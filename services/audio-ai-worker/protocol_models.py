@@ -33,6 +33,55 @@ class PetActionState(StrEnum):
     sleep_mute = 'sleep_mute'
 
 
+class PetAvatarClip(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    clipId: str
+    webmPath: Annotated[str, Field(min_length=1)]
+    loop: bool | None = True
+    playbackRate: Annotated[float | None, Field(ge=0.1, le=4.0)] = 1
+    fps: Annotated[int | None, Field(ge=1, le=120)] = 30
+    weight: Annotated[float | None, Field(ge=0.0, le=1.0)] = 1
+
+
+class Renderer(StrEnum):
+    webm_alpha = 'webm-alpha'
+    live2d = 'live2d'
+    sprite_sheet = 'sprite-sheet'
+
+
+class LicenseScope(StrEnum):
+    DEV_ONLY_NON_COMMERCIAL = 'DEV_ONLY_NON_COMMERCIAL'
+    COMMERCIAL_READY = 'COMMERCIAL_READY'
+
+
+class DefaultAction(StrEnum):
+    idle = 'idle'
+    walk = 'walk'
+    eat_rice = 'eat_rice'
+    happy_maid = 'happy_maid'
+    thinking_tail_wag = 'thinking_tail_wag'
+    rage_spray = 'rage_spray'
+    clumsy_panic = 'clumsy_panic'
+    game_focus = 'game_focus'
+    sing_stage = 'sing_stage'
+    hungry_lazy = 'hungry_lazy'
+    sleep_mute = 'sleep_mute'
+
+
+class Clip(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    clipId: str
+    webmPath: Annotated[str, Field(min_length=1)]
+    loop: bool | None = True
+    playbackRate: Annotated[float | None, Field(ge=0.1, le=4.0)] = 1
+    fps: Annotated[int | None, Field(ge=1, le=120)] = 30
+    weight: Annotated[float | None, Field(ge=0.0, le=1.0)] = 1
+
+
 class SourceModule(StrEnum):
     persona_talk = 'persona-talk'
     svc_singing = 'svc-singing'
@@ -149,11 +198,6 @@ class RiceBowlEconomy(BaseModel):
     consumedRiceGrainsToday: Annotated[int | None, Field(ge=0)] = 0
     lowRiceWarningRatio: Annotated[float | None, Field(ge=0.05, le=0.5)] = 0.15
     activeSideDishes: list[ActiveSideDish]
-
-
-class LicenseScope(StrEnum):
-    DEV_ONLY_NON_COMMERCIAL = 'DEV_ONLY_NON_COMMERCIAL'
-    COMMERCIAL_READY = 'COMMERCIAL_READY'
 
 
 class InnerVoiceConfig(BaseModel):
@@ -470,6 +514,29 @@ class NormalizedLiveEvent(BaseModel):
     timestamp: float
 
 
+class Action(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionState: DefaultAction
+    clips: Annotated[list[Clip], Field(min_length=1)]
+
+
+class PetAvatarManifest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    petId: str
+    renderer: Renderer
+    licenseScope: LicenseScope
+    attribution: str | None = ''
+    width: Annotated[int | None, Field(ge=16, le=4096)] = 640
+    height: Annotated[int | None, Field(ge=16, le=4096)] = 360
+    footlineRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.92
+    defaultAction: DefaultAction | None = 'idle'
+    actions: Annotated[list[Action], Field(min_length=1)]
+
+
 class StardewWeights(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -503,6 +570,8 @@ class AIWorkbenchContracts(BaseModel):
     )
     PetRendererType_1: Annotated[PetRendererType, Field(alias='PetRendererType')]
     PetActionState_1: Annotated[PetActionState, Field(alias='PetActionState')]
+    PetAvatarClip_1: Annotated[PetAvatarClip, Field(alias='PetAvatarClip')]
+    PetAvatarManifest_1: Annotated[PetAvatarManifest, Field(alias='PetAvatarManifest')]
     AudioPlaybackLease_1: Annotated[
         AudioPlaybackLease, Field(alias='AudioPlaybackLease')
     ]

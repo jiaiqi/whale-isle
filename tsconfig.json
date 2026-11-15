@@ -4,6 +4,7 @@
   "references": [
     { "path": "packages/shared-protocol" },
     { "path": "packages/local-store" },
+    { "path": "packages/pet-renderer" },
     { "path": "tools/mock-harness" }
   ]
 }

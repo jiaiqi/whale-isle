@@ -4,6 +4,7 @@ import {
   AudioPlaybackLeaseSchema,
   DiningProfilePresetSchema,
   NormalizedLiveEventSchema,
+  PetAvatarManifestSchema,
   PetPersonaConfigSchema,
   ReflexRuleSchema,
   StardewMcpActionReceiptSchema,
@@ -136,10 +137,60 @@ describe('DiningProfilePreset（干饭套餐）', () => {
   });
 });
 
+describe('PetAvatarManifest（桌宠资产清单）', () => {
+  const baseManifest = {
+    petId: 'blue-whale-maid',
+    renderer: 'webm-alpha',
+    licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+    attribution: '形象：CC BY-NC-SA 4.0（@ZipZipPipe / 原型 @上善无形）',
+    actions: [
+      {
+        actionState: 'idle',
+        clips: [{ clipId: 'idle-01', webmPath: 'webm/daiji-huxi-xiuxian.webm' }],
+      },
+      {
+        actionState: 'rage_spray',
+        clips: [
+          { clipId: 'rage-01', webmPath: 'webm/pentu-paopao.webm', weight: 0.7 },
+          { clipId: 'rage-02', webmPath: 'webm/yong-jingyu-weiba-paidadi.webm', weight: 0.3 },
+        ],
+      },
+    ],
+  } as const;
+
+  it('清单默认值落位（尺寸/脚底线/默认动作/片段权重）', () => {
+    const manifest = PetAvatarManifestSchema.parse(baseManifest);
+    expect(manifest.width).toBe(640);
+    expect(manifest.height).toBe(360);
+    expect(manifest.footlineRatio).toBe(0.92);
+    expect(manifest.defaultAction).toBe('idle');
+    expect(manifest.actions[1]?.clips[0]?.weight).toBe(0.7);
+    expect(manifest.actions[1]?.clips[1]?.loop).toBe(true);
+    expect(manifest.actions[1]?.clips[1]?.fps).toBe(30);
+  });
+
+  it('非法 renderer / 越界 footlineRatio / 未登记 actionState 拒绝', () => {
+    expect(PetAvatarManifestSchema.safeParse({ ...baseManifest, renderer: 'gif' }).success).toBe(false);
+    expect(
+      PetAvatarManifestSchema.safeParse({ ...baseManifest, footlineRatio: 1.5 }).success,
+    ).toBe(false);
+    expect(
+      PetAvatarManifestSchema.safeParse({
+        ...baseManifest,
+        actions: [...baseManifest.actions, { actionState: 'fly', clips: [{ clipId: 'x', webmPath: 'y.webm' }] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('actions 为空数组拒绝', () => {
+    expect(PetAvatarManifestSchema.safeParse({ ...baseManifest, actions: [] }).success).toBe(false);
+  });
+});
+
 describe('契约注册表', () => {
   it('版本化且 Schema 全部就位', () => {
     expect(CONTRACT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(Object.keys(CONTRACT_SCHEMAS).length).toBeGreaterThanOrEqual(17);
+    expect(Object.keys(CONTRACT_SCHEMAS).length).toBeGreaterThanOrEqual(19);
     for (const [name, schema] of Object.entries(CONTRACT_SCHEMAS)) {
       expect(typeof schema.safeParse, `${name} 应为 Zod Schema`).toBe('function');
     }

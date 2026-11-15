@@ -6,6 +6,8 @@
   "required": [
     "PetRendererType",
     "PetActionState",
+    "PetAvatarClip",
+    "PetAvatarManifest",
     "AudioPlaybackLease",
     "AudioPlaybackReceipt",
     "ReflexRule",
@@ -28,6 +30,12 @@
     },
     "PetActionState": {
       "$ref": "#/$defs/PetActionState"
+    },
+    "PetAvatarClip": {
+      "$ref": "#/$defs/PetAvatarClip"
+    },
+    "PetAvatarManifest": {
+      "$ref": "#/$defs/PetAvatarManifest"
     },
     "AudioPlaybackLease": {
       "$ref": "#/$defs/AudioPlaybackLease"
@@ -100,6 +108,174 @@
         "hungry_lazy",
         "sleep_mute"
       ]
+    },
+    "PetAvatarClip": {
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "type": "string"
+        },
+        "webmPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loop": {
+          "type": "boolean",
+          "default": true
+        },
+        "playbackRate": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 4,
+          "default": 1
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 30
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        }
+      },
+      "required": [
+        "clipId",
+        "webmPath"
+      ],
+      "additionalProperties": false
+    },
+    "PetAvatarManifest": {
+      "type": "object",
+      "properties": {
+        "petId": {
+          "type": "string"
+        },
+        "renderer": {
+          "type": "string",
+          "enum": [
+            "webm-alpha",
+            "live2d",
+            "sprite-sheet"
+          ]
+        },
+        "licenseScope": {
+          "type": "string",
+          "enum": [
+            "DEV_ONLY_NON_COMMERCIAL",
+            "COMMERCIAL_READY"
+          ]
+        },
+        "attribution": {
+          "type": "string",
+          "default": ""
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 4096,
+          "default": 640
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 4096,
+          "default": 360
+        },
+        "footlineRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.92
+        },
+        "defaultAction": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "walk",
+            "eat_rice",
+            "happy_maid",
+            "thinking_tail_wag",
+            "rage_spray",
+            "clumsy_panic",
+            "game_focus",
+            "sing_stage",
+            "hungry_lazy",
+            "sleep_mute"
+          ],
+          "default": "idle"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "actionState": {
+                "$ref": "#/$defs/PetAvatarManifest/properties/defaultAction"
+              },
+              "clips": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "clipId": {
+                      "type": "string"
+                    },
+                    "webmPath": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "loop": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "playbackRate": {
+                      "type": "number",
+                      "minimum": 0.1,
+                      "maximum": 4,
+                      "default": 1
+                    },
+                    "fps": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 120,
+                      "default": 30
+                    },
+                    "weight": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "default": 1
+                    }
+                  },
+                  "required": [
+                    "clipId",
+                    "webmPath"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "actionState",
+              "clips"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "petId",
+        "renderer",
+        "licenseScope",
+        "actions"
+      ],
+      "additionalProperties": false
     },
     "AudioPlaybackLease": {
       "type": "object",

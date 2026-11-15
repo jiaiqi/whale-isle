@@ -8,6 +8,8 @@ import {
   ModelProviderConfigSchema,
   NormalizedLiveEventSchema,
   PetActionStateSchema,
+  PetAvatarClipSchema,
+  PetAvatarManifestSchema,
   PetPersonaConfigSchema,
   PetRendererTypeSchema,
   ProviderEndpointVariantSchema,
@@ -31,6 +33,8 @@ export const CONTRACT_VERSION = '1.0.0';
 export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
   PetRendererType: PetRendererTypeSchema,
   PetActionState: PetActionStateSchema,
+  PetAvatarClip: PetAvatarClipSchema,
+  PetAvatarManifest: PetAvatarManifestSchema,
   AudioPlaybackLease: AudioPlaybackLeaseSchema,
   AudioPlaybackReceipt: AudioPlaybackReceiptSchema,
   ReflexRule: ReflexRuleSchema,

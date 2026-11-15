@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PetAvatarClip",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/PetAvatarClip",
+  "$defs": {
+    "PetAvatarClip": {
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "type": "string"
+        },
+        "webmPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loop": {
+          "type": "boolean",
+          "default": true
+        },
+        "playbackRate": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 4,
+          "default": 1
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 30
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        }
+      },
+      "required": [
+        "clipId",
+        "webmPath"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

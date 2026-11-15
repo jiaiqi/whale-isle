@@ -1,0 +1,35 @@
+{
+  "petId": "blue-whale-maid",
+  "renderer": "webm-alpha",
+  "licenseScope": "DEV_ONLY_NON_COMMERCIAL",
+  "attribution": "形象：CC BY-NC-SA 4.0（@ZipZipPipe / 原型 @上善无形）；素材：dsh-pet（MIT 代码）",
+  "width": 640,
+  "height": 360,
+  "footlineRatio": 0.92,
+  "defaultAction": "idle",
+  "actions": [
+    {
+      "actionState": "idle",
+      "clips": [{ "clipId": "idle-01", "webmPath": "webm/daiji-huxi-xiuxian.webm" }]
+    },
+    {
+      "actionState": "walk",
+      "clips": [{ "clipId": "walk-01", "webmPath": "webm/pangxie-zoulu.webm" }]
+    },
+    {
+      "actionState": "rage_spray",
+      "clips": [
+        { "clipId": "rage-01", "webmPath": "webm/jingyu-tu-paopao-texiao.webm", "weight": 0.7 },
+        { "clipId": "rage-02", "webmPath": "webm/yong-jingyu-weiba-paidadi.webm", "weight": 0.3 }
+      ]
+    },
+    {
+      "actionState": "sing_stage",
+      "clips": [{ "clipId": "sing-01", "webmPath": "webm/qingkuai-yaobaiwu.webm" }]
+    },
+    {
+      "actionState": "hungry_lazy",
+      "clips": [{ "clipId": "hungry-01", "webmPath": "webm/haqian-liantian.webm" }]
+    }
+  ]
+}

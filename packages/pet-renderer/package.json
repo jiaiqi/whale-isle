@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/pet-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[渲染抽象层] IPetAvatarRenderer 接口 + WebmVideoRenderer（双 video 无缝交叉淡入/脚底基准线/Q 弹形变/素材水印）",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}

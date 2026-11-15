@@ -1,0 +1,7 @@
+/**
+ * 渲染抽象层出口。
+ * 渲染进程请只 import 本包接口；真实 DOM 视频工厂在 apps/desktop-host（T-M1-02）。
+ */
+export * from './types';
+export * from './squash';
+export { WebmVideoRenderer, computeFootlineLayout, type WebmRendererOptions } from './webm-renderer';

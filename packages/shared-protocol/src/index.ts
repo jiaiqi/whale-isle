@@ -247,3 +247,44 @@ export const NormalizedLiveEventSchema = z.object({
   timestamp: z.number(),
 });
 export type NormalizedLiveEvent = z.infer<typeof NormalizedLiveEventSchema>;
+
+// ============================================================================
+// 6. 桌宠资产清单契约 (T-M1-01；素材许可红线见 docs/THIRD_PARTY_NOTICES.md)
+// ============================================================================
+
+/** 单段动作视频片段（VP9-Alpha .webm） */
+export const PetAvatarClipSchema = z.object({
+  clipId: z.string(),
+  webmPath: z.string().min(1),
+  loop: z.boolean().default(true),
+  playbackRate: z.number().min(0.1).max(4).default(1),
+  /** 帧率（供口型包络/时序对齐，见 SPEC §3.4 情绪 TTS） */
+  fps: z.number().int().min(1).max(120).default(30),
+  /** 同一动作多片段的随机加权（dsh-pet：按权重首尾相接） */
+  weight: z.number().min(0).max(1).default(1),
+});
+export type PetAvatarClip = z.infer<typeof PetAvatarClipSchema>;
+
+/** 桌宠资产清单 manifest.json（renderer=webm-alpha 的第一方实现见 packages/pet-renderer） */
+export const PetAvatarManifestSchema = z.object({
+  petId: z.string(),
+  renderer: PetRendererTypeSchema,
+  /** dsh-pet 素材红线：大肥鱼形象/动画为 CC BY-NC-SA 4.0 → 必须标 DEV_ONLY_NON_COMMERCIAL */
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']),
+  /** 二创署名（dsh-pet 二创约定：公开渠道须附原作者仓库/出处） */
+  attribution: z.string().default(''),
+  width: z.number().int().min(16).max(4096).default(640),
+  height: z.number().int().min(16).max(4096).default(360),
+  /** 脚底基准线在帧高内的比例（0=头顶，1=脚底；渲染器据此做脚底对齐） */
+  footlineRatio: z.number().min(0).max(1).default(0.92),
+  defaultAction: PetActionStateSchema.default('idle'),
+  actions: z
+    .array(
+      z.object({
+        actionState: PetActionStateSchema,
+        clips: z.array(PetAvatarClipSchema).min(1),
+      }),
+    )
+    .min(1),
+});
+export type PetAvatarManifest = z.infer<typeof PetAvatarManifestSchema>;

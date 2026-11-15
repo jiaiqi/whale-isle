@@ -43,6 +43,12 @@ importers:
         specifier: ^6.2.2
         version: 6.2.8
 
+  packages/pet-renderer:
+    dependencies:
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../shared-protocol
+
   packages/shared-protocol:
     dependencies:
       zod:
