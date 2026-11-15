@@ -3,18 +3,18 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M0-01`**
+> **当前激活工单：`T-M0-02`**
 
-> ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档、`shared-protocol` Zod 契约初稿与 `verify:gate` 的 Gate 1/2 基础接线已由人工会话预先落盘。因此：
-> - `T-M0-01` 剩余工作：`dependency-cruiser` 架构规则、pre-commit 接入、`lint:deps` 脚本接入；
+> ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
+> - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
 > - `T-M0-02` 剩余工作：Zod → JSON Schema / Python Pydantic 跨语言导出器与契约单测（`src/index.ts` 初稿已在仓库中）。
 
 ## 工单总表（M0~M4 · 20 张原子工单）
 
 | 工单编号 | 所属里程碑 | 工单名称与核心交付物（单工单 ≤ 8 个文件） | 开工前必查参考项目 | 自动化门禁校验指令与断言（Gate） | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| **`T-M0-01`** | M0：地基与铁笼 | **Monorepo 脚手架与架构边界锁**：完善 `pnpm-workspace.yaml`、`tsconfig.base.json`、`dependency-cruiser` 规则与 `docs/` 骨架 | `feiyu-os`（确定性准入） | `pnpm verify:gate` 基础框架跑通，违规跨包引用自动报错 | **NEXT** |
-| **`T-M0-02`** | M0：地基与铁笼 | **全局契约包 `shared-protocol` 与跨语言导出器**：落地 Zod 契约，并生成 JSON Schema 与 Python Pydantic 模型 `protocol_models.py` | `dsh-livestream`、`BlindWhaleFarmer` | 契约单测 100% 通过；生成的 Python 模型通过 `mypy` 严格校验 | PENDING |
+| **`T-M0-01`** | M0：地基与铁笼 | **Monorepo 脚手架与架构边界锁**：完善 `pnpm-workspace.yaml`、`tsconfig.base.json`、`dependency-cruiser` 规则与 `docs/` 骨架 | `feiyu-os`（确定性准入） | `pnpm verify:gate` 基础框架跑通，违规跨包引用自动报错 | **DONE** |
+| **`T-M0-02`** | M0：地基与铁笼 | **全局契约包 `shared-protocol` 与跨语言导出器**：落地 Zod 契约，并生成 JSON Schema 与 Python Pydantic 模型 `protocol_models.py` | `dsh-livestream`、`BlindWhaleFarmer` | 契约单测 100% 通过；生成的 Python 模型通过 `mypy` 严格校验 | **NEXT** |
 | **`T-M0-03`** | M0：地基与铁笼 | **本地存储双引擎底座**：实现主进程 SQLite（常客账本、Token 流水、点歌缓存表）与渲染进程 Dexie.js 配置库封装 | `dsh-live-studio`、`dsh-pet` | 内存 SQLite 单元测试验证：常客记仇标签读写、记忆一键删除（隐私合规）通过 | PENDING |
 | **`T-M0-04`** | M0：地基与铁笼 | **AI 自测仿真沙盒 `tools/mock-harness`**：编写星露谷 MCP 模拟器（5 大剧本）、抖音弹幕风暴回放器与许可证扫描器 | `BlindWhaleFarmer`、`dsh-douyin-agent` | 沙盒自检测试在 3 秒内跑完 5 个游戏剧本与弹幕压测流，标记 `[SIMULATION]` | PENDING |
 | **`T-M1-01`** | M1：大肥鱼复活 | **可插拔桌宠渲染引擎 `pet-renderer`**：实现 `IPetAvatarRenderer` 接口与 `WebmVideoRenderer`（双 `<video>` 无缝切换、脚底基准线对齐、Q 弹形变） | `dsh-pet` (`REFERENCE-dsh-pet.md`) | 组件单测验证状态切换零黑帧；内置素材自动挂载 `DEV_ONLY_NON_COMMERCIAL` 水印标记 | PENDING |

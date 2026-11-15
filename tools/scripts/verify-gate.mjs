@@ -3,7 +3,7 @@
  * pnpm verify:gate — 「四道自动化准入门禁」编排器（AGENTS.md §2.3 / §3.3）
  *
  * 当前进度（与 docs/ROADMAP.md 同步，随工单推进接线）：
- *   Gate 1 类型与边界    ✅ tsc -b 已接线（dependency-cruiser 架构规则由 T-M0-01 接入）
+ *   Gate 1 类型与边界    ✅ tsc -b + dependency-cruiser 架构边界（T-M0-01 接入）
  *   Gate 2 许可证与密钥  ✅ 基础版：THIRD_PARTY_NOTICES 台账校验 + 源码密钥泄漏/禁源痕迹扫描
  *   Gate 3 确定性单测    ⏳ TODO(T-M0-03 起)：核心包分支覆盖率 ≥90% 后接入
  *   Gate 4 沙盒 E2E      ⏳ TODO(T-M0-04 起)：tools/mock-harness 全链路回归接入
@@ -84,14 +84,24 @@ console.log('╭─────────────────────�
 console.log('│ pnpm verify:gate — 四道自动化准入门禁                    │');
 console.log('╰──────────────────────────────────────────────────────────╯');
 
-// ---- Gate 1：类型编译（架构边界 dependency-cruiser 由 T-M0-01 接入） ----
+// ---- Gate 1：类型编译 + dependency-cruiser 架构边界 ----
 const tsc = spawnSync('pnpm', ['typecheck'], { cwd: ROOT, encoding: 'utf8' });
+const depcruise = spawnSync('pnpm', ['lint:deps'], { cwd: ROOT, encoding: 'utf8' });
+const gate1Errors = [];
 if (tsc.error) {
-  gate('Gate 1 类型与边界', 'FAIL', `无法启动 pnpm typecheck：${tsc.error.message}（请先执行 pnpm install）`);
-} else if (tsc.status === 0) {
-  gate('Gate 1 类型与边界', 'PASS', 'tsc -b 零错误（strict + noUncheckedIndexedAccess）');
+  gate1Errors.push(`无法启动 pnpm typecheck：${tsc.error.message}（请先执行 pnpm install）`);
+} else if (tsc.status !== 0) {
+  gate1Errors.push(truncate(`${tsc.stdout}\n${tsc.stderr}`));
+}
+if (depcruise.error) {
+  gate1Errors.push(`无法启动 pnpm lint:deps：${depcruise.error.message}`);
+} else if (depcruise.status !== 0) {
+  gate1Errors.push(truncate(`${depcruise.stdout}\n${depcruise.stderr}`));
+}
+if (gate1Errors.length === 0) {
+  gate('Gate 1 类型与边界', 'PASS', 'tsc -b 零错误 + dependency-cruiser 零违规（strict + noUncheckedIndexedAccess）');
 } else {
-  gate('Gate 1 类型与边界', 'FAIL', truncate(`${tsc.stdout}\n${tsc.stderr}`));
+  gate('Gate 1 类型与边界', 'FAIL', gate1Errors.join('\n'));
 }
 
 // ---- Gate 2：许可证台账 + 密钥/禁源扫描 ----

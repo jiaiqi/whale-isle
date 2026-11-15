@@ -1,0 +1,3 @@
+#!/bin/sh
+# T-M0-01（AGENTS.md §2.3）：提交前强制执行四道自动化准入门禁
+pnpm verify:gate

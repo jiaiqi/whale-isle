@@ -8,10 +8,13 @@
   },
   "scripts": {
     "typecheck": "tsc -b",
-    "verify:gate": "node tools/scripts/verify-gate.mjs"
+    "lint:deps": "depcruise packages apps services tools --config .dependency-cruiser.cjs",
+    "verify:gate": "node tools/scripts/verify-gate.mjs",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "dependency-cruiser": "^16.5.0",
     "typescript": "^5.9.2"
   }
 }
