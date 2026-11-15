@@ -149,7 +149,120 @@ class AudioPlaybackReceipt(BaseModel):
     timestamp: float
 
 
-class EmotionTag1(StrEnum):
+class Viseme(StrEnum):
+    closed = 'closed'
+    wide = 'wide'
+    round = 'round'
+    open = 'open'
+    teeth = 'teeth'
+
+
+class Viseme1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    viseme: Viseme
+    startMs: Annotated[float, Field(ge=0.0)]
+    durationMs: Annotated[float, Field(ge=0.0)]
+    amplitude: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.6
+
+
+class LipEnvelope(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    visemes: list[Viseme1]
+    totalDurationMs: Annotated[float, Field(ge=0.0)]
+
+
+class EmotionVoiceProfile(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    emotionTag: EmotionTag
+    refAudioPath: Annotated[str, Field(min_length=1)]
+    refText: Annotated[str, Field(min_length=1)]
+    refDurationMs: Annotated[int | None, Field(ge=500, le=60000)] = 5000
+    actionState: ActionState
+
+
+class DefaultEmotionTag(StrEnum):
+    sweet_normal = 'sweet_normal'
+    tsundere_refuse = 'tsundere_refuse'
+    rage_spray = 'rage_spray'
+    lazy_yawn = 'lazy_yawn'
+    happy_rice = 'happy_rice'
+
+
+class Profile(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    emotionTag: EmotionTag
+    refAudioPath: Annotated[str, Field(min_length=1)]
+    refText: Annotated[str, Field(min_length=1)]
+    refDurationMs: Annotated[int | None, Field(ge=500, le=60000)] = 5000
+    actionState: ActionState
+
+
+class TtsVoicePack(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    voicePackId: Annotated[str, Field(min_length=1)]
+    defaultEmotionTag: DefaultEmotionTag
+    profiles: Annotated[list[Profile], Field(min_length=1)]
+    licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
+
+
+class Format(StrEnum):
+    wav = 'wav'
+    mp3 = 'mp3'
+    ogg = 'ogg'
+
+
+class Viseme4(StrEnum):
+    closed = 'closed'
+    wide = 'wide'
+    round = 'round'
+    open = 'open'
+    teeth = 'teeth'
+
+
+class Viseme3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    viseme: Viseme4
+    startMs: Annotated[float, Field(ge=0.0)]
+    durationMs: Annotated[float, Field(ge=0.0)]
+    amplitude: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.6
+
+
+class LipEnvelope1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    visemes: list[Viseme3]
+    totalDurationMs: Annotated[float, Field(ge=0.0)]
+
+
+class TtsSynthesisResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    synthId: UUID
+    emotionTag: EmotionTag
+    refAudioPath: Annotated[str, Field(min_length=1)]
+    backend: Annotated[str, Field(min_length=1)]
+    degraded: bool | None = False
+    format: Format
+    durationMs: Annotated[float, Field(ge=0.0)]
+    audioBase64: Annotated[str, Field(min_length=1)]
+    lipEnvelope: LipEnvelope1
+
+
+class EmotionTag4(StrEnum):
     rage_spray = 'rage_spray'
     tsundere_refuse = 'tsundere_refuse'
 
@@ -163,7 +276,7 @@ class ReflexRule(BaseModel):
     cooldownMs: int | None = 8000
     priority: Literal['P0_INTERRUPT']
     actionState: ActionState
-    emotionTag: EmotionTag1
+    emotionTag: EmotionTag4
     ledgerGrudgeTag: str
     presetResponses: Annotated[list[str], Field(min_length=1)]
 
@@ -219,7 +332,7 @@ class ReflexRule1(BaseModel):
     cooldownMs: int | None = 8000
     priority: Literal['P0_INTERRUPT']
     actionState: ActionState
-    emotionTag: EmotionTag1
+    emotionTag: EmotionTag4
     ledgerGrudgeTag: str
     presetResponses: Annotated[list[str], Field(min_length=1)]
 
@@ -577,6 +690,15 @@ class AIWorkbenchContracts(BaseModel):
     ]
     AudioPlaybackReceipt_1: Annotated[
         AudioPlaybackReceipt, Field(alias='AudioPlaybackReceipt')
+    ]
+    Viseme_1: Annotated[Viseme, Field(alias='Viseme')]
+    LipEnvelope_1: Annotated[LipEnvelope, Field(alias='LipEnvelope')]
+    EmotionVoiceProfile_1: Annotated[
+        EmotionVoiceProfile, Field(alias='EmotionVoiceProfile')
+    ]
+    TtsVoicePack_1: Annotated[TtsVoicePack, Field(alias='TtsVoicePack')]
+    TtsSynthesisResult_1: Annotated[
+        TtsSynthesisResult, Field(alias='TtsSynthesisResult')
     ]
     ReflexRule_1: Annotated[ReflexRule, Field(alias='ReflexRule')]
     StardewUtilityWeights_1: Annotated[

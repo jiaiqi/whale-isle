@@ -5,8 +5,10 @@
 import { WebmVideoRenderer, type RendererHost, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { createAlphaProbe } from './alpha-probe';
 import { createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
+import { AudioLeaseManager } from './audio-lease';
 import { mountBubbleWidgets } from './widgets/bubbles';
 import { mountRiceBowlWidget } from './widgets/rice-bowl-widget';
+import { buildPlaybackLease, sampleVisemeTimeline, type SpeakRequest } from './tts-router';
 
 interface PetStageBridge {
   ready: boolean;
@@ -195,6 +197,56 @@ window.addEventListener('mouseup', () => {
     raf = requestAnimationFrame(stepLoop);
   })();
 });
+
+// ---- 情绪感知 TTS 编排（T-M2-02）：语音锁 + 口型驱动 + 动作切换 ----
+/** 语音播放适配器：真实实现走 WebAudio（onended 释放租约）；此处为编排骨架（音频由 Sidecar 提供） */
+const leaseManager = new AudioLeaseManager({
+  adapter: {
+    async play(leaseId) {
+      const started = performance.now();
+      await new Promise<void>((resolve) => {
+        // 真实实现：<audio>.play() + onended → resolve；此处按口型时间线推进到末尾
+        const timeline = visemeTimelines.get(leaseId) ?? [];
+        const total = timeline.at(-1)?.atMs ?? 0;
+        const tick = (): void => {
+          const elapsed = performance.now() - started;
+          const current = timeline.find((item) => item.atMs <= elapsed)?.viseme ?? 'closed';
+          void renderer.play('idle'); // 动作切换由情绪映射决定（见下）
+          void current;
+          if (elapsed >= total) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    },
+    abort() {
+      /* 真实实现：停止 <audio> 元素 */
+    },
+  },
+  onReceipt: (receipt) => {
+    // 真实回执 → 气泡收起 / 账本落库（宿主组装层）
+    void receipt;
+  },
+});
+const visemeTimelines = new Map<string, Array<{ atMs: number; viseme: string }>>();
+
+/** 合成结果 → 语音租约 → 播放 + 动作切换 + 口型驱动（T-M2-02 编排入口） */
+function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
+  const { lease, visemeTimeline } = buildPlaybackLease({ leaseId, request });
+  visemeTimelines.set(leaseId, visemeTimeline);
+  // 情绪 → 桌宠动作切换（SPEC §3.4）
+  void renderer.play(lease.actionState);
+  const granted = leaseManager.acquire({
+    leaseId: lease.leaseId,
+    priority: lease.priority,
+    ttlMs: lease.ttlMs,
+    durationMs: request.durationMs,
+  });
+  if (granted === 'queued') {
+    // 排队中：气泡先显示，说话到点再播（dsh-pet「气泡会等语音」语义）
+    widgets.showDialog(request.text);
+  }
+}
 
 // ---- UI 挂件（T-M1-05）：双轨气泡 + 赛博饭碗 ----
 const widgets = mountBubbleWidgets(stage, { width: 440, height: 300 });

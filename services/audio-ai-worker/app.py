@@ -25,11 +25,31 @@ from typing import Any, Literal
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
+from tts_engine.emotion_router import (
+    EmotionTtsRouter,
+    EmotionVoiceProfile,
+    TtsVoicePack,
+)
+
 Backend = Literal["mps", "cuda", "cpu"]
 
 APP_VERSION = "0.1.0"
 
 app = FastAPI(title="audio-ai-worker", version=APP_VERSION)
+
+# 大肥鱼音色包（SPEC §3.4：5 组 5 秒情绪参考音频；素材 licenseScope 非商用）
+VOICE_PACK = TtsVoicePack(
+    voice_pack_id="blue-whale-maid-v1",
+    default_emotion_tag="sweet_normal",
+    profiles=(
+        EmotionVoiceProfile("sweet_normal", "ref/sweet_normal.wav", "主人好~", 5_000, "happy_maid"),
+        EmotionVoiceProfile("tsundere_refuse", "ref/tsundere_refuse.wav", "哼，本鱼才没有偷懒！", 5_000, "happy_maid"),
+        EmotionVoiceProfile("rage_spray", "ref/rage_spray.wav", "噗——喷水抗议！", 5_000, "rage_spray"),
+        EmotionVoiceProfile("lazy_yawn", "ref/lazy_yawn.wav", "唔……困了", 5_000, "hungry_lazy"),
+        EmotionVoiceProfile("happy_rice", "ref/happy_rice.wav", "开饭啦！", 5_000, "eat_rice"),
+    ),
+)
+TTS_ROUTER = EmotionTtsRouter(voice_pack=VOICE_PACK)
 
 
 def detect_backend() -> Backend:
@@ -102,6 +122,36 @@ def synthesize(payload: dict[str, Any]) -> JSONResponse:
             "backend": detect_backend(),
         }
     )
+
+
+@app.post("/tts/emotion")
+def synthesize_with_emotion(payload: dict[str, Any]) -> JSONResponse:
+    """情绪感知合成：{text, emotionTag?} → 音频流 + 口型包络 + 命中的参考音频路径。"""
+    text = str(payload.get("text", "")).strip()
+    if not text:
+        return JSONResponse(status_code=400, content={"error": {"code": "EMPTY_TEXT", "message": "text 不能为空"}})
+    result = TTS_ROUTER.synthesize(text)
+    return JSONResponse(TTS_ROUTER.result_to_dict(result))
+
+
+@app.get("/tts/voice-pack")
+def voice_pack() -> dict[str, Any]:
+    """音色包清单（宿主侧核对参考音频登记与素材许可）。"""
+    return {
+        "voicePackId": VOICE_PACK.voice_pack_id,
+        "defaultEmotionTag": VOICE_PACK.default_emotion_tag,
+        "licenseScope": VOICE_PACK.license_scope,
+        "profiles": [
+            {
+                "emotionTag": profile.emotion_tag,
+                "refAudioPath": profile.ref_audio_path,
+                "refText": profile.ref_text,
+                "refDurationMs": profile.ref_duration_ms,
+                "actionState": profile.action_state,
+            }
+            for profile in VOICE_PACK.profiles
+        ],
+    }
 
 
 @app.websocket("/ws/audio")

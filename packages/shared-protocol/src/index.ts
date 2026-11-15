@@ -43,6 +43,73 @@ export const AudioPlaybackReceiptSchema = z.object({
 });
 export type AudioPlaybackReceipt = z.infer<typeof AudioPlaybackReceiptSchema>;
 
+/** 口型（viseme）枚举：桌宠口型驱动（SPEC §3.4 口型包络） */
+export const VisemeSchema = z.enum(['closed', 'wide', 'round', 'open', 'teeth']);
+export type Viseme = z.infer<typeof VisemeSchema>;
+
+/**
+ * 口型包络：按时间锚点给出一串口型，桌宠据此同步嘴型。
+ * startMs 为相对音频起点的偏移；durationMs 为该口型保持时长。
+ */
+export const LipEnvelopeSchema = z.object({
+  visemes: z.array(
+    z.object({
+      viseme: VisemeSchema,
+      startMs: z.number().min(0),
+      durationMs: z.number().min(0),
+      /** 该区间的相对响度（0~1），供口型幅度调制 */
+      amplitude: z.number().min(0).max(1).default(0.6),
+    }),
+  ),
+  totalDurationMs: z.number().min(0),
+});
+export type LipEnvelope = z.infer<typeof LipEnvelopeSchema>;
+
+/**
+ * 情绪参考音频（SPEC §3.4：大肥鱼预置 5 组 5 秒情绪参考音频）。
+ * emotionTag 与 AudioPlaybackLease.emotionTag 同一枚举。
+ */
+export const EmotionVoiceProfileSchema = z.object({
+  emotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'happy_rice']),
+  /** 参考音频路径（GPT-SoVITS 推理输入） */
+  refAudioPath: z.string().min(1),
+  /** 参考音频对应文本（推理提示） */
+  refText: z.string().min(1),
+  /** 参考音频时长（毫秒），默认 5 秒 */
+  refDurationMs: z.number().int().min(500).max(60_000).default(5_000),
+  /** 该情绪对应的桌宠动作（驱动 .webm 切换） */
+  actionState: PetActionStateSchema,
+});
+export type EmotionVoiceProfile = z.infer<typeof EmotionVoiceProfileSchema>;
+
+/** 音色包（voice pack）：5 组情绪参考音频的集合 */
+export const TtsVoicePackSchema = z.object({
+  voicePackId: z.string().min(1),
+  /** 默认情绪（未指定情绪前缀时使用） */
+  defaultEmotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'happy_rice']),
+  profiles: z.array(EmotionVoiceProfileSchema).min(1),
+  /** 素材许可（dsh-pet 素材红线：非商用素材需标记） */
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']).default('DEV_ONLY_NON_COMMERCIAL'),
+});
+export type TtsVoicePack = z.infer<typeof TtsVoicePackSchema>;
+
+/** TTS 合成回执（Python 侧 → 宿主）：音频流 + 口型包络 + 实际路由后端 */
+export const TtsSynthesisResultSchema = z.object({
+  synthId: z.string().uuid(),
+  emotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'happy_rice']),
+  /** 命中的参考音频路径（门禁断言：情绪 → 正确参考音频） */
+  refAudioPath: z.string().min(1),
+  /** 实际使用的推理后端：local-gpt-sovits / cloud-* */
+  backend: z.string().min(1),
+  /** 是否发生了降级（本地失败 → 云端） */
+  degraded: z.boolean().default(false),
+  format: z.enum(['wav', 'mp3', 'ogg']),
+  durationMs: z.number().min(0),
+  audioBase64: z.string().min(1),
+  lipEnvelope: LipEnvelopeSchema,
+});
+export type TtsSynthesisResult = z.infer<typeof TtsSynthesisResultSchema>;
+
 // ============================================================================
 // 2. "大肥鱼（蓝鲸女仆）"三层人格与赛博饭碗契约 (Persona & Rice Bowl)
 // ============================================================================
