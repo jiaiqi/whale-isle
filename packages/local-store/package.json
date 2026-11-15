@@ -1,0 +1,30 @@
+{
+  "name": "@workbench/local-store",
+  "version": "0.1.0",
+  "private": true,
+  "description": "本地存储双引擎底座：主进程 SQLite（常客账本/Token 流水/点歌缓存）+ 渲染进程 Dexie（中控台配置）",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sqlite.d.ts",
+      "default": "./dist/sqlite.js"
+    },
+    "./dexie": {
+      "types": "./dist/dexie.d.ts",
+      "default": "./dist/dexie.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "dexie": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "fake-indexeddb": "^6.2.2"
+  }
+}

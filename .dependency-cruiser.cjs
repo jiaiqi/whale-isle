@@ -45,6 +45,21 @@ module.exports = {
       to: { path: '^packages/(model-gateway|persona-brain|game-bridge-mcp|live-stream-hub)' },
     },
     {
+      name: 'local-store-runtime-only-storage',
+      severity: 'error',
+      comment: '存储层运行时依赖只允许 better-sqlite3 / dexie（*.spec.ts 额外允许测试库）',
+      from: { path: '^packages/local-store', pathNot: '\\.spec\\.(ts|tsx)$' },
+      to: {
+        dependencyTypes: ['npm', 'npm-dev'],
+        pathNot: [
+          '^better-sqlite3($|/)', '/node_modules/better-sqlite3/',
+          '^dexie($|/)', '/node_modules/dexie/',
+          '^fake-indexeddb($|/)', '/node_modules/fake-indexeddb/',
+          '^vitest($|/)', '/node_modules/vitest/',
+        ],
+      },
+    },
+    {
       name: 'mock-harness-only-protocol',
       severity: 'error',
       comment: 'AI 自测沙盒只允许依赖 shared-protocol 与测试库，严禁引入业务实现',

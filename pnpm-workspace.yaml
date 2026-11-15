@@ -1,5 +1,5 @@
 packages:
-  # TS 业务包（shared-protocol / pet-renderer / model-gateway / persona-brain / game-bridge-mcp / live-stream-hub）
+  # TS 业务包（shared-protocol / pet-renderer / model-gateway / persona-brain / game-bridge-mcp / live-stream-hub / local-store）
   - "packages/*"
   # Electron 宿主（desktop-host）
   - "apps/*"
@@ -8,3 +8,8 @@ packages:
   # AI 自测沙盒（mock-harness）与脚本
   - "tools/*"
 # 注意：mods/ 为 C# SMAPI Mod（dotnet 构建），不纳入 pnpm 工作区
+
+# 允许运行安装脚本的依赖（原生模块/构建工具）
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true

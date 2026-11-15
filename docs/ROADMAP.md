@@ -3,11 +3,12 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M0-03`**
+> **当前激活工单：`T-M0-04`**
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
 > - `T-M0-02` ✅ 已完成（2026-11-15）：`src/registry.ts` 契约注册表 + `pnpm gen:contracts` 导出器（Zod → 17 份 JSON Schema + workbench 合并视图 → Pydantic `protocol_models.py`）+ TS/Python 双侧夹具单测。
+> - `T-M0-03` ✅ 已完成（2026-11-15）：`packages/local-store` 双引擎底座（SQLite 常客账本/Token 流水/点歌缓存 + 一键擦除；Dexie 中控台配置库），覆盖率纳入 Gate 3 ≥90% 门槛。
 
 ## 工单总表（M0~M4 · 20 张原子工单）
 
@@ -15,8 +16,8 @@
 | --- | --- | --- | --- | --- | --- |
 | **`T-M0-01`** | M0：地基与铁笼 | **Monorepo 脚手架与架构边界锁**：完善 `pnpm-workspace.yaml`、`tsconfig.base.json`、`dependency-cruiser` 规则与 `docs/` 骨架 | `feiyu-os`（确定性准入） | `pnpm verify:gate` 基础框架跑通，违规跨包引用自动报错 | **DONE** |
 | **`T-M0-02`** | M0：地基与铁笼 | **全局契约包 `shared-protocol` 与跨语言导出器**：落地 Zod 契约，并生成 JSON Schema 与 Python Pydantic 模型 `protocol_models.py` | `dsh-livestream`、`BlindWhaleFarmer` | 契约单测 100% 通过；生成的 Python 模型通过 `mypy` 严格校验 | **DONE** |
-| **`T-M0-03`** | M0：地基与铁笼 | **本地存储双引擎底座**：实现主进程 SQLite（常客账本、Token 流水、点歌缓存表）与渲染进程 Dexie.js 配置库封装 | `dsh-live-studio`、`dsh-pet` | 内存 SQLite 单元测试验证：常客记仇标签读写、记忆一键删除（隐私合规）通过 | **NEXT** |
-| **`T-M0-04`** | M0：地基与铁笼 | **AI 自测仿真沙盒 `tools/mock-harness`**：编写星露谷 MCP 模拟器（5 大剧本）、抖音弹幕风暴回放器与许可证扫描器 | `BlindWhaleFarmer`、`dsh-douyin-agent` | 沙盒自检测试在 3 秒内跑完 5 个游戏剧本与弹幕压测流，标记 `[SIMULATION]` | PENDING |
+| **`T-M0-03`** | M0：地基与铁笼 | **本地存储双引擎底座**：实现主进程 SQLite（常客账本、Token 流水、点歌缓存表）与渲染进程 Dexie.js 配置库封装 | `dsh-live-studio`、`dsh-pet` | 内存 SQLite 单元测试验证：常客记仇标签读写、记忆一键删除（隐私合规）通过 | **DONE** |
+| **`T-M0-04`** | M0：地基与铁笼 | **AI 自测仿真沙盒 `tools/mock-harness`**：编写星露谷 MCP 模拟器（5 大剧本）、抖音弹幕风暴回放器与许可证扫描器 | `BlindWhaleFarmer`、`dsh-douyin-agent` | 沙盒自检测试在 3 秒内跑完 5 个游戏剧本与弹幕压测流，标记 `[SIMULATION]` | **NEXT** |
 | **`T-M1-01`** | M1：大肥鱼复活 | **可插拔桌宠渲染引擎 `pet-renderer`**：实现 `IPetAvatarRenderer` 接口与 `WebmVideoRenderer`（双 `<video>` 无缝切换、脚底基准线对齐、Q 弹形变） | `dsh-pet` (`REFERENCE-dsh-pet.md`) | 组件单测验证状态切换零黑帧；内置素材自动挂载 `DEV_ONLY_NON_COMMERCIAL` 水印标记 | PENDING |
 | **`T-M1-02`** | M1：大肥鱼复活 | **Electron 跨平台透明穿透宿主 `desktop-host`**：实现 Mac/Win 无边框置顶透明窗、离屏 Canvas Alpha 像素级鼠标穿透、多屏 DPI 拖拽甩抛 | `dsh-pet` | Playwright Electron E2E 验证：`alpha > 20` 拦截点击，`alpha <= 20` 穿透点击 | PENDING |
 | **`T-M1-03`** | M1：大肥鱼复活 | **模型与供应商网关 `model-gateway`**：实现 CC Switch 两步式预设+Region/Plan 切换、Magpie 6 角色路由、干饭套餐切换、粘性路由与隐私脱敏 | `CC Switch`、`Magpie`、`dsh-douyin-agent` | 模拟上游 429 报错，断言 100ms 内静默切换备用 Key；敏感路径 100% 替换为 `{{MASKED}}` | PENDING |

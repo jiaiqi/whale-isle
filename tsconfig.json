@@ -1,5 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "files": [],
-  "references": [{ "path": "packages/shared-protocol" }]
+  "references": [
+    { "path": "packages/shared-protocol" },
+    { "path": "packages/local-store" }
+  ]
 }
