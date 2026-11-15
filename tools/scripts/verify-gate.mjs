@@ -125,48 +125,14 @@ if (gate1Detail !== null) {
   }
 }
 
-// ---- Gate 2：许可证台账 + 密钥/禁源扫描 ----
-const noticesPath = join(ROOT, 'docs', 'THIRD_PARTY_NOTICES.md');
-const noticesOk = existsSync(noticesPath) && readFileSync(noticesPath, 'utf8').length > 200;
-
-const secretHits = [];
-const forbiddenHits = [];
-let scanned = 0;
-if (existsSync(join(ROOT, 'packages'))) {
-  for (const f of collectFiles()) {
-    scanned += 1;
-    let text;
-    try {
-      text = readFileSync(f, 'utf8');
-    } catch {
-      continue;
-    }
-    const lines = text.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      for (const r of SECRET_RULES) {
-        if (r.re.test(lines[i])) secretHits.push(`${relative(ROOT, f)}:${i + 1}  ${r.label}`);
-      }
-      for (const r of FORBIDDEN_MARKERS) {
-        if (r.re.test(lines[i])) forbiddenHits.push(`${relative(ROOT, f)}:${i + 1}  ${r.label}`);
-      }
-    }
-  }
-}
-
-if (!noticesOk) {
-  gate('Gate 2 许可证与密钥', 'FAIL', 'docs/THIRD_PARTY_NOTICES.md 缺失或为空壳（每引入一个第三方依赖/素材必须登记）');
-} else if (secretHits.length > 0 || forbiddenHits.length > 0) {
-  const detail = [
-    ...secretHits.map((h) => `[密钥泄漏嫌疑] ${h}`),
-    ...forbiddenHits.map((h) => `[UNLICENSED 源码痕迹] ${h}`),
-  ].join('\n');
-  gate('Gate 2 许可证与密钥', 'FAIL', truncate(detail));
+// ---- Gate 2：许可证台账 + 密钥/禁源扫描（T-M0-04 起委托 tools/mock-harness 独立扫描器） ----
+const scannerPath = join(ROOT, 'tools', 'mock-harness', 'src', 'license-scanner.mjs');
+if (existsSync(scannerPath)) {
+  const scan = spawnSync('node', [scannerPath, ROOT], { cwd: ROOT, encoding: 'utf8' });
+  const detail = truncate(`${scan.stdout ?? ''}\n${scan.stderr ?? ''}`);
+  gate('Gate 2 许可证与密钥', scan.status === 0 ? 'PASS' : 'FAIL', detail);
 } else {
-  gate(
-    'Gate 2 许可证与密钥',
-    'PASS',
-    `台账 OK；已扫描 ${scanned} 个源文件：0 处密钥泄漏 / 0 处 UNLICENSED 源码痕迹`
-  );
+  gate('Gate 2 许可证与密钥', 'FAIL', 'license-scanner.mjs 缺失（T-M0-04 产物被误删）');
 }
 
 // ---- Gate 3：确定性单测（TS vitest + Python pytest；覆盖率门槛随 T-M0-03 起逐包生效） ----
