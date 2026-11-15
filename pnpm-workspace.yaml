@@ -1,0 +1,10 @@
+packages:
+  # TS 业务包（shared-protocol / pet-renderer / model-gateway / persona-brain / game-bridge-mcp / live-stream-hub）
+  - "packages/*"
+  # Electron 宿主（desktop-host）
+  - "apps/*"
+  # Python 音频服务（audio-ai-worker）目录纳入工作区视野，但其本身用 uv 管理，无 package.json 时会被忽略
+  - "services/*"
+  # AI 自测沙盒（mock-harness）与脚本
+  - "tools/*"
+# 注意：mods/ 为 C# SMAPI Mod（dotnet 构建），不纳入 pnpm 工作区

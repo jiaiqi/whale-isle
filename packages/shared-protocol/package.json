@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/shared-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[零依赖核心层] 全局单点事实源：Zod 强类型契约（事件总线、MCP 回执、人设与配置 Schema）",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
+}

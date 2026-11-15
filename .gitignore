@@ -1,0 +1,34 @@
+# Node / pnpm
+node_modules/
+*.tsbuildinfo
+dist/
+coverage/
+
+# Python（services/audio-ai-worker）
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.mypy_cache/
+
+# C#（mods/stardew-mcp-mod）
+mods/**/bin/
+mods/**/obj/
+
+# 运行期本地数据与缓存（严禁入库）
+data/
+*.sqlite3
+*.db
+cache/
+recordings/
+
+# 密钥与环境变量
+.env
+.env.*
+!.env.example
+
+# 编辑器与系统
+.DS_Store
+.idea/
+.vscode/
+*.log
