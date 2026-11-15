@@ -2,6 +2,7 @@
 
 > **纪律**：任何第三方代码/素材进入本仓库前，必须先在此登记；Gate 2（`pnpm verify:gate`）会校验本文件存在且持续维护。
 > 台账状态标记：`✅ 已登记` / `⚠️ 待核实` / `⛔ 禁止引入`。
+> **核实口径（2026-11-15）**：许可证结论来自 GitHub API `license` 字段 + LICENSE 文件原文通读；"采用什么"实现细节详见各 `docs/REFERENCE-*.md`。
 
 ## 1. 运行时依赖（Node / TS）
 
@@ -13,22 +14,30 @@
 
 > 后续引入的每一个新依赖（Electron、React、Dexie、better-sqlite3、dependency-cruiser、FastAPI、Demucs、RVC 等）**必须在本表追加一行**。
 
-## 2. 移植/参考的开源项目代码
+## 2. 移植/参考的开源项目代码（2026-11-15 真实核实）
 
-| 来源项目 | 许可证 | 移植范围 | 本仓库落点 | 备注与约束 | 状态 |
+| 来源项目 | 许可证（核实结果） | 移植范围 | 本仓库落点 | 备注与约束 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| PC2005-cloud/dsh-pet | MIT | 渲染物理、语音锁、绿幕转 WebM 工具链 | `packages/pet-renderer`、`services/audio-ai-worker/asset_pipeline` | 代码可移植需保留版权头 | ✅ 已登记（代码） |
-| PC2005-cloud/dsh-pet（内置素材） | **非商用** | "蓝色大肥鱼" .webm 动作资产包 | `assets/pets/blue-whale-maid/` | **`licenseScope: DEV_ONLY_NON_COMMERCIAL`，禁止商用**；必须提供一键替换自制素材包管线 | ⚠️ 仅限本地开发测试 |
-| BlindWhaleFarmer | ⚠️ 待核实 | 动作互斥锁 / 真实回执 / 键鼠接管机制思想 | `packages/game-bridge-mcp`、`mods/stardew-mcp-mod` | 核实许可证前严禁复制源码 | ⚠️ 待核实 |
-| newbeejmc/Dsh_douyin | UNLICENSED | — | — | **⛔ 严禁复制源码**，仅参考节目状态机思想 | ⛔ 禁止引入 |
-| fore-vip/dsh-live | UNLICENSED | — | — | **⛔ 严禁复制源码**；其密钥回传/虚假指标逻辑绝对禁止 | ⛔ 禁止引入 |
+| `PC2005-cloud/dsh-pet` | **代码 MIT** | 渲染物理（Q 弹/甩抛/DPI 边界）、睡觉安静模式、余额分档动画、绿幕转 WebM 资产链 | `packages/pet-renderer`、`services/audio-ai-worker/asset_pipeline` | 移植须保留 MIT 版权头；二创公开渠道须附原作者仓库地址（README 约定） | ✅ 已登记（代码） |
+| `PC2005-cloud/dsh-pet` + `luckui/dsh-livestream`（大肥鱼形象/动画素材） | **CC BY-NC-SA 4.0**（形象原型声明：溟月 @上善无形；女仆鲸鱼娘设计 @ZipZipPipe） | "蓝色大肥鱼" webm 动作资产包 | `assets/pets/blue-whale-maid/` | **`licenseScope: DEV_ONLY_NON_COMMERCIAL`，禁止商用**；必须提供一键替换自制素材包管线 | ⚠️ 仅限本地开发测试 |
+| `Darianliu23/dsh-stardew-blind-whale-farmer` | **MIT**（原"待核实"已解除） | Observer 状态树、A*/跨地图寻路、游戏原生执行、F7 接管、游玩预算、攻略分层 | `mods/stardew-mcp-mod`、`packages/game-bridge-mcp` | 传输改为本仓 WS+JSON-RPC 2.0；保留版权头；C# 改造（MIT 允许直接改造，非仅思想参考） | ✅ 已登记 |
+| `LockyBee/dsh-douyin-agent` | **MIT** | 收据基线/验证记录/额度账本的纪律参照；分镜拼图思路 | `packages/live-stream-hub`、`docs/VERIFY.md` | 不引入其浏览器自动化源码 | ✅ 已登记 |
+| `SAOS-3624/dsh-video-storyboard` | **Apache-2.0**（v0.5.0 起） | evidence.json 证据链格式、token 预算/dryRun 思想 | `packages/live-stream-hub`（切片器） | **必须保留 NOTICE 与署名**（Apache-2.0 §4） | ✅ 已登记 |
+| `luckui/dsh-livestream` | **代码 MIT** | 注意力调度原型、情绪标记换表情、谢幕结算、模拟观众思想 | `packages/live-stream-hub` | 代码引用保留版权头；其 dafeiyu 素材同上 CC BY-NC-SA | ✅ 已登记（代码） |
+| `XiaoZheBrother/dsh-live-studio` | **MIT** | Live2D 三工具设计、同观众合并、渲染安全基线（回环+同源+令牌） | `packages/pet-renderer`（Live2D 预留）、`packages/live-stream-hub` | 引用保留版权头；其复用的鲸语（jingyu-live2d-agent）MIT 组件如引入须带 NOTICE | ✅ 已登记 |
+| `YeStarOne/deepseek-superagent-feiyu-os` | **代码 MIT / 文档 CC-BY-4.0** | observe→auto 纪律、唤醒分级、信箱消息、契约夹具+双侧探针思想 | `AGENTS.md` 体系、`packages/shared-protocol`（T-M0-02） | 不引入其运行时与常驻唤醒机制 | ✅ 已登记 |
+| `newbeejmc/Dsh_douyin` | **None（无 LICENSE）** | — | — | **⛔ 严禁复制任何源码**；其 `vendor/douyin-danma`（cortico-world-douyin-live）为 **GPL-3.0**，引入即传染 | ⛔ 禁止引入 |
+| `fore-vip/dsh-live` | **None（无 LICENSE）** | — | — | **⛔ 严禁复制任何源码**；README 自述"模拟引擎"码率/观看/时长为模拟值（虚假指标反面样本） | ⛔ 禁止引入 |
+| `cortico-world-douyin-live` | **GPL-3.0-or-later** | — | — | **⛔ 禁止 vendor 引入**（传染性）；抖音弹幕直连主线为 dyhub，不可用则自研协议并立合规工单 | ⛔ 禁止引入 |
+| `dyhub` / `CC Switch` / `Magpie` / `awesome-codex-pet` | ⚠️ 待核实（用户未提供仓库） | — | — | 补档前一律按"仅思想参考、禁止复制源码"处置 | ⚠️ 待核实 |
 
 ## 3. 素材资产台账
 
 | 素材 | 来源 | 许可证 | licenseScope | 状态 |
 | --- | --- | --- | --- | --- |
-| 蓝色大肥鱼 .webm 动作包 | dsh-pet 内置 | 非商用 | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 仅开发测试，商用前必须整包替换 |
+| 蓝色大肥鱼 .webm 动作包 | dsh-pet 内置 | 非商用（形象 CC BY-NC-SA 4.0） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 仅开发测试，商用前必须整包替换 |
+| dsh-livestream dafeiyu 动画片段 | `packages/dsh-livestream/assets/characters/dafeiyu/` | CC BY-NC-SA 4.0（目录级声明） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 同上，未引入则不登记落点 |
 
 ## 4. 许可证文本归档
 
-- 第三方代码整段移植时，许可证全文与版权声明归档至 `docs/licenses/`（按 `<项目名>-<年份>.txt` 命名）。
+- 第三方代码整段移植时，许可证全文与版权声明归档至 `docs/licenses/`（按 `<项目名>-<年份>.txt` 命名）；Apache-2.0 移植同时归档其 NOTICE。

@@ -1,26 +1,40 @@
 # REFERENCE — dsh-stardew-blind-whale-farmer（BlindWhaleFarmer）复评档案
 
-> 状态：⏳ 待补充（由人类宿主提供原始资料后填写，或 AI 在对应工单复评时补全）
-> 硬性约束：上游许可证**待核实**；核实前一律按"仅吸收机制思想、严禁复制源码"处置。
+> 仓库：https://github.com/Darianliu23/dsh-stardew-blind-whale-farmer ｜ 许可证：**MIT**（LICENSE 原文核实，此前"待核实"解除——**可在保留版权头前提下直接改造**）｜ 主语言：C#（SMAPI mod）+ JS（DSH 插件）｜ Stars：21 ｜ 最近推送：2026-11-14
+> 分析方式：README 全文 + `docs/dsh-plugin.md` + `BlindWhaleFarmer/` 目录结构；未逐行审计源码。分析日期：2026-11-15
 
 ## 1. 结论摘要
 
-（待填写：星露谷 MCP 具身代理的核心机制来源）
+**M3《星露谷》模块的直接底座**：SMAPI 模组把游戏"翻译"成纯文字（状态/背包/29×19 字符地图/作物坐标/出口/村民好感生日/动物/钓鱼点/矿洞），AI 经 function calling 发指令，模组用**游戏原生 API** 执行（寻路、用工具、播种浇水），全程无视觉模型——与 SPEC §3.5 的设计完全同源，且许可证允许直接改造而非重写。
 
 ## 2. 采用什么
 
-（待填写，例：结构化状态树封装、原子级 MCP Tools（`till_soil` / `water_crops` / `talk_to_npc` / `go_to_location`）、`COMPLETED | FAILED | UNCERTAIN` 真实执行回执、动作互斥锁、玩家物理键鼠一动即接管、游玩预算控制）
+- **状态树 → 文字观察**（`Observer.cs`）：体力/生命/金钱/技能/背包/当前菜单与选项/本地点出口与营业时间/村民位置好感生日/作物状态坐标/附近物体带建议工具/29×19 以玩家为中心字符地图/动物待办/送礼喜好——`gameStateSnapshot` 契约的蓝本。
+- **寻路与移动**：`Pathfinder.cs`（当前地图 A*）+ `Exits.cs`（跨地图出口图 BFS，自动开门）；寻路失败返回原因（`PATH_BLOCKED` 类）。
+- **真实执行铁律**：工具全部走游戏原生逻辑（`BeginUsingTool`/`checkAction`/`tryToPlaceItem`/`shipItem`），体力消耗、动画、掉落与手动一致——严禁结果造假的技术实现。
+- **接管语义**：按 **F7** 立即中止 AI 正在执行的动作，之后游戏动作被拒绝并回"玩家接管了"提示，再按交还——映射我们 `ABORTED_BY_HUMAN_TAKEOVER` + `GameControlAuthoritySchema`。（BWF 是显式按键接管，无 0.1s 物理键鼠监听——我们的 Seamless Co-Play 是增强而非替代。）
+- **游玩预算**：`SessionDays` / `SessionMinutes`（到点先回家睡觉存档再停下汇报）——防沉迷式任务边界。
+- **时间冻结**：AI 思考时冻结游戏时钟；MCP 客户端空闲 120s 暂停游戏。
+- **攻略分层省 token**：主攻略 + 钓鱼/采矿/节日专题**按需 `get_guide`**，不塞进常驻上下文。
+- **坏回复自动续玩**：模型吐坏工具调用文本时等会话空闲自动"接着玩"，连续上限 3 次、有成功即重新计数——`uncertain` 重试上限的现实参照。
+- **离线测试**：`tests/HarnessTest/` 不启动游戏即可测模组逻辑——`stardew-mcp-simulator` 的对接思路（真实 mod 逻辑也可离线断言）。
+- **成本画像**：每步 10k–14k 输入 token（系统提示+工具定义约 7.5k 固定、命中 DeepSeek 缓存），每 10–20 秒一步——**印证粘性路由 + Prompt Cache 假设**。
+- **联机三模式**：指令做完接着自己玩（默认）/ 主要听指令 / 自己玩，固定口令即时切换——托管/接管状态机的语义参照。
 
 ## 3. 不采用什么（为什么）
 
-（待填写）
+- **传输协议**：BWF 的 MCP 是本机 Streamable HTTP（`127.0.0.1:18080/mcp`）；我们统一走 WS + JSON-RPC 2.0（端口 18760），契约以 `shared-protocol` 为准——仅保留其工具语义，不改我们的总线。
+- **内置 DeepSeek 直连**（`DeepSeekClient.cs` 直连 api.deepseek.com）：我们所有模型调用必须经 `model-gateway`（脱敏/路由/计量）。
+- **53 个全量工具**直接搬：M3 先以 `StardewMcpActionReceiptSchema.toolName` 的 7 个原子工具跑通闭环，后续按需扩充（BWF 的 `fish`/`explore_mine` 等复杂动作可作第二阶段移植清单）。
 
 ## 4. 验证路径、预算边界与回退方案
 
-（待填写）
+- 验证路径：T-M3-01 在 `stardew-mcp-simulator` 跑 5 剧本（含 `uncertain` 卡死与接管）；T-M3-04 `dotnet build` 零警告（BWF 用 .NET 6 + SMAPI 4.5.2 + 游戏 1.6.15，直接沿用其构建链 `build.ps1`）。
+- 预算边界：游玩预算字段（SessionDays/Minutes）进 C# Mod 配置，硬上限写在 Mod 侧而非 LLM 侧。
+- 回退：C# 改造受阻时，上层逻辑（规划器/回执处理/接管）先用模拟器闭环，Mod 最后接入。
 
-## 5. 复评记录（每次推翻/更新结论时追加）
+## 5. 复评记录
 
 | 日期 | 工单 | 结论变化 | 原因 |
 | --- | --- | --- | --- |
-| — | — | — | — |
+| 2026-11-15 | 预置 | 许可证由"待核实"变更为 **MIT 可直接改造**；补充真实工具清单与成本画像 | GitHub API + LICENSE 原文核实 |
