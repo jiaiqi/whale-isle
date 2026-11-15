@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AudioPlaybackReceipt",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/AudioPlaybackReceipt",
+  "$defs": {
+    "AudioPlaybackReceipt": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "INTERRUPTED_BY_P0",
+            "TTL_EXPIRED",
+            "AUDIO_DEVICE_ERROR"
+          ]
+        },
+        "actualPlayedMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "leaseId",
+        "status",
+        "actualPlayedMs",
+        "timestamp"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

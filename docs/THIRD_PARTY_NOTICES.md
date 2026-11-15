@@ -9,8 +9,15 @@
 | 组件 | 版本 | 许可证 | 使用方式 | 用途 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | zod | ^3.25 | MIT | 依赖 | `packages/shared-protocol` 契约校验 | ✅ 已登记 |
+| zod-to-json-schema | ^3.25 | MIT | devDependencies（shared-protocol） | Zod → JSON Schema 导出 | ✅ 已登记 |
 | typescript | ^5.9 | Apache-2.0 | devDependencies | 全仓类型编译 | ✅ 已登记 |
 | @types/node | ^22 | MIT | devDependencies | Node 类型 | ✅ 已登记 |
+| vitest | ^5 | MIT | devDependencies | Gate 3 单测运行器 | ✅ 已登记 |
+| tsx | ^4 | MIT | devDependencies | 契约生成器运行时 | ✅ 已登记 |
+| dependency-cruiser | ^16 | MIT | devDependencies | Gate 1 架构边界检查 | ✅ 已登记 |
+| pydantic（uv 临时环境） | 2.x | MIT | Python 侧契约模型基类 | protocol_models.py 依赖 | ✅ 已登记 |
+| datamodel-code-generator（uv） | latest | MIT | 生成工具 | JSON Schema → Pydantic | ✅ 已登记 |
+| mypy / ruff / pytest（uv） | latest | MIT/MIT-类/PSF-类 | 生成工具链 | Python 类型/规范/测试 | ✅ 已登记 |
 
 > 后续引入的每一个新依赖（Electron、React、Dexie、better-sqlite3、dependency-cruiser、FastAPI、Demucs、RVC 等）**必须在本表追加一行**。
 

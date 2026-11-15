@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewMcpActionReceipt",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewMcpActionReceipt",
+  "$defs": {
+    "StardewMcpActionReceipt": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "toolName": {
+          "type": "string",
+          "enum": [
+            "move_to_tile",
+            "use_tool_on_tile",
+            "water_crops_batch",
+            "interact_with_npc",
+            "check_trash_can",
+            "eat_food_for_stamina",
+            "go_to_sleep"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN",
+            "ABORTED_BY_HUMAN_TAKEOVER"
+          ]
+        },
+        "failureOrUncertainReason": {
+          "type": "string"
+        },
+        "gameStateSnapshot": {
+          "type": "object",
+          "properties": {
+            "dayOfMonth": {
+              "type": "integer"
+            },
+            "season": {
+              "type": "string",
+              "enum": [
+                "spring",
+                "summer",
+                "fall",
+                "winter"
+              ]
+            },
+            "timeOfDay": {
+              "type": "integer"
+            },
+            "staminaCurrent": {
+              "type": "number"
+            },
+            "staminaMax": {
+              "type": "number"
+            },
+            "healthCurrent": {
+              "type": "number"
+            },
+            "gold": {
+              "type": "integer"
+            },
+            "locationName": {
+              "type": "string"
+            },
+            "isPlayerMovingPhysically": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "dayOfMonth",
+            "season",
+            "timeOfDay",
+            "staminaCurrent",
+            "staminaMax",
+            "healthCurrent",
+            "gold",
+            "locationName",
+            "isPlayerMovingPhysically"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "toolName",
+        "status",
+        "gameStateSnapshot"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

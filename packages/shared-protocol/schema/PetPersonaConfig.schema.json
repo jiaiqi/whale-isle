@@ -1,0 +1,294 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PetPersonaConfig",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/PetPersonaConfig",
+  "$defs": {
+    "PetPersonaConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "ownerTitles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "鱼片",
+            "主人"
+          ]
+        },
+        "licenseScope": {
+          "type": "string",
+          "enum": [
+            "DEV_ONLY_NON_COMMERCIAL",
+            "COMMERCIAL_READY"
+          ]
+        },
+        "avatarManifestPath": {
+          "type": "string"
+        },
+        "tailMoodIndicatorEnabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "systemPromptTemplate": {
+          "type": "string"
+        },
+        "innerVoiceConfig": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "thinkTagName": {
+              "type": "string",
+              "default": "think"
+            },
+            "derailmentProbability": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.35
+            },
+            "derailmentPrompts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "derailmentPrompts"
+          ],
+          "additionalProperties": false
+        },
+        "reflexRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "triggerRegex": {
+                "type": "string"
+              },
+              "cooldownMs": {
+                "type": "integer",
+                "default": 8000
+              },
+              "priority": {
+                "type": "string",
+                "const": "P0_INTERRUPT"
+              },
+              "actionState": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "walk",
+                  "eat_rice",
+                  "happy_maid",
+                  "thinking_tail_wag",
+                  "rage_spray",
+                  "clumsy_panic",
+                  "game_focus",
+                  "sing_stage",
+                  "hungry_lazy",
+                  "sleep_mute"
+                ]
+              },
+              "emotionTag": {
+                "type": "string",
+                "enum": [
+                  "rage_spray",
+                  "tsundere_refuse"
+                ]
+              },
+              "ledgerGrudgeTag": {
+                "type": "string"
+              },
+              "presetResponses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "id",
+              "triggerRegex",
+              "priority",
+              "actionState",
+              "emotionTag",
+              "ledgerGrudgeTag",
+              "presetResponses"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "riceBowl": {
+          "type": "object",
+          "properties": {
+            "dailyRiceGrainBudget": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 500000
+            },
+            "consumedRiceGrainsToday": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "lowRiceWarningRatio": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 0.5,
+              "default": 0.15
+            },
+            "activeSideDishes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "dishName": {
+                    "type": "string"
+                  },
+                  "workEthicMultiplier": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "unlockDeepReasoning": {
+                    "type": "boolean"
+                  },
+                  "expiresAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "dishName",
+                  "workEthicMultiplier",
+                  "unlockDeepReasoning",
+                  "expiresAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "activeSideDishes"
+          ],
+          "additionalProperties": false
+        },
+        "stardewWeights": {
+          "type": "object",
+          "properties": {
+            "lazyDefault": {
+              "type": "object",
+              "properties": {
+                "farmingProfit": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "npcGossipAndTrashCan": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "miningCombat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "slackingAndScenery": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minStaminaThreshold": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 0.9
+                }
+              },
+              "required": [
+                "farmingProfit",
+                "npcGossipAndTrashCan",
+                "miningCombat",
+                "slackingAndScenery",
+                "minStaminaThreshold"
+              ],
+              "additionalProperties": false
+            },
+            "seriousForOwner": {
+              "$ref": "#/$defs/PetPersonaConfig/properties/stardewWeights/properties/lazyDefault"
+            }
+          },
+          "required": [
+            "lazyDefault",
+            "seriousForOwner"
+          ],
+          "additionalProperties": false
+        },
+        "voiceProfile": {
+          "type": "object",
+          "properties": {
+            "ttsVoicePackId": {
+              "type": "string"
+            },
+            "rvcModelPath": {
+              "type": "string"
+            },
+            "rvcIndexRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.75
+            },
+            "pitchShiftSemitones": {
+              "type": "integer",
+              "minimum": -12,
+              "maximum": 12,
+              "default": 0
+            }
+          },
+          "required": [
+            "ttsVoicePackId",
+            "rvcModelPath"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "title",
+        "licenseScope",
+        "avatarManifestPath",
+        "systemPromptTemplate",
+        "innerVoiceConfig",
+        "reflexRules",
+        "riceBowl",
+        "stardewWeights",
+        "voiceProfile"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

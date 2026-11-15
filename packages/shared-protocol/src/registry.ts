@@ -1,0 +1,49 @@
+import type { ZodTypeAny } from 'zod';
+import {
+  AudioPlaybackLeaseSchema,
+  AudioPlaybackReceiptSchema,
+  DiningProfilePresetSchema,
+  GameControlAuthoritySchema,
+  LiveProgramStateSchema,
+  ModelProviderConfigSchema,
+  NormalizedLiveEventSchema,
+  PetActionStateSchema,
+  PetPersonaConfigSchema,
+  PetRendererTypeSchema,
+  ProviderEndpointVariantSchema,
+  ReflexRuleSchema,
+  RiceBowlEconomySchema,
+  StardewMcpActionReceiptSchema,
+  StardewUtilityWeightsSchema,
+  StickyRoutingGroupSchema,
+  WorkbenchRoleSlotSchema,
+} from './index';
+
+/**
+ * 跨语言契约注册表（T-M0-02）。
+ * gen-contracts.ts 由此生成：
+ *   - packages/shared-protocol/schema/*.schema.json（供 C# SMAPI Mod 校验）
+ *   - services/audio-ai-worker/protocol_models.py（Pydantic，供 Python 音频服务）
+ * 新增/修改契约必须：先改本文件登记 → 跑 `pnpm gen:contracts` → 跑 `pnpm py:check`。
+ */
+export const CONTRACT_VERSION = '1.0.0';
+
+export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
+  PetRendererType: PetRendererTypeSchema,
+  PetActionState: PetActionStateSchema,
+  AudioPlaybackLease: AudioPlaybackLeaseSchema,
+  AudioPlaybackReceipt: AudioPlaybackReceiptSchema,
+  ReflexRule: ReflexRuleSchema,
+  StardewUtilityWeights: StardewUtilityWeightsSchema,
+  RiceBowlEconomy: RiceBowlEconomySchema,
+  PetPersonaConfig: PetPersonaConfigSchema,
+  ProviderEndpointVariant: ProviderEndpointVariantSchema,
+  ModelProviderConfig: ModelProviderConfigSchema,
+  WorkbenchRoleSlot: WorkbenchRoleSlotSchema,
+  StickyRoutingGroup: StickyRoutingGroupSchema,
+  DiningProfilePreset: DiningProfilePresetSchema,
+  GameControlAuthority: GameControlAuthoritySchema,
+  StardewMcpActionReceipt: StardewMcpActionReceiptSchema,
+  LiveProgramState: LiveProgramStateSchema,
+  NormalizedLiveEvent: NormalizedLiveEventSchema,
+};

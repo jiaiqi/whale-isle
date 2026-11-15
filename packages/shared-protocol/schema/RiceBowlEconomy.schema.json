@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RiceBowlEconomy",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/RiceBowlEconomy",
+  "$defs": {
+    "RiceBowlEconomy": {
+      "type": "object",
+      "properties": {
+        "dailyRiceGrainBudget": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 500000
+        },
+        "consumedRiceGrainsToday": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "lowRiceWarningRatio": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5,
+          "default": 0.15
+        },
+        "activeSideDishes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "dishName": {
+                "type": "string"
+              },
+              "workEthicMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 5
+              },
+              "unlockDeepReasoning": {
+                "type": "boolean"
+              },
+              "expiresAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "dishName",
+              "workEthicMultiplier",
+              "unlockDeepReasoning",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "activeSideDishes"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkbenchRoleSlot",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/WorkbenchRoleSlot",
+  "$defs": {
+    "WorkbenchRoleSlot": {
+      "type": "string",
+      "enum": [
+        "MAIN_PERSONA_BRAIN",
+        "STARDEW_GAME_PLANNER",
+        "DANMAKU_FAST_ROUTER",
+        "VISION_STORYBOARD",
+        "VOICE_TTS_SPEECH",
+        "VOICE_SVC_SINGING"
+      ]
+    }
+  }
+}

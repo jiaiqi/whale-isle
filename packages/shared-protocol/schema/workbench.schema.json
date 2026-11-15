@@ -1,0 +1,1135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AIWorkbenchContracts",
+  "contractVersion": "1.0.0",
+  "type": "object",
+  "required": [
+    "PetRendererType",
+    "PetActionState",
+    "AudioPlaybackLease",
+    "AudioPlaybackReceipt",
+    "ReflexRule",
+    "StardewUtilityWeights",
+    "RiceBowlEconomy",
+    "PetPersonaConfig",
+    "ProviderEndpointVariant",
+    "ModelProviderConfig",
+    "WorkbenchRoleSlot",
+    "StickyRoutingGroup",
+    "DiningProfilePreset",
+    "GameControlAuthority",
+    "StardewMcpActionReceipt",
+    "LiveProgramState",
+    "NormalizedLiveEvent"
+  ],
+  "properties": {
+    "PetRendererType": {
+      "$ref": "#/$defs/PetRendererType"
+    },
+    "PetActionState": {
+      "$ref": "#/$defs/PetActionState"
+    },
+    "AudioPlaybackLease": {
+      "$ref": "#/$defs/AudioPlaybackLease"
+    },
+    "AudioPlaybackReceipt": {
+      "$ref": "#/$defs/AudioPlaybackReceipt"
+    },
+    "ReflexRule": {
+      "$ref": "#/$defs/ReflexRule"
+    },
+    "StardewUtilityWeights": {
+      "$ref": "#/$defs/StardewUtilityWeights"
+    },
+    "RiceBowlEconomy": {
+      "$ref": "#/$defs/RiceBowlEconomy"
+    },
+    "PetPersonaConfig": {
+      "$ref": "#/$defs/PetPersonaConfig"
+    },
+    "ProviderEndpointVariant": {
+      "$ref": "#/$defs/ProviderEndpointVariant"
+    },
+    "ModelProviderConfig": {
+      "$ref": "#/$defs/ModelProviderConfig"
+    },
+    "WorkbenchRoleSlot": {
+      "$ref": "#/$defs/WorkbenchRoleSlot"
+    },
+    "StickyRoutingGroup": {
+      "$ref": "#/$defs/StickyRoutingGroup"
+    },
+    "DiningProfilePreset": {
+      "$ref": "#/$defs/DiningProfilePreset"
+    },
+    "GameControlAuthority": {
+      "$ref": "#/$defs/GameControlAuthority"
+    },
+    "StardewMcpActionReceipt": {
+      "$ref": "#/$defs/StardewMcpActionReceipt"
+    },
+    "LiveProgramState": {
+      "$ref": "#/$defs/LiveProgramState"
+    },
+    "NormalizedLiveEvent": {
+      "$ref": "#/$defs/NormalizedLiveEvent"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "PetRendererType": {
+      "type": "string",
+      "enum": [
+        "webm-alpha",
+        "live2d",
+        "sprite-sheet"
+      ]
+    },
+    "PetActionState": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "walk",
+        "eat_rice",
+        "happy_maid",
+        "thinking_tail_wag",
+        "rage_spray",
+        "clumsy_panic",
+        "game_focus",
+        "sing_stage",
+        "hungry_lazy",
+        "sleep_mute"
+      ]
+    },
+    "AudioPlaybackLease": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sourceModule": {
+          "type": "string",
+          "enum": [
+            "persona-talk",
+            "svc-singing",
+            "reflex-interrupt",
+            "system-alert"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "P0_INTERRUPT",
+            "P1_CADENCE",
+            "P2_IDLE"
+          ]
+        },
+        "ttlMs": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 300000
+        },
+        "emotionTag": {
+          "type": "string",
+          "enum": [
+            "sweet_normal",
+            "tsundere_refuse",
+            "rage_spray",
+            "lazy_yawn",
+            "happy_rice"
+          ]
+        },
+        "textSubtitle": {
+          "type": "string"
+        },
+        "innerThoughtText": {
+          "type": "string"
+        },
+        "audioUrlOrBase64": {
+          "type": "string"
+        },
+        "actionState": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "walk",
+            "eat_rice",
+            "happy_maid",
+            "thinking_tail_wag",
+            "rage_spray",
+            "clumsy_panic",
+            "game_focus",
+            "sing_stage",
+            "hungry_lazy",
+            "sleep_mute"
+          ]
+        }
+      },
+      "required": [
+        "leaseId",
+        "sourceModule",
+        "priority",
+        "ttlMs",
+        "emotionTag",
+        "textSubtitle",
+        "audioUrlOrBase64",
+        "actionState"
+      ],
+      "additionalProperties": false
+    },
+    "AudioPlaybackReceipt": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "INTERRUPTED_BY_P0",
+            "TTL_EXPIRED",
+            "AUDIO_DEVICE_ERROR"
+          ]
+        },
+        "actualPlayedMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "leaseId",
+        "status",
+        "actualPlayedMs",
+        "timestamp"
+      ],
+      "additionalProperties": false
+    },
+    "ReflexRule": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "triggerRegex": {
+          "type": "string"
+        },
+        "cooldownMs": {
+          "type": "integer",
+          "default": 8000
+        },
+        "priority": {
+          "type": "string",
+          "const": "P0_INTERRUPT"
+        },
+        "actionState": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "walk",
+            "eat_rice",
+            "happy_maid",
+            "thinking_tail_wag",
+            "rage_spray",
+            "clumsy_panic",
+            "game_focus",
+            "sing_stage",
+            "hungry_lazy",
+            "sleep_mute"
+          ]
+        },
+        "emotionTag": {
+          "type": "string",
+          "enum": [
+            "rage_spray",
+            "tsundere_refuse"
+          ]
+        },
+        "ledgerGrudgeTag": {
+          "type": "string"
+        },
+        "presetResponses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "triggerRegex",
+        "priority",
+        "actionState",
+        "emotionTag",
+        "ledgerGrudgeTag",
+        "presetResponses"
+      ],
+      "additionalProperties": false
+    },
+    "StardewUtilityWeights": {
+      "type": "object",
+      "properties": {
+        "farmingProfit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "npcGossipAndTrashCan": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "miningCombat": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "slackingAndScenery": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minStaminaThreshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.9
+        }
+      },
+      "required": [
+        "farmingProfit",
+        "npcGossipAndTrashCan",
+        "miningCombat",
+        "slackingAndScenery",
+        "minStaminaThreshold"
+      ],
+      "additionalProperties": false
+    },
+    "RiceBowlEconomy": {
+      "type": "object",
+      "properties": {
+        "dailyRiceGrainBudget": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 500000
+        },
+        "consumedRiceGrainsToday": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "lowRiceWarningRatio": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5,
+          "default": 0.15
+        },
+        "activeSideDishes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "dishName": {
+                "type": "string"
+              },
+              "workEthicMultiplier": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 5
+              },
+              "unlockDeepReasoning": {
+                "type": "boolean"
+              },
+              "expiresAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "dishName",
+              "workEthicMultiplier",
+              "unlockDeepReasoning",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "activeSideDishes"
+      ],
+      "additionalProperties": false
+    },
+    "PetPersonaConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "ownerTitles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "鱼片",
+            "主人"
+          ]
+        },
+        "licenseScope": {
+          "type": "string",
+          "enum": [
+            "DEV_ONLY_NON_COMMERCIAL",
+            "COMMERCIAL_READY"
+          ]
+        },
+        "avatarManifestPath": {
+          "type": "string"
+        },
+        "tailMoodIndicatorEnabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "systemPromptTemplate": {
+          "type": "string"
+        },
+        "innerVoiceConfig": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "thinkTagName": {
+              "type": "string",
+              "default": "think"
+            },
+            "derailmentProbability": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.35
+            },
+            "derailmentPrompts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "derailmentPrompts"
+          ],
+          "additionalProperties": false
+        },
+        "reflexRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "triggerRegex": {
+                "type": "string"
+              },
+              "cooldownMs": {
+                "type": "integer",
+                "default": 8000
+              },
+              "priority": {
+                "type": "string",
+                "const": "P0_INTERRUPT"
+              },
+              "actionState": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "walk",
+                  "eat_rice",
+                  "happy_maid",
+                  "thinking_tail_wag",
+                  "rage_spray",
+                  "clumsy_panic",
+                  "game_focus",
+                  "sing_stage",
+                  "hungry_lazy",
+                  "sleep_mute"
+                ]
+              },
+              "emotionTag": {
+                "type": "string",
+                "enum": [
+                  "rage_spray",
+                  "tsundere_refuse"
+                ]
+              },
+              "ledgerGrudgeTag": {
+                "type": "string"
+              },
+              "presetResponses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "id",
+              "triggerRegex",
+              "priority",
+              "actionState",
+              "emotionTag",
+              "ledgerGrudgeTag",
+              "presetResponses"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "riceBowl": {
+          "type": "object",
+          "properties": {
+            "dailyRiceGrainBudget": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "default": 500000
+            },
+            "consumedRiceGrainsToday": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "lowRiceWarningRatio": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 0.5,
+              "default": 0.15
+            },
+            "activeSideDishes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "dishName": {
+                    "type": "string"
+                  },
+                  "workEthicMultiplier": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "unlockDeepReasoning": {
+                    "type": "boolean"
+                  },
+                  "expiresAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "dishName",
+                  "workEthicMultiplier",
+                  "unlockDeepReasoning",
+                  "expiresAt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "activeSideDishes"
+          ],
+          "additionalProperties": false
+        },
+        "stardewWeights": {
+          "type": "object",
+          "properties": {
+            "lazyDefault": {
+              "type": "object",
+              "properties": {
+                "farmingProfit": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "npcGossipAndTrashCan": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "miningCombat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "slackingAndScenery": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minStaminaThreshold": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 0.9
+                }
+              },
+              "required": [
+                "farmingProfit",
+                "npcGossipAndTrashCan",
+                "miningCombat",
+                "slackingAndScenery",
+                "minStaminaThreshold"
+              ],
+              "additionalProperties": false
+            },
+            "seriousForOwner": {
+              "$ref": "#/$defs/PetPersonaConfig/properties/stardewWeights/properties/lazyDefault"
+            }
+          },
+          "required": [
+            "lazyDefault",
+            "seriousForOwner"
+          ],
+          "additionalProperties": false
+        },
+        "voiceProfile": {
+          "type": "object",
+          "properties": {
+            "ttsVoicePackId": {
+              "type": "string"
+            },
+            "rvcModelPath": {
+              "type": "string"
+            },
+            "rvcIndexRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.75
+            },
+            "pitchShiftSemitones": {
+              "type": "integer",
+              "minimum": -12,
+              "maximum": 12,
+              "default": 0
+            }
+          },
+          "required": [
+            "ttsVoicePackId",
+            "rvcModelPath"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "title",
+        "licenseScope",
+        "avatarManifestPath",
+        "systemPromptTemplate",
+        "innerVoiceConfig",
+        "reflexRules",
+        "riceBowl",
+        "stardewWeights",
+        "voiceProfile"
+      ],
+      "additionalProperties": false
+    },
+    "ProviderEndpointVariant": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string",
+          "enum": [
+            "CN",
+            "GLOBAL",
+            "LOCAL"
+          ]
+        },
+        "planType": {
+          "type": "string",
+          "enum": [
+            "PAY_AS_YOU_GO",
+            "CODING_PLAN",
+            "FREE_TIER",
+            "LOCAL_GPU"
+          ]
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "isFullUrl": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "region",
+        "planType",
+        "baseUrl"
+      ],
+      "additionalProperties": false
+    },
+    "ModelProviderConfig": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "OFFICIAL_LLM",
+            "AGGREGATOR_LLM",
+            "LOCAL_LLM",
+            "AUDIO_TTS",
+            "AUDIO_SVC"
+          ]
+        },
+        "activeRegion": {
+          "type": "string",
+          "enum": [
+            "CN",
+            "GLOBAL",
+            "LOCAL"
+          ],
+          "default": "CN"
+        },
+        "activePlanType": {
+          "type": "string",
+          "enum": [
+            "PAY_AS_YOU_GO",
+            "CODING_PLAN",
+            "FREE_TIER",
+            "LOCAL_GPU"
+          ],
+          "default": "PAY_AS_YOU_GO"
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "region": {
+                "type": "string",
+                "enum": [
+                  "CN",
+                  "GLOBAL",
+                  "LOCAL"
+                ]
+              },
+              "planType": {
+                "type": "string",
+                "enum": [
+                  "PAY_AS_YOU_GO",
+                  "CODING_PLAN",
+                  "FREE_TIER",
+                  "LOCAL_GPU"
+                ]
+              },
+              "baseUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "isFullUrl": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "region",
+              "planType",
+              "baseUrl"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "apiKeyMaskedOrRef": {
+          "type": "string"
+        },
+        "customParams": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "discoveredModels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "supportsReasoningThink": {
+                "type": "boolean",
+                "default": false
+              },
+              "supportsVision": {
+                "type": "boolean",
+                "default": false
+              },
+              "supportsToolCalling": {
+                "type": "boolean",
+                "default": true
+              },
+              "inputCostPer1M": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              },
+              "outputCostPer1M": {
+                "type": "number",
+                "minimum": 0,
+                "default": 0
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "variants",
+        "apiKeyMaskedOrRef",
+        "discoveredModels"
+      ],
+      "additionalProperties": false
+    },
+    "WorkbenchRoleSlot": {
+      "type": "string",
+      "enum": [
+        "MAIN_PERSONA_BRAIN",
+        "STARDEW_GAME_PLANNER",
+        "DANMAKU_FAST_ROUTER",
+        "VISION_STORYBOARD",
+        "VOICE_TTS_SPEECH",
+        "VOICE_SVC_SINGING"
+      ]
+    },
+    "StickyRoutingGroup": {
+      "type": "object",
+      "properties": {
+        "groupId": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "PROMPT_CACHE_STICKY",
+            "ROUND_ROBIN",
+            "LOWEST_LATENCY"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "providerId": {
+                "type": "string"
+              },
+              "modelId": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 100
+              }
+            },
+            "required": [
+              "providerId",
+              "modelId"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "groupId",
+        "strategy",
+        "candidates"
+      ],
+      "additionalProperties": false
+    },
+    "DiningProfilePreset": {
+      "type": "object",
+      "properties": {
+        "profileId": {
+          "type": "string",
+          "enum": [
+            "BUDGET_SLACKING",
+            "DELUXE_LIVESTREAM",
+            "OFFLINE_SURVIVAL"
+          ]
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "roleBindings": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "MAIN_PERSONA_BRAIN",
+              "STARDEW_GAME_PLANNER",
+              "DANMAKU_FAST_ROUTER",
+              "VISION_STORYBOARD",
+              "VOICE_TTS_SPEECH",
+              "VOICE_SVC_SINGING"
+            ]
+          }
+        },
+        "secretMaskingEnabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [
+        "profileId",
+        "displayName",
+        "roleBindings"
+      ],
+      "additionalProperties": false
+    },
+    "GameControlAuthority": {
+      "type": "string",
+      "enum": [
+        "AI_AUTOPILOT",
+        "HUMAN_TAKEOVER_ACTIVE",
+        "PAUSED_BY_PROGRAM"
+      ]
+    },
+    "StardewMcpActionReceipt": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "toolName": {
+          "type": "string",
+          "enum": [
+            "move_to_tile",
+            "use_tool_on_tile",
+            "water_crops_batch",
+            "interact_with_npc",
+            "check_trash_can",
+            "eat_food_for_stamina",
+            "go_to_sleep"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN",
+            "ABORTED_BY_HUMAN_TAKEOVER"
+          ]
+        },
+        "failureOrUncertainReason": {
+          "type": "string"
+        },
+        "gameStateSnapshot": {
+          "type": "object",
+          "properties": {
+            "dayOfMonth": {
+              "type": "integer"
+            },
+            "season": {
+              "type": "string",
+              "enum": [
+                "spring",
+                "summer",
+                "fall",
+                "winter"
+              ]
+            },
+            "timeOfDay": {
+              "type": "integer"
+            },
+            "staminaCurrent": {
+              "type": "number"
+            },
+            "staminaMax": {
+              "type": "number"
+            },
+            "healthCurrent": {
+              "type": "number"
+            },
+            "gold": {
+              "type": "integer"
+            },
+            "locationName": {
+              "type": "string"
+            },
+            "isPlayerMovingPhysically": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "dayOfMonth",
+            "season",
+            "timeOfDay",
+            "staminaCurrent",
+            "staminaMax",
+            "healthCurrent",
+            "gold",
+            "locationName",
+            "isPlayerMovingPhysically"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "toolName",
+        "status",
+        "gameStateSnapshot"
+      ],
+      "additionalProperties": false
+    },
+    "LiveProgramState": {
+      "type": "string",
+      "enum": [
+        "GAMING_MAIN",
+        "SINGING_CONCERT",
+        "CHATTING_INTERACT",
+        "SLEEP_OFF_DUTY"
+      ]
+    },
+    "NormalizedLiveEvent": {
+      "type": "object",
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "douyin",
+            "bilibili",
+            "local-host-input"
+          ]
+        },
+        "eventType": {
+          "type": "string",
+          "enum": [
+            "DANMAKU",
+            "GIFT",
+            "LIKE",
+            "ENTER_ROOM",
+            "SONG_REQUEST",
+            "VOTE_CHOICE"
+          ]
+        },
+        "sender": {
+          "type": "object",
+          "properties": {
+            "uid": {
+              "type": "string"
+            },
+            "nickname": {
+              "type": "string"
+            },
+            "intimacyScore": {
+              "type": "number",
+              "default": 0
+            },
+            "grudgeTags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "uid",
+            "nickname"
+          ],
+          "additionalProperties": false
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "rawText": {
+              "type": "string"
+            },
+            "sanitizedText": {
+              "type": "string"
+            },
+            "mergedCount": {
+              "type": "integer",
+              "default": 1
+            },
+            "giftName": {
+              "type": "string"
+            },
+            "giftDiamondValue": {
+              "type": "number",
+              "minimum": 0
+            },
+            "songTitle": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "assignedPriority": {
+          "type": "string",
+          "enum": [
+            "P0_INTERRUPT",
+            "P1_CADENCE",
+            "P2_IDLE"
+          ]
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "eventId",
+        "platform",
+        "eventType",
+        "sender",
+        "payload",
+        "assignedPriority",
+        "timestamp"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProviderEndpointVariant",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/ProviderEndpointVariant",
+  "$defs": {
+    "ProviderEndpointVariant": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string",
+          "enum": [
+            "CN",
+            "GLOBAL",
+            "LOCAL"
+          ]
+        },
+        "planType": {
+          "type": "string",
+          "enum": [
+            "PAY_AS_YOU_GO",
+            "CODING_PLAN",
+            "FREE_TIER",
+            "LOCAL_GPU"
+          ]
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "isFullUrl": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "region",
+        "planType",
+        "baseUrl"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

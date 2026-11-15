@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReflexRule",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/ReflexRule",
+  "$defs": {
+    "ReflexRule": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "triggerRegex": {
+          "type": "string"
+        },
+        "cooldownMs": {
+          "type": "integer",
+          "default": 8000
+        },
+        "priority": {
+          "type": "string",
+          "const": "P0_INTERRUPT"
+        },
+        "actionState": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "walk",
+            "eat_rice",
+            "happy_maid",
+            "thinking_tail_wag",
+            "rage_spray",
+            "clumsy_panic",
+            "game_focus",
+            "sing_stage",
+            "hungry_lazy",
+            "sleep_mute"
+          ]
+        },
+        "emotionTag": {
+          "type": "string",
+          "enum": [
+            "rage_spray",
+            "tsundere_refuse"
+          ]
+        },
+        "ledgerGrudgeTag": {
+          "type": "string"
+        },
+        "presetResponses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "triggerRegex",
+        "priority",
+        "actionState",
+        "emotionTag",
+        "ledgerGrudgeTag",
+        "presetResponses"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

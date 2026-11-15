@@ -3,9 +3,10 @@
  * pnpm verify:gate — 「四道自动化准入门禁」编排器（AGENTS.md §2.3 / §3.3）
  *
  * 当前进度（与 docs/ROADMAP.md 同步，随工单推进接线）：
- *   Gate 1 类型与边界    ✅ tsc -b + dependency-cruiser 架构边界（T-M0-01 接入）
- *   Gate 2 许可证与密钥  ✅ 基础版：THIRD_PARTY_NOTICES 台账校验 + 源码密钥泄漏/禁源痕迹扫描
- *   Gate 3 确定性单测    ⏳ TODO(T-M0-03 起)：核心包分支覆盖率 ≥90% 后接入
+ *   Gate 1 类型与边界    ✅ tsc -b + dependency-cruiser（T-M0-01）+ Python ruff/mypy（T-M0-02）
+ *   Gate 2 许可证与密钥  ✅ 台账校验 + 密钥泄漏/禁源痕迹扫描（T-M0-04 将升级为独立扫描器）
+ *   Gate 3 确定性单测    ✅ vitest（TS 契约单测）+ pytest（Python 夹具回放）（T-M0-02 接线；
+ *                        覆盖率 ≥90% 门槛自 T-M0-03 随包接入）
  *   Gate 4 沙盒 E2E      ⏳ TODO(T-M0-04 起)：tools/mock-harness 全链路回归接入
  *
  * 注意：本脚本自身包含检测规则字面量，已被排除在扫描范围之外。
@@ -78,7 +79,7 @@ const gates = [];
 function gate(name, status, detail) {
   gates.push({ name, status, detail });
 }
-const icon = { PASS: '✅ PASS', FAIL: '❌ FAIL', PENDING: '⏳ PENDING' };
+const icon = { PASS: '✅ PASS', FAIL: '❌ FAIL', PENDING: '⏳ PENDING', SKIP: '⏭️ SKIP' };
 
 console.log('╭──────────────────────────────────────────────────────────╮');
 console.log('│ pnpm verify:gate — 四道自动化准入门禁                    │');
@@ -88,6 +89,7 @@ console.log('╰─────────────────────�
 const tsc = spawnSync('pnpm', ['typecheck'], { cwd: ROOT, encoding: 'utf8' });
 const depcruise = spawnSync('pnpm', ['lint:deps'], { cwd: ROOT, encoding: 'utf8' });
 const gate1Errors = [];
+let gate1Detail = null;
 if (tsc.error) {
   gate1Errors.push(`无法启动 pnpm typecheck：${tsc.error.message}（请先执行 pnpm install）`);
 } else if (tsc.status !== 0) {
@@ -99,9 +101,28 @@ if (depcruise.error) {
   gate1Errors.push(truncate(`${depcruise.stdout}\n${depcruise.stderr}`));
 }
 if (gate1Errors.length === 0) {
-  gate('Gate 1 类型与边界', 'PASS', 'tsc -b 零错误 + dependency-cruiser 零违规（strict + noUncheckedIndexedAccess）');
+  gate1Detail = 'tsc -b 零错误 + dependency-cruiser 零违规（strict + noUncheckedIndexedAccess）';
+  gate('Gate 1 类型与边界', 'PASS', gate1Detail);
 } else {
   gate('Gate 1 类型与边界', 'FAIL', gate1Errors.join('\n'));
+}
+
+// ---- Gate 1 补充：Python 契约模型（ruff + mypy --strict；uv 缺失或未生成时 SKIP 并明示） ----
+const PY_MODEL = join(ROOT, 'services', 'audio-ai-worker', 'protocol_models.py');
+const uvProbe = spawnSync('uv', ['--version'], { encoding: 'utf8' });
+if (gate1Detail !== null) {
+  if (!existsSync(PY_MODEL)) {
+    gate('Gate 1 类型与边界(Python)', 'SKIP', 'protocol_models.py 尚未生成（pnpm gen:contracts）');
+  } else if (uvProbe.error || uvProbe.status !== 0) {
+    gate('Gate 1 类型与边界(Python)', 'SKIP', 'uv 未安装，无法校验 Python 契约模型（安装 uv 后重跑）');
+  } else {
+    const pyType = spawnSync('pnpm', ['py:type'], { cwd: ROOT, encoding: 'utf8' });
+    if (pyType.status === 0) {
+      gate('Gate 1 类型与边界(Python)', 'PASS', 'ruff 全绿 + mypy --strict 通过（生成物 assignment 豁免见 mypy.ini 注释）');
+    } else {
+      gate('Gate 1 类型与边界(Python)', 'FAIL', truncate(`${pyType.stdout}\n${pyType.stderr}`));
+    }
+  }
 }
 
 // ---- Gate 2：许可证台账 + 密钥/禁源扫描 ----
@@ -148,9 +169,37 @@ if (!noticesOk) {
   );
 }
 
-// ---- Gate 3 / Gate 4：随 M0 工单接线 ----
-gate('Gate 3 确定性单测', 'PENDING', 'TODO(T-M0-03 起)：核心包（persona-brain / model-gateway / game-bridge-mcp / live-stream-hub）分支覆盖率 ≥90% 后接线');
-gate('Gate 4 沙盒 E2E', 'PENDING', 'TODO(T-M0-04 起)：tools/mock-harness 全链路回归（骂大肥鱼 → 喷水反驳 → 语音锁 → 账本落盘 ≤15s）接线');
+// ---- Gate 3：确定性单测（TS vitest + Python pytest；覆盖率门槛随 T-M0-03 起逐包生效） ----
+const vitest = spawnSync('pnpm', ['test'], { cwd: ROOT, encoding: 'utf8' });
+const gate3Notes = [];
+let gate3Ok = true;
+if (vitest.error) {
+  gate3Ok = false;
+  gate3Notes.push(`无法启动 pnpm test：${vitest.error.message}`);
+} else if (vitest.status !== 0) {
+  gate3Ok = false;
+  gate3Notes.push(truncate(`${vitest.stdout}\n${vitest.stderr}`));
+}
+let gate3Label = 'vitest 全绿';
+if (gate3Ok && existsSync(PY_MODEL) && !(uvProbe.error || uvProbe.status !== 0)) {
+  const pytest = spawnSync('pnpm', ['py:test'], { cwd: ROOT, encoding: 'utf8' });
+  if (pytest.status !== 0) {
+    gate3Ok = false;
+    gate3Notes.push(truncate(`${pytest.stdout}\n${pytest.stderr}`));
+  } else {
+    gate3Label += ' + pytest 夹具回放全绿';
+  }
+} else if (gate3Ok) {
+  gate3Notes.push('Python 侧契约测试跳过（protocol_models.py 未生成或 uv 缺失）');
+}
+gate(
+  'Gate 3 确定性单测',
+  gate3Ok ? 'PASS' : 'FAIL',
+  `${gate3Label}${gate3Notes.length > 0 ? `\n${gate3Notes.join('\n')}` : ''}`
+);
+
+// ---- Gate 4：沙盒 E2E（随 T-M0-04 接线） ----
+gate('Gate 4 沙盒 E2E', 'PENDING', 'TODO(T-M0-04)：tools/mock-harness 全链路回归（骂大肥鱼 → 喷水反驳 → 语音锁 → 账本落盘 ≤15s）接线');
 
 // ---- 汇总 ----
 console.log('');
@@ -162,10 +211,11 @@ console.log('');
 
 const failed = gates.filter((g) => g.status === 'FAIL');
 const passed = gates.filter((g) => g.status === 'PASS').length;
+const skipped = gates.filter((g) => g.status === 'SKIP').length;
 const pending = gates.filter((g) => g.status === 'PENDING').length;
 
 if (failed.length > 0) {
-  console.log(`❌ verify:gate 未通过：${passed} 过 / ${failed.length} 败 / ${pending} 待接线（工单不得标记 DONE）`);
+  console.log(`❌ verify:gate 未通过：${passed} 过 / ${failed.length} 败 / ${skipped} 跳过 / ${pending} 待接线（工单不得标记 DONE）`);
   process.exit(1);
 }
-console.log(`✅ verify:gate 通过：${passed} 过 / ${pending} 待接线（Gate 3/4 随 ROADMAP 工单逐步接入）`);
+console.log(`✅ verify:gate 通过：${passed} 过 / ${skipped} 跳过 / ${pending} 待接线`);

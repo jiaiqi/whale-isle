@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LiveProgramState",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/LiveProgramState",
+  "$defs": {
+    "LiveProgramState": {
+      "type": "string",
+      "enum": [
+        "GAMING_MAIN",
+        "SINGING_CONCERT",
+        "CHATTING_INTERACT",
+        "SLEEP_OFF_DUTY"
+      ]
+    }
+  }
+}

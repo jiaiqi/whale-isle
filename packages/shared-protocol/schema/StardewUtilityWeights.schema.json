@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewUtilityWeights",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewUtilityWeights",
+  "$defs": {
+    "StardewUtilityWeights": {
+      "type": "object",
+      "properties": {
+        "farmingProfit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "npcGossipAndTrashCan": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "miningCombat": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "slackingAndScenery": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minStaminaThreshold": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.9
+        }
+      },
+      "required": [
+        "farmingProfit",
+        "npcGossipAndTrashCan",
+        "miningCombat",
+        "slackingAndScenery",
+        "minStaminaThreshold"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

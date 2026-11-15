@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StickyRoutingGroup",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StickyRoutingGroup",
+  "$defs": {
+    "StickyRoutingGroup": {
+      "type": "object",
+      "properties": {
+        "groupId": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "PROMPT_CACHE_STICKY",
+            "ROUND_ROBIN",
+            "LOWEST_LATENCY"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "providerId": {
+                "type": "string"
+              },
+              "modelId": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "default": 100
+              }
+            },
+            "required": [
+              "providerId",
+              "modelId"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "groupId",
+        "strategy",
+        "candidates"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
