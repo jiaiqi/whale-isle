@@ -1,1 +1,0 @@
-{"version":3,"file":"rice-bowl-widget.d.ts","sourceRoot":"","sources":["../../../../src/renderer/pet-stage/widgets/rice-bowl-widget.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,MAAM,WAAW,cAAc;IAC7B,QAAQ,CAAC,KAAK,EAAE,MAAM,GAAG,IAAI,CAAC;IAC9B,KAAK,IAAI,MAAM,CAAC;CACjB;AAED,wBAAgB,mBAAmB,CAAC,KAAK,EAAE,WAAW,GAAG,cAAc,CAuCtE"}

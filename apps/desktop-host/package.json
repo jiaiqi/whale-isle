@@ -10,20 +10,21 @@
     "start": "node scripts/build.mjs && electron dist/main/index.js"
   },
   "dependencies": {
+    "@workbench/local-store": "workspace:*",
+    "@workbench/model-gateway": "workspace:*",
     "@workbench/pet-renderer": "workspace:*",
     "@workbench/shared-protocol": "workspace:*",
-    "@workbench/local-store": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@workbench/model-gateway": "workspace:*"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "electron": "^38.2.0",
-    "esbuild": "^0.25.0",
-    "playwright-core": "^1.56.0",
     "@tailwindcss/cli": "^4.1.13",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "electron": "^38.2.0",
+    "esbuild": "^0.25.0",
+    "playwright-core": "^1.56.0",
     "tailwindcss": "^4.1.13"
   }
 }

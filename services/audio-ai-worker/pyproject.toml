@@ -1,0 +1,19 @@
+[project]
+name = "audio-ai-worker"
+version = "0.1.0"
+description = "[Python 独立推理进程] FastAPI + WebSocket：本地 GPT-SoVITS / 云端混合 TTS + Demucs/RVC 点歌（T-M2 骨架）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "websockets>=14.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]

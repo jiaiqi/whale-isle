@@ -12,9 +12,9 @@
     "test": "vitest run",
     "gen:contracts": "tsx tools/scripts/gen-contracts.ts",
     "py:ruff": "uv run --quiet --with ruff ruff check services/audio-ai-worker",
-    "py:mypy": "uv run --quiet --with mypy --with pydantic mypy --strict services/audio-ai-worker/protocol_models.py",
+    "py:mypy": "uv run --quiet --with mypy --with pydantic --with fastapi mypy --strict services/audio-ai-worker",
     "py:type": "pnpm py:ruff && pnpm py:mypy",
-    "py:test": "uv run --quiet --with pytest --with pydantic pytest services/audio-ai-worker/test_protocol_models.py -q",
+    "py:test": "uv run --quiet --with pytest --with pydantic --with fastapi --with httpx --with websockets pytest services/audio-ai-worker -q",
     "py:check": "pnpm py:type && pnpm py:test",
     "verify:gate": "node tools/scripts/verify-gate.mjs",
     "prepare": "git config core.hooksPath .githooks || true"

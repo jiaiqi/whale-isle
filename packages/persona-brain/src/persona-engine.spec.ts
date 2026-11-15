@@ -64,6 +64,13 @@ describe('loadPersona（blue-whale-maid 三层人格引擎）', () => {
     // rng=0 → 跑题命中首条主题
     const derail = engine.maybeDerail(() => 0);
     expect(derail).toBe('今晚吃几碗白米饭配红烧肉');
+    // rng=0.34（<0.35 命中）→ 按比例取第二条主题
+    expect(engine.maybeDerail(() => 0.34)).toBe('偷偷观察鱼片今天写代码的侧脸');
+    // disabled / 空 prompts → null
+    const disabled = loadPersona({ ...FIXTURE, innerVoiceConfig: { enabled: false, derailmentProbability: 0.35, derailmentPrompts: ['x'] } });
+    expect(disabled.maybeDerail(() => 0)).toBeNull();
+    const noPrompts = loadPersona({ ...FIXTURE, innerVoiceConfig: { enabled: true, derailmentProbability: 0.35, derailmentPrompts: [] } });
+    expect(noPrompts.maybeDerail(() => 0)).toBeNull();
   });
 
   it('第 3 层与饭碗联动：雷区扣费路径互不干扰；饭碗低于 15% 建议 hungry_lazy', () => {

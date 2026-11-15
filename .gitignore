@@ -2,6 +2,7 @@
 node_modules/
 *.tsbuildinfo
 dist/
+build/
 coverage/
 
 # Python（services/audio-ai-worker）

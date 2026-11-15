@@ -3,7 +3,7 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M2-01`（M1「大肥鱼复活」全部完成，进入 M2「本地语音与点歌」）**
+> **当前激活工单：`T-M2-02`（M2「本地语音与点歌」进行中）**
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
@@ -15,6 +15,7 @@
 > - `T-M1-03` ✅ 已完成（2026-11-15）：`packages/model-gateway` 落地——CC Switch 两步式预设库（9 家）/Region/Plan 胶囊/Full URL 免拼接 + Magpie 6 槽位绑定与干饭套餐切换 + 粘性路由（PROMPT_CACHE_STICKY/ROUND_ROBIN/LOWEST_LATENCY）+ 隐私脱敏（路径/密钥/用户名 → {{MASKED}}）+ 429/5xx/网络错误 100ms 内静默 failover（400 即抛）+ usage 仅记供应商实报。
 > - `T-M1-04` ✅ 已完成（2026-11-15）：`packages/persona-brain` 落地三层人格引擎——第 1 层系统提示模板填充、第 2 层 `<think>` 流式剥离（跨块悬挂安全/未闭合兜底/跑题碎碎念）+ 情绪五档前缀解析、第 3 层雷区反射钩子（装载期正则编译防 ReDoS/冷却窗口/预设台词直出结构性不烧主脑）+ 赛博饭碗经济（1粒米=1Token/15% 饥饿线/hungry_lazy/下饭菜 Buff 过期×2 热情）。
 > - `T-M1-05` ✅ 已完成（2026-11-15）：pet-stage 双轨气泡（云朵半透明 `<think>` / 正式对话）+ 赛博饭碗挂件（布局纯函数保证不重叠）+ `[DEV-ASSET-ONLY]` 水印署名；director 中控台（React 19 + Tailwind v4，esbuild 打包）——三套餐胶囊一键切换写 Dexie `activeDiningProfile` 刷新持久恢复、六槽位绑定、供应商预设卡。**M1 全部 5 张工单 DONE。**
+> - `T-M2-01` ✅ 已完成（2026-11-15）：Python Sidecar 骨架（`services/audio-ai-worker`：uv 管理 Python 3.11 + FastAPI + WebSocket；`/health` 硬件后端探测 mps/cuda/cpu、`/tts/synthesize` 确定性 WAV stub、`/ws/audio` JSON-RPC 通道）+ 宿主侧 `AudioLeaseManager` 单端语音锁（dsh-pet 已核实机制工程化：单端互斥 active≤1 不变式、播放完成回执驱动、P0 抢占 INTERRUPTED_BY_P0、TTL 强制释放 TTL_EXPIRED、失败 AUDIO_DEVICE_ERROR、队列 P0 优先+同级 FIFO）；REFERENCE-dsh-pet 的 TTL 语音锁待核实项已核实并回写档案。
 
 ## 工单总表（M0~M4 · 20 张原子工单）
 
@@ -29,8 +30,8 @@
 | **`T-M1-03`** | M1：大肥鱼复活 | **模型与供应商网关 `model-gateway`**：实现 CC Switch 两步式预设+Region/Plan 切换、Magpie 6 角色路由、干饭套餐切换、粘性路由与隐私脱敏 | `CC Switch`、`Magpie`、`dsh-douyin-agent` | 模拟上游 429 报错，断言 100ms 内静默切换备用 Key；敏感路径 100% 替换为 `{{MASKED}}` | **DONE** |
 | **`T-M1-04`** | M1：大肥鱼复活 | **"大肥鱼"三层人格引擎 `persona-brain`**：实现 `blue-whale-maid` 配置加载、`<think>` 内心戏流式剥离、0.1s"大肥鱼"雷区正则拦截与赛博饭碗扣费 | `dsh-pet`、`dsh-douyin-agent` | 输入含"大肥鱼"文本，断言 `<10ms` 返回 `P0_INTERRUPT` + `rage_spray` 且不消耗主脑 Token | **DONE** |
 | **`T-M1-05`** | M1：大肥鱼复活 | **桌面舞台 UI 挂件与中控台模型配置页**：渲染头顶半透明 `<think>` 内心戏云朵气泡、正式对话气泡、赛博饭碗挂件及 CC Switch/Magpie 风格设置界面 | `dsh-live-studio`、`dsh-pet` | Playwright 截图断言双轨气泡同时显示不重叠；套餐胶囊一键切换 Dexie 状态同步 | **DONE** |
-| **`T-M2-01`** | M2：本地语音与点歌 | **Python 跨平台音频 Sidecar 骨架与单端语音锁**：用 `uv` 搭建 FastAPI/WS 服务（自动识别 Mac `mps` / Win `cuda`），在宿主端实现带 TTL 的单端语音播放回执锁 | `dsh-pet` | 并发注入 5 条语音请求，断言严格串行播放或按 P0 抢占，绝不出现双音轨重叠 | **NEXT** |
-| **`T-M2-02`** | M2：本地语音与点歌 | **情绪感知 TTS 混合路由器**：实现本地 GPT-SoVITS v2 推理封装（绑定大肥鱼 5 组情绪参考音频）+ 云端 SiliconFlow/OpenAI TTS 自动降级路由 | `dsh-pet` | 传入 `[傲娇反驳]` 标签文本，断言正确匹配傲娇参考音频并返回有效音频流与口型包络 | PENDING |
+| **`T-M2-01`** | M2：本地语音与点歌 | **Python 跨平台音频 Sidecar 骨架与单端语音锁**：用 `uv` 搭建 FastAPI/WS 服务（自动识别 Mac `mps` / Win `cuda`），在宿主端实现带 TTL 的单端语音播放回执锁 | `dsh-pet` | 并发注入 5 条语音请求，断言严格串行播放或按 P0 抢占，绝不出现双音轨重叠 | **DONE** |
+| **`T-M2-02`** | M2：本地语音与点歌 | **情绪感知 TTS 混合路由器**：实现本地 GPT-SoVITS v2 推理封装（绑定大肥鱼 5 组情绪参考音频）+ 云端 SiliconFlow/OpenAI TTS 自动降级路由 | `dsh-pet` | 传入 `[傲娇反驳]` 标签文本，断言正确匹配傲娇参考音频并返回有效音频流与口型包络 | **NEXT** |
 | **`T-M2-03`** | M2：本地语音与点歌 | **点歌台 SVC 歌声转换与流式切片缓存池**：集成 Demucs v4 伴奏分离 + RVC v2 变声，实现"前 25 秒预缓冲先唱 + 本地磁盘 MD5 缓存池"与违禁曲目拦截 | `dsh-livestream`、`Dsh_douyin`（仅思想） | 测试音频跑通分离与变声混音；二次点播同一首歌断言 `<50ms` 命中本地缓存直接返回 | PENDING |
 | **`T-M2-04`** | M2：本地语音与点歌 | **DIY 绿幕转透明 WebM 素材自动化管线**：将 `dsh-pet` 的 Python + FFmpeg 绿幕抠像、脚底对齐脚本集成到中控台，支持一键生成商用自有宠物包 | `dsh-pet`、`awesome-codex-pet` | 输入测试绿幕 MP4，断言自动输出带 Alpha 通道的 `.webm` 与对齐后的 `manifest.json` | PENDING |
 | **`T-M3-01`** | M3：星露谷共玩 | **星露谷 MCP 客户端与动作互斥状态机 `game-bridge-mcp`**：实现动作派发、互斥锁、`COMPLETED/FAILED/UNCERTAIN` 回执处理与卡死甩锅台词触发器 | `BlindWhaleFarmer` | 在 `stardew-mcp-simulator` 下跑通寻路卡石头返回 `UNCERTAIN`，断言触发 `clumsy_panic` 且不死循环 | PENDING |

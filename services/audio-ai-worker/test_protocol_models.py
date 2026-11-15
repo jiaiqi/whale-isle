@@ -8,8 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from protocol_models import DiningProfilePreset, NormalizedLiveEvent, PetPersonaConfig
 from pydantic import ValidationError
+
+from protocol_models import DiningProfilePreset, NormalizedLiveEvent, PetPersonaConfig
 
 FIXTURE = (
     Path(__file__).resolve().parents[2]

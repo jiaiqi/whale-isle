@@ -33,6 +33,7 @@ export const AudioPlaybackLeaseSchema = z.object({
   audioUrlOrBase64: z.string(),
   actionState: PetActionStateSchema,
 });
+export type AudioPlaybackLease = z.infer<typeof AudioPlaybackLeaseSchema>;
 
 export const AudioPlaybackReceiptSchema = z.object({
   leaseId: z.string().uuid(),
@@ -40,6 +41,7 @@ export const AudioPlaybackReceiptSchema = z.object({
   actualPlayedMs: z.number().nonnegative(),
   timestamp: z.number(),
 });
+export type AudioPlaybackReceipt = z.infer<typeof AudioPlaybackReceiptSchema>;
 
 // ============================================================================
 // 2. "大肥鱼（蓝鲸女仆）"三层人格与赛博饭碗契约 (Persona & Rice Bowl)
