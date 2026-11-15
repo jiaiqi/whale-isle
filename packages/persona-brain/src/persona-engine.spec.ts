@@ -73,6 +73,16 @@ describe('loadPersona（blue-whale-maid 三层人格引擎）', () => {
     expect(noPrompts.maybeDerail(() => 0)).toBeNull();
   });
 
+  it('流式内心戏：引擎暴露 createThinkStream（分块跨标签安全）', () => {
+    const engine = loadPersona(FIXTURE);
+    const parser = engine.createThinkStream();
+    const first = parser.feed('好<thi');
+    expect(first.visibleChunk).toBe('好');
+    const second = parser.feed('nk>白米饭真香</think>，鱼片！');
+    expect(second.thoughtChunk).toBe('白米饭真香');
+    expect(parser.result().visible).toBe('好，鱼片！');
+  });
+
   it('第 3 层与饭碗联动：雷区扣费路径互不干扰；饭碗低于 15% 建议 hungry_lazy', () => {
     const engine = loadPersona(FIXTURE);
     const hit = engine.reflex('大肥鱼！');
@@ -82,6 +92,17 @@ describe('loadPersona（blue-whale-maid 三层人格引擎）', () => {
     engine.rice.consume(480000);
     expect(engine.rice.isHungry()).toBe(true);
     expect(engine.buildSystemPrompt()).toContain('余量：4%');
+  });
+
+  it('ownerTitles 为空 → 系统提示回落「主人」', () => {
+    const engine = loadPersona({ ...FIXTURE, ownerTitles: [] });
+    expect(engine.buildSystemPrompt()).toContain('主人叫主人');
+  });
+
+  it('maybeDerail 默认 rng 路径（不抛异常）', () => {
+    const engine = loadPersona(FIXTURE);
+    const result = engine.maybeDerail(); // 默认 Math.random
+    expect(result === null || typeof result === 'string').toBe(true);
   });
 
   it('情绪前缀路由（T-M2-02 TTS 参考音频的输入契约）', () => {

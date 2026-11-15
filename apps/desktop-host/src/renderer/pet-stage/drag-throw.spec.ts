@@ -99,6 +99,22 @@ describe('createThrow（甩出物理）', () => {
     expect(sim.done()).toBe(true);
   });
 
+  it('右墙反弹（maxX 语义）', () => {
+    const sim = createThrow({
+      start: { x: BOUNDS.maxX - 5, y: 300 },
+      velocity: { vx: 2000, vy: 0 },
+      bounds: BOUNDS,
+      gravity: 0,
+      friction: 1,
+      stopSpeed: 0,
+      restitution: 0.5,
+    });
+    const first = sim.step(16); // dx=+32 → 越界 → 夹紧 maxX
+    expect(first.x).toBe(BOUNDS.maxX);
+    const second = sim.step(16); // 反弹向左
+    expect(second.x).toBeLessThan(BOUNDS.maxX);
+  });
+
   it('上抛撞顶边反弹（minY 语义）', () => {
     const sim = createThrow({
       start: { x: 400, y: BOUNDS.maxY - 10 },

@@ -241,6 +241,14 @@ describe('WebmVideoRenderer 零黑帧切换', () => {
     expect(host.badge).toBe('[DEV-ASSET-ONLY] 非商用素材');
   });
 
+  it('dispose 在无在飞画面时安全（幂等）', async () => {
+    const { renderer } = makeRenderer(MANIFEST);
+    await renderer.load(MANIFEST);
+    renderer.dispose();
+    renderer.dispose(); // 二次 dispose 不抛
+    expect(renderer.currentAction()).toBeNull();
+  });
+
   it('dispose：暂停并撤离当前画面，状态清空', async () => {
     const { host, renderer } = makeRenderer(MANIFEST);
     await renderer.load(MANIFEST);

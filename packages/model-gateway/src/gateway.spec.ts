@@ -141,6 +141,38 @@ describe('ModelGateway', () => {
     expect(callCount).toBe(1); // 不 failover
   });
 
+  it('400 且响应体不可解析 → 仍报 BAD_REQUEST（错误信息兜底）', async () => {
+    const gateway = new ModelGateway({
+      profile: PROFILE,
+      providers: PROVIDERS,
+      groups: [GROUP],
+      keys: KEYS,
+      fetchImpl: async () => ({
+        ok: false,
+        status: 400,
+        json: async () => {
+          throw new Error('invalid json');
+        },
+      }),
+    });
+    const error = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]).catch((e) => e);
+    expect((error as GatewayError).code).toBe('BAD_REQUEST');
+    expect((error as GatewayError).message).toContain('unknown');
+  });
+
+  it('上游返回无 choices → 回执内容为空串（兜底不崩）', async () => {
+    const gateway = new ModelGateway({
+      profile: PROFILE,
+      providers: PROVIDERS,
+      groups: [GROUP],
+      keys: KEYS,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ usage: { prompt_tokens: 5 } }) }),
+    });
+    const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]);
+    expect(receipt.content).toBe('');
+    expect(receipt.usage.inputTokens).toBe(5);
+  });
+
   it('usage 计量只记供应商实际回报（1 粒米 = 1 Token 流水口径）', async () => {
     const usages: UsageRecord[] = [];
     const gateway = new ModelGateway({
@@ -324,6 +356,25 @@ describe('ModelGateway', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('配置损坏时原样透传异常（防御分支：非 RouteError 不被吞）', async () => {
+    // 损坏的粘性组：candidates 非数组 → orderedCandidates 抛 TypeError（非 RouteError）
+    const brokenGroup = {
+      groupId: 'broken-group',
+      strategy: 'PROMPT_CACHE_STICKY',
+      candidates: 'not-an-array',
+    } as unknown as StickyRoutingGroup;
+    const gateway = new ModelGateway({
+      profile: { ...PROFILE, roleBindings: { ...PROFILE.roleBindings, MAIN_PERSONA_BRAIN: 'group/broken-group' } },
+      providers: PROVIDERS,
+      groups: [brokenGroup],
+      keys: KEYS,
+      fetchImpl: async () => okResponse(),
+    });
+    const error = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]).catch((e) => e);
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as TypeError).message).toContain('map');
   });
 
   it('switchProfile 清空粘性状态；ROUND_ROBIN 套餐直接绑定不受影响', async () => {

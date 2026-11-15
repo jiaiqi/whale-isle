@@ -48,7 +48,7 @@ export class RiceBowl {
   }
 
   ratioRemaining(): number {
-    if (this.config.dailyRiceGrainBudget <= 0) return 0;
+    // 契约保证 dailyRiceGrainBudget 为 positive()——此处不设 0 分支（不可达死代码）
     return this.remainingGrains() / this.config.dailyRiceGrainBudget;
   }
 

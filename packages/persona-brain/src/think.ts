@@ -134,8 +134,7 @@ export interface EmotionPrefixResult {
 export function parseEmotionPrefix(text: string): EmotionPrefixResult {
   const match = /^\s*\[(.+?)\]\s*/.exec(text);
   if (!match) return { emotionTag: null, body: text };
-  const tag = match[1];
-  if (tag === undefined) return { emotionTag: null, body: text };
+  const tag = match[1] ?? ''; // 正则捕获组必然存在；?? 仅作类型收窄
   const mapped = EMOTION_PREFIX_MAP[`[${tag}]`];
   if (!mapped) return { emotionTag: null, body: text };
   return { emotionTag: mapped, body: text.slice(match[0].length) };

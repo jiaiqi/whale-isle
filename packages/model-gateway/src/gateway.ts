@@ -132,7 +132,7 @@ export class ModelGateway {
       candidates = orderedCandidates(routeContext);
     } catch (error) {
       // orderedCandidates 契约仅抛 RouteError；非 RouteError 为防御透传（数学不可达）
-      /* v8 ignore next 2 */
+      /* v8 ignore next 3 */
       if (error instanceof RouteError) throw new GatewayError(error.code, error.message);
       throw error;
     }

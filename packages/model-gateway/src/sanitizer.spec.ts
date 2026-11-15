@@ -72,6 +72,12 @@ describe('createSanitizer（隐私脱敏）', () => {
     expect(minimal('普通文本')).toBe('普通文本');
   });
 
+  it('显式传 undefined → 走 os 探测与 env 兜底（分支覆盖）', () => {
+    const withUndefined = createSanitizer({ username: undefined, homeDir: undefined });
+    const text = '普通文本 /Users/jiaqi/x';
+    expect(withUndefined(text)).toContain(MASK);
+  });
+
   it('extraRules：宿主扩展规则', () => {
     const custom = createSanitizer({
       username: 'x',

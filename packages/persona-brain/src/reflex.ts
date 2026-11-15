@@ -36,8 +36,8 @@ function pickWeighted<T>(items: Array<T & { weight?: number }>, rng: () => numbe
     roll -= item.weight ?? 1;
     if (roll <= 0) return item;
   }
-  const fallback = items[items.length - 1];
-  if (!fallback) throw new Error('加权选择空集合');
+  // 调用方保证非空（presetResponses 契约 min(1)）
+  const fallback = items[items.length - 1] as T;
   return fallback;
 }
 

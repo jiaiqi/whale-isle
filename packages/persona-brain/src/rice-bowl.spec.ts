@@ -61,6 +61,17 @@ describe('RiceBowl（赛博饭碗）', () => {
     expect(bowl.hasDeepReasoning()).toBe(true);
   });
 
+  it('预算为 0 被契约拒绝（positive()）——防线在装载期而非运行期', () => {
+    expect(() => makePersona({ dailyRiceGrainBudget: 0 })).toThrow(); // Zod: must be greater than 0
+  });
+
+  it('消耗超出预算 → remaining 归零（不出现负数米粒）', () => {
+    const bowl = new RiceBowl(makePersona().riceBowl);
+    bowl.consume(600000);
+    expect(bowl.remainingGrains()).toBe(0);
+    expect(bowl.ratioRemaining()).toBe(0);
+  });
+
   it('倍率取最大值；乘数越界夹紧 [1,5]', () => {
     let clock = 0;
     const bowl = new RiceBowl(makePersona().riceBowl, () => clock);

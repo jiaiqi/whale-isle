@@ -183,6 +183,23 @@ describe('AudioLeaseManager（单端语音播放锁）', () => {
     expect(receipts.find((receipt) => receipt.leaseId === IDS.cancelled)).toBeUndefined();
   });
 
+  it('租约未指定 durationMs → 实际播放时长回落到 elapsed（?? 兜底）', async () => {
+    const adapter = makeAdapter();
+    const receipts: Receipt[] = [];
+    const manager = new AudioLeaseManager({
+      adapter: adapter.adapter,
+      onReceipt: (receipt) => receipts.push({ leaseId: receipt.leaseId, status: receipt.status, actualPlayedMs: receipt.actualPlayedMs }),
+    });
+    // 无 durationMs（宿主按 TTL 兜底）
+    manager.acquire({ leaseId: IDS.first, priority: 'P1_CADENCE', ttlMs: 30_000 });
+    await flush();
+    adapter.finish(IDS.first);
+    await flush();
+    const receipt = receipts.find((item) => item.leaseId === IDS.first);
+    expect(receipt?.status).toBe('COMPLETED');
+    expect(receipt?.actualPlayedMs).toBeGreaterThanOrEqual(0);
+  });
+
   it('P0 到达即抢占在飞；释放后队列 FIFO 推进（不排队）', async () => {
     const adapter = makeAdapter();
     const manager = new AudioLeaseManager({ adapter: adapter.adapter });

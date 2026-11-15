@@ -115,6 +115,14 @@ describe('orderedCandidates（Magpie 路由）', () => {
     expect(orderedCandidates(makeContext('group/brain-pool', { groups: [group], state }))[0]?.providerId).toBe('deepseek-official'); // 回绕
   });
 
+  it('LOWEST_LATENCY：无时延记录时按权重降序（兜底分支）', () => {
+    const group: StickyRoutingGroup = { ...GROUP, strategy: 'LOWEST_LATENCY' };
+    const state = new StickyState(); // 无任何时延记录
+    const ordered = orderedCandidates(makeContext('group/brain-pool', { groups: [group], state }));
+    expect(ordered[0]?.providerId).toBe('deepseek-official'); // weight 70 优先
+    expect(ordered).toHaveLength(2);
+  });
+
   it('LOWEST_LATENCY：最快节点优先', () => {
     const group: StickyRoutingGroup = { ...GROUP, strategy: 'LOWEST_LATENCY' };
     const state = new StickyState();
