@@ -1,0 +1,22 @@
+{
+  "name": "@workbench/model-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[模型网关层] CC Switch 预设库 + Region/Plan 胶囊 + Magpie 6 槽位路由 + 干饭套餐 + 粘性路由 + 隐私脱敏 + Token 计量",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

@@ -123,6 +123,7 @@ export const ProviderEndpointVariantSchema = z.object({
   baseUrl: z.string().url(),
   isFullUrl: z.boolean().default(false), // 开启后不自动拼接 /v1/chat/completions
 });
+export type ProviderEndpointVariant = z.infer<typeof ProviderEndpointVariantSchema>;
 
 export const ModelProviderConfigSchema = z.object({
   id: z.string(), // e.g., "deepseek-official", "siliconflow", "local-gpt-sovits"
@@ -144,6 +145,7 @@ export const ModelProviderConfigSchema = z.object({
     })
   ),
 });
+export type ModelProviderConfig = z.infer<typeof ModelProviderConfigSchema>;
 
 /** Magpie 风格：单屏 6 大核心工作槽位 (Every Role's Model, One Screen) */
 export const WorkbenchRoleSlotSchema = z.enum([
@@ -168,6 +170,7 @@ export const StickyRoutingGroupSchema = z.object({
     })
   ),
 });
+export type StickyRoutingGroup = z.infer<typeof StickyRoutingGroupSchema>;
 
 /** "干饭套餐"全局 Profile 一键切换 */
 export const DiningProfilePresetSchema = z.object({
@@ -176,6 +179,7 @@ export const DiningProfilePresetSchema = z.object({
   roleBindings: z.record(WorkbenchRoleSlotSchema, z.string()), // value 为 "providerId/modelId" 或 "group/groupId"
   secretMaskingEnabled: z.boolean().default(true),
 });
+export type DiningProfilePreset = z.infer<typeof DiningProfilePresetSchema>;
 
 // ============================================================================
 // 4. 《星露谷物语》MCP 真实执行回执与键鼠接管契约 (源自 BlindWhaleFarmer)

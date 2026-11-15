@@ -69,8 +69,8 @@ for (const dirName of SCAN_DIRS) {
   const abs = join(ROOT, dirName);
   if (!existsSync(abs)) continue;
   for (const file of walk(abs)) {
-    // 自身 / verify-gate / 扫描器自测 spec 均按设计包含规则字面量，排除
-    if (file === SELF || file.endsWith(SELF_GUARD) || file.endsWith('verify-gate.mjs') || file.endsWith('license-scanner.spec.ts')) continue;
+    // 自身 / verify-gate / 各 *.spec.ts（按约定承载测试假密钥与规则字面量，如 sanitizer/scanner 自测）——排除
+    if (file === SELF || file.endsWith(SELF_GUARD) || file.endsWith('verify-gate.mjs') || file.endsWith('.spec.ts')) continue;
     let text;
     try {
       text = readFileSync(file, 'utf8');

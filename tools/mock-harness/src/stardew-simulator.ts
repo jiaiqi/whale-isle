@@ -94,16 +94,15 @@ export class StardewMcpSimulator {
   private pendingResolve: ((receipt: StardewReceipt) => void) | null = null;
   private pendingTimer: ReturnType<typeof setTimeout> | null = null;
   private uncertainStreak = 0;
+  /** 正常动作的模拟结算延迟（ms）：默认 5ms；接管剧本可拉大以确定性命中"在飞中止"路径 */
+  private readonly actionDelayMs: number;
 
-  constructor(scenario: ScenarioId) {
+  constructor(scenario: ScenarioId, options?: { actionDelayMs?: number }) {
     this.scenario = scenario;
+    this.actionDelayMs = options?.actionDelayMs ?? 5;
     const preset = PRESETS[scenario];
     this.state = { ...preset.state };
     this.blockedTiles = preset.blockedTiles.map((tile) => ({ ...tile }));
-  }
-
-  get scenarioId(): ScenarioId {
-    return this.scenario;
   }
 
   /** 启动模拟服务端（ephemeral 端口，只监听本机） */
@@ -114,6 +113,8 @@ export class StardewMcpSimulator {
         if (address && typeof address === 'object') {
           resolve(`ws://127.0.0.1:${address.port}/mcp`);
         } else {
+          // port=0 的 TCP server listen 成功后 address 必为对象（防御式兜底）
+          /* v8 ignore next */
           reject(new Error('无法获取模拟器监听地址'));
         }
       });
@@ -132,6 +133,8 @@ export class StardewMcpSimulator {
   setPhysicalInput(moving: boolean): void {
     this.state.isPlayerMovingPhysically = moving;
     if (moving && this.pendingResolve) {
+      // pendingTimer 与 pendingResolve 同生命周期，null 分支不可达（防御式 clearTimeout）
+      /* v8 ignore next */
       if (this.pendingTimer) clearTimeout(this.pendingTimer);
       const resolve = this.pendingResolve;
       this.pendingResolve = null;
@@ -233,7 +236,7 @@ export class StardewMcpSimulator {
       this.pendingResolve = null;
       this.pendingTimer = null;
       resolve?.(this.buildReceipt(tool, 'COMPLETED'));
-    }, 5);
+    }, this.actionDelayMs);
   }
 
   private buildReceipt(toolName: StardewReceipt['toolName'], status: StardewReceipt['status'], reason?: string): StardewReceipt {

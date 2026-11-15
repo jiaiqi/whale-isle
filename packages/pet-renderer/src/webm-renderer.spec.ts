@@ -181,6 +181,27 @@ describe('WebmVideoRenderer 零黑帧切换', () => {
     expect(host2.ops).toContain('show(webm/yong-jingyu-weiba-paidadi.webm)');
   });
 
+  it('浮点兜底：roll 恰好漏过全部权重段时取末段（rng()=1, 0.1+0.2 浮点）', async () => {
+    const floatManifest: PetAvatarManifest = PetAvatarManifestSchema.parse({
+      ...MANIFEST,
+      actions: [
+        {
+          actionState: 'rage_spray',
+          clips: [
+            { clipId: 'f-a', webmPath: 'webm/f-a.webm', weight: 0.1 },
+            { clipId: 'f-b', webmPath: 'webm/f-b.webm', weight: 0.2 },
+          ],
+        },
+      ],
+    });
+    const { host, load } = makeRenderer(floatManifest);
+    await load(floatManifest);
+    const renderer = new WebmVideoRenderer({ host, videoFactory: (src) => new FakeVideo(src, false) });
+    await renderer.load(floatManifest, { rng: () => 1 }); // roll = 1×0.30000000000000004，扣减后仍 >0
+    await renderer.play('rage_spray');
+    expect(host.ops).toContain('show(webm/f-b.webm)'); // 命中末段兜底
+  });
+
   it('加权退化为顺序：权重全 0 命中首段；load 可换装新工厂', async () => {
     const zeroWeight: PetAvatarManifest = PetAvatarManifestSchema.parse({
       ...MANIFEST,

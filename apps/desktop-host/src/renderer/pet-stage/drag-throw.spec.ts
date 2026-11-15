@@ -99,6 +99,32 @@ describe('createThrow（甩出物理）', () => {
     expect(sim.done()).toBe(true);
   });
 
+  it('上抛撞顶边反弹（minY 语义）', () => {
+    const sim = createThrow({
+      start: { x: 400, y: BOUNDS.maxY - 10 },
+      velocity: { vx: 0, vy: -3000 },
+      bounds: BOUNDS,
+      gravity: 0,
+      friction: 1,
+      stopSpeed: 0,
+      restitution: 0.5,
+    });
+    let bouncedTop = false;
+    for (let i = 0; i < 80; i++) {
+      const pos = sim.step(16);
+      if (pos.y <= BOUNDS.minY + 0.01) bouncedTop = true;
+    }
+    expect(bouncedTop).toBe(true); // 顶边被夹到 minY 后向下反弹
+  });
+
+  it('时间戳相同（dt<=0）测速为零', () => {
+    const samples: DragSample[] = [
+      { t: 100, x: 0, y: 0 },
+      { t: 100, x: 500, y: 500 },
+    ];
+    expect(velocityFromSamples(samples)).toEqual({ vx: 0, vy: 0 });
+  });
+
   it('边界夹紧：位置永不越界', () => {
     const sim = createThrow({ start: { x: -50, y: 700 }, velocity: { vx: 0, vy: 0 }, bounds: BOUNDS });
     const pos = sim.step(16);

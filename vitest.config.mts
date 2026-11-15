@@ -14,6 +14,8 @@ export default defineConfig({
         '**/dist/**',
         '**/fixtures/**',
         '**/pet-renderer/src/index.ts',
+        '**/model-gateway/src/index.ts',
+        '**/model-gateway/src/types.ts', // 纯 re-export 桶与仅类型声明文件不计入
         '**/desktop-host/src/main/**',
         '**/desktop-host/src/preload/**',
         '**/desktop-host/src/renderer/pet-stage/main.ts',

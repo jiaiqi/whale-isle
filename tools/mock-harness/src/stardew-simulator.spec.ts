@@ -21,8 +21,8 @@ afterEach(() => {
   sim?.close();
 });
 
-async function start(scenario: ScenarioId): Promise<void> {
-  sim = new StardewMcpSimulator(scenario);
+async function start(scenario: ScenarioId, opts?: { actionDelayMs?: number }): Promise<void> {
+  sim = new StardewMcpSimulator(scenario, opts);
   const url = await sim.start();
   client = createSimulatorClient(url);
 }
@@ -103,8 +103,10 @@ describe('剧本 ③ stamina_exhausted（体力耗尽）', () => {
 
 describe('剧本 ④ player_takeover（键鼠一动即接管）', () => {
   it('在飞动作 <100ms 被中止，后续动作全部拒绝', async () => {
-    await start('player_takeover');
+    // actionDelayMs 拉大在飞窗口，确保 setPhysicalInput 前服务器已受理动作（确定性命中中止路径）
+    await start('player_takeover', { actionDelayMs: 200 });
     const inFlight = client.act('move_to_tile', { x: 55, y: 12 });
+    await new Promise((resolve) => setTimeout(resolve, 20)); // 让出事件循环：服务器进入在飞状态
     const startedAt = performance.now();
     sim.setPhysicalInput(true);
     const aborted = await inFlight;
@@ -119,6 +121,18 @@ describe('剧本 ④ player_takeover（键鼠一动即接管）', () => {
     // 交还控制权后恢复
     sim.setPhysicalInput(false);
     expect((await client.act('water_crops_batch')).status).toBe('COMPLETED');
+    // 空载接管：无在飞动作时开关输入仅记录状态位，不触发中止
+    sim.setPhysicalInput(true);
+    expect((await client.act('check_trash_can')).status).toBe('ABORTED_BY_HUMAN_TAKEOVER');
+    sim.setPhysicalInput(false);
+  });
+
+  it('stardew/state 快照查询（JSON-RPC 次要方法）', async () => {
+    await start('normal_farming');
+    const response = await client.raw({ method: 'stardew/state' });
+    const snapshot = response.result as { dayOfMonth: number; staminaCurrent: number };
+    expect(snapshot.dayOfMonth).toBe(3);
+    expect(snapshot.staminaCurrent).toBe(200);
   });
 });
 
