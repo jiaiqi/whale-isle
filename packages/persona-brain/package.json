@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/persona-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[人格与记忆层] 三层人格引擎：系统提示模板 / <think> 内心戏流式剥离 / 0.1s 雷区反射钩子 / 赛博饭碗经济",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}

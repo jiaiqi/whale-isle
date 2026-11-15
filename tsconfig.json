@@ -6,6 +6,7 @@
     { "path": "packages/local-store" },
     { "path": "packages/pet-renderer" },
     { "path": "packages/model-gateway" },
+    { "path": "packages/persona-brain" },
     { "path": "tools/mock-harness" },
     { "path": "apps/desktop-host" }
   ]

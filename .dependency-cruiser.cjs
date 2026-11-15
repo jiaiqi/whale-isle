@@ -45,6 +45,19 @@ module.exports = {
       to: { path: '^packages/(model-gateway|persona-brain|game-bridge-mcp|live-stream-hub)' },
     },
     {
+      name: 'persona-brain-runtime-only-zod',
+      severity: 'error',
+      comment: '人格层运行时依赖只允许 zod（shared-protocol 为 workspace 依赖；*.spec.ts 额外允许测试库）',
+      from: { path: '^packages/persona-brain', pathNot: '\\.spec\\.(ts|tsx)$' },
+      to: {
+        dependencyTypes: ['npm', 'npm-dev'],
+        pathNot: [
+          '^zod($|/)', '/node_modules/zod/',
+          '^vitest($|/)', '/node_modules/vitest/',
+        ],
+      },
+    },
+    {
       name: 'model-gateway-runtime-only-zod',
       severity: 'error',
       comment: '网关层运行时依赖只允许 zod（shared-protocol 为 workspace 依赖；*.spec.ts 额外允许测试库）',
