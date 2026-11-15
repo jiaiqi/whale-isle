@@ -5,6 +5,8 @@
 import { WebmVideoRenderer } from '@workbench/pet-renderer';
 import { createAlphaProbe } from './alpha-probe';
 import { createThrow, velocityFromSamples } from './drag-throw';
+import { mountBubbleWidgets } from './widgets/bubbles';
+import { mountRiceBowlWidget } from './widgets/rice-bowl-widget';
 const bridge = window.petStage;
 const stage = document.getElementById('stage');
 const badgeEl = document.getElementById('dev-badge');
@@ -171,8 +173,30 @@ window.addEventListener('mouseup', () => {
         raf = requestAnimationFrame(stepLoop);
     })();
 });
-// E2E 就绪标记
+// ---- UI 挂件（T-M1-05）：双轨气泡 + 赛博饭碗 ----
+const widgets = mountBubbleWidgets(stage, { width: 440, height: 300 });
+const riceBowlWidget = mountRiceBowlWidget(stage);
+// E2E 就绪标记 + 测试钩子（PET_STAGE_E2E=1 门控）
 void bridge.appMeta().then((meta) => {
     window.__petStageReady = Boolean(meta);
+    if (meta.testMode) {
+        window.__petStageTest = {
+            showBubbles(input) {
+                widgets.showThought(input.thought);
+                widgets.showDialog(input.dialog);
+            },
+            hideBubbles() {
+                widgets.hideThought();
+                widgets.hideDialog();
+            },
+            bubbleRects: () => widgets.rects(),
+            setRiceRatio: (ratio) => riceBowlWidget.setRatio(ratio),
+            riceRatio: () => riceBowlWidget.ratio(),
+            bubbleElements: () => ({
+                thought: document.querySelector('.pet-bubble--thought')?.getBoundingClientRect().toJSON() ?? null,
+                dialog: document.querySelector('.pet-bubble--dialog')?.getBoundingClientRect().toJSON() ?? null,
+            }),
+        };
+    }
 });
 //# sourceMappingURL=main.js.map

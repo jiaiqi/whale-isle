@@ -32,3 +32,6 @@ recordings/
 .idea/
 .vscode/
 *.log
+
+# E2E 截图等验证产物（本地留证，不入库）
+artifacts/

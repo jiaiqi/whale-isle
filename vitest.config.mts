@@ -20,6 +20,8 @@ export default defineConfig({
         '**/desktop-host/src/main/**',
         '**/desktop-host/src/preload/**',
         '**/desktop-host/src/renderer/pet-stage/main.ts',
+        '**/desktop-host/src/renderer/pet-stage/widgets/bubbles.ts',
+        '**/desktop-host/src/renderer/pet-stage/widgets/rice-bowl-widget.ts', // DOM 挂件由 E2E 真实渲染覆盖（v8 不计 Electron 进程）
       ],
       // Gate 3 硬指标（AGENTS.md §3.3）：分支覆盖率 ≥90%
       thresholds: { lines: 90, functions: 90, branches: 90, statements: 90 },

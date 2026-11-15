@@ -11,11 +11,19 @@
   },
   "dependencies": {
     "@workbench/pet-renderer": "workspace:*",
-    "@workbench/shared-protocol": "workspace:*"
+    "@workbench/shared-protocol": "workspace:*",
+    "@workbench/local-store": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@workbench/model-gateway": "workspace:*"
   },
   "devDependencies": {
     "electron": "^38.2.0",
     "esbuild": "^0.25.0",
-    "playwright-core": "^1.56.0"
+    "playwright-core": "^1.56.0",
+    "@tailwindcss/cli": "^4.1.13",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.13"
   }
 }

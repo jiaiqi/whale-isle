@@ -9,6 +9,7 @@ import { registerStageIpc } from './passthrough';
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
 let stageWindow = null;
+let directorWindow = null;
 function createStageWindow() {
     const win = new BrowserWindow({
         width: 440,
@@ -31,12 +32,32 @@ function createStageWindow() {
     win.once('ready-to-show', () => win.showInactive());
     return win;
 }
+function createDirectorWindow() {
+    const win = new BrowserWindow({
+        width: 960,
+        height: 720,
+        title: '大肥鱼中控台',
+        autoHideMenuBar: true,
+        backgroundColor: '#020617',
+        show: false,
+        webPreferences: {
+            sandbox: true,
+            contextIsolation: true,
+        },
+    });
+    win.loadFile(join(here, '../renderer/director/index.html'));
+    win.once('ready-to-show', () => win.show());
+    return win;
+}
 app.whenReady().then(() => {
     registerStageIpc({ getWindow: () => stageWindow, testMode: TEST_MODE });
     stageWindow = createStageWindow();
+    directorWindow = createDirectorWindow();
     app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0)
+        if (BrowserWindow.getAllWindows().length === 0) {
             stageWindow = createStageWindow();
+            directorWindow = createDirectorWindow();
+        }
     });
 });
 app.on('window-all-closed', () => {

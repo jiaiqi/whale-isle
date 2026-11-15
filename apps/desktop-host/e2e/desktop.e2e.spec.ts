@@ -38,6 +38,22 @@ async function waitFor(win: import('playwright-core').Page, fn: () => Promise<bo
   throw new Error(`条件在 ${timeoutMs}ms 内未满足（透明窗 rAF 节流？请用 evaluate 轮询）`);
 }
 
+
+/** 轮询等待指定 URL 片段的窗口（双窗口启动顺序不保证） */
+async function waitForWindow(
+  app: import('playwright-core').ElectronApplication,
+  urlPart: string,
+  timeoutMs = 20_000,
+): Promise<import('playwright-core').Page> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = app.windows().find((candidate) => candidate.url().includes(urlPart));
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`未找到包含 ${urlPart} 的窗口`);
+}
+
 describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
   it('窗口属性 + alpha 阈值状态机 + 拖拽边界夹紧', { timeout: 90_000 }, async () => {
     const app = await electron.launch({
@@ -46,7 +62,7 @@ describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
       env: { ...process.env, PET_STAGE_E2E: '1' },
     });
     try {
-      const win = await app.firstWindow();
+      const win = await waitForWindow(app, 'pet-stage');
       await waitFor(
         win,
         () => win.evaluate(() => Boolean((window as unknown as PetStageWindow).__petStageReady)),

@@ -9,7 +9,7 @@
 | 里程碑 | Mock/沙盒验证已通过项（`[SIMULATION]` / 单测 / 编译） | 待人类宿主真机验收项（`[REAL-DEVICE]`） | 最近更新 |
 | --- | --- | --- | --- |
 | M0 地基与铁笼 | （未开始） | 无需真机：宿主查看 `pnpm verify:gate` 全绿即可放行 | — |
-| M1 大肥鱼复活 | （M1-01/02 已过沙盒+真实 Electron E2E） | **OS 级真实点击穿透与鼠标拖拽手感**（E2E 只能验证状态机与坐标夹紧，无法模拟 OS 级点击落点）；输入框打一句"大肥鱼"，确认瞬间喷水破防并弹出 `<think>` 内心戏气泡 | — |
+| M1 大肥鱼复活 | （M1-01~05 全部过沙盒+真实 Electron E2E） | **OS 级真实点击穿透与鼠标拖拽手感**（E2E 只能验证状态机与坐标夹紧，无法模拟 OS 级点击落点）；气泡长文本观感与水印章贴位置；在 Mac 桌面拖拽"大肥鱼"；输入框打一句"大肥鱼"，确认瞬间喷水破防并弹出 `<think>` 内心戏气泡（需 webm 资产就位后联测） | — |
 | M2 本地语音与点歌 | （未开始） | 听 Mac M 系列芯片本地生成的傲娇语音延迟；点一首歌听她用自己的声音唱出来 | — |
 | M3 星露谷共玩 | （未开始） | 打开《星露谷》看她翻垃圾桶/种菜；晃一下鼠标，确认她立刻停手变场边啦啦队 | — |
 | M4 直播与切片 | （未开始） | 在 OBS 添加 `http://localhost:18765` 浏览器源，挂测试直播间看她边玩星露谷边回弹幕、记仇和唱歌 | — |
@@ -27,6 +27,7 @@
 | T-M0-01 | `[SIMULATION]`（规则引擎） | `pnpm lint:deps`：`no dependency violations found (7 modules, 5 dependencies cruised)`；临时探针 `zz-tmp-violation.ts`（import `ws`）实测命中 `shared-protocol-runtime-only-zod` 报错且 exit≠0，删除探针后恢复全绿 | 2026-11-15 |
 | T-M0-01 | 编译 | `pnpm verify:gate`：Gate 1（tsc -b + depcruise）PASS、Gate 2（台账+密钥扫描）PASS，Gate 3/4 按计划待 T-M0-03/04 接线 | 2026-11-15 |
 | T-M0-02 | `[SIMULATION]`（契约单测） | TS 侧 `pnpm test`：11 passed（大肥鱼夹具 parse/默认值/非法值拒绝/语音锁 TTL 边界/回执枚举/干饭套餐槽位）；Python 侧 `pnpm py:test`：4 passed（同一夹具回放 + 默认值一致性）——夹具双侧 probe 通过 | 2026-11-15 |
+| T-M1-05 | `[E2E-HOST]`（Playwright Electron 双窗口） | `pnpm test`：144 passed（desktop-host 新增 5 项）——① 双轨气泡：E2E 几何断言两 rect 不相交 + 截图留证 `artifacts/pet-stage-bubbles.png`（人工复核：云朵半透明 `<think>` / 对话泡 / 🥣6% 饿瘪饭碗 / DEV-ASSET-ONLY 水印+署名均真实渲染）；② director：点击胶囊序列 🍚→🛡️ 每步 Dexie `activeDiningProfile` 键值断言、刷新后持久恢复、六槽位绑定随套餐联动；气泡观感（长文本溢出裁剪）记录为真机抽检项 | 2026-11-15 |
 | T-M1-04 | `[SIMULATION]`（组件单测） | `pnpm test`：139 passed（persona-brain 新增 26 项）——门禁：`reflex("你这大肥鱼…")` 单次 <10ms 实测通过且 1000 次 <100ms，返回 `P0_INTERRUPT` + `rage_spray` + `consumedMainBrainTokens=false`（预设台词直出，主脑零调用）；雷区冷却窗口（8s 内跳过、冷却中可命中其他规则）；`<think>` 流式剥离跨块悬挂（"<thi"/"</thin"）与未闭合兜底；情绪五档前缀 → emotionTag 映射；饭碗 1粒米=1Token 扣费/15% 饥饿线→hungry_lazy/下饭菜 Buff 过期与 ×2 热情夹紧 [1,5]；装载期非法正则拦截（防 ReDoS）；覆盖率四维 90.6–98.6% 达标 | 2026-11-15 |
 | T-M1-03 | `[SIMULATION]`（fake fetch 注入） | `pnpm test`：113 passed（model-gateway 新增 26 项）——门禁①：429→静默 failover 实测 <100ms（attempt=1 落 siliconflow）；门禁②：出站 body 捕获断言敏感路径/密钥/用户名 100% → {{MASKED}}（残留 0）；500/网络错误/非 Error 抛出/PROVIDER_MISSING/KEY_MISSING/PARSE_ERROR 全部静默切换并附尝试明细，400 即抛不浪费候选；粘性会话同节点（PROMPT_CACHE_STICKY）+ ROUND_ROBIN/LOWEST_LATENCY 候选序；usage 只记供应商实报（1200/900/80）；secretMaskingEnabled=false 原文直传；覆盖率四维 91.7–98.9% 达标 | 2026-11-15 |
 | T-M1-02 | `[E2E-HOST]`（Playwright Electron） | `pnpm test`：78 passed（desktop-host 新增 11 项）——真实 Electron 38 启动：alwaysOnTop API 真值 + meta 双证（transparent/frameless/skipTaskbar）；alpha 状态机 force(255/21)→interactive、force(20/0)→passthrough（阈值 20 边界全覆盖，经 passthrough:get 主进程回读）；dragTo(999999,999999) 被合并 workArea 夹紧、dragTo(40,40) 精确落位；测试钩子由 PET_STAGE_E2E=1 门控；覆盖率四维 90.3–97.1% 达标 | 2026-11-15 |
