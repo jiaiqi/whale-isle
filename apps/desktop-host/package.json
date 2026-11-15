@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/desktop-host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[Electron 跨平台宿主] 主进程（透明穿透窗/IPC）+ pet-stage 渲染层（WebM 渲染 + alpha 穿透 + 拖拽甩抛）",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -b && node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron dist/main/index.js"
+  },
+  "dependencies": {
+    "@workbench/pet-renderer": "workspace:*",
+    "@workbench/shared-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "esbuild": "^0.25.0",
+    "playwright-core": "^1.56.0"
+  }
+}

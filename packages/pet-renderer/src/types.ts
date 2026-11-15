@@ -10,6 +10,8 @@ import type { PetAvatarManifest, PetActionState } from '@workbench/shared-protoc
 /** 单段视频句柄：引擎只依赖此接口，不直接触碰 HTMLVideoElement */
 export interface VideoHandle {
   readonly src: string;
+  /** 底层元素（宿主 mount/show 需要；引擎自身不触碰。真实实现为 HTMLVideoElement） */
+  readonly el?: unknown;
   /** 播放；resolve 时机 = 画面可安全展示（真实实现监听 loadeddata），reject = 加载失败 */
   play(loop: boolean, playbackRate: number): Promise<void>;
   pause(): void;

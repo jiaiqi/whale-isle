@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent; /* OBS/桌面透明关键 */
+        overflow: hidden;
+        user-select: none;
+      }
+      #stage {
+        position: absolute;
+        transform-origin: bottom center; /* Q 弹以脚底为原点 */
+        width: 400px;
+        height: 260px;
+      }
+      #stage video { width: 400px; height: 260px; }
+      #dev-badge {
+        position: fixed;
+        left: 4px;
+        bottom: 2px;
+        font: 10px/1.4 monospace;
+        color: rgba(255, 170, 60, 0.85);
+        background: rgba(0, 0, 0, 0.35);
+        padding: 1px 6px;
+        border-radius: 4px;
+        display: none;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="dev-badge"></div>
+    <script src="./main.js"></script>
+  </body>
+</html>

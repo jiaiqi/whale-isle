@@ -5,6 +5,7 @@
     { "path": "packages/shared-protocol" },
     { "path": "packages/local-store" },
     { "path": "packages/pet-renderer" },
-    { "path": "tools/mock-harness" }
+    { "path": "tools/mock-harness" },
+    { "path": "apps/desktop-host" }
   ]
 }

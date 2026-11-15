@@ -12,4 +12,5 @@ packages:
 # 允许运行安装脚本的依赖（原生模块/构建工具）
 allowBuilds:
   better-sqlite3: true
+  electron: true
   esbuild: true
