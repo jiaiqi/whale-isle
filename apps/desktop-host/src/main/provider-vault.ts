@@ -51,7 +51,12 @@ function loadVault(vaultPath: string): VaultFile {
   }
 }
 
-function storedKey(vaultPath: string, providerId: string): string | null {
+/** 主进程内解密（T-M6-01 完整版）：供 gateway 构造使用——仅主进程，绝不回传渲染进程 */
+export function readVaultKey(vaultPath: string, providerId: string): string | null {
+  return storedKeyInner(vaultPath, providerId);
+}
+
+function storedKeyInner(vaultPath: string, providerId: string): string | null {
   const cipherB64 = loadVault(vaultPath)[providerId];
   if (!cipherB64) return null;
   if (!safeStorage.isEncryptionAvailable()) return null;
@@ -95,13 +100,13 @@ export function registerProviderVaultIpc(vaultPath: string): void {
   });
 
   ipcMain.handle('providers:key-mask', (_event, providerId: string): VaultResult => {
-    const key = storedKey(vaultPath, providerId);
+    const key = storedKeyInner(vaultPath, providerId);
     if (key === null) return { ok: true, mask: '' };
     return { ok: true, mask: maskKey(key) };
   });
 
   ipcMain.handle('providers:discover-models', async (_event, args: DiscoverModelsArgs): Promise<VaultResult> => {
-    const key = storedKey(vaultPath, args.providerId);
+    const key = storedKeyInner(vaultPath, args.providerId);
     if (!key) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };
     try {
       const models = await discoverModels(args.baseUrl, key);
@@ -112,7 +117,7 @@ export function registerProviderVaultIpc(vaultPath: string): void {
   });
 
   ipcMain.handle('providers:test-chat', async (_event, args: TestChatArgs): Promise<VaultResult> => {
-    const key = storedKey(vaultPath, args.providerId);
+    const key = storedKeyInner(vaultPath, args.providerId);
     if (!key) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };
     const url = `${args.baseUrl.replace(/\/+$/, '')}/chat/completions`;
     const startedAt = Date.now();

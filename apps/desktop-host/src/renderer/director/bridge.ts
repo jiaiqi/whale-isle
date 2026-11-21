@@ -84,6 +84,10 @@ export interface DirectorBridge {
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
   riceStatus(): Promise<{ balance: number }>;
+  plannerSwitch(mode: 'rule' | 'llm'): Promise<{ ok: boolean; error?: string; mode?: string }>;
+  plannerStatus(): Promise<{ mode: string; llmReady: boolean }>;
+  chatSay(text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }>;
+  guidesLoad(): Promise<{ ok: boolean; error?: string; topics?: string[] }>;
 }
 
 declare global {

@@ -49,6 +49,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
   riceStatus: (): Promise<{ balance: number }> => ipcRenderer.invoke('rice:status'),
+  // LLM 大脑（T-M6-01 完整版）
+  plannerSwitch: (mode: 'rule' | 'llm'): Promise<{ ok: boolean; error?: string; mode?: string }> => ipcRenderer.invoke('planner:switch', mode),
+  plannerStatus: (): Promise<{ mode: string; llmReady: boolean }> => ipcRenderer.invoke('planner:status'),
+  chatSay: (text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }> => ipcRenderer.invoke('chat:say', text),
+  guidesLoad: (): Promise<{ ok: boolean; error?: string; topics?: string[] }> => ipcRenderer.invoke('guides:load'),
 });
 
 contextBridge.exposeInMainWorld('petStage', {

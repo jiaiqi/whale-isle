@@ -69,7 +69,7 @@ app.whenReady().then(() => {
   // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）
   registerProviderVaultIpc(join(app.getPath('userData'), 'provider-vault.json'));
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
-  const autodrive = createAutodriveHost();
+  const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'));
   const harness = createHarnessHost();
   const wireTargets = () => {
     const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);

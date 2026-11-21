@@ -4,6 +4,7 @@
  * 事件源 = 主进程 autodrive-host 单源多播（onAutodriveEvent）。
  */
 import { useEffect, useRef, useState } from 'react';
+const s0 = undefined;
 import type { DiningProfilePreset, ModelProviderConfig, WorkbenchRoleSlot } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
 import type { AutodriveEventView } from './bridge';
@@ -59,6 +60,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [tab, setTab] = useState<Tab>('chat');
   const [events, setEvents] = useState<AutodriveEventView[]>([]);
   const [running, setRunning] = useState(false);
+  const [brain, setBrain] = useState<{ mode: string; llmReady: boolean }>({ mode: 'rule', llmReady: false });
   const [driveError, setDriveError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const flowRef = useRef<HTMLDivElement | null>(null);
@@ -68,6 +70,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       setEvents((prev) => (prev.length >= 500 ? [...prev.slice(-499), event] : [...prev, event]));
     });
     void window.directorBridge.autodriveStatus().then((s) => setRunning(s.running));
+    void window.directorBridge.plannerStatus().then((s) => setBrain(s));
+    if (s0 !== undefined) void s0;
   }, []);
 
   useEffect(() => {
@@ -86,6 +90,20 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     }
   };
 
+  const switchBrain = async (): Promise<void> => {
+    const next = brain.mode === 'llm' ? 'rule' : 'llm';
+    const res = await window.directorBridge.plannerSwitch(next);
+    if (res.ok) {
+      setBrain((b) => ({ ...b, mode: res.mode ?? next }));
+      if (next === 'llm') void window.directorBridge.guidesLoad().then((g) => {
+        if (g.ok) setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', tool: 'brain', summary: `LLM 大脑接管（攻略注入：${(g.topics ?? []).length} 专题）——小鲸开始聪明地玩` }]);
+      });
+      else setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', tool: 'brain', summary: '切回规则日程大脑' }]);
+    } else {
+      setDriveError(res.error ?? '切换失败');
+    }
+  };
+
   const stop = async (): Promise<void> => {
     await window.directorBridge.autodriveStop();
     setRunning(false);
@@ -100,8 +118,15 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent);
       setEvents((prev) => [...prev, { type: 'decision', tool: directive.tool, intent: directive.intent, planner: 'remote' }]);
     } else {
-      // 普通聊天：T-M6-01 完整版路由 persona-brain；最小版先入本地回显
-      setEvents((prev) => [...prev, { type: 'decision', tool: 'chat', intent: `主人说：${text}（LLM 路由接入后小鲸会回话）`, planner: 'local' }]);
+      // 普通聊天 → 主进程 chat:say（雷区反射先行 → persona 主脑回话）
+      setEvents((prev) => [...prev, { type: 'decision', tool: 'chat', intent: `主人说：${text}`, planner: 'remote' }]);
+      void window.directorBridge.chatSay(text).then((res) => {
+        if (res.ok && res.reply) {
+          setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', tool: res.reflex ? 'reflex_spray' : 'chat_reply', summary: res.reply }]);
+        } else if (!res.ok) {
+          setEvents((prev) => [...prev, { type: 'receipt', status: 'ERROR', tool: 'chat', summary: res.error ?? '主脑未回' }]);
+        }
+      });
     }
     setInput('');
   };
@@ -129,6 +154,18 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           ))}
         </nav>
         <div className="flex-1" />
+        <button
+          data-brain-toggle
+          onClick={() => void switchBrain()}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+            brain.mode === 'llm'
+              ? 'border-violet-400/60 bg-violet-500/10 text-violet-300'
+              : 'border-slate-600 bg-slate-800/50 text-slate-400'
+          } ${brain.llmReady ? '' : 'opacity-50'}`}
+          title={brain.llmReady ? '切换规则/LLM 大脑' : 'LLM 未就绪（供应商 key 未配置）'}
+        >
+          {brain.mode === 'llm' ? '🧠 LLM 大脑' : '⚙ 规则日程'}
+        </button>
         <button
           data-autodrive-toggle
           onClick={() => void (running ? stop() : start())}

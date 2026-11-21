@@ -3,7 +3,7 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M6-03` dsh 插件兼容层（T-M5-01/02/15/16、T-M6-01 最小版、T-M6-02 均已 DONE 真机验收）**
+> **当前激活工单：`T-M6-03` dsh 插件兼容层（T-M5-01/02/15/16、T-M6-01 Shell+LLM 大脑、T-M6-02 均已 DONE 真机验收）**
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
@@ -75,7 +75,7 @@
 
 | 工单编号 | 分期 | 工单名称与核心交付物（单工单 ≤ 8 文件） | 开工前必查参考 | 自动化门禁校验指令与断言（Gate） | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| **`T-M6-01`** | P0 | **工作台 Shell 与插件内核**（🟨 2026-11-21 最小版完成：三页签+聊天流+监控+指令插队；插件内核 Cordis 化待续）：Shell 布局（侧栏导航树=插件注册/顶栏主题切换/右侧快捷卡区）+ 插件 manifest/defineTool/registry/事件总线订阅/enable-disable 热开关 + 插件管理页 + zustand + lucide-react 全量图标 + 深/浅/跟随系统主题 + motion 动效规格；**并入 T-M5-03**：聊天主界面（think 折叠/工具卡片/审批卡/对话指挥）；**并入 D11/D12**：pet 插件 renderer 层——状态气泡组（动作状态条/目标卡/事件弹泡，ADR-6 status-bubble 状态机）+ 语音设置三开关 | deepseek-harness（Cordis）、dsh-plugin-yushe（defineTool）、t3code（Shell/Providers）、magpie（UI 模式） | E2E：插件禁用后其侧栏项/卡片消失且事件解绑；主题切换 CSS vars 全量生效；lucide 图标零 emoji 断言（lint 扫描 UI 源码）；聊天流式/think 折叠/审批卡 E2E | NEXT（T-M5-01 完成后） |
+| **`T-M6-01`** | P0 | **工作台 Shell 与插件内核**（🟨 2026-11-22 LLM 大脑完成：聊天回话/雷区反射/攻略注入/LlmPlanner 真机验收；插件内核 Cordis 化待续）：Shell 布局（侧栏导航树=插件注册/顶栏主题切换/右侧快捷卡区）+ 插件 manifest/defineTool/registry/事件总线订阅/enable-disable 热开关 + 插件管理页 + zustand + lucide-react 全量图标 + 深/浅/跟随系统主题 + motion 动效规格；**并入 T-M5-03**：聊天主界面（think 折叠/工具卡片/审批卡/对话指挥）；**并入 D11/D12**：pet 插件 renderer 层——状态气泡组（动作状态条/目标卡/事件弹泡，ADR-6 status-bubble 状态机）+ 语音设置三开关 | deepseek-harness（Cordis）、dsh-plugin-yushe（defineTool）、t3code（Shell/Providers）、magpie（UI 模式） | E2E：插件禁用后其侧栏项/卡片消失且事件解绑；主题切换 CSS vars 全量生效；lucide 图标零 emoji 断言（lint 扫描 UI 源码）；聊天流式/think 折叠/审批卡 E2E | NEXT（T-M5-01 完成后） |
 | **`T-M6-02`** | P0 | **ACP Harness 层**（✅ 2026-11-21 DONE：真机 gemini+dsh 双握手验收）：ACP v1/v2 client（stdio JSON-RPC）+ Provider 实例管理（Registry 搜索/本地命令如 `dsh --profile acp`）+ 线程/中途换 agent/checkpoint 回放 + 工具调用审批卡（桌面+远程）+ 按 agent 用量记账；**并入 T-M5-07：线程状态→桌宠工作跟随动画** | t3code（providers-acp.md/thread）、magpie（agentOf） | 契约单测：ACP initialize/session 流程夹具；审批卡拒绝→工具不执行且回喂；线程状态→动画映射断言 | PENDING |
 | **`T-M6-03`** | P1 | **dsh 插件兼容层 plugin-bridge**：Cordis 插件树/defineTool/typed events → 本工作台工具/事件模型适配器 + 插件装载器（host/client/shared 三层约定）+ dsh 插件兼容测试夹具 | deepseek-harness、dsh-fish、dsh-plugin-yushe | 夹具断言：一个样例 dsh 插件原样装载成功且 defineTool 注册的工具经总线可调；禁用/崩溃隔离 | PENDING |
 | **`T-M6-04`** | P1 | **WebUI 形态**：bridge 抽象双实现（Electron IPC ↔ HTTP/WS）+ 轻量本地 server（总线/静态资源/vault 代理）+ 远程审批（桌面开线程、浏览器批审批）+ Vite 迁移评估 | t3code（desktop/server/web 多端）、magpie（本地网关） | 同一 renderer 组件在两种宿主下渲染断言；远程审批 E2E（WebUI 拒绝→桌面动作不执行） | PENDING |
