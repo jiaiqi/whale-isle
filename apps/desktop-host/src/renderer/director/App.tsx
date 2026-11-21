@@ -90,6 +90,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     }
   };
 
+  const toggleVoice = async (): Promise<void> => {
+    const cfg = await window.directorBridge.voiceConfigGet();
+    const next = await window.directorBridge.voiceConfigSet({ enabled: !cfg.enabled });
+    setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', tool: 'voice', summary: `语音 ${next.enabled ? '开启（内心戏：' + (next.innerVoice ? '发声' : '静音') + '）' : '关闭'}——音色 ${next.voice}` }]);
+  };
+
   const switchBrain = async (): Promise<void> => {
     const next = brain.mode === 'llm' ? 'rule' : 'llm';
     const res = await window.directorBridge.plannerSwitch(next);
@@ -154,6 +160,22 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           ))}
         </nav>
         <div className="flex-1" />
+        <button
+          data-voice-toggle
+          onClick={() => void toggleVoice()}
+          className="px-3 py-1.5 rounded-full text-xs font-semibold border border-teal-500/60 bg-teal-500/10 text-teal-300"
+          title="语音总开关（D11：macOS say 引擎）"
+        >
+          🔊 语音开
+        </button>
+        <button
+          data-voice-test
+          onClick={() => void window.directorBridge.voiceSpeak('哼，本鱼才没有偷懒呢！', 'normal')}
+          className="px-3 py-1.5 rounded-full text-xs border border-slate-600 bg-slate-800/50 text-slate-400"
+          title="试听小鲸的声音"
+        >
+          试听
+        </button>
         <button
           data-brain-toggle
           onClick={() => void switchBrain()}

@@ -9,6 +9,7 @@ import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
+import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
@@ -68,8 +69,11 @@ app.whenReady().then(() => {
   registerStageIpc({ getWindow: () => stageWindow, testMode: TEST_MODE });
   // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）
   registerProviderVaultIpc(join(app.getPath('userData'), 'provider-vault.json'));
+  // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
+  const voice = createVoiceHost();
+  registerVoiceHostIpc(voice);
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
-  const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'));
+  const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice);
   const harness = createHarnessHost();
   const wireTargets = () => {
     const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);

@@ -15,6 +15,7 @@ import {
 } from '@workbench/game-bridge-mcp';
 import { ModelGateway } from '@workbench/model-gateway';
 import { readVaultKey } from './provider-vault';
+import type { VoiceHost } from './voice-host';
 
 export interface AutodriveHost {
   readonly runner: AutodriveRunner;
@@ -22,7 +23,7 @@ export interface AutodriveHost {
   setTargets(targets: WebContents[]): void;
 }
 
-export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vaultPath?: string): AutodriveHost {
+export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vaultPath?: string, voiceHost?: VoiceHost): AutodriveHost {
   const windows: WebContents[] = [];
 
   // ---- T-M6-01 完整版：LLM 大脑（vault key → model-gateway → LlmPlanner） ----
@@ -83,6 +84,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
     if (/大肥鱼/.test(text)) {
       const spray = '谁、谁是鱼！本鱼是鲸！喷水抗议！';
       broadcast({ type: 'receipt', tool: 'reflex_spray', status: 'COMPLETED', summary: spray } as AutodriveEvent);
+      speak({ text: spray, scene: 'p0' });
       return { ok: true, reply: spray, reflex: true };
     }
     if (!gateway) return { ok: false, error: '主脑未接通（供应商 key 未配置）' };
@@ -92,6 +94,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
         { role: 'user', content: text },
       ], { maxTokens: 200 });
       broadcast({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: receipt.content } as AutodriveEvent);
+      speak({ text: receipt.content, scene: 'normal' });
       return { ok: true, reply: receipt.content };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -153,7 +156,15 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
       if (!wc.isDestroyed()) wc.send('autodrive:event', event);
     }
   };
+  const speak = (v: { text: string; scene?: 'normal' | 'inner' | 'p0' }): void => { void voiceHost?.speak(v); };
   const runner = new AutodriveRunner((event) => {
+    if (event.type === 'receipt' && event.tool !== 'autodrive' && voiceHost?.config.enabled) {
+      // 回执短评（D11 节流 8s 防刷）：翻车心虚 / 收获欢呼
+      if (event.status === 'UNCERTAIN') speak({ text: '都、都怪这块石头突然长出来的！', scene: 'normal' });
+      else if (event.status === 'COMPLETED' && /fish|钓/.test(String(event.tool)) && /成功|完美/.test(String(event.summary))) {
+        speak({ text: '钓到啦！本鱼的手感是天赋！', scene: 'normal' });
+      }
+    }
     if (event.type === 'receipt' && event.tool !== 'autodrive') {
       recentReceipts.push(event.status + ' ' + event.tool + ': ' + (event.summary ?? '').slice(0, 80));
       if (recentReceipts.length > 8) recentReceipts = recentReceipts.slice(-8);

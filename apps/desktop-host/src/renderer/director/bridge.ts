@@ -88,6 +88,9 @@ export interface DirectorBridge {
   plannerStatus(): Promise<{ mode: string; llmReady: boolean }>;
   chatSay(text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }>;
   guidesLoad(): Promise<{ ok: boolean; error?: string; topics?: string[] }>;
+  voiceSpeak(text: string, scene: 'normal' | 'inner' | 'p0'): Promise<{ ok: boolean; error?: string }>;
+  voiceConfigGet(): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string }>;
+  voiceConfigSet(patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string }>;
 }
 
 declare global {

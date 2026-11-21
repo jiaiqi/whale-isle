@@ -3,7 +3,7 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M6-03` dsh 插件兼容层（T-M5-01/02/15/16、T-M6-01 Shell+LLM 大脑、T-M6-02 均已 DONE 真机验收）**
+> **当前激活工单：`T-M5-04` 记忆图谱引擎（D11 语音第一版已完成真机发声；T-M5-01/02/15/16、T-M6-01/02 均已 DONE）**
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
