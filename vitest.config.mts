@@ -18,6 +18,8 @@ export default defineConfig({
         '**/model-gateway/src/types.ts',
         '**/persona-brain/src/index.ts', // 纯 re-export 桶与仅类型声明文件不计入
         '**/desktop-host/src/main/**',
+        '**/desktop-host/src/renderer/director/**', // Shell UI 由 E2E 覆盖（bridge.ts 纯类型声明）
+        '**/game-bridge-mcp/src/index.ts', // 纯 re-export 桶
         '**/desktop-host/src/preload/**',
         '**/desktop-host/src/renderer/pet-stage/main.ts',
         '**/desktop-host/src/renderer/pet-stage/widgets/bubbles.ts',

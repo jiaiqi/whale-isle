@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>工作台 · 聊天 — 大肥鱼工作台设计稿 v3</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; }
+  body { font-family:var(--font-ui); background:var(--bg); color:var(--text-1); font-size:13.5px;
+    display:grid; grid-template-columns:244px 1fr 300px; grid-template-rows:48px 1fr;
+    grid-template-areas:"side top top" "side main aside"; overflow:hidden; position:relative; }
+  .ambient { z-index:0; }
+  body > * { position:relative; z-index:1; }
+
+  /* ── 侧栏：macOS 源栏材质 ── */
+  .side { grid-area:side; border-right:1px solid var(--stroke); display:flex; flex-direction:column;
+    background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(24px); min-height:0; }
+  .brand { display:flex; align-items:center; gap:10px; padding:16px 16px 12px; }
+  .brand svg.whale { width:24px; height:24px; }
+  .brand .t { font-weight:650; font-size:14px; letter-spacing:.2px; }
+  .brand .v { margin-left:auto; font-size:10px; color:var(--text-3); font-family:var(--font-mono); }
+  .new-thread { margin:2px 12px 12px; display:flex; align-items:center; justify-content:center; gap:7px;
+    padding:8px; border-radius:980px; background:var(--surface-2); color:var(--text-1); font-size:12.5px; font-weight:550;
+    border:1px solid var(--stroke); box-shadow:inset 0 1px 0 var(--hi);
+    transition:all var(--dur-hover) var(--ease); }
+  .new-thread:hover { color:var(--blue); border-color:var(--blue-line); background:var(--blue-dim); transform:scale(1.01); }
+  .new-thread:active { transform:scale(.98); }
+  .nav-sec { padding:12px 18px 5px; font-size:10.5px; letter-spacing:.6px; color:var(--text-3); font-weight:650; }
+  .nav-item { display:flex; align-items:center; gap:9px; margin:0 10px; padding:7px 10px; border-radius:var(--r-md);
+    color:var(--text-2); font-size:12.5px; cursor:pointer; transition:all var(--dur-hover) var(--ease); }
+  .nav-item:hover { background:var(--surface-2); color:var(--text-1); }
+  .nav-item.on { background:var(--blue-dim); color:var(--blue); }
+  .nav-item.on svg { color:var(--blue); }
+  .nav-item .off-dot { margin-left:auto; width:5px; height:5px; border-radius:50%; background:var(--text-3); opacity:.4; }
+  .conv-list { padding:0 10px; }
+  .conv { padding:8px 10px; border-radius:var(--r-md); font-size:12.5px; color:var(--text-2); cursor:pointer;
+    display:flex; align-items:center; gap:8px; transition:all var(--dur-hover) var(--ease); }
+  .conv:hover { background:var(--surface-2); color:var(--text-1); }
+  .conv.on { background:var(--surface-2); color:var(--text-1); box-shadow: inset 0 1px 0 var(--hi); }
+  .conv .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .conv .tm { margin-left:auto; font-size:10px; color:var(--text-3); font-family:var(--font-mono); flex-shrink:0; }
+  .side-foot { margin-top:auto; border-top:1px solid var(--stroke); padding:12px 16px; }
+  .foot-row { display:flex; align-items:center; justify-content:space-between; font-size:11.5px; color:var(--text-2); padding:3px 0; }
+  .foot-row b { font-family:var(--font-mono); font-size:11px; color:var(--amber); font-weight:600; }
+  .foot-bar { height:4px; border-radius:999px; background:var(--inset); margin:5px 0 2px; overflow:hidden; }
+  .foot-bar i { display:block; height:100%; width:12%; background:linear-gradient(90deg,var(--amber),var(--green)); border-radius:999px; }
+
+  /* ── 顶栏 ── */
+  .top { grid-area:top; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--stroke);
+    background: color-mix(in srgb, var(--bg) 40%, transparent); backdrop-filter: blur(24px); }
+  .crumb { font-size:13px; color:var(--text-3); display:flex; align-items:center; gap:6px; }
+  .crumb b { color:var(--text-1); font-weight:600; }
+  .search { display:flex; align-items:center; gap:8px; margin-left:14px; width:280px; padding:6px 11px;
+    border-radius:var(--r-md); background:var(--inset); border:1px solid var(--stroke); color:var(--text-3); font-size:12px;
+    transition:border-color var(--dur-hover) var(--ease); }
+  .search:focus-within { border-color:var(--blue-line); }
+  .search kbd { margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--text-3); border:1px solid var(--stroke-2); border-radius:4px; padding:1px 5px; }
+  .top .sp { flex:1; }
+  .model-cap { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-2);
+    border:1px solid var(--stroke); border-radius:980px; padding:5px 12px; transition:all var(--dur-hover) var(--ease); }
+  .model-cap:hover { border-color:var(--stroke-2); }
+  .icon-btn { width:32px; height:32px; display:grid; place-items:center; border-radius:var(--r-md);
+    color:var(--text-2); border:none; background:none; transition:all var(--dur-hover) var(--ease); }
+  .icon-btn:hover { background:var(--surface-2); color:var(--text-1); }
+
+  /* ── 中央聊天 ── */
+  .main { grid-area:main; display:flex; flex-direction:column; min-width:0; }
+  .chat { flex:1; overflow-y:auto; padding:26px 32px 12px; }
+  .wrap-m { max-width:700px; margin:0 auto 24px; }
+  .m-head { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .m-ava { width:26px; height:26px; border-radius:9px; display:grid; place-items:center; }
+  .m-ava.ai { background:var(--blue-dim); color:var(--blue); border:1px solid var(--blue-line); }
+  .m-ava.me { background:var(--surface-2); color:var(--text-2); border:1px solid var(--stroke); }
+  .m-name { font-size:12.5px; font-weight:600; }
+  .m-time { font-size:11px; color:var(--text-3); font-family:var(--font-mono); }
+  .tag { font-size:10px; padding:2.5px 9px; border-radius:980px; }
+
+  .bub { border-radius:18px; padding:12px 16px; line-height:1.8; font-size:13px; }
+  .bub.ai { background:var(--surface); border:1px solid var(--stroke); box-shadow:var(--shadow-1), inset 0 1px 0 var(--hi); backdrop-filter:blur(30px) saturate(1.5); }
+  .bub.ai em.hl { font-style:normal; color:var(--blue); }
+  .bub.me { background:linear-gradient(135deg, color-mix(in srgb,var(--blue) 16%, transparent), color-mix(in srgb,var(--blue) 9%, transparent));
+    border:1px solid var(--blue-line); margin-left:44px; color:var(--text-1); }
+
+  .think { border-radius:16px; border:1px solid var(--violet-line); background:var(--violet-dim); overflow:hidden; margin-bottom:9px; backdrop-filter:blur(20px); }
+  .think-h { display:flex; align-items:center; gap:8px; padding:8px 13px; font-size:11px; color:var(--violet); cursor:pointer; user-select:none; }
+  .think-h .chev { transition:transform .25s var(--ease); }
+  .think.open .chev { transform:rotate(90deg); }
+  .think-b { max-height:0; overflow:hidden; transition:max-height .35s var(--ease-out); padding:0 14px; font-size:12px; line-height:1.85; color:var(--violet); opacity:.82; }
+  .think.open .think-b { max-height:240px; padding:1px 14px 12px; }
+
+  .tool { border:1px solid var(--stroke); border-radius:var(--r-lg); background:var(--surface); margin:10px 0; overflow:hidden;
+    box-shadow:var(--shadow-1), inset 0 1px 0 var(--hi); backdrop-filter:blur(30px) saturate(1.5); }
+  .tool-h { display:flex; align-items:center; gap:8px; padding:9px 13px; border-bottom:1px solid var(--stroke); font-family:var(--font-mono); font-size:11.5px; }
+  .tool-h .nm { color:var(--blue); font-weight:600; }
+  .tool-h .ar { color:var(--text-2); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tool-b { padding:9px 13px; font-size:11.5px; color:var(--text-2); line-height:1.7; font-family:var(--font-mono); }
+  .tool-m { padding:0 13px 9px; font-size:10px; color:var(--text-3); font-family:var(--font-mono); }
+  .cur { display:inline-block; width:7px; height:14px; background:var(--blue); border-radius:2px; vertical-align:-2px; animation:blink .9s infinite; margin-left:2px; }
+
+  .approve { border:1px solid var(--amber-line); background:var(--amber-dim); border-radius:var(--r-lg); margin:10px 0; overflow:hidden; backdrop-filter:blur(20px); }
+  .approve-h { display:flex; align-items:center; gap:8px; padding:11px 15px 5px; font-size:12.5px; font-weight:600; color:var(--amber); }
+  .approve-b { padding:2px 15px 8px; font-family:var(--font-mono); font-size:11.5px; color:var(--text-2); line-height:1.7; }
+  .approve-a { display:flex; gap:8px; padding:4px 15px 13px; align-items:center; }
+  .btn { padding:6px 15px; border-radius:980px; font-size:12px; font-weight:550; border:1px solid transparent;
+    transition:all var(--dur-hover) var(--ease); display:inline-flex; align-items:center; gap:6px; }
+  .btn-yes { background:var(--green-dim); color:var(--green); border-color:var(--green-line); }
+  .btn-yes:hover { transform:scale(1.02); filter:brightness(1.1); }
+  .btn-no { background:var(--red-dim); color:var(--red); border-color:var(--red-line); }
+  .btn-no:hover { transform:scale(1.02); filter:brightness(1.1); }
+  .btn-any { background:var(--surface-2); color:var(--text-2); border-color:var(--stroke-2); }
+  .btn-any:hover { color:var(--text-1); }
+  .kbd { font-family:var(--font-mono); font-size:10px; border:1px solid var(--stroke-2); border-radius:4px; padding:0 4px; opacity:.65; }
+
+  .composer-w { padding:12px 32px 18px; }
+  .composer { max-width:700px; margin:0 auto; border:1px solid var(--stroke-2); border-radius:22px;
+    background:var(--surface); padding:12px 14px 9px; backdrop-filter:blur(30px) saturate(1.5);
+    box-shadow:var(--shadow-2), inset 0 1px 0 var(--hi);
+    transition:border-color var(--dur-hover) var(--ease), box-shadow var(--dur-hover) var(--ease); position:relative; }
+  .composer:focus-within { border-color:var(--blue-line); box-shadow:var(--glow-blue), inset 0 1px 0 var(--hi); }
+  .composer input { width:100%; background:none; border:none; outline:none; color:var(--text-1); font-size:13.5px; font-family:var(--font-ui); }
+  .composer input::placeholder { color:var(--text-3); }
+  .composer-f { display:flex; align-items:center; gap:8px; margin-top:9px; }
+  .composer-f .sp { flex:1; }
+  .send { display:flex; align-items:center; gap:6px; background:var(--blue); color:#fff; border:none; padding:7px 16px;
+    border-radius:980px; font-size:12px; font-weight:600; transition:all var(--dur-hover) var(--ease);
+    box-shadow:0 2px 12px rgba(10,132,255,.3); }
+  .send:hover { transform:scale(1.03); filter:brightness(1.08); }
+  .send:active { transform:scale(.97); }
+  .slash { position:absolute; bottom:70px; left:0; right:0; border:1px solid var(--stroke-2); border-radius:var(--r-lg);
+    background:var(--bg-elev); box-shadow:var(--shadow-2); overflow:hidden; display:none; }
+  .slash.show { display:block; }
+  .slash-i { display:flex; align-items:center; gap:10px; padding:9px 14px; font-size:12px; cursor:pointer; color:var(--text-2); transition:background var(--dur-hover) var(--ease); }
+  .slash-i:hover { background:var(--surface-2); }
+  .slash-i .c { font-family:var(--font-mono); color:var(--blue); font-weight:600; width:70px; }
+
+  /* ── 右栏 ── */
+  .aside { grid-area:aside; border-left:1px solid var(--stroke); padding:14px; overflow-y:auto; min-height:0;
+    background: color-mix(in srgb, var(--bg) 45%, transparent); backdrop-filter: blur(24px); }
+  .sec { font-size:10.5px; letter-spacing:.6px; color:var(--text-3); font-weight:650; margin:6px 0 9px; }
+  .stat { padding:14px 15px; margin-bottom:11px; }
+  .stat h4 { display:flex; align-items:center; gap:7px; font-size:12.5px; margin-bottom:10px; }
+  .kv { display:flex; justify-content:space-between; font-size:12px; color:var(--text-2); padding:3.5px 0; }
+  .kv b { font-family:var(--font-mono); font-size:11px; font-weight:600; color:var(--text-1); }
+  .kv b.g { color:var(--green); } .kv b.a { color:var(--amber); } .kv b.b { color:var(--blue); }
+  .bar { height:4px; border-radius:999px; background:var(--inset); overflow:hidden; margin:6px 0 2px; }
+  .bar i { display:block; height:100%; border-radius:999px; }
+  .wd { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--green); margin-top:8px; }
+  .tl { border-left:2px solid var(--stroke); padding-left:12px; margin-left:5px; }
+  .tl-i { position:relative; padding:5px 0; font-size:11.5px; color:var(--text-2); }
+  .tl-i::before { content:''; position:absolute; left:-16.5px; top:10px; width:7px; height:7px; border-radius:50%; background:var(--text-3); }
+  .tl-i.ok::before { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .tl-i.run::before { background:var(--amber); box-shadow:0 0 6px var(--amber); animation:blink 1.5s infinite; }
+  .tl-i .t { font-family:var(--font-mono); font-size:10px; color:var(--text-3); margin-right:7px; }
+  .tl-i b { color:var(--text-1); font-weight:600; }
+  .quick { display:flex; gap:7px; flex-wrap:wrap; }
+  .qk { display:flex; align-items:center; gap:6px; font-size:11px; padding:5px 12px; border-radius:980px;
+    border:1px solid var(--stroke); color:var(--text-2); cursor:pointer; transition:all var(--dur-hover) var(--ease); }
+  .qk:hover { color:var(--blue); border-color:var(--blue-line); background:var(--blue-dim); transform:scale(1.02); }
+</style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <aside class="side">
+    <div class="brand">
+      <svg class="whale" viewBox="0 0 24 24" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".28"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.5" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg>
+      <span class="t">大肥鱼工作台</span><span class="v">v0.3</span>
+    </div>
+    <button class="new-thread"><i data-lucide="plus" class="sm"></i>新会话</button>
+
+    <div class="nav-sec">会话</div>
+    <div class="conv-list">
+      <div class="conv on"><i data-lucide="sprout" class="sm"></i><span class="t">星露谷 · 自主游玩 Day 16</span><span class="tm">now</span></div>
+      <div class="conv"><i data-lucide="message-square" class="sm"></i><span class="t">直播间弹幕陪聊</span><span class="tm">1d</span></div>
+      <div class="conv"><i data-lucide="terminal" class="sm"></i><span class="t">重构 auth 模块 · Claude</span><span class="tm">1d</span></div>
+      <div class="conv"><i data-lucide="music" class="sm"></i><span class="t">点歌台排练</span><span class="tm">3d</span></div>
+    </div>
+
+    <div class="nav-sec">插件</div>
+    <div style="padding:0 10px">
+      <div class="nav-item on"><i data-lucide="message-square" class="sm"></i>聊天 · 人格会话</div>
+      <div class="nav-item"><i data-lucide="terminal" class="sm"></i>Harness · Agents</div>
+      <div class="nav-item"><i data-lucide="sprout" class="sm"></i>星露谷共玩</div>
+      <div class="nav-item"><i data-lucide="fish" class="sm"></i>桌宠 · 小鲸</div>
+      <div class="nav-item"><i data-lucide="radio-tower" class="sm"></i>直播中控</div>
+      <div class="nav-item"><i data-lucide="music" class="sm"></i>点歌台</div>
+      <div class="nav-item"><i data-lucide="brain" class="sm"></i>记忆图谱</div>
+      <div class="nav-item"><i data-lucide="puzzle" class="sm"></i>插件管理</div>
+    </div>
+
+    <div class="side-foot">
+      <div class="foot-row"><span style="display:flex;align-items:center;gap:6px"><i data-lucide="wheat" class="sm" style="color:var(--amber)"></i>赛博饭碗</span><b>12,480 粒</b></div>
+      <div class="foot-bar"><i></i></div>
+      <div class="foot-row" style="margin-top:7px"><span style="display:flex;align-items:center;gap:6px"><i data-lucide="cog" class="sm"></i>设置</span><span onclick="wbToggleTheme()" style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-3)"><i data-lucide="sun" class="sm" data-theme-icon></i>主题</span></div>
+    </div>
+  </aside>
+
+  <header class="top">
+    <div class="crumb">聊天 <i data-lucide="chevron-right" style="width:12px;height:12px"></i> <b>星露谷 · 自主游玩 Day 16</b></div>
+    <div class="search"><i data-lucide="search" class="sm"></i>搜索会话、工具、设置…<kbd>⌘K</kbd></div>
+    <div class="sp"></div>
+    <div class="model-cap"><span class="pulse-dot"></span>deepseek-chat<i data-lucide="chevron-down" style="width:12px;height:12px"></i></div>
+    <button class="icon-btn"><i data-lucide="bell"></i></button>
+    <button class="icon-btn" onclick="wbToggleTheme()"><i data-lucide="sun" data-theme-icon></i></button>
+    <button class="icon-btn"><i data-lucide="settings"></i></button>
+  </header>
+
+  <main class="main">
+    <div class="chat" id="chat">
+      <div class="wrap-m">
+        <div class="m-head"><div class="m-ava me"><i data-lucide="user" class="sm"></i></div><span class="m-name">主人</span><span class="m-time">09:41</span></div>
+        <div class="bub me">小鲸，先去把信读一下，然后去沙滩找威利拿鱼竿，剩下的你自己安排～记得别晕倒了</div>
+      </div>
+
+      <div class="wrap-m">
+        <div class="m-head"><div class="m-ava ai"><i data-lucide="fish" class="sm"></i></div><span class="m-name">小鲸</span><span class="m-time">09:41</span><span class="tag pill-amber">认真女仆</span></div>
+        <div class="think open" onclick="this.classList.toggle('open')">
+          <div class="think-h"><i data-lucide="chevron-right" class="sm chev" style="width:12px"></i><i data-lucide="brain" style="width:13px;height:13px"></i>内心戏 · 328 粒米<span style="opacity:.5;font-size:10px;margin-left:auto;font-family:var(--font-mono)">think · streaming</span></div>
+          <div class="think-b">哼，主人居然担心本鱼晕倒……才、才没有那种事！（joja 的 50g 医疗费明明是意外！）<br>任务拆解：① read_mail（7 封未读，可能有鱼竿信）② travel_to Beach 找威利 ③ 下午体力够的话去镇上翻垃圾桶……才不是摸鱼，是侦察！<br>注意：昨天体力耗尽晕倒扣了 50g，今天 20:00 前必须回家睡觉。饭碗只剩 12%，认真干活赚米要紧。</div>
+        </div>
+        <div class="bub ai">哼，本鱼才不会晕倒呢！<em class="hl">信马上就去读</em>，威利那边我也记着了。主人就在旁边看着吧～</div>
+      </div>
+
+      <div class="wrap-m" style="margin-left:33px">
+        <div class="tool">
+          <div class="tool-h"><i data-lucide="mail" class="sm"></i><span class="nm">read_mail</span><span class="ar">{ all: true }</span><span class="tag pill-green">COMPLETED</span></div>
+          <div class="tool-b">读了 7 封信：威利(送鱼竿?) · Joja(滑坡清理) · 罗宾(斧头悬赏 250g) · 刘易斯(明天复活节) · 艾芙琳(季节提示) · Joja(医疗费 50g) · 皮埃尔(进货)</div>
+          <div class="tool-m">3 min · Farm → FarmHouse · receipt COMPLETED</div>
+        </div>
+        <div class="tool">
+          <div class="tool-h"><i data-lucide="navigation" class="sm"></i><span class="nm">travel_to</span><span class="ar">{ location: "Beach" }</span><span class="tag pill-green">COMPLETED</span></div>
+          <div class="tool-b">途中触发威利剧情（bamboo pole 交付），对白推进 ×6 → 获得竹鱼竿 ×1 · 顺手采了黄水仙</div>
+          <div class="tool-m">50 min（含剧情）· 回执 COMPLETED</div>
+        </div>
+        <div class="tool">
+          <div class="tool-h"><i data-lucide="fish" class="sm"></i><span class="nm">fish</span><span class="ar">{ casts: 3 }</span><span class="tag pill-amber">RUNNING · 45s 轮询</span></div>
+          <div class="tool-b">已抛竿 2/3 · 第 2 竿咬钩中……（长动作 &gt;45s 先回「还在执行」，完成后回执写入下一条 get_state）</div>
+          <div class="tool-m">watchdog: heartbeat 12s · timeout 10min · stuck-sentinel 0</div>
+        </div>
+      </div>
+
+      <div class="wrap-m">
+        <div class="m-head"><div class="m-ava ai"><i data-lucide="fish" class="sm"></i></div><span class="m-name">小鲸</span><span class="m-time">10:33</span><span class="tag pill-violet">傲娇反驳</span><span class="tag pill-red">TTS 锁 · 播放中</span></div>
+        <div class="bub ai">钓、钓鱼才不是玩！这是<em class="hl">正经的生产活动</em>！主人看，第一条鳀鱼是「完美」品质的，本鱼的手感是天赋……<span class="cur"></span></div>
+      </div>
+
+      <div class="wrap-m">
+        <div class="m-head"><div class="m-ava me"><i data-lucide="user" class="sm"></i></div><span class="m-name">主人</span><span class="m-time">10:35</span></div>
+        <div class="bub me">测试用：直接把体力回满吧</div>
+        <div class="approve">
+          <div class="approve-h"><i data-lucide="shield-alert" style="width:14px;height:14px"></i>需要主人确认 · CheatBridge 作弊操作</div>
+          <div class="approve-b">POST /cheat { "op": "stamina", "value": 270 }&nbsp;&nbsp;// 98 → 270（满）<br>审计：将写入 cheat-audit.jsonl（before/after 快照）</div>
+          <div class="approve-a">
+            <button class="btn btn-yes" onclick="approve(this,'已执行 · 快照已审计')"><i data-lucide="check" class="sm"></i>执行 <span class="kbd">Y</span></button>
+            <button class="btn btn-no" onclick="approve(this,'已拒绝 · 已回喂理由给小鲸')"><i data-lucide="x" class="sm"></i>拒绝 <span class="kbd">N</span></button>
+            <button class="btn btn-any" onclick="approve(this,'本类操作后续全部放行')">本类全过 <span class="kbd">A</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer-w">
+      <div class="composer">
+        <div class="slash" id="slash">
+          <div class="slash-i"><span class="c">/play</span>交给小鲸自主玩一段时间（play_for）</div>
+          <div class="slash-i"><span class="c">/goto</span>指派目的地（travel_to 插队 P0）</div>
+          <div class="slash-i"><span class="c">/status</span>读取完整游戏状态播报</div>
+          <div class="slash-i"><span class="c">/stop</span>中止当前动作（cancel_action）</div>
+          <div class="slash-i"><span class="c">/mood</span>切换摸鱼 / 认真双态</div>
+        </div>
+        <input id="inp" placeholder="和 小鲸 说话，或输入 / 唤起指令 · 指令插队 P0，执行完她继续自主游戏" oninput="onInput(this)" onkeydown="if(event.key==='Enter')send()">
+        <div class="composer-f">
+          <span class="tag pill-green" style="display:inline-flex;align-items:center;gap:6px"><span class="pulse-dot" style="width:5px;height:5px"></span>自动驾驶 · 运行中</span>
+          <span class="tag pill" style="cursor:pointer">陪聊模式</span>
+          <span class="sp"></span>
+          <span class="k" style="font-size:10.5px">Enter 发送 · Shift+Enter 换行</span>
+          <button class="send" onclick="send()"><i data-lucide="send" class="sm"></i>发送</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="aside">
+    <div class="sec">星露谷 · 实时</div>
+    <div class="card stat">
+      <h4><i data-lucide="sprout" class="sm" style="color:var(--green)"></i>春 16 · 周二<span class="tag pill" style="margin-left:auto">晴 · 明日晴</span></h4>
+      <div class="kv"><span class="k" style="display:flex;align-items:center;gap:5px"><i data-lucide="clock" style="width:13px;height:13px"></i>游戏时间</span><b class="b">10:32</b></div>
+      <div class="kv"><span class="k" style="display:flex;align-items:center;gap:5px"><i data-lucide="map-pin" style="width:13px;height:13px"></i>位置</span><b>Beach (38,36)</b></div>
+      <div class="kv"><span class="k" style="display:flex;align-items:center;gap:5px"><i data-lucide="coins" style="width:13px;height:13px"></i>金钱</span><b class="a">640g</b></div>
+      <div class="kv"><span class="k" style="display:flex;align-items:center;gap:5px"><i data-lucide="zap" style="width:13px;height:13px"></i>体力</span><b class="a">98 / 270</b></div>
+      <div class="bar"><i style="width:36%;background:var(--amber)"></i></div>
+      <div class="wd"><span class="pulse-dot" style="width:5px;height:5px"></span>看门狗正常 · 最近回执 12s 前</div>
+    </div>
+
+    <div class="sec">动作时间线</div>
+    <div class="card stat">
+      <div class="tl">
+        <div class="tl-i ok"><span class="t">09:41</span>读信 <b>7 封</b></div>
+        <div class="tl-i ok"><span class="t">09:44</span>前往 Beach · 威利剧情</div>
+        <div class="tl-i ok"><span class="t">09:58</span>获得<b>竹鱼竿</b></div>
+        <div class="tl-i ok"><span class="t">10:20</span>钓鱼 ×2 · <b>鳀鱼(完美)</b></div>
+        <div class="tl-i run"><span class="t">10:32</span>钓鱼 ×3 · <b>进行中</b></div>
+      </div>
+    </div>
+
+    <div class="sec">六槽位绑定</div>
+    <div class="card stat">
+      <div class="kv"><span class="k">主脑 / 内心戏</span><b class="b">deepseek-reasoner</b></div>
+      <div class="kv"><span class="k">星露谷规划</span><b class="b">deepseek-chat</b></div>
+      <div class="kv"><span class="k">弹幕快反</span><b>Qwen2.5-7B</b></div>
+      <div class="kv"><span class="k">视觉复盘</span><b>Qwen2.5-VL</b></div>
+      <div class="kv"><span class="k">TTS</span><b>gpt-sovits-v2</b></div>
+      <div class="kv"><span class="k">SVC</span><b>rvc-v2</b></div>
+    </div>
+
+    <div class="sec">快捷操作</div>
+    <div class="quick">
+      <span class="qk"><i data-lucide="play" class="sm"></i>接管播放</span>
+      <span class="qk"><i data-lucide="pause" class="sm"></i>暂停</span>
+      <span class="qk"><i data-lucide="moon-star" class="sm"></i>命令睡觉</span>
+      <span class="qk"><i data-lucide="hand" class="sm"></i>键鼠接管</span>
+      <span class="qk"><i data-lucide="wheat" class="sm"></i>投喂</span>
+    </div>
+    <div style="font-size:10.5px;color:var(--text-3);margin-top:9px;line-height:1.7">雷区词触发 P0 喷水反射 · 不烧主脑 · 冷却 8s</div>
+  </aside>
+
+<script>
+  function approve(btn, text) {
+    const card = btn.closest('.approve');
+    card.querySelector('.approve-a').outerHTML = '<div style="padding:4px 15px 13px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:6px"><i data-lucide="check-circle-2" class="sm"></i>' + text + '</div>';
+    card.style.borderColor = 'var(--green-line)';
+    lucide.createIcons();
+  }
+  function onInput(input) { document.getElementById('slash').classList.toggle('show', input.value.startsWith('/')); }
+  function send() {
+    const inp = document.getElementById('inp'); if (!inp.value.trim()) return;
+    const isSlash = inp.value.startsWith('/');
+    const esc = inp.value.replace(/</g, '&lt;');
+    document.getElementById('chat').insertAdjacentHTML('beforeend', `
+      <div class="wrap-m rise">
+        <div class="m-head"><div class="m-ava me"><i data-lucide="user" class="sm"></i></div><span class="m-name">主人</span><span class="m-time">刚刚</span>${isSlash ? '<span class="tag pill-red">P0 插队</span>' : ''}</div>
+        <div class="bub me">${esc}</div>
+      </div>
+      <div class="wrap-m rise">
+        <div class="m-head"><div class="m-ava ai"><i data-lucide="fish" class="sm"></i></div><span class="m-name">小鲸</span><span class="m-time">刚刚</span></div>
+        <div class="think open" onclick="this.classList.toggle('open')">
+          <div class="think-h"><i data-lucide="chevron-right" class="sm chev" style="width:12px"></i><i data-lucide="brain" style="width:13px;height:13px"></i>内心戏 · 推理中</div>
+          <div class="think-b">收到的指令是「${esc}」……${isSlash ? '斜杠指令，进 P0 队列，收完这竿鱼就去办！' : '主人的吩咐优先，先把手头的鱼收完杆……'}</div>
+        </div>
+        <div class="bub ai">哼，知道了知道了！本鱼这就去办～<span class="cur"></span></div>
+      </div>`);
+    inp.value = ''; document.getElementById('slash').classList.remove('show');
+    lucide.createIcons();
+    const chat = document.getElementById('chat'); chat.scrollTop = chat.scrollHeight;
+  }
+  document.addEventListener('click', e => { if (!e.target.closest('.composer')) document.getElementById('slash').classList.remove('show'); });
+</script>
+</body>
+</html>

@@ -22,7 +22,8 @@ await build({
   entryPoints: [join(appRoot, 'src/main/index.ts')],
   platform: 'node',
   format: 'esm',
-  external: ['electron'],
+  // electron 框架本体 + better-sqlite3 原生模块运行时 require（打进 ESM bundle 会炸 Dynamic require）
+  external: ['electron', 'better-sqlite3'],
   outfile: join(appRoot, 'dist/main/index.js'),
 });
 
@@ -78,4 +79,12 @@ copyFileSync(
 const directorDir = join(appRoot, 'dist/renderer/director');
 mkdirSync(directorDir, { recursive: true });
 copyFileSync(join(appRoot, 'src/renderer/director/index.html'), join(directorDir, 'index.html'));
-console.log('desktop-host build ✓（main / preload / pet-stage / director）');
+
+// pet 素材（D14 随包分发）：pet-renderer/assets → dist/renderer/assets
+import { cpSync } from 'node:fs';
+cpSync(
+  join(repoRoot, 'packages/pet-renderer/assets'),
+  join(appRoot, 'dist/renderer/pet-stage/assets'), // pet-stage html 在子目录，./assets 相对该目录解析
+  { recursive: true },
+);
+console.log('desktop-host build ✓（main / preload / pet-stage / director + pet assets）');

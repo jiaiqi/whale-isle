@@ -3,6 +3,45 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+### Changed
+
+- **设计稿 v3「曜石」（apple-ui-design 三原则：Clarity/Deference/Depth）**：iOS 系统色板（#0A84FF 主 accent + 系统语义色）、true-black 分层底（避开死黑）、**光影七层系统**（ambient 环境光斑慢漂移 / 玻璃卡 blur30+内高光 / 发丝分隔线 / 双层柔影 / Sheen 文本光泽 / 状态光晕）、SF Pro+PingFang 节奏、pill 按钮（980px）+ hover scale 1.02、连续曲率圆角 8/12/16/20；tokens 变量名保持兼容（全部页面自动继承质感），shell-chat 全面精修、其余 6 页注入 ambient 光影层；深浅双主题（#f5f5f7 Apple 浅灰对等实现）。功能结构沿 v2 已确认的 7 页（Shell+聊天/Harness/插件管理/星露谷/供应商/桌宠/OBS），插件化信息架构保证新功能融洽插入。
+- **设计稿 v2 重做（ui-ux-pro-max 工作流，决策 D4/D9/D10）**：`design/` 全套升级——设计系统由 skill 数据库生成（Modern Dark 开发者工具风格、密度 8/10、Expo.out/spring 动效规格）；run-green 主操作色（#22C55E，"code dark + run green"）替代蓝紫 AI 味（v3 中绿转为纯运行/成功语义色）；lucide SVG 全量替换 emoji（本地 vendor/lucide.min.js，UI 零 emoji）；深/浅双主题完整 token（shell.js 持久切换）；7 页结构确立并经 Chrome headless 深浅双主题截图验证。
+- **产品功能设计 v2（定位升级）**：[docs/PRODUCT-DESIGN.md](docs/PRODUCT-DESIGN.md) 重写——从「AI VTuber 工作台」升级为**通用个人 AI 工作台**（用户决策 D6~D10）：桌宠/直播/星露谷等全部收编为**可开关插件**；插件系统对齐 dsh（Cordis 插件树/defineTool/三层约定）+ 兼容层规划；新增 **ACP Harness 层**（参考 pingdotgg/t3code，MIT 68.5k★，已克隆分析：providers-acp/线程/远程审批，`dsh --profile acp` 直连）；技术栈选型（React 19 + Tailwind v4 + zustand + motion + **lucide-react 图标** + Electron + WebUI 双形态 + Vite 评估）；主题系统（深/浅/跟随+主题色）；ROADMAP 新增 M6 批次 4 工单（Shell+插件内核 / ACP Harness / dsh 兼容层 / WebUI），原 T-M5-03 并入 T-M6-01、T-M5-07 并入 T-M6-02。
+
+### Added
+
+- **T-M5-01 ✅ + T-M5-02 ✅ + T-M6-01 最小版 ✅ 端到端真机打通（2026-11-21 晚）**：
+  - **素材**（T-M5-01）：dsh-pet 114 个 VP9-alpha webm（55MB）入库 `packages/pet-renderer/assets/blue-whale-maid/`（D14 随包分发）；契约扩展 `ambientPool`（77 条随机氛围池）跨语言重生成；`gen:pet-manifest` 生成器（11 语义槽位全覆盖 + sleep 循环段 + 池空兜底 `pickAmbient`）；manifest-asset.spec 3 项门禁。
+  - **game-bridge-mcp 包**（T-M5-02）：`mcp-client`（SSE/JSON 双解析 + JSON 前缀括号平衡解析器 + 超时≠失败语义 + 长动作 10min 分层超时）；`action-lock`（单在途互斥 + stats + cancel 幂等清锁）；`StuckSentinel`（4min 游戏时间冻结→卡死哨兵，时钟可注入）；`RulePlanner` 确定性日程（morning-mail→farm-work→fishing→forage→homeward，体力<8% 强制睡觉防晕倒，菜单优先处理）；`autodrive` 编排器（get_state→哨兵→P0 插队→执行→回执多播，**不可解析状态/网络错误按 watchdog 处理而非盲跑**，错误详情透传修复，maxCycles 死循环防护）。
+  - **宿主接线**：main `autodrive-host`（事件 webContents.send 单源多播到两窗 + autodrive:start/stop/directive/status IPC）；preload `directorBridge` 扩展（含 onAutodriveEvent 中继）；pet-stage 真形象加载（manifest 相对路径改写 + 114 webm 随包拷贝到 dist/renderer/pet-stage/assets）+ **autodrive 事件驱动动作映射**（UNCERTAIN→clumsy_panic / FAILED→rage_spray / 钓鱼收获→happy_maid / 决策→game_focus / state→thought 气泡）。
+  - **Shell 三页签**（T-M6-01 最小版）：聊天（autodrive 事件流卡片化 + 启停按钮 + `/goto /fish /sleep /stop /forage` 指令 P0 插队）｜星露谷监控（get_state 摘要 + 回执统计 + 时间线）｜供应商配置（T-dir-01 全量迁移 providers-panel.tsx）；E2E 适配页签导航后全绿。
+  - **真机端到端验证**：游戏重启后 BWF MCP bind → load_save 读档（泡泡湾 春16 06:00）→ Shell 点「启动自动驾驶」→ **小鲸真实接管游戏**：read_mail 7 封（COMPLETED）→ water_crops 浇水（COMPLETED）→ travel_to Beach 去钓鱼，游戏时间 06:00→06:50；`/fish 5` P0 插队 ✓；桌宠窗渲染真形象（待机呼吸.webm + DEV 水印 + 事件驱动切换动作）✓；监控页 15 条真实回执 ✓；`verify:gate` 4 道全绿（覆盖率攻坚：新增 game-bridge-mcp 20+ 用例至分支 90%+）。
+- **D13 形象与直播增强**（用户 2026-11-21 补充）：PRODUCT-DESIGN 新增 §2.6 小鲸日记（SessionEvent→换日归纳→图谱入库，聊天可问"昨天做了什么"只答有据）/ §2.7 形象工坊（AI 生视频→绿幕→normalize→manifest 注册→试穿，精灵图逆向导入）/ §2.8 直播感知与点歌（进房模糊解析+翻旧账问候、tid 防双计、**送礼插队点歌**[小+1位/中+3位/大置顶]、歌单管理、违禁拦截/同曲冷却/限额）/ §2.9 方案方补充功能（远程互动、日记面板、弹幕抽奖、多形象轮换）；ROADMAP 新增 **T-M5-13 形象工坊**、**T-M5-14 小鲸日记面板**，扩展 T-M5-04（观众双写/日记/提炼）与 T-M5-08（歌单+插队+防呆）；ARCHITECTURE 新增 **ADR-7**（日志=证据链与记忆=可检索摘要职责分离，双路订阅）。
+- **D11/D12 桌宠语音与状态气泡设计**（用户 2026-11-21 补充）：PRODUCT-DESIGN 新增 §2.4 语音场景矩阵（正式台词/内心戏发声[默认关，-30%音量+0.9x语速+排队制]/P0 反射/甩锅/碎碎念/播报级，六类触发点+节流护栏 8s/20s/30min）与 §2.5 状态气泡组（动作状态条常驻/今日目标卡折叠/事件弹泡 3.5s 收起/回执 ticker/直播简化/夜间呼吸条）；ARCHITECTURE 新增 **ADR-6**（语音 voice.ts 与气泡 status-bubble.ts 为 pet 插件独立总线订阅模块，非编排器内部件）；ROADMAP T-M5-02/T-M6-01 工单补充对应范围；pet-stage.html 设计稿重写为完整演示（三开关语音面板/心声云朵/台词弹泡+TTS 波形/脚下状态条/目标卡展开态/场景矩阵六卡）。
+- **docs/ARCHITECTURE.md 架构师方案 v1**（定稿待用户确认）：C4 两级视图（系统上下文/容器拓扑：main 内嵌 WebUI Server + ACP Client + PluginHost）；**8 条 ADR**（WebUI 内嵌、渲染层总线单向流、PluginHost=@cordisjs/core 最大兼容 dsh、ACP v1 先行 v2 渐进、electron-rebuild 管线解 ABI、三层插件结构 main/renderer/shared）；插件系统技术规格（manifest/defineTool/六扩展点/policy 单咽喉/审批三键/审计链）；数据所有权矩阵（Dexie/SQLite/JSONL 各司）；单源多播数据流不变式；三轨并行开发计划（素材/Shell/游戏轨道 + 合流端到端验收）与风险登记册 R1~R8。
+
+## [Unreleased] - 2026-11-21（第二轮）
+
+### Added
+
+- **产品功能设计 v1 定稿**（[docs/PRODUCT-DESIGN.md](docs/PRODUCT-DESIGN.md)，用户决策 D1~D5）：基于 21 个参考仓库的代码级深挖（克隆至 `~/Documents/vibe/reference-clones/`，5 个分析代理并行产出文件级结论），确定六大子系统升级方案——桌宠素材包（dsh-pet 114 alpha webm）、记忆图谱引擎移植（feiyuos-memory-graph）、星露谷自动驾驶（BWF 主线+守护脚本层+CheatBridge 开关）、聊天主界面（Codex 式，D3 最高优先）、三级注意力调度公式移植、鱼鳍安全模板；ROADMAP 新增 M5 批次 12 张工单（T-M5-01~12），当前激活 T-M5-01。
+- **docs/REFERENCES.md §4 第二轮代码级复评**：21 仓库总表（定位/可移植点/素材清单，含素材 alpha 与否实测）；D5 用户豁免声明（本地自用可移植、须登记来源）。
+- **全界面高保真交互设计稿**（`design/`，决策 D4）：6 页 HTML——`index.html`（设计语言总览：色板/排版/语义）+ `chat.html`（Codex 式聊天主界面：会话列表/think 折叠/工具卡片三态/审批卡 YNA//指令菜单/模拟流式）+ `stardew.html`（自动驾驶监控：动作互斥大卡/真实回执时间线/看门狗六宫格/CheatBridge 开关+审计流水/技能卡/ASCII 地图）+ `providers.html`（Magpie 单屏：套餐/六槽位/供应商卡升级版）+ `pet-stage.html`（桌宠舞台：双轨气泡/饭碗挂件/剪影点击分区/114 动作库网格分类筛选）+ `obs-overlay.html`（18765 挂件：投票板/歌词卡/双轨气泡/弹幕互动）。共享 `tokens.css` 设计 token（深空玻璃拟态）。Chrome headless 截图全页视觉验证通过；设计数据取自真机实测状态（春16日/体力98/竹鱼竿/鳀鱼完美）。
+
+## [Unreleased] - 2026-11-21
+
+### Added
+
+- **T-dir-01 ✅ Magpie 式模型供应商配置 + 客户端真机运行**（参考 [yetone/magpie](https://github.com/yetone/magpie)（MIT，39.6k★）单屏交互思想重写，未复制任何代码）：
+  - 契约先行：`ModelProviderConfig` 新增 `activeModelId`（Magpie「一处配置供应商，处处选模型」），`gen:contracts` 跨语言重生成（JSON Schema 24 域 + Pydantic）。
+  - 主进程 `provider-vault.ts`：API Key 经 Electron `safeStorage` 加密落盘 `userData/provider-vault.json`（明文只上行、永不下行，渲染进程只见掩码 `sk-1••••••••abcd`）；`providers:discover-models` 主进程 fetch OpenAI 兼容 `/models`；`providers:test-chat` 一次 `max_tokens=1` 真实请求验证 + 延迟回执。凭据库刻意避开 better-sqlite3（其 Node ABI 137 与 Electron ABI 139 无法同时服务 vitest 与 Electron 主进程，文件 KV 亦符合 AGENTS.md §1 的 SQLite 职责清单边界）。
+  - preload 新增 `directorBridge`（saveProviderKey/providerKeyMask/discoverModels/testProviderChat）；director 窗口补挂 preload（此前无桥）。
+  - director App 重构为 Magpie 单屏：9 张供应商卡（粘贴 Key → 加密保存 → 拉取模型 → 连接测试 → 选激活模型 + Region/Plan 胶囊切换端点）+ 六槽位绑定下拉（选项来自已发现模型，"providerId/modelId" 格式与干饭套餐契约一致）；状态合并 = 内置预设基底 + Dexie `providerOverrides` 覆盖层（重启持久）；套餐槽位绑定存 Dexie `diningProfiles`。E2E 选择器（`data-profile/data-active/data-binding/data-provider`）全兼容。
+  - 构建修复：main bundle `external: ['electron','better-sqlite3']`（原生模块打进 ESM 会炸 Dynamic require）。
+  - **E2E 稳定性修复**：`PET_STAGE_E2E=1` 时主进程 `app.setPath('userData', …/e2e-profile)`——开发实例与 E2E 并发共用 userData 会撞 IndexedDB LevelDB 锁（`Internal error opening backing store`）导致 director 白屏假死；隔离后 E2E 30s 超时 → 756ms 通过。
+  - 真机验证：Electron 38 客户端启动，CDP DOM 验收（9 供应商卡 / 3 套餐胶囊 / 6 槽位下拉 / bridge 挂载）、IPC 链路实测（假 key 保存 → 掩码回读一致 → vault 文件只见密文 → 未存 key 拉模型报错不崩）；`pnpm verify:gate` 4 过全绿。
+
 ## [Unreleased] - 2026-11-15（第二轮）
 
 ### Added

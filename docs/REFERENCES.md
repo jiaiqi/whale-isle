@@ -37,3 +37,35 @@
 - ⚠️ "大肥鱼"形象及全部衍生动画素材为 **CC BY-NC-SA 4.0**（dsh-pet 与 dsh-livestream 均有目录级声明）：仅限本地开发测试（`DEV_ONLY_NON_COMMERCIAL`），商用前必须整包替换为自制/已授权素材。
 - ⚠️ Apache-2.0 项目（dsh-video-storyboard）移植须保留 NOTICE 与署名。
 - ⚠️ 未提供仓库的参考项（dyhub / CC Switch / Magpie / awesome-codex-pet）在补档前一律按"仅思想参考、禁止复制源码"处置。
+- 📢 **2026-11-21 用户豁免声明（PRODUCT-DESIGN D5）**：应用本地自用、不公开——参考仓库代码/素材可移植（含上述 ⛔ 条目的思想与素材范畴；GPL vendor 组件仍不整体引入），全部移植须在素材台账登记来源；未来若公开/商用须按本节清洗。
+
+## 4. 第二轮代码级复评（2026-11-21，21 仓库深挖）
+
+> 本轮对全部仓库做了**实际代码级分析**（克隆至 `~/Documents/vibe/reference-clones/`，逐仓读源码+素材抽样），结论驱动 [PRODUCT-DESIGN.md](./PRODUCT-DESIGN.md)。素材许可证细节见各仓库内声明；本地自用豁免见 D5。
+
+| 项目 | 一句话定位 | 核心可移植点（已验证的文件级结论） | 素材 |
+| --- | --- | --- | --- |
+| dsh-pet | Electron 桌宠重仓 | 双 video 防黑帧同构实现、宠物占用锁（TTL 2min/上限 30min/仅用户可抢）、manifest 三层合并、记忆教训（内部 id 永不进记忆正文） | **114 个 640×360 VP9 alpha webm**（动作/情绪/睡觉三段/工作/余额全套）+ 绿幕脚本链 + 3 份生视频提示词 |
+| dsh-stardew-blind-whale-farmer | SMAPI mod v1.1.27 | Observer 状态树+ASCII 地图、A*(maxNodes 60000)+BFS 兜底、游戏原生 API 执行、F7 接管、攻略分层、HarnessTest 反射离线测试 | guide 攻略 8 文件 |
+| feiyuos-memory-graph | 零依赖 Node 记忆图谱 | node/edge 数据结构、混合检索（向量+4 跳图扩展+加权）、30 天半衰期遗忘、JSONL 墓碑压实、looseParse | 力导向可视化 viewer |
+| deepseek-superagent-feiyu-os | agent 编排方法论 | 四层架构（传输/信箱/班次/项目记忆）、确定性准入闸、唤醒四安全轨、HANDOFF 模板、6 个案例 | 无 |
+| feiyuos-pc-body | PC 身体胶水层 | 鱼鳍安全模板（灾难黑名单/审计 JSONL/急刹/信号量）、看门狗自愈、pet_say 双投递 | 无 |
+| feiyuos-stardew-ai-farmer | 星露谷 AI 农场（外置脚本+HTTP 桥） | CheatBridge v1.4（游戏线程队列+审计快照）、173 端点动作库、63 地标表、守护脚本群（卡死哨兵/换日总控/强制睡觉）、fish-eye 翻译层 | 3 张大肥鱼皮肤 |
+| FeiyuOS | ESP32-S3 AI 固件（C++/Lua） | URI 资源命名空间+7 通用工具、Policy 前缀权限（凭据硬拒）、Y/N/A 审批状态机、工具结果 out#N 落盘 | 吉祥物 spritesheet + 开机文案 |
+| magpie | 本地多供应商网关（MIT, 39.6k★） | 四协议互译矩阵（Chat/Responses/Anthropic/Gemini 流式含工具）、tier+临期 failover、agentOf() 识别、masking 掩码回填、agentenv 注入+原子改写、单屏 UI 模式 | 无（官网截图） |
+| deepseek-harness | DeepSeek 官方 agent harness（MIT, dsh CLI） | 事件化 agent-loop、SessionEvent JSONL 事件溯源、compaction 三事件+崩溃锁、subagent 6 后端、system-prompt 分节、capability seam、478 份 ADR | UI 设计规范文档 |
+| dsh-livestream | B 站直播全栈 | 三级注意力调度公式、弹幕特征正则、事件中枢（去重/合并/批量 flush）、点单簿、下播提炼+注入过滤、STAGE_PROTOCOL 契约 | dafeiyu 13 webm（**无 alpha**）+ transitions.json |
+| Dsh_douyin | 抖音直播间（读小说+健身房） | 点歌正则+SSE 探活+saying 互斥锁+12 条滚动 history | 25 webm（**无 alpha**） |
+| dsh-douyin-agent | 抖音浏览器 agent v1.4.7 | 文件锁+pid 心跳+runId 归属、结构化失败诊断（sha256/reasonCode/前后快照）、原子写、identityVersion 校验 | 无 |
+| dsh-live-studio | B 站弹幕→TTS→Live2D | SQLite 账本（tid 防 COMBO 双计）、uid 同人合并≤5 条、Live2D 参数级表演控制器 | 无 |
+| dsh-live | ffmpeg 推流插件 | avfoundation 采集/编码参数/tee 边推边录/设备枚举 | 无 |
+| dsh-fish | 事件流养成 AI（零依赖铁律） | clip.js（UTF-16 边界+孤立代理对）、budget.js 字数预算、guard.js 输入闸门、212 个 node:test 的测试守文案模式 | 无 |
+| dsh-plugin-yushe | 鱼社养鱼可视化插件 | 三层架构（host/client/shared 纯函数）、defineTool registry、成长引擎、风控退避 | **348 张鱼立绘（594×900）+10 房间背景** |
+| dsh-video-storyboard | 视频分镜/切片 | 五阶段切点链（HSV 差分）、300MB LRU media-store、宫格分镜（运动 p90/切点吸附/拉普拉斯最锐，222 token/5min）、ASR 分片缓存 | 无 |
+| aboutme-pets | 桌宠素材商店 | spritesheet↔webm 双向转换脚本（yuva420p alpha）、音画同步播放器、`moving` 位移数据结构 | **9 角色 1040 动作精灵图（VP8X alpha 640×360/帧）+ m4a 音效** |
+| crosspet | 跨 AI 状态桌宠 | hook→状态 JSON→pose 映射（BIG_JOB_TOOLS=8 判大活）、静态立绘+SVG SMIL 特效、`lines{pose:[台词池]}` | **31 角色 919 立绘 webp（alpha，60 pose/角色）**+ 生图提示词 |
+| dsh-desktop-petbox | Live2D 桌宠舞台 | **engine.js 参数单出口**（854 行）、mood.js 纯函数、gaze.js 注射手感、interact.js alpha 剪影分区、HTTP 控制口、RMS 口型 | 无 |
+| agent-pet | Tauri/Rust AI 监视桌宠 | codex_monitor jsonl→事件映射（1410 行）、双层映射（原始事件→语义→动画）、9 态状态机 | 12 个像素宠精灵图 |
+| **pingdotgg/t3code** | **coding agents 开源控制平面**（MIT，68.5k★，2026-11-21 补档） | **ACP（Agent Client Protocol）v1/v2 统一接入** Claude Code/Codex/Cursor/OpenCode/dsh（`dsh --profile acp`）；Provider 实例模型（Registry 搜索/本地命令/凭据自管）；线程/中途换 agent/checkpoint/任务委派；桌面↔手机远程审批；monorepo 多端（desktop/server/web/mobile）+ libghostty-vt 终端渲染 | 无 |
+
+> 12 个新仓库的第一轮档案尚未单独建 `REFERENCE-*.md`，按工单开工必查原则：各工单开工前以本表结论为索引、深读对应仓库源码复核。

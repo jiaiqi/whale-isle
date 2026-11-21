@@ -113,6 +113,9 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       await director.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
 
       // 一键切换序列（Dexie 跨运行持久，不假设初始态）：🍚 省饭档 → 🛡️ 断网档
+      // Shell 化重构（T-M6-01）：供应商/套餐配置在 providers 页签内——先切页签
+      await director.click('[data-tab="providers"]');
+      await director.waitForSelector('[data-profile="BUDGET_SLACKING"]', { timeout: 10_000 });
       const snapshot = async () => (await director.evaluate(() => (window as unknown as { __directorSnapshot: () => Promise<Record<string, unknown>> }).__directorSnapshot())) as Record<string, unknown>;
       await director.click('[data-profile="BUDGET_SLACKING"]');
       await director.waitForFunction(
@@ -128,8 +131,9 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       );
       expect((await snapshot()).activeDiningProfile).toBe('OFFLINE_SURVIVAL'); // Dexie 状态同步②
 
-      // 刷新后持久恢复（IndexedDB 真持久化，非内存态）
+      // 刷新后持久恢复（IndexedDB 真持久化，非内存态）——reload 后默认 chat 页签，需先切回 providers
       await director.reload();
+      await director.click('[data-tab="providers"]');
       await director.waitForFunction(
         () => document.querySelector('[data-profile="OFFLINE_SURVIVAL"]')?.getAttribute('data-active') === 'true',
         { timeout: 10_000 },

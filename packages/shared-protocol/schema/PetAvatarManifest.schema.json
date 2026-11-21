@@ -123,6 +123,37 @@
             "additionalProperties": false
           },
           "minItems": 1
+        },
+        "ambientPool": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "clipId": {
+                "type": "string"
+              },
+              "webmPath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "type": "string",
+                "default": "小动作"
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "default": 10
+              }
+            },
+            "required": [
+              "clipId",
+              "webmPath"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
         }
       },
       "required": [

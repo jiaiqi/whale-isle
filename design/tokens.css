@@ -1,0 +1,169 @@
+/* ==========================================================================
+   大肥鱼工作台 · 设计系统 v3「曜石」(apple-ui-design 三原则: Clarity/Deference/Depth)
+   —— 光影七层系统：
+   L1 ambient 光斑(页面级慢漂移)  L2 true-black 分层底  L3 玻璃卡(blur30+内高光)
+   L4 发丝分隔线(1px rgba)  L5 柔影深度分级  L6 文本光泽(clip 渐变)
+   L7 状态光晕(运行点 glow)
+   —— 反 AI 味延续：UI 零 emoji(lucide)、无蓝紫渐变 hero、真实数据密度
+   —— 色板 = iOS 系统色(dark/light 双套)；字号层级 = SF Pro 节奏
+   ========================================================================== */
+
+/* ── 深色（主形态 · true-black 分层） ── */
+:root.dark {
+  --bg: #050507;               /* L2 近黑(带一丝蓝，避开死黑) */
+  --bg-elev: #101014;
+  --surface: rgba(28, 28, 32, 0.72);      /* iOS secondarySystemGroupedBackground 质感 */
+  --surface-solid: #1c1c20;
+  --surface-2: rgba(44, 44, 48, 0.72);
+  --inset: rgba(0, 0, 0, 0.42);
+
+  --stroke: rgba(255, 255, 255, 0.08);    /* L4 发丝线 */
+  --stroke-2: rgba(255, 255, 255, 0.16);
+  --hi: rgba(255, 255, 255, 0.09);        /* L3 玻璃卡顶部内高光 */
+
+  --text-1: #f5f5f7;
+  --text-2: #98989f;
+  --text-3: #636368;
+
+  /* iOS 系统色 (dark) */
+  --blue: #0a84ff;             /* 主 accent：主操作/链接/焦点 */
+  --blue-dim: rgba(10, 132, 255, 0.14);
+  --blue-line: rgba(10, 132, 255, 0.45);
+  --green: #30d158;            /* 运行态/成功 */
+  --green-dim: rgba(48, 209, 88, 0.13);
+  --green-line: rgba(48, 209, 88, 0.42);
+  --amber: #ff9f0a;            /* 饭碗经济/等待 */
+  --amber-dim: rgba(255, 159, 10, 0.13);
+  --amber-line: rgba(255, 159, 10, 0.42);
+  --violet: #bf5af2;           /* <think> 专属 */
+  --violet-dim: rgba(191, 90, 242, 0.12);
+  --violet-line: rgba(191, 90, 242, 0.4);
+  --red: #ff453a;
+  --red-dim: rgba(255, 69, 58, 0.13);
+  --red-line: rgba(255, 69, 58, 0.42);
+
+  /* L5 柔影深度分级 */
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --glow-blue: 0 0 0 1px var(--blue-line), 0 0 24px rgba(10, 132, 255, 0.22);
+}
+
+/* ── 浅色（完整对等 · Apple 标志性 #f5f5f7） ── */
+:root:not(.dark) {
+  --bg: #f5f5f7;
+  --bg-elev: #ffffff;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-solid: #ffffff;
+  --surface-2: rgba(240, 240, 244, 0.9);
+  --inset: rgba(0, 0, 0, 0.045);
+
+  --stroke: rgba(0, 0, 0, 0.07);
+  --stroke-2: rgba(0, 0, 0, 0.14);
+  --hi: rgba(255, 255, 255, 0.85);
+
+  --text-1: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #86868b;
+
+  /* iOS 系统色 (light) */
+  --blue: #0071e3;
+  --blue-dim: rgba(0, 113, 227, 0.09);
+  --blue-line: rgba(0, 113, 227, 0.4);
+  --green: #28a745;
+  --green-dim: rgba(40, 167, 69, 0.09);
+  --green-line: rgba(40, 167, 69, 0.4);
+  --amber: #c93400;
+  --amber-dim: rgba(201, 52, 0, 0.08);
+  --amber-line: rgba(201, 52, 0, 0.36);
+  --violet: #8944ab;
+  --violet-dim: rgba(137, 68, 171, 0.08);
+  --violet-line: rgba(137, 68, 171, 0.36);
+  --red: #d70015;
+  --red-dim: rgba(215, 0, 21, 0.08);
+  --red-line: rgba(215, 0, 21, 0.36);
+
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-2: 0 12px 40px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --glow-blue: 0 0 0 1px var(--blue-line);
+}
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;   /* 连续曲率感 */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);                 /* Apple 标准 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 300ms;
+  --dur-hover: 200ms;
+}
+
+/* L3 玻璃卡：blur + 内高光 + 柔影 */
+.card {
+  background: var(--surface);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--hi);
+}
+.card-hover { transition: background var(--dur-hover) var(--ease), border-color var(--dur-hover) var(--ease), transform var(--dur-hover) var(--ease), box-shadow var(--dur-hover) var(--ease); }
+.card-hover:hover { background: var(--surface-2); border-color: var(--stroke-2); box-shadow: var(--shadow-2), inset 0 1px 0 var(--hi); }
+.elev { box-shadow: var(--shadow-2), inset 0 1px 0 var(--hi); }
+
+.inset { background: var(--inset); border: 1px solid var(--stroke); border-radius: var(--r-md); }
+.pill { border: 1px solid var(--stroke); border-radius: 980px; font-size: 11px; padding: 3px 11px; color: var(--text-2); }
+.pill-green { background: var(--green-dim); border-color: var(--green-line); color: var(--green); }
+.pill-amber { background: var(--amber-dim); border-color: var(--amber-line); color: var(--amber); }
+.pill-red { background: var(--red-dim); border-color: var(--red-line); color: var(--red); }
+.pill-violet { background: var(--violet-dim); border-color: var(--violet-line); color: var(--violet); }
+.pill-blue { background: var(--blue-dim); border-color: var(--blue-line); color: var(--blue); }
+.mono { font-family: var(--font-mono); font-size: 11.5px; }
+.k { color: var(--text-3); }
+button, .clickable { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+/* L1 ambient 环境光斑：页面级、慢漂移、极低透明度 */
+.ambient { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.ambient::before, .ambient::after { content: ''; position: absolute; border-radius: 50%; filter: blur(90px); }
+.ambient::before { width: 620px; height: 420px; top: -160px; right: -80px;
+  background: radial-gradient(circle, rgba(10,132,255,0.10), transparent 70%);
+  animation: drift 26s ease-in-out infinite alternate; }
+.ambient::after { width: 540px; height: 380px; bottom: -140px; left: -100px;
+  background: radial-gradient(circle, rgba(48,209,88,0.06), transparent 70%);
+  animation: drift 32s ease-in-out infinite alternate-reverse; }
+@keyframes drift { from { transform: translate(0,0) scale(1) } to { transform: translate(-70px, 50px) scale(1.12) } }
+
+/* L6 文本光泽：大标题白→灰 clip 渐变 */
+.sheen {
+  background: linear-gradient(180deg, var(--text-1) 40%, color-mix(in srgb, var(--text-1) 62%, transparent));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+/* L7 状态光晕 */
+.pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green), 0 0 2px var(--green); animation: blink 2.2s infinite; }
+
+/* Apple 按钮：pill + hover 1.02 + brightness */
+.btn-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 20px; border-radius: 980px;
+  font-size: 12.5px; font-weight: 550; border: none; transition: all var(--dur-hover) var(--ease); }
+.btn-pill.primary { background: var(--blue); color: #fff; }
+.btn-pill.primary:hover { transform: scale(1.02); filter: brightness(1.1); }
+.btn-pill.ghost { background: var(--surface-2); color: var(--text-1); border: 1px solid var(--stroke); }
+.btn-pill.ghost:hover { border-color: var(--stroke-2); }
+
+svg.lucide { width: 16px; height: 16px; stroke-width: 1.6; }
+svg.lucide.sm { width: 14px; height: 14px; }
+svg.lucide.lg { width: 18px; height: 18px; }
+
+/* 动效 */
+@keyframes blink { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+@keyframes rise { from { opacity: 0; transform: translateY(20px) } to { opacity: 1; transform: none } }
+@keyframes floaty { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+.rise { animation: rise .5s var(--ease-out) both; }
+.stagger > * { animation: rise .55s var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: .03s } .stagger > *:nth-child(2) { animation-delay: .1s }
+.stagger > *:nth-child(3) { animation-delay: .17s } .stagger > *:nth-child(4) { animation-delay: .24s }
+.stagger > *:nth-child(5) { animation-delay: .31s } .stagger > *:nth-child(6) { animation-delay: .38s }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--stroke-2); border-radius: 999px; }

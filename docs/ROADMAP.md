@@ -3,7 +3,7 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M2-03`（M2「本地语音与点歌」进行中）**
+> **当前激活工单：`T-M6-02` ACP Harness 层（T-M5-01/02 已 DONE、T-M6-01 最小版已真机跑通；下一步完整插件内核或 Harness）**
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
@@ -17,6 +17,8 @@
 > - `T-M1-05` ✅ 已完成（2026-11-15）：pet-stage 双轨气泡（云朵半透明 `<think>` / 正式对话）+ 赛博饭碗挂件（布局纯函数保证不重叠）+ `[DEV-ASSET-ONLY]` 水印署名；director 中控台（React 19 + Tailwind v4，esbuild 打包）——三套餐胶囊一键切换写 Dexie `activeDiningProfile` 刷新持久恢复、六槽位绑定、供应商预设卡。**M1 全部 5 张工单 DONE。**
 > - `T-M2-02` ✅ 已完成（2026-11-15）：情绪感知 TTS 混合路由——契约先行（`TtsVoicePack`/`EmotionVoiceProfile`/`LipEnvelope`/`TtsSynthesisResult` 进 shared-protocol，19→24 域跨语言重生成）；Python `tts_engine` 情绪路由（情绪前缀→参考音频匹配、本地 GPT-SoVITS 优先 + 云端降级如实上报 degraded、口型包络 viseme 序列生成）；宿主侧 `tts-router`（情绪→桌宠动作映射、参考音频选择、语音租约组装 ttl=时长+缓冲、口型时间线采样）。
 > - `T-M2-01` ✅ 已完成（2026-11-15）：Python Sidecar 骨架（`services/audio-ai-worker`：uv 管理 Python 3.11 + FastAPI + WebSocket；`/health` 硬件后端探测 mps/cuda/cpu、`/tts/synthesize` 确定性 WAV stub、`/ws/audio` JSON-RPC 通道）+ 宿主侧 `AudioLeaseManager` 单端语音锁（dsh-pet 已核实机制工程化：单端互斥 active≤1 不变式、播放完成回执驱动、P0 抢占 INTERRUPTED_BY_P0、TTL 强制释放 TTL_EXPIRED、失败 AUDIO_DEVICE_ERROR、队列 P0 优先+同级 FIFO）；REFERENCE-dsh-pet 的 TTL 语音锁待核实项已核实并回写档案。
+> - `T-dir-01` ✅ 已完成（2026-11-21，**用户指令插队**：真机测试 + 供应商 key 自配优先，原 NEXT 的 T-M2-03 回落 PENDING）：Magpie（yetone/magpie，MIT）式供应商配置——契约加 `activeModelId` 跨语言重生成；主进程 provider-vault（safeStorage 加密落盘 userData/provider-vault.json、渲染进程只见掩码、模型发现/连接测试走主进程 fetch 守 UI 边界）；preload directorBridge + director 补挂 preload；App 重构 Magpie 单屏（9 供应商卡 Key→拉模型→测试→选激活模型 + 六槽位下拉绑定，Dexie providerOverrides/diningProfiles 双层持久）；构建修复（better-sqlite3 external）与 E2E 隔离修复（PET_STAGE_E2E 独立 userData 防 IndexedDB LevelDB 锁互踩）；真机 Electron 38 验收 + verify:gate 4 过。
+> - **真机游戏侧进展（2026-11-21）**：Stardew Valley 1.6.15 + SMAPI 4.5.2 + BWF Mod（已升级 1.1.6→1.1.27，修 MCP 端口 bind 问题）真机联调打通——MCP `http://127.0.0.1:18080/mcp`（Streamable HTTP，JSON/SSE 双格式摇摆），81 工具；已实测 load_save 读档「泡泡湾_454908853」+ 以小鲸人设游玩（读信/开垦播种浇水 15 防风草/威利剧情领竹鱼竿/钓鳀鱼/卖杂物）。发现待办：MCP tools/list 未标 required、长动作 45s "还在执行"语义、HTTP 超时≠失败不可重发——game-bridge-mcp TS 客户端（T-M3-01）需内置互斥锁+看门狗（"没反应查原因"）。
 
 ## 工单总表（M0~M4 · 20 张原子工单）
 
@@ -42,3 +44,36 @@
 | **`T-M4-01`** | M4：直播与切片 | **直播事件总线与三级注意力调度器 `live-stream-hub`**：接入 `dyhub` 抖音弹幕流，实现同观众弹幕合并、礼物连击合并、三道防封敏感词护栏与 P0/P1/P2 队列 | `dsh-livestream`、`dsh-live-studio`、`dyhub` | 用 `danmaku-storm-replay` 注入 100 条/秒弹幕与违规词，断言违规词 100% 拦截且 P0 零延迟插播 | PENDING |
 | **`T-M4-02`** | M4：直播与切片 | **节目状态机、常客记仇账本与弹幕议会**：实现"打游戏 ↔ 点歌 ↔ 杂谈"防呆切换、进房翻旧账互动，以及关键抉择 20 秒弹幕扣 1/2/3 投票器 | `Dsh_douyin`（仅思想）、`dsh-live-studio` | 模拟游戏过夜等待或卡关超 15 秒，断言自动切入点歌或杂谈状态，画面绝不冷场发呆 | PENDING |
 | **`T-M4-03`** | M4：直播与切片 | **OBS 透明浏览器挂件源与高光/翻车自动切片器**：提供 `http://localhost:18765` OBS 透明图层（双轨气泡+歌词+饭碗+投票板），并基于 45 秒环形缓存生成翻车复盘切片 | `dsh-video-storyboard`、`dsh-live`（仅思想） | 模拟"矿洞晕倒+弹幕哈哈哈哈激增"事件，断言自动导出带时间戳与毒舌复盘字幕的切片草稿 | PENDING |
+
+## M5 批次：体验升级（2026-11-21 新增，源于 21 仓库代码级复评与用户决策 D1~D5）
+
+> 需求总纲见 [PRODUCT-DESIGN.md](./PRODUCT-DESIGN.md)；复评索引见 [REFERENCES.md](./REFERENCES.md) §4。**当前激活：`T-M5-01`**（用户指令：P0 三连，M2-03/M3/M4 原工单按 M5 融合后推进）。
+
+| 工单编号 | 分期 | 工单名称与核心交付物（单工单 ≤ 8 文件） | 开工前必查参考 | 自动化门禁校验指令与断言（Gate） | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| **`T-M5-01`** | P0 | **官方素材包移植与 manifest 管线**（✅ 2026-11-21 DONE）：dsh-pet 114 个 alpha webm → pet-renderer 素材库；manifest 三层合并（categories/weights/sleep 三段）；aboutme-pets 精灵图逆向脚本移植为扩展角色包管线；素材台账登记 | dsh-pet、aboutme-pets | 断言：≥100 动作可渲染、sleep 三段接力首尾帧对齐、manifest 条目级覆盖生效、台账含来源路径 | NEXT |
+| **`T-M5-02`** | P0 | **game-bridge-mcp 客户端与人格化自动驾驶**（✅ 2026-11-21 DONE：真机 E2E 游戏被驱动）：MCP 客户端（SSE/JSON 双解析）+ 动作互斥锁 + 看门狗（分层超时/卡死哨兵/cancel 兜底）+ 人格化规划器（get_state→persona-brain→LLM→回执→总线多播）+ 守护层（换日总控/强制睡觉）+ CheatBridge 开关（默认关+审计）；**语音触发挂点**（D11：场景矩阵六类触发 → voice 订阅模块 → AudioLeaseManager 租约，节流 8s/20s/30min） | BWF、feiyuos-stardew、feiyuos-pc-body | 仿真剧本断言：uncertain→clumsy_panic 不死循环；游戏时间 4min 不动→诊断触发；超时不重发；CheatBridge 关闭时直写被拒 | PENDING |
+| **`T-M5-03`** | P0 | **聊天主界面 v1（D3）**：会话列表侧栏 + 流式回复 + Markdown + `<think>` 折叠 + 工具调用卡片（动作回执/语音锁实时态）+ 对话控 AI（指令插队 P0，执行完回归自主）+ 审批卡片（Y/N/A） | deepseek-harness agent-loop、FeiyuOS Y/N/A | E2E：流式渲染断言；注入"去钓鱼"指令断言插队 P0；`<think>` 折叠；审批卡拒绝后动作不执行 | PENDING |
+| **`T-M5-04`** | P1 | **长期记忆图谱引擎移植**：feiyuos-memory-graph 节点/边/检索/遗忘/压实全量移植对接 local-store；**小鲸日记（换日自动归纳当日事件→日记条目入图谱）**；下播提炼（12 观众/次）；**观众感知双写（进房/发言/送礼 → grudge_ledger + 图谱 event+viewer 实体，常客翻旧账问候）**；聊天自问「昨天做了什么」检索作答 | feiyuos-memory-graph、dsh-livestream distill | 单测：检索 top5 加权正确；30 天半衰期衰减；同实体≥3 事件归纳主题；JSONL 原子写；日记生成幂等；观众双写一致性 | PENDING |
+| **`T-M5-05`** | P1 | **三级注意力调度与弹幕中枢**：dsh-livestream attention 公式移植（人数分档/e^(-age/τ)/连击结算/聚拢欢迎）+ 事件中枢（去重/合并/批量 flush）+ clip.js/budget.js | dsh-livestream、dsh-fish | danmaku-storm-replay 断言：100 条/秒分档正确；同观众合并；违规词 100% 拦截 | PENDING |
+| **`T-M5-06`** | P1 | **渲染参数单出口重构与交互质感**：engine.js 范式重写参数管理 + mood 纯函数 + gaze 注射 + alpha 剪影点击分区 | dsh-desktop-petbox | 断言：呼吸/眨眼/注视/口型并发不覆盖（每帧单出口）；剪影命中分区正确 | PENDING |
+| **`T-M5-07`** | P1 | **工作跟随**：本地 AI CLI 会话 jsonl 监听→事件映射→桌宠动画/气泡（改文件轮询为总线 WS 推送） | agent-pet、crosspet | 断言：mention/processing/success→动画映射；BIG_JOB_TOOLS 大活判定 | PENDING |
+| **`T-M5-08`** | P2 | **点歌台 SVC 与歌词挂件**：点歌正则解析→队列→Demucs/RVC 管线（小鲸音色演唱）+ OBS 歌词卡 + **歌单管理页（Shell 面板）+ 送礼插队（价值→权重：小+1位/中+3位/大置顶+专属感谢）** + 防呆（违禁曲拦截/同曲冷却 30min/每人每小时 3 首） | Dsh_douyin、dsh-livestream | 二次点播 <50ms 缓存命中；违禁曲拦截；礼物插队排序断言 | PENDING |
+| **`T-M5-09`** | P2 | **OBS 挂件与 STAGE_PROTOCOL**：18765 透明浏览器源 + 版本化 SSE 契约 + transitions 帧匹配防叠影 | dsh-livestream stage | 契约版本协商断言；切换零叠影 | PENDING |
+| **`T-M5-10`** | P2 | **高光/翻车切片器**：ffmpeg 采集管线 + 五阶段切点链 + 宫格分镜 + LRU 缓存 | dsh-video-storyboard、dsh-live | 模拟翻车事件→自动导出带字幕切片草稿 | PENDING |
+| **`T-M5-11`** | P2 | **model-gateway v2 协议互译**：OpenAI/Anthropic/Gemini 流式互译（含工具调用）、tier+临期 failover、agent 用量归属、掩码回填 | magpie | 四协议互译单测 100% 分支；tier 选号断言；掩码回填残留 0 | PENDING |
+| **`T-M5-12`** | P2 | **PC 身体安全模板与看门狗自愈**：鱼鳍安全边界（黑名单/审计/急刹/信号量）+ 进程看护 | feiyuos-pc-body | 灾难命令 100% 拦截；审计 JSONL 轮转；kill 后 ~70s 自愈 | PENDING |
+| **`T-M5-13`** | P2 | **形象工坊（D13③）**：自定义形象 + AI 生成动作管线——AI 生视频提示词模板→绿幕→chroma→normalize（640×360 alpha）→manifest 条目注册→试穿预览；精灵图逆向导入 | dsh-pet scripts、aboutme-pets | 素材规格自动校验（alpha/帧率/时长）；生成→注册→pet-stage 即时切换断言；台账登记 | PENDING |
+| **`T-M5-14`** | P1 | **小鲸日记面板（D13②）**：Shell 日历视图翻阅每日日记 + 记忆图谱力导向可视化 + 周报复盘（TTS 播报+切片联动入口） | feiyuos-memory-graph viewer | 日历翻阅 E2E；周报生成幂等；图谱检索入口可用 | PENDING |
+| **`T-M6-05`** | P2 | **独立安装包（D14）**：electron-builder（macOS dmg + Win nsis）——素材/worker/契约生成物打进 resources；首启向导（星露谷+Mod 一键安装引导、GPT-SoVITS 可选下载、供应商 key 配置）；全功能离线自包含验证 | electron-builder | 干净环境（无参考仓库路径）安装→启动→桌宠渲染→autodrive 依赖注入断言；安装包体积 <200MB（不含可选 GPT-SoVITS） | PENDING |
+
+## M6 批次：通用工作台内核（2026-11-21 v2 新增，用户决策 D6~D10）
+
+> 需求总纲见 [PRODUCT-DESIGN.md](./PRODUCT-DESIGN.md) §2（分层架构/插件系统/Harness/技术栈）；**实现规格与 ADR 决策见 [ARCHITECTURE.md](./ARCHITECTURE.md)**（进程拓扑 / 三层插件 / PluginHost=cordis / ACP v1 先行 / 数据所有权 / policy 单咽喉 / 三轨并行计划 / 风险登记册 R1~R8）。产品定位升级为**通用个人 AI 工作台**：插件化 + ACP Harness + WebUI + 主题系统 + lucide 图标。
+
+| 工单编号 | 分期 | 工单名称与核心交付物（单工单 ≤ 8 文件） | 开工前必查参考 | 自动化门禁校验指令与断言（Gate） | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| **`T-M6-01`** | P0 | **工作台 Shell 与插件内核**（🟨 2026-11-21 最小版完成：三页签+聊天流+监控+指令插队；插件内核 Cordis 化待续）：Shell 布局（侧栏导航树=插件注册/顶栏主题切换/右侧快捷卡区）+ 插件 manifest/defineTool/registry/事件总线订阅/enable-disable 热开关 + 插件管理页 + zustand + lucide-react 全量图标 + 深/浅/跟随系统主题 + motion 动效规格；**并入 T-M5-03**：聊天主界面（think 折叠/工具卡片/审批卡/对话指挥）；**并入 D11/D12**：pet 插件 renderer 层——状态气泡组（动作状态条/目标卡/事件弹泡，ADR-6 status-bubble 状态机）+ 语音设置三开关 | deepseek-harness（Cordis）、dsh-plugin-yushe（defineTool）、t3code（Shell/Providers）、magpie（UI 模式） | E2E：插件禁用后其侧栏项/卡片消失且事件解绑；主题切换 CSS vars 全量生效；lucide 图标零 emoji 断言（lint 扫描 UI 源码）；聊天流式/think 折叠/审批卡 E2E | NEXT（T-M5-01 完成后） |
+| **`T-M6-02`** | P0 | **ACP Harness 层**：ACP v1/v2 client（stdio JSON-RPC）+ Provider 实例管理（Registry 搜索/本地命令如 `dsh --profile acp`）+ 线程/中途换 agent/checkpoint 回放 + 工具调用审批卡（桌面+远程）+ 按 agent 用量记账；**并入 T-M5-07：线程状态→桌宠工作跟随动画** | t3code（providers-acp.md/thread）、magpie（agentOf） | 契约单测：ACP initialize/session 流程夹具；审批卡拒绝→工具不执行且回喂；线程状态→动画映射断言 | PENDING |
+| **`T-M6-03`** | P1 | **dsh 插件兼容层 plugin-bridge**：Cordis 插件树/defineTool/typed events → 本工作台工具/事件模型适配器 + 插件装载器（host/client/shared 三层约定）+ dsh 插件兼容测试夹具 | deepseek-harness、dsh-fish、dsh-plugin-yushe | 夹具断言：一个样例 dsh 插件原样装载成功且 defineTool 注册的工具经总线可调；禁用/崩溃隔离 | PENDING |
+| **`T-M6-04`** | P1 | **WebUI 形态**：bridge 抽象双实现（Electron IPC ↔ HTTP/WS）+ 轻量本地 server（总线/静态资源/vault 代理）+ 远程审批（桌面开线程、浏览器批审批）+ Vite 迁移评估 | t3code（desktop/server/web 多端）、magpie（本地网关） | 同一 renderer 组件在两种宿主下渲染断言；远程审批 E2E（WebUI 拒绝→桌面动作不执行） | PENDING |

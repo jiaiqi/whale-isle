@@ -6,9 +6,17 @@ import { app, BrowserWindow } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerStageIpc } from './passthrough';
+import { registerProviderVaultIpc } from './provider-vault';
+import { createAutodriveHost } from './autodrive-host';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
+
+// E2E 模式独立 userData：与开发实例并发时 IndexedDB LevelDB 锁互不干扰，测试数据不污染真实配置。
+// 必须在 app ready 前调用。
+if (TEST_MODE) {
+  app.setPath('userData', join(app.getPath('userData'), 'e2e-profile'));
+}
 
 let stageWindow: BrowserWindow | null = null;
 let directorWindow: BrowserWindow | null = null;
@@ -47,6 +55,7 @@ function createDirectorWindow(): BrowserWindow {
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
+      preload: join(here, '../preload/index.cjs'),
     },
   });
   win.loadFile(join(here, '../renderer/director/index.html'));
@@ -56,12 +65,21 @@ function createDirectorWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
   registerStageIpc({ getWindow: () => stageWindow, testMode: TEST_MODE });
+  // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）
+  registerProviderVaultIpc(join(app.getPath('userData'), 'provider-vault.json'));
+  // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
+  const autodrive = createAutodriveHost();
+  const wireTargets = () => {
+    autodrive.setTargets([stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents));
+  };
   stageWindow = createStageWindow();
   directorWindow = createDirectorWindow();
+  wireTargets();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       stageWindow = createStageWindow();
       directorWindow = createDirectorWindow();
+      wireTargets();
     }
   });
 });

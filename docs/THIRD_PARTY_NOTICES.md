@@ -43,6 +43,7 @@
 | 素材 | 来源 | 许可证 | licenseScope | 状态 |
 | --- | --- | --- | --- | --- |
 | 蓝色大肥鱼 .webm 动作包 | dsh-pet 内置 | 非商用（形象 CC BY-NC-SA 4.0） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 仅开发测试，商用前必须整包替换 |
+| **114 个 VP9-alpha webm 已入库**（T-M5-01，55MB） | `packages/pet-renderer/assets/blue-whale-maid/`（源自 dsh-pet/dsh-pet/assets/webm） | CC BY-NC-SA 4.0 | `DEV_ONLY_NON_COMMERCIAL`（manifest.json licenseScope 强制） | ⚠️ 入库即随安装包分发——D14 自包含 vs 商用清洗冲突时以商用清洗优先（删包+换装管线） |
 | dsh-livestream dafeiyu 动画片段 | `packages/dsh-livestream/assets/characters/dafeiyu/` | CC BY-NC-SA 4.0（目录级声明） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 同上，未引入则不登记落点 |
 
 ## 4. 许可证文本归档

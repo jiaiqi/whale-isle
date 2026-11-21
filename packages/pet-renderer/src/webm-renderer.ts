@@ -164,3 +164,24 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
     return clips[clips.length - 1]!;
   }
 }
+
+export function pickAmbient(
+  manifest: PetAvatarManifest,
+  rng: () => number = Math.random,
+): { clipId: string; webmPath: string; category: string } {
+  const pool = manifest.ambientPool.filter((c) => c.weight > 0);
+  if (pool.length === 0) {
+    const idle = manifest.actions.find((a) => a.actionState === manifest.defaultAction) ?? manifest.actions[0];
+    const clip = idle?.clips[0];
+    return { clipId: clip?.clipId ?? 'idle', webmPath: clip?.webmPath ?? '', category: 'idle' };
+  }
+  const total = pool.reduce((s, c) => s + c.weight, 0);
+  let roll = rng() * total;
+  for (const c of pool) {
+    roll -= c.weight;
+    if (roll <= 0) return { clipId: c.clipId, webmPath: c.webmPath, category: c.category };
+  }
+  // rng() < 1 数学保证 roll 在最后一项前必 ≤0，循环必返回
+  const last = pool[pool.length - 1]!;
+  return { clipId: last.clipId, webmPath: last.webmPath, category: last.category };
+}

@@ -1,22 +1,46 @@
-import { useEffect, useState } from 'react';
+/**
+ * Shell 主壳（T-M6-01 最小版）：页签 = 插件面板路由。
+ *   聊天（autodrive 事件流 + 指令插队）｜星露谷监控｜供应商配置
+ * 事件源 = 主进程 autodrive-host 单源多播（onAutodriveEvent）。
+ */
+import { useEffect, useRef, useState } from 'react';
 import type { DiningProfilePreset, ModelProviderConfig, WorkbenchRoleSlot } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
+import type { AutodriveEventView } from './bridge';
+import { ProvidersPanel } from './providers-panel';
 
-/**
- * 中控台模型配置页（T-M1-05，CC Switch/Magpie 风格）：
- *   顶部 3 个干饭套餐胶囊（一键切换 → Dexie 持久）
- *   中部 6 槽位绑定（Magpie 单屏 6 角色）
- *   底部供应商预设卡（Region/Plan 胶囊 + 掩码 Key）
- */
+type Tab = 'chat' | 'stardew' | 'providers';
 
-const SLOT_ORDER: WorkbenchRoleSlot[] = [
-  'MAIN_PERSONA_BRAIN',
-  'STARDEW_GAME_PLANNER',
-  'DANMAKU_FAST_ROUTER',
-  'VISION_STORYBOARD',
-  'VOICE_TTS_SPEECH',
-  'VOICE_SVC_SINGING',
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'chat', label: '聊天 · 小鲸' },
+  { id: 'stardew', label: '星露谷监控' },
+  { id: 'providers', label: '供应商配置' },
 ];
+
+/** 简单指令解析（Shell 聊天框 → P0 插队；T-M6-01 完整版接 persona-brain 闲聊路由） */
+function parseDirective(text: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
+  const t = text.trim();
+  if (!t.startsWith('/')) return null;
+  const parts = t.slice(1).split(/\s+/);
+  const cmd = (parts[0] ?? '').toLowerCase();
+  const rest = parts.slice(1);
+  switch (cmd) {
+    case 'goto':
+      return { tool: 'travel_to', args: { location: rest[0] ?? 'Farm' }, intent: `主人指令：去 ${rest[0] ?? 'Farm'}` };
+    case 'stop':
+      return { tool: 'cancel_action', args: {}, intent: '主人指令：停下当前动作' };
+    case 'sleep':
+      return { tool: 'sleep', args: {}, intent: '主人指令：回家睡觉' };
+    case 'fish':
+      return { tool: 'fish', args: { casts: Number(rest[0] ?? 5) || 5 }, intent: '主人指令：钓鱼' };
+    case 'state':
+      return { tool: 'get_state', args: {}, intent: '主人指令：播报状态' };
+    case 'forage':
+      return { tool: 'forage', args: {}, intent: '主人指令：去采集' };
+    default:
+      return { tool: cmd, args: {}, intent: `主人指令：${cmd}` };
+  }
+}
 
 interface AppProps {
   profiles: DiningProfilePreset[];
@@ -27,108 +51,219 @@ interface AppProps {
 }
 
 export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {
-  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  void storeKey;
+  const [tab, setTab] = useState<Tab>('chat');
+  const [events, setEvents] = useState<AutodriveEventView[]>([]);
+  const [running, setRunning] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [input, setInput] = useState('');
+  const flowRef = useRef<HTMLDivElement | null>(null);
 
-  // 启动 hydrate：Dexie 快照恢复（断电/重启后状态不丢）
   useEffect(() => {
-    void store.getConfig<string>(storeKey).then((stored) => {
-      setActiveProfileId(stored ?? profiles[0]?.profileId ?? null);
-      setHydrated(true);
+    window.directorBridge.onAutodriveEvent((event) => {
+      setEvents((prev) => (prev.length >= 500 ? [...prev.slice(-499), event] : [...prev, event]));
     });
-  }, [profiles, store, storeKey]);
+    void window.directorBridge.autodriveStatus().then((s) => setRunning(s.running));
+  }, []);
 
-  const activeProfile = profiles.find((profile) => profile.profileId === activeProfileId) ?? profiles[0];
+  useEffect(() => {
+    const el = flowRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [events.length]);
 
-  const switchProfile = (profileId: string): void => {
-    setActiveProfileId(profileId);
-    void store.setConfig(storeKey, profileId); // 套餐胶囊一键切换 → Dexie 即时同步
+  const start = async (): Promise<void> => {
+    setDriveError(null);
+    const res = await window.directorBridge.autodriveStart();
+    if (res.ok) {
+      setRunning(true);
+      setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', summary: '自动驾驶启动——小鲸接管星露谷', tool: 'autodrive' }]);
+    } else {
+      setDriveError(res.error ?? '启动失败');
+    }
   };
 
-  if (!hydrated || !activeProfile) {
-    return <div className="p-6 text-slate-400">饭碗加载中……</div>;
-  }
+  const stop = async (): Promise<void> => {
+    await window.directorBridge.autodriveStop();
+    setRunning(false);
+    setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', summary: '自动驾驶已停止', tool: 'autodrive' }]);
+  };
+
+  const send = (): void => {
+    const text = input.trim();
+    if (text === '') return;
+    const directive = parseDirective(text);
+    if (directive) {
+      void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent);
+      setEvents((prev) => [...prev, { type: 'decision', tool: directive.tool, intent: directive.intent, planner: 'remote' }]);
+    } else {
+      // 普通聊天：T-M6-01 完整版路由 persona-brain；最小版先入本地回显
+      setEvents((prev) => [...prev, { type: 'decision', tool: 'chat', intent: `主人说：${text}（LLM 路由接入后小鲸会回话）`, planner: 'local' }]);
+    }
+    setInput('');
+  };
+
+  const latestState = [...events].reverse().find((e) => e.type === 'state');
+  const receipts = events.filter((e) => e.type === 'receipt');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
-      <header className="px-6 pt-5 pb-3 border-b border-slate-800">
-        <h1 className="text-lg font-bold">🐟 大肥鱼中控台 · 模型配置</h1>
-        <p className="text-xs text-slate-400 mt-1">CC Switch 预设 × Magpie 六槽位 · 100% 本地优先</p>
+    <div className="h-screen flex flex-col bg-slate-950 text-slate-100 font-sans overflow-hidden">
+      <header className="flex items-center gap-3 px-5 h-12 border-b border-slate-800 bg-slate-950/90">
+        <span className="text-sm font-bold text-sky-300">🐋 大肥鱼工作台</span>
+        <nav className="flex gap-1 ml-2">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              data-tab={t.id}
+              data-active={tab === t.id ? 'true' : 'false'}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                tab === t.id ? 'bg-sky-500/15 text-sky-300 font-semibold' : 'text-slate-400 hover:bg-slate-800/60'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1" />
+        <button
+          data-autodrive-toggle
+          onClick={() => void (running ? stop() : start())}
+          className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+            running ? 'border-rose-500/60 bg-rose-500/10 text-rose-300' : 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
+          }`}
+        >
+          {running ? '■ 停止自动驾驶' : '▶ 启动自动驾驶'}
+        </button>
       </header>
 
-      {/* 干饭套餐胶囊 */}
-      <section className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-300 mb-2">干饭套餐</h2>
-        <div className="flex gap-3">
-          {profiles.map((profile) => {
-            const active = profile.profileId === activeProfile.profileId;
-            return (
-              <button
-                key={profile.profileId}
-                data-profile={profile.profileId}
-                data-active={active ? 'true' : 'false'}
-                onClick={() => switchProfile(profile.profileId)}
-                className={`px-4 py-2 rounded-full border text-sm transition-colors ${
-                  active
-                    ? 'border-amber-400 bg-amber-400/15 text-amber-300 font-semibold'
-                    : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
-                }`}
-              >
-                {profile.displayName}
+      {driveError && (
+        <div className="px-5 py-2 text-xs text-rose-300 bg-rose-500/10 border-b border-rose-500/30" data-drive-error>
+          {driveError}
+        </div>
+      )}
+
+      {tab === 'chat' && (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div ref={flowRef} className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="max-w-3xl mx-auto">
+              {events.length === 0 && (
+                <div className="text-xs text-slate-500 mt-8 text-center leading-relaxed">
+                  小鲸待命中。点右上「启动自动驾驶」接管星露谷（需游戏 + BWF Mod MCP 18080 已就绪）。<br />
+                  可输入指令插队：<span className="font-mono text-slate-400">/goto Beach · /fish 5 · /sleep · /stop</span>
+                </div>
+              )}
+              {events.map((e, i) => (
+                <EventCard key={i} event={e} />
+              ))}
+            </div>
+          </div>
+          <div className="px-6 pb-4">
+            <div className="max-w-3xl mx-auto flex gap-2">
+              <input
+                data-chat-input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+                placeholder="和 小鲸 说话，或 /goto Beach、/fish 5、/sleep、/stop 指令插队……"
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-sm outline-none focus:border-sky-500/60"
+              />
+              <button data-chat-send onClick={send} className="rounded-xl bg-sky-600 hover:bg-sky-500 px-5 text-sm font-semibold">
+                发送
               </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Magpie 六槽位 */}
-      <section className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-300 mb-2">六槽位绑定（{activeProfile.displayName}）</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {SLOT_ORDER.map((slot) => (
-            <div key={slot} data-slot={slot} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
-              <div className="text-xs text-slate-400">{slotLabels[slot]}</div>
-              <div className="text-sm font-mono text-sky-300 mt-1" data-binding={slot}>
-                {activeProfile.roleBindings[slot] ?? '（未绑定）'}
-              </div>
             </div>
-          ))}
+          </div>
         </div>
-      </section>
+      )}
 
-      {/* 供应商预设卡（CC Switch 风格：Region/Plan 胶囊 + 掩码 Key） */}
-      <section className="px-6 py-4 pb-8">
-        <h2 className="text-sm font-semibold text-slate-300 mb-2">供应商预设库</h2>
-        <div className="grid grid-cols-3 gap-3">
-          {providers.map((provider) => (
-            <div key={provider.id} data-provider={provider.id} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">{provider.name}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                  {provider.category}
-                </span>
-              </div>
-              <div className="flex gap-1 mt-2">
-                {provider.variants.map((variant) => (
-                  <span
-                    key={`${variant.region}-${variant.planType}`}
-                    className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      variant.region === provider.activeRegion && variant.planType === provider.activePlanType
-                        ? 'bg-sky-500/20 text-sky-300'
-                        : 'bg-slate-800 text-slate-500'
-                    }`}
-                  >
-                    {variant.region}/{variant.planType === 'PAY_AS_YOU_GO' ? '按量' : variant.planType === 'CODING_PLAN' ? '套餐' : variant.planType === 'LOCAL_GPU' ? '本地' : '免费'}
-                  </span>
-                ))}
-              </div>
-              <div className="text-[10px] text-slate-500 mt-2 font-mono">
-                Key: {provider.apiKeyMaskedOrRef === '' ? '未配置' : provider.apiKeyMaskedOrRef}
-              </div>
+      {tab === 'stardew' && (
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="max-w-4xl mx-auto grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <h3 className="text-xs text-slate-400 font-semibold mb-3">当前状态（get_state 摘要）</h3>
+              <KV k="游戏时间" v={latestState?.clock ?? '—'} />
+              <KV k="位置" v={latestState?.location ?? '—'} />
+              <KV k="金钱" v={latestState?.money != null ? `${latestState.money}g` : '—'} />
+              <KV k="体力" v={latestState?.stamina != null ? `${latestState.stamina}/${latestState.staminaMax}` : '—'} />
+              <div className="mt-4 text-xs text-slate-400 font-semibold mb-2">回执统计</div>
+              <KV k="COMPLETED" v={String(receipts.filter((r) => r.status === 'COMPLETED').length)} />
+              <KV k="FAILED / UNCERTAIN" v={String(receipts.filter((r) => r.status === 'FAILED' || r.status === 'UNCERTAIN').length)} />
+              <KV k="TIMEOUT / ERROR" v={String(receipts.filter((r) => r.status === 'TIMEOUT' || r.status === 'ERROR').length)} />
             </div>
-          ))}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 overflow-y-auto max-h-[70vh]">
+              <h3 className="text-xs text-slate-400 font-semibold mb-3">回执时间线</h3>
+              {receipts.slice(-30).reverse().map((r, i) => (
+                <div key={i} className="text-xs border-l-2 border-slate-700 pl-3 py-1.5 mb-1" data-receipt={r.status}>
+                  <span className={`font-mono font-semibold ${
+                    r.status === 'COMPLETED' ? 'text-emerald-400' : r.status === 'UNCERTAIN' ? 'text-violet-400' : r.status === 'TIMEOUT' || r.status === 'ERROR' ? 'text-rose-400' : 'text-amber-400'
+                  }`}>{r.status}</span>
+                  <span className="text-slate-300 ml-2">{r.tool}</span>
+                  <div className="text-slate-500 mt-0.5 line-clamp-2">{r.summary}</div>
+                </div>
+              ))}
+              {receipts.length === 0 && <div className="text-xs text-slate-600">尚无回执——启动自动驾驶后这里会出现真实执行记录。</div>}
+            </div>
+          </div>
         </div>
-      </section>
+      )}
+
+      {tab === 'providers' && (
+        <div className="flex-1 overflow-y-auto">
+          <ProvidersPanel profiles={profiles} slotLabels={slotLabels} providers={providers} store={store} />
+        </div>
+      )}
     </div>
   );
+}
+
+function KV({ k, v }: { k: string; v: string }): React.JSX.Element {
+  return (
+    <div className="flex justify-between text-xs py-1">
+      <span className="text-slate-500">{k}</span>
+      <span className="font-mono text-slate-200">{v}</span>
+    </div>
+  );
+}
+
+function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element {
+  if (event.type === 'decision') {
+    return (
+      <div data-event="decision" className="max-w-3xl mx-auto mb-3 rounded-xl border border-sky-500/25 bg-sky-500/5 p-3">
+        <div className="text-[10px] text-sky-300 font-mono">{event.planner === 'remote' ? 'P0 插队' : `决策 · ${event.planner ?? 'planner'}`}</div>
+        <div className="text-sm font-mono text-sky-200 mt-1">{event.tool}</div>
+        <div className="text-xs text-slate-300 mt-1">{event.intent}</div>
+      </div>
+    );
+  }
+  if (event.type === 'receipt') {
+    const color =
+      event.status === 'COMPLETED' ? 'border-emerald-500/25 bg-emerald-500/5 text-emerald-300'
+      : event.status === 'UNCERTAIN' ? 'border-violet-500/25 bg-violet-500/5 text-violet-300'
+      : event.status === 'TIMEOUT' ? 'border-amber-500/25 bg-amber-500/5 text-amber-300'
+      : 'border-rose-500/25 bg-rose-500/5 text-rose-300';
+    return (
+      <div data-event="receipt" className={`max-w-3xl mx-auto mb-3 rounded-xl border p-3 ${color}`}>
+        <div className="flex items-center gap-2 text-xs font-mono font-semibold">
+          <span>{event.status}</span>
+          <span className="text-slate-400">{event.tool}</span>
+        </div>
+        <div className="text-xs mt-1 line-clamp-3 opacity-80">{event.summary}</div>
+      </div>
+    );
+  }
+  if (event.type === 'state') {
+    return (
+      <div data-event="state" className="max-w-3xl mx-auto mb-2 text-[10px] text-slate-500 font-mono text-center">
+        {event.clock} · {event.location} · {event.stamina}/{event.staminaMax} · {event.money}g
+      </div>
+    );
+  }
+  if (event.type === 'watchdog') {
+    return (
+      <div data-event="watchdog" className="max-w-3xl mx-auto mb-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-2.5">
+        <div className="text-[10px] text-amber-300 font-mono">{event.kind === 'stuck' ? '卡死哨兵' : '心跳'}</div>
+        <div className="text-xs text-amber-200/80 mt-0.5">{event.detail}</div>
+      </div>
+    );
+  }
+  return <div data-event="cycle-end" className="max-w-3xl mx-auto mb-1 text-[10px] text-slate-600 text-center font-mono">— 间步 {Math.round((event.delayMs ?? 0) / 1000)}s —</div>;
 }

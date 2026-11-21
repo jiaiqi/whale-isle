@@ -1,0 +1,22 @@
+{
+  "name": "@workbench/game-bridge-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[T-M5-02] 星露谷 BWF MCP 客户端：SSE/JSON 双解析 + 动作互斥锁 + 看门狗 + autodrive 编排器",
+  "type": "module",
+  "main": "./dist/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

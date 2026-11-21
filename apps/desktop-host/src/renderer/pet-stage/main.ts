@@ -97,11 +97,43 @@ const videoFactory: VideoFactory = (src): VideoHandle => {
 
 const renderer = new WebmVideoRenderer({ host, videoFactory });
 
-// 装载清单（build 脚本会把 fixtures 拷到同目录）；失败不阻塞穿透探针
-void fetch('./blue-whale-maid.manifest.json')
+// 装载真形象清单（T-M5-01：114 官方 VP9-alpha webm，随包分发 assets/blue-whale-maid/）
+// webmPath 为「仓库视角」相对路径（assets/blue-whale-maid/x.webm）→ 渲染进程相对当前 html 即 ./assets/...
+void fetch('./assets/blue-whale-maid/manifest.json')
   .then((res) => res.json())
+  .then((rawManifest: import('@workbench/shared-protocol').PetAvatarManifest) => {
+    // webmPath 为仓库视角（assets/...）→ 渲染进程相对 html 改写为 ./assets/...
+    for (const action of rawManifest.actions) {
+      for (const clip of action.clips) {
+        if (clip.webmPath.startsWith('assets/')) clip.webmPath = `./${clip.webmPath}`;
+      }
+    }
+    return rawManifest;
+  })
   .then((manifest) => renderer.load(manifest))
-  .catch((error) => console.warn('[pet-stage] 清单/素材未就绪（预期，待 T-M2-04 管线）：', error));
+  .then(() => renderer.play('idle'))
+  .catch((error) => console.warn('[pet-stage] 真形象清单未就绪（回退占位渲染）：', error));
+
+// ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
+type AutodriveEventLite = {
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end';
+  tool?: string; status?: string; summary?: string; intent?: string; clock?: string;
+};
+if (window.directorBridge?.onAutodriveEvent) {
+  window.directorBridge.onAutodriveEvent((event: AutodriveEventLite) => {
+    if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
+      // 回执 → 人格化动作（uncertain → 心虚冒汗；error → 气急败坏；完成 → 开心）
+      if (event.status === 'UNCERTAIN') void renderer.play('clumsy_panic');
+      else if (event.status === 'FAILED' || event.status === 'ERROR') void renderer.play('rage_spray');
+      else if (event.status === 'COMPLETED' && /fish|收获|收获|钓/.test(`${event.tool}${event.summary ?? ''}`)) void renderer.play('happy_maid');
+      // 决策进行中 → 专注
+    }
+    if (event.type === 'decision') void renderer.play('game_focus');
+    if (event.type === 'state' && typeof event.clock === 'string') {
+      widgets.showThought(`星露谷 ${event.clock}`);
+    }
+  });
+}
 
 // ---- alpha 穿透探针 ----
 const probeCanvas = document.createElement('canvas');

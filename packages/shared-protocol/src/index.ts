@@ -202,6 +202,7 @@ export const ModelProviderConfigSchema = z.object({
   activePlanType: z.enum(['PAY_AS_YOU_GO', 'CODING_PLAN', 'FREE_TIER', 'LOCAL_GPU']).default('PAY_AS_YOU_GO'),
   variants: z.array(ProviderEndpointVariantSchema),
   apiKeyMaskedOrRef: z.string(), // 存储于本地安全凭据库，前端仅展示掩码
+  activeModelId: z.string().default(''), // Magpie 交互：该供应商当前选中的模型（discoverModels 后选择）
   customParams: z.record(z.string(), z.unknown()).optional(), // 支持自定义 temperature, top_p, reasoning_effort
   discoveredModels: z.array(
     z.object({
@@ -359,5 +360,17 @@ export const PetAvatarManifestSchema = z.object({
       }),
     )
     .min(1),
+  /** 随机氛围动作池（T-M5-01，dsh-pet categories 简化版）：未绑定语义槽位的全部动作，
+   *  空闲随机链按 category/weight 抽取播放（dsh-pet animationWeights 思想） */
+  ambientPool: z
+    .array(
+      z.object({
+        clipId: z.string(),
+        webmPath: z.string().min(1),
+        category: z.string().default('小动作'),
+        weight: z.number().min(0).max(100).default(10),
+      }),
+    )
+    .default([]),
 });
 export type PetAvatarManifest = z.infer<typeof PetAvatarManifestSchema>;

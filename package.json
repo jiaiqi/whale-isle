@@ -17,7 +17,8 @@
     "py:test": "uv run --quiet --with pytest --with pydantic --with fastapi --with httpx --with websockets pytest services/audio-ai-worker -q",
     "py:check": "pnpm py:type && pnpm py:test",
     "verify:gate": "node tools/scripts/verify-gate.mjs",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "git config core.hooksPath .githooks || true",
+    "gen:pet-manifest": "tsx tools/scripts/gen-pet-manifest.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

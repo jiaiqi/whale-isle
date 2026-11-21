@@ -82,6 +82,16 @@ class Clip(BaseModel):
     weight: Annotated[float | None, Field(ge=0.0, le=1.0)] = 1
 
 
+class AmbientPoolItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    clipId: str
+    webmPath: Annotated[str, Field(min_length=1)]
+    category: str | None = '小动作'
+    weight: Annotated[float | None, Field(ge=0.0, le=100.0)] = 10
+
+
 class SourceModule(StrEnum):
     persona_talk = 'persona-talk'
     svc_singing = 'svc-singing'
@@ -445,6 +455,7 @@ class ModelProviderConfig(BaseModel):
     activePlanType: ActivePlanType | None = 'PAY_AS_YOU_GO'
     variants: list[Variant]
     apiKeyMaskedOrRef: str
+    activeModelId: str | None = ''
     customParams: dict[str, Any] | None = None
     discoveredModels: list[DiscoveredModel]
 
@@ -648,6 +659,9 @@ class PetAvatarManifest(BaseModel):
     footlineRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.92
     defaultAction: DefaultAction | None = 'idle'
     actions: Annotated[list[Action], Field(min_length=1)]
+    ambientPool: Annotated[
+        list[AmbientPoolItem] | None, Field(validate_default=True)
+    ] = []
 
 
 class StardewWeights(BaseModel):

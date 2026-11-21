@@ -9,8 +9,8 @@
 | 里程碑 | Mock/沙盒验证已通过项（`[SIMULATION]` / 单测 / 编译） | 待人类宿主真机验收项（`[REAL-DEVICE]`） | 最近更新 |
 | --- | --- | --- | --- |
 | M0 地基与铁笼 | （未开始） | 无需真机：宿主查看 `pnpm verify:gate` 全绿即可放行 | — |
-| M1 大肥鱼复活 | （M1-01~05 全部过沙盒+真实 Electron E2E） | **OS 级真实点击穿透与鼠标拖拽手感**（E2E 只能验证状态机与坐标夹紧，无法模拟 OS 级点击落点）；气泡长文本观感与水印章贴位置；在 Mac 桌面拖拽"大肥鱼"；输入框打一句"大肥鱼"，确认瞬间喷水破防并弹出 `<think>` 内心戏气泡（需 webm 资产就位后联测） | — |
-| M2 本地语音与点歌 | （未开始） | 听 Mac M 系列芯片本地生成的傲娇语音延迟；点一首歌听她用自己的声音唱出来 | — |
+| M1 大肥鱼复活 | （M1-01~05 全部过沙盒+真实 Electron E2E） | **OS 级真实点击穿透与鼠标拖拽手感**（E2E 只能验证状态机与坐标夹紧，无法模拟 OS 级点击落点）；气泡长文本观感与水印章贴位置；在 Mac 桌面拖拽"大肥鱼"；输入框打一句"大肥鱼"，确认瞬间喷水破防并弹出 `<think>` 内心戏气泡（需 webm 资产就位后联测） | 2026-11-15 |
+| M2 本地语音与点歌 | （T-M2-01 语音锁、T-M2-02 情绪 TTS 已过单测/契约夹具） | 听 Mac M 系列芯片本地生成的傲娇语音延迟；点一首歌听她用自己的声音唱出来 | 2026-11-15 |
 | M3 星露谷共玩 | （未开始） | 打开《星露谷》看她翻垃圾桶/种菜；晃一下鼠标，确认她立刻停手变场边啦啦队 | — |
 | M4 直播与切片 | （未开始） | 在 OBS 添加 `http://localhost:18765` 浏览器源，挂测试直播间看她边玩星露谷边回弹幕、记仇和唱歌 | — |
 
@@ -24,6 +24,9 @@
 
 | 工单 | 验证方式 | 证据摘要 | 日期 |
 | --- | --- | --- | --- |
+| T-M5-01 | `[E2E-HOST]`（入库素材 + 契约断言） | `pnpm test`：manifest-asset.spec 3 项——manifest 过契约、11 语义槽位全覆盖、素材路径全相对（D14 随包）、sleep 循环段、ambientPool ≥70 条 + 睡眠接力 weight=0 不可达、pickAmbient 加权确定性（rng 0/0.9999 边界 + 200 次随机不可达验证）；`gen:pet-manifest` 实跑：114 素材 → 11 槽位（37 clips）+ ambientPool 77 条；license-scanner 100 源文件 0 违规（台账已登记 CC BY-NC-SA） | 2026-11-21 |
+| T-M5-02 | `[E2E-HOST]`（Electron + 真机 BWF MCP） | 真机链路：BWF MCP bind → load_save 泡泡湾（春16 06:00）→ Shell「启动自动驾驶」→ **游戏真实被驱动**：read_mail 7 封 COMPLETED → water_crops COMPLETED → travel_to Beach，游戏时间 06:00→06:50；`/fish 5` 指令 P0 插队 ✓；监控页 15 条真实回执；网络错误/不可解析状态走 watchdog 不盲跑（断言）。单测：game-bridge-mcp 20+ 用例（SSE/JSON 双解析、前缀括号平衡、超时≠失败、互斥、卡死哨兵时钟注入、RulePlanner 全日程分支、autodrive 全路径）覆盖率分支 90% 达标 | 2026-11-21 |
+| T-dir-01 | `[E2E-HOST]`（Electron 真机 + CDP DOM/IPC 验收） | `pnpm --filter @workbench/desktop-host build` ✓ → Electron 38 启动双窗（pet-stage + 大肥鱼中控台）；playwright-core connectOverCDP DOM 验收：9 供应商卡 / 3 套餐胶囊 / 6 槽位下拉 / `window.directorBridge` 挂载 / E2E data-* 选择器兼容；IPC 实测：`saveProviderKey('deepseek-official', 假key)` → ok+掩码 `sk-t••••••••cdef`、`providerKeyMask` 回读一致、vault 文件内容仅 safeStorage 密文（明文 0 落盘）、未存 key 的 `discoverModels` 返回结构化错误不崩；`pnpm verify:gate` 4 过全绿。修复记录：better-sqlite3 ABI 冲突（Node 137 vs Electron 139）→ 凭据库改文件 KV；E2E 与开发实例 userData 互踩（IndexedDB LevelDB 锁 → 白屏）→ PET_STAGE_E2E 独立 userData，30s 超时 → 756ms | 2026-11-21 |
 | T-M0-01 | `[SIMULATION]`（规则引擎） | `pnpm lint:deps`：`no dependency violations found (7 modules, 5 dependencies cruised)`；临时探针 `zz-tmp-violation.ts`（import `ws`）实测命中 `shared-protocol-runtime-only-zod` 报错且 exit≠0，删除探针后恢复全绿 | 2026-11-15 |
 | T-M0-01 | 编译 | `pnpm verify:gate`：Gate 1（tsc -b + depcruise）PASS、Gate 2（台账+密钥扫描）PASS，Gate 3/4 按计划待 T-M0-03/04 接线 | 2026-11-15 |
 | T-M0-02 | `[SIMULATION]`（契约单测） | TS 侧 `pnpm test`：11 passed（大肥鱼夹具 parse/默认值/非法值拒绝/语音锁 TTL 边界/回执枚举/干饭套餐槽位）；Python 侧 `pnpm py:test`：4 passed（同一夹具回放 + 默认值一致性）——夹具双侧 probe 通过 | 2026-11-15 |

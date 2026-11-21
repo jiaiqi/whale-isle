@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>设计系统 v3「曜石」总览 — 大肥鱼工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--font-ui); background:var(--bg); color:var(--text-1); min-height:100vh; position:relative; }
+  body > .wrap { position:relative; z-index:1; }
+  .wrap { max-width:1060px; margin:0 auto; padding:64px 28px 70px; }
+  .hero .tag { font-size:10.5px; letter-spacing:3px; color:var(--blue); font-weight:650; font-family:var(--font-mono); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .hero h1 { font-size:40px; font-weight:700; letter-spacing:.2px; line-height:1.15; display:flex; align-items:center; gap:14px; }
+  .hero h1 svg { filter: drop-shadow(0 4px 18px rgba(10,132,255,.45)); }
+  .hero p { font-size:15px; color:var(--text-2); margin-top:14px; line-height:1.9; max-width:660px; font-weight:400; }
+  .hero .meta { display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; }
+
+  .sec { font-size:11px; letter-spacing:2.5px; color:var(--text-3); font-weight:700; margin:44px 0 14px; display:flex; align-items:center; gap:8px; }
+  .pages { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .pc { display:flex; gap:14px; align-items:flex-start; border-radius:var(--r-xl); padding:17px 19px; text-decoration:none; color:var(--text-1); }
+  .pc .no { font-family:var(--font-mono); font-size:10px; color:var(--text-3); }
+  .pc .ic { width:40px; height:40px; border-radius:13px; display:grid; place-items:center;
+    background:var(--blue-dim); border:1px solid var(--blue-line); color:var(--blue); flex-shrink:0;
+    box-shadow: inset 0 1px 0 var(--hi); }
+  .pc h3 { font-size:14px; margin-bottom:5px; font-weight:650; }
+  .pc p { font-size:12px; color:var(--text-2); line-height:1.75; }
+  .pc .inter { margin-top:8px; font-size:10px; color:var(--text-3); font-family:var(--font-mono); }
+
+  .lang-grid { display:grid; grid-template-columns:1.1fr 1fr; gap:12px; }
+  .lang { border-radius:var(--r-xl); padding:18px 20px; }
+  .lang h4 { font-size:13px; margin-bottom:14px; display:flex; align-items:center; gap:8px; font-weight:650; }
+
+  /* 光影七层演示 */
+  .light-layers { display:flex; flex-direction:column; gap:10px; }
+  .ll { display:flex; align-items:center; gap:12px; font-size:12px; color:var(--text-2); }
+  .ll .demo { width:64px; height:40px; border-radius:10px; flex-shrink:0; }
+  .ll b { color:var(--text-1); font-weight:600; width:110px; flex-shrink:0; }
+  .d-ambient { background:radial-gradient(ellipse 60px 30px at 70% 30%, rgba(10,132,255,.35), transparent 70%), var(--bg-solid,#050507); }
+  .d-glass { background:rgba(28,28,32,.72); backdrop-filter:blur(12px); border:1px solid var(--stroke); box-shadow: inset 0 1px 0 var(--hi), var(--shadow-1); }
+  .d-hairline { background:linear-gradient(180deg, transparent 48%, var(--stroke-2) 50%, transparent 52%), var(--bg-elev); border:1px solid var(--stroke); }
+  .d-shadow { background:var(--surface-solid,#1c1c20); box-shadow:0 12px 28px rgba(0,0,0,.6); border-radius:10px; }
+  .d-sheen { background:linear-gradient(180deg,#fff 35%, #8e8e93); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; font-weight:700; font-size:16px; align-self:center; }
+  .d-glowdot { display:flex; align-items:center; padding-left:14px; }
+  .d-pillglow { width:80px; height:26px; border-radius:980px; background:var(--blue); box-shadow:0 2px 14px rgba(10,132,255,.5); }
+
+  .sw2 { display:grid; grid-template-columns:repeat(7,1fr); gap:9px; margin-bottom:12px; }
+  .sw2 .s { border-radius:12px; overflow:hidden; border:1px solid var(--stroke); box-shadow:var(--shadow-1), inset 0 1px 0 var(--hi); }
+  .sw2 .c { height:40px; }
+  .sw2 .n { font-size:8.5px; padding:5px 6px; color:var(--text-3); font-family:var(--font-mono); background:var(--inset); white-space:nowrap; overflow:hidden; }
+  .motion-spec { display:grid; grid-template-columns:1fr 1fr; gap:7px 18px; font-size:12px; color:var(--text-2); }
+  .motion-spec .k2 { font-family:var(--font-mono); font-size:10.5px; color:var(--blue); }
+  .rule { display:flex; gap:9px; padding:7px 0; font-size:12px; color:var(--text-2); line-height:1.75; border-bottom:1px dashed var(--stroke); }
+  .rule:last-child { border:none; }
+  .rule b { color:var(--text-1); }
+  .rule svg { color:var(--green); flex-shrink:0; margin-top:3px; }
+  .rule.x svg { color:var(--red); }
+</style>
+</head>
+<body>
+<div class="ambient"></div>
+<div class="wrap">
+  <div class="hero">
+    <div class="tag"><i data-lucide="sparkles" style="width:12px;height:12px"></i>DESIGN SYSTEM v3「曜石」· APPLE THREE PRINCIPLES · 2026-11-21</div>
+    <h1><svg style="width:38px;height:38px" viewBox="0 0 24 24" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".3"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.5" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg><span class="sheen">大肥鱼工作台</span></h1>
+    <p>通用个人 AI 工作台。v3 遵循 Apple 三原则：<b style="color:var(--text-1)">Clarity</b> 内容为王 UI 退后 · <b style="color:var(--text-1)">Deference</b> 界面服务内容 · <b style="color:var(--text-1)">Depth</b> 用光影分层表达层级。iOS 系统色板 + SF Pro 节奏 + 玻璃材质 + 环境光斑。右上角切换深浅主题。</p>
+    <div class="meta">
+      <span class="tag pill-blue">iOS 系统色板</span>
+      <span class="tag pill" style="display:inline-flex;align-items:center;gap:5px"><i data-lucide="pen-tool" style="width:11px;height:11px"></i>lucide · UI 零 emoji</span>
+      <span class="tag pill" style="display:inline-flex;align-items:center;gap:5px"><i data-lucide="layers" style="width:11px;height:11px"></i>光影七层</span>
+      <span class="tag pill" style="display:inline-flex;align-items:center;gap:5px"><i data-lucide="moon-star" style="width:11px;height:11px"></i>深浅双主题</span>
+      <span class="tag pill" style="display:inline-flex;align-items:center;gap:5px"><i data-lucide="puzzle" style="width:11px;height:11px"></i>插件化可扩展</span>
+    </div>
+  </div>
+
+  <div class="sec"><i data-lucide="layout-dashboard" style="width:12px;height:12px"></i>界面原型（7 页 · 统一 Shell · 全部带交互）</div>
+  <div class="pages stagger">
+    <a class="pc card card-hover" href="shell-chat.html">
+      <div class="ic"><i data-lucide="message-square"></i></div>
+      <div>
+        <div class="no">01 · T-M6-01</div>
+        <h3>Shell + 聊天主界面</h3>
+        <p>插件导航源栏 + Codex 式会话流：内心戏折叠、工具回执、审批卡、指令菜单、流式光标。</p>
+        <div class="inter">主题切换 · think 折叠 · 审批 YNA · 模拟发送</div>
+      </div>
+    </a>
+    <a class="pc card card-hover" href="harness.html">
+      <div class="ic"><i data-lucide="terminal"></i></div>
+      <div>
+        <div class="no">02 · T-M6-02</div>
+        <h3>Harness · ACP Agents</h3>
+        <p>Claude Code / Codex / dsh 控制平面：线程、中途换 agent、diff 审批、checkpoint、用量归属。</p>
+        <div class="inter">provider 切换 · 审批卡 · 线程状态</div>
+      </div>
+    </a>
+    <a class="pc card card-hover" href="plugins.html">
+      <div class="ic"><i data-lucide="puzzle"></i></div>
+      <div>
+        <div class="no">03 · T-M6-01</div>
+        <h3>插件管理</h3>
+        <p>全部功能皆插件：热开关列表、dsh 兼容插件、Policy 权限（allow/ask/deny）、扩展点一览——新功能即新行。</p>
+        <div class="inter">开关热切 · 权限档位</div>
+      </div>
+    </a>
+    <a class="pc card card-hover" href="stardew.html">
+      <div class="ic"><i data-lucide="sprout"></i></div>
+      <div>
+        <div class="no">04 · T-M5-02</div>
+        <h3>星露谷自动驾驶监控</h3>
+        <p>动作互斥大卡、真实回执时间线、看门狗六宫格、CheatBridge 开关 + 审计流水、技能卡闭环。</p>
+        <div class="inter">CheatBridge 开关 · 回执色彩语义</div>
+      </div>
+    </a>
+    <a class="pc card card-hover" href="providers.html">
+      <div class="ic"><i data-lucide="plug-zap"></i></div>
+      <div>
+        <div class="no">05 · 已实现</div>
+        <h3>模型供应商配置</h3>
+        <p>Magpie 单屏：套餐、六槽位、供应商卡（Key 加密 / 拉模型 / 测试）——真机可用的功能基线。</p>
+        <div class="inter">套餐 / 端点胶囊 · 测试态</div>
+      </div>
+    </a>
+    <a class="pc card card-hover" href="pet-stage.html">
+      <div class="ic"><i data-lucide="fish"></i></div>
+      <div>
+        <div class="no">06 · 桌宠层</div>
+        <h3>桌宠舞台</h3>
+        <p>透明窗 + 双轨气泡 + 饭碗挂件 + 剪影点击分区 + 114 官方 webm 动作库（分类筛选/试播）。</p>
+        <div class="inter">动作分类筛选 · 试播态 · 分区 hover</div>
+      </div>
+    </a>
+    <a class="pc card card-hover" href="obs-overlay.html">
+      <div class="ic"><i data-lucide="monitor-play"></i></div>
+      <div>
+        <div class="no">07 · 直播层</div>
+        <h3>OBS 透明挂件</h3>
+        <p>18765 浏览器源：投票板、歌词卡、双轨气泡、弹幕互动——透明叠加游戏捕获层。</p>
+        <div class="inter">投票进度 · STAGE_PROTOCOL</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="sec"><i data-lucide="sun-medium" style="width:12px;height:12px"></i>光影七层系统（Depth 的具体构成）</div>
+  <div class="lang-grid">
+    <div class="lang card">
+      <h4><i data-lucide="layers" class="sm" style="color:var(--blue)"></i>分层演示</h4>
+      <div class="light-layers">
+        <div class="ll"><div class="demo d-ambient"></div><span><b>L1 环境光斑</b>页面级 radial 慢漂移（26s alternate），蓝+绿双色极低透明度</span></div>
+        <div class="ll"><div class="demo d-glass"></div><span><b>L3 玻璃卡</b>blur(30px) saturate(1.6) + 顶部 1px 内高光 + 发丝描边</span></div>
+        <div class="ll"><div class="demo d-hairline"></div><span><b>L4 发丝分隔</b>1px rgba 白线分层，代替粗边框</span></div>
+        <div class="ll"><div class="demo d-shadow"></div><span><b>L5 柔影深度</b>双层阴影（0 12px 40px + 0 2px 8px）表达浮起</span></div>
+        <div class="ll"><span class="d-sheen">Sheen Text</span><span><b>L6 文本光泽</b>大标题白→灰 clip 渐变（Apple keynote 手法）</span></div>
+        <div class="ll"><div class="d-glowdot"><span class="pulse-dot"></span><span style="margin-left:10px" class="d-pillglow"></span></div><span><b>L7 状态光晕</b>运行点 box-shadow glow / 主按钮彩色柔影</span></div>
+      </div>
+    </div>
+    <div class="lang card">
+      <h4><i data-lucide="paintbrush" class="sm" style="color:var(--blue)"></i>iOS 系统色板（dark）</h4>
+      <div class="sw2">
+        <div class="s"><div class="c" style="background:#050507"></div><div class="n">bg</div></div>
+        <div class="s"><div class="c" style="background:#1c1c20"></div><div class="n">surface</div></div>
+        <div class="s"><div class="c" style="background:#0a84ff"></div><div class="n">blue 主</div></div>
+        <div class="s"><div class="c" style="background:#30d158"></div><div class="n">green</div></div>
+        <div class="s"><div class="c" style="background:#ff9f0a"></div><div class="n">amber</div></div>
+        <div class="s"><div class="c" style="background:#bf5af2"></div><div class="n">violet</div></div>
+        <div class="s"><div class="c" style="background:#ff453a"></div><div class="n">red</div></div>
+      </div>
+      <div class="rule"><i data-lucide="circle-check" class="sm"></i><span><b>语义</b>：蓝=主操作/链接/焦点（Apple 标志性）；绿=运行态/成功；橙=饭碗/等待；紫=内心戏专属；红=失败/P0。</span></div>
+      <div class="rule"><i data-lucide="circle-check" class="sm"></i><span><b>可扩展性</b>：侧栏导航树=插件注册表（新插件=新行）；右栏卡片槽、面板路由、桌宠动作池、OBS 组件均为插件注册槽——新功能融洽插入，零改布局。</span></div>
+      <div class="rule x"><i data-lucide="x" class="sm"></i><span><b>禁</b>：蓝紫渐变 hero、UI emoji、纯黑 #000 死底、大圆角 24+、装饰性动画。</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><i data-lucide="wind" style="width:12px;height:12px"></i>动效规格（丝滑优雅 · 60fps）</div>
+  <div class="lang card" style="padding:16px 20px">
+    <div class="motion-spec">
+      <div><span class="k2">标准过渡</span> 0.3s cubic-bezier(0.25,0.1,0.25,1)（Apple 标准）</div>
+      <div><span class="k2">进场</span> fadeUp 20px · 0.5s Expo.out(0.16,1,0.3,1)</div>
+      <div><span class="k2">hover</span> scale 1.02 + brightness(1.08) · 200ms</div>
+      <div><span class="k2">按压</span> scale .97 → 1.0（触觉反馈感）</div>
+      <div><span class="k2">列表</span> stagger 70ms · rise 550ms</div>
+      <div><span class="k2">光斑</span> drift 26s/32s ease-in-out alternate</div>
+      <div><span class="k2">弹层</span> max-height .35s / focus glow 200ms</div>
+      <div><span class="k2">无障碍</span> prefers-reduced-motion 全尊重</div>
+    </div>
+  </div>
+
+  <div style="margin-top:34px;font-size:11.5px;color:var(--text-3);text-align:center">v3「曜石」· 确认后按 ROADMAP M5/M6 开工（T-M5-01 素材 → T-M6-01 Shell → T-M6-02 Harness）· 数据取自真机实测 · 桌宠渲染以 dsh-pet 官方 webm 为准</div>
+</div>
+</body>
+</html>
