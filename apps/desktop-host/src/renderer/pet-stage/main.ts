@@ -50,8 +50,10 @@ const host: RendererHost = {
     (handle.el as HTMLVideoElement).remove();
   },
   setDevBadge(text) {
-    badgeEl.textContent = text ?? '';
-    badgeEl.style.display = text ? 'block' : 'none';
+    // D5 用户豁免（2026-11-21）：本地自用不显示非商用提示 UI；licenseScope 数据与台账登记保持完整。
+    // 公开/商用前必须恢复显示（还原为：badgeEl.textContent = text ?? ''; badgeEl.style.display = text ? 'block' : 'none';）
+    badgeEl.style.display = 'none';
+    if (text) console.debug('[pet-stage] DEV 素材标记（UI 已按 D5 豁免隐藏）：', text);
   },
   applyLayout(layout) {
     stage.style.left = `${layout.offsetX}px`;
