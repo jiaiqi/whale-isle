@@ -144,6 +144,12 @@ importers:
         specifier: ^3.25.2
         version: 3.25.2(zod@3.25.76)
 
+  tools/guide-forager:
+    dependencies:
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../../packages/shared-protocol
+
   tools/mock-harness:
     dependencies:
       '@workbench/shared-protocol':

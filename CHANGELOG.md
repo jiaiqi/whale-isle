@@ -11,6 +11,8 @@
 
 ### Added
 
+- **T-M5-15 ✅ guide-forager 攻略采集器（D15 全链路真机闭环）**：`tools/guide-forager`——MediaWiki API（parse wikitext）→ 清洗管线（模板折叠/链接展开/加粗列表时序修复/表格降噪/标题层级——清洗坑：列表正则会误伤 `**加粗**` 行首，必须列表先于加粗）→ 主题归档 markdown（frontmatter 来源署名 + sha1 去重）→ **BWF get_guide 直通**（导出 Mod guide/ 七专题：钓鱼/采矿/节日/结婚/沙漠/姜岛/农场类型）；真机验收：**游戏内 get_guide 钓鱼 返回刚抓的 wiki 最新攻略**（重启游戏重载生效）；wiki 拦 Node fetch(403) → CLI 走 curl 子进程；courtesyDelay 限速。单测 9 项（离线 fixture 全路径：清洗断言/去重/薄页跳过/错误透传/容错/双页混合）。
+- **D16 饭碗档位联动（适当时机触发补全）**：autodrive 回执扣米（30 粒/回执模拟计量，真实计量待 T-M5-04 token_ledger）→ 档位边沿广播（hungry/starving/full/fed_buff）→ 桌宠档位动作（RICE_LEVEL_ACTION_MAP）；`rice:feed` 投喂 IPC（Shell/directorBridge.riceFeed）→ fed_buff。E2E 真机：投喂 90000 粒 → full 档 → happy_maid 池动作真实切换 ✓。
 - **T-M6-02 ✅ ACP Harness 层 + T-M5-16 ✅ 动作库预览与情绪全映射（D16）**（2026-11-21 深夜）：
   - **agent-harness 包**：ACP v1 客户端（stdio JSON-RPC 双向、initialize/session/prompt/permission 流、鉴权错误 auth-required 事件、pending 清理、行协议 banner 容错）；providers 注册表（真机探测：gemini --acp 原生 ✓ / dsh --profile acp ✓ / claude-agent-acp 预留）；HarnessManager 全生命周期；**acp-simulator**（测试脚手架假 agent：流式 update/权限请求/审批回填）。真机验收：gemini + dsh 双握手 ✓、dsh 真实会话创建 ✓（API key 失效如实透传）；Shell 第 4 页签 Harness（providers 卡/对话流/审批卡 YNA）；协议实测修正（dsh 要求显式 jsonrpc 字段）。
   - **D16 动作库**：emotion-map 三层映射表（情绪五档/游戏回执七类/饭碗五档 → 语义槽位）+ classifyAutodriveReceipt；**playClip 单条零黑帧播放 API**（ambient 池条目不在槽位也可播，加载失败保留旧画面）；Shell 动作库页（11 槽位卡+77 氛围池分类网格+点击预览→桌宠窗即播 6s 回 idle）；pet-stage ambient 空闲随机链（30s→pickAmbient→6s）；**素材零闲置审计单测**（114 clips 槽位∪池全覆盖+无重复挂载）。E2E：11 槽位+77 池渲染、槽位预览（鲸尾拍地）、ambient 单条预览（放风筝.webm 即播）全真机通过。修复：ESM __dirname、预览视图切换复位。

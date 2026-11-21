@@ -3,7 +3,7 @@
  * 注意：webm 资产不入库（DEV_ONLY_NON_COMMERCIAL），未放置资产时舞台为透明空窗——属预期。
  */
 import { WebmVideoRenderer, pickAmbient, type RendererHost, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
-import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
+import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
 import { createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
@@ -126,8 +126,19 @@ const AMBIENT_PLAY_MS = 6_000;    // 播 6s 回 idle
 
 // 预览：Shell 动作库页点击 → main pets:preview → preload 桥 petStage.onPetPreview → 本窗即播
 const petStageBridge = (window as unknown as {
-  petStage?: { onPetPreview?: (h: (d: { action: string; clipId: string | null }) => void) => void };
+  petStage?: {
+    onPetPreview?: (h: (d: { action: string; clipId: string | null }) => void) => void;
+    onPetRice?: (h: (d: { level: string; balance: number }) => void) => void;
+  };
 }).petStage;
+// D16：饭碗档位 → 桌宠动作（hungry→饿瘪/starving→睡觉/fed_buff→开吃/full→女仆礼）
+if (petStageBridge?.onPetRice) {
+  petStageBridge.onPetRice((detail) => {
+    const action = RICE_LEVEL_ACTION_MAP[detail.level as keyof typeof RICE_LEVEL_ACTION_MAP];
+    if (action) void renderer.play(action).catch(() => undefined);
+    lastEventAt = Date.now(); // 档位事件抑制 ambient 链
+  });
+}
 if (petStageBridge?.onPetPreview) {
   petStageBridge.onPetPreview((detail) => {
     if (detail.clipId) {

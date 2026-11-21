@@ -1,0 +1,10 @@
+{
+  "name": "@workbench/guide-forager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[T-M5-15/D15] 攻略采集器：星露谷 wiki MediaWiki API → 主题归档 markdown → BWF get_guide 直读",
+  "type": "module",
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}

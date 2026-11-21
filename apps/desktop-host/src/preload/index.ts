@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // pets 动作库（T-M5-16，D16）：manifest + 预览
   petsManifest: (): Promise<{ ok: boolean; manifest?: unknown; error?: string }> => ipcRenderer.invoke('pets:manifest'),
   petsPreview: (action: string, clipId: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke('pets:preview', action, clipId),
+  // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
+  riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
+  riceStatus: (): Promise<{ balance: number }> => ipcRenderer.invoke('rice:status'),
 });
 
 contextBridge.exposeInMainWorld('petStage', {
@@ -60,6 +63,9 @@ contextBridge.exposeInMainWorld('petStage', {
   // T-M5-16：动作库预览中继（main → pet-stage 窗）
   onPetPreview: (handler: (detail: { action: string; clipId: string | null }) => void) => {
     ipcRenderer.on('pet:preview', (_e, detail: { action: string; clipId: string | null }) => handler(detail));
+  },
+  onPetRice: (handler: (detail: { level: string; balance: number }) => void) => {
+    ipcRenderer.on('pet:rice', (_e, detail: { level: string; balance: number }) => handler(detail));
   },
   ...(TEST_MODE
     ? {

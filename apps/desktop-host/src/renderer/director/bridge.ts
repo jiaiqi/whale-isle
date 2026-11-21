@@ -82,6 +82,8 @@ export interface DirectorBridge {
   onHarnessEvent(handler: (event: HarnessEventMsg) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
+  riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
+  riceStatus(): Promise<{ balance: number }>;
 }
 
 declare global {

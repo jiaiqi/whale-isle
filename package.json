@@ -18,7 +18,9 @@
     "py:check": "pnpm py:type && pnpm py:test",
     "verify:gate": "node tools/scripts/verify-gate.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
-    "gen:pet-manifest": "tsx tools/scripts/gen-pet-manifest.mjs"
+    "gen:pet-manifest": "tsx tools/scripts/gen-pet-manifest.mjs",
+    "forage:guides": "node tools/guide-forager/run.mjs",
+    "forage:guides:export": "node tools/guide-forager/run.mjs --export"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

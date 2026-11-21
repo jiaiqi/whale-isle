@@ -28,6 +28,9 @@
     },
     {
       "path": "packages/agent-harness"
+    },
+    {
+      "path": "tools/guide-forager"
     }
   ]
 }

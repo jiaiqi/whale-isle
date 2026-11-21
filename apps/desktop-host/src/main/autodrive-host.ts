@@ -36,12 +36,39 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp'): Au
     }
     return { ok: true };
   });
+  // ---- D16：饭碗档位联动（每回执扣米 → 档位广播 → 桌宠档位动作） ----
+  let riceBalance = 12_480; // 初始（与 fixtures 一致）；后续接 token_ledger 真实计量（T-M5-04）
+  let riceLevel = 'hungry'; // 初始 12.48% 即在饥饿线下——首个回执前不发（避免启动即广播）
+  const broadcastRice = (level: string): void => {
+    // D16 边沿触发：仅档位变化时广播（同档持续不重复刷桌宠动作）
+    if (level === riceLevel) return;
+    riceLevel = level;
+    for (const wc of windows) {
+      if (!wc.isDestroyed()) wc.send('pet:rice', { level, balance: riceBalance });
+    }
+  };
+  ipcMain.handle('rice:feed', (_e, grains: number) => {
+    riceBalance += Math.max(0, grains);
+    // 投喂下饭菜 → fed_buff 档（dsh-pet Buff 思想）；低于满 buff 线回落 ok
+    broadcastRice(riceBalance > 100_000 * 0.9 ? 'fed_buff' : riceBalance > 80_000 ? 'full' : 'ok');
+    return { ok: true, balance: riceBalance };
+  });
+  ipcMain.handle('rice:status', () => ({ balance: riceBalance }));
   const broadcast = (event: AutodriveEvent): void => {
     for (const wc of windows) {
       if (!wc.isDestroyed()) wc.send('autodrive:event', event);
     }
   };
-  const runner = new AutodriveRunner(broadcast, { endpoint });
+  const runner = new AutodriveRunner((event) => {
+    // 回执扣米（1 回执 = 30 粒模拟计量；真实 token 计量待 T-M5-04 token_ledger 接线）
+    if (event.type === 'receipt' && event.tool !== 'autodrive') {
+      riceBalance = Math.max(0, riceBalance - 30);
+      const ratio = riceBalance / 100_000;
+      broadcastRice(ratio < 0.05 ? 'starving' : ratio < 0.15 ? 'hungry' : ratio > 0.8 ? 'full' : 'ok');
+      void riceLevel;
+    }
+    broadcast(event);
+  }, { endpoint });
 
   ipcMain.handle('autodrive:start', async () => {
     try {
