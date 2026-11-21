@@ -4,6 +4,9 @@
  * 启停由 Shell 显式触发（用户不在游戏时不自动跑）。
  */
 import { ipcMain, type WebContents } from 'electron';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   AutodriveRunner,
   type AutodriveEvent,
@@ -17,6 +20,22 @@ export interface AutodriveHost {
 
 export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp'): AutodriveHost {
   const windows: WebContents[] = [];
+  // ---- T-M5-16（D16）pets 动作库：manifest 读取 + 预览转发 ----
+  ipcMain.handle('pets:manifest', () => {
+    try {
+      const manifestPath = join(dirname(fileURLToPath(import.meta.url)), '../renderer/pet-stage/assets/blue-whale-maid/manifest.json');
+      return { ok: true, manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  // preview：actionState（槽位）或 clipId（ambient 单条）——转发给 pet-stage 窗
+  ipcMain.handle('pets:preview', (_e, action: string, clipId: string | null) => {
+    for (const wc of windows) {
+      if (!wc.isDestroyed()) wc.send('pet:preview', { action, clipId });
+    }
+    return { ok: true };
+  });
   const broadcast = (event: AutodriveEvent): void => {
     for (const wc of windows) {
       if (!wc.isDestroyed()) wc.send('autodrive:event', event);

@@ -25,6 +25,9 @@
     },
     {
       "path": "packages/game-bridge-mcp"
+    },
+    {
+      "path": "packages/agent-harness"
     }
   ]
 }

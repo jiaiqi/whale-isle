@@ -28,6 +28,24 @@ contextBridge.exposeInMainWorld('directorBridge', {
   onAutodriveEvent: (handler: (event: unknown) => void) => {
     ipcRenderer.on('autodrive:event', (_e, event) => handler(event));
   },
+  // harness（T-M6-02）：ACP agents 统管
+  harnessPresets: (): Promise<Array<{ id: string; label: string; command: string | null; authHint: string }>> =>
+    ipcRenderer.invoke('harness:presets'),
+  harnessStart: (presetId: string): Promise<{ ok: boolean; error?: string; authMethods?: string[] }> =>
+    ipcRenderer.invoke('harness:start', presetId),
+  harnessPrompt: (presetId: string, text: string): Promise<{ ok: boolean; error?: string; sessionId?: string }> =>
+    ipcRenderer.invoke('harness:prompt', presetId, text),
+  harnessPermission: (presetId: string, requestId: number, outcome: 'allow' | 'always' | 'reject'): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('harness:permission', presetId, requestId, outcome),
+  harnessStop: (presetId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('harness:stop', presetId),
+  harnessStatus: (): Promise<Array<{ presetId: string; label: string; running: boolean; sessions: string[] }>> =>
+    ipcRenderer.invoke('harness:status'),
+  onHarnessEvent: (handler: (event: unknown) => void) => {
+    ipcRenderer.on('harness:event', (_e, event) => handler(event));
+  },
+  // pets 动作库（T-M5-16，D16）：manifest + 预览
+  petsManifest: (): Promise<{ ok: boolean; manifest?: unknown; error?: string }> => ipcRenderer.invoke('pets:manifest'),
+  petsPreview: (action: string, clipId: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke('pets:preview', action, clipId),
 });
 
 contextBridge.exposeInMainWorld('petStage', {
@@ -39,6 +57,10 @@ contextBridge.exposeInMainWorld('petStage', {
   winPosition: (): Promise<[number, number] | null> => ipcRenderer.invoke('win:get-position'),
   dragTo: (x: number, y: number): Promise<[number, number] | null> => ipcRenderer.invoke('win:drag-to', x, y),
   appMeta: () => ipcRenderer.invoke('app:meta'),
+  // T-M5-16：动作库预览中继（main → pet-stage 窗）
+  onPetPreview: (handler: (detail: { action: string; clipId: string | null }) => void) => {
+    ipcRenderer.on('pet:preview', (_e, detail: { action: string; clipId: string | null }) => handler(detail));
+  },
   ...(TEST_MODE
     ? {
         forceAlpha: (alpha: number) => ipcRenderer.invoke('test:force-alpha', alpha),

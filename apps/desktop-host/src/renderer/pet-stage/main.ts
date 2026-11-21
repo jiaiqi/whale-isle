@@ -2,7 +2,9 @@
  * pet-stage 渲染层装配（T-M1-02）：WebmVideoRenderer + alpha 穿透探针 + 拖拽甩抛。
  * 注意：webm 资产不入库（DEV_ONLY_NON_COMMERCIAL），未放置资产时舞台为透明空窗——属预期。
  */
-import { WebmVideoRenderer, type RendererHost, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
+import { WebmVideoRenderer, pickAmbient, type RendererHost, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
+import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
+import type { PetActionState } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
 import { createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
 import { AudioLeaseManager } from './audio-lease';
@@ -116,6 +118,42 @@ void fetch('./assets/blue-whale-maid/manifest.json')
   .then(() => renderer.play('idle'))
   .catch((error) => console.warn('[pet-stage] 真形象清单未就绪（回退占位渲染）：', error));
 
+// ---- T-M5-16（D16）：动作库预览 + ambient 空闲随机链 + 三层情绪映射 ----
+let lastEventAt = Date.now();
+let previewTimer: ReturnType<typeof setTimeout> | null = null;
+const AMBIENT_IDLE_MS = 30_000;   // 空闲 30s 播一条氛围动作
+const AMBIENT_PLAY_MS = 6_000;    // 播 6s 回 idle
+
+// 预览：Shell 动作库页点击 → main pets:preview → preload 桥 petStage.onPetPreview → 本窗即播
+const petStageBridge = (window as unknown as {
+  petStage?: { onPetPreview?: (h: (d: { action: string; clipId: string | null }) => void) => void };
+}).petStage;
+if (petStageBridge?.onPetPreview) {
+  petStageBridge.onPetPreview((detail) => {
+    if (detail.clipId) {
+      const manifest = renderer.manifest;
+      // ambient 单条：先找槽位（语义命中播槽位）→ 不在槽位则直查 ambientPool 走 playClip
+      const slotAction = previewActionFor(detail.clipId);
+      const ambientEntry = manifest?.ambientPool.find((c) => c.clipId === detail.clipId);
+      const slotClip = manifest?.actions.flatMap((a) => a.clips).find((c) => c.clipId === detail.clipId);
+      if (slotAction && slotClip) {
+        void renderer.play(slotAction).catch(() => undefined);
+      } else if (ambientEntry) {
+        void renderer.playClip({ clipId: ambientEntry.clipId, webmPath: ambientEntry.webmPath, loop: false, playbackRate: 1, fps: 24, weight: ambientEntry.weight }).catch(() => undefined);
+      } else {
+        void renderer.play(detail.action as PetActionState).catch(() => undefined);
+      }
+    } else {
+      void renderer.play(detail.action as PetActionState).catch(() => undefined);
+    }
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      previewTimer = null;
+      void renderer.play('idle');
+    }, AMBIENT_PLAY_MS);
+  });
+}
+
 // ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
 type AutodriveEventLite = {
   type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end';
@@ -123,12 +161,11 @@ type AutodriveEventLite = {
 };
 if (window.directorBridge?.onAutodriveEvent) {
   window.directorBridge.onAutodriveEvent((event: AutodriveEventLite) => {
+    lastEventAt = Date.now();
     if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
-      // 回执 → 人格化动作（uncertain → 心虚冒汗；error → 气急败坏；完成 → 开心）
-      if (event.status === 'UNCERTAIN') void renderer.play('clumsy_panic');
-      else if (event.status === 'FAILED' || event.status === 'ERROR') void renderer.play('rage_spray');
-      else if (event.status === 'COMPLETED' && /fish|收获|收获|钓/.test(`${event.tool}${event.summary ?? ''}`)) void renderer.play('happy_maid');
-      // 决策进行中 → 专注
+      const kind = classifyAutodriveReceipt(event.status, event.tool ?? '', event.summary ?? '');
+      const action = GAME_EVENT_ACTION_MAP[kind];
+      if (action) void renderer.play(action);
     }
     if (event.type === 'decision') void renderer.play('game_focus');
     if (event.type === 'state' && typeof event.clock === 'string') {
@@ -309,3 +346,36 @@ void bridge.appMeta().then((meta) => {
     };
   }
 });
+
+
+// T-M5-16：事件分类与映射（三层映射表消费端——import 已移至文件头）
+
+// ambient 空闲随机链：30s 无事件 → pickAmbient 播 6s 回 idle（D16 素材全利用）
+const ambientLoop = setInterval(() => {
+  if (Date.now() - lastEventAt < AMBIENT_IDLE_MS) return;
+  if (previewTimer) return; // 预览播放中不抢
+  const manifest = renderer.manifest;
+  if (!manifest || manifest.ambientPool.length === 0) return;
+  const picked = pickAmbient(manifest);
+  if (!picked.webmPath) return;
+  void (async () => {
+    try {
+      await renderer.play(previewActionFor(picked.clipId) ?? 'idle');
+    } catch { /* 预览失败静默回 idle */ }
+  })();
+  previewTimer = setTimeout(() => {
+    previewTimer = null;
+    void renderer.play('idle');
+  }, AMBIENT_PLAY_MS);
+}, 5_000);
+void ambientLoop;
+
+// clipId → 尝试匹配语义槽位；匹配不到回落 detail.action（预览页给的槽位名）
+function previewActionFor(clipId: string): PetActionState | null {
+  const manifest = renderer.manifest;
+  if (!manifest) return null;
+  for (const action of manifest.actions) {
+    if (action.clips.some((c) => c.clipId === clipId)) return action.actionState;
+  }
+  return null;
+}

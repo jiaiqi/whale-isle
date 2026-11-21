@@ -4,4 +4,4 @@
  */
 export * from './types';
 export * from './squash';
-export { WebmVideoRenderer, computeFootlineLayout, type WebmRendererOptions } from './webm-renderer';
+export { WebmVideoRenderer, computeFootlineLayout, pickAmbient, type WebmRendererOptions } from './webm-renderer';

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createAutodriveHost } from './autodrive-host';
+import { createHarnessHost } from './agent-host';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
@@ -69,8 +70,11 @@ app.whenReady().then(() => {
   registerProviderVaultIpc(join(app.getPath('userData'), 'provider-vault.json'));
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
   const autodrive = createAutodriveHost();
+  const harness = createHarnessHost();
   const wireTargets = () => {
-    autodrive.setTargets([stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents));
+    const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);
+    autodrive.setTargets(targets);
+    harness.setTargets(targets);
   };
   stageWindow = createStageWindow();
   directorWindow = createDirectorWindow();

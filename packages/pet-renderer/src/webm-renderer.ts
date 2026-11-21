@@ -94,6 +94,35 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
     this.options.host.applyLayout(layout);
   }
 
+  /** 播放任意单条 clip（T-M5-16 动作库预览：ambient 池条目不在槽位内，走此 API）。
+   *  与 play 同一条零黑帧链路；不写 activeAction（预览回落 idle 不受同动作短路影响）。 */
+  async playClip(clip: PetAvatarClip): Promise<void> {
+    if (!this.factory) throw new PetRendererError('NO_FACTORY', '缺少 videoFactory（真实工厂由 desktop-host 注入）');
+    if (this.switching) return; // 预览不因并发切换抛错（静默让位）
+    this.switching = true;
+    const standby = this.factory(clip.webmPath);
+    try {
+      this.options.host.mountVideo(standby);
+      await standby.play(clip.loop, clip.playbackRate);
+      this.options.host.showVideo(standby);
+      if (this.active) {
+        this.options.host.hideVideo(this.active);
+        this.options.host.detachVideo(this.active);
+      }
+      this.active = standby;
+      // 单条预览不更新 activeAction/entry 缓存——后续 play(action) 正常接管
+    } catch (error) {
+      this.options.host.detachVideo(standby);
+      // 加载失败保留旧画面（不黑屏）
+      if (error instanceof Error) {
+        throw new PetRendererError('CLIP_PLAY_FAILED', `片段播放失败：${clip.webmPath}（${error.message}）`);
+      }
+      throw new PetRendererError('CLIP_PLAY_FAILED', `片段播放失败：${clip.webmPath}`);
+    } finally {
+      this.switching = false;
+    }
+  }
+
   async play(action: PetActionState, opts?: PlayOptions): Promise<void> {
     const manifest = this.manifestState;
     if (!manifest) throw new PetRendererError('NO_MANIFEST', '清单尚未装载（先调用 load）');

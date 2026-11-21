@@ -147,3 +147,26 @@ describe('情绪感知 TTS 路由（宿主侧）', () => {
     expect(request.lipEnvelope.visemes).toHaveLength(3);
   });
 });
+
+describe('T-M5-16 残分支：无 fallback 情绪 → 首档案；viseme 无命中不 push', () => {
+  it('exact 未命中且 defaultEmotionTag 也未命中 → profiles[0] 回落', () => {
+    const pack = {
+      voicePackId: 'x', defaultEmotionTag: 'ghost-tag', profiles: [
+        { emotionTag: 'a', refAudioPath: 'ref/a.wav', refText: 'A', actionState: 'idle' },
+        { emotionTag: 'b', refAudioPath: 'ref/b.wav', refText: 'B', actionState: 'idle' },
+      ],
+    } as unknown as Parameters<typeof selectVoiceProfile>[0];
+    const p = selectVoiceProfile(pack, 'not-exist');
+    expect(p.emotionTag).toBe('a'); // profiles[0]
+  });
+
+  it('viseme 时间线：区间外采样不产生条目', () => {
+    const envelope = {
+      totalDurationMs: 1000, visemes: [
+        { viseme: 'A', startMs: 100, endMs: 200 }, { viseme: 'rest', startMs: 300, endMs: 500 },
+      ],
+    } as unknown as Parameters<typeof sampleVisemeTimeline>[0];
+    const tl = sampleVisemeTimeline(envelope, 600);
+    expect(tl.every((t) => t.atMs <= 600)).toBe(true);
+  });
+});

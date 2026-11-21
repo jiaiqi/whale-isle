@@ -64,7 +64,8 @@ export type RendererErrorCode =
   | 'NO_MANIFEST'
   | 'ACTION_NOT_IN_MANIFEST'
   | 'SWITCH_IN_PROGRESS'
-  | 'CLIP_LOAD_FAILED';
+  | 'CLIP_LOAD_FAILED'
+  | 'CLIP_PLAY_FAILED';
 
 export class PetRendererError extends Error {
   constructor(

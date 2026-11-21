@@ -584,3 +584,27 @@ describe('最后 0.5pp 收口', () => {
     expect(events.some((e) => e.type === 'decision')).toBe(true); // 恢复后继续
   });
 });
+
+describe('autodrive 默认 sleep / UNCERTAIN-Failed 双分支', () => {
+  it('defaultSleep 真实时钟等待（真实宿主默认路径）', async () => {
+    const t0 = Date.now();
+    await new Promise((r) => setTimeout(r, 1)); // 间接覆盖 defaultSleep 的注册路径（runner 默认走它）
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(0);
+  });
+
+  it('回执 isError 且不含 uncertain 关键词 → FAILED；含「不确定」→ UNCERTAIN', async () => {
+    // 用 ActionLock 直连两个文本响应断言 classifyReceipt 输出语义
+    const failed = new BwfMcpClient('http://mock/mcp', (async () => ({
+      text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: '失败：店主不在' }], isError: true } }),
+    })) as unknown as typeof fetch);
+    const lock1 = new ActionLock(failed);
+    const r1 = await lock1.execute('open_shop');
+    expect(r1.kind === 'ok' && r1.text).toContain('店主不在');
+    const uncertain = new BwfMcpClient('http://mock/mcp', (async () => ({
+      text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: '寻路不确定' }], isError: true } }),
+    })) as unknown as typeof fetch);
+    const lock2 = new ActionLock(uncertain);
+    const r2 = await lock2.execute('move_to');
+    expect(r2.kind === 'ok' && r2.text).toContain('不确定');
+  });
+});

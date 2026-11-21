@@ -324,3 +324,47 @@ describe('Q 弹挤压形变（Squash & Stretch）', () => {
     expect(host.squashes).toHaveLength(1);
   });
 });
+
+describe('playClip 单条预览（T-M5-16）', () => {
+  it('零黑帧链路直播指定 clip；预览不污染槽位（后续 play 正常接管）', async () => {
+    const { host, renderer, load } = makeRenderer(MANIFEST);
+    await load();
+    await renderer.play('idle');
+    host.ops = [];
+    await renderer.playClip({ clipId: 'ambient-x', webmPath: 'webm/ambient-x.webm', loop: false, playbackRate: 1, fps: 24, weight: 5 });
+    expect(host.ops[0]).toBe('mount(webm/ambient-x.webm)');
+    expect(host.ops).toContain('show(webm/ambient-x.webm)');
+    expect(host.ops.some((op) => op.startsWith('hide('))).toBe(true); // 旧画面交叉淡出
+    expect(renderer.currentAction()).toBe('idle'); // 槽位未被污染
+    host.ops = [];
+    await renderer.play('walk', { force: true });
+    const walkShow = host.ops.find((op) => op.startsWith('show('));
+    expect(walkShow).toBeDefined(); // 接管正常（walk 片上屏）
+  });
+
+  it('加载失败：CLIP_PLAY_FAILED + 旧画面保留（detach 失败备片，绝不空屏）', async () => {
+    const { host, renderer, load } = makeRenderer(MANIFEST, ['webm/ambient-bad.webm']);
+    await load();
+    await renderer.play('idle');
+    host.ops = [];
+    await expect(
+      renderer.playClip({ clipId: 'bad', webmPath: 'webm/ambient-bad.webm', loop: false, playbackRate: 1, fps: 24, weight: 1 }),
+    ).rejects.toMatchObject({ code: 'CLIP_PLAY_FAILED' });
+    expect(host.ops).toContain('detach(webm/ambient-bad.webm)');
+    expect(host.ops.some((op) => op.startsWith('hide('))).toBe(false); // 旧画面未被隐藏
+  });
+
+  it('switching 中静默让位（不抛错）', async () => {
+    const { renderer, load } = makeRenderer(MANIFEST);
+    await load();
+    await renderer.play('idle');
+    // 构造 switching 态：用 fail 片使 play 抛错前 switching=true？——直接构造并发最稳：
+    // 让 idle→walk 的切换在进行中（FakeVideo.play 是同步 resolve，需人工延迟）
+    // 简化：借内部状态直接置 switching=true（测试同包白盒）
+    (renderer as unknown as { switching: boolean }).switching = true;
+    await expect(
+      renderer.playClip({ clipId: 'x', webmPath: 'webm/x.webm', loop: true, playbackRate: 1, fps: 24, weight: 1 }),
+    ).resolves.toBeUndefined();
+    (renderer as unknown as { switching: boolean }).switching = false;
+  });
+});

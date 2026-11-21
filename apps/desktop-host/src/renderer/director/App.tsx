@@ -8,13 +8,17 @@ import type { DiningProfilePreset, ModelProviderConfig, WorkbenchRoleSlot } from
 import type { DirectorStore } from '@workbench/local-store/dexie';
 import type { AutodriveEventView } from './bridge';
 import { ProvidersPanel } from './providers-panel';
+import { HarnessPanel } from './harness-panel';
+import { PetsPanel } from './pets-panel';
 
-type Tab = 'chat' | 'stardew' | 'providers';
+type Tab = 'chat' | 'stardew' | 'providers' | 'harness' | 'pets';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'chat', label: '聊天 · 小鲸' },
   { id: 'stardew', label: '星露谷监控' },
   { id: 'providers', label: '供应商配置' },
+  { id: 'harness', label: 'Harness · Agents' },
+  { id: 'pets', label: '动作库' },
 ];
 
 /** 简单指令解析（Shell 聊天框 → P0 插队；T-M6-01 完整版接 persona-brain 闲聊路由） */
@@ -209,6 +213,18 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       {tab === 'providers' && (
         <div className="flex-1 overflow-y-auto">
           <ProvidersPanel profiles={profiles} slotLabels={slotLabels} providers={providers} store={store} />
+        </div>
+      )}
+
+      {tab === 'harness' && (
+        <div className="flex-1 overflow-y-auto">
+          <HarnessPanel />
+        </div>
+      )}
+
+      {tab === 'pets' && (
+        <div className="flex-1 overflow-y-auto">
+          <PetsPanel />
         </div>
       )}
     </div>

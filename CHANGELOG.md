@@ -11,6 +11,11 @@
 
 ### Added
 
+- **T-M6-02 ✅ ACP Harness 层 + T-M5-16 ✅ 动作库预览与情绪全映射（D16）**（2026-11-21 深夜）：
+  - **agent-harness 包**：ACP v1 客户端（stdio JSON-RPC 双向、initialize/session/prompt/permission 流、鉴权错误 auth-required 事件、pending 清理、行协议 banner 容错）；providers 注册表（真机探测：gemini --acp 原生 ✓ / dsh --profile acp ✓ / claude-agent-acp 预留）；HarnessManager 全生命周期；**acp-simulator**（测试脚手架假 agent：流式 update/权限请求/审批回填）。真机验收：gemini + dsh 双握手 ✓、dsh 真实会话创建 ✓（API key 失效如实透传）；Shell 第 4 页签 Harness（providers 卡/对话流/审批卡 YNA）；协议实测修正（dsh 要求显式 jsonrpc 字段）。
+  - **D16 动作库**：emotion-map 三层映射表（情绪五档/游戏回执七类/饭碗五档 → 语义槽位）+ classifyAutodriveReceipt；**playClip 单条零黑帧播放 API**（ambient 池条目不在槽位也可播，加载失败保留旧画面）；Shell 动作库页（11 槽位卡+77 氛围池分类网格+点击预览→桌宠窗即播 6s 回 idle）；pet-stage ambient 空闲随机链（30s→pickAmbient→6s）；**素材零闲置审计单测**（114 clips 槽位∪池全覆盖+无重复挂载）。E2E：11 槽位+77 池渲染、槽位预览（鲸尾拍地）、ambient 单条预览（放风筝.webm 即播）全真机通过。修复：ESM __dirname、预览视图切换复位。
+  - **D15 攻略采集 guide-forager**：PRODUCT-DESIGN §2.10 设计 + ROADMAP T-M5-15 工单（wiki MediaWiki API/小黑盒→主题归档→BWF get_guide/LLM 检索/技能卡三路注入）。
+  - 工程修复：better-sqlite3 ABI 双 node 环境断裂（PATH node26 vs pnpm node24）→ prebuild-install 对齐 pnpm 测试链 137；v8 覆盖率抖动确认（连跑两次 exit=0）。
 - **T-M5-01 ✅ + T-M5-02 ✅ + T-M6-01 最小版 ✅ 端到端真机打通（2026-11-21 晚）**：
   - **素材**（T-M5-01）：dsh-pet 114 个 VP9-alpha webm（55MB）入库 `packages/pet-renderer/assets/blue-whale-maid/`（D14 随包分发）；契约扩展 `ambientPool`（77 条随机氛围池）跨语言重生成；`gen:pet-manifest` 生成器（11 语义槽位全覆盖 + sleep 循环段 + 池空兜底 `pickAmbient`）；manifest-asset.spec 3 项门禁。
   - **game-bridge-mcp 包**（T-M5-02）：`mcp-client`（SSE/JSON 双解析 + JSON 前缀括号平衡解析器 + 超时≠失败语义 + 长动作 10min 分层超时）；`action-lock`（单在途互斥 + stats + cancel 幂等清锁）；`StuckSentinel`（4min 游戏时间冻结→卡死哨兵，时钟可注入）；`RulePlanner` 确定性日程（morning-mail→farm-work→fishing→forage→homeward，体力<8% 强制睡觉防晕倒，菜单优先处理）；`autodrive` 编排器（get_state→哨兵→P0 插队→执行→回执多播，**不可解析状态/网络错误按 watchdog 处理而非盲跑**，错误详情透传修复，maxCycles 死循环防护）。

@@ -3,7 +3,7 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M6-02` ACP Harness 层（T-M5-01/02 已 DONE、T-M6-01 最小版已真机跑通；下一步完整插件内核或 Harness）**
+> **当前激活工单：`T-M6-03` dsh 插件兼容层（T-M5-01/02/16、T-M6-01 最小版、T-M6-02 均已 DONE 真机验收）**
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
@@ -65,6 +65,8 @@
 | **`T-M5-12`** | P2 | **PC 身体安全模板与看门狗自愈**：鱼鳍安全边界（黑名单/审计/急刹/信号量）+ 进程看护 | feiyuos-pc-body | 灾难命令 100% 拦截；审计 JSONL 轮转；kill 后 ~70s 自愈 | PENDING |
 | **`T-M5-13`** | P2 | **形象工坊（D13③）**：自定义形象 + AI 生成动作管线——AI 生视频提示词模板→绿幕→chroma→normalize（640×360 alpha）→manifest 条目注册→试穿预览；精灵图逆向导入 | dsh-pet scripts、aboutme-pets | 素材规格自动校验（alpha/帧率/时长）；生成→注册→pet-stage 即时切换断言；台账登记 | PENDING |
 | **`T-M5-14`** | P1 | **小鲸日记面板（D13②）**：Shell 日历视图翻阅每日日记 + 记忆图谱力导向可视化 + 周报复盘（TTS 播报+切片联动入口） | feiyuos-memory-graph viewer | 日历翻阅 E2E；周报生成幂等；图谱检索入口可用 | PENDING |
+| **`T-M5-16`** | P0 | **动作库预览与情绪全映射（D16）**（✅ 2026-11-21 DONE：E2E 全通+零闲置审计）：Shell pets 页签（11 槽位卡+ambientPool 分类网格+点击预览 IPC→桌宠窗即播）；情绪五档/游戏事件/饭碗三层映射表 + ambient 空闲随机链（30s→pickAmbient→6s 回 idle）+ **素材零闲置审计**（114 clips 全覆盖断言） | dsh-pet（animationWeights/余额分档）、T-M5-01 manifest | 单测：114 clips 覆盖率审计断言；E2E：pets 页点击 → 桌宠窗 src 切换；ambient 链确定性（rng 注入） | NEXT（并入 T-M6-01 桌宠插件范围先行） |
+| **`T-M5-15`** | P1 | **攻略采集器 guide-forager（D15）**：星露谷 wiki（MediaWiki API）+ 小黑盒热榜 → 正文提取→主题分类→hash 去重→`guide-forager/<主题>.md` 归档+索引；**三路注入**：BWF get_guide 专题导出 / LLM Planner 检索上下文 / 技能卡互引；周更+开播前触发 | 星露谷 wiki、小黑盒、BWF Guide.cs | 单测：抓取→清洗→分类→去重确定性（fixture）；导出文件可被 get_guide 读取断言；限速与 robots 合规断言 | PENDING |
 | **`T-M6-05`** | P2 | **独立安装包（D14）**：electron-builder（macOS dmg + Win nsis）——素材/worker/契约生成物打进 resources；首启向导（星露谷+Mod 一键安装引导、GPT-SoVITS 可选下载、供应商 key 配置）；全功能离线自包含验证 | electron-builder | 干净环境（无参考仓库路径）安装→启动→桌宠渲染→autodrive 依赖注入断言；安装包体积 <200MB（不含可选 GPT-SoVITS） | PENDING |
 
 ## M6 批次：通用工作台内核（2026-11-21 v2 新增，用户决策 D6~D10）
@@ -74,6 +76,6 @@
 | 工单编号 | 分期 | 工单名称与核心交付物（单工单 ≤ 8 文件） | 开工前必查参考 | 自动化门禁校验指令与断言（Gate） | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | **`T-M6-01`** | P0 | **工作台 Shell 与插件内核**（🟨 2026-11-21 最小版完成：三页签+聊天流+监控+指令插队；插件内核 Cordis 化待续）：Shell 布局（侧栏导航树=插件注册/顶栏主题切换/右侧快捷卡区）+ 插件 manifest/defineTool/registry/事件总线订阅/enable-disable 热开关 + 插件管理页 + zustand + lucide-react 全量图标 + 深/浅/跟随系统主题 + motion 动效规格；**并入 T-M5-03**：聊天主界面（think 折叠/工具卡片/审批卡/对话指挥）；**并入 D11/D12**：pet 插件 renderer 层——状态气泡组（动作状态条/目标卡/事件弹泡，ADR-6 status-bubble 状态机）+ 语音设置三开关 | deepseek-harness（Cordis）、dsh-plugin-yushe（defineTool）、t3code（Shell/Providers）、magpie（UI 模式） | E2E：插件禁用后其侧栏项/卡片消失且事件解绑；主题切换 CSS vars 全量生效；lucide 图标零 emoji 断言（lint 扫描 UI 源码）；聊天流式/think 折叠/审批卡 E2E | NEXT（T-M5-01 完成后） |
-| **`T-M6-02`** | P0 | **ACP Harness 层**：ACP v1/v2 client（stdio JSON-RPC）+ Provider 实例管理（Registry 搜索/本地命令如 `dsh --profile acp`）+ 线程/中途换 agent/checkpoint 回放 + 工具调用审批卡（桌面+远程）+ 按 agent 用量记账；**并入 T-M5-07：线程状态→桌宠工作跟随动画** | t3code（providers-acp.md/thread）、magpie（agentOf） | 契约单测：ACP initialize/session 流程夹具；审批卡拒绝→工具不执行且回喂；线程状态→动画映射断言 | PENDING |
+| **`T-M6-02`** | P0 | **ACP Harness 层**（✅ 2026-11-21 DONE：真机 gemini+dsh 双握手验收）：ACP v1/v2 client（stdio JSON-RPC）+ Provider 实例管理（Registry 搜索/本地命令如 `dsh --profile acp`）+ 线程/中途换 agent/checkpoint 回放 + 工具调用审批卡（桌面+远程）+ 按 agent 用量记账；**并入 T-M5-07：线程状态→桌宠工作跟随动画** | t3code（providers-acp.md/thread）、magpie（agentOf） | 契约单测：ACP initialize/session 流程夹具；审批卡拒绝→工具不执行且回喂；线程状态→动画映射断言 | PENDING |
 | **`T-M6-03`** | P1 | **dsh 插件兼容层 plugin-bridge**：Cordis 插件树/defineTool/typed events → 本工作台工具/事件模型适配器 + 插件装载器（host/client/shared 三层约定）+ dsh 插件兼容测试夹具 | deepseek-harness、dsh-fish、dsh-plugin-yushe | 夹具断言：一个样例 dsh 插件原样装载成功且 defineTool 注册的工具经总线可调；禁用/崩溃隔离 | PENDING |
 | **`T-M6-04`** | P1 | **WebUI 形态**：bridge 抽象双实现（Electron IPC ↔ HTTP/WS）+ 轻量本地 server（总线/静态资源/vault 代理）+ 远程审批（桌面开线程、浏览器批审批）+ Vite 迁移评估 | t3code（desktop/server/web 多端）、magpie（本地网关） | 同一 renderer 组件在两种宿主下渲染断言；远程审批 E2E（WebUI 拒绝→桌面动作不执行） | PENDING |
