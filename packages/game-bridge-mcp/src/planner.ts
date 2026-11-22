@@ -107,7 +107,8 @@ export function cleanItemName(text: string): string {
     .trim();
 }
 
-function* inventoryTexts(raw: string): Generator<string> {
+/** 背包段逐行物品文本迭代器（序号: 物品）——救援/预留策略共用 */
+export function* inventoryTexts(raw: string): Generator<string> {
   for (const line of raw.split('\n')) {
     const m = /^\d+:\s*(.+)$/.exec(line.trim());
     if (m) yield m[1] ?? '';

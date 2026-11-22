@@ -4,7 +4,7 @@
  * chat 全注入 mock（零网络）。真机病灶：同一冻结分钟 dialogue×191 / place_item×96 / donate_bundles×29。
  */
 import { describe, expect, it } from 'vitest';
-import { extractDecisionJson, festivalWindowOf, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickShippableItem } from './llm-planner';
+import { extractDecisionJson, festivalWindowOf, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickPrematureReservedEdible, pickShippableItem } from './llm-planner';
 import { countWood, hasChestItem, isRaining, parseGameState, pickFurnitureToPlace, RulePlanner, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `时间：第1年春16日 07:30（Tue），天气：晴
@@ -856,5 +856,60 @@ ${FESTIVAL_HINT}
     const d = await planner.decide(nextDay);
     expect(d.kind === 'act' && d.tool).toBe('festival');
     expect(d.kind === 'act' && d.args).toEqual({ action: 'enter' });
+  });
+});
+
+describe('T-M6-15 死锁自主解（为未解锁收集包过早预留）', () => {
+  /** 真机春20 现场：全部鱼为锁着的鱼缸包预留，背包 0 空位 */
+  const LOCKED_BAG = `${STATE_OK.replace('邮箱里有 7 封未读信件', '')}
+## 背包（序号: 物品）
+0: 斧头
+5: 沙丁鱼 铱星 [可食用 +23体力]【留着：社区中心“海鱼”要交】
+6: 太阳鱼 金星 [可食用 +23体力]【留着：社区中心“河鱼”要交】
+7: 石头 x14【留着：社区中心“建筑”要交】
+背包空位：0 个（共 12 格）`;
+  const BUNDLE_SNAPSHOT = 'OK bundle_info: 成功：【工艺室(Crafts Room)】   春季采集：已交 1/4，可选材料：野山葵 x1、韭葱 x1、蒲公英 x1   构造（建筑）：石头 x99';
+
+  it('pickPrematureReservedEdible：包名不在已解锁清单 → 过早预留；可食用优先，材料类兜底', () => {
+    // 海鱼/河鱼没出现在 bundle_info（鱼缸未解锁）→ 沙丁鱼是过早预留；建筑在清单里 → 石头不动
+    expect(pickPrematureReservedEdible(LOCKED_BAG, BUNDLE_SNAPSHOT)).toBe('沙丁鱼');
+    // 鱼缸已解锁（快照里提到海鱼）→ 沙丁鱼的预留是合理的 → 只剩河鱼可撤
+    expect(pickPrematureReservedEdible(LOCKED_BAG, `${BUNDLE_SNAPSHOT} 鱼缸（Fish Tank）：海鱼 沙丁鱼`)).toBe('太阳鱼');
+    // 全部预留都合理 → 不动
+    expect(pickPrematureReservedEdible(LOCKED_BAG, '【工艺室】建筑 石头 【鱼缸】海鱼 沙丁鱼 河鱼 太阳鱼')).toBeNull();
+  });
+
+  it('救援阶梯 step 11：死锁 + 快照在手 → 撤一件过早预留（每天一次）并重进 eat 档', async () => {
+    type Internals = {
+      bundleSnapshot: string; unreserveTried: boolean; rescueStage: number; nextRescueStage: number | null;
+      cooledTools: Set<string>; dayInfoDone: Set<string>;
+    };
+    const receipts: string[] = [
+      'FAILED tidy_backpack: 失败：农场上没有箱子',
+      'FAILED store_items: 失败：这里没有箱子',
+      'FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料',
+      BUNDLE_SNAPSHOT,
+      'FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料',
+    ];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const s = parseGameState(LOCKED_BAG);
+    const internals = planner as unknown as Internals;
+    // 前置：查过缺料、donate 已冷却、阶梯停在 10 档之后
+    await planner.decide(s);
+    expect(internals.bundleSnapshot).toContain('工艺室'); // decide 捕获了 bundle_info 快照
+    internals.cooledTools = new Set(['donate_bundles']);
+    internals.dayInfoDone.add('bundle_info');
+    internals.rescueStage = 11;
+    const unreserve = await planner.decide(s);
+    expect(unreserve.kind === 'act' && unreserve.tool).toBe('reserve_items');
+    expect(unreserve.kind === 'act' && unreserve.args).toEqual({ remove: '沙丁鱼' });
+    expect(internals.unreserveTried).toBe(true);
+    expect(internals.rescueStage).toBe(2); // 撤完重进 eat 档
+    // BWF 撤预留即时生效：下一状态沙丁鱼标签消失（当天不再二次撤预留）→ eat 档把它吃掉腾位
+    const untagged = parseGameState(LOCKED_BAG.replace('【留着：社区中心“海鱼”要交】', ''));
+    receipts.push('OK reserve_items: 成功：不再留着 沙丁鱼');
+    const eat = await planner.decide(untagged);
+    expect(eat.kind === 'act' && eat.tool).toBe('eat');
+    expect(eat.kind === 'act' && eat.args).toEqual({ item: '沙丁鱼' });
   });
 });

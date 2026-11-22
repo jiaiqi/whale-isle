@@ -337,7 +337,9 @@ ${memoryContext}
       } catch {
         /* 记忆失败不影响主链路 */
       }
-      recentReceipts.push(event.status + ' ' + event.tool + ': ' + (event.summary ?? '').slice(0, 80));
+      // bundle_info 是收集包全量清单（T-M6-15 撤预留判据靠它），80 字会把「已解锁包名」截掉 → 放宽到 400
+      const slice = event.tool === 'bundle_info' ? 400 : 80;
+      recentReceipts.push(event.status + ' ' + event.tool + ': ' + (event.summary ?? '').slice(0, slice));
       if (recentReceipts.length > 8) recentReceipts = recentReceipts.slice(-8);
       if (llmPlanner) (llmPlanner as unknown as { deps: { recentReceipts: string[] } }).deps.recentReceipts = recentReceipts;
     }

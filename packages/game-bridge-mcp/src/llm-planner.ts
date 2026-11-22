@@ -19,6 +19,7 @@ import {
   countWood,
   findFreeTile,
   hasChestItem,
+  inventoryTexts,
   isRaining,
   listEdibleItems,
   listShippableItems,
@@ -80,9 +81,9 @@ ${guidesHint}
 1. 有界面打开时先处理界面（dialogue/close_menu/buy/skip_event）；剧情选择题必须带 choice；起名用 set_name。
 2. 优先批量工具：water_crops / harvest_crops / till_area / plant_seeds / clear_area / forage，比一格一格高效。下雨天作物自动喝饱，别浇水，把时间花在钓鱼/采集上。
 3. 体力低于 20 不要干重活：吃东西或回家睡觉；23:00 前必须回家准备 sleep，绝不拖到凌晨。
-4. 背包里标了【留着：…】的是任务/收集包材料：别吃、别卖、别扔；满包优先 tidy/ship，其次 place_item 家具、craft Chest、donate_bundles。
+4. 背包里标了【留着：…】的是任务/收集包材料：别吃、别卖、别扔；满包优先 tidy/ship，其次 place_item 家具、craft Chest、donate_bundles。reserve_items 只为**已解锁**的收集包预留（bundle_info 里看得到的才算解锁），别为锁着的包提前囤货把背包堵死。
 5. 工具失败时读原因并换做法，不要原样重复同一个失败动作超过两次；「最近回执」就是你的短期记忆。
-6. 用 update_notes 记录长期目标与关键信息（农田坐标、商店时间、谁喜欢什么礼物）；笔记会一直出现在状态最前面，不用抄背包/箱子内容。
+6. 用 update_notes 记录长期目标与关键信息（农田坐标、商店时间、谁喜欢什么礼物）；笔记会一直出现在状态最前面，不用抄背包/箱子内容。笔记过期了要及时重写（比如日期、节日提示已经过了就更新，别让旧计划误导自己）。
 7. 身边有怪且会挨打时先 fight 清怪；生命低于 30% 且没回血食物先离开这张地图。
 8. 农场要有规划：作物集中成片、新田挨着老田、机器/箱子集中放不堵门口；钱要花出去——按攻略优先买当季种子/背包/工具升级，留约 1000g 备用。
 9. 攻略是参考不是命令；结合当前金钱、体力、天气、季节做取舍，优先能提高长期收入的行动。状态里出现节日提示时按它说的做（窗口内 festival enter → greet → start），节日当天镇上商店关门别白跑；今天是某位村民生日时优先安排送他喜欢的礼物（好感 8 倍）。
@@ -200,6 +201,25 @@ function failedItemOf(receipt: string): string {
   return cleanItemName(m?.[1] ?? '');
 }
 
+/**
+ * T-M6-15 死锁自主解（真机春20 实证）：挑一件「为未解锁收集包预留的可食用物」。
+ * 判据：物品带【留着：…“X”…】预留标签，但 bundle_info 快照（已解锁收集包清单）里完全没提到 X
+ * → 这个包还锁着、囤它纯属过早；只挑可食用的（吃完就腾位），石头/木材这类材料类预留不碰。
+ */
+export function pickPrematureReservedEdible(raw: string, bundleSnapshot: string): string | null {
+  let fallback: string | null = null;
+  for (const text of inventoryTexts(raw)) {
+    const tag = /【留着：[^】]*[“"]([^”"]+)[”"][^】]*】/.exec(text);
+    if (tag?.[1] === undefined) continue;
+    if (bundleSnapshot.includes(tag[1])) continue; // 包在已解锁清单里 → 预留合理，别动
+    const name = cleanItemName(text);
+    if (name === '') continue;
+    if (/\[可食用/.test(text)) return name;
+    if (fallback === null) fallback = name;
+  }
+  return fallback;
+}
+
 export class LlmPlanner implements Planner {
   readonly name = 'llm-xiaojing';
   private readonly fallback = new RulePlanner();
@@ -235,6 +255,11 @@ export class LlmPlanner implements Planner {
   private festivalEnterTried = false;
   private festivalGreeted = false;
   private festivalStartTried = false;
+  /** T-M6-15 死锁自主解：bundle_info 快照（回执缓冲区会被后续失败挤掉，查到就存下来）与撤预留一次性标记 */
+  private bundleSnapshot = '';
+  private unreserveTried = false;
+  /** rescueAction 需要跳出默认「阶段=当前步」时的覆盖值（撤预留后重进 eat 档） */
+  private nextRescueStage: number | null = null;
 
   constructor(private readonly deps: LlmPlannerDeps) {}
 
@@ -261,6 +286,16 @@ export class LlmPlanner implements Planner {
       this.festivalEnterTried = false;
       this.festivalGreeted = false;
       this.festivalStartTried = false;
+      this.unreserveTried = false;
+    }
+    // bundle_info 快照捕获（T-M6-15）：回执缓冲区只有 8 条，快照行可能停在缓冲区中部——
+    // 从尾部往回找最近一条 OK bundle_info 存全文（幂等，重复捕获同值无害）
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const receipt = recent[i] ?? '';
+      if (/^OK\s+bundle_info/i.test(receipt)) {
+        this.bundleSnapshot = receipt;
+        break;
+      }
     }
     const failedTool = /^FAILED\s+([^\s:：]+)/.exec(recent.at(-1) ?? '')?.[1] ?? '';
     if (this.lastIssued !== null && failedTool !== '' && failedTool === this.lastIssued) {
@@ -448,10 +483,11 @@ export class LlmPlanner implements Planner {
         }
       }
       const start = noChest ? Math.max(1, this.rescueStage) : this.rescueStage;
-      for (let step = start; step <= 10; step++) {
+      for (let step = start; step <= 11; step++) {
         const decision = this.rescueAction(step, state);
         if (decision) {
-          this.rescueStage = step;
+          this.rescueStage = this.nextRescueStage ?? step;
+          this.nextRescueStage = null;
           return decision;
         }
       }
@@ -605,7 +641,7 @@ export class LlmPlanner implements Planner {
         if (item === null) return null;
         return { kind: 'act', tool: 'trash_item', args: { item, force: true }, intent: `家具摆不下，只好忍痛丢掉${item}换一格了` };
       }
-      default: {
+      case 10: {
         // 10：只剩任务/收集包材料 → 去社区中心捐掉（【留着】的正确出路，腾出多格）。
         // BWF 拒捐时会提示「用 bundle_info 看看缺什么」：按提示查一次（当天一次），失败预算耗尽即冷却不再空转
         if (!/【留着[^】]*】/.test(state.raw)) return null;
@@ -622,6 +658,24 @@ export class LlmPlanner implements Planner {
         }
         return { kind: 'act', tool: 'donate_bundles', args: {}, intent: '背包只剩收集包材料了，去社区中心捐掉换空位' };
       }
+      case 11: {
+        // T-M6-15 死锁自主解（真机春20：为未解锁的鱼缸包把全部鱼都预留了，背包 0 空位无物可腾，
+        // 只能等主人）：bundle_info 快照显示对应包还没解锁 → 撤掉这件「过早预留」（每天最多一件），
+        // 下一轮救援从 eat 档重进，把它吃掉腾位。只撤可食用的；材料类（石头/木材等）预留可能是合理的，不碰。
+        if (this.unreserveTried || this.bundleSnapshot === '' || !/【留着[^】]*】/.test(state.raw)) return null;
+        const item = pickPrematureReservedEdible(state.raw, this.bundleSnapshot);
+        if (item === null) return null;
+        this.unreserveTried = true;
+        this.nextRescueStage = 2; // 撤预留后重进 eat 档：这件东西下一轮就能吃
+        return {
+          kind: 'act',
+          tool: 'reserve_items',
+          args: { remove: item },
+          intent: `收集包还没解锁，先撤掉${item}的预留腾位置（回头再补就是）`,
+        };
+      }
+      default:
+        return null;
     }
   }
 
