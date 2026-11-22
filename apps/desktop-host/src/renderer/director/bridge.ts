@@ -108,6 +108,9 @@ export interface DirectorBridge {
   memoryDiary(day?: string): Promise<{ ok: boolean; day?: string; text?: string; error?: string }>;
   memoryStats(): Promise<{ nodes: number; edges: number; lastDay: string | null }>;
   memoryWipe(): Promise<{ ok: boolean }>;
+  memoryGraph(): Promise<import('@workbench/shared-protocol').MemoryGraphView>;
+  memoryPin(id: string, pinned: boolean): Promise<{ ok: boolean }>;
+  webuiInfo(): Promise<{ ok: boolean; port: number; token: string }>;
   // 星露谷 Mod 管理（T-M6-06）
   modsState(): Promise<ModsStateView>;
   modsSetDir(dir: string): Promise<ModsOpView>;

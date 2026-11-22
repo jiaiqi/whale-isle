@@ -488,3 +488,39 @@ export const StardewModsConfigSchema = z.object({
   modsDir: z.string().default(''),
 });
 export type StardewModsConfig = z.infer<typeof StardewModsConfigSchema>;
+
+// ───────────────────────── 记忆图谱视图（T-M6-07 UI v4 记忆页） ─────────────────────────
+/** 记忆节点视图（渲染层/Dexie 只读镜像；正文已消毒） */
+export const MemoryNodeViewSchema = z.object({
+  id: z.string(),
+  nodeType: z.enum(['event', 'entity', 'concept', 'summary']),
+  text: z.string(),
+  importance: z.number().min(0).max(1),
+  pinned: z.boolean(),
+  createdAt: z.number(),
+  /** 游戏日键（event 来自 meta.day；summary 同） */
+  day: z.string().default(''),
+  instanceCount: z.number().int().min(1).default(1),
+});
+export type MemoryNodeView = z.infer<typeof MemoryNodeViewSchema>;
+
+export const MemoryEdgeViewSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  kind: z.enum(['temporal', 'causal', 'semantic', 'entity', 'instance']),
+  weight: z.number().min(0).max(1),
+});
+export type MemoryEdgeView = z.infer<typeof MemoryEdgeViewSchema>;
+
+/** 图谱快照（节点上限 200，按重要度+新近排序；days = 日记可选日键） */
+export const MemoryGraphViewSchema = z.object({
+  nodes: z.array(MemoryNodeViewSchema),
+  edges: z.array(MemoryEdgeViewSchema),
+  days: z.array(z.string()),
+  stats: z.object({
+    nodes: z.number().int().min(0),
+    edges: z.number().int().min(0),
+    lastDay: z.string().nullable(),
+  }),
+});
+export type MemoryGraphView = z.infer<typeof MemoryGraphViewSchema>;

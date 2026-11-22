@@ -72,7 +72,7 @@ const DEFAULT_SVC: SvcParams = {
 
 type CreateMode = 'cloud_voice_design' | 'local_audio_slice' | 'local_weight_import';
 
-export function VoiceStudioPanel(): React.JSX.Element {
+export function VoiceStudioPanel({ bare = false }: { bare?: boolean } = {}): React.JSX.Element {
   const [emotions, setEmotions] = useState<Record<EmotionTag, EmotionParams>>({ ...DEFAULT_PARAMS });
   const [svc, setSvc] = useState<SvcParams>({ ...DEFAULT_SVC });
   const [activeTag, setActiveTag] = useState<EmotionTag>('sweet_normal');
@@ -149,12 +149,12 @@ export function VoiceStudioPanel(): React.JSX.Element {
 
   const auditionTts = async (): Promise<void> => {
     const r = await callWorker('/api/voice-studio/audition-tts', { ...current });
-    setNotice(r.ok ? '🔊 试听渲染完成（参数已实时应用）' : `⚠ ${r.error}`);
+    setNotice(r.ok ? '试听渲染完成（参数已实时应用）' : `⚠ ${r.error}`);
   };
 
   const auditionSvc = async (): Promise<void> => {
     const r = await callWorker('/api/voice-studio/audition-svc', svc);
-    setNotice(r.ok ? '🎵 RVC 唱歌试听完成（TTS 已自动挂起/恢复）' : `⚠ ${r.error}`);
+    setNotice(r.ok ? 'RVC 唱歌试听完成（TTS 已自动挂起/恢复）' : `⚠ ${r.error}`);
   };
 
   const savePack = async (): Promise<void> => {
@@ -182,7 +182,7 @@ export function VoiceStudioPanel(): React.JSX.Element {
   return (
     <div className="mx-auto max-w-6xl px-6 py-5">
       {/* 顶部：音色库 + 新建向导 */}
-      <header className="mb-4 flex items-end justify-between">
+      {!bare && (<header className="mb-4 flex items-end justify-between">
         <div>
           <h1 className="text-xl font-semibold">声音工坊</h1>
           <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
@@ -202,7 +202,7 @@ export function VoiceStudioPanel(): React.JSX.Element {
             <Plus size={13} /> 生成/提取新音色
           </button>
         </div>
-      </header>
+      </header>)}
 
       {notice && (
         <div className="card mb-4 px-4 py-2.5 text-xs" style={{ color: notice.startsWith('✅') || notice.startsWith('🔊') || notice.startsWith('🎵') ? 'var(--green)' : 'var(--amber)' }}>

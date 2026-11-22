@@ -87,6 +87,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   memoryStats: (): Promise<{ nodes: number; edges: number; lastDay: string | null }> =>
     ipcRenderer.invoke('memory:stats'),
   memoryWipe: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('memory:wipe'),
+  memoryGraph: (): Promise<unknown> => ipcRenderer.invoke('memory:graph'),
+  memoryPin: (id: string, pinned: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('memory:pin', id, pinned),
+  webuiInfo: (): Promise<{ ok: boolean; port: number; token: string }> => ipcRenderer.invoke('webui:info'),
 });
 
 contextBridge.exposeInMainWorld('petStage', {

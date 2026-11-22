@@ -18,6 +18,19 @@
 | pydantic（uv 临时环境） | 2.x | MIT | Python 侧契约模型基类 | protocol_models.py 依赖 | ✅ 已登记 |
 | datamodel-code-generator（uv） | latest | MIT | 生成工具 | JSON Schema → Pydantic | ✅ 已登记 |
 | mypy / ruff / pytest（uv） | latest | MIT/MIT-类/PSF-类 | 生成工具链 | Python 类型/规范/测试 | ✅ 已登记 |
+| react / react-dom | 19.3 | MIT | 依赖 | 渲染层 | ✅ 已登记 |
+| lucide-react | 1.77 | ISC | 依赖 | 全站 SVG 图标（零 emoji） | ✅ 已登记 |
+| tailwindcss / @tailwindcss/cli | 4.3 | MIT | devDependencies | v4 utility 编译 | ✅ 已登记 |
+| electron | 38.8 | MIT | devDependencies | 桌面宿主 | ✅ 已登记 |
+| esbuild | 0.25 | MIT | devDependencies | main/preload/renderer 打包 | ✅ 已登记 |
+| playwright-core | 1.65 | Apache-2.0 | devDependencies | Electron E2E | ✅ 已登记 |
+| ws | 8.23 | MIT | 依赖 | WebUI HTTP/WS 回环网关 | ✅ 已登记 |
+| better-sqlite3 | 12.x | MIT | 依赖（local-store） | 常客账本/Token 流水/点歌缓存 | ✅ 已登记 |
+| fastapi / uvicorn | 0.115 / 0.34 | MIT / BSD-3-Clause | 依赖（audio-ai-worker） | 本地音频 Sidecar | ✅ 已登记 |
+| cmdk | 1.1.1 | MIT | 依赖（desktop-host UI） | ⌘K 命令面板（含 Radix Dialog 传递依赖，MIT） | ✅ 已登记 |
+| sonner | 2.0.8 | MIT | 依赖（desktop-host UI） | Toast 通知 | ✅ 已登记 |
+| react-markdown + remark-gfm | 10.1 / 4.0 | MIT | 依赖（desktop-host UI） | 聊天 Markdown/GFM 渲染 | ✅ 已登记 |
+| react-force-graph-2d | 1.29.2 | MIT | 依赖（desktop-host UI） | 记忆图谱力导向渲染（force-graph/d3-force 传递依赖，MIT） | ✅ 已登记 |
 
 > 后续引入的每一个新依赖（Electron、React、Dexie、better-sqlite3、dependency-cruiser、FastAPI、Demucs、RVC 等）**必须在本表追加一行**。
 

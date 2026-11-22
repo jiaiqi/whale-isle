@@ -63,6 +63,35 @@ export function createMemoryHost(userDataDir: string): MemoryHost {
     edges: store.allEdges().length,
     lastDay,
   }));
+  // 记忆图谱（T-M6-07 UI v4 记忆页）：节点上限 200（钉住 > 重要度 > 新近），边只保留两端可见
+  ipcMain.handle('memory:graph', () => {
+    const all = store.allNodes();
+    const picked = [...all]
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.importance - a.importance || b.createdAt - a.createdAt)
+      .slice(0, 200);
+    const ids = new Set(picked.map((n) => n.id));
+    const edges = store.allEdges().filter((e) => ids.has(e.from) && ids.has(e.to));
+    const days = [...new Set(all.filter((n) => n.nodeType === 'event' && n.meta?.['day']).map((n) => String(n.meta?.['day'])))].sort();
+    return {
+      nodes: picked.map((n) => ({
+        id: n.id,
+        nodeType: n.nodeType,
+        text: n.text,
+        importance: n.importance,
+        pinned: n.pinned,
+        createdAt: n.createdAt,
+        day: String(n.meta?.['day'] ?? ''),
+        instanceCount: n.instanceCount,
+      })),
+      edges,
+      days,
+      stats: { nodes: store.size, edges: store.allEdges().length, lastDay: lastDay ?? days[days.length - 1] ?? null },
+    };
+  });
+  ipcMain.handle('memory:pin', (_e, id: string, pinned: boolean) => {
+    store.pin(id, pinned === true);
+    return { ok: true };
+  });
   ipcMain.handle('memory:wipe', () => {
     store.wipe();
     lastDay = null;

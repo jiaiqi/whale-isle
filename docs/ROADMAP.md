@@ -3,9 +3,8 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M2-03` 点歌台 SVC（`T-M5-18` 背包容量自愈 · `T-M6-06` 星露谷 Mod 管理已于 2026-11-22 DONE；verify:gate 497 tests 全绿）**
-> `T-M5-18` 决策声明：采用 BWF `GameActions.Tidy.cs` 的「tidy 依赖农场箱子 → 无箱子必须换路」事实与 feiyuos-stardew-ai-farmer 的「白名单卖货 + 满包禁止 craft」教训，做成确定性救援阶梯（tidy→ship→eat→trash→store，失败才降级）；不采用「无限重试 tidy」与「满包 craft Chest（合成物会掉地上）」；回退方案：阶梯全部失败时交规则日程 + 看门狗。
-> `T-M6-06` 决策声明：采用 SMAPI 目录约定（每 mod 一文件夹 + manifest.json；禁用 = manifest.json 改名 `.disabled`）做只读扫描/启停/目录内复制安装，路径写入 userData；不引入第三方 Mod 管理器依赖；回退：仅提供打开 Mods 目录的只读路径。
+> **当前激活工单：`T-M2-03` 点歌台 SVC（`T-M5-18`/`T-M6-06`/`T-M6-07` 已于 2026-11-22 DONE；verify:gate 497 tests 全绿）**
+> `T-M6-07` 决策声明（UI v4 还原）：采用 v4「曜石·演进版」tokens（与 `design/tokens.css` 同步）与开源依赖——`cmdk`（⌘K 命令面板）、`sonner`（toast）、`react-markdown`+`remark-gfm`（聊天 Markdown）、`react-force-graph-2d`（记忆力导向图）；**不手写**命令面板键盘导航 / Markdown 解析 / 力导向布局，也不引入重型 UI 框架（Radix 仅随 cmdk 传递）；仅新增只读 `memory:graph`/`memory:pin` IPC，不改既有业务语义；回退方案：新页面可独立降级为 seg-tabs 静态列表，Shell 主题/字号全部走 CSS 变量。
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
@@ -85,3 +84,4 @@
 | **`T-M6-03`** | P1 | **dsh 插件兼容层 plugin-bridge**：Cordis 插件树/defineTool/typed events → 本工作台工具/事件模型适配器 + 插件装载器（host/client/shared 三层约定）+ dsh 插件兼容测试夹具 | deepseek-harness、dsh-fish、dsh-plugin-yushe | 夹具断言：一个样例 dsh 插件原样装载成功且 defineTool 注册的工具经总线可调；禁用/崩溃隔离 | **DONE**（2026-11-22：33 it，本包四维 100%） |
 | **`T-M6-04`** | P1 | **WebUI 形态**：bridge 抽象双实现（Electron IPC ↔ HTTP/WS）+ 轻量本地 server（总线/静态资源/vault 代理）+ 远程审批（桌面开线程、浏览器批审批）+ Vite 迁移评估 | t3code（desktop/server/web 多端）、magpie（本地网关） | 同一 renderer 组件在两种宿主下渲染断言；远程审批 E2E（WebUI 拒绝→桌面动作不执行） | **DONE**（2026-11-22：WebUI 18780 回环+token、远程审批/指令真机通；React 同构渲染留后续） |
 | **`T-M6-06`** | P1 | **星露谷 Mod 管理（2026-11-22 用户指令）**：契约 `StardewModInfo/StardewModsSnapshot/StardewModToggleRequest/StardewModsOpResult/StardewModsConfig`（33 域跨语言重生成）+ `packages/stardew-mods`（manifest 注释/尾逗号容错解析、目录扫描、`.disabled` 启停、解压目录安装、平台默认 Mods 路径探测）+ 主进程 mods-host（userData 配置、smapi 版本、打开目录/安装 zip via 系统解压）+ Shell「Mod 管理」页（列表/启停开关/安装/打开目录） | SMAPI 文档（manifest 约定） | 单测：注释 manifest/损坏 manifest/启停幂等/路径穿越拒绝/重名 -2/嵌套安装；真机：列出实际 Mods 目录 + 停用再恢复 BWF 不破坏启动 | **DONE**（2026-11-22：48 it；真机 3 Mod 扫描 + SaveBackup 启停往返） |
+| **`T-M6-07`** | P0 | **工作台 UI v4 还原（2026-11-22 用户指令：按最新设计稿更新，优先开源库）**：v4 tokens/壳层同步；分组插件侧栏（badge/运行点/饭碗进度+投喂）+ 顶栏 ⌘K 命令面板/主题切换/三开关 + 聊天 304px aside（get_state/时间线/P0/上下文）；新增**记忆图谱与日记**（真实节点/边/检索/钉住/日记）、**OBS 挂件**（图层开关+预演）、**插件与权限**（启停过滤侧栏+Policy/扩展点）；声音工坊合并音色库、桌宠舞台合并动作库（seg-tabs）；星露谷三栏（当前动作/回执过滤/指标）；聊天 Markdown 与 slash 浮层；全站去彩色 emoji | `design/` v4、cmdk、sonner、react-markdown、react-force-graph-2d | 真机 10 页截图；⌘K 跳转、主题持久、插件关停隐藏入口、外部启动自驾按钮同步、Markdown 列表、记忆 92 节点/202 边真实渲染；`pnpm verify:gate` 4 过（497 tests） | **DONE**（2026-11-22） |

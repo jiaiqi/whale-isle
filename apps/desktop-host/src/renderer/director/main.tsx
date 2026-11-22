@@ -8,7 +8,7 @@ import { App } from './App';
 const DINING_PROFILES: DiningProfilePreset[] = [
   {
     profileId: 'BUDGET_SLACKING',
-    displayName: '🍚 省饭摸鱼档',
+    displayName: '省饭摸鱼档',
     roleBindings: {
       MAIN_PERSONA_BRAIN: 'deepseek-official/deepseek-chat',
       STARDEW_GAME_PLANNER: 'local-ollama/qwen2.5:7b',
@@ -21,7 +21,7 @@ const DINING_PROFILES: DiningProfilePreset[] = [
   },
   {
     profileId: 'DELUXE_LIVESTREAM',
-    displayName: '🍱 豪华直播档',
+    displayName: '豪华直播档',
     roleBindings: {
       MAIN_PERSONA_BRAIN: 'deepseek-official/deepseek-reasoner',
       STARDEW_GAME_PLANNER: 'deepseek-official/deepseek-chat',
@@ -34,7 +34,7 @@ const DINING_PROFILES: DiningProfilePreset[] = [
   },
   {
     profileId: 'OFFLINE_SURVIVAL',
-    displayName: '🛡️ 断网求生档',
+    displayName: '断网求生档',
     roleBindings: {
       MAIN_PERSONA_BRAIN: 'local-ollama/qwen2.5:14b',
       STARDEW_GAME_PLANNER: 'local-ollama/qwen2.5:7b',
@@ -59,6 +59,10 @@ const SLOT_LABELS: Record<WorkbenchRoleSlot, string> = {
 const STORE_KEY = 'activeDiningProfile';
 const db = new DirectorDexie();
 const store = createDirectorStore(db);
+
+// v4 主题：localStorage 记忆（默认深色），首帧前落类避免闪烁
+const savedTheme = localStorage.getItem('wb-theme');
+document.documentElement.classList.toggle('dark', savedTheme !== 'light');
 
 const root = createRoot(document.getElementById('director-root') as HTMLElement);
 root.render(<App profiles={DINING_PROFILES} slotLabels={SLOT_LABELS} providers={BUILTIN_PROVIDER_PRESETS} store={store} storeKey={STORE_KEY} />);

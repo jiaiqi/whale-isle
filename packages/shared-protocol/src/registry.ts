@@ -31,6 +31,9 @@ import {
   StardewModToggleRequestSchema,
   StardewModsOpResultSchema,
   StardewModsConfigSchema,
+  MemoryNodeViewSchema,
+  MemoryEdgeViewSchema,
+  MemoryGraphViewSchema,
   StickyRoutingGroupSchema,
   WorkbenchRoleSlotSchema,
 } from './index';
@@ -78,4 +81,7 @@ export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
   StardewModToggleRequest: StardewModToggleRequestSchema,
   StardewModsOpResult: StardewModsOpResultSchema,
   StardewModsConfig: StardewModsConfigSchema,
+  MemoryNodeView: MemoryNodeViewSchema,
+  MemoryEdgeView: MemoryEdgeViewSchema,
+  MemoryGraphView: MemoryGraphViewSchema,
 };

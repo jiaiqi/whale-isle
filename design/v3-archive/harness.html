@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>Harness · Agents — 大肥鱼工作台设计稿 v3</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--font-ui); background:var(--bg); color:var(--text-1); font-size:13.5px; min-height:100vh; display:grid; grid-template-columns:236px 1fr; grid-template-rows:46px 1fr; grid-template-areas:"side top" "side main"; overflow:hidden; }
+  .side, .top, .brand, .nav-sec, .nav-item, .side-foot, .icon-btn, .new-thread, .conv-list, .conv { /* 继承 shell 侧栏样式 */ }
+  .side { grid-area:side; border-right:1px solid var(--stroke); display:flex; flex-direction:column; }
+  .brand { display:flex; align-items:center; gap:10px; padding:14px 16px 10px; }
+  .brand .t { font-weight:650; font-size:13.5px; }
+  .brand svg.whale { width:22px; height:22px; }
+  .nav-sec { padding:10px 16px 5px; font-size:10px; letter-spacing:1.4px; color:var(--text-3); font-weight:650; }
+  .nav-item { display:flex; align-items:center; gap:9px; margin:0 8px; padding:7px 9px; border-radius:var(--r-md); color:var(--text-2); font-size:12.5px; cursor:pointer; transition:all var(--dur-hover) var(--ease-out); }
+  .nav-item:hover { background:var(--surface-2); color:var(--text-1); }
+  .nav-item.on { background:var(--green-dim); color:var(--green); }
+  .nav-item .off-dot { margin-left:auto; width:6px; height:6px; border-radius:50%; background:var(--text-3); opacity:.4; }
+  .side-foot { margin-top:auto; border-top:1px solid var(--stroke); padding:11px 14px; font-size:11.5px; color:var(--text-2); }
+  .foot-row { display:flex; justify-content:space-between; padding:3px 0; }
+
+  .top { grid-area:top; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--stroke); }
+  .crumb { font-size:12.5px; color:var(--text-2); display:flex; align-items:center; gap:6px; }
+  .crumb b { color:var(--text-1); font-weight:600; }
+  .top .sp { flex:1; }
+  .icon-btn { width:30px; height:30px; display:grid; place-items:center; border-radius:var(--r-md); color:var(--text-2); background:none; border:none; }
+  .icon-btn:hover { background:var(--surface-2); }
+
+  .main { grid-area:main; overflow-y:auto; padding:20px 26px 40px; }
+  .layout { display:grid; grid-template-columns:300px 1fr; gap:16px; max-width:1240px; margin:0 auto; align-items:start; }
+
+  .sec { font-size:10px; letter-spacing:1.4px; color:var(--text-3); font-weight:650; margin:4px 0 8px; display:flex; align-items:center; }
+  .sec .act { margin-left:auto; font-size:11px; color:var(--green); cursor:pointer; display:flex; align-items:center; gap:4px; letter-spacing:0; font-weight:600; }
+
+  .prov { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-lg); border:1px solid var(--stroke); background:var(--surface); margin-bottom:8px; cursor:pointer; transition:all var(--dur-hover) var(--ease-out); }
+  .prov:hover { border-color:var(--stroke-2); background:var(--surface-2); }
+  .prov.on { border-color:var(--green-line); background:var(--green-dim); }
+  .prov .logo { width:30px; height:30px; border-radius:var(--r-md); display:grid; place-items:center; background:var(--inset); border:1px solid var(--stroke); }
+  .prov .nm { font-size:12.5px; font-weight:600; }
+  .prov .ds { font-size:10.5px; color:var(--text-3); margin-top:2px; font-family:var(--font-mono); }
+  .prov .st { margin-left:auto; }
+  .acp { font-size:9.5px; padding:2px 7px; border-radius:4px; background:var(--blue-dim); color:var(--blue); font-family:var(--font-mono); border:1px solid var(--blue-line); }
+
+  /* 线程区 */
+  .thread-head { display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--stroke); }
+  .thread-head .t { font-size:13.5px; font-weight:650; }
+  .thread-head .path { font-size:11px; color:var(--text-3); font-family:var(--font-mono); display:flex; align-items:center; gap:5px; }
+  .thread-body { padding:16px 18px; }
+  .ev { margin-bottom:14px; }
+  .ev-h { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-3); font-family:var(--font-mono); margin-bottom:5px; }
+  .ev-who { font-size:11.5px; font-weight:650; color:var(--text-2); }
+  .ev .bub { background:var(--surface-2); border:1px solid var(--stroke); border-radius:var(--r-lg); padding:10px 13px; font-size:12.5px; line-height:1.75; }
+  .ev .bub.agent { background:var(--green-dim); border-color:var(--green-line); }
+  .handoff { display:flex; align-items:center; gap:9px; border:1px dashed var(--blue-line); background:var(--blue-dim); border-radius:var(--r-lg); padding:9px 13px; font-size:11.5px; color:var(--blue); }
+  .toolcall { border:1px solid var(--stroke); border-radius:var(--r-lg); background:var(--inset); overflow:hidden; margin:8px 0; }
+  .toolcall-h { display:flex; align-items:center; gap:8px; padding:8px 12px; font-family:var(--font-mono); font-size:11.5px; border-bottom:1px solid var(--stroke); }
+  .toolcall-b { padding:8px 12px; font-family:var(--font-mono); font-size:11px; color:var(--text-2); line-height:1.7; }
+  .diff { font-family:var(--font-mono); font-size:11px; line-height:1.6; padding:8px 12px; }
+  .diff .add { color:var(--green); background:var(--green-dim); display:block; padding:0 6px; border-radius:3px; }
+  .diff .del { color:var(--red); background:var(--red-dim); display:block; padding:0 6px; border-radius:3px; }
+  .approve-inline { border:1px solid var(--amber-line); background:var(--amber-dim); border-radius:var(--r-lg); padding:10px 13px; margin:8px 0; }
+  .approve-inline .t { font-size:12px; font-weight:650; color:var(--amber); display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+  .approve-inline .c { font-family:var(--font-mono); font-size:11px; color:var(--text-2); margin-bottom:8px; }
+  .approve-inline .a { display:flex; gap:8px; }
+  .btn { padding:5px 12px; border-radius:var(--r-md); font-size:11.5px; font-weight:600; border:1px solid transparent; display:inline-flex; align-items:center; gap:5px; }
+  .btn-yes { background:var(--green-dim); color:var(--green); border-color:var(--green-line); }
+  .btn-no { background:var(--red-dim); color:var(--red); border-color:var(--red-line); }
+  .btn-any { background:var(--surface-2); color:var(--text-2); border-color:var(--stroke-2); }
+
+  /* 右侧用量列 */
+  .usage-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px dashed var(--stroke); font-size:11.5px; }
+  .usage-row:last-child { border:none; }
+  .usage-row .nm { color:var(--text-2); }
+  .usage-row .val { margin-left:auto; font-family:var(--font-mono); font-size:11px; font-weight:600; }
+  .usage-bar { height:4px; border-radius:999px; background:var(--inset); overflow:hidden; margin-top:4px; }
+  .usage-bar i { display:block; height:100%; border-radius:999px; }
+  .checkpoint { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-3); padding:5px 0; font-family:var(--font-mono); }
+  .checkpoint .dot { width:7px; height:7px; border-radius:50%; border:1.5px solid var(--green); }
+</style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <aside class="side">
+    <div class="brand"><svg class="whale" viewBox="0 0 24 24" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".25"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg><span class="t">大肥鱼工作台</span></div>
+    <div class="nav-sec">会话</div>
+    <div style="padding:0 8px">
+      <div class="nav-item"><i data-lucide="message-square" class="sm"></i>星露谷 · 自主游玩</div>
+      <div class="nav-item"><i data-lucide="radio-tower" class="sm"></i>直播间弹幕陪聊</div>
+    </div>
+    <div class="nav-sec">插件</div>
+    <div style="padding:0 8px">
+      <div class="nav-item"><i data-lucide="message-square" class="sm"></i>聊天 · 人格会话</div>
+      <div class="nav-item on"><i data-lucide="terminal" class="sm"></i>Harness · Agents</div>
+      <div class="nav-item"><i data-lucide="sprout" class="sm"></i>星露谷共玩</div>
+      <div class="nav-item"><i data-lucide="fish" class="sm"></i>桌宠 · 小鲸</div>
+      <div class="nav-item"><i data-lucide="radio-tower" class="sm"></i>直播中控<span class="off-dot"></span></div>
+      <div class="nav-item"><i data-lucide="music" class="sm"></i>点歌台<span class="off-dot"></span></div>
+      <div class="nav-item"><i data-lucide="brain" class="sm"></i>记忆图谱</div>
+      <div class="nav-item"><i data-lucide="puzzle" class="sm"></i>插件管理</div>
+    </div>
+    <div class="side-foot">
+      <div class="foot-row"><span>主题</span><span onclick="wbToggleTheme()" style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-3)"><i data-lucide="sun" class="sm" data-theme-icon></i>深色</span></div>
+      <div class="foot-row"><span>设置</span><span class="k" style="font-family:var(--font-mono);font-size:10px">⌘,</span></div>
+    </div>
+  </aside>
+
+  <header class="top">
+    <div class="crumb">Harness <i data-lucide="chevron-right" style="width:12px;height:12px"></i> <b>重构 auth 模块</b></div>
+    <div class="sp"></div>
+    <span class="tag pill-green">claude · 运行中</span>
+    <button class="icon-btn" onclick="wbToggleTheme()"><i data-lucide="sun" data-theme-icon></i></button>
+  </header>
+
+  <main class="main">
+    <div class="layout">
+      <!-- 左：Providers + 线程列表 -->
+      <div>
+        <div class="sec">Providers · ACP 实例<span class="act" onclick="void(0)"><i data-lucide="plus" class="sm" style="width:12px"></i>添加</span></div>
+        <div class="prov on">
+          <div class="logo"><i data-lucide="terminal" class="sm" style="color:var(--green)"></i></div>
+          <div><div class="nm">Claude Code</div><div class="ds">claude-agent-acp · v2 preview</div></div>
+          <span class="st tag pill-green">已连接</span>
+        </div>
+        <div class="prov">
+          <div class="logo"><i data-lucide="box" class="sm" style="color:var(--text-2)"></i></div>
+          <div><div class="nm">Codex</div><div class="ds">codex acp · local</div></div>
+          <span class="st tag pill">空闲</span>
+        </div>
+        <div class="prov">
+          <div class="logo"><i data-lucide="waves" class="sm" style="color:var(--blue)"></i></div>
+          <div><div class="nm">DeepSeek Harness</div><div class="ds">dsh --profile acp</div></div>
+          <span class="st acp">ACP</span>
+        </div>
+        <div class="prov">
+          <div class="logo"><i data-lucide="square-terminal" class="sm" style="color:var(--text-2)"></i></div>
+          <div><div class="nm">Cursor CLI</div><div class="ds">registry · 未登录</div></div>
+          <span class="st tag pill-amber">待登录</span>
+        </div>
+        <div style="font-size:10.5px;color:var(--text-3);line-height:1.7;margin:10px 2px">凭据由 agent 自管（我们不碰订阅）· 模型与 reasoning 选项来自 ACP 协商 · agent 崩溃自动重启</div>
+
+        <div class="sec" style="margin-top:18px">线程</div>
+        <div class="prov on" style="margin-bottom:6px"><i data-lucide="git-branch" class="sm" style="color:var(--green)"></i><div><div class="nm">重构 auth 模块</div><div class="ds">claude · 3 checkpoints</div></div><span class="st tag pill-amber">运行中</span></div>
+        <div class="prov" style="margin-bottom:6px"><i data-lucide="git-branch" class="sm"></i><div><div class="nm">修复 flaky 测试</div><div class="ds">codex · 已完成</div></div><span class="st tag pill-green">✓</span></div>
+        <div class="prov" style="margin-bottom:6px"><i data-lucide="git-branch" class="sm"></i><div><div class="nm">升级依赖到 React 19.2</div><div class="ds">dsh · 等待审批</div></div><span class="st tag pill-red">1 项待批</span></div>
+      </div>
+
+      <!-- 右：线程详情 + 用量 -->
+      <div>
+        <div class="card">
+          <div class="thread-head">
+            <i data-lucide="git-branch" style="color:var(--green)"></i>
+            <div>
+              <div class="t">重构 auth 模块</div>
+              <div class="path"><i data-lucide="folder" style="width:12px;height:12px"></i>~/Documents/vibe/ai-vtuber-workbench · branch feat/auth</div>
+            </div>
+            <span style="margin-left:auto" class="tag pill-green">claude-code · ACP v2</span>
+            <span class="tag pill">中途可切换 Codex</span>
+          </div>
+          <div class="thread-body">
+            <div class="ev">
+              <div class="ev-h"><span class="ev-who">主人</span><span>17:02</span></div>
+              <div class="bub">把 auth 模块里的明文密码比较改成 constant-time 比较，补上单元测试，不要动公开接口。</div>
+            </div>
+            <div class="ev">
+              <div class="ev-h"><span class="ev-who" style="color:var(--green)">Claude</span><span>17:02 · plan</span></div>
+              <div class="bub agent">计划：① 读 auth/compare.ts 现状 ② 引入 node:crypto timingSafeEqual ③ 补 3 组边界用例（空串/不等长/全等）④ 跑 pnpm test。预计 4 个文件，公开 API 不变。</div>
+            </div>
+            <div class="ev">
+              <div class="toolcall">
+                <div class="toolcall-h"><i data-lucide="file-code" class="sm"></i><span style="color:var(--green)">Edit</span><span style="color:var(--text-2)">packages/local-store/src/auth/compare.ts</span><span style="margin-left:auto" class="tag pill-green">applied</span></div>
+                <div class="diff">
+                  <span class="del">- if (password === stored) return true;</span>
+                  <span class="add">+ const a = Buffer.from(password); const b = Buffer.from(stored);</span>
+                  <span class="add">+ return a.length === b.length &amp;&amp; timingSafeEqual(a, b);</span>
+                </div>
+              </div>
+              <div class="handoff" style="margin-top:10px"><i data-lucide="arrow-right-left" class="sm"></i>任务委派：Claude 把「覆盖率报告生成」交给 <b>Codex</b>（中途换 agent · t3 式协作）<span class="tag pill" style="margin-left:auto">codex 已接手</span></div>
+            </div>
+            <div class="ev">
+              <div class="approve-inline">
+                <div class="t"><i data-lucide="shield-alert" class="sm"></i>Claude 请求执行 pnpm install（新增依赖 crypto@2）</div>
+                <div class="c">$ pnpm install --save node-crypto-ext · 影响 lockfile ±2</div>
+                <div class="a">
+                  <button class="btn btn-yes"><i data-lucide="check" class="sm"></i>批准 <span class="k" style="border:1px solid var(--stroke-2);border-radius:3px;padding:0 4px;font-size:9.5px">Y</span></button>
+                  <button class="btn btn-no"><i data-lucide="x" class="sm"></i>拒绝 <span class="k" style="border:1px solid var(--stroke-2);border-radius:3px;padding:0 4px;font-size:9.5px">N</span></button>
+                  <button class="btn btn-any">本类全过 <span class="k" style="border:1px solid var(--stroke-2);border-radius:3px;padding:0 4px;font-size:9.5px">A</span></button>
+                  <span style="margin-left:auto;font-size:10.5px;color:var(--text-3);display:flex;align-items:center;gap:4px"><i data-lucide="smartphone" class="sm" style="width:12px"></i>也可在 WebUI / 手机上审批</span>
+                </div>
+              </div>
+            </div>
+            <div class="ev">
+              <div class="ev-h"><span class="ev-who" style="color:var(--green)">Claude</span><span>17:14</span></div>
+              <div class="bub agent">完成。3 个文件改动，覆盖率 92.4%（+1.2pp），全部测试通过。分支已提交，未推送——等你审。</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+          <div class="card" style="padding:13px 15px">
+            <div class="sec">今日用量（按 agent 归属）</div>
+            <div class="usage-row"><span class="nm">Claude Code</span><span class="val" style="color:var(--green)">¥6.42</span></div>
+            <div class="usage-bar"><i style="width:64%;background:var(--green)"></i></div>
+            <div class="usage-row"><span class="nm">Codex</span><span class="val" style="color:var(--blue)">¥2.18</span></div>
+            <div class="usage-bar"><i style="width:22%;background:var(--blue)"></i></div>
+            <div class="usage-row"><span class="nm">dsh (DeepSeek)</span><span class="val" style="color:var(--amber)">¥0.87</span></div>
+            <div class="usage-bar"><i style="width:9%;background:var(--amber)"></i></div>
+            <div style="font-size:10px;color:var(--text-3);margin-top:8px">订阅额度优先消耗（不重复计费）· 明细入 token_ledger</div>
+          </div>
+          <div class="card" style="padding:13px 15px">
+            <div class="sec">Checkpoints（可回滚）</div>
+            <div class="checkpoint"><span class="dot"></span>17:14 完成重构 · 3 files</div>
+            <div class="checkpoint"><span class="dot"></span>17:08 边界用例通过</div>
+            <div class="checkpoint"><span class="dot"></span>17:04 timingSafeEqual 引入</div>
+            <div class="checkpoint" style="opacity:.5"><span class="dot" style="border-color:var(--text-3)"></span>17:02 线程创建 · 初始状态</div>
+            <div style="font-size:10px;color:var(--text-3);margin-top:6px">SessionEvent JSONL 事件溯源 · 模型所见必可从日志重建（deepseek-harness 机制）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -15,6 +15,14 @@
 
 ### Added
 
+- **工作台 UI v4「曜石 · 演进版」还原（用户指令：按最新设计稿更新，优先开源库）**：
+  - **设计系统**：`design-tokens.css` 与 `design/tokens.css` 逐行同步（v4 深浅色板/玻璃卡/seg-tabs/switch/range/动效）；移除全局 `*` 重置（unlayered CSS 会压过 Tailwind utilities，导致全站 padding 失效的坑已修）。
+  - **Shell**：244px 分组插件侧栏（交互中枢/声形与舞台/游戏与直播/平台与底层，动态 badge 与自动驾驶运行点）+ 顶栏面包屑/⌘K 搜索/语音/大脑/自驾/主题切换 + 饭碗 footer（进度条+投喂 5k）+ 聊天页 304px 右栏（get_state/动作时间线/快捷 P0/记忆与攻略上下文）。
+  - **开源库优先**：`cmdk` 1.1（⌘K 命令面板，Radix Dialog 随包）、`sonner` 2.0（toast）、`react-markdown` 10 + `remark-gfm` 4（聊天 Markdown）、`react-force-graph-2d` 1.29（记忆力导向图谱）——不再手写命令面板/键盘导航/解析器/力导向布局。
+  - **新页面**：**记忆图谱与日记**（真实 `memory:graph`/`memory:pin` IPC：92 节点/202 边/日记全文/检索命中高亮/钉住/隐私擦除）、**OBS 透明挂件**（5 图层开关 + 520px 棋盘格预演 + 真实饭碗/气泡 + STAGE_PROTOCOL 接线中标注）、**插件与权限策略**（9 插件热开关即时过滤侧栏、Policy 单咽喉与六大扩展点只读表）；`voice` 合并音色库+声音工坊（seg-tabs）、`pet` 合并透明舞台+动作库（真实 manifest 待机视频/双轨气泡/语音设置/今日目标）、星露谷三栏、聊天 Markdown+slash 浮层。全站移除彩色 emoji。
+  - **契约**：新增 `MemoryNodeView/MemoryEdgeView/MemoryGraphView`（36 域跨语言重生成）。窗口默认 1360×860（min 1120×700）以承载 v4 三栏。
+- **契约/后端补记**（并行批遗留）：`MemoryGraphView` 只读快照 + `memory:pin`；`autodrive-host` 暴露 `say/subscribe/getBrainMode` 供 WebUI 复用。
+
 - **T-M5-18 背包容量自愈（用户指令「现在好像处理不了背包满了」）**：研读 BWF `GameActions.Tidy.cs`（tidy/store 依赖农场箱子，无箱必失败）与 feiyuos-stardew-ai-farmer `LESSONS.md`（满包 craft 会掉地上、任务物品绝对保留、白名单卖货）后重写救援策略——**确定性救援阶梯**：tidy（purpose 按时段）→ ship_items（排除法 + 值钱线索排序，工具/种子/肥料/鱼饵/炸弹/花束/吊坠/家具/【留着】任务物品不卖）→ eat（跳过任务鱼）→ trash（真垃圾）→ store → 任意非必需品；失败才降级，腾出空位即归零，全失败退化为 wait 不空转；被 BWF 拒绝的单品（家具/任务鱼/名字带 xN）自动记住换下一个。真机三段实证：`tidy FAILED(无箱子)` → `ship_items 沙丁鱼 COMPLETED 180g` → `travel_to Beach` → `fish`；另修复 `cleanItemName`（去 `xN`/品质词）与 RulePlanner 满包直接出货。
 - **T-M6-06 星露谷 Mod 管理（用户指令「我还希望能管理星露谷的 mod」）**：契约新增 5 域（StardewModInfo/Snapshot/ToggleRequest/OpResult/Config → 33 域跨语言重生成）+ `packages/stardew-mods`（SMAPI manifest 注释/尾逗号容错、损坏 manifest 可见、目录扫描、`.disabled` 启停、解压目录安装重名 -2、三平台 Mods 路径猜测；48 it，分支 95.9%）+ 主进程 `mods-host`（配置落 userData、系统解压 zip 安装、打开目录）+ Shell 新增「Mod 管理」页（目录候选切换/列表开关/安装 ZIP/刷新）。真机：自动探测 Steam Mods 目录并列出 3 个真实 Mod（含 BWF 1.1.27），SaveBackup 启停往返成功。
 - **对话控 AI（中文自然语言指令）**：Shell 聊天里直接说「先去海滩钓鱼吧」「先把多余的东西放到出货箱」即可插队——关键词直译（去海滩/农场/镇上/矿洞、钓鱼、整理背包、睡觉、浇水）优先，未命中再走 LLM 指令解析（白名单校验）；插队决策事件标记 `planner=remote`（中控台显示 P0 插队）。真机验证：关键词 → `decision remote travel_to 主人指令：去海滩`。

@@ -115,7 +115,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     const result = await window.directorBridge.saveProviderKey(provider.id, draft);
     setBusyFor(provider.id, null);
     if (!result.ok) {
-      setNotices((n) => ({ ...n, [provider.id]: `❌ ${result.error ?? '保存失败'}` }));
+      setNotices((n) => ({ ...n, [provider.id]: `错误：${result.error ?? '保存失败'}` }));
       return;
     }
     setKeyDrafts((d) => ({ ...d, [provider.id]: '' }));
@@ -130,7 +130,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     setBusyFor(provider.id, null);
     const models = result.models;
     if (!result.ok || models === undefined) {
-      setNotices((n) => ({ ...n, [provider.id]: `❌ 拉模型失败：${result.error ?? '未知错误'}` }));
+      setNotices((n) => ({ ...n, [provider.id]: `错误：拉模型失败：${result.error ?? '未知错误'}` }));
       return;
     }
     persistOverrides({
@@ -152,7 +152,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     setBusyFor(provider.id, null);
     setNotices((n) => ({
       ...n,
-      [provider.id]: result.ok ? `✅ 测试通过（${result.latencyMs ?? 0}ms）` : `❌ ${result.error ?? '测试失败'}`,
+      [provider.id]: result.ok ? `✅ 测试通过（${result.latencyMs ?? 0}ms）` : `错误：${result.error ?? '测试失败'}`,
     }));
   };
 

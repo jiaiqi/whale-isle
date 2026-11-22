@@ -2,7 +2,7 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerStageIpc } from './passthrough';
@@ -51,11 +51,13 @@ function createStageWindow(): BrowserWindow {
 
 function createDirectorWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 960,
-    height: 720,
+    width: 1360,
+    height: 860,
+    minWidth: 1120,
+    minHeight: 700,
     title: '大肥鱼中控台',
     autoHideMenuBar: true,
-    backgroundColor: '#020617',
+    backgroundColor: '#050507',
     show: false,
     webPreferences: {
       sandbox: true,
@@ -114,6 +116,7 @@ app.whenReady().then(() => {
         return { ok: true };
       },
     });
+    ipcMain.handle('webui:info', () => ({ ok: true, port: webui.port, token: webui.token }));
     void webui.ready
       .then(() => {
         console.log(`[webui] http://127.0.0.1:${webui.port}/?token=${webui.token}`);

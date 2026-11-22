@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>星露谷自动驾驶监控 — 大肥鱼工作台设计稿 v3</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--font-ui); background:var(--bg); color:var(--text-1); font-size:13.5px;
+    display:grid; grid-template-columns:236px 1fr; grid-template-rows:46px 1fr; grid-template-areas:"side top" "side main"; overflow:hidden; }
+  .side { grid-area:side; border-right:1px solid var(--stroke); display:flex; flex-direction:column; }
+  .brand { display:flex; align-items:center; gap:10px; padding:14px 16px 10px; }
+  .brand .t { font-weight:650; font-size:13.5px; }
+  .nav-sec { padding:10px 16px 5px; font-size:10px; letter-spacing:1.4px; color:var(--text-3); font-weight:650; }
+  .nav-item { display:flex; align-items:center; gap:9px; margin:0 8px; padding:7px 9px; border-radius:var(--r-md); color:var(--text-2); font-size:12.5px; cursor:pointer; transition:all var(--dur-hover) var(--ease-out); }
+  .nav-item:hover { background:var(--surface-2); color:var(--text-1); }
+  .nav-item.on { background:var(--green-dim); color:var(--green); }
+  .live-dot { margin-left:auto; width:6px; height:6px; border-radius:50%; background:var(--green); animation:blink 1.8s infinite; }
+  .off-dot { margin-left:auto; width:6px; height:6px; border-radius:50%; background:var(--text-3); opacity:.4; }
+  .side-foot { margin-top:auto; border-top:1px solid var(--stroke); padding:11px 14px; font-size:11.5px; color:var(--text-2); }
+  .foot-row { display:flex; justify-content:space-between; padding:3px 0; align-items:center; }
+  .top { grid-area:top; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--stroke); }
+  .crumb { font-size:12.5px; color:var(--text-2); } .crumb b { color:var(--text-1); font-weight:600; }
+  .top .sp { flex:1; }
+  .icon-btn { width:30px; height:30px; display:grid; place-items:center; border-radius:var(--r-md); color:var(--text-2); background:none; border:none; }
+  .icon-btn:hover { background:var(--surface-2); }
+  .main-area { grid-area:main; overflow-y:auto; padding:18px 22px 36px; }
+  .wrap { display:grid; grid-template-columns:1.25fr .85fr .8fr; gap:14px; max-width:1320px; margin:0 auto; align-items:start; }
+  .col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .sec { font-size:10px; letter-spacing:1.4px; color:var(--text-3); font-weight:650; margin-bottom:-7px; }
+  .card { padding:15px 16px; }
+  .card h4 { font-size:12.5px; margin-bottom:11px; display:flex; align-items:center; gap:7px; }
+
+  .now-label { font-size:10px; color:var(--green); letter-spacing:1px; font-weight:650; font-family:var(--font-mono); margin-bottom:7px; }
+  .now-name { font-size:18px; font-weight:700; font-family:var(--font-mono); margin-bottom:4px; }
+  .now-args { font-size:11.5px; color:var(--text-2); font-family:var(--font-mono); margin-bottom:11px; }
+  .now-progress { height:6px; border-radius:999px; background:var(--inset); overflow:hidden; margin-bottom:9px; }
+  .now-progress i { display:block; height:100%; width:62%; border-radius:999px; background:var(--green); }
+  .now-meta { display:flex; gap:14px; font-size:11px; color:var(--text-3); flex-wrap:wrap; }
+  .now-meta b { color:var(--text-2); font-family:var(--font-mono); font-weight:600; }
+  .now-meta span { display:flex; align-items:center; gap:4px; }
+
+  .status-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .note { font-size:11px; color:var(--text-3); line-height:1.75; margin-top:10px; }
+  .note b { color:var(--text-2); }
+
+  .goal { display:flex; align-items:center; gap:10px; padding:7px 0; font-size:12px; border-bottom:1px dashed var(--stroke); }
+  .goal:last-child { border:none; }
+  .goal .st { margin-left:auto; font-size:10px; font-family:var(--font-mono); display:flex; align-items:center; gap:4px; }
+  .goal.done { color:var(--text-3); text-decoration:line-through; }
+  .goal svg { color:var(--text-2); }
+
+  .ascii { font-family:var(--font-mono); font-size:12px; line-height:1.5; color:var(--text-2); background:var(--inset); border:1px solid var(--stroke); border-radius:var(--r-md); padding:12px 14px; white-space:pre; overflow-x:auto; }
+  .ascii .me { color:var(--green); font-weight:700; }
+  .ascii .water { color:var(--blue); opacity:.55; }
+  .ascii .npc { color:var(--violet); }
+  .legend { display:flex; gap:13px; flex-wrap:wrap; font-size:10px; color:var(--text-3); margin-top:9px; }
+  .legend b { font-family:var(--font-mono); color:var(--text-2); }
+
+  .receipt { position:relative; padding-left:20px; }
+  .receipt::before { content:''; position:absolute; left:5px; top:7px; bottom:7px; width:2px; background:var(--stroke); }
+  .r { position:relative; padding:6px 0; font-size:12px; }
+  .r::before { content:''; position:absolute; left:-19px; top:12px; width:9px; height:9px; border-radius:50%; background:var(--text-3); }
+  .r.ok::before { background:var(--green); }
+  .r.run::before { background:var(--amber); animation:blink 1.5s infinite; }
+  .r.fail::before { background:var(--red); }
+  .r.unc::before { background:var(--violet); }
+  .r .t { font-family:var(--font-mono); font-size:10px; color:var(--text-3); margin-right:8px; }
+  .r .nm { font-weight:650; font-family:var(--font-mono); font-size:11.5px; }
+  .r .st { float:right; font-size:9.5px; padding:1.5px 8px; border-radius:999px; font-family:var(--font-mono); }
+  .st-ok { background:var(--green-dim); color:var(--green); }
+  .st-run { background:var(--amber-dim); color:var(--amber); }
+  .st-fail { background:var(--red-dim); color:var(--red); }
+  .st-unc { background:var(--violet-dim); color:var(--violet); }
+  .r .dt { color:var(--text-3); font-size:10.5px; margin-top:3px; line-height:1.65; }
+  .r .dt b { color:var(--violet); font-weight:600; }
+
+  .wd-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .wd-cell { border:1px solid var(--stroke); border-radius:var(--r-md); padding:9px 11px; }
+  .wd-cell .kk { font-size:10px; color:var(--text-3); margin-bottom:3px; display:flex; align-items:center; gap:5px; }
+  .wd-cell .vv { font-size:12.5px; font-weight:700; font-family:var(--font-mono); }
+  .vv.g { color:var(--green); } .vv.a { color:var(--amber); }
+
+  .sw { position:relative; width:40px; height:22px; border-radius:999px; background:var(--inset); border:1px solid var(--stroke-2); cursor:pointer; transition:all .2s var(--ease-out); flex-shrink:0; }
+  .sw::after { content:''; position:absolute; top:2.5px; left:3px; width:15px; height:15px; border-radius:50%; background:var(--text-3); transition:left .2s var(--ease-spring); }
+  .sw.on { background:var(--green-dim); border-color:var(--green-line); }
+  .sw.on::after { left:20px; background:var(--green); }
+  .sw-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; font-size:12px; border-bottom:1px dashed var(--stroke); }
+  .sw-row:last-of-type { border:none; }
+  .sw-row .ds2 { font-size:10px; color:var(--text-3); margin-top:2px; }
+  .audit { font-family:var(--font-mono); font-size:10.5px; color:var(--text-3); padding:5px 0 1px; line-height:1.8; }
+  .audit b { color:var(--amber); font-weight:600; }
+  .audit .ok { color:var(--green); } .audit .no { color:var(--red); }
+
+  .skill { font-size:12px; line-height:1.75; color:var(--text-2); }
+  .skill .fn { color:var(--green); font-weight:650; font-family:var(--font-mono); font-size:11.5px; }
+  .skill > div { margin-bottom:9px; padding-bottom:9px; border-bottom:1px dashed var(--stroke); }
+  .skill > div:last-child { border:none; margin-bottom:0; padding-bottom:0; }
+</style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <aside class="side">
+    <div class="brand"><svg style="width:22px;height:22px" viewBox="0 0 24 24" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".25"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg><span class="t">大肥鱼工作台</span></div>
+    <div class="nav-sec">插件</div>
+    <div style="padding:0 8px">
+      <div class="nav-item"><i data-lucide="message-square" class="sm"></i>聊天 · 人格会话</div>
+      <div class="nav-item"><i data-lucide="terminal" class="sm"></i>Harness · Agents</div>
+      <div class="nav-item on"><i data-lucide="sprout" class="sm"></i>星露谷共玩<span class="live-dot"></span></div>
+      <div class="nav-item"><i data-lucide="fish" class="sm"></i>桌宠 · 小鲸</div>
+      <div class="nav-item"><i data-lucide="radio-tower" class="sm"></i>直播中控<span class="off-dot"></span></div>
+      <div class="nav-item"><i data-lucide="music" class="sm"></i>点歌台<span class="off-dot"></span></div>
+      <div class="nav-item"><i data-lucide="brain" class="sm"></i>记忆图谱</div>
+      <div class="nav-item"><i data-lucide="puzzle" class="sm"></i>插件管理</div>
+    </div>
+    <div class="side-foot"><div class="foot-row"><span>主题</span><span onclick="wbToggleTheme()" style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text-3)"><i data-lucide="sun" class="sm" data-theme-icon></i>深色</span></div></div>
+  </aside>
+
+  <header class="top">
+    <div class="crumb">星露谷 <b>· 自动驾驶监控</b></div>
+    <div class="sp"></div>
+    <span class="tag pill-green" style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.8s infinite"></span>自动驾驶 · 运行中</span>
+    <button class="icon-btn" onclick="wbToggleTheme()"><i data-lucide="sun" data-theme-icon></i></button>
+  </header>
+
+  <main class="main-area">
+    <div class="wrap">
+      <div class="col stagger">
+        <div class="sec">当前动作 · 动作互斥锁（单在途）</div>
+        <div class="card">
+          <div class="now-label">▶ RUNNING · a-1042</div>
+          <div class="now-name">fish(casts: 3)</div>
+          <div class="now-args">Beach (38,36) · 竹鱼竿 · 落点离岸 2 格</div>
+          <div class="now-progress"><i></i></div>
+          <div class="now-meta">
+            <span><i data-lucide="crosshair" style="width:12px;height:12px"></i>已抛竿 <b>2/3</b></span>
+            <span><i data-lucide="timer" style="width:12px;height:12px"></i>用时 <b>01:47</b></span>
+            <span><i data-lucide="zap" style="width:12px;height:12px"></i>体力 <b>-16</b></span>
+            <span><i data-lucide="hourglass" style="width:12px;height:12px"></i>预算余 <b>6.2h</b></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4><i data-lucide="compass" style="color:var(--text-2)"></i>模式与状态</h4>
+          <div class="status-row">
+            <span class="tag pill-green">自动驾驶 · hybrid</span>
+            <span class="tag pill-amber">摸鱼模式（饭碗 12%）</span>
+            <span class="tag pill">玩家接管：未触发</span>
+            <span class="tag pill-green">游戏时钟：运行</span>
+          </div>
+          <div class="note">玩家物理键鼠一动 → <b>0.1s 释放控制权</b> → 切场边解说陪玩 → 静默 8s 平滑接回托管。</div>
+        </div>
+
+        <div class="card">
+          <h4><i data-lucide="list-todo" style="color:var(--text-2)"></i>今日目标链（小鲸自己排的）</h4>
+          <div class="goal done"><i data-lucide="mail" class="sm"></i>读信（7 封，领鱼竿线索）<span class="st" style="color:var(--green)">done</span></div>
+          <div class="goal done"><i data-lucide="fish" class="sm"></i>找威利拿竹鱼竿<span class="st" style="color:var(--green)">done</span></div>
+          <div class="goal"><i data-lucide="waves" class="sm"></i>在海滩钓 5 条鱼（卖钱赚米）<span class="st" style="color:var(--amber)">2/5 · 进行中</span></div>
+          <div class="goal"><i data-lucide="trash-2" class="sm"></i>傍晚去镇上翻垃圾桶（侦察）<span class="st" style="color:var(--text-3)">计划 16:00</span></div>
+          <div class="goal"><i data-lucide="bed" class="sm"></i>20:00 前回家睡觉（防晕倒）<span class="st" style="color:var(--text-3)">看护锁定</span></div>
+        </div>
+
+        <div class="card">
+          <h4><i data-lucide="map" style="color:var(--text-2)"></i>周边地图（fish-eye 人话翻译）</h4>
+          <div class="ascii">  <span class="water">~~~~~ ~~~~~</span>
+  <span class="water">~~~</span>·<span class="water">~</span><span class="water">~~~</span>·<span class="me">@</span>·<span class="water">~~</span>
+  <span class="water">~~</span>·<span class="water">~</span>o<span class="water">~~~</span>·<span class="water">~~~</span>
+  · · · [桥断] · · <span class="npc">N</span> · · · · · ·</div>
+          <div class="legend"><span><b>@</b>小鲸</span><span><b>~</b>水面</span><span><b>o</b>冒泡点（咬钩快）</span><span><b>N</b>村民</span><span><b>[桥断]</b>修复需 300 木材</span></div>
+          <div class="note">翻译：你站在码头东侧沙滩，面朝右；左上方 3 格有冒泡点；镇上的告示板在西边出口 (38,0)。</div>
+        </div>
+      </div>
+
+      <div class="col stagger">
+        <div class="sec">真实回执时间线 · COMPLETED / FAILED / UNCERTAIN</div>
+        <div class="card">
+          <div class="receipt">
+            <div class="r ok"><span class="t">09:41</span><span class="nm">read_mail</span><span class="st st-ok">COMPLETED</span><div class="dt">7 封信 · 领取威利线索 · 3min</div></div>
+            <div class="r ok"><span class="t">09:44</span><span class="nm">travel_to(Beach)</span><span class="st st-ok">COMPLETED</span><div class="dt">途触发剧情 → dialogue ×6 推进 → 获竹鱼竿</div></div>
+            <div class="r ok"><span class="t">10:20</span><span class="nm">fish(casts:2)</span><span class="st st-ok">COMPLETED</span><div class="dt">鳀鱼(完美)×1 · 浅水警告已记入技能卡</div></div>
+            <div class="r fail"><span class="t">10:26</span><span class="nm">open_shop(FishShop)</span><span class="st st-fail">FAILED</span><div class="dt">店主不在柜台 → 已写入记忆：威利 9:00 后在码头</div></div>
+            <div class="r unc"><span class="t">10:28</span><span class="nm">move_to(60,12)</span><span class="st st-unc">UNCERTAIN</span><div class="dt">寻路卡石头 ×1 → <b>clumsy_panic 台词已触发</b>（「都怪这块石头突然长出来！」）→ 重试 1/2 改走 (58,13) ✓</div></div>
+            <div class="r run"><span class="t">10:32</span><span class="nm">fish(casts:3)</span><span class="st st-run">RUNNING</span><div class="dt">45s 心跳轮询中 · 第 2 竿咬钩</div></div>
+          </div>
+        </div>
+
+        <div class="sec">看门狗与守护层</div>
+        <div class="card">
+          <div class="wd-grid">
+            <div class="wd-cell"><div class="kk"><i data-lucide="heart-pulse" style="width:11px;height:11px"></i>动作心跳</div><div class="vv g">正常 · 12s</div></div>
+            <div class="wd-cell"><div class="kk"><i data-lucide="shield-alert" style="width:11px;height:11px"></i>卡死哨兵</div><div class="vv g">0 / 阈值 4min</div></div>
+            <div class="wd-cell"><div class="kk"><i data-lucide="rotate-ccw" style="width:11px;height:11px"></i>uncertain 重试</div><div class="vv a">1 / 上限 2</div></div>
+            <div class="wd-cell"><div class="kk"><i data-lucide="cable" style="width:11px;height:11px"></i>MCP 连接</div><div class="vv g">18080 · SSE 15s</div></div>
+            <div class="wd-cell"><div class="kk"><i data-lucide="bed" style="width:11px;height:11px"></i>强制睡觉看护</div><div class="vv a">20:00 锁定</div></div>
+            <div class="wd-cell"><div class="kk"><i data-lucide="hourglass" style="width:11px;height:11px"></i>游玩预算</div><div class="vv g">余 6.2h</div></div>
+          </div>
+          <div class="note">「没反应查原因」策略：超时 ≠ 失败——先 get_state 确认动作实际状态，再决定 cancel_action / 重试 / 升级汇报；绝不盲目重发造成重复执行。</div>
+        </div>
+      </div>
+
+      <div class="col stagger">
+        <div class="sec">CheatBridge 作弊桥（开关控制）</div>
+        <div class="card">
+          <div class="sw-row">
+            <div>总开关<div class="ds2">关闭时直写端点 401 拒绝</div></div>
+            <div class="sw on" onclick="toggleCB(this)"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);margin:4px 0 8px">当前：<b id="cbState" style="color:var(--amber)">开启（测试模式）</b></div>
+          <div class="sw-row">
+            <div>直改金钱 / 体力 / 生命<div class="ds2">stamina · money · health · qi</div></div><span class="tag pill-amber">需审批</span>
+          </div>
+          <div class="sw-row">
+            <div>item.spawn / animal.buy<div class="ds2">跳过商店 UI 的写操作</div></div><span class="tag pill-amber">需审批</span>
+          </div>
+          <div class="sw-row">
+            <div>walk.cross 边界传送<div class="ds2">治「边界 walk 不切图」死局</div></div><span class="tag pill-green">放行</span>
+          </div>
+          <div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--stroke)">
+            <div style="font-size:10px;color:var(--text-3);margin-bottom:3px;display:flex;align-items:center;gap:5px"><i data-lucide="scroll-text" style="width:11px;height:11px"></i>审计流水 · cheat-audit.jsonl（before/after 快照）</div>
+            <div class="audit">10:35:12 <b>stamina</b> 98→270 <span class="ok">✓ 审批:主人</span></div>
+            <div class="audit">10:35:31 <b>walk.cross</b> Farm→Town <span class="ok">✓ 自动</span></div>
+            <div class="audit">10:36:04 <b>money</b> +5000 <span class="no">✗ 拒绝:主人(N)</span></div>
+          </div>
+        </div>
+
+        <div class="sec">技能卡（翻车知识闭环）</div>
+        <div class="card">
+          <div class="skill">
+            <div><span class="fn">SKILL-fishing.md</span><br>海滩浅水鱼小品质差 → 优先码头/栈桥尽头抛远；冒泡点咬钩快。</div>
+            <div><span class="fn">SKILL-stamina.md</span><br>体力 &lt;80 时别接长动作链；18:30 后预留回家体力；身上常备 1 份料理。</div>
+            <div><span class="fn">SKILL-willy.md</span><br>威利 9:00-17:00 在码头柜台；雨天不出海。</div>
+          </div>
+          <div class="note" style="margin-top:9px;border-top:1px dashed var(--stroke);padding-top:9px">失败自动写入 → 下次决策热载进提示词 · 今天新增 2 张</div>
+        </div>
+      </div>
+    </div>
+  </main>
+<script>
+  function toggleCB(el) {
+    el.classList.toggle('on');
+    document.getElementById('cbState').textContent = el.classList.contains('on') ? '开启（测试模式）' : '关闭';
+  }
+</script>
+</body>
+</html>

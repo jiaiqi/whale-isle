@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryGraphView",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/MemoryGraphView",
+  "$defs": {
+    "MemoryGraphView": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "nodeType": {
+                "type": "string",
+                "enum": [
+                  "event",
+                  "entity",
+                  "concept",
+                  "summary"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "importance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "pinned": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "number"
+              },
+              "day": {
+                "type": "string",
+                "default": ""
+              },
+              "instanceCount": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 1
+              }
+            },
+            "required": [
+              "id",
+              "nodeType",
+              "text",
+              "importance",
+              "pinned",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "temporal",
+                  "causal",
+                  "semantic",
+                  "entity",
+                  "instance"
+                ]
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "kind",
+              "weight"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "days": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "nodes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "edges": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lastDay": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "nodes",
+            "edges",
+            "lastDay"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "nodes",
+        "edges",
+        "days",
+        "stats"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

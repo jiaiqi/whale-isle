@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>记忆图谱与小鲸日记 — 大肥鱼工作台 v4</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  .page { max-width: 1220px; margin: 0 auto; padding: 20px 26px 48px; }
+  .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .head-row h1 { font-size: 20px; font-weight: 700; }
+  .head-row p { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+
+  .stats-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+  .st-card { padding: 12px 14px; border-radius: var(--r-lg); }
+  .st-card .lbl { font-size: 10.5px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+  .st-card .val { font-size: 18px; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
+
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+  .sec { font-size: 10px; letter-spacing: 1.2px; color: var(--text-3); font-weight: 650; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
+
+  /* 换日日记 */
+  .diary-list { display: flex; flex-direction: column; gap: 10px; }
+  .diary { padding: 14px 16px; border-radius: var(--r-lg); cursor: pointer; transition: all var(--dur-hover) var(--ease); }
+  .diary.on { border-color: var(--blue-line); box-shadow: var(--glow-blue), inset 0 1px 0 var(--hi); }
+  .diary .day { font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .diary .txt { font-size: 12px; color: var(--text-2); line-height: 1.75; }
+  .diary .meta { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+
+  /* 检索条 + SVG 图谱 */
+  .search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search-bar input {
+    flex: 1; padding: 9px 14px; border-radius: 980px; border: 1px solid var(--stroke-2);
+    background: var(--surface); color: var(--text-1); font-size: 12.5px; outline: none;
+  }
+  .search-bar input:focus { border-color: var(--blue-line); box-shadow: var(--glow-blue); }
+
+  .graph-box { padding: 14px; border-radius: var(--r-xl); margin-bottom: 14px; }
+  .graph-svg { width: 100%; height: 310px; display: block; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--stroke); }
+  .g-node { cursor: pointer; transition: transform 0.2s var(--ease); }
+  .g-node circle { transition: all 0.2s var(--ease); }
+  .g-node:hover circle { filter: brightness(1.2); }
+  .g-node text { font-family: var(--font-ui); font-size: 11px; fill: var(--text-1); pointer-events: none; }
+  .g-edge { stroke: var(--stroke-2); stroke-width: 1.4; }
+  .g-edge.hit { stroke: var(--violet); stroke-width: 2.2; }
+
+  .detail-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+  .panel { padding: 15px 17px; border-radius: var(--r-xl); }
+  .panel h4 { font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }
+  .kv { display: flex; justify-content: space-between; font-size: 11.5px; padding: 4px 0; border-bottom: 1px dashed var(--stroke); }
+  .kv:last-of-type { border: none; }
+  .kv span { color: var(--text-3); }
+  .kv b { font-family: var(--font-mono); color: var(--text-1); }
+
+  .prompt-preview {
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.75; color: var(--text-2);
+    background: var(--inset); border: 1px solid var(--stroke); border-radius: var(--r-md);
+    padding: 10px 12px; white-space: pre-wrap;
+  }
+  @media (max-width: 1020px) { .layout, .detail-grid { grid-template-columns: 1fr; } .stats-strip { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body data-wb-page="memory" data-wb-group="交互中枢" data-wb-title="记忆图谱与日记">
+  <main class="wb-main">
+    <div class="page">
+      <div class="head-row">
+        <div>
+          <h1>记忆图谱与小鲸日记</h1>
+          <p>packages/memory-graph（JSONL Append-Only + 邻接表 + 2-gram 词法召回 + 2 跳图扩展 + 30 天半衰期）</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-pill ghost" onclick="wbToast('已触发墓碑压实检查（当前墓碑占比 8% < 30% 阈值）')"><i data-lucide="sparkles" class="xs"></i>压实检查</button>
+          <button class="btn-pill red" onclick="confirmWipe()"><i data-lucide="trash-2" class="xs"></i>隐私一键擦除</button>
+        </div>
+      </div>
+
+      <div class="stats-strip stagger">
+        <div class="card st-card"><div class="lbl"><i data-lucide="circle-dot" class="xs" style="color:var(--blue)"></i>图谱节点</div><div class="val" style="color:var(--blue)">13</div></div>
+        <div class="card st-card"><div class="lbl"><i data-lucide="git-commit-horizontal" class="xs" style="color:var(--violet)"></i>关联边</div><div class="val" style="color:var(--violet)">15</div></div>
+        <div class="card st-card"><div class="lbl"><i data-lucide="calendar-days" class="xs" style="color:var(--green)"></i>最近换日</div><div class="val" style="color:var(--green)">春16日</div></div>
+        <div class="card st-card"><div class="lbl"><i data-lucide="hourglass" class="xs" style="color:var(--amber)"></i>半衰期 / 宽限</div><div class="val">30d / 7d</div></div>
+        <div class="card st-card"><div class="lbl"><i data-lucide="shield-check" class="xs" style="color:var(--green)"></i>正文消毒</div><div class="val" style="font-size:13px;margin-top:8px">密钥/路径 0 残留</div></div>
+      </div>
+
+      <div class="layout">
+        <!-- 左：小鲸换日日记 -->
+        <div>
+          <div class="sec"><span>小鲸换日日记（自动归纳）</span><span class="mono">memory:diary</span></div>
+          <div class="diary-list stagger">
+            <div class="card card-hover diary on" onclick="selectDay(this,'春16日')">
+              <div class="day"><i data-lucide="book-open" class="sm" style="color:var(--blue)"></i>春16日 日记<span class="pill pill-green" style="margin-left:auto">今日</span></div>
+              <div class="txt">完成 7 项，翻车 1 次。早上读了 7 封信，去海滩找威利拿到竹鱼竿，钓到一条完美品质的鳀鱼！途中被一块突然长出来的石头卡了一下（绝对不是本鱼没看路），背包满的时候自己吃了海草腾格子。米粒差点饿没了呢～</div>
+              <div class="meta"><span class="pill pill-violet">7 事件</span><span class="pill pill-amber">1 翻车</span><span class="pill">重要度 0.88</span></div>
+            </div>
+            <div class="card card-hover diary" onclick="selectDay(this,'春15日')">
+              <div class="day"><i data-lucide="book-open" class="sm" style="color:var(--text-2)"></i>春15日 日记</div>
+              <div class="txt">完成 5 项，翻车 1 次。给防风草浇了水（冒了两片叶子！），下午在矿洞入口体力耗尽晕倒，被 Joja 扣了 50g 医疗费，记仇！已自动写入 SKILL-stamina 教训。</div>
+              <div class="meta"><span class="pill">4 事件</span><span class="pill pill-red">晕倒 -50g</span><span class="pill pill-blue">已钉住</span></div>
+            </div>
+            <div class="card card-hover diary" onclick="selectDay(this,'春14日')">
+              <div class="day"><i data-lucide="book-open" class="sm" style="color:var(--text-2)"></i>春14日 日记</div>
+              <div class="txt">完成 4 项，翻车 0 次。熟悉泡泡湾农场地形，认识了镇长刘易斯和木匠罗宾，收到了复活节预告信。</div>
+              <div class="meta"><span class="pill">2 事件</span><span class="pill pill-green">0 翻车</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右：交互图谱 + 检索调试 -->
+        <div>
+          <div class="sec"><span>检索调试（2-gram 召回 → 2 跳扩展 · 权重 0.5 相似 + 0.3 重要 + 0.2 新近 + 0.3 钉住）</span></div>
+          <div class="search-bar">
+            <input id="mem-query" value="钓鱼" placeholder="输入检索词，如：钓鱼、威利、石头、晕倒…" oninput="runQuery()">
+            <button class="btn-pill ghost" onclick="setQ('钓鱼')">钓鱼</button>
+            <button class="btn-pill ghost" onclick="setQ('石头')">石头翻车</button>
+            <button class="btn-pill ghost" onclick="setQ('晕倒')">晕倒教训</button>
+          </div>
+
+          <div class="card graph-box">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:11px;color:var(--text-2)">
+              <span id="hit-summary">命中 <b style="color:var(--violet)">7</b> 条关联节点（含 2 跳扩展）</span>
+              <div style="display:flex;gap:10px;font-size:10.5px;color:var(--text-3)">
+                <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--blue);margin-right:4px"></i>event</span>
+                <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--violet);margin-right:4px"></i>summary</span>
+                <span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);margin-right:4px"></i>pinned</span>
+              </div>
+            </div>
+            <svg class="graph-svg" id="graph-svg" viewBox="0 0 760 310"></svg>
+          </div>
+
+          <div class="detail-grid">
+            <div class="card panel">
+              <h4><i data-lucide="scan-search" class="sm" style="color:var(--blue)"></i>选中节点详情</h4>
+              <div id="node-detail"></div>
+              <div style="margin-top:12px;display:flex;gap:8px">
+                <button class="btn-pill ghost" id="pin-btn" onclick="togglePin()"><i data-lucide="pin" class="xs"></i>钉住永存</button>
+                <button class="btn-pill ghost" onclick="wbToast('已复制消毒后的记忆文本')"><i data-lucide="copy" class="xs"></i>复制正文</button>
+              </div>
+            </div>
+            <div class="card panel">
+              <h4><i data-lucide="braces" class="sm" style="color:var(--violet)"></i>LLM System 注入预览（≤600 字预算）</h4>
+              <div class="prompt-preview" id="prompt-preview"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+  const NODES = [
+    { id: 'n1', label: '春16日 · 威利送竹鱼竿', type: 'event', day: '春16日', imp: 0.92, decay: 0.99, pinned: true, x: 155, y: 92, tags: ['钓鱼', '威利', '海滩'], body: '前往 Beach 触发威利剧情，推进对白 ×6，获得竹鱼竿 ×1。' },
+    { id: 'n2', label: '钓获鳀鱼(完美)', type: 'event', day: '春16日', imp: 0.85, decay: 0.99, pinned: false, x: 350, y: 66, tags: ['钓鱼', '鳀鱼', '海滩'], body: '在 Beach(38,36) 抛竿 2 次钓获完美品质鳀鱼，手气极佳。' },
+    { id: 'n3', label: '吃海草腾背包格', type: 'event', day: '春16日', imp: 0.78, decay: 0.98, pinned: false, x: 555, y: 82, tags: ['钓鱼', '背包', 'LLM决策'], body: 'LLM 大脑自主判断背包已满，决定吃海草腾出 1 格装鱼。' },
+    { id: 'n4', label: '春16日 自动日记', type: 'summary', day: '春16日', imp: 0.90, decay: 1.0, pinned: true, x: 360, y: 175, tags: ['钓鱼', '威利', '石头', '日记'], body: '春16日 日记：完成 7 项，翻车 1 次。拿竹鱼竿、钓鳀鱼，被石头卡了一次。' },
+    { id: 'n5', label: '寻路卡石头翻车', type: 'event', day: '春16日', imp: 0.88, decay: 0.99, pinned: false, x: 180, y: 235, tags: ['石头', '翻车', 'UNCERTAIN'], body: 'move_to(60,12) 卡石头触发 UNCERTAIN，甩锅台词「都怪石头突然长出来」，改走 (58,13) 成功。' },
+    { id: 'n6', label: '读信 7 封', type: 'event', day: '春16日', imp: 0.64, decay: 0.97, pinned: false, x: 90, y: 165, tags: ['威利', '钓鱼', '读信'], body: '读取 7 封邮件，包含威利鱼竿线索与 Joja 50g 医疗费账单。' },
+    { id: 'n7', label: '春15日 晕倒扣 50g', type: 'event', day: '春15日', imp: 0.95, decay: 0.95, pinned: true, x: 585, y: 225, tags: ['晕倒', '体力', '翻车'], body: '体力耗尽在矿洞入口晕倒，被 Joja 扣 50g 医疗费；20:00 前必须回家睡觉。' },
+  ];
+  const EDGES = [
+    ['n6', 'n1', 'temporal'], ['n1', 'n2', 'temporal'], ['n2', 'n3', 'causal'],
+    ['n1', 'n4', 'summary'], ['n2', 'n4', 'summary'], ['n5', 'n4', 'summary'],
+    ['n6', 'n5', 'temporal'], ['n7', 'n4', 'lesson'], ['n3', 'n4', 'summary'],
+  ];
+
+  let selectedId = 'n1';
+  let hitIds = new Set();
+
+  function runQuery() {
+    const q = document.getElementById('mem-query').value.trim();
+    hitIds = new Set();
+    if (!q) {
+      NODES.forEach((n) => hitIds.add(n.id));
+    } else {
+      NODES.forEach((n) => {
+        if (n.label.includes(q) || n.body.includes(q) || n.tags.some((t) => t.includes(q) || q.includes(t))) {
+          hitIds.add(n.id);
+        }
+      });
+      // 模拟 2 跳扩展
+      const seed = [...hitIds];
+      EDGES.forEach(([a, b]) => { if (seed.includes(a)) hitIds.add(b); if (seed.includes(b)) hitIds.add(a); });
+    }
+    document.getElementById('hit-summary').innerHTML = `检索「<b>${q || '全部'}</b>」→ 命中 <b style="color:var(--violet)">${hitIds.size}</b> 条节点（2-gram 召回 + 2 跳扩展）`;
+    renderGraph();
+    renderPrompt();
+  }
+
+  function renderGraph() {
+    const svg = document.getElementById('graph-svg');
+    const edgeHtml = EDGES.map(([a, b]) => {
+      const na = NODES.find((n) => n.id === a), nb = NODES.find((n) => n.id === b);
+      const hit = hitIds.has(a) && hitIds.has(b);
+      return `<line class="g-edge${hit ? ' hit' : ''}" x1="${na.x}" y1="${na.y}" x2="${nb.x}" y2="${nb.y}" />`;
+    }).join('');
+    const nodeHtml = NODES.map((n) => {
+      const hit = hitIds.has(n.id);
+      const sel = n.id === selectedId;
+      const fill = n.pinned ? 'var(--amber)' : n.type === 'summary' ? 'var(--violet)' : 'var(--blue)';
+      return `<g class="g-node" opacity="${hit ? 1 : 0.25}" onclick="selectNode('${n.id}')">
+        <circle cx="${n.x}" cy="${n.y}" r="${sel ? 16 : 12}" fill="${fill}" fill-opacity="${sel ? 0.35 : 0.2}" stroke="${fill}" stroke-width="${sel ? 2.4 : 1.5}" />
+        <circle cx="${n.x}" cy="${n.y}" r="4.5" fill="${fill}" />
+        <text x="${n.x}" y="${n.y + 28}" text-anchor="middle">${n.label}</text>
+      </g>`;
+    }).join('');
+    svg.innerHTML = edgeHtml + nodeHtml;
+  }
+
+  function renderDetail() {
+    const n = NODES.find((x) => x.id === selectedId);
+    document.getElementById('node-detail').innerHTML = `
+      <div style="font-size:13.5px;font-weight:650;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        ${n.label}${n.pinned ? '<span class="pill pill-amber">已钉住</span>' : ''}
+      </div>
+      <div style="font-size:12px;color:var(--text-2);line-height:1.75;margin-bottom:10px">${n.body}</div>
+      <div class="kv"><span>节点类型</span><b>${n.type}</b></div>
+      <div class="kv"><span>归属日期</span><b>${n.day}</b></div>
+      <div class="kv"><span>重要度 / 当前权重</span><b>${n.imp} / ${(n.imp * n.decay).toFixed(2)}</b></div>
+      <div class="kv"><span>关键词标签</span><b>${n.tags.join(' · ')}</b></div>
+    `;
+    document.getElementById('pin-btn').innerHTML = `<i data-lucide="pin" class="xs"></i>${n.pinned ? '取消钉住' : '钉住永存'}`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderPrompt() {
+    const picked = NODES.filter((n) => hitIds.has(n.id)).slice(0, 4);
+    const lines = picked.map((n) => `- [${n.day}][${n.type}${n.pinned ? '·钉住' : ''}] ${n.body}`).join('\n');
+    const text = `[相关记忆 · 回答时自然使用，不要编造]\n${lines || '（无匹配记忆）'}`;
+    document.getElementById('prompt-preview').textContent = `${text}\n\n// 字符统计：${text.length} / 600 字预算`;
+  }
+
+  function selectNode(id) { selectedId = id; renderGraph(); renderDetail(); }
+  function togglePin() {
+    const n = NODES.find((x) => x.id === selectedId);
+    n.pinned = !n.pinned;
+    renderGraph(); renderDetail(); renderPrompt();
+    wbToast(n.pinned ? `已钉住「${n.label}」（不受 30 天半衰期衰减影响）` : `已取消钉住「${n.label}」`);
+  }
+  function setQ(q) { document.getElementById('mem-query').value = q; runQuery(); }
+  function selectDay(el, day) {
+    document.querySelectorAll('.diary').forEach((d) => d.classList.remove('on'));
+    el.classList.add('on');
+    wbToast(`已聚焦 ${day} 关联记忆节点`);
+  }
+  function confirmWipe() {
+    if (confirm('确认执行 memory:wipe 隐私一键擦除？（原型演示不会删除真实文件）')) {
+      wbToast('已模拟执行 memory:wipe（JSONL 与内存索引已清空）');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { runQuery(); renderDetail(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryEdgeView",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/MemoryEdgeView",
+  "$defs": {
+    "MemoryEdgeView": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "temporal",
+            "causal",
+            "semantic",
+            "entity",
+            "instance"
+          ]
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "kind",
+        "weight"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

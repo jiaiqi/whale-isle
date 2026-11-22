@@ -1,0 +1,149 @@
+/**
+ * OBS 透明挂件（v4 设计稿 06）：图层开关 + 520px 预演 + 接入状态。
+ * 预演用真实 autodrive 事件渲染双轨气泡、真实饭碗余额；投票/歌词层来自 STAGE_PROTOCOL（T-M5-09 接线中）。
+ */
+import { useState } from 'react';
+import { MonitorPlay, Radio, Wheat } from 'lucide-react';
+import type { AutodriveEventView } from './bridge';
+
+const LAYERS = [
+  { id: 'bubbles', label: '双轨气泡' },
+  { id: 'vote', label: '弹幕议会' },
+  { id: 'lyrics', label: 'RVC 歌词卡' },
+  { id: 'rice', label: '赛博饭碗徽' },
+  { id: 'bar', label: '弹幕交互条' },
+] as const;
+type LayerId = (typeof LAYERS)[number]['id'];
+
+export interface ObsPanelProps {
+  rice: number;
+  riceCap: number;
+  events: AutodriveEventView[];
+}
+
+export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.Element {
+  const [on, setOn] = useState<Record<LayerId, boolean>>({ bubbles: true, vote: true, lyrics: true, rice: true, bar: true });
+  const [votes, setVotes] = useState([12, 7, 4]);
+  const latestThink = [...events].reverse().find((e) => e.type === 'decision')?.intent ?? '（小鲸还没有内心戏）';
+  const latestTalk = [...events].reverse().find((e) => e.tool === 'chat_reply' || e.type === 'receipt')?.summary ?? '（暂无正式台词）';
+  const total = votes.reduce((a, b) => a + b, 0);
+  const pct = Math.min(100, Math.round((rice / riceCap) * 100));
+
+  return (
+    <div className="mx-auto max-w-[1100px] px-6 py-5">
+      <header className="mb-4 flex items-end justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-semibold"><MonitorPlay size={18} /> OBS 透明挂件</h1>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
+            18765 浏览器源 · STAGE_PROTOCOL=1 SSE · 透明底双轨气泡 / 议会投票 / 歌词卡 / 饭碗徽
+          </p>
+        </div>
+        <span className="pill pill-amber"><Radio size={11} /> STAGE_PROTOCOL 接线中（T-M5-09）</span>
+      </header>
+
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {LAYERS.map((l) => (
+          <button
+            key={l.id}
+            className={`pill${on[l.id] ? ' pill-blue' : ''}`}
+            onClick={() => setOn((prev) => ({ ...prev, [l.id]: !prev[l.id] }))}
+            data-obs-layer={l.id}
+          >
+            <span className="pulse-dot" style={on[l.id] ? undefined : { background: 'var(--text-3)', boxShadow: 'none' }} />
+            {l.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 520px 透明预演（棋盘格模拟 OBS 透明区） */}
+      <div
+        className="relative mx-auto mb-4 overflow-hidden rounded-2xl"
+        style={{
+          width: '100%', maxWidth: 720, height: 520,
+          border: '1px solid var(--stroke-2)',
+          background:
+            'repeating-conic-gradient(rgba(255,255,255,0.045) 0% 25%, transparent 0% 50%) 0 0 / 22px 22px, var(--bg)',
+        }}
+      >
+        {on.rice && (
+          <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full px-3 py-1.5" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', backdropFilter: 'blur(12px)' }}>
+            <Wheat size={11} style={{ color: 'var(--amber)' }} />
+            <span className="mono text-[10px]" style={{ color: 'var(--text-2)' }}>{rice.toLocaleString()} 粒</span>
+            <span className="h-1 w-16 overflow-hidden rounded-full" style={{ background: 'var(--inset)' }}>
+              <i className="block h-full" style={{ width: `${Math.max(4, pct)}%`, background: 'linear-gradient(90deg,var(--amber),var(--green))' }} />
+            </span>
+          </div>
+        )}
+
+        {on.vote && (
+          <div className="absolute right-3 top-3 w-44 rounded-xl p-2.5" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', backdropFilter: 'blur(12px)' }}>
+            <div className="mono mb-1.5 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
+              <span>弹幕议会</span><span>0:20</span>
+            </div>
+            {['继续钓鱼', '回家睡觉', '下矿碰碰运气'].map((label, i) => {
+              const p = Math.round(((votes[i] ?? 0) / Math.max(1, total)) * 100);
+              return (
+                <button key={label} onClick={() => setVotes((v) => v.map((x, j) => (j === i ? x + 1 : x)))} className="mb-1 w-full text-left">
+                  <div className="flex justify-between text-[10px]" style={{ color: 'var(--text-2)' }}>
+                    <span>{label}</span><span className="mono">{p}%</span>
+                  </div>
+                  <div className="mt-0.5 h-1 overflow-hidden rounded-full" style={{ background: 'var(--inset)' }}>
+                    <i className="block h-full" style={{ width: `${p}%`, background: i === 0 ? 'var(--blue)' : i === 1 ? 'var(--green)' : 'var(--violet)' }} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {on.bubbles && (
+          <div className="absolute bottom-24 left-6 max-w-[60%]">
+            <div className="mb-2 rounded-2xl px-3 py-2 text-[12px]" style={{ background: 'linear-gradient(135deg, rgba(191,90,242,0.16), rgba(191,90,242,0.05))', border: '1.5px dashed rgba(191,90,242,0.45)', color: 'var(--text-1)' }}>
+              <span className="mono mr-1 text-[9px]" style={{ color: 'var(--violet)' }}>内心戏</span>
+              {latestThink}
+            </div>
+            <div className="rounded-2xl px-3.5 py-2.5 text-[13px]" style={{ background: 'var(--surface)', border: '1px solid var(--blue-line)', backdropFilter: 'blur(14px)', color: 'var(--text-1)' }}>
+              {latestTalk}
+            </div>
+          </div>
+        )}
+
+        {/* 桌宠剪影占位（真实 OBS 源为 pet-stage 透明窗） */}
+        <svg className="absolute bottom-6 right-10 floaty" width="150" height="150" viewBox="0 0 24 24" fill="none">
+          <path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="rgba(10,132,255,0.12)" stroke="rgba(10,132,255,0.55)" strokeWidth="0.8" />
+          <circle cx="17.5" cy="10.5" r="1.2" fill="var(--blue)" />
+        </svg>
+
+        {on.bar && (
+          <div className="absolute bottom-4 left-1/2 w-[70%] -translate-x-1/2 rounded-full px-4 py-1.5 text-center text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', color: 'var(--text-2)' }}>
+            弹幕交互条：发送 <span className="mono" style={{ color: 'var(--blue)' }}>点歌 晴天</span> / <span className="mono" style={{ color: 'var(--violet)' }}>投票 2</span>
+          </div>
+        )}
+
+        {on.lyrics && (
+          <div className="absolute bottom-16 right-3 w-52 rounded-xl p-2.5" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', backdropFilter: 'blur(12px)' }}>
+            <div className="mono mb-1 text-[10px]" style={{ color: 'var(--text-3)' }}>正在演唱 · 学猫叫</div>
+            <div className="text-[11px]" style={{ color: 'var(--blue)' }}>我们一起学猫叫</div>
+            <div className="text-[10px]" style={{ color: 'var(--text-3)' }}>一起喵喵喵喵喵</div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: 'var(--inset)' }}>
+              <i className="block h-full" style={{ width: '38%', background: 'var(--violet)' }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          ['双轨气泡', '内心戏紫云朵 + 正式台词玻璃泡，事件来自真实 autodrive 总线'],
+          ['议会投票', '20s 倒计时三选一；票数实时重排（STAGE_PROTOCOL SSE 接线中）'],
+          ['歌词 / 饭碗', 'RVC 当前句与下一句、饭碗余额与进度条'],
+        ].map(([t, d]) => (
+          <div key={t} className="card px-3.5 py-3">
+            <div className="text-xs font-semibold">{t}</div>
+            <p className="mt-1 text-[11px] leading-relaxed" style={{ color: 'var(--text-3)' }}>{d}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -2,212 +2,142 @@
 <html lang="zh-CN" class="dark">
 <head>
 <meta charset="UTF-8">
-<title>插件管理 — 大肥鱼工作台设计稿 v3</title>
+<title>插件与权限策略 — 大肥鱼工作台 v4</title>
 <link rel="stylesheet" href="tokens.css">
 <script src="vendor/lucide.min.js"></script>
 <script src="shell.js"></script>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:var(--font-ui); background:var(--bg); color:var(--text-1); font-size:13.5px; min-height:100vh; display:grid; grid-template-columns:236px 1fr; grid-template-rows:46px 1fr; grid-template-areas:"side top" "side main"; overflow:hidden; }
-  .side { grid-area:side; border-right:1px solid var(--stroke); display:flex; flex-direction:column; }
-  .brand { display:flex; align-items:center; gap:10px; padding:14px 16px 10px; }
-  .brand .t { font-weight:650; font-size:13.5px; }
-  .nav-sec { padding:10px 16px 5px; font-size:10px; letter-spacing:1.4px; color:var(--text-3); font-weight:650; }
-  .nav-item { display:flex; align-items:center; gap:9px; margin:0 8px; padding:7px 9px; border-radius:var(--r-md); color:var(--text-2); font-size:12.5px; cursor:pointer; }
-  .nav-item:hover { background:var(--surface-2); color:var(--text-1); }
-  .nav-item.on { background:var(--green-dim); color:var(--green); }
-  .side-foot { margin-top:auto; border-top:1px solid var(--stroke); padding:11px 14px; font-size:11.5px; color:var(--text-2); }
-  .top { grid-area:top; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--stroke); }
-  .crumb { font-size:12.5px; color:var(--text-2); } .crumb b { color:var(--text-1); }
-  .top .sp { flex:1; }
-  .icon-btn { width:30px; height:30px; display:grid; place-items:center; border-radius:var(--r-md); color:var(--text-2); background:none; border:none; }
-  .icon-btn:hover { background:var(--surface-2); }
-  .main { grid-area:main; overflow-y:auto; padding:20px 26px 40px; }
-  .inner { max-width:1080px; margin:0 auto; }
+  .page { max-width: 1120px; margin: 0 auto; padding: 20px 26px 48px; }
+  .pg-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 4px; flex-wrap: wrap; }
+  .pg-head h1 { font-size: 20px; font-weight: 700; }
+  .pg-head .n { font-family: var(--font-mono); font-size: 11.5px; color: var(--blue); }
+  .pg-sub { font-size: 12px; color: var(--text-2); margin-bottom: 18px; }
 
-  .pg-head { display:flex; align-items:baseline; gap:14px; margin-bottom:4px; }
-  .pg-head h1 { font-size:17px; font-weight:700; }
-  .pg-head .n { font-family:var(--font-mono); font-size:11px; color:var(--text-3); }
-  .pg-sub { font-size:12px; color:var(--text-2); margin-bottom:20px; }
+  .plug-list { overflow: hidden; border-radius: var(--r-xl); }
+  .plug { display: grid; grid-template-columns: 42px 1fr auto; gap: 14px; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--stroke); transition: background var(--dur-hover) var(--ease); }
+  .plug:last-child { border: none; }
+  .plug:hover { background: var(--surface-2); }
+  .plug .ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--inset); border: 1px solid var(--stroke); color: var(--blue); }
+  .plug .nm { font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .plug .ds { font-size: 11.5px; color: var(--text-2); margin-top: 3px; line-height: 1.6; }
+  .plug .meta { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
 
-  /* 插件行（列表优先，破卡片网格 AI 味） */
-  .plug { display:grid; grid-template-columns:44px 1fr auto; gap:14px; align-items:center; padding:13px 16px; border-bottom:1px solid var(--stroke); transition:background var(--dur-hover) var(--ease-out); }
-  .plug:hover { background:var(--surface-2); }
-  .plug .ic { width:38px; height:38px; border-radius:var(--r-lg); display:grid; place-items:center; background:var(--inset); border:1px solid var(--stroke); }
-  .plug .nm { font-size:13px; font-weight:650; display:flex; align-items:center; gap:8px; }
-  .plug .ds { font-size:11.5px; color:var(--text-2); margin-top:3px; line-height:1.6; }
-  .plug .meta { display:flex; gap:6px; margin-top:7px; flex-wrap:wrap; }
-  .plug .right { display:flex; align-items:center; gap:14px; }
-  .kind { font-size:9.5px; font-family:var(--font-mono); padding:2px 7px; border-radius:4px; border:1px solid var(--stroke); color:var(--text-3); }
-  .kind.core { color:var(--green); border-color:var(--green-line); background:var(--green-dim); }
-  .kind.dsh { color:var(--blue); border-color:var(--blue-line); background:var(--blue-dim); }
+  .bottom-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin-top: 16px; }
+  .panel { padding: 15px 17px; border-radius: var(--r-xl); }
+  .sec { font-size: 10px; letter-spacing: 1.2px; color: var(--text-3); font-weight: 650; margin-bottom: 10px; text-transform: uppercase; display: flex; justify-content: space-between; }
 
-  /* 开关 */
-  .sw { position:relative; width:40px; height:22px; border-radius:999px; background:var(--inset); border:1px solid var(--stroke-2); cursor:pointer; transition:background .2s var(--ease-out), border-color .2s; flex-shrink:0; }
-  .sw::after { content:''; position:absolute; top:2.5px; left:3px; width:15px; height:15px; border-radius:50%; background:var(--text-3); transition:left .2s var(--ease-spring), background .2s; }
-  .sw.on { background:var(--green-dim); border-color:var(--green-line); }
-  .sw.on::after { left:20px; background:var(--green); }
+  .perm { display: flex; gap: 10px; align-items: center; padding: 8.5px 0; border-bottom: 1px dashed var(--stroke); font-size: 12px; flex-wrap: wrap; }
+  .perm:last-child { border: none; }
+  .perm .nm { color: var(--text-1); display: flex; align-items: center; gap: 7px; width: 130px; }
+  .perm .path { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
+  .perm .pol { margin-left: auto; display: flex; gap: 5px; }
+  .pol-b { font-size: 10px; padding: 3px 10px; border-radius: 980px; border: 1px solid var(--stroke); color: var(--text-3); background: var(--inset); cursor: pointer; }
+  .pol-b.on-allow { background: var(--green-dim); color: var(--green); border-color: var(--green-line); }
+  .pol-b.on-ask { background: var(--amber-dim); color: var(--amber); border-color: var(--amber-line); }
+  .pol-b.on-deny { background: var(--red-dim); color: var(--red); border-color: var(--red-line); }
 
-  /* 权限 */
-  .perm { display:flex; gap:10px; align-items:center; padding:9px 0; border-bottom:1px dashed var(--stroke); font-size:12px; }
-  .perm:last-child { border:none; }
-  .perm .nm { color:var(--text-2); display:flex; align-items:center; gap:8px; }
-  .perm .path { font-family:var(--font-mono); font-size:10.5px; color:var(--text-3); }
-  .perm .pol { margin-left:auto; display:flex; gap:6px; }
-  .pol-b { font-size:10px; padding:3px 10px; border-radius:999px; border:1px solid var(--stroke); color:var(--text-3); cursor:pointer; }
-  .pol-b.on-allow { background:var(--green-dim); color:var(--green); border-color:var(--green-line); }
-  .pol-b.on-ask { background:var(--amber-dim); color:var(--amber); border-color:var(--amber-line); }
-  .pol-b.on-deny { background:var(--red-dim); color:var(--red); border-color:var(--red-line); }
-
-  .ext-row { display:flex; align-items:center; gap:10px; padding:8px 0; font-size:11.5px; color:var(--text-2); border-bottom:1px dashed var(--stroke); }
-  .ext-row:last-child { border:none; }
-  .ext-row .where { font-family:var(--font-mono); font-size:10px; color:var(--blue); }
+  .ext-row { display: flex; align-items: center; gap: 10px; padding: 7.5px 0; font-size: 12px; color: var(--text-2); border-bottom: 1px dashed var(--stroke); }
+  .ext-row:last-child { border: none; }
+  .ext-row .where { margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--blue); }
+  @media (max-width: 960px) { .bottom-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
-<body>
-  <div class="ambient"></div>
-  <aside class="side">
-    <div class="brand"><svg style="width:22px;height:22px" viewBox="0 0 24 24" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".25"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg><span class="t">大肥鱼工作台</span></div>
-    <div class="nav-sec">插件</div>
-    <div style="padding:0 8px">
-      <div class="nav-item"><i data-lucide="message-square" class="sm"></i>聊天 · 人格会话</div>
-      <div class="nav-item"><i data-lucide="terminal" class="sm"></i>Harness · Agents</div>
-      <div class="nav-item"><i data-lucide="sprout" class="sm"></i>星露谷共玩</div>
-      <div class="nav-item"><i data-lucide="fish" class="sm"></i>桌宠 · 小鲸</div>
-      <div class="nav-item"><i data-lucide="radio-tower" class="sm"></i>直播中控</div>
-      <div class="nav-item"><i data-lucide="music" class="sm"></i>点歌台</div>
-      <div class="nav-item"><i data-lucide="brain" class="sm"></i>记忆图谱</div>
-      <div class="nav-item on"><i data-lucide="puzzle" class="sm"></i>插件管理</div>
-    </div>
-    <div class="side-foot"><div style="display:flex;justify-content:space-between"><span>主题</span><span onclick="wbToggleTheme()" style="display:flex;align-items:center;gap:6px;cursor:pointer"><i data-lucide="sun" class="sm" data-theme-icon></i>深色</span></div></div>
-  </aside>
-
-  <header class="top">
-    <div class="crumb">设置 <b>· 插件管理</b></div>
-    <div class="sp"></div>
-    <button class="icon-btn" onclick="wbToggleTheme()"><i data-lucide="sun" data-theme-icon></i></button>
-  </header>
-
-  <main class="main">
-    <div class="inner">
-      <div class="pg-head"><h1>插件管理</h1><span class="n">8 enabled / 2 disabled · 1 dsh-compatible</span></div>
-      <div class="pg-sub">全部功能都是插件——按需开启。禁用后其侧栏入口、面板卡片、桌宠动作与工具注册一并卸载；崩溃相互隔离，不拖垮内核。</div>
-
-      <div class="card">
-        <div class="plug">
-          <div class="ic"><i data-lucide="message-square" style="color:var(--green)"></i></div>
-          <div>
-            <div class="nm">聊天 · 人格会话<span class="kind core">core</span></div>
-            <div class="ds">Codex 式会话流：小鲸的输出、内心戏、工具回执全程可视；对话可指挥、执行完回归自主。</div>
-            <div class="meta"><span class="tag pill-violet">扩展点：面板 · 快捷卡 · 桌宠气泡</span><span class="tag pill">tools: 6</span></div>
-          </div>
-          <div class="right"><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="terminal" style="color:var(--green)"></i></div>
-          <div>
-            <div class="nm">Harness · Agents<span class="kind core">core</span></div>
-            <div class="ds">ACP 协议统一接入 Claude Code / Codex / Cursor / dsh——线程、中途换 agent、checkpoint 回滚、桌面+远程审批。</div>
-            <div class="meta"><span class="tag pill-blue" style="color:var(--blue);border:1px solid var(--blue-line);background:var(--blue-dim);font-size:9.5px;padding:2px 7px;border-radius:4px">ACP v1/v2</span><span class="tag pill">providers: 4</span></div>
-          </div>
-          <div class="right"><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="sprout" style="color:var(--green)"></i></div>
-          <div>
-            <div class="nm">星露谷共玩</div>
-            <div class="ds">BWF MCP 主线 + 看门狗「没反应查原因」+ 换日/睡觉守护层 + CheatBridge 作弊桥（独立开关 + 审计）。</div>
-            <div class="meta"><span class="tag pill-green">运行中</span><span class="tag pill">MCP: 18080 · tools: 81</span><span class="tag pill-amber">cheat: off</span></div>
-          </div>
-          <div class="right"><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="fish" style="color:var(--blue)"></i></div>
-          <div>
-            <div class="nm">桌宠 · 小鲸</div>
-            <div class="ds">透明窗 + VP9-Alpha 双 video 渲染、114 官方动作库、参数单出口引擎（呼吸/眨眼/注视/口型）、剪影点击分区。</div>
-            <div class="meta"><span class="tag pill">actions: 114</span><span class="tag pill">manifest: 3-layer</span></div>
-          </div>
-          <div class="right"><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="radio-tower" style="color:var(--text-3)"></i></div>
-          <div>
-            <div class="nm">直播中控</div>
-            <div class="ds">dyhub 弹幕接入、三级注意力调度（人数分档 + e^(-age/τ) 衰减）、礼连击结算、三级防封护栏、OBS 挂件。</div>
-            <div class="meta"><span class="tag pill">obs: 18765</span><span class="tag pill-red">未开播</span></div>
-          </div>
-          <div class="right"><div class="sw" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="music" style="color:var(--text-3)"></i></div>
-          <div>
-            <div class="nm">点歌台 · SVC</div>
-            <div class="ds">点歌解析 → 队列 → Demucs v4 伴奏分离 + RVC v2 变声；前 25s 预缓冲先唱 + MD5 缓存池；违禁曲目拦截。</div>
-            <div class="meta"><span class="tag pill">cache: MD5 池</span></div>
-          </div>
-          <div class="right"><div class="sw" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="brain" style="color:var(--green)"></i></div>
-          <div>
-            <div class="nm">记忆图谱</div>
-            <div class="ds">事件/实体/概念节点 + 五类边混合检索；30 天半衰期遗忘；同实体≥3 事件自动归纳长期主题；下播提炼入口。</div>
-            <div class="meta"><span class="tag pill">nodes: 1,284 · edges: 3,077</span><span class="tag pill-green">benchmark 70.3%</span></div>
-          </div>
-          <div class="right"><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug">
-          <div class="ic"><i data-lucide="activity" style="color:var(--green)"></i></div>
-          <div>
-            <div class="nm">工作跟随</div>
-            <div class="ds">监听本地 agent CLI 会话（jsonl→事件映射），桌宠跟着你的 AI 一起干活：mention/processing/success → 动画。</div>
-            <div class="meta"><span class="tag pill">watching: 2 sessions</span></div>
-          </div>
-          <div class="right"><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug" style="opacity:.75">
-          <div class="ic"><i data-lucide="fish-outline" style="color:var(--blue)"></i></div>
-          <div>
-            <div class="nm">羽觞养鱼<span class="kind dsh">dsh plugin</span></div>
-            <div class="ds">经 plugin-bridge 原样装载的 dsh 生态插件（Cordis / defineTool / shared 纯函数规则核心）——抽卡、成长引擎、零花钱钱包。</div>
-            <div class="meta"><span class="tag pill dsh" style="color:var(--blue);border:1px solid var(--blue-line);background:var(--blue-dim);font-size:9.5px;padding:2px 7px;border-radius:4px">兼容层 T-M6-03</span></div>
-          </div>
-          <div class="right"><div class="sw" onclick="this.classList.toggle('on')"></div></div>
-        </div>
-        <div class="plug" style="opacity:.75">
-          <div class="ic"><i data-lucide="clapperboard" style="color:var(--text-3)"></i></div>
-          <div>
-            <div class="nm">高光切片器</div>
-            <div class="ds">五阶段切点检测链（HSV 差分）、300MB LRU 媒体缓存、宫格分镜（222 token 看 5 分钟）、翻车复盘字幕。</div>
-            <div class="meta"><span class="tag pill">P2 规划中</span></div>
-          </div>
-          <div class="right"><div class="sw" onclick="this.classList.toggle('on')"></div></div>
-        </div>
+<body data-wb-page="plugins" data-wb-group="平台与底层" data-wb-title="插件与权限策略">
+  <main class="wb-main">
+    <div class="page">
+      <div class="pg-head">
+        <h1>插件管理与权限策略</h1>
+        <span class="n" id="plug-count">7 enabled / 2 disabled · Cordis 插件树兼容</span>
       </div>
+      <div class="pg-sub">全部业务能力皆可开关插件——禁用后其侧栏入口、右栏卡片与工具注册同步卸载，故障彼此隔离。</div>
 
-      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:18px">
-        <div class="card" style="padding:14px 16px">
-          <div class="sec" style="margin-top:0">权限策略（Policy · 按资源前缀）<span style="margin-left:auto;font-size:10px;color:var(--text-3);font-weight:500;letter-spacing:0">凭据路径硬拒 · allow_all 也不能放行</span></div>
-          <div class="perm"><span class="nm"><i data-lucide="globe" class="sm" style="width:14px"></i>网络请求</span><span class="path">http(s)://*</span><div class="pol"><span class="pol-b on-allow">allow</span><span class="pol-b">ask</span><span class="pol-b">deny</span></div></div>
-          <div class="perm"><span class="nm"><i data-lucide="file-cog" class="sm" style="width:14px"></i>读写文件</span><span class="path">file://~/workbench/**</span><div class="pol"><span class="pol-b on-ask">ask</span><span class="pol-b">allow</span><span class="pol-b">deny</span></div></div>
-          <div class="perm"><span class="nm"><i data-lucide="terminal" class="sm" style="width:14px"></i>执行命令</span><span class="path">exec://*</span><div class="pol"><span class="pol-b on-ask">ask</span><span class="pol-b">allow</span><span class="pol-b">deny</span></div></div>
-          <div class="perm"><span class="nm"><i data-lucide="key-round" class="sm" style="width:14px"></i>凭据访问</span><span class="path">vault://*</span><div class="pol"><span class="pol-b on-deny">deny（硬拒）</span><span class="pol-b">ask</span><span class="pol-b">allow</span></div></div>
-          <div class="perm"><span class="nm"><i data-lucide="shield-alert" class="sm" style="width:14px"></i>CheatBridge 写操作</span><span class="path">cheat://*</span><div class="pol"><span class="pol-b on-ask">ask（审计）</span><span class="pol-b">allow</span><span class="pol-b">deny</span></div></div>
+      <div class="card plug-list" id="plug-list"></div>
+
+      <div class="bottom-grid">
+        <div class="card panel">
+          <div class="sec"><span>权限策略（Policy · 按资源前缀）</span><span style="color:var(--red)">vault://* 硬拒不可放行</span></div>
+          <div id="perm-list"></div>
         </div>
-        <div class="card" style="padding:14px 16px">
-          <div class="sec" style="margin-top:0">扩展点一览（插件向工作台注册什么）</div>
-          <div class="ext-row"><i data-lucide="panel-left" class="sm" style="width:14px;color:var(--green)"></i>侧栏导航入口<span class="where">sidebar.item</span></div>
-          <div class="ext-row"><i data-lucide="layout-panel-left" class="sm" style="width:14px;color:var(--green)"></i>工作台面板（页面）<span class="where">panel.route</span></div>
-          <div class="ext-row"><i data-lucide="gallery-vertical-end" class="sm" style="width:14px;color:var(--green)"></i>右栏快捷卡片<span class="where">aside.card</span></div>
-          <div class="ext-row"><i data-lucide="wrench" class="sm" style="width:14px;color:var(--blue)"></i>工具注册（LLM/UI 同源）<span class="where">tool.defineTool</span></div>
-          <div class="ext-row"><i data-lucide="radio" class="sm" style="width:14px;color:var(--blue)"></i>总线事件订阅<span class="where">bus.on(domain:event)</span></div>
-          <div class="ext-row"><i data-lucide="cat" class="sm" style="width:14px;color:var(--violet)"></i>桌宠动作 + 台词池<span class="where">pet.animation / pet.line</span></div>
-          <div class="ext-row"><i data-lucide="monitor-play" class="sm" style="width:14px;color:var(--violet)"></i>OBS 挂件组件<span class="where">overlay.widget</span></div>
-          <div style="font-size:10.5px;color:var(--text-3);margin-top:10px;line-height:1.7">dsh 兼容层映射：Cordis 插件树 → 工作台插件；defineTool+registry → bus 工具；typed events → 总线事件。</div>
+        <div class="card panel">
+          <div class="sec"><span>六大插件扩展点（ARCHITECTURE）</span></div>
+          <div class="ext-row"><i data-lucide="panel-left" class="xs" style="color:var(--blue)"></i>侧栏分组导航入口<span class="where">sidebar.item</span></div>
+          <div class="ext-row"><i data-lucide="layout-panel-left" class="xs" style="color:var(--blue)"></i>工作台主面板路由<span class="where">panel.route</span></div>
+          <div class="ext-row"><i data-lucide="gallery-vertical-end" class="xs" style="color:var(--green)"></i>右栏实时状态卡片<span class="where">aside.card</span></div>
+          <div class="ext-row"><i data-lucide="wrench" class="xs" style="color:var(--green)"></i>统一工具注册（LLM/UI 同源）<span class="where">tool.defineTool</span></div>
+          <div class="ext-row"><i data-lucide="radio" class="xs" style="color:var(--violet)"></i>单源多播事件订阅<span class="where">bus.on(domain:ev)</span></div>
+          <div class="ext-row"><i data-lucide="fish" class="xs" style="color:var(--violet)"></i>桌宠动作池 / OBS 挂件<span class="where">pet.* / overlay.*</span></div>
         </div>
       </div>
     </div>
   </main>
+
+<script>
+  const PLUGINS = [
+    { id: 'chat', ic: 'message-square', nm: '聊天 · 人格会话', tag: 'core', ds: 'Codex 式会话流、紫云朵内心戏、记忆注入、P0 雷区 0-token 反射与斜杠插队。', meta: ['已闭环', 'tools: 6'], on: true },
+    { id: 'memory', ic: 'brain', nm: '记忆图谱与小鲸日记', tag: 'T-M5-04', ds: 'JSONL 节点/边图谱、2-gram 召回 + 2 跳扩展、换日自动日记与正文消毒。', meta: ['已闭环', '13 节点 / 15 边'], on: true },
+    { id: 'voice', ic: 'audio-lines', nm: '声音工坊与音色库', tag: 'T-M5-17', ds: '5 音色×5 情感快捷库 + 五情绪调音台 + RVC 实验室 + ResourceMutex 护栏。', meta: ['已闭环', 'audio-ai-worker :18790'], on: true },
+    { id: 'pet', ic: 'fish', nm: '桌宠舞台与动作库', tag: 'D11/D16', ds: '透明窗 VP9-Alpha 双 video 渲染、双轨气泡、11 槽位 + 77 氛围池零闲置。', meta: ['已闭环', '114 clips'], on: true },
+    { id: 'stardew', ic: 'sprout', nm: '星露谷共玩', tag: 'T-M5-02/15', ds: 'LlmPlanner + RulePlanner 兜底、75 工具白名单、guide-forager 7 专题攻略与 CheatBridge。', meta: ['运行中', 'MCP :18080'], on: true },
+    { id: 'harness', ic: 'terminal', nm: 'Harness · ACP', tag: 'T-M6-02', ds: 'ACP v1 协议接入 gemini / dsh / claude-agent-acp，流式事件与 YNA 审批。', meta: ['已闭环', '2 在线'], on: true },
+    { id: 'providers', ic: 'cpu', nm: '模型供应商网关', tag: 'T-dir-01', ds: 'Magpie 单屏、safeStorage 凭据库、三大干饭套餐与六槽位粘性路由。', meta: ['已闭环', '9 预设'], on: true },
+    { id: 'live', ic: 'radio-tower', nm: '直播中控 & OBS 挂件', tag: '规划中', ds: '弹幕接入、三级注意力调度、礼物插队点歌与 18765 透明挂件。', meta: ['obs :18765'], on: false },
+    { id: 'dsh-fish', ic: 'waves', nm: '羽觞养鱼（dsh 兼容插件）', tag: 'dsh-compat', ds: '经 Cordis 兼容层原样装载的 dsh 生态插件（defineTool + 纯函数规则核心）。', meta: ['T-M6-03'], on: false },
+  ];
+
+  const PERMS = [
+    { ic: 'globe', nm: '网络请求', path: 'http(s)://*', pol: 'allow', locked: false },
+    { ic: 'file-cog', nm: '读写工作区', path: 'file://~/workbench/**', pol: 'ask', locked: false },
+    { ic: 'terminal', nm: '执行命令', path: 'exec://*', pol: 'ask', locked: false },
+    { ic: 'shield-alert', nm: 'CheatBridge 写', path: 'cheat://*', pol: 'ask', locked: false },
+    { ic: 'key-round', nm: '凭据访问', path: 'vault://*', pol: 'deny', locked: true },
+  ];
+
+  function renderPlugins() {
+    const en = PLUGINS.filter((p) => p.on).length;
+    document.getElementById('plug-count').textContent = `${en} enabled / ${PLUGINS.length - en} disabled · Cordis 插件树兼容`;
+    document.getElementById('plug-list').innerHTML = PLUGINS.map((p, idx) => `
+      <div class="plug" style="opacity:${p.on ? 1 : 0.65}">
+        <div class="ic" style="color:${p.on ? 'var(--blue)' : 'var(--text-3)'}"><i data-lucide="${p.ic}" class="sm"></i></div>
+        <div>
+          <div class="nm">${p.nm}<span class="pill ${p.tag === 'core' ? 'pill-green' : p.tag === 'dsh-compat' ? 'pill-blue' : ''}" style="font-size:9.5px;padding:1px 7px">${p.tag}</span></div>
+          <div class="ds">${p.ds}</div>
+          <div class="meta">${p.meta.map((m) => `<span class="pill" style="font-size:10px">${m}</span>`).join('')}</div>
+        </div>
+        <div class="sw${p.on ? ' on' : ''}" onclick="togglePlug(${idx})"></div>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+  function togglePlug(i) {
+    PLUGINS[i].on = !PLUGINS[i].on;
+    renderPlugins();
+    wbToast(`插件「${PLUGINS[i].nm}」已${PLUGINS[i].on ? '热启用' : '卸载禁用'}`);
+  }
+
+  function renderPerms() {
+    document.getElementById('perm-list').innerHTML = PERMS.map((p, idx) => `
+      <div class="perm">
+        <span class="nm"><i data-lucide="${p.ic}" class="xs" style="color:var(--blue)"></i>${p.nm}</span>
+        <span class="path">${p.path}</span>
+        <div class="pol">
+          ${['allow', 'ask', 'deny'].map((mode) => {
+            const on = p.pol === mode ? ` on-${mode}` : '';
+            return `<button class="pol-b${on}" onclick="setPerm(${idx},'${mode}')">${mode}${p.locked && mode === 'deny' ? ' (硬拒)' : ''}</button>`;
+          }).join('')}
+        </div>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+  function setPerm(idx, mode) {
+    if (PERMS[idx].locked && mode !== 'deny') {
+      wbToast('安全红线：vault://* 凭据路径硬拒，allow_all 亦不可放行');
+      return;
+    }
+    PERMS[idx].pol = mode;
+    renderPerms();
+    wbToast(`策略更新：${PERMS[idx].path} → ${mode}`);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => { renderPlugins(); renderPerms(); });
+</script>
 </body>
 </html>

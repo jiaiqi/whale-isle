@@ -27,7 +27,7 @@ const MODE_SAMPLE: Record<string, string> = {
   surprised: '诶诶诶！主人居然给本鱼准备了礼物？！真的吗真的吗！',
 };
 
-export function VoicePanel(): React.JSX.Element {
+export function VoicePanel({ bare = false }: { bare?: boolean } = {}): React.JSX.Element {
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [modes, setModes] = useState<ModeOption[]>([]);
   const [currentVoiceId, setCurrentVoiceId] = useState<string>('');
@@ -47,7 +47,7 @@ export function VoicePanel(): React.JSX.Element {
     setNotice(null);
     const res = await window.directorBridge.voiceAudition(voiceId, mode, MODE_SAMPLE[mode]);
     setBusy(null);
-    if (!res.ok) setNotice(`❌ 试听失败：${res.error ?? '未知错误'}`);
+    if (!res.ok) setNotice(`错误：试听失败：${res.error ?? '未知错误'}`);
   };
 
   const pickVoice = async (voiceId: string): Promise<void> => {
@@ -58,7 +58,7 @@ export function VoicePanel(): React.JSX.Element {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
-      <header className="mb-5 flex items-end justify-between">
+      {!bare && (<header className="mb-5 flex items-end justify-between">
         <div>
           <h1 className="text-xl font-semibold">音色库</h1>
           <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
@@ -66,7 +66,7 @@ export function VoicePanel(): React.JSX.Element {
           </p>
         </div>
         <span className="pill pill-violet">{voices.length} 个候选音色</span>
-      </header>
+      </header>)}
 
       {notice && (
         <div className="card mb-4 px-4 py-2.5 text-xs" style={{ color: notice.startsWith('✅') ? 'var(--green)' : 'var(--red)' }}>

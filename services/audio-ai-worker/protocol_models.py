@@ -783,6 +783,88 @@ class StardewModsConfig(BaseModel):
     modsDir: str | None = ''
 
 
+class NodeType(StrEnum):
+    event = 'event'
+    entity = 'entity'
+    concept = 'concept'
+    summary = 'summary'
+
+
+class MemoryNodeView(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: str
+    nodeType: NodeType
+    text: str
+    importance: Annotated[float, Field(ge=0.0, le=1.0)]
+    pinned: bool
+    createdAt: float
+    day: str | None = ''
+    instanceCount: Annotated[int | None, Field(ge=1)] = 1
+
+
+class Kind(StrEnum):
+    temporal = 'temporal'
+    causal = 'causal'
+    semantic = 'semantic'
+    entity = 'entity'
+    instance = 'instance'
+
+
+class MemoryEdgeView(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    from_: Annotated[str, Field(alias='from')]
+    to: str
+    kind: Kind
+    weight: Annotated[float, Field(ge=0.0, le=1.0)]
+
+
+class Node(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: str
+    nodeType: NodeType
+    text: str
+    importance: Annotated[float, Field(ge=0.0, le=1.0)]
+    pinned: bool
+    createdAt: float
+    day: str | None = ''
+    instanceCount: Annotated[int | None, Field(ge=1)] = 1
+
+
+class Edge(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    from_: Annotated[str, Field(alias='from')]
+    to: str
+    kind: Kind
+    weight: Annotated[float, Field(ge=0.0, le=1.0)]
+
+
+class Stats(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    nodes: Annotated[int, Field(ge=0)]
+    edges: Annotated[int, Field(ge=0)]
+    lastDay: str | None
+
+
+class MemoryGraphView(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    nodes: list[Node]
+    edges: list[Edge]
+    days: list[str]
+    stats: Stats
+
+
 class Action(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -909,3 +991,6 @@ class AIWorkbenchContracts(BaseModel):
         StardewModsOpResult, Field(alias='StardewModsOpResult')
     ]
     StardewModsConfig_1: Annotated[StardewModsConfig, Field(alias='StardewModsConfig')]
+    MemoryNodeView_1: Annotated[MemoryNodeView, Field(alias='MemoryNodeView')]
+    MemoryEdgeView_1: Annotated[MemoryEdgeView, Field(alias='MemoryEdgeView')]
+    MemoryGraphView_1: Annotated[MemoryGraphView, Field(alias='MemoryGraphView')]

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>设计稿 · 供应商配置 — 大肥鱼工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:var(--font-sans); background:var(--bg); color:var(--text-1); min-height:100vh; }
+  .topbar { display:flex; align-items:center; gap:14px; padding:0 18px; height:44px; border-bottom:1px solid var(--stroke); background:rgba(2,6,23,.6); backdrop-filter:blur(12px); position:sticky; top:0; z-index:10; }
+  .logo { font-weight:700; font-size:14px; }
+  .topbar .spacer{flex:1}
+  .topbar a { color:var(--text-2); text-decoration:none; font-size:12px; padding:5px 10px; border-radius:8px; }
+  .topbar a:hover{background:var(--glass-hi);color:var(--text-1)}
+  .topbar a.active{color:var(--whale-300);background:rgba(56,189,248,.12)}
+  .wrap { max-width:1180px; margin:0 auto; padding:22px 22px 44px; }
+
+  .page-head { margin-bottom:18px; }
+  .page-head h1 { font-size:19px; font-weight:700; }
+  .page-head p { font-size:12px; color:var(--text-3); margin-top:5px; }
+
+  /* 干饭套餐 */
+  .profile-row { display:flex; gap:12px; margin-bottom:24px; }
+  .profile-pill { flex:1; border-radius:14px; border:1px solid var(--stroke); background:var(--surface); padding:14px 18px; cursor:pointer; transition:all .2s var(--ease-out); position:relative; }
+  .profile-pill:hover { border-color:var(--stroke-2); }
+  .profile-pill.on { border-color:rgba(251,191,36,.55); background:linear-gradient(150deg, rgba(251,191,36,.1), rgba(251,191,36,.03)); }
+  .profile-pill .name { font-size:14px; font-weight:700; }
+  .profile-pill .desc { font-size:11px; color:var(--text-3); margin-top:4px; line-height:1.5; }
+  .profile-pill .cost { position:absolute; top:13px; right:16px; font-size:10.5px; font-family:var(--font-mono); color:var(--text-2); }
+
+  /* 六槽位 */
+  .section-title { font-size:11px; letter-spacing:1.5px; color:var(--text-3); font-weight:600; margin:24px 0 10px; }
+  .slot-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+  .slot-card { border-radius:13px; border:1px solid var(--stroke); background:var(--surface); padding:13px 15px; }
+  .slot-card .role { font-size:11px; color:var(--text-3); margin-bottom:6px; }
+  .slot-card .binding { font-size:13px; color:var(--whale-300); font-family:var(--font-mono); margin-bottom:9px; }
+  .slot-card select { width:100%; background:var(--inset); border:1px solid var(--stroke); color:var(--text-1); border-radius:9px; padding:7px 10px; font-size:12px; font-family:var(--font-sans); outline:none; }
+  .slot-card select:focus { border-color:rgba(56,189,248,.5); }
+  .slot-card .linked { font-size:10px; color:var(--text-3); margin-top:6px; }
+
+  /* 供应商卡 */
+  .prov-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .prov-card { border-radius:14px; border:1px solid var(--stroke); background:var(--surface); padding:15px 16px; transition:border-color .2s; }
+  .prov-card:hover { border-color:var(--stroke-2); }
+  .prov-card.ok { border-color:rgba(52,211,153,.4); }
+  .prov-head { display:flex; align-items:center; gap:9px; }
+  .prov-logo { width:30px; height:30px; border-radius:9px; display:grid; place-items:center; font-size:15px; background:rgba(56,189,248,.12); border:1px solid rgba(56,189,248,.3); }
+  .prov-name { font-size:14px; font-weight:700; }
+  .prov-cat { font-size:9.5px; padding:2px 8px; border-radius:999px; background:rgba(148,163,184,.14); color:var(--text-2); margin-left:auto; }
+  .variant-row { display:flex; gap:6px; margin:11px 0 7px; flex-wrap:wrap; }
+  .variant-pill { font-size:10px; padding:3.5px 10px; border-radius:999px; border:1px solid var(--stroke); color:var(--text-3); cursor:pointer; }
+  .variant-pill.on { background:rgba(56,189,248,.14); color:var(--whale-300); border-color:rgba(56,189,248,.45); }
+  .base-url { font-size:10.5px; color:var(--text-3); font-family:var(--font-mono); margin-bottom:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .key-row { display:flex; gap:8px; }
+  .key-input { flex:1; min-width:0; background:var(--inset); border:1px solid var(--stroke); border-radius:9px; padding:7px 11px; color:var(--text-1); font-size:12px; font-family:var(--font-mono); outline:none; }
+  .key-input:focus { border-color:rgba(56,189,248,.5); box-shadow:var(--accent-glow); }
+  .key-input::placeholder { color:var(--text-3); font-family:var(--font-sans); }
+  .btn-s { padding:7px 13px; border-radius:9px; border:none; cursor:pointer; font-size:12px; font-weight:600; background:rgba(56,189,248,.16); color:var(--whale-300); border:1px solid rgba(56,189,248,.4); white-space:nowrap; }
+  .btn-s:hover { background:rgba(56,189,248,.28); }
+  .model-row { display:flex; gap:8px; margin-top:9px; align-items:center; }
+  .model-select { flex:1; min-width:0; background:var(--inset); border:1px solid var(--stroke); color:var(--text-1); border-radius:9px; padding:7px 10px; font-size:11.5px; font-family:var(--font-mono); outline:none; }
+  .btn-test { padding:7px 13px; border-radius:9px; border:1px solid rgba(52,211,153,.4); background:rgba(52,211,153,.1); color:var(--green); font-size:12px; cursor:pointer; white-space:nowrap; }
+  .prov-note { margin-top:8px; font-size:10.5px; min-height:15px; }
+  .prov-note.ok { color:var(--green); } .prov-note.err { color:var(--red); } .prov-note.dim { color:var(--text-3); }
+  .prov-foot { display:flex; justify-content:space-between; margin-top:9px; padding-top:9px; border-top:1px dashed var(--stroke); font-size:10px; color:var(--text-3); font-family:var(--font-mono); }
+  .lock { color:var(--green); }
+
+  /* 添加自定义供应商 */
+  .add-card { border:1.5px dashed var(--stroke-2); border-radius:14px; display:grid; place-items:center; min-height:150px; color:var(--text-3); font-size:13px; cursor:pointer; transition:all .2s; background:transparent; }
+  .add-card:hover { color:var(--whale-300); border-color:rgba(56,189,248,.5); background:rgba(56,189,248,.05); }
+
+  .security-note { margin-top:22px; border-radius:13px; border:1px solid rgba(52,211,153,.3); background:rgba(52,211,153,.05); padding:13px 16px; font-size:12px; color:var(--text-2); line-height:1.8; }
+  .security-note b { color:var(--green); }
+</style>
+</head>
+<body>
+  <div class="ambient"></div>
+<header class="topbar">
+  <div class="logo"><svg style="width:20px;height:20px;vertical-align:-4px" viewBox="0 0 24 24" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".25"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg> 大肥鱼工作台</div>
+  <div class="spacer"></div>
+  <a href="index.html">总览</a><a href="shell-chat.html">聊天</a><a href="stardew.html">星露谷</a><a href="providers.html" class="active">供应商</a><a href="pet-stage.html">桌宠</a><a href="obs-overlay.html">OBS</a>
+</header>
+
+<div class="wrap">
+  <div class="page-head">
+    <h1>模型供应商 · Magpie 单屏</h1>
+    <p>Key 经 macOS Keychain（safeStorage）加密落盘，界面永远只见掩码 · 模型发现/连接测试走主进程 fetch · 一处配置，处处可用</p>
+  </div>
+
+  <!-- 干饭套餐 -->
+  <div class="profile-row">
+    <div class="profile-pill on">
+      <div class="name">🍱 豪华直播档</div>
+      <div class="desc">主脑 reasoner + 规划 chat + 弹幕 Qwen + 本地语音<br>直播/复杂任务的满血配置</div>
+      <div class="cost">≈ 3.2 粒米/千token</div>
+    </div>
+    <div class="profile-pill">
+      <div class="name"><i data-lucide="wheat" class="sm" style="display:inline-block;vertical-align:-2px;color:var(--amber)"></i> 省饭摸鱼档</div>
+      <div class="desc">主脑 deepseek-chat + 其余全本地小模型<br>日常闲聊/低预算挂机</div>
+      <div class="cost">≈ 0.8 粒米/千token</div>
+    </div>
+    <div class="profile-pill">
+      <div class="name">🛡️ 断网求生档</div>
+      <div class="desc">全本地 Ollama + 本地 GPT-SoVITS<br>无网环境保底</div>
+      <div class="cost">0 粒米</div>
+    </div>
+  </div>
+
+  <!-- 六槽位 -->
+  <div class="section-title">六槽位绑定（当前套餐：豪华直播档）</div>
+  <div class="slot-grid">
+    <div class="slot-card">
+      <div class="role">🧠 主脑与内心戏（&lt;think&gt; 流式剥离）</div>
+      <div class="binding">deepseek-official / deepseek-reasoner</div>
+      <select><option>deepseek-official / deepseek-reasoner</option><option>deepseek-official / deepseek-chat</option></select>
+      <div class="linked">粘性路由：PROMPT_CACHE_STICKY · 命中缓存 -90% 输入费</div>
+    </div>
+    <div class="slot-card">
+      <div class="role">🌾 星露谷战术规划（MCP 动作决策）</div>
+      <div class="binding">deepseek-official / deepseek-chat</div>
+      <select><option>deepseek-official / deepseek-chat</option></select>
+      <div class="linked">每步 10-14k 输入 · thinking 冻结游戏时钟</div>
+    </div>
+    <div class="slot-card">
+      <div class="role">💬 弹幕快反路由（清洗/打分/拦截）</div>
+      <div class="binding">siliconflow / Qwen2.5-7B-Instruct</div>
+      <select><option>siliconflow / Qwen2.5-7B-Instruct</option></select>
+      <div class="linked">延迟敏感 · LOWEST_LATENCY 策略</div>
+    </div>
+    <div class="slot-card">
+      <div class="role">👁️ 翻车视觉复盘（切片理解）</div>
+      <div class="binding">siliconflow / Qwen2.5-VL-7B-Instruct</div>
+      <select><option>siliconflow / Qwen2.5-VL-7B-Instruct</option></select>
+      <div class="linked">222 token / 5 分钟片（宫格分镜）</div>
+    </div>
+    <div class="slot-card">
+      <div class="role">🗣️ 日常说话 TTS</div>
+      <div class="binding">local-gpt-sovits / gpt-sovits-v2（MPS）</div>
+      <select><option>local-gpt-sovits / gpt-sovits-v2（MPS）</option></select>
+      <div class="linked">云端 SiliconFlow 降级备选 · degraded 如实上报</div>
+    </div>
+    <div class="slot-card">
+      <div class="role"><i data-lucide="music" class="sm" style="width:13px;display:inline-block"></i> 点歌演唱 SVC</div>
+      <div class="binding">local-gpt-sovits / rvc-v2 + demucs-v4</div>
+      <select><option>local-gpt-sovits / rvc-v2 + demucs-v4</option></select>
+      <div class="linked">前 25s 预缓冲先唱 · MD5 缓存池</div>
+    </div>
+  </div>
+
+  <!-- 供应商 -->
+  <div class="section-title">供应商预设库（9 家内置 + 自定义）</div>
+  <div class="prov-grid">
+    <div class="prov-card ok">
+      <div class="prov-head"><div class="prov-logo"><i data-lucide="fish"></i></div><span class="prov-name">DeepSeek 官方</span><span class="prov-cat">OFFICIAL_LLM</span></div>
+      <div class="variant-row">
+        <span class="variant-pill on">CN/按量</span><span class="variant-pill">CN/套餐</span><span class="variant-pill">GLOBAL/按量</span>
+      </div>
+      <div class="base-url">https://api.deepseek.com/v1</div>
+      <div class="key-row"><input class="key-input" type="password" placeholder="已保存：sk-1a2c••••••••9f3e" readonly><button class="btn-s" onclick="note(this,'✅ Key 已重新加密保存')">更新</button></div>
+      <div class="model-row">
+        <select class="model-select"><option>deepseek-reasoner（激活）</option><option>deepseek-chat</option><option>deepseek-v4-flash</option></select>
+        <button class="btn-s" onclick="note(this,'✅ 发现 3 个模型')">拉模型</button>
+        <button class="btn-test" onclick="note(this,'✅ 测试通过 · 412ms · max_tokens=1')">测试</button>
+      </div>
+      <div class="prov-note ok">✅ 测试通过 · 412ms · 上次拉取 2026-11-21 17:42</div>
+      <div class="prov-foot"><span>输入 ¥2/M · 输出 ¥8/M</span><span class="lock" style="display:inline-flex;align-items:center;gap:3px"><i data-lucide="lock" style="width:10px;height:10px"></i>keychain</span></div>
+    </div>
+
+    <div class="prov-card">
+      <div class="prov-head"><div class="prov-logo"><i data-lucide="zap"></i></div><span class="prov-name">SiliconFlow 硅基流动</span><span class="prov-cat">AGGREGATOR</span></div>
+      <div class="variant-row"><span class="variant-pill on">CN/按量</span></div>
+      <div class="base-url">https://api.siliconflow.cn/v1</div>
+      <div class="key-row"><input class="key-input" type="password" placeholder="粘贴 API Key"><button class="btn-s" onclick="note(this,'✅ Key 已加密保存（掩码 sk-7f••••••••a0c1）')">保存</button></div>
+      <div class="model-row">
+        <select class="model-select"><option>（先拉取模型）</option></select>
+        <button class="btn-s" onclick="note(this,'⏳ 拉取中…')">拉模型</button>
+        <button class="btn-test" onclick="note(this,'❌ 先保存 Key 并拉取模型', 'err')">测试</button>
+      </div>
+      <div class="prov-note dim">尚未配置 · 保存后可一键拉取 40+ 模型</div>
+      <div class="prov-foot"><span>聚合商 · Qwen/DeepSeek/GLM 全家桶</span><span class="lock" style="display:inline-flex;align-items:center;gap:3px"><i data-lucide="lock" style="width:10px;height:10px"></i>keychain</span></div>
+    </div>
+
+    <div class="prov-card">
+      <div class="prov-head"><div class="prov-logo"><i data-lucide="compass"></i></div><span class="prov-name">OpenRouter</span><span class="prov-cat">AGGREGATOR</span></div>
+      <div class="variant-row"><span class="variant-pill on">GLOBAL/按量</span></div>
+      <div class="base-url">https://openrouter.ai/api/v1</div>
+      <div class="key-row"><input class="key-input" type="password" placeholder="粘贴 API Key"><button class="btn-s">保存</button></div>
+      <div class="model-row">
+        <select class="model-select"><option>（先拉取模型）</option></select>
+        <button class="btn-s">拉模型</button><button class="btn-test">测试</button>
+      </div>
+      <div class="prov-note dim">数百模型场景 · 选择器带搜索+虚拟列表</div>
+      <div class="prov-foot"><span>全球路由 · 付费聚合</span><span class="lock" style="display:inline-flex;align-items:center;gap:3px"><i data-lucide="lock" style="width:10px;height:10px"></i>keychain</span></div>
+    </div>
+
+    <div class="prov-card">
+      <div class="prov-head"><div class="prov-logo"><i data-lucide="box"></i></div><span class="prov-name">Ollama 本地</span><span class="prov-cat">LOCAL_LLM</span></div>
+      <div class="variant-row"><span class="variant-pill on">LOCAL/免费</span></div>
+      <div class="base-url">http://127.0.0.1:11434/v1</div>
+      <div class="key-row"><input class="key-input" type="password" placeholder="本地无需 Key" readonly><button class="btn-s" onclick="note(this,'✅ 发现 7 个本地模型')">拉模型</button></div>
+      <div class="model-row">
+        <select class="model-select"><option>qwen2.5:14b（激活）</option><option>qwen2.5:7b</option><option>qwen2.5-vl:7b</option></select>
+        <button class="btn-test" onclick="note(this,'✅ 测试通过 · 89ms（本机）')">测试</button>
+      </div>
+      <div class="prov-note ok">✅ 断网求生档主力 · 0 粒米</div>
+      <div class="prov-foot"><span>GPU: mps · 14B 量化</span><span class="lock">本地</span></div>
+    </div>
+
+    <div class="prov-card">
+      <div class="prov-head"><div class="prov-logo"><i data-lucide="audio-lines"></i></div><span class="prov-name">GPT-SoVITS 本地语音</span><span class="prov-cat">AUDIO_TTS/SVC</span></div>
+      <div class="variant-row"><span class="variant-pill on">LOCAL_GPU</span></div>
+      <div class="base-url">audio-ai-worker (uv · Python 3.11) :18790</div>
+      <div class="key-row"><input class="key-input" type="password" placeholder="硬件后端自动探测：mps ✓" readonly></div>
+      <div class="model-row">
+        <select class="model-select"><option>blue-whale-maid-v1（5 组情绪参考音频）</option></select>
+        <button class="btn-test" onclick="note(this,'✅ /health mps · TTS 引擎就绪')">测试</button>
+      </div>
+      <div class="prov-note dim">5 档情绪：傲娇/开心/生气/难过/平静 · RVC index_rate 0.75</div>
+      <div class="prov-foot"><span>语音锁 TTL=时长+3000ms</span><span class="lock">本地</span></div>
+    </div>
+
+    <div class="add-card">＋ 添加自定义供应商（OpenAI 兼容端点）</div>
+  </div>
+
+  <div class="security-note">
+    <i data-lucide="lock" class="sm" style="vertical-align:-2px"></i> <b>安全设计</b>：明文 Key 只上行主进程 → safeStorage 加密 → userData/provider-vault.json；渲染进程仅获掩码（<code>sk-1a2c••••••••9f3e</code>）；模型发现/连接测试由主进程代理（UI 不越权直调外部 API）；日志全程脱敏（路径/用户名/密钥 → {{MASKED}}）。
+  </div>
+</div>
+
+<script>
+  function note(btn, text, cls) {
+    const card = btn.closest('.prov-card');
+    const noteEl = card.querySelector('.prov-note');
+    if (noteEl) { noteEl.textContent = text; noteEl.className = 'prov-note ' + (cls || 'ok'); }
+  }
+  document.querySelectorAll('.profile-pill').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.profile-pill').forEach(n => n.classList.remove('on'));
+    p.classList.add('on');
+  }));
+  document.querySelectorAll('.variant-pill').forEach(p => p.addEventListener('click', () => {
+    p.parentElement.querySelectorAll('.variant-pill').forEach(n => n.classList.remove('on'));
+    p.classList.add('on');
+  }));
+</script>
+</body>
+</html>

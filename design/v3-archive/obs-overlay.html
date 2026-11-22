@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>设计稿 · OBS 透明挂件 — 大肥鱼工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:var(--font-sans); min-height:100vh; color:var(--text-1);
+    /* OBS 浏览器源透明背景 —— 用棋盘格表示"透明" */
+    background:
+      linear-gradient(45deg, #1e293b 25%, transparent 25%, transparent 75%, #1e293b 75%),
+      linear-gradient(45deg, #1e293b 25%, #0f172a 25%, #0f172a 75%, #1e293b 75%);
+    background-size: 28px 28px; background-position: 0 0, 14px 14px;
+    background-color: #0b1220;
+  }
+  .topbar { position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px; padding:0 18px; height:44px; border-bottom:1px solid var(--stroke); background:rgba(2,6,23,.78); backdrop-filter:blur(12px); }
+  .logo { font-weight:700; font-size:14px; }
+  .topbar .spacer{flex:1}
+  .topbar a { color:var(--text-2); text-decoration:none; font-size:12px; padding:5px 10px; border-radius:8px; }
+  .topbar a:hover{background:var(--glass-hi);color:var(--text-1)}
+  .topbar a.active{color:var(--whale-300);background:rgba(56,189,248,.12)}
+  .hint-bar { text-align:center; font-size:11px; color:var(--text-3); padding:8px 0 2px; }
+  .hint-bar b { color:var(--whale-300); }
+
+  /* ── OBS 场景模拟（1920×1080 视窗比例缩小） ── */
+  .obs-scene { position:relative; max-width:1180px; height:560px; margin:14px auto; border-radius:16px; border:1px solid var(--stroke); overflow:hidden;
+    background: linear-gradient(160deg, #172554 0%, #0f172a 55%, #14532d 100%); }
+  .obs-scene .scene-tag { position:absolute; top:10px; left:12px; font-size:10px; color:rgba(226,232,240,.4); font-family:var(--font-mono); }
+  .obs-scene .scene-tag2 { position:absolute; top:10px; right:12px; font-size:10px; color:rgba(226,232,240,.4); font-family:var(--font-mono); }
+
+  /* 星露谷游戏画面占位（模拟 OBS 场景里的游戏捕获层） */
+  .game-layer { position:absolute; inset:0; display:grid; place-items:center; opacity:.5; }
+  .game-layer .fake-game { font-size:60px; filter:grayscale(.4); opacity:.35; }
+
+  /* 桌宠在场景中（左下） */
+  .overlay-pet { position:absolute; left:36px; bottom:24px; width:220px; }
+  .overlay-pet .body { width:210px; height:160px; border-radius:16px 16px 36px 36px; background:linear-gradient(160deg, rgba(56,189,248,.3), rgba(2,132,199,.12)); border:2px solid rgba(56,189,248,.45); display:grid; place-items:center; font-size:40px; animation:breathe 3.2s infinite; }
+  .overlay-pet .cap { text-align:center; font-size:10px; color:rgba(226,232,240,.55); margin-top:6px; font-family:var(--font-mono); }
+
+  /* 双轨气泡（挂件层渲染，非游戏层） */
+  .ov-think { position:absolute; left:60px; bottom:216px; max-width:250px; border-radius:14px; padding:10px 14px;
+    font-size:12px; line-height:1.65; color:#c4b5fd;
+    background: linear-gradient(135deg, rgba(167,139,250,.22), rgba(167,139,250,.08));
+    border:1.5px dashed rgba(167,139,250,.5); backdrop-filter:blur(8px);
+    animation:floaty 4.5s infinite; }
+  .ov-talk { position:absolute; left:290px; bottom:230px; max-width:300px; border-radius:14px; padding:11px 15px;
+    font-size:12.5px; line-height:1.7; color:#fff;
+    background: rgba(2,6,23,.62); border:1.5px solid rgba(56,189,248,.5); backdrop-filter:blur(10px); }
+  .ov-talk .emo { font-size:9.5px; padding:1.5px 7px; border-radius:999px; background:rgba(167,139,250,.25); color:#d8ccff; margin-left:5px; }
+
+  /* 歌词卡（点歌时） */
+  .lyric-card { position:absolute; right:34px; bottom:120px; width:330px; border-radius:14px; padding:14px 18px;
+    background:rgba(2,6,23,.55); border:1px solid rgba(251,191,36,.4); backdrop-filter:blur(10px); }
+  .lyric-card .song { font-size:13px; font-weight:700; color:var(--amber); display:flex; align-items:center; gap:8px; }
+  .lyric-card .line-now { font-size:15px; margin-top:9px; color:#fff; font-weight:600; }
+  .lyric-card .line-next { font-size:12px; margin-top:5px; color:rgba(226,232,240,.45); }
+  .lyric-card .progress { height:4px; border-radius:999px; background:rgba(148,163,184,.25); margin-top:11px; overflow:hidden; }
+  .lyric-card .progress i { display:block; height:100%; width:38%; background:linear-gradient(90deg,var(--amber),var(--amber)); }
+  .lyric-card .rvc { font-size:9.5px; color:rgba(226,232,240,.5); margin-top:7px; font-family:var(--font-mono); }
+
+  /* 投票板 */
+  .vote-card { position:absolute; right:34px; top:56px; width:290px; border-radius:14px; padding:14px 17px;
+    background:rgba(2,6,23,.58); border:1px solid rgba(167,139,250,.4); backdrop-filter:blur(10px); }
+  .vote-card .q { font-size:13px; font-weight:700; margin-bottom:3px; }
+  .vote-card .timer { font-size:10px; color:#c4b5fd; font-family:var(--font-mono); margin-bottom:11px; }
+  .vote-opt { margin-bottom:9px; }
+  .vote-opt .line { display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; }
+  .vote-opt .line b { font-family:var(--font-mono); color:#c4b5fd; }
+  .vote-opt .bar { height:7px; border-radius:999px; background:rgba(148,163,184,.2); overflow:hidden; }
+  .vote-opt .bar i { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,#8b5cf6,#a78bfa); transition:width .4s var(--ease-out); }
+  .vote-opt.win .bar i { background:linear-gradient(90deg,var(--amber),var(--amber)); }
+  .vote-opt.win .line b { color:var(--amber); }
+
+  /* 饭碗小徽 */
+  .ov-rice { position:absolute; left:36px; top:56px; border-radius:12px; padding:9px 13px;
+    background:rgba(2,6,23,.55); border:1px solid rgba(251,191,36,.4); backdrop-filter:blur(8px);
+    font-size:11px; color:var(--amber); display:flex; gap:9px; align-items:center; font-family:var(--font-mono); }
+
+  /* 弹幕流预览 */
+  .danmaku-strip { position:absolute; top:120px; left:50%; transform:translateX(-50%); width:420px; }
+  .dm { font-size:12px; padding:4px 12px; border-radius:999px; margin-bottom:7px; display:inline-block; margin-right:8px;
+    background:rgba(2,6,23,.5); border:1px solid var(--stroke); color:rgba(226,232,240,.85); backdrop-filter:blur(6px);
+    animation:floaty 5s infinite; }
+  .dm.me { border-color:rgba(56,189,248,.5); color:var(--whale-300); }
+  .dm.mv { margin-left:12px; animation-delay:.8s; }
+
+  /* 组件说明 */
+  .comp-grid { max-width:1180px; margin:0 auto 40px; padding:0 22px; display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .comp-card { border-radius:13px; border:1px solid var(--stroke); background:var(--surface); padding:14px 16px; }
+  .comp-card h5 { font-size:12.5px; margin-bottom:7px; display:flex; align-items:center; gap:7px; }
+  .comp-card p { font-size:11.5px; color:var(--text-3); line-height:1.7; }
+</style>
+</head>
+<body>
+  <div class="ambient"></div>
+<header class="topbar">
+  <div class="logo">大肥鱼工作台</div>
+  <div class="spacer"></div>
+  <a href="index.html">总览</a><a href="shell-chat.html">聊天</a><a href="stardew.html">星露谷</a><a href="providers.html">供应商</a><a href="pet-stage.html">桌宠</a><a href="obs-overlay.html" class="active">OBS</a>
+</header>
+<div class="hint-bar">OBS 浏览器源 <b>http://localhost:18765</b> · 背景棋盘格 = 透明区域 · 挂件层独立于游戏捕获层 · STAGE_PROTOCOL=1 版本化 SSE 契约</div>
+
+<div class="obs-scene">
+  <span class="scene-tag">OBS 场景模拟（游戏捕获 + 挂件浏览器源叠加）</span>
+  <span class="scene-tag2">STAGE_PROTOCOL=1 · connected</span>
+  <div class="game-layer"><div class="fake-game">🌾🎮</div></div>
+
+  <div class="ov-rice"><i data-lucide="wheat" class="sm"></i> 12,480 粒米 <span style="color:rgba(226,232,240,.5)">·</span> <span style="color:var(--amber)">饥饿线 12%</span></div>
+
+  <!-- 投票板（弹幕议会） -->
+  <div class="vote-card">
+    <div class="q">下午干什么？弹幕扣 1/2/3</div>
+    <div class="timer">⏳ 剩余 14s</div>
+    <div class="vote-opt win">
+      <div class="line"><span>1. 去矿洞探险</span><b>34 票</b></div>
+      <div class="bar"><i style="width:52%"></i></div>
+    </div>
+    <div class="vote-opt">
+      <div class="line"><span>2. 钓鱼卖钱</span><b>21 票</b></div>
+      <div class="bar"><i style="width:32%"></i></div>
+    </div>
+    <div class="vote-opt">
+      <div class="line"><span>3. 翻垃圾桶摸鱼</span><b>10 票</b></div>
+      <div class="bar"><i style="width:16%"></i></div>
+    </div>
+  </div>
+
+  <!-- 弹幕流 -->
+  <div class="danmaku-strip">
+    <span class="dm">大肥鱼今天钓到鱼了吗</span><span class="dm mv"><i data-lucide="heart" class="sm" style="width:11px;color:var(--red)"></i> 送了 小辣条 ×1</span><span class="dm me">回复：钓到啦！鳀鱼·完美品质！</span>
+  </div>
+
+  <!-- 双轨气泡 -->
+  <div class="ov-think">矿洞……体力只剩 36% 还想下矿？等本鱼先吃个饭！<div style="font-size:9.5px;opacity:.6;margin-top:4px;font-family:var(--font-mono)">think · 不进 TTS</div></div>
+  <div class="ov-talk">
+    好好好，弹幕议会赢了是吧！<span class="emo">[傲娇反驳]</span> 1 号矿洞是吧……本鱼这就去准备炸弹！主人放心，本鱼可是在新手矿洞都晕倒过两层的女人！
+  </div>
+
+  <!-- 桌宠 -->
+  <div class="overlay-pet">
+    <svg viewBox="0 0 24 24" style="width:56px;height:56px"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".3"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" stroke-width="1.4" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="var(--blue)"/></svg>
+    <div class="cap">webm alpha · 脚底对齐场景地面</div>
+  </div>
+
+  <!-- 歌词卡 -->
+  <div class="lyric-card">
+    <div class="song"><i data-lucide="music" class="sm"></i>点歌台 · 周杰伦《晴天》<span style="margin-left:auto;font-size:9.5px;color:rgba(226,232,240,.45);font-family:var(--font-mono)">@鱼片 点的</span></div>
+    <div class="line-now">刮风这天 我试着握着你手</div>
+    <div class="line-next">但偏偏 雨渐渐 大到我看你不见</div>
+    <div class="progress"><i></i></div>
+    <div class="rvc">RVC v2 变声中 · blue-whale-maid · Demucs 伴奏分离完成</div>
+  </div>
+</div>
+
+<div class="comp-grid">
+  <div class="comp-card"><h5><i data-lucide="message-circle" class="sm"></i> 双轨气泡</h5><p>think 云朵（半透明、不进 TTS）与正式对话（带情绪标签、口型同步）错位排布，互不遮挡；字体描边保证任意游戏背景可读。</p></div>
+  <div class="comp-card"><h5><i data-lucide="vote" class="sm"></i> 弹幕议会</h5><p>关键抉择 20 秒投票器（扣 1/2/3），进度实时刷新，最高票自动执行并触发"尊重议会"台词。</p></div>
+  <div class="comp-card"><h5><i data-lucide="music" class="sm"></i> 歌词卡</h5><p>点歌台歌曲信息 + 逐行歌词 + RVC 变声状态；歌名带点歌人 ID（常客系统联动）。</p></div>
+  <div class="comp-card"><h5><i data-lucide="wheat" class="sm"></i> 饭碗徽</h5><p>Token 经济可视化：观众能看见她的"工资条"，投喂下饭菜即加 Buff。</p></div>
+  <div class="comp-card"><h5><i data-lucide="messages-square" class="sm"></i> 弹幕互动</h5><p>她的回复以弹幕样式内嵌展示；常客带专属色；礼物连击 3s 结算后统一答谢。</p></div>
+  <div class="comp-card"><h5><i data-lucide="plug-zap" class="sm"></i> 契约</h5><p>STAGE_PROTOCOL=1 版本化 SSE；角色/模板 manifest（idle/talk/out/in/moods + transitions.json 帧匹配防叠影）。</p></div>
+</div>
+</body>
+</html>
