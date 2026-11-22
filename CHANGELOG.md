@@ -15,6 +15,13 @@
 
 ### Added
 
+- **三票并行批 ✅（用户指令「分三个子 agent 一起做」，2026-11-22）**：
+  - **T-M5-05 弹幕注意力中枢 `packages/live-stream-hub`**（dsh-livestream 思想重写，零依赖）：三级注意力调度（按**说话人数** 7/8/29/30 分档，τ 90/40/20s e^(-age/τ) 衰减，档位名额 4/2/1，刷屏单人不升档）+ 同观众 15s 合并（≤5 段）/礼物 3s 连击/进场 2.5s 聚拢（>20 人折叠）+ 300s 超龄清理/512 队列上限；防封护栏（block→频控 20 条/分→mask→warn 四级，UTF-16 安全截断 200 + 孤立代理对清洗）；事件中枢（契约 safeParse→护栏→4000 LRU 去重→150ms 批次 flush→订阅多播，单订阅者异常隔离）。**46 it 全绿（分支 92.5%）**；风暴集成复核：5 观众 100 条/秒不升档、频控丢 200 条、平台违禁 3/3 拦截、30 位说话人→busy、同 eventId 去重。
+  - **T-M6-03 dsh 插件兼容层 `packages/plugin-kit`**（Cordis 语义，本包四维 100%）：manifest Zod Schema（7 扩展点/permissions/dshCompatible）、`defineTool`（zod 入参校验 + `{ok:false}` 异常包装）、`ToolRegistry`（重名拒绝/按插件批量注销）、事件总线（`domain:*` 通配/once/监听隔离）、`PluginHost`（register 即启用、父子树 disable 级联、LIFO 副作用回收、setup 崩溃回滚+errors 记账）、`adaptDshPlugin`（结构化最小面，未声明 schema 的外来工具默认 ask 审批）。**33 it 全绿**。
+  - **T-M6-04 WebUI 形态（`webui-server` + `src/webui`）**：仅回环 `127.0.0.1:18780`、启动生成 device token（`?token=`/Bearer 双校验，无 token 401）、`/api/state`（运行态/大脑/记忆/语音 + 总线事件）、`/api/command`（复用 Shell 同款小鲸回话：人设+记忆+雷区反射+发声）、`/api/approve`（远程 ACP 审批直连 `resolvePermission`）、`/ws` 事件推送、`/renderer/*` 静态资源（路径穿越防护）；`WebUIClient` 指数退避自动重连。**62 it 全绿（本目录四维 100%）**；真机 curl/WS/指令/审批全通。`ws` 用 `createRequire` 延迟加载，避免 esbuild ESM 打包 `require('events')` 崩主进程。
+- **真机自驾护栏（2026-11-22 真机抓到死循环后修复）**：`parseGameState` 新增 `背包空位` 解析；Rule/Llm 双规划器空位 0 → 确定性 `tidy_backpack`（不烧 token）；整理连续失败 → `ship_items`（从背包段解析可出货物品，跳过工具与「留着」任务物品）/无物可出 → `store_items`；同工具连续两次失败 → 换规则日程。真机复验：`tidy_backpack FAILED`（农场无箱子）→ `ship_items COMPLETED 2 个 小嘴鲈鱼 ≈125g` → 恢复钓鱼，死循环消失。长动作表补 `travel_to/interact/give_gift/tidy_backpack/store_items`，消除 30s 假超时。
+- **中控台聊天体验（codex 式）**：`chat_reply/reflex_spray` 从绿色「COMPLETED 回执卡」改为**左对齐头像对话泡**（雷区反射带「炸毛反射 · 0 token」标签）；主进程事件环形缓冲（≤200 + 单调 `seq`）+ `autodrive:status` 水合，**刷新中控台不再丢对话**（真机刷新后立即渲染 18 条历史）；`autodrive-host` 暴露 `say/subscribe/getBrainMode`，WebUI 复用同一总线。
+
 - **设计稿 v3 差异补齐 + T-M5-04 ✅ 记忆图谱（接续完善）**：
   - **UI 差异补齐**：聊天流新增**紫云朵内心戏卡**（violet dashed 渐变，设计稿 L2）；用户消息改独立右对齐蓝渐变气泡（设计稿 .bub.me）；桌宠双轨气泡换 v3 材质（think=紫云朵 dashed+小圆点尾巴 / dialog=深空玻璃+蓝边+内高光）并**接线 autodrive 事件**（decision.intent→云朵 12s 自动收、chat_reply/reflex→对话泡 10s）；修复回话重复插卡（只信主进程广播）。
   - **packages/memory-graph**（feiyuos-memory-graph MIT 思想重写，零外部依赖 D14）：`MemoryStore`（JSONL append-only+内存 Map/邻接表+墓碑压实 30% 阈值+半衰期 30 天/宽限 7 天/0.2 剪枝+pinned 永存+**正文消毒**剔路径/内部 id/密钥——修复 `skip_event` 被误掩码的正则误伤）；`retrieve`（中文 2-gram 词法召回→沿边 2 跳图扩展→加权 0.5 相似+0.3 重要+0.2 新近+0.3 钉住→topN，只召回 event/summary）+ `formatMemoryContext`（≤600 字 Token 预算）。

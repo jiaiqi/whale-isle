@@ -22,6 +22,8 @@ export default defineConfig({
         '**/game-bridge-mcp/src/index.ts', // 纯 re-export 桶
         '**/agent-harness/src/index.ts', // 纯 re-export 桶
         '**/memory-graph/src/index.ts', // 纯 re-export 桶
+        '**/plugin-kit/src/index.ts', // 纯 re-export 桶
+        '**/live-stream-hub/src/index.ts', // 纯 re-export 桶
         '**/desktop-host/src/preload/**',
         '**/desktop-host/src/renderer/pet-stage/main.ts',
         '**/desktop-host/src/renderer/pet-stage/widgets/bubbles.ts',

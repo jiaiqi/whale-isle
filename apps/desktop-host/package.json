@@ -20,7 +20,10 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.6.7",
-    "@workbench/memory-graph": "workspace:*"
+    "@workbench/memory-graph": "workspace:*",
+    "@workbench/plugin-kit": "workspace:*",
+    "@workbench/live-stream-hub": "workspace:*",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.13",

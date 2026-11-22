@@ -59,6 +59,10 @@ describe('mcp-client', () => {
 
   it('长动作分层超时', () => {
     expect(isLongAction('fish')).toBe(true);
+    expect(isLongAction('tidy_backpack')).toBe(true); // BWF 文档：最长约 5 分钟
+    expect(isLongAction('store_items')).toBe(true);
+    expect(isLongAction('travel_to')).toBe(true); // 自动多段寻路（真机 30s 超时误报修复）
+    expect(isLongAction('give_gift')).toBe(true); // 传名字会自动走过去
     expect(actionTimeoutMs('fish')).toBe(600_000);
     expect(actionTimeoutMs('read_mail')).toBe(600_000); // read_mail 走回家路，也是长动作
     expect(actionTimeoutMs('dialogue')).toBe(30_000);
@@ -106,6 +110,7 @@ describe('parseGameState', () => {
     expect(s.menu).toContain('无（可以自由行动）');
     expect(s.season).toBe('春');
     expect(s.day).toBe(16);
+    expect(s.freeSlots).toBe(12); // 状态未报背包空位 → 不阻塞
   });
 });
 
@@ -145,6 +150,35 @@ describe('RulePlanner 确定性日程', () => {
     const s = { ...base, menu: '正在播放剧情/节日事件' };
     const d = await planner.decide(s);
     expect(d.kind === 'act' && d.tool).toBe('dialogue');
+  });
+
+  it('背包空位 0 → 先 tidy_backpack（规则模式同样不自杀式钓鱼）', async () => {
+    const d = await planner.decide(at('12:00', { freeSlots: 0 }));
+    expect(d.kind === 'act' && d.tool).toBe('tidy_backpack');
+    expect(d.kind === 'act' && d.intent).toContain('背包');
+  });
+
+  it('商店/选择题界面：close_menu 与带选项 dialogue（确定性，不问 LLM）', async () => {
+    const p = new RulePlanner();
+    const shop = await p.decide({ ...base, menu: '商店界面（Shop）' });
+    expect(shop.kind === 'act' && shop.tool).toBe('close_menu');
+    const choice = await p.decide({ ...base, menu: '选择题：要帮他吗？' });
+    expect(choice.kind === 'act' && choice.tool).toBe('dialogue');
+    expect(choice.kind === 'act' && choice.args).toEqual({ choice: 1 });
+  });
+
+  it('钓鱼阶段 17:30 后转傍晚采集（去镇上）', async () => {
+    const p = new RulePlanner();
+    await p.decide(at('11:30')); // 首轮先读信（7 封未读）→ 阶段进入 farm-work
+    const goFish = await p.decide(at('11:30'));
+    expect(goFish.kind === 'act' && goFish.tool).toBe('travel_to'); // 阶段切到 fishing
+    const dusk = await p.decide(at('17:45', { location: 'Beach' }));
+    expect(dusk.kind === 'act' && dusk.tool).toBe('travel_to'); // 去镇上采集
+    expect(dusk.kind === 'act' && dusk.intent).toContain('镇上');
+
+    const sleepy = new RulePlanner();
+    const nap = await sleepy.decide(at('10:00', { stamina: 10, staminaMax: 270, location: 'FarmHouse' })); // 体力<8% → 直接睡
+    expect(nap.kind === 'act' && nap.tool).toBe('sleep');
   });
 });
 

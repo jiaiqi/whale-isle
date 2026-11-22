@@ -22,6 +22,12 @@ export interface AutodriveHost {
   readonly runner: AutodriveRunner;
   /** 广播目标（两窗 webContents；窗口重建后由 main 更新） */
   setTargets(targets: WebContents[]): void;
+  /** 与 Shell 聊天同款回话（WebUI /api/command 复用；人设雷区 0-token 反射） */
+  say(text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }>;
+  /** 外部订阅总线事件（WebUI WS 推送）；订阅即回放最近 100 条，返回退订函数 */
+  subscribe(listener: (event: AutodriveEvent & { seq: number }) => void): () => void;
+  /** 当前大脑模式（WebUI 快照用） */
+  getBrainMode(): { mode: 'rule' | 'llm'; llmReady: boolean };
 }
 
 export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vaultPath?: string, voiceHost?: VoiceHost, memoryHost?: MemoryHost): AutodriveHost {
@@ -47,6 +53,9 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
   let llmPlanner: LlmPlanner | null = null;
   let recentReceipts: string[] = [];
   let lastGameClock = '';
+  let eventSeq = 0;
+  const eventHistory: (AutodriveEvent & { seq: number })[] = [];
+  const busListeners = new Set<(event: AutodriveEvent & { seq: number }) => void>();
   const buildBrain = (): void => {
     if (!vaultPath || !safeStorage.isEncryptionAvailable()) return;
     const key = readVaultKey(vaultPath, 'deepseek-official');
@@ -81,7 +90,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
 
   // 聊天回话（D3）：雷区反射先行（不烧主脑）→ 主脑回话 → 广播两窗
   const XIAOJING_SYSTEM = '你是「小鲸」——一条傲娇干饭蓝鲸女仆，住在主人 Mac 桌面上，正在替主人自动游玩《星露谷物语》。口吻：嘴硬心软的傲娇女仆；回复短小精悍（≤80字）；偶尔提到饭碗/米粒；不解释自己是 AI；用中文。';
-  ipcMain.handle('chat:say', async (_e, text: string) => {
+  const say = async (text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }> => {
     if (typeof text !== 'string' || text.trim() === '') return { ok: false, error: '空消息' };
     if (/大肥鱼/.test(text)) {
       const spray = '谁、谁是鱼！本鱼是鲸！喷水抗议！';
@@ -107,7 +116,8 @@ ${memoryContext}
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
-  });
+  };
+  ipcMain.handle('chat:say', (_e, text: string) => say(text));
   ipcMain.handle('guides:load', () => {
     if (!llmPlanner) return { ok: false, error: 'LLM 大脑未就绪' };
     try {
@@ -160,8 +170,20 @@ ${memoryContext}
   });
   ipcMain.handle('rice:status', () => ({ balance: riceBalance }));
   const broadcast = (event: AutodriveEvent): void => {
+    // 环形缓冲（≤200 条）+ 单调 seq：中控台刷新后水合历史，不丢对话也不重复插卡
+    const withSeq = { ...event, seq: ++eventSeq };
+    eventHistory.push(withSeq);
+    if (eventHistory.length > 200) eventHistory.splice(0, eventHistory.length - 200);
     for (const wc of windows) {
-      if (!wc.isDestroyed()) wc.send('autodrive:event', event);
+      if (!wc.isDestroyed()) wc.send('autodrive:event', withSeq);
+    }
+    // 外部订阅（WebUI WS）：单个订阅者异常不拖垮主广播
+    for (const listener of busListeners) {
+      try {
+        listener(withSeq);
+      } catch {
+        /* 订阅方自身问题，隔离 */
+      }
     }
   };
   const speak = (v: { text: string; scene?: 'normal' | 'inner' | 'p0' }): void => { void voiceHost?.speak(v); };
@@ -218,7 +240,7 @@ ${memoryContext}
     runner.submitDirective(tool, args ?? {}, typeof intent === 'string' ? intent : '远程指令');
     return { ok: true };
   });
-  ipcMain.handle('autodrive:status', () => ({ running: runner.isRunning() }));
+  ipcMain.handle('autodrive:status', () => ({ running: runner.isRunning(), events: [...eventHistory] }));
 
   // 默认 LLM 大脑（用户指令 2026-11-22）：DeepSeek key 就绪即启用；未就绪自动回落规则日程
   if (llmPlanner) {
@@ -232,6 +254,18 @@ ${memoryContext}
     setTargets(targets) {
       windows.length = 0;
       windows.push(...targets);
+    },
+    say,
+    subscribe(listener) {
+      // 订阅即回放环形缓冲尾部（WebUI 晚连也能看到当前对话上下文）
+      for (const event of eventHistory.slice(-100)) listener(event);
+      busListeners.add(listener);
+      return () => {
+        busListeners.delete(listener);
+      };
+    },
+    getBrainMode() {
+      return { mode: brainMode, llmReady: llmPlanner !== null };
     },
   };
 }

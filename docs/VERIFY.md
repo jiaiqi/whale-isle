@@ -53,6 +53,11 @@
 | T-M0-03 | `[SIMULATION]`（存储单测） | `pnpm test`：27 passed（含 local-store 15 项：记仇标签去重读写/好感榜单/隐私一键擦除/Token 流水 1粒米=1Token 汇总/点歌缓存命中计数/文件库 WAL 重开持久化/脏数据容错；Dexie fake-indexeddb 3 项）；覆盖率四维 100%（门槛 ≥90%） | 2026-11-15 |
 | T-M0-02 | 编译 | `pnpm gen:contracts`：17 份 JSON Schema + workbench 合并视图（17 $defs 去重冲突检测）→ `protocol_models.py`（0 个 Any 化残留）；`mypy --strict` Success（仅生成物 assignment 豁免，理由记录于 mypy.ini）；`ruff` All checks passed | 2026-11-15 |
 
+| T-M5-05 | `[SIMULATION]`（danmaku-storm-replay 400 条 / 100 条每秒 → LiveEventHub）+ 单测 | 包内 46 it 全绿（分支 92.5%）；集成复核：契约校验 invalid=0、**5 名观众 100 条/秒不升档（quiet）**、频控丢 200 条刷屏、quiet 档每轮 ≤4 条、同观众合并 76 次、**30 位说话人 → busy 档**；平台违禁词（加微信/占位词/代开发票）**3/3 dropped**、人设雷区「大肥鱼」放行（交 persona 0-token 反射）；同 eventId 第二次 → duplicate；风暴生成 5ms <3s | 2026-11-22 |
+| T-M6-03 | 单测（零依赖包，无真机面） | `tsc -b packages/plugin-kit` 零错误；33 it 全绿；本包 **branches/functions/lines 100%**；Cordis 语义：register 即启用、disable 级联子级、setup 崩溃回滚半成品 + errors 记录、工具 execute 异常统一 `{ok:false}`、事件监听隔离；dsh 适配器结构化最小面（外来工具默认 `ask` 审批）；depcruise 零违规 | 2026-11-22 |
+| T-M6-04 | `[E2E-HOST]` + `[REAL-DEVICE]`（WebUI 18780 回环口） | `apps/desktop-host/src/webui` 62 it 全绿（client 21/http-utils 20/server 21，本目录四维 100%）；真机启动日志 `[webui] http://127.0.0.1:18780/?token=<uuid>`；无 token `401`；`/api/state` 返回 `running/brainMode=llm/memoryStats/voice` + 总线事件（订阅回放）；`/api/command` 真机走通 → 小鲸回话「哼，忙着替主人跑腿呢！威利那老头一直唠叨钓鱼…」（与 Shell 同款 LLM+人设+发声）；`/api/approve` → `harness.manager.resolvePermission` 已接线；`ws` 用 createRequire 延迟加载避免 ESM Dynamic require 崩主进程。未完成：浏览器内 React 同构渲染（当前为最小 HTML 外壳 + 完整 HTTP/WS 通道） | 2026-11-22 |
+| 真机自驾护栏 | `[REAL-DEVICE]`（BWF MCP 真机 + 单测） | 抓到并修复 `FAILED fish` 死循环（背包空位 0）：真机事件流 `decision tidy_backpack` → `FAILED 农场上没有箱子` → 自动升级 `decision ship_items（小嘴鲈鱼）` → `COMPLETED 已把 2 个 小嘴鲈鱼 放进出货箱（约 125g）` → `travel_to Beach COMPLETED` → `fish COMPLETED（沙丁鱼/鲱鱼 完美）`，全程无重复死磕；`travel_to` 长动作超时修复后不再 30s 假超时。单测 53 项全绿（分支 91.3%）：freeSlots 解析、tidy/ship/store 升级链、同工具两连败换日程、菜单商店/选择题、钓鱼→傍晚采集、pickShippableItem 跳过工具与「留着」任务物品 | 2026-11-22 |
+| 聊天体验（codex 式） | `[REAL-DEVICE]`（CDP 截图 + 刷新验收） | ① 小鲸回话由「COMPLETED 绿色回执卡」改为**左对齐头像对话泡**（截图留证）；② 主进程事件环形缓冲（≤200 + 单调 seq）+ `autodrive:status` 水合：**中控台刷新后立即渲染 18 条历史事件**（此前刷新即清空），聊天/决策/回执同屏连续 | 2026-11-22 |
 ## 待人类宿主真机验收项
 
 | 里程碑 | 验收内容 | 状态 | 验收日期 |

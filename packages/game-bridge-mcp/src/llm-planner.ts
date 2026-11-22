@@ -15,7 +15,7 @@ export const LLM_TOOL_WHITELIST = new Set([
   'till_area', 'plant_seeds', 'water_crops', 'harvest_crops', 'clear_area', 'forage',
   'ship_items', 'store_items', 'list_chests', 'map_info', 'take_items', 'trash_item',
   'eat', 'use_item', 'open_shop', 'buy', 'sell', 'craft', 'dialogue', 'menu_click',
-  'close_menu', 'read_mail', 'choose_profession', 'skip_event', 'leave_festival',
+  'close_menu', 'read_mail', 'tidy_backpack', 'choose_profession', 'skip_event', 'leave_festival',
   'fish', 'care_animals', 'gift_info', 'give_gift', 'donate_museum', 'bundle_info',
   'donate_bundles', 'cook', 'check_crab_pots', 'fight', 'explore_mine', 'use_bomb',
   'upgrade_tool', 'crack_geodes', 'quest_board', 'special_orders', 'special_order_dropbox',
@@ -43,7 +43,8 @@ ${guidesHint}
 1. 根据游戏状态选下一步最优动作；优先完成当日农活与赚钱目标；20:00 前必须回家睡觉；体力低于 15% 时吃东西或直接睡觉。
 2. 你只能调用白名单里的 BWF 工具；一次只做一个动作。
 3. 输出必须是一行 JSON，格式：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}
-4. args 的键必须与该工具的真实参数名一致；不确定参数就给空对象 {}。`;
+4. args 的键必须与该工具的真实参数名一致；不确定参数就给空对象 {}。
+5. 如果「最近回执」里某个动作刚刚失败，下一动作必须换一种做法；「背包空位」为 0 时先整理背包或出货，不要硬钓鱼/采集。`;
 
 /** 从 LLM 输出中宽松提取首个 JSON 对象（容忍 markdown 围栏/前后缀文本） */
 export function extractDecisionJson(content: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
@@ -102,6 +103,21 @@ export function pickGuideContext(state: GameStateSnapshot, guides: Record<string
   return '';
 }
 
+/** 从状态背包段挑一个可出货的物品（跳过工具与「留着」的交任务物品；取最后一条=最近捡的） */
+export function pickShippableItem(raw: string): string | null {
+  let candidate: string | null = null;
+  for (const line of raw.split('\n')) {
+    const m = /^\d+:\s*(.+)$/.exec(line.trim());
+    if (!m) continue;
+    const text = m[1] ?? '';
+    if (/【(?:留着|保留)[^】]*】/.test(text)) continue;
+    if (/^(斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)/.test(text)) continue;
+    const name = text.replace(/【[^】]*】/g, '').replace(/\[[^\]]*\]/g, '').trim();
+    if (name !== '') candidate = name;
+  }
+  return candidate;
+}
+
 export class LlmPlanner implements Planner {
   readonly name = 'llm-xiaojing';
   private readonly fallback = new RulePlanner();
@@ -116,8 +132,37 @@ export class LlmPlanner implements Planner {
     if (menu !== '' && !/无（可以自由行动）/.test(menu)) {
       return this.fallback.decide(state);
     }
+    const recent = this.deps.recentReceipts ?? [];
+    // 确定性护栏（真机 2026-11-22：小模型看得到「背包空位：0」却仍连续选 fish）：
+    //   ① 背包满 → 整理；若整理本身也连续失败 → 升级为出货卖钱腾位置
+    //   ② 同一工具连续两次失败 → 换规则日程，绝不死磕同一动作
+    const failTools = recent
+      .map((r) => /^FAILED\s+([^\s:：]+)/.exec(r)?.[1] ?? '')
+      .filter((t) => t !== '');
+    const tail2 = failTools.slice(-2);
+    const repeated = tail2.length === 2 && tail2[0] === tail2[1];
+    const inventoryFull =
+      state.freeSlots <= 0 ||
+      /背包满|背包.{0,6}满|空位：?0|空位 0/.test(recent.slice(-2).join(' '));
+    if (inventoryFull) {
+      if (repeated && tail2[0] === 'tidy_backpack') {
+        const item = pickShippableItem(state.raw);
+        return item !== null
+          ? { kind: 'act', tool: 'ship_items', args: { item }, intent: `整理也塞不下，先把${item}出货换米——腾位置还能赚一笔` }
+          : { kind: 'act', tool: 'store_items', args: {}, intent: '整理也塞不下，先把杂物存进箱子腾位置' };
+      }
+      return {
+        kind: 'act',
+        tool: 'tidy_backpack',
+        args: {},
+        intent: '背包塞得满满当当，先整理出空位（不然连鱼都没地方放啦）',
+      };
+    }
+    if (repeated) {
+      return this.fallback.decide(state);
+    }
     const guidesHint = pickGuideContext(state, this.deps.guides);
-    const receipts = (this.deps.recentReceipts ?? []).slice(-3).map((r) => `- ${r}`).join('\n');
+    const receipts = recent.slice(-3).map((r) => `- ${r}`).join('\n');
     const user = `当前游戏状态：\n${state.raw.slice(0, 4000)}\n\n最近回执：\n${receipts || '（刚开始）'}\n\n请决定下一步动作，只输出一行 JSON。`;
 
     for (let attempt = 0; attempt < 2; attempt++) {

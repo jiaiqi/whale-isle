@@ -18,6 +18,8 @@ export interface GameStateSnapshot {
   menu: string; // 当前界面（空 = 自由行动）
   season: string;
   day: number;
+  /** 背包剩余空位（真机 2026-11-22 教训：空位 0 时钓鱼必失败，必须先整理/出货） */
+  freeSlots: number;
 }
 
 export function parseGameState(raw: string): GameStateSnapshot {
@@ -26,6 +28,7 @@ export function parseGameState(raw: string): GameStateSnapshot {
   const moneyM = /金钱：(\d+)g/.exec(raw);
   const locM = /地点：([^\s（，。]+)/.exec(raw);
   const menuM = /## 当前界面\n(.+)/.exec(raw);
+  const freeM = /背包空位：(\d+)\s*个/.exec(raw);
   const seasonM = /第\d+年(春|夏|秋冬|秋|冬)?/.exec(clockM?.[1] ?? '');
   const dayM = /年[春夏秋冬](\d+)日/.exec(clockM?.[1] ?? '');
   const hh = Number(clockM?.[2] ?? '6');
@@ -41,6 +44,7 @@ export function parseGameState(raw: string): GameStateSnapshot {
     menu: (menuM?.[1] ?? '').trim(),
     season: seasonM?.[1] ?? '春',
     day: Number(dayM?.[1] ?? 1),
+    freeSlots: Number(freeM?.[1] ?? 12), // 状态没报背包 → 视为有位置（不阻塞）
   };
 }
 
@@ -76,7 +80,7 @@ function handleMenu(state: GameStateSnapshot): PlannerDecision | null {
  */
 export class RulePlanner implements Planner {
   readonly name = 'rule-schedule';
-  private phase: 'morning-mail' | 'farm-work' | 'fishing' | 'forage' | 'homeward' | 'sleeping' = 'farm-work';
+  private phase: 'morning-mail' | 'farm-work' | 'fishing' | 'forage' = 'farm-work';
   private lastPhaseDay = -1;
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
@@ -101,6 +105,11 @@ export class RulePlanner implements Planner {
     if (state.clockMinutes >= 18 * 60 + 30) {
       return this.goSleep(state);
     }
+    // 背包塞满：任何采集/钓鱼都会失败（真机 2026-11-22 连续 FAILED fish 教训）→ 先整理
+    // 注意规则模式无回执上下文，只做空位确定性兜底；连续失败升级由 LlmPlanner 负责
+    if (state.freeSlots <= 0) {
+      return { kind: 'act', tool: 'tidy_backpack', args: {}, intent: '背包塞得满满当当，先整理出空位再干活' };
+    }
 
     switch (this.phase) {
       case 'morning-mail': {
@@ -121,12 +130,8 @@ export class RulePlanner implements Planner {
         }
         return { kind: 'act', tool: 'fish', args: { casts: 5 }, intent: '钓鱼赚米！这可是正经的生产活动（傲娇）' };
       case 'forage':
-        if (state.clockMinutes >= 18 * 60 + 30) return this.goSleep(state);
+        // 18:30 后的睡觉切换由上方全局规则统一处理，这里只做傍晚采集
         return this.forage(state);
-      case 'homeward':
-        return this.goSleep(state);
-      case 'sleeping':
-        return { kind: 'wait', seconds: 60, reason: '睡觉结算中……' };
     }
   }
 
@@ -160,7 +165,6 @@ export class RulePlanner implements Planner {
   }
 
   private goSleep(_state: GameStateSnapshot): PlannerDecision {
-    this.phase = 'sleeping';
     if (_state.location !== 'FarmHouse') {
       return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '回家！绝不晕倒（Joja 医疗费 50g 的教训）' };
     }

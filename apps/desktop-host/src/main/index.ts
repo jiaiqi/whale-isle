@@ -11,6 +11,7 @@ import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createMemoryHost, dayKeyOf } from './memory-host';
+import { createWebUIServer } from './webui-server';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
@@ -79,6 +80,46 @@ app.whenReady().then(() => {
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
   const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice, memory);
   const harness = createHarnessHost();
+  // WebUI 形态（T-M6-04）：本机浏览器复核口（HTTP/WS + 远程审批）。
+  // 包裹 try/catch：WebUI 起不来只告警，绝不拖垮 Electron 主进程。
+  try {
+    const webui = createWebUIServer({
+      getState: () => ({
+        running: autodrive.runner.isRunning(),
+        brainMode: autodrive.getBrainMode().mode,
+        memoryStats: { nodes: memory.store.size, edges: memory.store.allEdges().length },
+        voice: {
+          enabled: voice.config.enabled,
+          innerVoice: voice.config.innerVoice,
+          volume: voice.config.volume,
+          ratePercent: voice.config.ratePercent,
+          voice: voice.config.voice,
+          voiceId: voice.config.voiceId,
+          pitchMul: voice.config.pitchMul,
+        },
+      }),
+      // 浏览器聊天复用 Shell 同款回话（人设/记忆/雷区反射/自动发声全一致）
+      onCommand: (text) => autodrive.say(text),
+      // 总线事件（决策/回执/聊天）实时推给 WebUI WS
+      getBusEventSources: () => [
+        { subscribe: (listener) => autodrive.subscribe((event) => listener(event)) },
+      ],
+      // 远程审批：浏览器审批卡直接回填 ACP permission（Y/N/A）
+      onApprove: (payload) => {
+        harness.manager.resolvePermission(payload.providerId, payload.requestId, payload.outcome);
+        return { ok: true };
+      },
+    });
+    void webui.ready
+      .then(() => {
+        console.log(`[webui] http://127.0.0.1:${webui.port}/?token=${webui.token}`);
+      })
+      .catch((error: unknown) => {
+        console.warn('[webui] 启动失败（不影响主进程）:', error);
+      });
+  } catch (error) {
+    console.warn('[webui] 初始化失败（不影响主进程）:', error);
+  }
   const wireTargets = () => {
     const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);
     autodrive.setTargets(targets);

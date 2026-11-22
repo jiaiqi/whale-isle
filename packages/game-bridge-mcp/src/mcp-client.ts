@@ -114,7 +114,8 @@ export class BwfMcpClient {
 /** 长动作判定（BWF 语义：>45s 先回「还在执行」） */
 export function isLongAction(tool: string): boolean {
   return ['fish', 'explore_mine', 'water_crops', 'harvest_crops', 'donate_bundles', 'crack_geodes',
-    'quest_board', 'ship_items', 'sleep', 'care_animals', 'festival', 'leave_festival', 'fight',
+    'quest_board', 'ship_items', 'tidy_backpack', 'store_items', 'travel_to', 'interact', 'give_gift',
+    'sleep', 'care_animals', 'festival', 'leave_festival', 'fight',
     'check_crab_pots', 'upgrade_house', 'build', 'read_mail', 'repair_boat', 'mermaid_show', 'wait'].includes(tool);
 }
 

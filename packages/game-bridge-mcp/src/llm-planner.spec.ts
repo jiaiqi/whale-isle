@@ -3,7 +3,7 @@
  * chat 全注入 mock（零网络）。
  */
 import { describe, expect, it } from 'vitest';
-import { extractDecisionJson, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext } from './llm-planner';
+import { extractDecisionJson, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickShippableItem } from './llm-planner';
 import { parseGameState, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `时间：第1年春16日 07:30（Tue），天气：晴
@@ -13,6 +13,13 @@ const STATE_OK = `时间：第1年春16日 07:30（Tue），天气：晴
 ## 位置
 地点：Farm（泡泡湾农场）
 邮箱里有 7 封未读信件`;
+
+/** 真机 2026-11-22 现场原样：背包空位 0，钓鱼连续 FAILED */
+const STATE_FULL = `${STATE_OK.replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）')}
+## 背包（序号: 物品）
+0: 斧头
+11: 小嘴鲈鱼 [可食用 +25 体力]
+背包空位：0 个（共 12 格）`;
 
 const state = (): GameStateSnapshot => parseGameState(STATE_OK);
 
@@ -27,6 +34,7 @@ describe('extractDecisionJson', () => {
     expect(extractDecisionJson('我就想睡觉不输出 JSON')).toBeNull();
     expect(extractDecisionJson('{"args":{},"intent":"x"}')).toBeNull();
     expect(extractDecisionJson('{"tool":"fish","args":{"casts":')).toBeNull();
+    expect(extractDecisionJson('{"tool": bad json }')).toBeNull(); // JSON.parse 抛错也须吞掉
   });
 });
 
@@ -37,14 +45,29 @@ describe('白名单与攻略检索', () => {
     expect(LLM_TOOL_WHITELIST.has('rm_rf')).toBe(false);
   });
 
-  it('状态含钓鱼线索 → 钓鱼攻略节选；无线索 → 空', () => {
-    const guides = { 钓鱼: '钓鱼攻略正文'.repeat(200), 采矿: '采矿攻略' };
+  it('状态含钓鱼线索 → 钓鱼攻略节选；无线索 → 空', () => {    const guides = { 钓鱼: '钓鱼攻略正文'.repeat(200), 采矿: '采矿攻略' };
     const s = { ...state(), raw: state().raw + '去海边钓鱼（fish）' };
     const ctx = pickGuideContext(s, guides);
     expect(ctx).toContain('钓鱼 专题节选');
     expect(ctx.length).toBeLessThanOrEqual(1200 + 60);
     const noHint = pickGuideContext(state(), guides);
     expect(noHint).toBe('');
+  });
+});
+
+describe('pickShippableItem（出货目标挑选）', () => {
+  it('跳过工具与「留着」任务物品；取最后一条并剥离标签', () => {
+    const raw = `## 背包（序号: 物品）
+0: 斧头
+1: 黄水仙【留着：社区中心"春季采集"要交】
+4: 绿藻 [可食用 +13 体力]
+7: 小嘴鲈鱼 金星 [可食用 +45 体力]
+背包空位：0 个（共 12 格）`;
+    expect(pickShippableItem(raw)).toBe('小嘴鲈鱼 金星');
+  });
+  it('只有工具/任务物品 → null（升级路径改走 store_items）', () => {
+    expect(pickShippableItem('0: 斧头\n1: 锄头\n2: 黄水仙【留着】')).toBeNull();
+    expect(pickShippableItem('没有背包段')).toBeNull();
   });
 });
 
@@ -87,6 +110,67 @@ describe('LlmPlanner 决策链', () => {
     });
     const withMenu = { ...state(), menu: '正在播放剧情/节日事件' };
     await planner.decide(withMenu);
+    expect(asked).toBe(0);
+  });
+
+  it('背包空位 0 → 确定性 tidy_backpack，不烧 token（真机连续 FAILED fish 修复）', async () => {
+    let asked = 0;
+    const planner = new LlmPlanner({
+      chat: async () => { asked++; return { content: '{"tool":"fish","args":{}}' }; },
+    });
+    const full = parseGameState(STATE_FULL);
+    expect(full.freeSlots).toBe(0);
+    const d = await planner.decide(full);
+    expect(d.kind === 'act' && d.tool).toBe('tidy_backpack');
+    expect(d.kind === 'act' && d.intent).toContain('背包');
+    expect(asked).toBe(0);
+    expect(planner.asks).toBe(1); // 只计数，未走 LLM
+  });
+
+  it('回执显示背包满（状态未解析出空位）→ 同样整理', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED fish: 失败：背包满了，再钓拿不下的会掉在地上'],
+    });
+    const d = await planner.decide(state());
+    expect(d.kind === 'act' && d.tool).toBe('tidy_backpack');
+  });
+
+  it('整理连续两次失败 + 背包满 → 升级为出货 ship_items（带具体物品名）', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED tidy_backpack: 失败：箱子也满了', 'FAILED tidy_backpack: 失败：真的塞不下'],
+    });
+    const d = await planner.decide(parseGameState(STATE_FULL));
+    expect(d.kind === 'act' && d.tool).toBe('ship_items');
+    // ship_items 契约要求 item 必填：从背包挑最近捡的鱼（跳过工具）
+    expect(d.kind === 'act' && d.args).toEqual({ item: '小嘴鲈鱼' });
+  });
+
+  it('整理连续失败但没有可出货物品 → store_items（无参也安全）', async () => {
+    const toolsOnly = `${STATE_OK}
+## 背包（序号: 物品）
+0: 斧头
+1: 锄头
+2: 喷壶（水 39/40）
+3: 黄水仙【留着：社区中心"春季采集"要交】
+背包空位：0 个（共 12 格）`;
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED tidy_backpack: 失败：箱子也满了', 'FAILED tidy_backpack: 失败：真的塞不下'],
+    });
+    const d = await planner.decide(parseGameState(toolsOnly));
+    expect(d.kind === 'act' && d.tool).toBe('store_items');
+  });
+
+  it('同一工具连续两次失败（非背包）→ 换规则日程，不重复死磕', async () => {
+    let asked = 0;
+    const planner = new LlmPlanner({
+      chat: async () => { asked++; return { content: '{"tool":"fish","args":{}}' }; },
+      recentReceipts: ['FAILED fish: 失败：这里没有水', 'FAILED fish: 失败：没有水钓不了'],
+    });
+    const d = await planner.decide(state());
+    expect(d.kind === 'act' && d.tool).not.toBe('fish');
     expect(asked).toBe(0);
   });
 });

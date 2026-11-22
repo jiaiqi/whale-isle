@@ -1,0 +1,22 @@
+{
+  "name": "@workbench/plugin-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[T-M6-03] dsh 插件兼容层：manifest/defineTool/registry/插件树/Cordis 适配（零依赖）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

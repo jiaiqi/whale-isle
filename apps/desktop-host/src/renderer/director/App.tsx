@@ -68,8 +68,21 @@ interface AppProps {
   storeKey: string;
 }
 
-export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {
-  void storeKey;
+/** 历史水合：主进程环形缓冲 + 已收到的实时事件按 seq 去重（刷新不丢对话、不重复插卡） */
+export function mergeHydrated(history: AutodriveEventView[], live: AutodriveEventView[]): AutodriveEventView[] {
+  const seen = new Set<number>();
+  const merged: AutodriveEventView[] = [];
+  for (const e of [...history, ...live]) {
+    if (e.seq !== undefined) {
+      if (seen.has(e.seq)) continue;
+      seen.add(e.seq);
+    }
+    merged.push(e);
+  }
+  return merged.slice(-500);
+}
+
+export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {  void storeKey;
   const [tab, setTab] = useState<Tab>('chat');
   const [events, setEvents] = useState<AutodriveEventView[]>([]);
   const [running, setRunning] = useState(false);
@@ -83,7 +96,11 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     window.directorBridge.onAutodriveEvent((event) => {
       setEvents((prev) => (prev.length >= 500 ? [...prev.slice(-499), event] : [...prev, event]));
     });
-    void window.directorBridge.autodriveStatus().then((s) => setRunning(s.running));
+    void window.directorBridge.autodriveStatus().then((s) => {
+      setRunning(s.running);
+      const history = s.events ?? [];
+      if (history.length > 0) setEvents((prev) => mergeHydrated(history, prev));
+    });
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
   }, []);
@@ -398,6 +415,50 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
         </div>
         <div className="mono mt-1 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{event.tool}</div>
         <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{event.intent}</div>
+      </div>
+    );
+  }
+  if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray')) {
+    // 小鲸回话：左对齐对话泡（codex 式聊天流）——不再套「COMPLETED receipt」绿色回执卡
+    const isReflex = event.tool === 'reflex_spray';
+    return (
+      <div data-event="chat" className="mb-3 flex items-start gap-2.5">
+        <div
+          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+          style={{
+            background: 'linear-gradient(135deg, rgba(120,170,255,0.95), rgba(90,110,240,0.85))',
+            color: '#fff',
+            boxShadow: '0 2px 8px rgba(60,110,255,0.35)',
+          }}
+        >
+          鲸
+        </div>
+        <div className="max-w-[78%]">
+          <div className="mono mb-1 flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--text-3)' }}>
+            <span style={{ color: 'var(--text-2)' }}>小鲸</span>
+            {isReflex && (
+              <span
+                className="rounded px-1 py-px text-[9px]"
+                style={{ background: 'var(--red-dim)', color: 'var(--red)' }}
+              >
+                炸毛反射 · 0 token
+              </span>
+            )}
+          </div>
+          <div
+            className="px-3.5 py-2.5 text-[13px] leading-relaxed"
+            style={{
+              borderRadius: '4px 16px 16px 16px',
+              background: isReflex ? 'var(--red-dim)' : 'var(--surface)',
+              border: `1px solid ${isReflex ? 'var(--red-line)' : 'var(--stroke-2)'}`,
+              backdropFilter: 'blur(14px)',
+              color: 'var(--text-1)',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {event.summary}
+          </div>
+        </div>
       </div>
     );
   }

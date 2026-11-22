@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/live-stream-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[T-M5-05] 弹幕事件中枢与三级注意力调度：去重/合并/衰减/防封护栏（dsh-livestream 思想重写）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}

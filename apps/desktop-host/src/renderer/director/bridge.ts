@@ -47,6 +47,8 @@ export interface AutodriveEventView {
   kind?: 'stuck' | 'heartbeat';
   detail?: string;
   delayMs?: number;
+  /** 主进程单调序号：刷新水合时去重（同一事件不插两次卡） */
+  seq?: number;
 }
 
 export interface HarnessPresetInfo {
@@ -70,7 +72,7 @@ export interface DirectorBridge {
   testProviderChat(args: { providerId: string; baseUrl: string; modelId: string }): Promise<ProviderVaultResponse>;
   autodriveStart(): Promise<{ ok: boolean; error?: string }>;
   autodriveStop(): Promise<{ ok: boolean }>;
-  autodriveStatus(): Promise<{ running: boolean }>;
+  autodriveStatus(): Promise<{ running: boolean; events?: AutodriveEventView[] }>;
   autodriveDirective(tool: string, args: Record<string, unknown>, intent: string): Promise<{ ok: boolean }>;
   onAutodriveEvent(handler: (event: AutodriveEventView) => void): void;
   harnessPresets(): Promise<HarnessPresetInfo[]>;
