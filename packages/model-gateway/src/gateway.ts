@@ -18,7 +18,7 @@ import {
 
 type ProviderConfigInput = z.input<typeof ModelProviderConfigSchema>;
 import { createSanitizer, type Sanitize, type SanitizerOptions } from './sanitizer';
-import { BUILTIN_PROVIDER_PRESETS, buildChatUrl } from './presets';
+import { BUILTIN_PROVIDER_PRESETS, buildChatUrl, resolveProtocol } from './presets';
 import { orderedCandidates, recordStickyGood, StickyState, RouteError } from './router';
 
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<{
@@ -85,9 +85,41 @@ export class GatewayError extends Error {
 }
 
 interface ChatCompletionResponse {
+  /** OpenAI 兼容：choices[0].message */
   choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
-  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number };
+  /** Anthropic Messages 兼容：content blocks（type === 'text' 时拼接 text） */
+  content?: Array<{ type?: string; text?: string }>;
+  /** Anthropic stop_reason 仅记录形状，当前不参与回执 */
+  stop_reason?: string | null;
+  usage?: {
+    /** OpenAI */
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    prompt_cache_hit_tokens?: number;
+    /** Anthropic */
+    input_tokens?: number;
+    output_tokens?: number;
+  };
   error?: { message?: string };
+}
+
+interface AnthropicRequestMessages {
+  system: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+/** Anthropic 不支持 system 角色：抽取 system 消息拼成顶层 system 字符串 */
+function splitAnthropicMessages(messages: ChatMessage[]): AnthropicRequestMessages {
+  const systemParts: string[] = [];
+  const conversation: AnthropicRequestMessages['messages'] = [];
+  for (const message of messages) {
+    if (message.role === 'system') {
+      systemParts.push(message.content);
+    } else {
+      conversation.push({ role: message.role, content: message.content });
+    }
+  }
+  return { system: systemParts.join('\n\n'), messages: conversation };
 }
 
 export class ModelGateway {
@@ -160,22 +192,38 @@ export class ModelGateway {
         continue;
       }
 
+      const protocol = resolveProtocol(provider);
       const url = buildChatUrl(provider);
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      let requestBody: string;
+      if (protocol === 'anthropic') {
+        // Anthropic 走 x-api-key + anthropic-version，严禁附带 authorization
+        headers['x-api-key'] = apiKey;
+        headers['anthropic-version'] = '2023-06-01';
+        const split = splitAnthropicMessages(outbound);
+        requestBody = JSON.stringify({
+          model: candidate.modelId,
+          max_tokens: opts?.maxTokens ?? 1024,
+          ...(split.system ? { system: split.system } : {}),
+          messages: split.messages,
+          ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        });
+      } else {
+        headers.authorization = `Bearer ${apiKey}`;
+        requestBody = JSON.stringify({
+          model: candidate.modelId,
+          messages: outbound,
+          ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+          ...(opts?.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
+        });
+      }
       const t0 = Date.now();
       let response: Awaited<ReturnType<FetchLike>>;
       try {
         response = await fetchImpl(url, {
           method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: candidate.modelId,
-            messages: outbound,
-            ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
-            ...(opts?.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-          }),
+          headers,
+          body: requestBody,
           signal: opts?.signal,
         });
       } catch (error) {
@@ -186,8 +234,10 @@ export class ModelGateway {
 
       // 400 = 请求本身有问题（模型名/参数），failover 无意义 → 立即抛出
       if (response.status === 400) {
-        const body = (await response.json().catch(() => ({}))) as ChatCompletionResponse;
-        throw new GatewayError('BAD_REQUEST', `请求被拒绝（400）：${body.error?.message ?? 'unknown'}`, { status: 400 });
+        // OpenAI 与 Anthropic 的错误体同为 { error: { message } }
+        const parsed = (await response.json().catch(() => null)) as ChatCompletionResponse | null;
+        const errorBody = parsed ?? {};
+        throw new GatewayError('BAD_REQUEST', `请求被拒绝（400）：${errorBody.error?.message ?? 'unknown'}`, { status: 400 });
       }
       if (!response.ok) {
         attempts.push({ providerId: candidate.providerId, modelId: candidate.modelId, reason: `HTTP_${response.status}` });
@@ -203,14 +253,32 @@ export class ModelGateway {
       }
 
       const latencyMs = Date.now() - t0;
-      const usage = {
-        inputTokens: body.usage?.prompt_tokens ?? 0,
-        cachedInputTokens: body.usage?.prompt_cache_hit_tokens ?? 0,
-        outputTokens: body.usage?.completion_tokens ?? 0,
-      };
+      let content: string;
+      let reasoningContent: string | null;
+      let usage: ChatReceipt['usage'];
+      if (protocol === 'anthropic') {
+        content = (body.content ?? [])
+          .filter((block) => block.type === 'text')
+          .map((block) => block.text ?? '')
+          .join('');
+        reasoningContent = null;
+        usage = {
+          inputTokens: body.usage?.input_tokens ?? 0,
+          cachedInputTokens: 0, // Anthropic 的 cache 计量字段暂不计入 Token 饭碗
+          outputTokens: body.usage?.output_tokens ?? 0,
+        };
+      } else {
+        content = body.choices?.[0]?.message?.content ?? '';
+        reasoningContent = body.choices?.[0]?.message?.reasoning_content ?? null;
+        usage = {
+          inputTokens: body.usage?.prompt_tokens ?? 0,
+          cachedInputTokens: body.usage?.prompt_cache_hit_tokens ?? 0,
+          outputTokens: body.usage?.completion_tokens ?? 0,
+        };
+      }
       const receipt: ChatReceipt = {
-        content: body.choices?.[0]?.message?.content ?? '',
-        reasoningContent: body.choices?.[0]?.message?.reasoning_content ?? null,
+        content,
+        reasoningContent,
         usage,
         route: { providerId: candidate.providerId, modelId: candidate.modelId, attempt: attemptIndex },
         sanitized,

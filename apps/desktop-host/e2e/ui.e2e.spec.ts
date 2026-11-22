@@ -1,4 +1,5 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { _electron as electron } from 'playwright-core';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -8,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * [E2E-HOST] T-M1-05 门禁：
  *   ① Playwright 截图 + 几何断言——pet-stage 双轨气泡同时显示且不重叠
- *   ② 套餐胶囊一键切换 → Dexie 状态同步（键值断言 + 刷新后持久恢复）
+ *   ② 模型与服务商 v5：双 Tab / 自定义服务商增删持久 / 导入弹窗（零明文泄露）
  * 视觉观感（气泡美观度）属真机抽检，不在此冒充。
  */
 const here = dirname(fileURLToPath(import.meta.url));
@@ -106,43 +107,88 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       const shotPath = join(artifactsDir, 'pet-stage-bubbles.png');
       await stageWin.screenshot({ path: shotPath });
 
-      // ---- ② director：套餐胶囊一键切换 → Dexie 同步 + 刷新恢复 ----
+      // ---- ② director：模型与服务商 v5（双 Tab / 自定义服务商 / 导入弹窗） ----
       const directorWin = app.windows().find((candidate) => candidate.url().includes('director'));
       expect(directorWin).toBeDefined();
       const director = directorWin!;
       await director.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
-
-      // 一键切换序列（Dexie 跨运行持久，不假设初始态）：🍚 省饭档 → 🛡️ 断网档
-      // Shell 化重构（T-M6-01）：供应商/套餐配置在 providers 页签内——先切页签
-      await director.click('[data-tab="providers"]');
-      await director.waitForSelector('[data-profile="BUDGET_SLACKING"]', { timeout: 10_000 });
       const snapshot = async () => (await director.evaluate(() => (window as unknown as { __directorSnapshot: () => Promise<Record<string, unknown>> }).__directorSnapshot())) as Record<string, unknown>;
-      await director.click('[data-profile="BUDGET_SLACKING"]');
-      await director.waitForFunction(
-        () => document.querySelector('[data-profile="BUDGET_SLACKING"]')?.getAttribute('data-active') === 'true',
-        { timeout: 5_000 },
-      );
-      expect((await snapshot()).activeDiningProfile).toBe('BUDGET_SLACKING'); // Dexie 状态同步①
 
-      await director.click('[data-profile="OFFLINE_SURVIVAL"]');
-      await director.waitForFunction(
-        () => document.querySelector('[data-profile="OFFLINE_SURVIVAL"]')?.getAttribute('data-active') === 'true',
-        { timeout: 5_000 },
-      );
-      expect((await snapshot()).activeDiningProfile).toBe('OFFLINE_SURVIVAL'); // Dexie 状态同步②
+      await director.click('[data-tab="providers"]');
+      await director.waitForSelector('[data-provider-item="opencode-go"]', { timeout: 10_000 });
 
-      // 刷新后持久恢复（IndexedDB 真持久化，非内存态）——reload 后默认 chat 页签，需先切回 providers
+      // 双 Tab：服务商配置 / 默认模型(6)
+      expect(await director.locator('[data-ptab]').count()).toBe(2);
+      await director.click('[data-ptab="defaults"]');
+      await director.waitForSelector('[data-slot-select="MAIN_PERSONA_BRAIN"]', { timeout: 5_000 });
+      expect(await director.locator('[data-slot-select]').count()).toBe(6);
+      await director.click('[data-ptab="providers"]');
+
+      // OpenCode Go 内置条目 + 协议变体
+      await director.click('[data-provider-item="opencode-go"]');
+      await director.waitForFunction(() => document.body.innerText.includes('OpenCode Go'));
+      expect(await director.locator('[data-variant]').count()).toBeGreaterThanOrEqual(2);
+      expect(await director.locator('[data-set-main]').count()).toBeGreaterThanOrEqual(1);
+
+      // 添加自定义服务商（Anthropic 协议 + isFullUrl）
+      await director.click('[data-add-provider]');
+      await director.fill('[data-new-name]', 'E2E 自建中转');
+      await director.click('[data-new-proto="anthropic"]');
+      await director.fill('[data-new-url]', 'http://127.0.0.1:9999/v1/messages');
+      await director.fill('[data-new-models]', 'e2e-model-a, e2e-model-b');
+      await director.click('[data-create-provider]');
+      await director.waitForSelector('[data-provider-item^="custom-"]', { timeout: 5_000 });
+      const customId = await director.evaluate(() => document.querySelector('[data-provider-item^="custom-"]')?.getAttribute('data-provider-item') ?? '');
+      expect(customId.startsWith('custom-')).toBe(true);
+      const cfg = await snapshot();
+      expect(Array.isArray(cfg.customProviders)).toBe(true);
+
+      // 刷新后自定义服务商持久（Dexie）
       await director.reload();
       await director.click('[data-tab="providers"]');
-      await director.waitForFunction(
-        () => document.querySelector('[data-profile="OFFLINE_SURVIVAL"]')?.getAttribute('data-active') === 'true',
-        { timeout: 10_000 },
-      );
-      const restored = (await director.evaluate(() => (window as unknown as { __directorSnapshot: () => Promise<Record<string, unknown>> }).__directorSnapshot())) as Record<string, unknown>;
-      expect(restored.activeDiningProfile).toBe('OFFLINE_SURVIVAL');
-      // 六槽位绑定随套餐切换
-      const binding = await director.evaluate(() => document.querySelector('[data-binding="MAIN_PERSONA_BRAIN"]')?.textContent);
-      expect(binding).toContain('local-ollama/qwen2.5:14b');
+      await director.waitForSelector(`[data-provider-item="${customId}"]`, { timeout: 10_000 });
+
+      // 删除自定义服务商（confirm 自动接受）
+      director.once('dialog', (dialog) => void dialog.accept());
+      await director.click('[data-provider-item="' + customId + '"]');
+      await director.click('[data-delete-provider]');
+      await director.waitForFunction((id) => !document.querySelector(`[data-provider-item="${id}"]`), customId, { timeout: 5_000 });
+
+      // 导入弹窗（主进程只读扫描；本机无 Magpie 时也应给出可读错误而不泄露明文）
+      await director.click('[data-provider-import]');
+      await director.waitForFunction(() => document.body.innerText.includes('导入外部配置'));
+      await director.waitForFunction(() => document.body.innerText.includes('Magpie') && document.body.innerText.includes('CC Switch'));
+      const importText = await director.evaluate(() => document.body.innerText);
+      expect(importText).not.toMatch(/oc_sk_|or_sk_|sk-[A-Za-z0-9]{16,}/);
+      await director.getByRole('button', { name: '取消' }).click();
+
+      // 导入 IPC 真机链路（file fixture）：扫描预览零明文 → apply 主进程加密写入
+      const fixtureDir = mkdtempSync(join(tmpdir(), 'prov-import-e2e-'));
+      const fixturePath = join(fixtureDir, 'magpie.json');
+      writeFileSync(fixturePath, JSON.stringify({
+        providers: [
+          { name: 'E2E Fixture Gateway', baseUrl: 'https://e2e-fixture.example/v1', api_key: 'oc_sk_e2e_1234567890abcdef', protocol: 'openai', models: ['fixture-a', 'fixture-b'] },
+        ],
+      }), 'utf8');
+      try {
+        const scan = await director.evaluate((path) => (window as unknown as {
+          directorBridge: { providerImportScan(args: { source: string; filePath: string }): Promise<{ ok: boolean; items: Array<{ id: string; hasKey: boolean; keyMask: string; matchedBuiltin: boolean }> }> };
+        }).directorBridge.providerImportScan({ source: 'file', filePath: path }), fixturePath);
+        expect(scan.ok).toBe(true);
+        expect(scan.items).toHaveLength(1);
+        expect(scan.items[0]?.matchedBuiltin).toBe(false);
+        expect(JSON.stringify(scan)).not.toContain('oc_sk_e2e');
+        expect(scan.items[0]?.keyMask).toContain('••••');
+
+        const applied = await director.evaluate(({ path, ids }) => (window as unknown as {
+          directorBridge: { providerImportApply(args: { source: string; filePath: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<{ ok: boolean; items: Array<{ id: string; action: string; keyMask: string }> }> };
+        }).directorBridge.providerImportApply({ source: 'file', filePath: path, selectedIds: ids, policy: 'overwrite' }), { path: fixturePath, ids: scan.items.map((i) => i.id) });
+        expect(applied.ok).toBe(true);
+        expect(JSON.stringify(applied)).not.toContain('oc_sk_e2e');
+        expect(['create', 'update']).toContain(applied.items[0]?.action);
+      } finally {
+        rmSync(fixtureDir, { recursive: true, force: true });
+      }
     } finally {
       await app.close();
     }

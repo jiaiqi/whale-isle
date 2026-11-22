@@ -47,7 +47,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: '平台与底层',
     items: [
       { id: 'harness', label: 'Harness · ACP', icon: Terminal, group: '平台与底层' },
-      { id: 'providers', label: '模型供应商', icon: Cpu, group: '平台与底层' },
+      { id: 'providers', label: '模型与服务商', icon: Cpu, group: '平台与底层' },
       { id: 'plugins', label: '插件与权限策略', icon: Blocks, group: '平台与底层' },
     ],
   },

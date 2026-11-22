@@ -19,7 +19,7 @@ const SELF = fileURLToPath(import.meta.url);
 const SELF_GUARD = 'license-scanner.mjs';
 const SCAN_DIRS = ['packages', 'apps', 'services', 'tools', 'mods'];
 const SKIP_DIR_NAMES = new Set([
-  'node_modules', 'dist', 'coverage', '.git', '.venv', '__pycache__',
+  'node_modules', 'dist', 'build', 'coverage', '.git', '.venv', '__pycache__',
   'bin', 'obj', '.ruff_cache', '.mypy_cache', 'out', 'test-fixtures',
 ]);
 const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.py', '.cs']);

@@ -31,6 +31,14 @@
         "isFullUrl": {
           "type": "boolean",
           "default": false
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai"
         }
       },
       "required": [

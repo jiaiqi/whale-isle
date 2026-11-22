@@ -8,7 +8,9 @@ export {
   BUILTIN_PROVIDER_PRESETS,
   PROVIDER_PRESET_IDS,
   resolveEndpoint,
+  resolveProtocol,
   buildChatUrl,
+  type ProviderProtocol,
 } from './presets';
 export {
   orderedCandidates,

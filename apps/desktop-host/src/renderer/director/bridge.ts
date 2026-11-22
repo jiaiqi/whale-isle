@@ -10,6 +10,43 @@ export interface ProviderVaultResponse {
   latencyMs?: number;
 }
 
+export interface ImportProviderPreview {
+  id: string;
+  name: string;
+  protocol: 'openai' | 'anthropic';
+  baseUrl: string;
+  models: string[];
+  hasKey: boolean;
+  keyMask: string;
+  matchedBuiltin: boolean;
+}
+
+export interface ImportScanView {
+  ok: boolean;
+  error?: string;
+  source: 'magpie' | 'ccswitch' | 'file';
+  detectedPath: string;
+  items: ImportProviderPreview[];
+}
+
+export interface ImportedProviderMeta {
+  id: string;
+  name: string;
+  protocol: 'openai' | 'anthropic';
+  baseUrl: string;
+  isFullUrl: boolean;
+  models: string[];
+  matchedBuiltin: boolean;
+  action: 'create' | 'update' | 'skip';
+  keyMask: string;
+}
+
+export interface ImportApplyView {
+  ok: boolean;
+  error?: string;
+  items: ImportedProviderMeta[];
+}
+
 export interface BrainApplyView {
   ok: boolean;
   mode: 'rule' | 'llm';
@@ -36,8 +73,11 @@ export interface HarnessEventMsg {
 export interface DirectorBridge {
   saveProviderKey(providerId: string, plainKey: string): Promise<ProviderVaultResponse>;
   providerKeyMask(providerId: string): Promise<ProviderVaultResponse>;
-  discoverModels(args: { providerId: string; baseUrl: string }): Promise<ProviderVaultResponse>;
-  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string }): Promise<ProviderVaultResponse>;
+  discoverModels(args: { providerId: string; baseUrl: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
+  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
+  providerImportPickFile(): Promise<{ ok: boolean; path?: string; error?: string }>;
+  providerImportScan(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string }): Promise<ImportScanView>;
+  providerImportApply(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<ImportApplyView>;
 }
 
 export interface AutodriveEventView {
@@ -60,6 +100,43 @@ export interface AutodriveEventView {
   seq?: number;
 }
 
+export interface ImportProviderPreview {
+  id: string;
+  name: string;
+  protocol: 'openai' | 'anthropic';
+  baseUrl: string;
+  models: string[];
+  hasKey: boolean;
+  keyMask: string;
+  matchedBuiltin: boolean;
+}
+
+export interface ImportScanView {
+  ok: boolean;
+  error?: string;
+  source: 'magpie' | 'ccswitch' | 'file';
+  detectedPath: string;
+  items: ImportProviderPreview[];
+}
+
+export interface ImportedProviderMeta {
+  id: string;
+  name: string;
+  protocol: 'openai' | 'anthropic';
+  baseUrl: string;
+  isFullUrl: boolean;
+  models: string[];
+  matchedBuiltin: boolean;
+  action: 'create' | 'update' | 'skip';
+  keyMask: string;
+}
+
+export interface ImportApplyView {
+  ok: boolean;
+  error?: string;
+  items: ImportedProviderMeta[];
+}
+
 export interface BrainApplyView {
   ok: boolean;
   mode: 'rule' | 'llm';
@@ -86,8 +163,11 @@ export interface HarnessEventMsg {
 export interface DirectorBridge {
   saveProviderKey(providerId: string, plainKey: string): Promise<ProviderVaultResponse>;
   providerKeyMask(providerId: string): Promise<ProviderVaultResponse>;
-  discoverModels(args: { providerId: string; baseUrl: string }): Promise<ProviderVaultResponse>;
-  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string }): Promise<ProviderVaultResponse>;
+  discoverModels(args: { providerId: string; baseUrl: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
+  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
+  providerImportPickFile(): Promise<{ ok: boolean; path?: string; error?: string }>;
+  providerImportScan(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string }): Promise<ImportScanView>;
+  providerImportApply(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<ImportApplyView>;
   autodriveStart(): Promise<{ ok: boolean; error?: string }>;
   autodriveStop(): Promise<{ ok: boolean }>;
   autodriveStatus(): Promise<{ running: boolean; events?: AutodriveEventView[] }>;

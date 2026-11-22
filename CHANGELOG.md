@@ -78,6 +78,14 @@
 
 ### Added
 
+- **T-M6-09 模型与服务商 v5（2026-11-22 用户指令）**：
+  - **取消三档干饭套餐**：UI 只保留单一当前生效配置（Dexie 写入 → `brain:apply-config` 热更新）；默认模型 Tab 六槽位从「已启用服务商 × 已启用模型」中选择，文本角色可一键跟随主脑。
+  - **OpenCode Go 内置**：`opencode-go` OpenAI（`/zen/v1`）与 Anthropic（`/zen/anthropic/v1`）双变体 + 5 个预设模型；契约新增 provider/variant `protocol`，gateway 支持 Anthropic `/messages`（x-api-key + anthropic-version，无 Authorization）；sanitizer 增 `oc_sk_`/`or_sk_`。
+  - **自定义服务商**：Dexie `customProviders` 持久化；名称/协议/BaseURL/isFullUrl/模型手动增删启停；删除时同步清理角色绑定；provider 总开关与绿点。
+  - **Magpie / CC Switch 只读导入**：主进程 `provider-importer`（Magpie JSON、CC Switch SQLite 经 `sqlite3 -readonly`、JSON 导出/旧 config.json），预览仅服务商名/协议/BaseURL/模型数/掩码；apply 阶段主进程直接 safeStorage 加密写 vault；`skip`（默认，已有凭据不覆盖）/`overwrite`；SQLite 只读有 fixture mtime+sha256 断言。
+  - **UI**：providers 页按 `design/providers.html` 重构为 Master-Detail（256px 目录 + 专注面板）+ 双 Tab + 导入弹窗 + 添加自定义弹窗；零 emoji；浅色主题同步。
+  - 修复：license-scanner 误把 tsc `build/` 编译产物当源码扫描（跳过 build），Gate 2 恢复 0 违规。
+
 - **P0 正确性收尾（2026-11-22 用户选定方向）**：
   - **套餐/槽位真正驱动运行时**：新增 `BrainRuntimeConfig` 契约（38 域）；App 启动与供应商页每次改套餐/槽位/激活模型 → `brain:apply-config` → 主进程用 vault 里对应供应商 key 重建 `ModelGateway`，`planner:status` 如实返回 `providers/missingKeys`；不再硬编码 DELUXE。UI 顶栏大脑状态跨面板同步（`wb:brain`）。
   - **真实 Token 饭碗**：`token-meter`（`userData/meter/`）消费 gateway `onUsage` 真实 usage → JSONL 流水（slot/provider/model/输入输出/latency/米粒）+ 日预算 500,000（1 粒米 = 1 Token），支持跨重启、跨日重置与投喂 bonus；删除「1 回执 = 30 粒」模拟扣米。真机：聊天 478 tokens → 499,522 并跨重启保持。

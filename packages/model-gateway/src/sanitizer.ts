@@ -1,7 +1,7 @@
 /**
  * 隐私脱敏网关（T-M1-03，Magpie 思想重写）：发往云端前屏蔽本机隐私。
  * 规则：本机用户名（独立词）、homeDir 前缀、绝对路径（POSIX/Windows）、
- *       API Key（sk-/ghp_/AKIA/Bearer/明文 apiKey 赋值）→ {{MASKED}}。
+ *       API Key（sk-/oc_sk_/or_sk_/ghp_/AKIA/Bearer/明文 apiKey 赋值）→ {{MASKED}}。
  */
 import { homedir, userInfo } from 'node:os';
 
@@ -53,6 +53,8 @@ export function createSanitizer(options: SanitizerOptions = {}): Sanitize {
     }
     // 明文密钥特征
     out = out.replace(/\bsk-[A-Za-z0-9]{16,}\b/g, MASK);
+    // OpenCode Go / OpenRouter 风格下划线密钥（oc_sk_ / or_sk_）
+    out = out.replace(/\b(?:oc_sk_|or_sk_)[A-Za-z0-9_-]{8,}\b/g, MASK);
     out = out.replace(/\bghp_[A-Za-z0-9]{20,}\b/g, MASK);
     out = out.replace(/\bAKIA[0-9A-Z]{16}\b/g, MASK);
     out = out.replace(/Bearer\s+[A-Za-z0-9._\-]{12,}/gi, `Bearer ${MASK}`);

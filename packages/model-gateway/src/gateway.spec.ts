@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DiningProfilePreset, StickyRoutingGroup } from '@workbench/shared-protocol';
+import type { DiningProfilePreset, ModelProviderConfig, StickyRoutingGroup } from '@workbench/shared-protocol';
 import { ModelGateway, GatewayError, type FetchLike, type UsageRecord } from './gateway';
 import { MASK } from './sanitizer';
 
@@ -391,5 +391,233 @@ describe('ModelGateway', () => {
     gateway.switchProfile({ ...PROFILE, roleBindings: { ...PROFILE.roleBindings, MAIN_PERSONA_BRAIN: 'siliconflow/deepseek-v3' } });
     await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'c' }]);
     expect(calls.at(-1)).toBe('https://api.siliconflow.cn/v1/chat/completions');
+  });
+});
+
+// ---- Anthropic 协议（OpenCode Go /messages）----
+const ANTHROPIC_PROVIDER: ModelProviderConfig = {
+  id: 'opencode-go',
+  name: 'OpenCode Go',
+  category: 'AGGREGATOR_LLM',
+  activeRegion: 'GLOBAL',
+  activePlanType: 'CODING_PLAN',
+  variants: [
+    {
+      region: 'GLOBAL',
+      planType: 'CODING_PLAN',
+      baseUrl: 'https://opencode.ai/zen/anthropic/v1',
+      isFullUrl: false,
+      protocol: 'anthropic',
+    },
+  ],
+  apiKeyMaskedOrRef: '',
+  activeModelId: 'deepseek-v4.1-flash',
+  protocol: 'openai', // 供应商默认 openai：验证变体 protocol 优先生效
+  discoveredModels: [],
+};
+
+const ANTHROPIC_PROFILE: DiningProfilePreset = {
+  profileId: 'DELUXE_LIVESTREAM',
+  displayName: '🍱 豪华直播档',
+  roleBindings: { MAIN_PERSONA_BRAIN: 'opencode-go/deepseek-v4.1-flash' },
+  secretMaskingEnabled: true,
+};
+
+const ANTHROPIC_KEYS = { 'opencode-go': 'oc_sk_live_0123456789abcdef' };
+
+const MIXED_GROUP: StickyRoutingGroup = {
+  groupId: 'brain-mixed',
+  strategy: 'PROMPT_CACHE_STICKY',
+  candidates: [
+    { providerId: 'opencode-go', modelId: 'deepseek-v4.1-flash', weight: 70 },
+    { providerId: 'siliconflow', modelId: 'deepseek-v3', weight: 30 },
+  ],
+};
+
+function anthropicOkResponse(content = '哼，本鱼才没有偷懒！'): Awaited<ReturnType<FetchLike>> {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      id: 'msg_test',
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'text', text: content }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 320, output_tokens: 45 },
+    }),
+  };
+}
+
+describe('ModelGateway · Anthropic 协议', () => {
+  it('请求 URL/headers/body：x-api-key + anthropic-version、无 authorization、system 抽为顶层字符串', async () => {
+    const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async (url, init) => {
+        calls.push({ url, headers: init.headers, body: init.body });
+        return anthropicOkResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [
+      { role: 'system', content: '你是大肥鱼' },
+      { role: 'system', content: '保持傲娇' },
+      { role: 'user', content: '在摸鱼吗' },
+      { role: 'assistant', content: '才没有' },
+    ]);
+
+    expect(calls).toHaveLength(1);
+    const call = calls[0]!;
+    expect(call.url).toBe('https://opencode.ai/zen/anthropic/v1/messages');
+    expect(call.headers['x-api-key']).toBe(ANTHROPIC_KEYS['opencode-go']);
+    expect(call.headers['anthropic-version']).toBe('2023-06-01');
+    expect(call.headers['content-type']).toBe('application/json');
+    expect(call.headers.authorization).toBeUndefined();
+
+    const body = JSON.parse(call.body) as {
+      model?: string;
+      max_tokens?: number;
+      system?: string;
+      temperature?: number;
+      messages?: Array<{ role: string; content: string }>;
+    };
+    expect(body.model).toBe('deepseek-v4.1-flash');
+    expect(body.max_tokens).toBe(1024); // 未显式传 maxTokens → 默认 1024
+    expect(body.system).toBe('你是大肥鱼\n\n保持傲娇');
+    expect(body.messages).toEqual([
+      { role: 'user', content: '在摸鱼吗' },
+      { role: 'assistant', content: '才没有' },
+    ]);
+    expect(body.messages?.some((message) => message.role === 'system')).toBe(false);
+    expect(body.temperature).toBeUndefined();
+  });
+
+  it('temperature 可选透传 + maxTokens 覆盖默认；无 system 消息时不发 system 字段', async () => {
+    const bodies: string[] = [];
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async (_url, init) => {
+        bodies.push(init.body);
+        return anthropicOkResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }], {
+      temperature: 0.3,
+      maxTokens: 256,
+    });
+    const body = JSON.parse(bodies[0] ?? '{}') as {
+      max_tokens?: number;
+      temperature?: number;
+      system?: string;
+      messages?: unknown[];
+    };
+    expect(body.max_tokens).toBe(256);
+    expect(body.temperature).toBe(0.3);
+    expect('system' in body).toBe(false);
+    expect(body.messages).toEqual([{ role: 'user', content: 'x' }]);
+  });
+
+  it('响应：仅拼接 text block、usage input/output 映射、reasoningContent=null、onUsage 真实用量', async () => {
+    const usages: UsageRecord[] = [];
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [
+            { type: 'thinking', thinking: '内部推理' },
+            { type: 'text', text: '哼，' },
+            { type: 'text' }, // 缺失 text → 空串
+            { type: 'text', text: '本鱼才没有偷懒！' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 320, output_tokens: 45 },
+        }),
+      }),
+      onUsage: (record) => usages.push(record),
+    });
+    const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]);
+    expect(receipt.content).toBe('哼，本鱼才没有偷懒！');
+    expect(receipt.reasoningContent).toBeNull();
+    expect(receipt.usage).toEqual({ inputTokens: 320, cachedInputTokens: 0, outputTokens: 45 });
+    expect(receipt.sanitized).toBe(true);
+    expect(usages).toHaveLength(1);
+    expect(usages[0]).toMatchObject({
+      slot: 'MAIN_PERSONA_BRAIN',
+      providerId: 'opencode-go',
+      modelId: 'deepseek-v4.1-flash',
+      inputTokens: 320,
+      cachedInputTokens: 0,
+      outputTokens: 45,
+    });
+  });
+
+  it('响应缺 content/usage → 空串与零值兜底', async () => {
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ stop_reason: 'end_turn' }) }),
+    });
+    const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]);
+    expect(receipt.content).toBe('');
+    expect(receipt.reasoningContent).toBeNull();
+    expect(receipt.usage).toEqual({ inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 });
+  });
+
+  it('400 → 解析 error.message 抛 BAD_REQUEST，不 failover', async () => {
+    let callCount = 0;
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async () => {
+        callCount += 1;
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({
+            type: 'error',
+            error: { type: 'invalid_request_error', message: 'max_tokens is required' },
+          }),
+        };
+      },
+    });
+    const error = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]).catch((e) => e);
+    expect(error).toBeInstanceOf(GatewayError);
+    expect((error as GatewayError).code).toBe('BAD_REQUEST');
+    expect((error as GatewayError).message).toContain('max_tokens is required');
+    expect(callCount).toBe(1); // 不 failover
+  });
+
+  it('429 → 静默 failover 到 OpenAI 协议候选（协议按候选分别组装）', async () => {
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const gateway = new ModelGateway({
+      profile: { ...ANTHROPIC_PROFILE, roleBindings: { MAIN_PERSONA_BRAIN: 'group/brain-mixed' } },
+      providers: [ANTHROPIC_PROVIDER, ...PROVIDERS],
+      groups: [MIXED_GROUP],
+      keys: { ...ANTHROPIC_KEYS, ...KEYS },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, headers: init.headers });
+        return url.includes('opencode.ai') ? statusResponse(429) : okResponse();
+      },
+    });
+    const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: '在摸鱼吗' }]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.url).toBe('https://opencode.ai/zen/anthropic/v1/messages');
+    expect(calls[0]?.headers['x-api-key']).toBe(ANTHROPIC_KEYS['opencode-go']);
+    expect(calls[0]?.headers.authorization).toBeUndefined();
+    expect(calls[1]?.url).toBe('https://api.siliconflow.cn/v1/chat/completions');
+    expect(calls[1]?.headers.authorization).toBe(`Bearer ${KEYS.siliconflow}`);
+    expect(calls[1]?.headers['x-api-key']).toBeUndefined();
+    expect(receipt.route).toEqual({ providerId: 'siliconflow', modelId: 'deepseek-v3', attempt: 1 });
+    expect(receipt.content).toContain('本鱼');
   });
 });

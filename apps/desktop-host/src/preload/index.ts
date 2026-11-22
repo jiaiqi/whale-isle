@@ -15,10 +15,16 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('providers:save-key', providerId, plainKey),
   providerKeyMask: (providerId: string): Promise<{ ok: boolean; error?: string; mask?: string }> =>
     ipcRenderer.invoke('providers:key-mask', providerId),
-  discoverModels: (args: { providerId: string; baseUrl: string }): Promise<{ ok: boolean; error?: string; models?: string[] }> =>
+  discoverModels: (args: { providerId: string; baseUrl: string; protocol?: 'openai' | 'anthropic' }): Promise<{ ok: boolean; error?: string; models?: string[] }> =>
     ipcRenderer.invoke('providers:discover-models', args),
-  testProviderChat: (args: { providerId: string; baseUrl: string; modelId: string }): Promise<{ ok: boolean; error?: string; latencyMs?: number }> =>
+  testProviderChat: (args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic' }): Promise<{ ok: boolean; error?: string; latencyMs?: number }> =>
     ipcRenderer.invoke('providers:test-chat', args),
+  providerImportPickFile: (): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('providers:import-pick-file'),
+  providerImportScan: (args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string }): Promise<unknown> =>
+    ipcRenderer.invoke('providers:import-scan', args),
+  providerImportApply: (args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<unknown> =>
+    ipcRenderer.invoke('providers:import-apply', args),
   // autodrive（T-M5-02）：启停/插队/事件订阅（事件经桥中继为 CustomEvent）
   autodriveStart: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('autodrive:start'),
   autodriveStop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('autodrive:stop'),

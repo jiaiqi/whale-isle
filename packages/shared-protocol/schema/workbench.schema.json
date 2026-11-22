@@ -1277,6 +1277,14 @@
         "isFullUrl": {
           "type": "boolean",
           "default": false
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai"
         }
       },
       "required": [
@@ -1353,6 +1361,14 @@
               "isFullUrl": {
                 "type": "boolean",
                 "default": false
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "openai",
+                  "anthropic"
+                ],
+                "default": "openai"
               }
             },
             "required": [
@@ -1369,6 +1385,14 @@
         "activeModelId": {
           "type": "string",
           "default": ""
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai"
         },
         "customParams": {
           "type": "object",
@@ -2445,6 +2469,162 @@
             "type": "string"
           },
           "default": {}
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "OFFICIAL_LLM",
+                  "AGGREGATOR_LLM",
+                  "LOCAL_LLM",
+                  "AUDIO_TTS",
+                  "AUDIO_SVC"
+                ]
+              },
+              "activeRegion": {
+                "type": "string",
+                "enum": [
+                  "CN",
+                  "GLOBAL",
+                  "LOCAL"
+                ],
+                "default": "CN"
+              },
+              "activePlanType": {
+                "type": "string",
+                "enum": [
+                  "PAY_AS_YOU_GO",
+                  "CODING_PLAN",
+                  "FREE_TIER",
+                  "LOCAL_GPU"
+                ],
+                "default": "PAY_AS_YOU_GO"
+              },
+              "variants": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "region": {
+                      "type": "string",
+                      "enum": [
+                        "CN",
+                        "GLOBAL",
+                        "LOCAL"
+                      ]
+                    },
+                    "planType": {
+                      "type": "string",
+                      "enum": [
+                        "PAY_AS_YOU_GO",
+                        "CODING_PLAN",
+                        "FREE_TIER",
+                        "LOCAL_GPU"
+                      ]
+                    },
+                    "baseUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "isFullUrl": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "protocol": {
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "anthropic"
+                      ],
+                      "default": "openai"
+                    }
+                  },
+                  "required": [
+                    "region",
+                    "planType",
+                    "baseUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "apiKeyMaskedOrRef": {
+                "type": "string"
+              },
+              "activeModelId": {
+                "type": "string",
+                "default": ""
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "openai",
+                  "anthropic"
+                ],
+                "default": "openai"
+              },
+              "customParams": {
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "discoveredModels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "supportsReasoningThink": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "supportsVision": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "supportsToolCalling": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "inputCostPer1M": {
+                      "type": "number",
+                      "minimum": 0,
+                      "default": 0
+                    },
+                    "outputCostPer1M": {
+                      "type": "number",
+                      "minimum": 0,
+                      "default": 0
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "category",
+              "variants",
+              "apiKeyMaskedOrRef",
+              "discoveredModels"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
         }
       },
       "required": [

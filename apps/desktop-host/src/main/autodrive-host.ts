@@ -126,6 +126,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
     gateway = new ModelGateway({
       profile: nextProfile,
       keys,
+      ...(config?.providers !== undefined && config.providers.length > 0 ? { providers: config.providers } : {}),
       onUsage: (usage) => {
         const recorded = meter.recordUsage({
           slot: String(usage.slot),

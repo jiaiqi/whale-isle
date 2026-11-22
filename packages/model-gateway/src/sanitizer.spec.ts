@@ -30,6 +30,18 @@ describe('createSanitizer（隐私脱敏）', () => {
     expect(sanitize('apiKey: "abcd1234efgh5678"')).toBe(`apiKey: "${MASK}"`);
   });
 
+  it('OpenCode Go / OpenRouter 下划线密钥（oc_sk_/or_sk_）→ {{MASKED}}', () => {
+    const out = sanitize('oc=oc_sk_live_abcdef123456 or=or_sk_test_ABCDEF_9876 end');
+    expect(out).not.toContain('oc_sk_live');
+    expect(out).not.toContain('or_sk_test');
+    expect(out.split(MASK).length - 1).toBe(2);
+  });
+
+  it('普通 oc_sk / or_sk 单词与不足 8 位的后缀不误伤', () => {
+    const text = 'oc_sk 是前缀，or_sk 也是；oc_sk_short 不够长';
+    expect(sanitize(text)).toBe(text);
+  });
+
   it('本机用户名（独立词）替换', () => {
     expect(sanitize('用户 jiaqi 今天写了 300 行')).toBe(`用户 ${MASK} 今天写了 300 行`);
   });

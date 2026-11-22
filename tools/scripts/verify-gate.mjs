@@ -21,7 +21,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SELF = fileURLToPath(import.meta.url);
 const SCAN_DIRS = ['packages', 'apps', 'services', 'tools', 'mods'];
 const SKIP_DIR_NAMES = new Set([
-  'node_modules', 'dist', 'coverage', '.git', '.venv', '__pycache__',
+  'node_modules', 'dist', 'build', 'coverage', '.git', '.venv', '__pycache__',
   'bin', 'obj', '.ruff_cache', '.mypy_cache', 'out',
 ]);
 const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.py', '.cs']);

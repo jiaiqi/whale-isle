@@ -190,7 +190,9 @@ export const ProviderEndpointVariantSchema = z.object({
   region: z.enum(['CN', 'GLOBAL', 'LOCAL']),
   planType: z.enum(['PAY_AS_YOU_GO', 'CODING_PLAN', 'FREE_TIER', 'LOCAL_GPU']),
   baseUrl: z.string().url(),
-  isFullUrl: z.boolean().default(false), // 开启后不自动拼接 /v1/chat/completions
+  isFullUrl: z.boolean().default(false), // 开启后不自动拼接 /chat/completions 或 /messages
+  /** 该端点的协议（OpenAI 兼容 /chat/completions 或 Anthropic 兼容 /messages） */
+  protocol: z.enum(['openai', 'anthropic']).default('openai'),
 });
 export type ProviderEndpointVariant = z.infer<typeof ProviderEndpointVariantSchema>;
 
@@ -203,6 +205,8 @@ export const ModelProviderConfigSchema = z.object({
   variants: z.array(ProviderEndpointVariantSchema),
   apiKeyMaskedOrRef: z.string(), // 存储于本地安全凭据库，前端仅展示掩码
   activeModelId: z.string().default(''), // Magpie 交互：该供应商当前选中的模型（discoverModels 后选择）
+  /** 供应商默认协议（变体未覆盖时使用） */
+  protocol: z.enum(['openai', 'anthropic']).default('openai'),
   customParams: z.record(z.string(), z.unknown()).optional(), // 支持自定义 temperature, top_p, reasoning_effort
   discoveredModels: z.array(
     z.object({
@@ -533,6 +537,8 @@ export type MemoryGraphView = z.infer<typeof MemoryGraphViewSchema>;
 export const BrainRuntimeConfigSchema = z.object({
   profile: DiningProfilePresetSchema,
   providerModels: z.record(z.string(), z.string()).default({}),
+  /** 渲染层合并后的服务商清单（内置覆盖 + 自定义；不含密钥，key 只在主进程 vault） */
+  providers: z.array(ModelProviderConfigSchema).default([]),
 });
 export type BrainRuntimeConfig = z.infer<typeof BrainRuntimeConfigSchema>;
 

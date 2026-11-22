@@ -10,7 +10,7 @@ import {
   Activity, Brain, ChevronRight, Play, Radio, RotateCcw, Send, ShieldAlert,
   Sprout, Square, Volume2, VolumeX, Wheat, Zap,
 } from 'lucide-react';
-import type { DiningProfilePreset, ModelProviderConfig, WorkbenchRoleSlot } from '@workbench/shared-protocol';
+import { ModelProviderConfigSchema, type DiningProfilePreset, type ModelProviderConfig, type WorkbenchRoleSlot } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
 import type { AutodriveEventView } from './bridge';
 import { ProvidersPanel } from './providers-panel';
@@ -140,21 +140,58 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
     void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
-    // 启动即把 Dexie 里的真实套餐/槽位同步给主进程（否则会一直用兜底 DELUXE）
+    // 启动即把 Dexie 里的单一配置 + 服务商清单/模型启停同步给主进程
     void Promise.all([
       store.getConfig<DiningProfilePreset[]>('diningProfiles'),
       store.getConfig<string>('activeDiningProfile'),
-      store.getConfig<Record<string, { activeModelId?: string }>>('providerOverrides'),
-    ]).then(([storedProfiles, activeId, overrides]) => {
+      store.getConfig<Record<string, { activeVariant?: number; variants?: ModelProviderConfig['variants']; models?: Array<{ id: string; enabled: boolean; caps: string[] }>; enabled?: boolean }>>('providerOverrides'),
+      store.getConfig<Array<{ id: string; name: string; protocol: 'openai' | 'anthropic'; variants: ModelProviderConfig['variants']; models: Array<{ id: string; enabled: boolean; caps: string[] }>; enabled: boolean }>>('customProviders'),
+    ]).then(([storedProfiles, activeId, overrides, customProviders]) => {
       const list = storedProfiles !== undefined && storedProfiles.length > 0 ? storedProfiles : profiles;
       const chosen = list.find((p) => p.profileId === activeId) ?? list[0];
       if (chosen === undefined) return;
-      const providerModels = Object.fromEntries(
-        Object.entries(overrides ?? {})
-          .map(([id, o]) => [id, o.activeModelId ?? ''] as const)
-          .filter(([, model]) => model !== ''),
+      const builtin = providers.map((provider) => {
+        const o = overrides?.[provider.id];
+        if (o === undefined) return provider;
+        const variants = o.variants ?? provider.variants;
+        const activeVariant = variants[o.activeVariant ?? 0] ?? variants[0];
+        const discoveredModels = o.models !== undefined
+          ? o.models.map((m) => ({
+            id: m.id,
+            supportsReasoningThink: m.caps.includes('reason'),
+            supportsVision: m.caps.includes('vision'),
+            supportsToolCalling: !m.caps.includes('tts') && !m.caps.includes('svc'),
+          }))
+          : provider.discoveredModels;
+        const parsed = ModelProviderConfigSchema.safeParse({
+          ...provider,
+          variants,
+          protocol: activeVariant?.protocol ?? provider.protocol,
+          discoveredModels,
+        });
+        return parsed.success ? parsed.data : provider;
+      });
+      const custom = (customProviders ?? []).map((c) => ModelProviderConfigSchema.parse({
+        id: c.id,
+        name: c.name,
+        category: 'AGGREGATOR_LLM',
+        protocol: c.protocol,
+        activeRegion: c.variants[0]?.region ?? 'GLOBAL',
+        activePlanType: c.variants[0]?.planType ?? 'PAY_AS_YOU_GO',
+        variants: c.variants,
+        apiKeyMaskedOrRef: '',
+        activeModelId: c.models.find((m) => m.enabled)?.id ?? '',
+        discoveredModels: c.models.map((m) => ({
+          id: m.id,
+          supportsReasoningThink: m.caps.includes('reason'),
+          supportsVision: m.caps.includes('vision'),
+          supportsToolCalling: !m.caps.includes('tts') && !m.caps.includes('svc'),
+        })),
+      }));
+      const merged = [...builtin, ...custom].filter((p) =>
+        overrides?.[p.id]?.enabled !== false && (customProviders ?? []).find((c) => c.id === p.id)?.enabled !== false,
       );
-      void window.directorBridge.brainApplyConfig({ profile: chosen, providerModels }).then((r) => {
+      void window.directorBridge.brainApplyConfig({ profile: chosen, providerModels: {}, providers: merged }).then((r) => {
         setBrain({ mode: r.mode, llmReady: r.llmReady });
       });
     });
@@ -171,24 +208,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   useEffect(() => {
     const refresh = (): void => {
       void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
-    // 启动即把 Dexie 里的真实套餐/槽位同步给主进程（否则会一直用兜底 DELUXE）
-    void Promise.all([
-      store.getConfig<DiningProfilePreset[]>('diningProfiles'),
-      store.getConfig<string>('activeDiningProfile'),
-      store.getConfig<Record<string, { activeModelId?: string }>>('providerOverrides'),
-    ]).then(([storedProfiles, activeId, overrides]) => {
-      const list = storedProfiles !== undefined && storedProfiles.length > 0 ? storedProfiles : profiles;
-      const chosen = list.find((p) => p.profileId === activeId) ?? list[0];
-      if (chosen === undefined) return;
-      const providerModels = Object.fromEntries(
-        Object.entries(overrides ?? {})
-          .map(([id, o]) => [id, o.activeModelId ?? ''] as const)
-          .filter(([, model]) => model !== ''),
-      );
-      void window.directorBridge.brainApplyConfig({ profile: chosen, providerModels }).then((r) => {
-        setBrain({ mode: r.mode, llmReady: r.llmReady });
-      });
-    });
       void window.directorBridge.memoryStats().then((m) => setMemoryStats(m));
     };
     const timer = setInterval(refresh, 15000);

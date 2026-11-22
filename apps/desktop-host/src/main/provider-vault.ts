@@ -21,6 +21,8 @@ export interface TestChatArgs {
   providerId: string;
   baseUrl: string;
   modelId: string;
+  /** 协议（缺省 openai）：anthropic 走 /messages + x-api-key，不拉 /models */
+  protocol?: 'openai' | 'anthropic';
 }
 
 export interface VaultResult {
@@ -54,6 +56,22 @@ function loadVault(vaultPath: string): VaultFile {
 /** 主进程内解密（T-M6-01 完整版）：供 gateway 构造使用——仅主进程，绝不回传渲染进程 */
 export function readVaultKey(vaultPath: string, providerId: string): string | null {
   return storedKeyInner(vaultPath, providerId);
+}
+
+/** 主进程内部写入（导入器专用）：safeStorage 加密落盘，返回掩码；绝不经 IPC 回传明文 */
+export function writeVaultKey(vaultPath: string, providerId: string, plainKey: string): { ok: boolean; mask?: string; error?: string } {
+  if (typeof providerId !== 'string' || providerId.trim() === '' || typeof plainKey !== 'string' || plainKey.trim() === '') {
+    return { ok: false, error: 'providerId 与 key 均不能为空' };
+  }
+  if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: '系统加密服务不可用（safeStorage），拒绝明文落盘' };
+  const file = loadVault(vaultPath);
+  file[providerId] = safeStorage.encryptString(plainKey.trim()).toString('base64');
+  writeFileSync(vaultPath, JSON.stringify(file, null, 2), 'utf8');
+  return { ok: true, mask: maskKey(plainKey) };
+}
+
+export function hasVaultKey(vaultPath: string, providerId: string): boolean {
+  return storedKeyInner(vaultPath, providerId) !== null;
 }
 
 function storedKeyInner(vaultPath: string, providerId: string): string | null {
@@ -90,13 +108,9 @@ export function registerProviderVaultIpc(vaultPath: string): void {
     if (typeof providerId !== 'string' || typeof plainKey !== 'string' || plainKey.trim() === '') {
       return { ok: false, error: 'providerId 与 key 均不能为空' };
     }
-    if (!safeStorage.isEncryptionAvailable()) {
-      return { ok: false, error: '系统加密服务不可用（safeStorage），拒绝明文落盘' };
-    }
-    const file = loadVault(vaultPath);
-    file[providerId] = safeStorage.encryptString(plainKey.trim()).toString('base64');
-    writeVault(file);
-    return { ok: true, mask: maskKey(plainKey) };
+    const written = writeVaultKey(vaultPath, providerId, plainKey);
+    if (!written.ok) return written;
+    return { ok: true, mask: written.mask };
   });
 
   ipcMain.handle('providers:key-mask', (_event, providerId: string): VaultResult => {
@@ -105,9 +119,10 @@ export function registerProviderVaultIpc(vaultPath: string): void {
     return { ok: true, mask: maskKey(key) };
   });
 
-  ipcMain.handle('providers:discover-models', async (_event, args: DiscoverModelsArgs): Promise<VaultResult> => {
+  ipcMain.handle('providers:discover-models', async (_event, args: DiscoverModelsArgs & { protocol?: 'openai' | 'anthropic' }): Promise<VaultResult> => {
     const key = storedKeyInner(vaultPath, args.providerId);
     if (!key) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };
+    if (args.protocol === 'anthropic') return { ok: false, error: 'Anthropic 协议不提供 /models 列表，请手动添加模型 ID' };
     try {
       const models = await discoverModels(args.baseUrl, key);
       return { ok: true, models };
@@ -119,18 +134,21 @@ export function registerProviderVaultIpc(vaultPath: string): void {
   ipcMain.handle('providers:test-chat', async (_event, args: TestChatArgs): Promise<VaultResult> => {
     const key = storedKeyInner(vaultPath, args.providerId);
     if (!key) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };
-    const url = `${args.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    const anthropic = args.protocol === 'anthropic';
+    const base = args.baseUrl.replace(/\/+$/, '');
+    const url = base.endsWith('/messages') || base.endsWith('/chat/completions') ? base : `${base}/${anthropic ? 'messages' : 'chat/completions'}`;
     const startedAt = Date.now();
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: args.modelId,
-          messages: [{ role: 'user', content: 'ping' }],
-          max_tokens: 1,
-          stream: false,
-        }),
+        headers: anthropic
+          ? { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }
+          : { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(
+          anthropic
+            ? { model: args.modelId, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }
+            : { model: args.modelId, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, stream: false },
+        ),
         signal: AbortSignal.timeout(30_000),
       });
       const latencyMs = Date.now() - startedAt;

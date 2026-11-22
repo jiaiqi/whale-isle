@@ -391,6 +391,11 @@ class PlanType(StrEnum):
     LOCAL_GPU = 'LOCAL_GPU'
 
 
+class Protocol(StrEnum):
+    openai = 'openai'
+    anthropic = 'anthropic'
+
+
 class ProviderEndpointVariant(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -399,6 +404,7 @@ class ProviderEndpointVariant(BaseModel):
     planType: PlanType
     baseUrl: AnyUrl
     isFullUrl: bool | None = False
+    protocol: Protocol | None = 'openai'
 
 
 class Category(StrEnum):
@@ -430,6 +436,7 @@ class Variant(BaseModel):
     planType: PlanType
     baseUrl: AnyUrl
     isFullUrl: bool | None = False
+    protocol: Protocol | None = 'openai'
 
 
 class DiscoveredModel(BaseModel):
@@ -456,6 +463,7 @@ class ModelProviderConfig(BaseModel):
     variants: list[Variant]
     apiKeyMaskedOrRef: str
     activeModelId: str | None = ''
+    protocol: Protocol | None = 'openai'
     customParams: dict[str, Any] | None = None
     discoveredModels: list[DiscoveredModel]
 
@@ -885,12 +893,41 @@ class Profile1(BaseModel):
     secretMaskingEnabled: bool | None = True
 
 
+class Variant1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    region: Region
+    planType: PlanType
+    baseUrl: AnyUrl
+    isFullUrl: bool | None = False
+    protocol: Protocol | None = 'openai'
+
+
+class Provider(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: str
+    name: str
+    category: Category
+    activeRegion: ActiveRegion | None = 'CN'
+    activePlanType: ActivePlanType | None = 'PAY_AS_YOU_GO'
+    variants: list[Variant1]
+    apiKeyMaskedOrRef: str
+    activeModelId: str | None = ''
+    protocol: Protocol | None = 'openai'
+    customParams: dict[str, Any] | None = None
+    discoveredModels: list[DiscoveredModel]
+
+
 class BrainRuntimeConfig(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
     profile: Profile1
     providerModels: dict[str, str] | None = {}
+    providers: Annotated[list[Provider] | None, Field(validate_default=True)] = []
 
 
 class Level(StrEnum):

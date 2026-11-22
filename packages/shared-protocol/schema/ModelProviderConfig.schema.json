@@ -71,6 +71,14 @@
               "isFullUrl": {
                 "type": "boolean",
                 "default": false
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "openai",
+                  "anthropic"
+                ],
+                "default": "openai"
               }
             },
             "required": [
@@ -87,6 +95,14 @@
         "activeModelId": {
           "type": "string",
           "default": ""
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai"
         },
         "customParams": {
           "type": "object",
