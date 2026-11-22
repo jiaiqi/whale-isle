@@ -31,7 +31,12 @@
     "PauseConfig",
     "TtsEmotionTuningParams",
     "SvcSingingTuningParams",
-    "VoiceDesignRequest"
+    "VoiceDesignRequest",
+    "StardewModInfo",
+    "StardewModsSnapshot",
+    "StardewModToggleRequest",
+    "StardewModsOpResult",
+    "StardewModsConfig"
   ],
   "properties": {
     "PetRendererType": {
@@ -117,6 +122,21 @@
     },
     "VoiceDesignRequest": {
       "$ref": "#/$defs/VoiceDesignRequest"
+    },
+    "StardewModInfo": {
+      "$ref": "#/$defs/StardewModInfo"
+    },
+    "StardewModsSnapshot": {
+      "$ref": "#/$defs/StardewModsSnapshot"
+    },
+    "StardewModToggleRequest": {
+      "$ref": "#/$defs/StardewModToggleRequest"
+    },
+    "StardewModsOpResult": {
+      "$ref": "#/$defs/StardewModsOpResult"
+    },
+    "StardewModsConfig": {
+      "$ref": "#/$defs/StardewModsConfig"
     }
   },
   "additionalProperties": false,
@@ -1889,6 +1909,256 @@
       "required": [
         "mode"
       ],
+      "additionalProperties": false
+    },
+    "StardewModInfo": {
+      "type": "object",
+      "properties": {
+        "folderName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uniqueId": {
+          "type": "string",
+          "default": ""
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "author": {
+          "type": "string",
+          "default": ""
+        },
+        "version": {
+          "type": "string",
+          "default": ""
+        },
+        "description": {
+          "type": "string",
+          "default": ""
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "contentType": {
+          "type": "string",
+          "default": ""
+        },
+        "minimumApiVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "parseError": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "folderName",
+        "name",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "StardewModsSnapshot": {
+      "type": "object",
+      "properties": {
+        "modsDir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "mods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "folderName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueId": {
+                "type": "string",
+                "default": ""
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "author": {
+                "type": "string",
+                "default": ""
+              },
+              "version": {
+                "type": "string",
+                "default": ""
+              },
+              "description": {
+                "type": "string",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "contentType": {
+                "type": "string",
+                "default": ""
+              },
+              "minimumApiVersion": {
+                "type": "string",
+                "default": ""
+              },
+              "parseError": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "folderName",
+              "name",
+              "enabled"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "smapiVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "scannedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "modsDir",
+        "exists",
+        "scannedAt"
+      ],
+      "additionalProperties": false
+    },
+    "StardewModToggleRequest": {
+      "type": "object",
+      "properties": {
+        "folderName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "folderName",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "StardewModsOpResult": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "snapshot": {
+          "type": "object",
+          "properties": {
+            "modsDir": {
+              "type": "string",
+              "minLength": 1
+            },
+            "exists": {
+              "type": "boolean"
+            },
+            "mods": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "folderName": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "uniqueId": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "author": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "version": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "description": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "minimumApiVersion": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "parseError": {
+                    "type": "string",
+                    "default": ""
+                  }
+                },
+                "required": [
+                  "folderName",
+                  "name",
+                  "enabled"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "smapiVersion": {
+              "type": "string",
+              "default": ""
+            },
+            "scannedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "modsDir",
+            "exists",
+            "scannedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "additionalProperties": false
+    },
+    "StardewModsConfig": {
+      "type": "object",
+      "properties": {
+        "modsDir": {
+          "type": "string",
+          "default": ""
+        }
+      },
       "additionalProperties": false
     }
   }

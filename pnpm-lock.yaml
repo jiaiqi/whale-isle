@@ -56,6 +56,9 @@ importers:
       '@workbench/shared-protocol':
         specifier: workspace:*
         version: link:../../packages/shared-protocol
+      '@workbench/stardew-mods':
+        specifier: workspace:*
+        version: link:../../packages/stardew-mods
       lucide-react:
         specifier: ^1.77.0
         version: 1.77.0(@types/react@19.3.0)(react@19.3.1)
@@ -179,6 +182,12 @@ importers:
       zod-to-json-schema:
         specifier: ^3.25.2
         version: 3.25.2(zod@3.25.76)
+
+  packages/stardew-mods:
+    dependencies:
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../shared-protocol
 
   tools/guide-forager:
     dependencies:

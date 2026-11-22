@@ -129,10 +129,12 @@ export class AutodriveRunner {
 
         // 3. 决策（P0 插队 > Planner）
         let decision: PlannerDecision;
+        let fromDirective = false;
         if (this.pendingDirective) {
           const d = this.pendingDirective;
           this.pendingDirective = null;
           decision = { kind: 'act', ...d };
+          fromDirective = true;
         } else {
           decision = await this.planner.decide(state);
         }
@@ -149,7 +151,7 @@ export class AutodriveRunner {
           return;
         }
 
-        this.onEvent({ type: 'decision', planner: this.planner.name, tool: decision.tool, args: decision.args, intent: decision.intent });
+        this.onEvent({ type: 'decision', planner: fromDirective ? 'remote' : this.planner.name, tool: decision.tool, args: decision.args, intent: decision.intent });
         const result = await this.lock.execute(decision.tool, decision.args);
         const receipt = classifyReceipt(result.kind === 'ok' ? result.text : '', result.kind, result.kind === 'ok' && result.isError, decision.tool, result.kind === 'error' ? result.message : undefined);
         this.onEvent({ type: 'receipt', tool: decision.tool, status: receipt.status, summary: receipt.summary });

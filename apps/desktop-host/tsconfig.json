@@ -20,6 +20,9 @@
     },
     {
       "path": "../../packages/pet-renderer"
+    },
+    {
+      "path": "../../packages/stardew-mods"
     }
   ]
 }

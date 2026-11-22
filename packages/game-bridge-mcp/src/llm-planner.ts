@@ -6,8 +6,19 @@
  * 决策协议（user 消息尾部约定）：
  *   只输出一行 JSON：{"tool":"动作名","args":{},"intent":"一句话人设化意图"}
  */
-import type { GameStateSnapshot, Planner, PlannerDecision } from './planner';
-import { RulePlanner } from './planner';
+import {
+  RulePlanner,
+  cleanItemName,
+  listEdibleItems,
+  listShippableItems,
+  pickAnyNonEssential,
+  pickTrash,
+  type GameStateSnapshot,
+  type Planner,
+  type PlannerDecision,
+} from './planner';
+
+export { pickEdible, pickShippableItem, pickTrash } from './planner';
 
 /** BWF 工具白名单（越权工具名一律拒绝——运行期安全锁） */
 export const LLM_TOOL_WHITELIST = new Set([
@@ -103,25 +114,35 @@ export function pickGuideContext(state: GameStateSnapshot, guides: Record<string
   return '';
 }
 
-/** 从状态背包段挑一个可出货的物品（跳过工具与「留着」的交任务物品；取最后一条=最近捡的） */
-export function pickShippableItem(raw: string): string | null {
-  let candidate: string | null = null;
-  for (const line of raw.split('\n')) {
-    const m = /^\d+:\s*(.+)$/.exec(line.trim());
-    if (!m) continue;
-    const text = m[1] ?? '';
-    if (/【(?:留着|保留)[^】]*】/.test(text)) continue;
-    if (/^(斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)/.test(text)) continue;
-    const name = text.replace(/【[^】]*】/g, '').replace(/\[[^\]]*\]/g, '').trim();
-    if (name !== '') candidate = name;
-  }
-  return candidate;
+/** 背包救援工具集合：只有这些工具失败才推进救援阶梯（fish/travel 失败不算） */
+const RESCUE_STEP: ReadonlyMap<string, number> = new Map([
+  ['tidy_backpack', 0],
+  ['ship_items', 1],
+  ['eat', 2],
+  ['trash_item', 3],
+  ['store_items', 4],
+]);
+const RESCUE_TOOLS: ReadonlySet<string> = new Set(RESCUE_STEP.keys());
+
+/** 从 BWF 失败回执里抠出被拒的单品名（「失败：普通窗户 不能出货」/「背包里没有“沙丁鱼 x3 金星”」） */
+function failedItemOf(receipt: string): string {
+  const noSuch = /(?:背包里没有|没有)[“"]([^”"]+)[”"]/.exec(receipt);
+  if (noSuch?.[1]) return cleanItemName(noSuch[1]);
+  const m =
+    /失败：(.+?)\s*(?:不能出货|无法出货|不在背包|是社区中心|不能吃|吃不|会坏)/.exec(receipt);
+  return cleanItemName(m?.[1] ?? '');
 }
 
 export class LlmPlanner implements Planner {
   readonly name = 'llm-xiaojing';
   private readonly fallback = new RulePlanner();
   private askCount = 0;
+  /** 背包救援阶段（0 tidy → 1 ship → 2 eat → 3 trash → 4 store → 5 任意非必需品）：失败才前进 */
+  private rescueStage = 0;
+  private lastRescueFail = '';
+  /** 被 BWF 拒绝过的单品（不能出货的家具/任务鱼等）——换下一个候选而不是换策略 */
+  private readonly rejectedShip = new Set<string>();
+  private readonly rejectedEat = new Set<string>();
 
   constructor(private readonly deps: LlmPlannerDeps) {}
 
@@ -143,20 +164,48 @@ export class LlmPlanner implements Planner {
     const repeated = tail2.length === 2 && tail2[0] === tail2[1];
     const inventoryFull =
       state.freeSlots <= 0 ||
-      /背包满|背包.{0,6}满|空位：?0|空位 0/.test(recent.slice(-2).join(' '));
+      /背包满|背包.{0,6}满|空位：?0|空位 0|装不下/.test(recent.slice(-2).join(' '));
+    // 腾出空位 = 本次背包危机结束，救援阶段归零
+    if (state.freeSlots > 0) {
+      this.rescueStage = 0;
+      this.lastRescueFail = '';
+      this.rejectedShip.clear();
+      this.rejectedEat.clear();
+    }
     if (inventoryFull) {
-      if (repeated && tail2[0] === 'tidy_backpack') {
-        const item = pickShippableItem(state.raw);
-        return item !== null
-          ? { kind: 'act', tool: 'ship_items', args: { item }, intent: `整理也塞不下，先把${item}出货换米——腾位置还能赚一笔` }
-          : { kind: 'act', tool: 'store_items', args: {}, intent: '整理也塞不下，先把杂物存进箱子腾位置' };
+      // 救援阶梯（BWF Tidy.cs：农场没有箱子时 tidy/store 必失败；feiyu LESSONS：满包合成会掉地上）：
+      //   tidy（purpose 按当前时段）→ ship（不依赖箱子，能赚钱）→ eat → trash → store → 任意非必需品
+      const noChest = /没有箱子|craft Chest/.test(recent.slice(-3).join(' '));
+      const lastFail = failTools.at(-1) ?? '';
+      if (RESCUE_TOOLS.has(lastFail) && lastFail !== this.lastRescueFail) {
+        this.lastRescueFail = lastFail;
+        const failedItem = failedItemOf(recent.at(-1) ?? '');
+        if (lastFail === 'ship_items' && failedItem !== '') {
+          // 家具等「不能出货」的单品：记住它，换下一个候选（不降级）
+          this.rejectedShip.add(failedItem);
+        } else if (lastFail === 'eat' && failedItem !== '') {
+          this.rejectedEat.add(failedItem);
+        } else {
+          // 策略级失败：跃迁到「该工具之后」的阶梯（ship 失败 → eat；eat 失败 → trash…）
+          this.rescueStage = Math.min(
+            Math.max(this.rescueStage + 1, (RESCUE_STEP.get(lastFail) ?? 0) + 1),
+            5,
+          );
+        }
       }
-      return {
-        kind: 'act',
-        tool: 'tidy_backpack',
-        args: {},
-        intent: '背包塞得满满当当，先整理出空位（不然连鱼都没地方放啦）',
-      };
+      // 任何东西都腾不出来：别再空转，等主人处理（看门狗会把 wait 事件亮出来）
+      if (this.rescueStage === 5 && lastFail === 'trash_item') {
+        return { kind: 'wait', seconds: 30, reason: '背包卡死：没有可卖/可吃/可扔的东西了，主人给我造个箱子吧' };
+      }
+      const start = noChest ? Math.max(1, this.rescueStage) : this.rescueStage;
+      for (let step = start; step <= 5; step++) {
+        const decision = this.rescueAction(step, state);
+        if (decision) {
+          this.rescueStage = step;
+          return decision;
+        }
+      }
+      return this.fallback.decide(state);
     }
     if (repeated) {
       return this.fallback.decide(state);
@@ -183,6 +232,49 @@ export class LlmPlanner implements Planner {
     }
     // LLM 两连失败 → 规则引擎兜底（自动驾驶绝不因大脑掉线而停摆）
     return this.fallback.decide(state);
+  }
+
+  /** 救援阶梯单步决策（无该步可用对象时返回 null，调用方继续下一步） */
+  private rescueAction(step: number, state: GameStateSnapshot): PlannerDecision | null {
+    switch (step) {
+      case 0: {
+        const fishingTime = state.clockMinutes >= 11 * 60 && state.clockMinutes < 17 * 60 + 30;
+        return {
+          kind: 'act',
+          tool: 'tidy_backpack',
+          args: fishingTime ? { purpose: 'fish' } : {},
+          intent: '背包塞得满满当当，先整理出空位（不然连鱼都没地方放啦）',
+        };
+      }
+      case 1: {
+        const item = listShippableItems(state.raw).find((n) => !this.rejectedShip.has(n));
+        if (item === undefined) return null;
+        return {
+          kind: 'act',
+          tool: 'ship_items',
+          args: { item },
+          intent: `先把${item}出货换米——腾位置还能赚一笔`,
+        };
+      }
+      case 2: {
+        const item = listEdibleItems(state.raw).find((n) => !this.rejectedEat.has(n));
+        if (item === undefined) return null;
+        return { kind: 'act', tool: 'eat', args: { item }, intent: `吃掉${item}腾一格，顺便回点体力` };
+      }
+      case 3: {
+        const item = pickTrash(state.raw);
+        if (item === null) return null;
+        return { kind: 'act', tool: 'trash_item', args: { item }, intent: `把这件没用的${item}扔掉腾位置` };
+      }
+      case 4:
+        return { kind: 'act', tool: 'store_items', args: {}, intent: '把杂物存进箱子腾位置（箱子满了就只能先出货了）' };
+      default: {
+        // 最后手段：家具之类卖不掉又不吃的非工具物品，扔一件换一格（绝不碰【留着】任务物品）
+        const item = pickAnyNonEssential(state.raw);
+        if (item === null) return null;
+        return { kind: 'act', tool: 'trash_item', args: { item }, intent: `实在腾不出位置，只好忍痛扔掉${item}了` };
+      }
+    }
   }
 
   get asks(): number {

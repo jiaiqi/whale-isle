@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
+import { createModsHost } from './mods-host';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
@@ -71,6 +72,9 @@ app.whenReady().then(() => {
   registerStageIpc({ getWindow: () => stageWindow, testMode: TEST_MODE });
   // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）
   registerProviderVaultIpc(join(app.getPath('userData'), 'provider-vault.json'));
+  // 星露谷 Mod 管理（T-M6-06）：只读写玩家 Mods 目录，配置落 userData
+  const modsHost = createModsHost(app.getPath('userData'));
+  void modsHost;
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
   const voice = createVoiceHost();
   registerVoiceHostIpc(voice);

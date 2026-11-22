@@ -108,6 +108,49 @@ export interface DirectorBridge {
   memoryDiary(day?: string): Promise<{ ok: boolean; day?: string; text?: string; error?: string }>;
   memoryStats(): Promise<{ nodes: number; edges: number; lastDay: string | null }>;
   memoryWipe(): Promise<{ ok: boolean }>;
+  // 星露谷 Mod 管理（T-M6-06）
+  modsState(): Promise<ModsStateView>;
+  modsSetDir(dir: string): Promise<ModsOpView>;
+  modsScan(): Promise<ModsOpView>;
+  modsToggle(folderName: string, enabled: boolean): Promise<ModsOpView>;
+  modsInstallZip(): Promise<ModsOpView & { folderName?: string }>;
+  modsOpenDir(): Promise<{ ok: boolean; error?: string }>;
+}
+
+/** Mod 条目视图（契约 StardewModInfo 的渲染层镜像） */
+export interface ModInfoView {
+  folderName: string;
+  uniqueId: string;
+  name: string;
+  author: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  contentType: string;
+  minimumApiVersion: string;
+  parseError: string;
+}
+
+export interface ModsSnapshotView {
+  modsDir: string;
+  exists: boolean;
+  mods: ModInfoView[];
+  smapiVersion: string;
+  scannedAt: number;
+}
+
+export interface ModsStateView {
+  ok: boolean;
+  configured?: boolean;
+  candidates?: Array<{ path: string; exists: boolean }>;
+  snapshot?: ModsSnapshotView | null;
+  error?: string;
+}
+
+export interface ModsOpView {
+  ok: boolean;
+  error?: string;
+  snapshot?: ModsSnapshotView;
 }
 
 declare global {

@@ -40,6 +40,9 @@
     },
     {
       "path": "packages/live-stream-hub"
+    },
+    {
+      "path": "./packages/stardew-mods"
     }
   ]
 }

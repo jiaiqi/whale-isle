@@ -68,6 +68,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
   }> => ipcRenderer.invoke('voice:catalog'),
   voiceAudition: (voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('voice:audition', voiceId, mode, text),
+  // 星露谷 Mod 管理（T-M6-06）：只经主进程读写玩家 Mods 目录
+  modsState: (): Promise<unknown> => ipcRenderer.invoke('mods:state'),
+  modsSetDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('mods:set-dir', dir),
+  modsScan: (): Promise<unknown> => ipcRenderer.invoke('mods:scan'),
+  modsToggle: (folderName: string, enabled: boolean): Promise<unknown> => ipcRenderer.invoke('mods:toggle', folderName, enabled),
+  modsInstallZip: (): Promise<unknown> => ipcRenderer.invoke('mods:install-zip'),
+  modsOpenDir: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('mods:open-dir'),
   // 记忆图谱（T-M5-04）
   memoryQuery: (query: string): Promise<{
     ok: boolean;

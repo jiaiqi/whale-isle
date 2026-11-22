@@ -3,7 +3,9 @@
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。
 >
-> **当前激活工单：`T-M2-03` 点歌台 SVC（三票并行批 `T-M5-05`/`T-M6-03`/`T-M6-04` 已于 2026-11-22 全部 DONE；verify:gate 444 tests 全绿）**
+> **当前激活工单：`T-M2-03` 点歌台 SVC（`T-M5-18` 背包容量自愈 · `T-M6-06` 星露谷 Mod 管理已于 2026-11-22 DONE；verify:gate 497 tests 全绿）**
+> `T-M5-18` 决策声明：采用 BWF `GameActions.Tidy.cs` 的「tidy 依赖农场箱子 → 无箱子必须换路」事实与 feiyuos-stardew-ai-farmer 的「白名单卖货 + 满包禁止 craft」教训，做成确定性救援阶梯（tidy→ship→eat→trash→store，失败才降级）；不采用「无限重试 tidy」与「满包 craft Chest（合成物会掉地上）」；回退方案：阶梯全部失败时交规则日程 + 看门狗。
+> `T-M6-06` 决策声明：采用 SMAPI 目录约定（每 mod 一文件夹 + manifest.json；禁用 = manifest.json 改名 `.disabled`）做只读扫描/启停/目录内复制安装，路径写入 userData；不引入第三方 Mod 管理器依赖；回退：仅提供打开 Mods 目录的只读路径。
 
 > ⚠️ **预置说明（2026-11-15）**：仓库骨架（pnpm workspace / tsconfig / .gitignore）、docs 全套文档与 `shared-protocol` Zod 契约初稿由人工会话预先落盘。
 > - `T-M0-01` ✅ 已完成（2026-11-15）：dependency-cruiser 架构边界、pre-commit（`core.hooksPath=.githooks`）、`lint:deps` 接入；
@@ -67,6 +69,7 @@
 | **`T-M5-13`** | P2 | **形象工坊（D13③）**：自定义形象 + AI 生成动作管线——AI 生视频提示词模板→绿幕→chroma→normalize（640×360 alpha）→manifest 条目注册→试穿预览；精灵图逆向导入 | dsh-pet scripts、aboutme-pets | 素材规格自动校验（alpha/帧率/时长）；生成→注册→pet-stage 即时切换断言；台账登记 | PENDING |
 | **`T-M5-14`** | P1 | **小鲸日记面板（D13②）**：Shell 日历视图翻阅每日日记 + 记忆图谱力导向可视化 + 周报复盘（TTS 播报+切片联动入口） | feiyuos-memory-graph viewer | 日历翻阅 E2E；周报生成幂等；图谱检索入口可用 | PENDING |
 | **`T-M5-16`** | P0 | **动作库预览与情绪全映射（D16）**（✅ 2026-11-21 DONE：E2E 全通+零闲置审计）：Shell pets 页签（11 槽位卡+ambientPool 分类网格+点击预览 IPC→桌宠窗即播）；情绪五档/游戏事件/饭碗三层映射表 + ambient 空闲随机链（30s→pickAmbient→6s 回 idle）+ **素材零闲置审计**（114 clips 全覆盖断言） | dsh-pet（animationWeights/余额分档）、T-M5-01 manifest | 单测：114 clips 覆盖率审计断言；E2E：pets 页点击 → 桌宠窗 src 切换；ambient 链确定性（rng 注入） | **DONE**（并入 T-M6-01） |
+| **`T-M5-18`** | P0 | **背包容量自愈（2026-11-22 用户指令）**：`parseGameState.freeSlots` + 双规划器确定性救援阶梯——tidy（purpose 按时段）→ **ship_items（排除法白名单：工具/种子/肥料/鱼饵/炸弹/花束/吊坠/任务物品不卖）** → eat（可食用）→ trash（真垃圾）→ store；失败才降级、腾出空位即归零；满包**禁止 craft**（feiyu LESSONS：合成物掉地上）；聊天自然语言指令「先出货」→ LLM 指令解析 → 白名单工具插队 | BWF `GameActions.Tidy.cs`、feiyuos-stardew-ai-farmer `LESSONS.md` | 单测：无箱子→直接 ship；ship/eat/trash 逐级降级；腾位归零；真机：空位 0 不再出现连续 FAILED fish | **DONE**（2026-11-22 真机：tidy 失败→ship 沙丁鱼 180g→恢复钓鱼） |
 | **`T-M5-17`** | P0 | **声音工坊 Voice Studio**（✅ 2026-11-22 DONE：契约 4 域+后端 5 端点+工坊 UI+13 pytest+10 契约测试） | dsh-voice-studio、dsh-gpt-sovits | 参数往返 100%；refText 空拦截；互斥锁 trace；低内存降级 | DONE |
 | **`T-M5-15`** | P1 | **攻略采集器 guide-forager（D15）**（✅ 2026-11-21 DONE：真机 get_guide 读到 wiki 新攻略）：星露谷 wiki（MediaWiki API）+ 小黑盒热榜 → 正文提取→主题分类→hash 去重→`guide-forager/<主题>.md` 归档+索引；**三路注入**：BWF get_guide 专题导出 / LLM Planner 检索上下文 / 技能卡互引；周更+开播前触发 | 星露谷 wiki、小黑盒、BWF Guide.cs | 单测：抓取→清洗→分类→去重确定性（fixture）；导出文件可被 get_guide 读取断言；限速与 robots 合规断言 | **DONE** |
 | **`T-M6-05`** | P2 | **独立安装包（D14）**：electron-builder（macOS dmg + Win nsis）——素材/worker/契约生成物打进 resources；首启向导（星露谷+Mod 一键安装引导、GPT-SoVITS 可选下载、供应商 key 配置）；全功能离线自包含验证 | electron-builder | 干净环境（无参考仓库路径）安装→启动→桌宠渲染→autodrive 依赖注入断言；安装包体积 <200MB（不含可选 GPT-SoVITS） | PENDING |
@@ -81,3 +84,4 @@
 | **`T-M6-02`** | P0 | **ACP Harness 层**（✅ 2026-11-21 DONE：真机 gemini+dsh 双握手验收）：ACP v1/v2 client（stdio JSON-RPC）+ Provider 实例管理（Registry 搜索/本地命令如 `dsh --profile acp`）+ 线程/中途换 agent/checkpoint 回放 + 工具调用审批卡（桌面+远程）+ 按 agent 用量记账；**并入 T-M5-07：线程状态→桌宠工作跟随动画** | t3code（providers-acp.md/thread）、magpie（agentOf） | 契约单测：ACP initialize/session 流程夹具；审批卡拒绝→工具不执行且回喂；线程状态→动画映射断言 | **DONE**（工作跟随动画并入 T-M5-07） |
 | **`T-M6-03`** | P1 | **dsh 插件兼容层 plugin-bridge**：Cordis 插件树/defineTool/typed events → 本工作台工具/事件模型适配器 + 插件装载器（host/client/shared 三层约定）+ dsh 插件兼容测试夹具 | deepseek-harness、dsh-fish、dsh-plugin-yushe | 夹具断言：一个样例 dsh 插件原样装载成功且 defineTool 注册的工具经总线可调；禁用/崩溃隔离 | **DONE**（2026-11-22：33 it，本包四维 100%） |
 | **`T-M6-04`** | P1 | **WebUI 形态**：bridge 抽象双实现（Electron IPC ↔ HTTP/WS）+ 轻量本地 server（总线/静态资源/vault 代理）+ 远程审批（桌面开线程、浏览器批审批）+ Vite 迁移评估 | t3code（desktop/server/web 多端）、magpie（本地网关） | 同一 renderer 组件在两种宿主下渲染断言；远程审批 E2E（WebUI 拒绝→桌面动作不执行） | **DONE**（2026-11-22：WebUI 18780 回环+token、远程审批/指令真机通；React 同构渲染留后续） |
+| **`T-M6-06`** | P1 | **星露谷 Mod 管理（2026-11-22 用户指令）**：契约 `StardewModInfo/StardewModsSnapshot/StardewModToggleRequest/StardewModsOpResult/StardewModsConfig`（33 域跨语言重生成）+ `packages/stardew-mods`（manifest 注释/尾逗号容错解析、目录扫描、`.disabled` 启停、解压目录安装、平台默认 Mods 路径探测）+ 主进程 mods-host（userData 配置、smapi 版本、打开目录/安装 zip via 系统解压）+ Shell「Mod 管理」页（列表/启停开关/安装/打开目录） | SMAPI 文档（manifest 约定） | 单测：注释 manifest/损坏 manifest/启停幂等/路径穿越拒绝/重名 -2/嵌套安装；真机：列出实际 Mods 目录 + 停用再恢复 BWF 不破坏启动 | **DONE**（2026-11-22：48 it；真机 3 Mod 扫描 + SaveBackup 启停往返） |

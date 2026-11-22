@@ -26,6 +26,11 @@ import {
   RiceBowlEconomySchema,
   StardewMcpActionReceiptSchema,
   StardewUtilityWeightsSchema,
+  StardewModInfoSchema,
+  StardewModsSnapshotSchema,
+  StardewModToggleRequestSchema,
+  StardewModsOpResultSchema,
+  StardewModsConfigSchema,
   StickyRoutingGroupSchema,
   WorkbenchRoleSlotSchema,
 } from './index';
@@ -68,4 +73,9 @@ export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
   TtsEmotionTuningParams: TtsEmotionTuningParamsSchema,
   SvcSingingTuningParams: SvcSingingTuningParamsSchema,
   VoiceDesignRequest: VoiceDesignRequestSchema,
+  StardewModInfo: StardewModInfoSchema,
+  StardewModsSnapshot: StardewModsSnapshotSchema,
+  StardewModToggleRequest: StardewModToggleRequestSchema,
+  StardewModsOpResult: StardewModsOpResultSchema,
+  StardewModsConfig: StardewModsConfigSchema,
 };

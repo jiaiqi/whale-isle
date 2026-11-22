@@ -15,6 +15,10 @@
 
 ### Added
 
+- **T-M5-18 背包容量自愈（用户指令「现在好像处理不了背包满了」）**：研读 BWF `GameActions.Tidy.cs`（tidy/store 依赖农场箱子，无箱必失败）与 feiyuos-stardew-ai-farmer `LESSONS.md`（满包 craft 会掉地上、任务物品绝对保留、白名单卖货）后重写救援策略——**确定性救援阶梯**：tidy（purpose 按时段）→ ship_items（排除法 + 值钱线索排序，工具/种子/肥料/鱼饵/炸弹/花束/吊坠/家具/【留着】任务物品不卖）→ eat（跳过任务鱼）→ trash（真垃圾）→ store → 任意非必需品；失败才降级，腾出空位即归零，全失败退化为 wait 不空转；被 BWF 拒绝的单品（家具/任务鱼/名字带 xN）自动记住换下一个。真机三段实证：`tidy FAILED(无箱子)` → `ship_items 沙丁鱼 COMPLETED 180g` → `travel_to Beach` → `fish`；另修复 `cleanItemName`（去 `xN`/品质词）与 RulePlanner 满包直接出货。
+- **T-M6-06 星露谷 Mod 管理（用户指令「我还希望能管理星露谷的 mod」）**：契约新增 5 域（StardewModInfo/Snapshot/ToggleRequest/OpResult/Config → 33 域跨语言重生成）+ `packages/stardew-mods`（SMAPI manifest 注释/尾逗号容错、损坏 manifest 可见、目录扫描、`.disabled` 启停、解压目录安装重名 -2、三平台 Mods 路径猜测；48 it，分支 95.9%）+ 主进程 `mods-host`（配置落 userData、系统解压 zip 安装、打开目录）+ Shell 新增「Mod 管理」页（目录候选切换/列表开关/安装 ZIP/刷新）。真机：自动探测 Steam Mods 目录并列出 3 个真实 Mod（含 BWF 1.1.27），SaveBackup 启停往返成功。
+- **对话控 AI（中文自然语言指令）**：Shell 聊天里直接说「先去海滩钓鱼吧」「先把多余的东西放到出货箱」即可插队——关键词直译（去海滩/农场/镇上/矿洞、钓鱼、整理背包、睡觉、浇水）优先，未命中再走 LLM 指令解析（白名单校验）；插队决策事件标记 `planner=remote`（中控台显示 P0 插队）。真机验证：关键词 → `decision remote travel_to 主人指令：去海滩`。
+
 - **三票并行批 ✅（用户指令「分三个子 agent 一起做」，2026-11-22）**：
   - **T-M5-05 弹幕注意力中枢 `packages/live-stream-hub`**（dsh-livestream 思想重写，零依赖）：三级注意力调度（按**说话人数** 7/8/29/30 分档，τ 90/40/20s e^(-age/τ) 衰减，档位名额 4/2/1，刷屏单人不升档）+ 同观众 15s 合并（≤5 段）/礼物 3s 连击/进场 2.5s 聚拢（>20 人折叠）+ 300s 超龄清理/512 队列上限；防封护栏（block→频控 20 条/分→mask→warn 四级，UTF-16 安全截断 200 + 孤立代理对清洗）；事件中枢（契约 safeParse→护栏→4000 LRU 去重→150ms 批次 flush→订阅多播，单订阅者异常隔离）。**46 it 全绿（分支 92.5%）**；风暴集成复核：5 观众 100 条/秒不升档、频控丢 200 条、平台违禁 3/3 拦截、30 位说话人→busy、同 eventId 去重。
   - **T-M6-03 dsh 插件兼容层 `packages/plugin-kit`**（Cordis 语义，本包四维 100%）：manifest Zod Schema（7 扩展点/permissions/dshCompatible）、`defineTool`（zod 入参校验 + `{ok:false}` 异常包装）、`ToolRegistry`（重名拒绝/按插件批量注销）、事件总线（`domain:*` 通配/once/监听隔离）、`PluginHost`（register 即启用、父子树 disable 级联、LIFO 副作用回收、setup 崩溃回滚+errors 记账）、`adaptDshPlugin`（结构化最小面，未声明 schema 的外来工具默认 ask 审批）。**33 it 全绿**。

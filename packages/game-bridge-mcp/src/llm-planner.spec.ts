@@ -63,7 +63,7 @@ describe('pickShippableItem（出货目标挑选）', () => {
 4: 绿藻 [可食用 +13 体力]
 7: 小嘴鲈鱼 金星 [可食用 +45 体力]
 背包空位：0 个（共 12 格）`;
-    expect(pickShippableItem(raw)).toBe('小嘴鲈鱼 金星');
+    expect(pickShippableItem(raw)).toBe('小嘴鲈鱼');
   });
   it('只有工具/任务物品 → null（升级路径改走 store_items）', () => {
     expect(pickShippableItem('0: 斧头\n1: 锄头\n2: 黄水仙【留着】')).toBeNull();
@@ -134,6 +134,80 @@ describe('LlmPlanner 决策链', () => {
     });
     const d = await planner.decide(state());
     expect(d.kind === 'act' && d.tool).toBe('tidy_backpack');
+  });
+
+  it('农场没有箱子（tidy 必失败）→ 直接出货，不再浪费一轮 tidy', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED tidy_backpack: 失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上'],
+    });
+    const d = await planner.decide(parseGameState(STATE_FULL));
+    expect(d.kind === 'act' && d.tool).toBe('ship_items');
+    expect(d.kind === 'act' && d.args).toEqual({ item: '小嘴鲈鱼' });
+  });
+
+  it('出货也失败 → 吃一个腾位 → 再失败 → 扔垃圾（阶梯降级）', async () => {
+    const raw = `${STATE_FULL}
+9: 破损的眼镜 [垃圾]`;
+    const shipFail = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED tidy_backpack: 失败：农场上没有箱子',
+        'FAILED ship_items: 失败：出货箱满了',
+      ],
+    });
+    const eat = await shipFail.decide(parseGameState(raw));
+    expect(eat.kind === 'act' && eat.tool).toBe('eat');
+    expect(eat.kind === 'act' && eat.args).toEqual({ item: '小嘴鲈鱼' });
+
+    const eatFail = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED ship_items: 失败：出货箱满了',
+        'FAILED eat: 失败：吃不下了',
+      ],
+    });
+    const trash = await eatFail.decide(parseGameState(raw));
+    expect(trash.kind === 'act' && trash.tool).toBe('trash_item');
+    expect(trash.kind === 'act' && trash.args).toEqual({ item: '破损的眼镜' });
+  });
+
+  it('腾出空位后救援阶段归零：恢复 LLM 正常决策', async () => {
+    let asked = 0;
+    const planner = new LlmPlanner({
+      chat: async () => { asked++; return { content: '{"tool":"water_crops","args":{},"intent":"浇水"}' }; },
+      recentReceipts: ['FAILED tidy_backpack: 失败：农场上没有箱子'],
+    });
+    const rescue = await planner.decide(parseGameState(STATE_FULL));
+    expect(rescue.kind === 'act' && rescue.tool).toBe('ship_items');
+    const freed = parseGameState(STATE_FULL.replace('背包空位：0 个', '背包空位：2 个'));
+    const normal = await planner.decide(freed);
+    expect(normal.kind === 'act' && normal.tool).toBe('water_crops');
+    expect(asked).toBe(1);
+  });
+
+  it('出货候选排序：鱼/采集优先于家具（真机「普通窗户不能出货」教训）', () => {
+    const raw = `${STATE_OK}
+## 背包（序号: 物品）
+5: 沙丁鱼 x3 金星 [可食用 +23体力]
+6: 普通窗户
+背包空位：0 个（共 12 格）`;
+    expect(pickShippableItem(raw)).toBe('沙丁鱼');
+  });
+
+  it('被 BWF 拒绝的单品会被记住并换下一个，不降级策略', async () => {
+    const raw = `${STATE_FULL}
+6: 普通窗户`;
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED tidy_backpack: 失败：农场上没有箱子',
+        'FAILED ship_items: 失败：普通窗户 不能出货',
+      ],
+    });
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind === 'act' && d.tool).toBe('ship_items');
+    expect(d.kind === 'act' && d.args).toEqual({ item: '小嘴鲈鱼' });
   });
 
   it('整理连续两次失败 + 背包满 → 升级为出货 ship_items（带具体物品名）', async () => {

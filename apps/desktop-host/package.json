@@ -23,7 +23,8 @@
     "@workbench/memory-graph": "workspace:*",
     "@workbench/plugin-kit": "workspace:*",
     "@workbench/live-stream-hub": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "@workbench/stardew-mods": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.13",

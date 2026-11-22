@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import {
   AutodriveRunner,
   LlmPlanner,
+  LLM_TOOL_WHITELIST,
   RulePlanner,
+  extractDecisionJson,
   type AutodriveEvent,
 } from '@workbench/game-bridge-mcp';
 import { ModelGateway } from '@workbench/model-gateway';
@@ -90,6 +92,53 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
 
   // 聊天回话（D3）：雷区反射先行（不烧主脑）→ 主脑回话 → 广播两窗
   const XIAOJING_SYSTEM = '你是「小鲸」——一条傲娇干饭蓝鲸女仆，住在主人 Mac 桌面上，正在替主人自动游玩《星露谷物语》。口吻：嘴硬心软的傲娇女仆；回复短小精悍（≤80字）；偶尔提到饭碗/米粒；不解释自己是 AI；用中文。';
+
+  /**
+   * 自然语言控 AI（D3 对话指挥）：把主人「先把多余的东西放到出货箱」这类话翻成一个白名单工具指令，
+   * 插队到下一轮（不打断当前动作）。解析失败/闲聊 → 静默跳过，只走聊天回话。
+   */
+  const CHAT_DIRECTIVE_SYSTEM = `你是《星露谷物语》指令解析器。判断用户这句话是不是要对 AI 玩家下达操作指令。
+是指令 → 只输出一行 JSON：{"tool":"工具名","args":{},"intent":"一句话"}
+不是指令（闲聊/提问/夸奖）→ 只输出 {"tool":""}
+常用映射：整理/清理背包、给出货、腾位置 → tidy_backpack；去某地 → travel_to {"location":"Beach|Town|Farm|FarmHouse|Mine"}；钓鱼 → fish；睡觉/回家 → sleep；浇水 → water_crops。
+只能使用 BWF 工具名，禁止臆造参数。`;
+
+  /** 关键词直译（确定性优先，避免小模型把「先去海滩钓鱼」解析成闲聊） */
+  const KEYWORD_DIRECTIVES: Array<{ re: RegExp; tool: string; args: Record<string, unknown>; intent: string }> = [
+    { re: /(去|到|回)(海滩|海边|Beach)/i, tool: 'travel_to', args: { location: 'Beach' }, intent: '主人指令：去海滩' },
+    { re: /(去|到|回)(农场|Farm)/i, tool: 'travel_to', args: { location: 'Farm' }, intent: '主人指令：去农场' },
+    { re: /(去|到|回)(镇上|镇|Town)/i, tool: 'travel_to', args: { location: 'Town' }, intent: '主人指令：去镇上' },
+    { re: /(去|下)(矿洞|矿|Mine)/i, tool: 'travel_to', args: { location: 'Mine' }, intent: '主人指令：去矿洞' },
+    { re: /回?家|房子|FarmHouse/i, tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '主人指令：回家' },
+    { re: /钓鱼|去钓|fish/i, tool: 'fish', args: {}, intent: '主人指令：钓鱼' },
+    { re: /整理.{0,3}背包|清理.{0,3}背包|清.{0,3}背包|出货|卖掉|腾.{0,3}(位置|空位|地方)|背包.{0,4}满/, tool: 'tidy_backpack', args: {}, intent: '主人指令：先整理背包腾位置' },
+    { re: /睡觉|休息|睡吧/, tool: 'sleep', args: {}, intent: '主人指令：睡觉' },
+    { re: /浇水|浇一下/, tool: 'water_crops', args: {}, intent: '主人指令：浇水' },
+  ];
+
+  const tryChatDirective = async (text: string): Promise<void> => {
+    if (!runner.isRunning()) return;
+    const direct = KEYWORD_DIRECTIVES.find((k) => k.re.test(text));
+    if (direct) {
+      runner.submitDirective(direct.tool, direct.args, direct.intent);
+      console.log('[chat-directive] keyword →', direct.tool, JSON.stringify(direct.args));
+      return;
+    }
+    if (!gateway) return;
+    try {
+      const r = await gateway.chat('STARDEW_GAME_PLANNER', [
+        { role: 'system', content: CHAT_DIRECTIVE_SYSTEM },
+        { role: 'user', content: text },
+      ], { maxTokens: 120 });
+      const d = extractDecisionJson(r.content);
+      if (!d || d.tool === '' || !LLM_TOOL_WHITELIST.has(d.tool)) return;
+      runner.submitDirective(d.tool, d.args, `主人指令：${d.intent === '' ? text.slice(0, 24) : d.intent}`);
+      console.log('[chat-directive] llm →', d.tool);
+    } catch {
+      /* 指令解析失败不影响聊天回话 */
+    }
+  };
+
   const say = async (text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }> => {
     if (typeof text !== 'string' || text.trim() === '') return { ok: false, error: '空消息' };
     if (/大肥鱼/.test(text)) {
@@ -99,6 +148,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
       return { ok: true, reply: spray, reflex: true };
     }
     if (!gateway) return { ok: false, error: '主脑未接通（供应商 key 未配置）' };
+    void tryChatDirective(text); // 并行解析指令（不阻塞回话；非指令自动忽略）
     try {
       // T-M5-04：记忆增强——「你昨天做了什么」类问句检索图谱注入 system
       const memoryContext = memoryHost?.contextFor(text) ?? '';

@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewModsSnapshot",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewModsSnapshot",
+  "$defs": {
+    "StardewModsSnapshot": {
+      "type": "object",
+      "properties": {
+        "modsDir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "mods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "folderName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueId": {
+                "type": "string",
+                "default": ""
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "author": {
+                "type": "string",
+                "default": ""
+              },
+              "version": {
+                "type": "string",
+                "default": ""
+              },
+              "description": {
+                "type": "string",
+                "default": ""
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "contentType": {
+                "type": "string",
+                "default": ""
+              },
+              "minimumApiVersion": {
+                "type": "string",
+                "default": ""
+              },
+              "parseError": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "folderName",
+              "name",
+              "enabled"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "smapiVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "scannedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "modsDir",
+        "exists",
+        "scannedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

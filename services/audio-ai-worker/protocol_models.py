@@ -705,6 +705,84 @@ class VoiceDesignRequest(BaseModel):
     licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
 
 
+class StardewModInfo(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    folderName: Annotated[str, Field(min_length=1)]
+    uniqueId: str | None = ''
+    name: Annotated[str, Field(min_length=1)]
+    author: str | None = ''
+    version: str | None = ''
+    description: str | None = ''
+    enabled: bool
+    contentType: str | None = ''
+    minimumApiVersion: str | None = ''
+    parseError: str | None = ''
+
+
+class Mod(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    folderName: Annotated[str, Field(min_length=1)]
+    uniqueId: str | None = ''
+    name: Annotated[str, Field(min_length=1)]
+    author: str | None = ''
+    version: str | None = ''
+    description: str | None = ''
+    enabled: bool
+    contentType: str | None = ''
+    minimumApiVersion: str | None = ''
+    parseError: str | None = ''
+
+
+class StardewModsSnapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    modsDir: Annotated[str, Field(min_length=1)]
+    exists: bool
+    mods: Annotated[list[Mod] | None, Field(validate_default=True)] = []
+    smapiVersion: str | None = ''
+    scannedAt: float
+
+
+class StardewModToggleRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    folderName: Annotated[str, Field(min_length=1)]
+    enabled: bool
+
+
+class Snapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    modsDir: Annotated[str, Field(min_length=1)]
+    exists: bool
+    mods: Annotated[list[Mod] | None, Field(validate_default=True)] = []
+    smapiVersion: str | None = ''
+    scannedAt: float
+
+
+class StardewModsOpResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ok: bool
+    error: str | None = None
+    snapshot: Snapshot | None = None
+
+
+class StardewModsConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    modsDir: str | None = ''
+
+
 class Action(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -820,3 +898,14 @@ class AIWorkbenchContracts(BaseModel):
     VoiceDesignRequest_1: Annotated[
         VoiceDesignRequest, Field(alias='VoiceDesignRequest')
     ]
+    StardewModInfo_1: Annotated[StardewModInfo, Field(alias='StardewModInfo')]
+    StardewModsSnapshot_1: Annotated[
+        StardewModsSnapshot, Field(alias='StardewModsSnapshot')
+    ]
+    StardewModToggleRequest_1: Annotated[
+        StardewModToggleRequest, Field(alias='StardewModToggleRequest')
+    ]
+    StardewModsOpResult_1: Annotated[
+        StardewModsOpResult, Field(alias='StardewModsOpResult')
+    ]
+    StardewModsConfig_1: Annotated[StardewModsConfig, Field(alias='StardewModsConfig')]

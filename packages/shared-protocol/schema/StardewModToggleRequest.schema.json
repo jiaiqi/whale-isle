@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewModToggleRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewModToggleRequest",
+  "$defs": {
+    "StardewModToggleRequest": {
+      "type": "object",
+      "properties": {
+        "folderName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "folderName",
+        "enabled"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

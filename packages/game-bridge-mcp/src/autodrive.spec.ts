@@ -152,10 +152,17 @@ describe('RulePlanner 确定性日程', () => {
     expect(d.kind === 'act' && d.tool).toBe('dialogue');
   });
 
-  it('背包空位 0 → 先 tidy_backpack（规则模式同样不自杀式钓鱼）', async () => {
-    const d = await planner.decide(at('12:00', { freeSlots: 0 }));
-    expect(d.kind === 'act' && d.tool).toBe('tidy_backpack');
-    expect(d.kind === 'act' && d.intent).toContain('背包');
+  it('背包空位 0：有可卖物先出货（不依赖箱子），无物可出才 tidy_backpack', async () => {
+    const noGoods = await planner.decide(at('12:00', { freeSlots: 0 }));
+    expect(noGoods.kind === 'act' && noGoods.tool).toBe('tidy_backpack');
+    expect(noGoods.kind === 'act' && noGoods.intent).toContain('背包');
+
+    const withFish = await planner.decide(at('12:00', {
+      freeSlots: 0,
+      raw: `${STATE_OK}\n## 背包（序号: 物品）\n0: 斧头\n4: 小嘴鲈鱼 金星 [可食用 +45 体力]\n背包空位：0 个（共 12 格）`,
+    }));
+    expect(withFish.kind === 'act' && withFish.tool).toBe('ship_items');
+    expect(withFish.kind === 'act' && withFish.args).toEqual({ item: '小嘴鲈鱼' });
   });
 
   it('商店/选择题界面：close_menu 与带选项 dialogue（确定性，不问 LLM）', async () => {
@@ -222,6 +229,7 @@ describe('AutodriveRunner 端到端（mock client）', () => {
     if (first.type !== 'decision') throw new Error('first event should be decision');
     expect(first.tool).toBe('play_for');
     expect(first.intent).toContain('主人指令');
+    expect(first.planner).toBe('remote'); // 中控台显示「P0 插队」而非 LLM 决策
   });
 });
 

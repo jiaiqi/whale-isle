@@ -48,8 +48,108 @@ export function parseGameState(raw: string): GameStateSnapshot {
   };
 }
 
-export type PlannerDecision =
-  | { kind: 'act'; tool: string; args: Record<string, unknown>; intent: string }
+/**
+ * 背包救援工具（T-M5-18，参考 BWF `GameActions.Tidy.cs` 与 feiyuos-stardew-ai-farmer LESSONS）：
+ *   - 出货按「排除法 + 值钱线索」：工具/种子/肥料/鱼饵/炸弹/花束/吊坠/家具/任务物品绝不卖；
+ *   - 背包满时优先 ship_items（有无箱子都能用，且能赚钱）；没有可卖物再 eat/trash 腾位；
+ *   - **禁止满包 craft**（feiyu LESSONS：合成物会掉地上，反而卡死）。
+ */
+const KEEP_TAG_RE = /【(?:留着|保留)[^】]*】/;
+const NON_SELLABLE_RE = new RegExp(
+  `${KEEP_TAG_RE.source}|种子|肥料|鱼饵|鱼钩|浮标|炸弹|花束|吊坠|^(?:斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)|窗户|椅子|桌子|床|灯|地毯|壁纸|地板|柜|架子|机器|熔炉|洒水器|稻草人|箱子|酒桶|罐头|火炉|壁炉|电视|沙发|盆栽`,
+);
+/** 值钱/可卖线索（真机教训：家具类 ship 会被 BWF 拒绝，优先挑鱼/采集/矿物） */
+const SELLABLE_HINT_RE =
+  /鱼|虾|蟹|蛤|牡蛎|海草|珊瑚|贝|鲤|鲈|鲱|鲷|鳗|沙丁|鳟|鲑|鳅|花|莓|韭|蕨|蘑菇|矿石|宝石|钻石|石英|水晶|煤|铜|铁|金/;
+/** 工具/消耗品识别（最后手段垃圾化时保护） */
+const ESSENTIAL_RE = /种子|肥料|鱼饵|鱼钩|浮标|炸弹|花束|吊坠|^(?:斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)/;
+
+/** 从状态行提取干净物品名：剥标签、去数量（「沙丁鱼 x3 金星」→「沙丁鱼」） */
+export function cleanItemName(text: string): string {
+  return text
+    .replace(/【[^】]*】/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\s*x\d+\b/gi, ' ')
+    .replace(/\s*(?:金星|银星|铱星)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function* inventoryTexts(raw: string): Generator<string> {
+  for (const line of raw.split('\n')) {
+    const m = /^\d+:\s*(.+)$/.exec(line.trim());
+    if (m) yield m[1] ?? '';
+  }
+}
+
+function listShippable(raw: string): string[] {
+  const scored: { name: string; score: number; order: number }[] = [];
+  let order = 0;
+  for (const text of inventoryTexts(raw)) {
+    order++;
+    if (NON_SELLABLE_RE.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name === '') continue;
+    const score = SELLABLE_HINT_RE.test(name) ? 2 : /\[可食用/.test(text) ? 1 : 0;
+    scored.push({ name, score, order });
+  }
+  scored.sort((a, b) => b.score - a.score || b.order - a.order);
+  return scored.map((s) => s.name);
+}
+
+/** 从状态背包段挑一个可出货物品（值钱线索优先；跳过工具/种子/家具/任务物品） */
+export function pickShippableItem(raw: string): string | null {
+  return listShippable(raw)[0] ?? null;
+}
+
+/** 全部候选（供救援阶梯跳过被 BWF 拒绝的单品） */
+export function listShippableItems(raw: string): string[] {
+  return listShippable(raw);
+}
+
+/** 挑一个可食用物品（`[可食用 +N 体力]` 标记；**跳过【留着】任务物品**——BWF 会拒绝） */
+export function pickEdible(raw: string): string | null {
+  return listEdibleItems(raw)[0] ?? null;
+}
+
+/** 全部可食用候选（救援阶梯跳过被 BWF 拒绝的单品） */
+export function listEdibleItems(raw: string): string[] {
+  const out: string[] = [];
+  for (const text of inventoryTexts(raw)) {
+    if (!/\[可食用/.test(text)) continue;
+    if (KEEP_TAG_RE.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name !== '') out.push(name);
+  }
+  return out.reverse(); // 最近捡的优先
+}
+
+/** 挑一件真垃圾（报纸/破眼镜/浮木/垃圾类；跳过任务物品）——只用于腾位，不卖钱 */
+export function pickTrash(raw: string): string | null {
+  let candidate: string | null = null;
+  for (const text of inventoryTexts(raw)) {
+    if (KEEP_TAG_RE.test(text)) continue;
+    if (!/垃圾|报纸|破眼镜|浮木|破损|旧鞋|Joja可乐罐/.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name !== '') candidate = name;
+  }
+  return candidate;
+}
+
+/** 最后手段：任何非工具、非任务、非消耗品的东西（宁可丢一件家具也别卡死） */
+export function pickAnyNonEssential(raw: string): string | null {
+  let candidate: string | null = null;
+  for (const text of inventoryTexts(raw)) {
+    if (KEEP_TAG_RE.test(text)) continue;
+    if (ESSENTIAL_RE.test(text)) continue;
+    if (/\[可食用/.test(text)) continue; // 能吃的留给 eat 阶段
+    const name = cleanItemName(text);
+    if (name !== '') candidate = name;
+  }
+  return candidate;
+}
+
+export type PlannerDecision =  | { kind: 'act'; tool: string; args: Record<string, unknown>; intent: string }
   | { kind: 'wait'; seconds: number; reason: string }
   | { kind: 'stop'; reason: string };
 
@@ -105,10 +205,14 @@ export class RulePlanner implements Planner {
     if (state.clockMinutes >= 18 * 60 + 30) {
       return this.goSleep(state);
     }
-    // 背包塞满：任何采集/钓鱼都会失败（真机 2026-11-22 连续 FAILED fish 教训）→ 先整理
-    // 注意规则模式无回执上下文，只做空位确定性兜底；连续失败升级由 LlmPlanner 负责
+    // 背包塞满：任何采集/钓鱼都会失败（真机 2026-11-22 连续 FAILED fish 教训）。
+    // 规则模式无回执上下文：优先出货（不依赖农场箱子，还能赚钱），没可卖的才整理。
     if (state.freeSlots <= 0) {
-      return { kind: 'act', tool: 'tidy_backpack', args: {}, intent: '背包塞得满满当当，先整理出空位再干活' };
+      const item = pickShippableItem(state.raw);
+      if (item !== null) {
+        return { kind: 'act', tool: 'ship_items', args: { item }, intent: `背包满了，先把${item}出货换米腾位置` };
+      }
+      return { kind: 'act', tool: 'tidy_backpack', args: { purpose: 'fish' }, intent: '背包塞得满满当当，先整理出空位再干活' };
     }
 
     switch (this.phase) {

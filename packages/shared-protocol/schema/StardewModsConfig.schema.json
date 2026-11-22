@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewModsConfig",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewModsConfig",
+  "$defs": {
+    "StardewModsConfig": {
+      "type": "object",
+      "properties": {
+        "modsDir": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

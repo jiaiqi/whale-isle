@@ -433,3 +433,58 @@ export const PetAvatarManifestSchema = z.object({
     .default([]),
 });
 export type PetAvatarManifest = z.infer<typeof PetAvatarManifestSchema>;
+
+// ───────────────────────── 星露谷 Mod 管理（T-M6-06） ─────────────────────────
+// SMAPI 目录约定：每个 mod 一个文件夹，内含 manifest.json；禁用 = manifest.json 改名为
+// manifest.json.disabled（SMAPI 会跳过无 manifest 的文件夹并如实提示）。
+/** 单个星露谷 Mod（SMAPI manifest 摘要 + 启用状态） */
+export const StardewModInfoSchema = z.object({
+  folderName: z.string().min(1),
+  uniqueId: z.string().default(''),
+  name: z.string().min(1),
+  author: z.string().default(''),
+  version: z.string().default(''),
+  description: z.string().default(''),
+  /** manifest 是否存在且未被禁用；false = 已禁用或 manifest 损坏 */
+  enabled: z.boolean(),
+  /** SMAPI ContentPack / 空（普通 C# mod） */
+  contentType: z.string().default(''),
+  /** manifest 声明的 lowest SMAPI 版本 */
+  minimumApiVersion: z.string().default(''),
+  /** manifest 解析失败的原因（enabled=false 且此处非空 = 损坏） */
+  parseError: z.string().default(''),
+});
+export type StardewModInfo = z.infer<typeof StardewModInfoSchema>;
+
+/** Mod 目录扫描快照 */
+export const StardewModsSnapshotSchema = z.object({
+  modsDir: z.string().min(1),
+  /** 目录是否存在（未配置或游戏未安装时为 false） */
+  exists: z.boolean(),
+  mods: z.array(StardewModInfoSchema).default([]),
+  /** SMAPI 本体版本（找到 SMAPI 的 manifest.version 时） */
+  smapiVersion: z.string().default(''),
+  scannedAt: z.number(),
+});
+export type StardewModsSnapshot = z.infer<typeof StardewModsSnapshotSchema>;
+
+/** 启用/禁用 Mod */
+export const StardewModToggleRequestSchema = z.object({
+  folderName: z.string().min(1),
+  enabled: z.boolean(),
+});
+export type StardewModToggleRequest = z.infer<typeof StardewModToggleRequestSchema>;
+
+/** Mod 操作回执（toggle/install/scan 统一形状） */
+export const StardewModsOpResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+  snapshot: StardewModsSnapshotSchema.optional(),
+});
+export type StardewModsOpResult = z.infer<typeof StardewModsOpResultSchema>;
+
+/** Mod 目录配置（userData/stardew-mods.json） */
+export const StardewModsConfigSchema = z.object({
+  modsDir: z.string().default(''),
+});
+export type StardewModsConfig = z.infer<typeof StardewModsConfigSchema>;

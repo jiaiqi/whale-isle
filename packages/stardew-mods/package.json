@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/stardew-mods",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[T-M6-06] 星露谷 SMAPI Mod 管理：manifest 解析 / 目录扫描 / 启停 / 安装（零依赖）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}
