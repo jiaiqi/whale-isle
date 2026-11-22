@@ -17,6 +17,7 @@ import {
 } from '@workbench/shared-protocol';
 
 type ProviderConfigInput = z.input<typeof ModelProviderConfigSchema>;
+import { createHash } from 'node:crypto';
 import { createSanitizer, type Sanitize, type SanitizerOptions } from './sanitizer';
 import { BUILTIN_PROVIDER_PRESETS, buildChatUrl, resolveProtocol } from './presets';
 import { orderedCandidates, recordStickyGood, StickyState, RouteError } from './router';
@@ -122,6 +123,22 @@ function splitAnthropicMessages(messages: ChatMessage[]): AnthropicRequestMessag
   return { system: systemParts.join('\n\n'), messages: conversation };
 }
 
+/** OpenCode Go（opencode.ai 托管推理）判定 */
+function isOpenCodeHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'opencode.ai' || host.endsWith('.opencode.ai');
+  } catch {
+    return false;
+  }
+}
+
+/** 稳定会话 ID（同一会话 × 同一槽位恒定）：OpenCode Go 用于路由与 Prompt Cache */
+function openCodeSessionId(sessionId: string, slot: string): string {
+  const digest = createHash('sha1').update(`${sessionId}:${slot}`).digest('hex');
+  return `ses_${digest.slice(0, 32)}`;
+}
+
 export class ModelGateway {
   private readonly providers = new Map<string, ModelProviderConfig>();
   private readonly sticky = new StickyState();
@@ -195,6 +212,11 @@ export class ModelGateway {
       const protocol = resolveProtocol(provider);
       const url = buildChatUrl(provider);
       const headers: Record<string, string> = { 'content-type': 'application/json' };
+      // OpenCode Go 强制要求稳定会话头 + 客户端 UA（否则 400 MissingSessionID）
+      if (isOpenCodeHost(url)) {
+        headers['x-opencode-session'] = openCodeSessionId(sessionId, slot);
+        headers['user-agent'] = 'xiaojing-workbench/1.0';
+      }
       let requestBody: string;
       if (protocol === 'anthropic') {
         // Anthropic 走 x-api-key + anthropic-version，严禁附带 authorization

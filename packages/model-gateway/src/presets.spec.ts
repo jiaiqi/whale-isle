@@ -67,8 +67,8 @@ describe('opencode-go 预设（OpenAI / Anthropic 双协议端点）', () => {
       expect(variant.region).toBe('GLOBAL');
       expect(variant.planType).toBe('CODING_PLAN');
     }
-    expect(opencode.variants[0]?.baseUrl).toBe('https://opencode.ai/zen/v1');
-    expect(opencode.variants[1]?.baseUrl).toBe('https://opencode.ai/zen/anthropic/v1');
+    expect(opencode.variants[0]?.baseUrl).toBe('https://opencode.ai/inference/go/openai/v1');
+    expect(opencode.variants[1]?.baseUrl).toBe('https://opencode.ai/inference/go/anthropic/v1');
   });
 
   it('预置 5 个模型：kimi-k3.1-pro 带 reasoning 标签，其余默认工具调用', () => {
@@ -89,21 +89,21 @@ describe('opencode-go 预设（OpenAI / Anthropic 双协议端点）', () => {
   });
 
   it('buildChatUrl：openai → /chat/completions；anthropic → /messages', () => {
-    expect(buildChatUrl(opencode)).toBe('https://opencode.ai/zen/v1/chat/completions'); // 首变体为 OpenAI
+    expect(buildChatUrl(opencode)).toBe('https://opencode.ai/inference/go/openai/v1/chat/completions'); // 首变体为 OpenAI
     const anthropicProvider = ModelProviderConfigSchema.parse({
       ...opencode,
       variants: [opencode.variants[1]!],
     });
     expect(resolveProtocol(anthropicProvider)).toBe('anthropic');
-    expect(buildChatUrl(anthropicProvider)).toBe('https://opencode.ai/zen/anthropic/v1/messages');
+    expect(buildChatUrl(anthropicProvider)).toBe('https://opencode.ai/inference/go/anthropic/v1/messages');
   });
 
   it('anthropic base 末尾带斜杠 / 已含 /v1 → 不重复拼接 /v1', () => {
     const trailing = ModelProviderConfigSchema.parse({
       ...opencode,
-      variants: [{ ...opencode.variants[1], baseUrl: 'https://opencode.ai/zen/anthropic/v1/' }],
+      variants: [{ ...opencode.variants[1], baseUrl: 'https://opencode.ai/inference/go/anthropic/v1/' }],
     });
-    expect(buildChatUrl(trailing)).toBe('https://opencode.ai/zen/anthropic/v1/messages');
+    expect(buildChatUrl(trailing)).toBe('https://opencode.ai/inference/go/anthropic/v1/messages');
   });
 
   it('resolveProtocol：变体覆盖供应商 / 供应商兜底 / 缺省回退 openai', () => {

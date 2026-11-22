@@ -405,7 +405,7 @@ const ANTHROPIC_PROVIDER: ModelProviderConfig = {
     {
       region: 'GLOBAL',
       planType: 'CODING_PLAN',
-      baseUrl: 'https://opencode.ai/zen/anthropic/v1',
+      baseUrl: 'https://opencode.ai/inference/go/anthropic/v1',
       isFullUrl: false,
       protocol: 'anthropic',
     },
@@ -450,6 +450,28 @@ function anthropicOkResponse(content = '哼，本鱼才没有偷懒！'): Awaite
 }
 
 describe('ModelGateway · Anthropic 协议', () => {
+  it('OpenCode Go 请求自动携带稳定 x-opencode-session 与自定义 User-Agent', async () => {
+    const seen: Array<Record<string, string>> = [];
+    const fetchImpl: FetchLike = async (_url, init) => {
+      seen.push(init.headers);
+      return okResponse('ok');
+    };
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl,
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'a' }], { sessionId: 'conv-1' });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'b' }], { sessionId: 'conv-1' });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'c' }], { sessionId: 'conv-2' });
+    const sessions = seen.map((h) => h['x-opencode-session'] ?? '');
+    expect(sessions[0]).toMatch(/^ses_[a-f0-9]{32}$/);
+    expect(sessions[1]).toBe(sessions[0]);
+    expect(sessions[2]).not.toBe(sessions[0]);
+    expect(seen[0]?.['user-agent']).toBe('xiaojing-workbench/1.0');
+  });
+
   it('请求 URL/headers/body：x-api-key + anthropic-version、无 authorization、system 抽为顶层字符串', async () => {
     const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
     const gateway = new ModelGateway({
@@ -470,7 +492,7 @@ describe('ModelGateway · Anthropic 协议', () => {
 
     expect(calls).toHaveLength(1);
     const call = calls[0]!;
-    expect(call.url).toBe('https://opencode.ai/zen/anthropic/v1/messages');
+    expect(call.url).toBe('https://opencode.ai/inference/go/anthropic/v1/messages');
     expect(call.headers['x-api-key']).toBe(ANTHROPIC_KEYS['opencode-go']);
     expect(call.headers['anthropic-version']).toBe('2023-06-01');
     expect(call.headers['content-type']).toBe('application/json');
@@ -611,7 +633,7 @@ describe('ModelGateway · Anthropic 协议', () => {
     });
     const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: '在摸鱼吗' }]);
     expect(calls).toHaveLength(2);
-    expect(calls[0]?.url).toBe('https://opencode.ai/zen/anthropic/v1/messages');
+    expect(calls[0]?.url).toBe('https://opencode.ai/inference/go/anthropic/v1/messages');
     expect(calls[0]?.headers['x-api-key']).toBe(ANTHROPIC_KEYS['opencode-go']);
     expect(calls[0]?.headers.authorization).toBeUndefined();
     expect(calls[1]?.url).toBe('https://api.siliconflow.cn/v1/chat/completions');

@@ -83,14 +83,14 @@ export const BUILTIN_PROVIDER_PRESETS: ModelProviderConfig[] = [
       {
         region: 'GLOBAL',
         planType: 'CODING_PLAN',
-        baseUrl: 'https://opencode.ai/zen/v1',
+        baseUrl: 'https://opencode.ai/inference/go/openai/v1',
         isFullUrl: false,
         protocol: 'openai',
       },
       {
         region: 'GLOBAL',
         planType: 'CODING_PLAN',
-        baseUrl: 'https://opencode.ai/zen/anthropic/v1',
+        baseUrl: 'https://opencode.ai/inference/go/anthropic/v1',
         isFullUrl: false,
         protocol: 'anthropic',
       },

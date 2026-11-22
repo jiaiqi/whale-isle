@@ -76,7 +76,10 @@
 
 ## [Unreleased] - 2026-11-21（第二轮）
 
-### Added
+### Fixed
+
+- **OpenCode Go 400 `MissingSessionID`（用户真机粘贴 key 后报错）**：按官方 Go API 规范补齐必需头 `x-opencode-session: ses_<stable>`（同一会话×槽位恒定，供路由与 Prompt Cache）+ 客户端 `User-Agent: xiaojing-workbench/1.0`；Base URL 迁移到 canonical `https://opencode.ai/inference/go/openai/v1` 与 `/anthropic/v1`；模型发现改走协议无关根 `https://opencode.ai/inference/go/v1/models`。真机验证：连接检测 1.5s 通过、拉取 5 个模型、网关真实回话 2.1s 并记账 `providerId=opencode-go/modelId=deepseek-v4.1-flash/426 tokens`。
+- **星露谷自治安全性（T-M6-10 续）**：系统提示升级为人类玩家准则（界面优先/批量工具/失败换法/【留着】红线/23:00 回家/update_notes/农场规划/花钱规划）；新增确定性作息护栏（23:00 必回家睡觉、体力 <8% 先吃→回家→睡，先于背包救援执行）。
 
 - **星露谷自治打磨·第一轮（T-M6-10）**：
   - **剧情菜单**：`当前界面` 改多行解析；选择题按 0 基 `choice` 回答（修复「这是个选择题，请用 choice」无限 FAILED）；起名界面 `set_name 小鲸`；过场无对话框 → `skip_event`。

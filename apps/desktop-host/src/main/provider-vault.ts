@@ -8,6 +8,7 @@
  */
 import { ipcMain, safeStorage } from 'electron';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 const VAULT_FILENAME = 'provider-vault.json';
 
@@ -82,10 +83,32 @@ function storedKeyInner(vaultPath: string, providerId: string): string | null {
   return buffer.length > 0 ? buffer : null;
 }
 
-async function discoverModels(baseUrl: string, apiKey: string): Promise<string[]> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/models`;
+function isOpenCodeUrl(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === 'opencode.ai' || host.endsWith('.opencode.ai');
+  } catch {
+    return false;
+  }
+}
+
+/** OpenCode Go 额外头：稳定会话 + 客户端 UA（缺失会 400 MissingSessionID） */
+function extraHeaders(providerId: string, baseUrl: string, apiKey: string): Record<string, string> {
+  if (providerId !== 'opencode-go' && !isOpenCodeUrl(baseUrl)) return {};
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    'x-opencode-session': `ses_${randomUUID().replace(/-/g, '')}`,
+    'User-Agent': 'xiaojing-workbench/1.0',
+  };
+}
+
+async function discoverModels(providerId: string, baseUrl: string, apiKey: string): Promise<string[]> {
+  // OpenCode 的模型清单在协议无关根路径（/inference/go/v1/models），不是 /openai/v1/models
+  const url = isOpenCodeUrl(baseUrl) || providerId === 'opencode-go'
+    ? 'https://opencode.ai/inference/go/v1/models'
+    : `${baseUrl.replace(/\/+$/, '')}/models`;
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: { Authorization: `Bearer ${apiKey}`, ...extraHeaders(providerId, baseUrl, apiKey) },
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
@@ -124,7 +147,7 @@ export function registerProviderVaultIpc(vaultPath: string): void {
     if (!key) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };
     if (args.protocol === 'anthropic') return { ok: false, error: 'Anthropic 协议不提供 /models 列表，请手动添加模型 ID' };
     try {
-      const models = await discoverModels(args.baseUrl, key);
+      const models = await discoverModels(args.providerId, args.baseUrl, key);
       return { ok: true, models };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -141,9 +164,13 @@ export function registerProviderVaultIpc(vaultPath: string): void {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: anthropic
-          ? { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }
-          : { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(anthropic
+            ? { 'x-api-key': key, 'anthropic-version': '2023-06-01' }
+            : { Authorization: `Bearer ${key}` }),
+          ...extraHeaders(args.providerId, args.baseUrl, key),
+        },
         body: JSON.stringify(
           anthropic
             ? { model: args.modelId, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }
