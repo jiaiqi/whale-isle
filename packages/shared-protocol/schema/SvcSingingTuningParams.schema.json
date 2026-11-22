@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SvcSingingTuningParams",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SvcSingingTuningParams",
+  "$defs": {
+    "SvcSingingTuningParams": {
+      "type": "object",
+      "properties": {
+        "rvcModelPath": {
+          "type": "string",
+          "default": ""
+        },
+        "indexPath": {
+          "type": "string",
+          "default": ""
+        },
+        "pitchShiftSemitones": {
+          "type": "integer",
+          "minimum": -12,
+          "maximum": 12,
+          "default": 0
+        },
+        "indexRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.75
+        },
+        "protectVoiceless": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5,
+          "default": 0.33
+        },
+        "vocalGainDb": {
+          "type": "number",
+          "minimum": -12,
+          "maximum": 12,
+          "default": 0
+        },
+        "accompanimentGainDb": {
+          "type": "number",
+          "minimum": -24,
+          "maximum": 6,
+          "default": -3
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

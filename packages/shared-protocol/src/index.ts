@@ -323,6 +323,65 @@ export const NormalizedLiveEventSchema = z.object({
 export type NormalizedLiveEvent = z.infer<typeof NormalizedLiveEventSchema>;
 
 // ============================================================================
+// 6.5 声音工坊契约（T-M5-17）：TTS 情感调参 / SVC 唱歌调参 / 音色创建请求
+// ============================================================================
+
+/** 气口停顿配置（dsh-gpt-sovits 思想：句号/逗号/省略号三档独立 ms） */
+export const PauseConfigSchema = z.object({
+  periodMs: z.number().int().min(50).max(2000).default(340),
+  commaMs: z.number().int().min(20).max(2000).default(150),
+  ellipsisMs: z.number().int().min(50).max(3000).default(460),
+});
+export type PauseConfig = z.infer<typeof PauseConfigSchema>;
+
+/** TTS 情感锚点独立可调参数（每个锚点一条；refText 必填防内部 ASR 卡顿） */
+export const TtsEmotionTuningParamsSchema = z.object({
+  emotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'clumsy_panic']),
+  refAudioPath: z.string().default(''),
+  /** 参考干声对应文本——必填（空值会触发内部 ASR 导致约 40s 卡顿） */
+  refText: z.string().min(1),
+  speed: z.number().min(0.7).max(1.4).default(1.0),
+  temperature: z.number().min(0.1).max(1.0).default(1.0),
+  topP: z.number().min(0.1).max(1.0).default(1.0),
+  topK: z.number().int().min(1).max(50).default(15),
+  pauseConfig: PauseConfigSchema.default({}),
+  /** 前置微音效（如"咕噜"气泡声）路径 */
+  prependSfxPath: z.string().default(''),
+  sfxVolume: z.number().min(0).max(1).default(0),
+});
+export type TtsEmotionTuningParams = z.infer<typeof TtsEmotionTuningParamsSchema>;
+
+/** SVC/RVC 唱歌调参（dsh-voice-studio 思想：气声保护 + 混音电平比） */
+export const SvcSingingTuningParamsSchema = z.object({
+  rvcModelPath: z.string().default(''),
+  indexPath: z.string().default(''),
+  /** 升降调半音：-12~+12；快捷预设「女声微调 +2」「男转女 +12」 */
+  pitchShiftSemitones: z.number().int().min(-12).max(12).default(0),
+  /** 音色还原度（0=纯源声 1=完全模型化） */
+  indexRate: z.number().min(0).max(1).default(0.75),
+  /** 气声保护（保护齿音/气声不破音；0=不保护 0.5=最强保护） */
+  protectVoiceless: z.number().min(0).max(0.5).default(0.33),
+  vocalGainDb: z.number().min(-12).max(12).default(0),
+  accompanimentGainDb: z.number().min(-24).max(6).default(-3),
+});
+export type SvcSingingTuningParams = z.infer<typeof SvcSingingTuningParamsSchema>;
+
+/** 声音工坊音色创建请求（三种路径） */
+export const VoiceDesignRequestSchema = z.object({
+  mode: z.enum(['cloud_voice_design', 'local_audio_slice', 'local_weight_import']),
+  petId: z.string().default('blue-whale-maid'),
+  /** cloud_voice_design：音色自然语言描述（工坊内置傲娇蓝鲸女仆等模板） */
+  prompt: z.string().default(''),
+  previewText: z.string().default('哼，本鱼才没有偷懒呢！主人快夸夸我嘛～'),
+  emotionTag: z.string().default('sweet_normal'),
+  /** local_weight_import：本地权重路径（.pth/.ckpt/.index） */
+  weightPath: z.string().default(''),
+  /** 导入权重强制标记许可证范围 */
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']).default('DEV_ONLY_NON_COMMERCIAL'),
+});
+export type VoiceDesignRequest = z.infer<typeof VoiceDesignRequestSchema>;
+
+// ============================================================================
 // 6. 桌宠资产清单契约 (T-M1-01；素材许可红线见 docs/THIRD_PARTY_NOTICES.md)
 // ============================================================================
 

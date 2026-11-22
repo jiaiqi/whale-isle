@@ -41,6 +41,7 @@
 @source "./harness-panel.tsx";
 @source "./pets-panel.tsx";
 @source "./voice-panel.tsx";
+@source "./voice-studio-panel.tsx";
 
 /* 圆角节奏：Tailwind rounded-lg/md 统一为设计稿的连续曲率 */
 @layer utilities {

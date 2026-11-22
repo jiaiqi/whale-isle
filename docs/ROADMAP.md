@@ -66,6 +66,7 @@
 | **`T-M5-13`** | P2 | **形象工坊（D13③）**：自定义形象 + AI 生成动作管线——AI 生视频提示词模板→绿幕→chroma→normalize（640×360 alpha）→manifest 条目注册→试穿预览；精灵图逆向导入 | dsh-pet scripts、aboutme-pets | 素材规格自动校验（alpha/帧率/时长）；生成→注册→pet-stage 即时切换断言；台账登记 | PENDING |
 | **`T-M5-14`** | P1 | **小鲸日记面板（D13②）**：Shell 日历视图翻阅每日日记 + 记忆图谱力导向可视化 + 周报复盘（TTS 播报+切片联动入口） | feiyuos-memory-graph viewer | 日历翻阅 E2E；周报生成幂等；图谱检索入口可用 | PENDING |
 | **`T-M5-16`** | P0 | **动作库预览与情绪全映射（D16）**（✅ 2026-11-21 DONE：E2E 全通+零闲置审计）：Shell pets 页签（11 槽位卡+ambientPool 分类网格+点击预览 IPC→桌宠窗即播）；情绪五档/游戏事件/饭碗三层映射表 + ambient 空闲随机链（30s→pickAmbient→6s 回 idle）+ **素材零闲置审计**（114 clips 全覆盖断言） | dsh-pet（animationWeights/余额分档）、T-M5-01 manifest | 单测：114 clips 覆盖率审计断言；E2E：pets 页点击 → 桌宠窗 src 切换；ambient 链确定性（rng 注入） | NEXT（并入 T-M6-01 桌宠插件范围先行） |
+| **`T-M5-17`** | P0 | **声音工坊 Voice Studio**（✅ 2026-11-22 DONE：契约 4 域+后端 5 端点+工坊 UI+13 pytest+10 契约测试） | dsh-voice-studio、dsh-gpt-sovits | 参数往返 100%；refText 空拦截；互斥锁 trace；低内存降级 | DONE |
 | **`T-M5-15`** | P1 | **攻略采集器 guide-forager（D15）**（✅ 2026-11-21 DONE：真机 get_guide 读到 wiki 新攻略）：星露谷 wiki（MediaWiki API）+ 小黑盒热榜 → 正文提取→主题分类→hash 去重→`guide-forager/<主题>.md` 归档+索引；**三路注入**：BWF get_guide 专题导出 / LLM Planner 检索上下文 / 技能卡互引；周更+开播前触发 | 星露谷 wiki、小黑盒、BWF Guide.cs | 单测：抓取→清洗→分类→去重确定性（fixture）；导出文件可被 get_guide 读取断言；限速与 robots 合规断言 | PENDING |
 | **`T-M6-05`** | P2 | **独立安装包（D14）**：electron-builder（macOS dmg + Win nsis）——素材/worker/契约生成物打进 resources；首启向导（星露谷+Mod 一键安装引导、GPT-SoVITS 可选下载、供应商 key 配置）；全功能离线自包含验证 | electron-builder | 干净环境（无参考仓库路径）安装→启动→桌宠渲染→autodrive 依赖注入断言；安装包体积 <200MB（不含可选 GPT-SoVITS） | PENDING |
 

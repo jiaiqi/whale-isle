@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
@@ -638,6 +638,73 @@ class NormalizedLiveEvent(BaseModel):
     timestamp: float
 
 
+class PauseConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    periodMs: Annotated[int | None, Field(ge=50, le=2000)] = 340
+    commaMs: Annotated[int | None, Field(ge=20, le=2000)] = 150
+    ellipsisMs: Annotated[int | None, Field(ge=50, le=3000)] = 460
+
+
+class EmotionTag6(StrEnum):
+    sweet_normal = 'sweet_normal'
+    tsundere_refuse = 'tsundere_refuse'
+    rage_spray = 'rage_spray'
+    lazy_yawn = 'lazy_yawn'
+    clumsy_panic = 'clumsy_panic'
+
+
+class TtsEmotionTuningParams(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    emotionTag: EmotionTag6
+    refAudioPath: str | None = ''
+    refText: Annotated[str, Field(min_length=1)]
+    speed: Annotated[float | None, Field(ge=0.7, le=1.4)] = 1
+    temperature: Annotated[float | None, Field(ge=0.1, le=1.0)] = 1
+    topP: Annotated[float | None, Field(ge=0.1, le=1.0)] = 1
+    topK: Annotated[int | None, Field(ge=1, le=50)] = 15
+    pauseConfig: Annotated[PauseConfig | None, Field(validate_default=True)] = cast(
+        'PauseConfig | None', {}
+    )
+    prependSfxPath: str | None = ''
+    sfxVolume: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0
+
+
+class SvcSingingTuningParams(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    rvcModelPath: str | None = ''
+    indexPath: str | None = ''
+    pitchShiftSemitones: Annotated[int | None, Field(ge=-12, le=12)] = 0
+    indexRate: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.75
+    protectVoiceless: Annotated[float | None, Field(ge=0.0, le=0.5)] = 0.33
+    vocalGainDb: Annotated[float | None, Field(ge=-12.0, le=12.0)] = 0
+    accompanimentGainDb: Annotated[float | None, Field(ge=-24.0, le=6.0)] = -3
+
+
+class Mode(StrEnum):
+    cloud_voice_design = 'cloud_voice_design'
+    local_audio_slice = 'local_audio_slice'
+    local_weight_import = 'local_weight_import'
+
+
+class VoiceDesignRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    mode: Mode
+    petId: str | None = 'blue-whale-maid'
+    prompt: str | None = ''
+    previewText: str | None = '哼，本鱼才没有偷懒呢！主人快夸夸我嘛～'
+    emotionTag: str | None = 'sweet_normal'
+    weightPath: str | None = ''
+    licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
+
+
 class Action(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -742,4 +809,14 @@ class AIWorkbenchContracts(BaseModel):
     LiveProgramState_1: Annotated[LiveProgramState, Field(alias='LiveProgramState')]
     NormalizedLiveEvent_1: Annotated[
         NormalizedLiveEvent, Field(alias='NormalizedLiveEvent')
+    ]
+    PauseConfig_1: Annotated[PauseConfig, Field(alias='PauseConfig')]
+    TtsEmotionTuningParams_1: Annotated[
+        TtsEmotionTuningParams, Field(alias='TtsEmotionTuningParams')
+    ]
+    SvcSingingTuningParams_1: Annotated[
+        SvcSingingTuningParams, Field(alias='SvcSingingTuningParams')
+    ]
+    VoiceDesignRequest_1: Annotated[
+        VoiceDesignRequest, Field(alias='VoiceDesignRequest')
     ]

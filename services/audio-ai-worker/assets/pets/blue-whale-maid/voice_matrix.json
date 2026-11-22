@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0",
+  "petId": "blue-whale-maid",
+  "voicePackId": "blue-whale-maid-v2",
+  "licenseScope": "DEV_ONLY_NON_COMMERCIAL",
+  "tts": {
+    "voicePackId": "blue-whale-maid-v2",
+    "defaultEmotionTag": "sweet_normal",
+    "profiles": [
+      {
+        "emotionTag": "sweet_normal",
+        "refAudioPath": "ref/sweet_normal.wav",
+        "refText": "sweet_normal 的参考台词",
+        "speed": 1.0,
+        "temperature": 0.8,
+        "topP": 1.0,
+        "topK": 15,
+        "pauseConfig": {
+          "periodMs": 340,
+          "commaMs": 150,
+          "ellipsisMs": 460
+        },
+        "prependSfxPath": "",
+        "sfxVolume": 0.0
+      },
+      {
+        "emotionTag": "tsundere_refuse",
+        "refAudioPath": "ref/tsundere_refuse.wav",
+        "refText": "tsundere_refuse 的参考台词",
+        "speed": 1.05,
+        "temperature": 0.8,
+        "topP": 1.0,
+        "topK": 15,
+        "pauseConfig": {
+          "periodMs": 340,
+          "commaMs": 150,
+          "ellipsisMs": 460
+        },
+        "prependSfxPath": "",
+        "sfxVolume": 0.0
+      },
+      {
+        "emotionTag": "rage_spray",
+        "refAudioPath": "ref/rage_spray.wav",
+        "refText": "rage_spray 的参考台词",
+        "speed": 1.1,
+        "temperature": 0.8,
+        "topP": 1.0,
+        "topK": 15,
+        "pauseConfig": {
+          "periodMs": 340,
+          "commaMs": 150,
+          "ellipsisMs": 460
+        },
+        "prependSfxPath": "",
+        "sfxVolume": 0.0
+      },
+      {
+        "emotionTag": "lazy_yawn",
+        "refAudioPath": "ref/lazy_yawn.wav",
+        "refText": "lazy_yawn 的参考台词",
+        "speed": 1.15,
+        "temperature": 0.8,
+        "topP": 1.0,
+        "topK": 15,
+        "pauseConfig": {
+          "periodMs": 340,
+          "commaMs": 150,
+          "ellipsisMs": 460
+        },
+        "prependSfxPath": "",
+        "sfxVolume": 0.0
+      },
+      {
+        "emotionTag": "clumsy_panic",
+        "refAudioPath": "ref/clumsy_panic.wav",
+        "refText": "clumsy_panic 的参考台词",
+        "speed": 1.2,
+        "temperature": 0.8,
+        "topP": 1.0,
+        "topK": 15,
+        "pauseConfig": {
+          "periodMs": 340,
+          "commaMs": 150,
+          "ellipsisMs": 460
+        },
+        "prependSfxPath": "",
+        "sfxVolume": 0.0
+      }
+    ]
+  },
+  "svc": {
+    "rvcModelPath": "rvc/xiaojing.pth",
+    "indexPath": "rvc/xiaojing.index",
+    "pitchShiftSemitones": 2,
+    "indexRate": 0.75,
+    "protectVoiceless": 0.33,
+    "vocalGainDb": 0.0,
+    "accompanimentGainDb": -3.0
+  }
+}

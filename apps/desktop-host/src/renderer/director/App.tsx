@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Activity, AudioLines, Brain, ChevronRight, Cpu, Fish, MessageSquare,
-  Play, Radio, Send, Sprout, Square, Terminal, Volume2, VolumeX, Wheat,
+  Play, Radio, Send, Sliders, Sprout, Square, Terminal, Volume2, VolumeX, Wheat,
 } from 'lucide-react';
 import type { DiningProfilePreset, ModelProviderConfig, WorkbenchRoleSlot } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
@@ -14,14 +14,16 @@ import { ProvidersPanel } from './providers-panel';
 import { HarnessPanel } from './harness-panel';
 import { PetsPanel } from './pets-panel';
 import { VoicePanel } from './voice-panel';
+import { VoiceStudioPanel } from './voice-studio-panel';
 
-type Tab = 'chat' | 'stardew' | 'pets' | 'voice' | 'harness' | 'providers';
+type Tab = 'chat' | 'stardew' | 'pets' | 'voice' | 'studio' | 'harness' | 'providers';
 
 const NAV: { id: Tab; label: string; icon: typeof MessageSquare }[] = [
   { id: 'chat', label: '聊天 · 小鲸', icon: MessageSquare },
   { id: 'stardew', label: '星露谷共玩', icon: Sprout },
   { id: 'pets', label: '动作库', icon: Fish },
   { id: 'voice', label: '音色库', icon: AudioLines },
+  { id: 'studio', label: '声音工坊', icon: Sliders },
   { id: 'harness', label: 'Harness · Agents', icon: Terminal },
   { id: 'providers', label: '供应商配置', icon: Cpu },
 ];
@@ -329,6 +331,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
           {tab === 'pets' && <div className="h-full overflow-y-auto"><PetsPanel /></div>}
           {tab === 'voice' && <div className="h-full overflow-y-auto"><VoicePanel /></div>}
+          {tab === 'studio' && <div className="h-full overflow-y-auto"><VoiceStudioPanel /></div>}
           {tab === 'harness' && <div className="h-full overflow-y-auto"><HarnessPanel /></div>}
           {tab === 'providers' && (
             <div className="h-full overflow-y-auto">

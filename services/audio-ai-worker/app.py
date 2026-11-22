@@ -197,3 +197,9 @@ async def ws_audio(websocket: WebSocket) -> None:
                 await websocket.send_text(json.dumps({"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": f"未知方法：{method}"}}))
     except WebSocketDisconnect:
         return
+# ---------------------------------------------------------------------------
+# 声音工坊子路由（T-M5-17）
+# ---------------------------------------------------------------------------
+from voice_studio import router as voice_studio_router
+
+app.include_router(voice_studio_router)

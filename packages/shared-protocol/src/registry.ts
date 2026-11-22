@@ -1,5 +1,9 @@
 import type { ZodTypeAny } from 'zod';
 import {
+  PauseConfigSchema,
+  TtsEmotionTuningParamsSchema,
+  SvcSingingTuningParamsSchema,
+  VoiceDesignRequestSchema,
   AudioPlaybackLeaseSchema,
   AudioPlaybackReceiptSchema,
   EmotionVoiceProfileSchema,
@@ -60,4 +64,8 @@ export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
   StardewMcpActionReceipt: StardewMcpActionReceiptSchema,
   LiveProgramState: LiveProgramStateSchema,
   NormalizedLiveEvent: NormalizedLiveEventSchema,
+  PauseConfig: PauseConfigSchema,
+  TtsEmotionTuningParams: TtsEmotionTuningParamsSchema,
+  SvcSingingTuningParams: SvcSingingTuningParamsSchema,
+  VoiceDesignRequest: VoiceDesignRequestSchema,
 };

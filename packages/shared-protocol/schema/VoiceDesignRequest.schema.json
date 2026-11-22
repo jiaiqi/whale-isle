@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VoiceDesignRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/VoiceDesignRequest",
+  "$defs": {
+    "VoiceDesignRequest": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "cloud_voice_design",
+            "local_audio_slice",
+            "local_weight_import"
+          ]
+        },
+        "petId": {
+          "type": "string",
+          "default": "blue-whale-maid"
+        },
+        "prompt": {
+          "type": "string",
+          "default": ""
+        },
+        "previewText": {
+          "type": "string",
+          "default": "哼，本鱼才没有偷懒呢！主人快夸夸我嘛～"
+        },
+        "emotionTag": {
+          "type": "string",
+          "default": "sweet_normal"
+        },
+        "weightPath": {
+          "type": "string",
+          "default": ""
+        },
+        "licenseScope": {
+          "type": "string",
+          "enum": [
+            "DEV_ONLY_NON_COMMERCIAL",
+            "COMMERCIAL_READY"
+          ],
+          "default": "DEV_ONLY_NON_COMMERCIAL"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

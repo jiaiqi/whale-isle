@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TtsEmotionTuningParams",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/TtsEmotionTuningParams",
+  "$defs": {
+    "TtsEmotionTuningParams": {
+      "type": "object",
+      "properties": {
+        "emotionTag": {
+          "type": "string",
+          "enum": [
+            "sweet_normal",
+            "tsundere_refuse",
+            "rage_spray",
+            "lazy_yawn",
+            "clumsy_panic"
+          ]
+        },
+        "refAudioPath": {
+          "type": "string",
+          "default": ""
+        },
+        "refText": {
+          "type": "string",
+          "minLength": 1
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 0.7,
+          "maximum": 1.4,
+          "default": 1
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1,
+          "default": 1
+        },
+        "topP": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1,
+          "default": 1
+        },
+        "topK": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 15
+        },
+        "pauseConfig": {
+          "type": "object",
+          "properties": {
+            "periodMs": {
+              "type": "integer",
+              "minimum": 50,
+              "maximum": 2000,
+              "default": 340
+            },
+            "commaMs": {
+              "type": "integer",
+              "minimum": 20,
+              "maximum": 2000,
+              "default": 150
+            },
+            "ellipsisMs": {
+              "type": "integer",
+              "minimum": 50,
+              "maximum": 3000,
+              "default": 460
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "prependSfxPath": {
+          "type": "string",
+          "default": ""
+        },
+        "sfxVolume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0
+        }
+      },
+      "required": [
+        "emotionTag",
+        "refText"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
