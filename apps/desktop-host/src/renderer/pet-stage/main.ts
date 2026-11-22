@@ -120,6 +120,8 @@ void fetch('./assets/blue-whale-maid/manifest.json')
 
 // ---- T-M5-16（D16）：动作库预览 + ambient 空闲随机链 + 三层情绪映射 ----
 let lastEventAt = Date.now();
+let thoughtTimer: ReturnType<typeof setTimeout> | undefined;
+let dialogTimer: ReturnType<typeof setTimeout> | undefined;
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
 const AMBIENT_IDLE_MS = 30_000;   // 空闲 30s 播一条氛围动作
 const AMBIENT_PLAY_MS = 6_000;    // 播 6s 回 idle
@@ -167,12 +169,23 @@ if (petStageBridge?.onPetPreview) {
 
 // ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
 type AutodriveEventLite = {
-  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end';
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user';
   tool?: string; status?: string; summary?: string; intent?: string; clock?: string;
 };
 if (window.directorBridge?.onAutodriveEvent) {
   window.directorBridge.onAutodriveEvent((event: AutodriveEventLite) => {
     lastEventAt = Date.now();
+    // 双轨气泡（设计稿 §L1/L2）：decision 意图 → 紫云朵内心戏；回话/反射 → 正式对话泡
+    if (event.type === 'decision' && typeof event.intent === 'string' && event.intent.length > 0) {
+      widgets.showThought(event.intent);
+      clearTimeout(thoughtTimer);
+      thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
+    }
+    if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray') && event.summary) {
+      widgets.showDialog(event.summary);
+      clearTimeout(dialogTimer);
+      dialogTimer = setTimeout(() => widgets.hideDialog(), 10_000);
+    }
     if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
       const kind = classifyAutodriveReceipt(event.status, event.tool ?? '', event.summary ?? '');
       const action = GAME_EVENT_ACTION_MAP[kind];

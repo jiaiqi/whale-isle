@@ -10,6 +10,7 @@ import { registerProviderVaultIpc } from './provider-vault';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
+import { createMemoryHost, dayKeyOf } from './memory-host';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
@@ -72,8 +73,11 @@ app.whenReady().then(() => {
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
   const voice = createVoiceHost();
   registerVoiceHostIpc(voice);
+  // 记忆图谱（T-M5-04）：回执入图谱 + 聊天检索
+  const memory = createMemoryHost(app.getPath('userData'));
+  void dayKeyOf;
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
-  const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice);
+  const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice, memory);
   const harness = createHarnessHost();
   const wireTargets = () => {
     const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);

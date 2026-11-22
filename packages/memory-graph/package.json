@@ -1,0 +1,21 @@
+{
+  "name": "@workbench/memory-graph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[T-M5-04] 长期记忆图谱：事件/实体/概念节点 + 语义边 + 混合检索 + 半衰期遗忘（feiyuos-memory-graph MIT 思想重写）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}

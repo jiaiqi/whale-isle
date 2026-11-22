@@ -11,6 +11,11 @@
 
 ### Added
 
+- **设计稿 v3 差异补齐 + T-M5-04 ✅ 记忆图谱（接续完善）**：
+  - **UI 差异补齐**：聊天流新增**紫云朵内心戏卡**（violet dashed 渐变，设计稿 L2）；用户消息改独立右对齐蓝渐变气泡（设计稿 .bub.me）；桌宠双轨气泡换 v3 材质（think=紫云朵 dashed+小圆点尾巴 / dialog=深空玻璃+蓝边+内高光）并**接线 autodrive 事件**（decision.intent→云朵 12s 自动收、chat_reply/reflex→对话泡 10s）；修复回话重复插卡（只信主进程广播）。
+  - **packages/memory-graph**（feiyuos-memory-graph MIT 思想重写，零外部依赖 D14）：`MemoryStore`（JSONL append-only+内存 Map/邻接表+墓碑压实 30% 阈值+半衰期 30 天/宽限 7 天/0.2 剪枝+pinned 永存+**正文消毒**剔路径/内部 id/密钥——修复 `skip_event` 被误掩码的正则误伤）；`retrieve`（中文 2-gram 词法召回→沿边 2 跳图扩展→加权 0.5 相似+0.3 重要+0.2 新近+0.3 钉住→topN，只召回 event/summary）+ `formatMemoryContext`（≤600 字 Token 预算）。
+  - **主进程 `memory-host`**：回执自动入图谱（event+temporal 边，翻车事件重要度更高）；**换日自动写日记**（`春16日 日记：完成 N 项，翻车 M 次…`）；聊天问句检索注入 LLM system（「回答时自然使用记忆，不要编造」）；`memory:query/diary/stats/wipe` IPC。
+  - **真机验收**：60s 自动驾驶 → 13 节点 15 边（lastDay 春16日）；检索「钓鱼」7 条命中；**聊天「你刚才都做了些什么」→ 小鲸答「刚才在春16日跟威利聊钓鱼的事，对话都推进好啦。米粒都差点饿没了呢～」**（记忆驱动+傲娇人设）；293 tests 全绿 + 门禁 4 道。
 - **T-M5-17 ✅ 声音工坊 Voice Studio 全栈落地（契约→后端→UI→测试四件套）**：
   - **契约**（shared-protocol +4 域 → 28 域跨语言重生成）：`PauseConfig`（dsh-gpt-sovits 气口停顿 340/150/460 三档）；`TtsEmotionTuningParams`（5 情绪锚点独立 refText 必填+speed/temperature/topP/topK/pauseConfig/前置音效）；`SvcSingingTuningParams`（dsh-voice-studio RVC 调参：升降调 ±12 半音/indexRate 0.75/气声保护 0.33/人声伴奏混音电平）；`VoiceDesignRequest`（三路径：云端捏声/本地切片/权重导入强制 licenseScope）。
   - **后端**（`services/audio-ai-worker/voice_studio.py` +5 端点 FastAPI 子路由）：`/design`（内置「大肥鱼傲娇蓝鲸女仆」等提示词模板 → stub 生成+prompt 归档+试听 b64）；`/slice-extract`（Demucs 互斥+内存 <4GB 422 降级+确定性 3-8s 切片+ASR 草稿）；`/audition-tts`（**refText 空值 400 拦截 + autoFill 草稿兜底**——防内部 ASR 40s 卡顿；skipCache 实时渲染）；`/audition-svc`（**ResourceMutex：先挂 TTS→RVC→恢复**（mutexTrace 断言）+低内存 422+resourcesLow）；`/save-pack`（五锚点+RVC 原子写 `voice_matrix.json` + 热重载钩子；重复锚点/空 refText 拒绝）。

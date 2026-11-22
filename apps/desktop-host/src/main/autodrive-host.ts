@@ -15,6 +15,7 @@ import {
 } from '@workbench/game-bridge-mcp';
 import { ModelGateway } from '@workbench/model-gateway';
 import { readVaultKey } from './provider-vault';
+import type { MemoryHost } from './memory-host';
 import type { VoiceHost } from './voice-host';
 
 export interface AutodriveHost {
@@ -23,7 +24,7 @@ export interface AutodriveHost {
   setTargets(targets: WebContents[]): void;
 }
 
-export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vaultPath?: string, voiceHost?: VoiceHost): AutodriveHost {
+export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vaultPath?: string, voiceHost?: VoiceHost, memoryHost?: MemoryHost): AutodriveHost {
   const windows: WebContents[] = [];
 
   // ---- T-M6-01 完整版：LLM 大脑（vault key → model-gateway → LlmPlanner） ----
@@ -45,6 +46,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
   let gateway: InstanceType<typeof ModelGateway> | null = null;
   let llmPlanner: LlmPlanner | null = null;
   let recentReceipts: string[] = [];
+  let lastGameClock = '';
   const buildBrain = (): void => {
     if (!vaultPath || !safeStorage.isEncryptionAvailable()) return;
     const key = readVaultKey(vaultPath, 'deepseek-official');
@@ -89,10 +91,16 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
     }
     if (!gateway) return { ok: false, error: '主脑未接通（供应商 key 未配置）' };
     try {
+      // T-M5-04：记忆增强——「你昨天做了什么」类问句检索图谱注入 system
+      const memoryContext = memoryHost?.contextFor(text) ?? '';
+      const system = memoryContext === '' ? XIAOJING_SYSTEM : `${XIAOJING_SYSTEM}
+
+${memoryContext}
+（以上是你的长期记忆；回答时自然地使用，不要编造记忆里没有的事）`;
       const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [
-        { role: 'system', content: XIAOJING_SYSTEM },
+        { role: 'system', content: system },
         { role: 'user', content: text },
-      ], { maxTokens: 200 });
+      ], { maxTokens: 260 });
       broadcast({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: receipt.content } as AutodriveEvent);
       speak({ text: receipt.content, scene: 'normal' });
       return { ok: true, reply: receipt.content };
@@ -165,7 +173,21 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
         speak({ text: '钓到啦！本鱼的手感是天赋！', scene: 'normal' });
       }
     }
+    if (event.type === 'state' && typeof (event as { clock?: string }).clock === 'string') {
+      lastGameClock = (event as { clock?: string }).clock ?? lastGameClock;
+    }
     if (event.type === 'receipt' && event.tool !== 'autodrive') {
+      // T-M5-04：回执自动入记忆图谱（换日自动写日记）
+      try {
+        memoryHost?.onReceipt({
+          summary: String(event.summary ?? '').slice(0, 120),
+          tool: String(event.tool ?? ''),
+          status: String(event.status ?? ''),
+          gameClock: String((event as { clock?: string }).clock ?? lastGameClock),
+        });
+      } catch {
+        /* 记忆失败不影响主链路 */
+      }
       recentReceipts.push(event.status + ' ' + event.tool + ': ' + (event.summary ?? '').slice(0, 80));
       if (recentReceipts.length > 8) recentReceipts = recentReceipts.slice(-8);
       if (llmPlanner) (llmPlanner as unknown as { deps: { recentReceipts: string[] } }).deps.recentReceipts = recentReceipts;

@@ -140,11 +140,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent);
       setEvents((prev) => [...prev, { type: 'decision', tool: directive.tool, intent: directive.intent, planner: 'remote' }]);
     } else {
-      setEvents((prev) => [...prev, { type: 'decision', tool: 'chat', intent: `主人说：${text}`, planner: 'remote' }]);
+      // 用户气泡右对齐；回话由主进程广播 chat_reply 事件（不本地重复插卡）
+      setEvents((prev) => [...prev, { type: 'user', summary: text }]);
       void window.directorBridge.chatSay(text).then((res) => {
-        if (res.ok && res.reply) {
-          setEvents((prev) => [...prev, { type: 'receipt', status: 'COMPLETED', tool: res.reflex ? 'reflex_spray' : 'chat_reply', summary: res.reply }]);
-        } else if (!res.ok) {
+        if (!res.ok) {
           setEvents((prev) => [...prev, { type: 'receipt', status: 'ERROR', tool: 'chat', summary: res.error ?? '主脑未回' }]);
         }
       });
@@ -354,6 +353,43 @@ function KV({ k, v }: { k: string; v: string }): React.JSX.Element {
 }
 
 function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element {
+  // 内心戏云朵（设计稿 L2）：chat/think 类决策与 planner=local 的意图 → 紫云朵卡
+  // 用户消息（本地合成事件）：右对齐蓝渐变气泡（设计稿 .bub.me）
+  if (event.type === 'user') {
+    return (
+      <div data-event="user" className="mb-3 flex justify-end">
+        <div
+          className="max-w-[72%] px-4 py-2.5 text-[13px]"
+          style={{
+            borderRadius: 18,
+            background: 'linear-gradient(135deg, rgba(10,132,255,0.20), rgba(10,132,255,0.10))',
+            border: '1px solid var(--blue-line)',
+            color: 'var(--text-1)',
+          }}
+        >
+          {event.summary}
+        </div>
+      </div>
+    );
+  }
+  // 内心戏云朵（设计稿 L2）：think 决策意图 → 紫云朵 dashed 卡
+  if (event.type === 'decision' && event.tool === 'think') {
+    return (
+      <div
+        data-event="think"
+        className="mb-3 rounded-[18px] p-3"
+        style={{
+          background: 'linear-gradient(135deg, rgba(191,90,242,0.14), rgba(191,90,242,0.05))',
+          border: '1.5px dashed rgba(191,90,242,0.42)',
+          backdropFilter: 'blur(16px)',
+        }}
+      >
+        <div className="mono flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--violet)' }}>
+          <Brain size={11} />内心戏 · {event.intent?.slice(0, 80)}
+        </div>
+      </div>
+    );
+  }
   if (event.type === 'decision') {
     return (
       <div data-event="decision" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--blue-line)', background: 'var(--blue-dim)' }}>

@@ -31,6 +31,9 @@
     },
     {
       "path": "tools/guide-forager"
+    },
+    {
+      "path": "packages/memory-graph"
     }
   ]
 }

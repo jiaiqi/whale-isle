@@ -19,7 +19,8 @@
     "lucide-react": "^1.77.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@workbench/memory-graph": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.13",

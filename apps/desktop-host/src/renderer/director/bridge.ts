@@ -32,7 +32,7 @@ export interface DirectorBridge {
 }
 
 export interface AutodriveEventView {
-  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end';
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user';
   clock?: string;
   stamina?: number;
   staminaMax?: number;
@@ -97,6 +97,15 @@ export interface DirectorBridge {
     currentVoiceId: string;
   }>;
   voiceAudition(voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }>;
+  memoryQuery(query: string): Promise<{
+    ok: boolean;
+    context: string;
+    hits: Array<{ text: string; score: number; type: string }>;
+    totalNodes: number;
+  }>;
+  memoryDiary(day?: string): Promise<{ ok: boolean; day?: string; text?: string; error?: string }>;
+  memoryStats(): Promise<{ nodes: number; edges: number; lastDay: string | null }>;
+  memoryWipe(): Promise<{ ok: boolean }>;
 }
 
 declare global {

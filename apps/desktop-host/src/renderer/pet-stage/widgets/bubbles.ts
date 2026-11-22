@@ -30,10 +30,17 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     position:absolute; left:${layout.thought.x}px; top:${layout.thought.y}px;
     width:${layout.thought.width}px; height:${layout.thought.height}px;
     display:none; overflow:hidden;
-    background:rgba(190,225,255,0.5); backdrop-filter:blur(2px);
-    border:1px solid rgba(255,255,255,0.6); border-radius:18px 18px 22px 10px;
-    font:12px/1.5 "PingFang SC",system-ui,sans-serif; color:#1c3a5e;
-    padding:8px 10px; box-sizing:border-box; pointer-events:none;`;
+    background:linear-gradient(135deg, rgba(191,90,242,0.18), rgba(191,90,242,0.07));
+    backdrop-filter:blur(10px) saturate(1.4);
+    border:1.5px dashed rgba(191,90,242,0.5); border-radius:18px 18px 22px 10px;
+    font:12px/1.55 "PingFang SC",system-ui,sans-serif; color:#dcbcf7;
+    padding:8px 10px; box-sizing:border-box; pointer-events:none;
+    box-shadow:0 4px 16px rgba(0,0,0,0.35);`;
+  const cloudDot = document.createElement('div');
+  cloudDot.style.cssText = `
+    position:absolute; left:26px; bottom:-12px; width:14px; height:14px; border-radius:50%;
+    background:rgba(191,90,242,0.12); border:1.5px dashed rgba(191,90,242,0.4); pointer-events:none; display:none;`;
+  thought.appendChild(cloudDot);
   stage.appendChild(thought);
 
   const dialog = document.createElement('div');
@@ -42,24 +49,27 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     position:absolute; left:${layout.dialog.x}px; top:${layout.dialog.y}px;
     width:${layout.dialog.width}px; height:${layout.dialog.height}px;
     display:none; overflow:hidden;
-    background:rgba(255,255,255,0.92);
-    border:1.5px solid rgba(80,150,220,0.8); border-radius:14px;
-    font:13px/1.5 "PingFang SC",system-ui,sans-serif; color:#0f2b4c;
-    padding:9px 12px; box-sizing:border-box; pointer-events:none;`;
+    background:rgba(20,20,24,0.82);
+    backdrop-filter:blur(14px) saturate(1.5);
+    border:1.5px solid rgba(10,132,255,0.55); border-radius:16px;
+    font:13px/1.55 "PingFang SC",system-ui,sans-serif; color:#f5f5f7;
+    padding:9px 12px; box-sizing:border-box; pointer-events:none;
+    box-shadow:0 8px 28px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);`;
   // 对话泡尾巴（伪三角）
   const tail = document.createElement('div');
   tail.style.cssText = `
     position:absolute; left:22px; bottom:-8px;
     border-left:8px solid transparent; border-right:8px solid transparent;
-    border-top:9px solid rgba(80,150,220,0.8);`;
+    border-top:9px solid rgba(10,132,255,0.55);`;
   dialog.appendChild(tail);
   stage.appendChild(dialog);
 
   const setBubbleText = (el: HTMLElement, text: string) => {
     const body = document.createElement('span');
     body.textContent = text;
-    el.replaceChildren(...(el === dialog ? [tail, body] : [body]));
+    el.replaceChildren(...(el === dialog ? [tail, body] : [cloudDot, body]));
     el.style.display = 'block';
+    cloudDot.style.display = el === thought ? 'block' : 'none';
   };
 
   return {

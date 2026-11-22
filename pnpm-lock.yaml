@@ -38,6 +38,9 @@ importers:
       '@workbench/local-store':
         specifier: workspace:*
         version: link:../../packages/local-store
+      '@workbench/memory-graph':
+        specifier: workspace:*
+        version: link:../../packages/memory-graph
       '@workbench/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
@@ -115,6 +118,12 @@ importers:
       fake-indexeddb:
         specifier: ^6.2.2
         version: 6.2.8
+
+  packages/memory-graph:
+    dependencies:
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../shared-protocol
 
   packages/model-gateway:
     dependencies:

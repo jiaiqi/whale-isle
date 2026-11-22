@@ -68,6 +68,18 @@ contextBridge.exposeInMainWorld('directorBridge', {
   }> => ipcRenderer.invoke('voice:catalog'),
   voiceAudition: (voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('voice:audition', voiceId, mode, text),
+  // 记忆图谱（T-M5-04）
+  memoryQuery: (query: string): Promise<{
+    ok: boolean;
+    context: string;
+    hits: Array<{ text: string; score: number; type: string }>;
+    totalNodes: number;
+  }> => ipcRenderer.invoke('memory:query', query),
+  memoryDiary: (day?: string): Promise<{ ok: boolean; day?: string; text?: string; error?: string }> =>
+    ipcRenderer.invoke('memory:diary', day),
+  memoryStats: (): Promise<{ nodes: number; edges: number; lastDay: string | null }> =>
+    ipcRenderer.invoke('memory:stats'),
+  memoryWipe: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('memory:wipe'),
 });
 
 contextBridge.exposeInMainWorld('petStage', {
