@@ -110,8 +110,10 @@ let directorWindow: BrowserWindow | null = null;
 
 function createStageWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 440,
-    height: 300,
+    // 窗口贴合舞台 400×260（footline 21px 余量 → 284）：旧 440×300 右侧 40px、底部 19px
+    // 是纯透明死区，用户真机反馈「透明宽度影响桌面操作」——收边减少屏幕占用与命中面积
+    width: 400,
+    height: 284,
     title: `${APP_NAME} · 桌宠`,
     icon: brandAssetPath(BRAND_ASSETS.iconPng),
     frame: false,

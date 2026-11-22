@@ -2,13 +2,17 @@
  * 像素级鼠标穿透状态机（T-M1-02，SPEC §3.1）。
  *
  * 策略：渲染进程每 intervalMs 采样鼠标所在像素的 alpha——
- *   alpha > 20  → interactive（允许拖拽/抚摸/右键）
- *   alpha <= 20 → passthrough（setIgnoreMouseEvents(true, {forward:true})，点击穿透到星露谷/桌面）
+ *   alpha > 64  → interactive（允许拖拽/抚摸/右键）
+ *   alpha <= 64 → passthrough（setIgnoreMouseEvents(true, {forward:true})，点击穿透到星露谷/桌面）
  * 仅在状态翻转时调用 apply（避免 50ms 轮询打爆 IPC）。
  * 纯逻辑无 DOM/Electron 依赖——采样与执行由注入完成。
+ *
+ * 阈值 20→64（2026-11-22 用户真机反馈「透明区太宽影响桌面操作」）：webm 软边/光晕常带
+ * alpha 21~63 的半透明像素，旧阈值把它们全当可点击；抬高后只有接近实心的身体拦截鼠标，
+ * 半透明发光边缘直接穿透。实体身体像素 alpha 通常 >200，拖拽不受影响。
  */
 
-export const ALPHA_THRESHOLD = 20;
+export const ALPHA_THRESHOLD = 64;
 
 export type PassthroughState = 'passthrough' | 'interactive';
 

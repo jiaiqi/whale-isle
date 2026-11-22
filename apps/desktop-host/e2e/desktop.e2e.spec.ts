@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * [E2E-HOST] T-M1-02 门禁：Playwright Electron。
  *   ① 窗口属性：transparent/frameless/alwaysOnTop/skipTaskbar（创建配置 + 真实 alwaysOnTop API 双证）
- *   ② alpha 穿透状态机：force(255/21)→interactive；force(0/19/20)→passthrough（阈值 20 边界）
+ *   ② alpha 穿透状态机：force(255/65)→interactive；force(0/64/63)→passthrough（阈值 64，软边不拦操作）
  *   ③ 拖拽：dragTo 越界值被主进程夹紧在多屏合并 workArea 内
  * OS 级真实点击穿透属 [REAL-DEVICE]（VERIFY.md 真机抽检栏），此处不冒充。
  */
@@ -80,15 +80,17 @@ describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
       };
       expect(meta).toMatchObject({ transparent: true, frame: false, testMode: true });
 
-      // ② alpha 状态机（阈值 20：>20 交互，<=20 穿透）
+      // ② alpha 状态机（阈值 64：>64 交互，<=64 穿透——半透明软边不拦桌面操作）
       const forceAlpha = (alpha: number) => win.evaluate((value) => (window as unknown as PetStageWindow).petStage.forceAlpha?.(value) ?? false, alpha);
       const stateIs = (expected: 'passthrough' | 'interactive') =>
         win.evaluate(() => (window as unknown as PetStageWindow).petStage.getState()).then((state) => state === expected);
       await forceAlpha(255);
       await waitFor(win, () => stateIs('interactive'));
-      await forceAlpha(21);
+      await forceAlpha(65);
       await waitFor(win, () => stateIs('interactive'));
-      await forceAlpha(20);
+      await forceAlpha(64);
+      await waitFor(win, () => stateIs('passthrough'));
+      await forceAlpha(63); // 软边光晕必须穿透
       await waitFor(win, () => stateIs('passthrough'));
       await forceAlpha(0);
       await waitFor(win, () => stateIs('passthrough'));

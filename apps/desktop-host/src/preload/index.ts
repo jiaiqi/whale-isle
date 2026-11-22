@@ -112,6 +112,9 @@ contextBridge.exposeInMainWorld('petStage', {
   mousePoint: () => ipcRenderer.invoke('cursor:point'),
   winPosition: (): Promise<[number, number] | null> => ipcRenderer.invoke('win:get-position'),
   dragTo: (x: number, y: number): Promise<[number, number] | null> => ipcRenderer.invoke('win:drag-to', x, y),
+  // T-M1-05 改版：桌宠窗自拉饭碗余额（默认隐藏 / hover 显示 / 饿态亮灯）
+  riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> =>
+    ipcRenderer.invoke('rice:status'),
   appMeta: () => ipcRenderer.invoke('app:meta'),
   // T-M5-16：动作库预览中继（main → pet-stage 窗）
   onPetPreview: (handler: (detail: { action: string; clipId: string | null }) => void) => {

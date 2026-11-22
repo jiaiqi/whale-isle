@@ -1,11 +1,16 @@
 /**
- * 赛博饭碗挂件（T-M1-05）：右上角 🍚 + 余量进度条；
- * 低于 15%（persona-brain 饥饿线）切换"饿瘪"配色，与 hungry_lazy 状态对齐。
+ * 赛博饭碗挂件（T-M1-05；2026-11-22 用户指令改版）：
+ *   - 位置从头顶右上挪到**脚下左下**（对话泡贴右下、云朵泡左上，左下无冲突）；
+ *   - **默认隐藏**——hover 桌宠时显示，米量低于 15%（persona 饥饿线）时强制亮灯提醒；
+ *   - 低于 15% 切换「饿瘪」配色，与 hungry_lazy 状态对齐。
  */
 
 export interface RiceBowlWidget {
   setRatio(ratio: number): void;
   ratio(): number;
+  show(): void;
+  hide(): void;
+  visible(): boolean;
 }
 
 export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
@@ -13,8 +18,8 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
   const root = document.createElement('div');
   root.className = 'pet-widget--rice-bowl';
   root.style.cssText = `
-    position:absolute; right:6px; top:4px;
-    display:flex; align-items:center; gap:6px;
+    position:absolute; left:8px; bottom:6px;
+    display:none; align-items:center; gap:6px;
     background:rgba(15,43,76,0.55); border-radius:12px;
     padding:3px 8px; pointer-events:none; font:11px/1.4 monospace; color:#ffe9b8;`;
   const emoji = document.createElement('span');
@@ -32,6 +37,11 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
   stage.appendChild(root);
 
   let current = 1;
+  let shown = false;
+  const applyVisible = (next: boolean): void => {
+    shown = next;
+    root.style.display = next ? 'flex' : 'none';
+  };
   return {
     setRatio(ratio: number) {
       const clamped = Math.min(Math.max(ratio, 0), 1);
@@ -45,6 +55,15 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
     },
     ratio() {
       return current;
+    },
+    show() {
+      applyVisible(true);
+    },
+    hide() {
+      applyVisible(false);
+    },
+    visible() {
+      return shown;
     },
   };
 }

@@ -6,16 +6,17 @@ import {
   type PassthroughState,
 } from './alpha-probe';
 
-/** [SIMULATION] T-M1-02：alpha 穿透状态机纯逻辑（阈值 20 / 翻转去重 / force 钩子） */
+/** [SIMULATION] T-M1-02：alpha 穿透状态机纯逻辑（阈值 64 / 翻转去重 / force 钩子） */
 
-describe('decidePassthrough（alpha 阈值 20）', () => {
-  it('边界语义：alpha>20 交互，<=20 穿透', () => {
+describe('decidePassthrough（alpha 阈值 64）', () => {
+  it('边界语义：alpha>64 交互，<=64 穿透（软边光晕 21~63 直接穿透不拦桌面操作）', () => {
     expect(decidePassthrough(255)).toBe('interactive');
-    expect(decidePassthrough(21)).toBe('interactive');
-    expect(decidePassthrough(20)).toBe('passthrough');
-    expect(decidePassthrough(19)).toBe('passthrough');
+    expect(decidePassthrough(200)).toBe('interactive'); // 实心身体照常可拖拽
+    expect(decidePassthrough(65)).toBe('interactive');
+    expect(decidePassthrough(64)).toBe('passthrough');
+    expect(decidePassthrough(63)).toBe('passthrough'); // 半透明软边 → 穿透
     expect(decidePassthrough(0)).toBe('passthrough');
-    expect(ALPHA_THRESHOLD).toBe(20);
+    expect(ALPHA_THRESHOLD).toBe(64);
   });
 });
 

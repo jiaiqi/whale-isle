@@ -20,6 +20,7 @@ interface PetStageBridge {
   mousePoint(): Promise<{ x: number; y: number }>;
   winPosition(): Promise<[number, number] | null>;
   dragTo(x: number, y: number): Promise<[number, number] | null>;
+  riceStatus(): Promise<{ balance: number; budget: number; consumedToday: number; level: string }>;
   appMeta(): Promise<{ transparent: boolean; frame: boolean; alwaysOnTop: boolean; skipTaskbar: boolean; testMode: boolean }>;
   forceAlpha?(alpha: number): Promise<boolean>;
   onTestAlpha?(handler: (alpha: number) => void): void;
@@ -131,14 +132,31 @@ const petStageBridge = (window as unknown as {
   petStage?: {
     onPetPreview?: (h: (d: { action: string; clipId: string | null }) => void) => void;
     onPetRice?: (h: (d: { level: string; balance: number }) => void) => void;
+    riceStatus?: () => Promise<{ balance: number; budget: number; consumedToday: number; level: string }>;
   };
 }).petStage;
 // D16：饭碗档位 → 桌宠动作（hungry→饿瘪/starving→睡觉/fed_buff→开吃/full→女仆礼）
+// 2026-11-22 改版：饭碗默认隐藏（hover 桌宠显示 / 米量 <15% 强制亮灯），并随档位事件实时刷新真实米量
+let hoverOnPet = false;
+let lastRiceRatio = 1;
+/** 饭碗显隐统一入口：hover 或饿态（<15%）才显示，平时不占桌面视觉（widget 在下方挂载，回调晚于初始化） */
+function refreshRiceWidget(ratio?: number): void {
+  if (ratio !== undefined) {
+    lastRiceRatio = Math.min(Math.max(ratio, 0), 1);
+    riceBowlWidget.setRatio(lastRiceRatio);
+  }
+  if (hoverOnPet || lastRiceRatio < 0.15) riceBowlWidget.show();
+  else riceBowlWidget.hide();
+}
 if (petStageBridge?.onPetRice) {
   petStageBridge.onPetRice((detail) => {
     const action = RICE_LEVEL_ACTION_MAP[detail.level as keyof typeof RICE_LEVEL_ACTION_MAP];
     if (action) void renderer.play(action).catch(() => undefined);
     lastEventAt = Date.now(); // 档位事件抑制 ambient 链
+    // 随档位事件刷新真实米量：budget 从 bridge 异步读取（widget 已在下方挂载，此处回调晚于初始化）
+    void petStageBridge?.riceStatus?.().then((st) => {
+      if (st.budget > 0) refreshRiceWidget(detail.balance / st.budget);
+    }).catch(() => undefined);
   });
 }
 if (petStageBridge?.onPetPreview) {
@@ -352,8 +370,15 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
 }
 
 // ---- UI 挂件（T-M1-05）：双轨气泡 + 赛博饭碗 ----
-const widgets = mountBubbleWidgets(stage, { width: 440, height: 300 });
+// 舞台 CSS 实际 400×260（窗口 400×284 留脚线 21px 余量）；旧代码按 440×300 算气泡会贴出窗右缘
+const widgets = mountBubbleWidgets(stage, { width: 400, height: 260 });
 const riceBowlWidget = mountRiceBowlWidget(stage);
+// 初始米量水合 + hover 显隐（默认隐藏；<15% 饿态强制亮灯）
+void bridge.riceStatus().then((st) => {
+  if (st.budget > 0) refreshRiceWidget(st.balance / st.budget);
+}).catch(() => undefined);
+stage.addEventListener('mouseenter', () => { hoverOnPet = true; refreshRiceWidget(); });
+stage.addEventListener('mouseleave', () => { hoverOnPet = false; refreshRiceWidget(); });
 
 // E2E 就绪标记 + 测试钩子（PET_STAGE_E2E=1 门控）
 void bridge.appMeta().then((meta) => {
@@ -369,8 +394,9 @@ void bridge.appMeta().then((meta) => {
         widgets.hideDialog();
       },
       bubbleRects: () => widgets.rects(),
-      setRiceRatio: (ratio: number) => riceBowlWidget.setRatio(ratio),
+      setRiceRatio: (ratio: number) => refreshRiceWidget(ratio), // 饿态（<15%）测试自动亮灯，与线上行为一致
       riceRatio: () => riceBowlWidget.ratio(),
+      riceVisible: () => riceBowlWidget.visible(),
       bubbleElements: () => ({
         thought: document.querySelector('.pet-bubble--thought')?.getBoundingClientRect().toJSON() ?? null,
         dialog: document.querySelector('.pet-bubble--dialog')?.getBoundingClientRect().toJSON() ?? null,
