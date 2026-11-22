@@ -13,7 +13,16 @@
 
 - **默认启用 LLM 大脑（用户指令）**：`autodrive-host` 的 `brainMode` 默认 `'llm'` 且 `runner` 初始 planner 直接注入 `LlmPlanner`（DeepSeek key 就绪即用）；key 未配置时自动回落规则日程并在顶栏显示。真机验证：启动即 `{"mode":"llm","llmReady":true}`、顶栏按钮「LLM 大脑」、决策流 `planner=llm-xiaojing`；规则日程仍可一键切回。
 
-### Added
+### Fixed
+
+- **全功能真机回归修复（2026-11-22，用户指令「把所有功能都测试一遍」）**：
+  - **浅色主题 legacy 面板黑块**：供应商/Harness/动作库仍在用 `bg-slate-900` 等深色写死类 → 浅色下把 `--color-slate-*` 色阶整体翻转（截图复验白卡）。
+  - **饭碗/记忆 badge 不刷新**：回执扣米与换日日记不是推送式 → 15s 轮询 `rice:status`/`memory:stats`。
+  - **`get_state` 省略背包段被误判**：BWF 对未变化段落会省略，`freeSlots` 回落 12 导致「满包」被当成「有空位」→ 双规划器记住上次解析值。
+  - **贵重物拒扔导致救援卡死**：BWF 拒绝扔能卖 300g 的家具并建议扔鱼饵 → 记录 `rejectedTrash` 并新增鱼饵/种子兜底阶梯；等待态不再抢先触发。
+  - **外部启动自驾按钮不刷新**：事件流收到 state/decision/receipt 即置 running。
+  - **聊天 Markdown 行距过大**：气泡容器 `white-space: pre-wrap` 与列表块叠加 → 移除。
+  - 记忆页 `lastDay` 回落最新日记、窄窗口统计条/按钮溢出、图谱 zoomToFit；桌宠舞台空状态改为「等待游戏状态…」。
 
 - **工作台 UI v4「曜石 · 演进版」还原（用户指令：按最新设计稿更新，优先开源库）**：
   - **设计系统**：`design-tokens.css` 与 `design/tokens.css` 逐行同步（v4 深浅色板/玻璃卡/seg-tabs/switch/range/动效）；移除全局 `*` 重置（unlayered CSS 会压过 Tailwind utilities，导致全站 padding 失效的坑已修）。

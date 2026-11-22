@@ -13,6 +13,7 @@ import {
   listShippableItems,
   pickAnyNonEssential,
   pickTrash,
+  pickTrashableFallback,
   type GameStateSnapshot,
   type Planner,
   type PlannerDecision,
@@ -128,8 +129,10 @@ const RESCUE_TOOLS: ReadonlySet<string> = new Set(RESCUE_STEP.keys());
 function failedItemOf(receipt: string): string {
   const noSuch = /(?:背包里没有|没有)[“"]([^”"]+)[”"]/.exec(receipt);
   if (noSuch?.[1]) return cleanItemName(noSuch[1]);
+  const trash = /失败：(?:\d+:)?(.+?)x\d+.*没有扔/.exec(receipt);
+  if (trash?.[1]) return cleanItemName(trash[1]);
   const m =
-    /失败：(.+?)\s*(?:不能出货|无法出货|不在背包|是社区中心|不能吃|吃不|会坏)/.exec(receipt);
+    /失败：(.+?)\s*(?:不能出货|无法出货|不在背包|是社区中心|不能吃|吃不|会坏|一个能卖)/.exec(receipt);
   return cleanItemName(m?.[1] ?? '');
 }
 
@@ -140,9 +143,12 @@ export class LlmPlanner implements Planner {
   /** 背包救援阶段（0 tidy → 1 ship → 2 eat → 3 trash → 4 store → 5 任意非必需品）：失败才前进 */
   private rescueStage = 0;
   private lastRescueFail = '';
+  /** 上次解析到的背包空位；get_state 省略背包段时沿用，避免把「满」误判成「空」 */
+  private lastFreeSlots: number | null = null;
   /** 被 BWF 拒绝过的单品（不能出货的家具/任务鱼等）——换下一个候选而不是换策略 */
   private readonly rejectedShip = new Set<string>();
   private readonly rejectedEat = new Set<string>();
+  private readonly rejectedTrash = new Set<string>();
 
   constructor(private readonly deps: LlmPlannerDeps) {}
 
@@ -162,20 +168,34 @@ export class LlmPlanner implements Planner {
       .filter((t) => t !== '');
     const tail2 = failTools.slice(-2);
     const repeated = tail2.length === 2 && tail2[0] === tail2[1];
+    const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
+    if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
+    const effectiveSlots = rawHasSlots ? state.freeSlots : (this.lastFreeSlots ?? state.freeSlots);
     const inventoryFull =
-      state.freeSlots <= 0 ||
+      effectiveSlots <= 0 ||
       /背包满|背包.{0,6}满|空位：?0|空位 0|装不下/.test(recent.slice(-2).join(' '));
     // 腾出空位 = 本次背包危机结束，救援阶段归零
-    if (state.freeSlots > 0) {
+    if (effectiveSlots > 0) {
       this.rescueStage = 0;
       this.lastRescueFail = '';
       this.rejectedShip.clear();
       this.rejectedEat.clear();
+      this.rejectedTrash.clear();
     }
     if (inventoryFull) {
       // 救援阶梯（BWF Tidy.cs：农场没有箱子时 tidy/store 必失败；feiyu LESSONS：满包合成会掉地上）：
       //   tidy（purpose 按当前时段）→ ship（不依赖箱子，能赚钱）→ eat → trash → store → 任意非必需品
       const noChest = /没有箱子|craft Chest/.test(recent.slice(-3).join(' '));
+      // 先把最近回执里所有「单品级拒绝」记进黑名单（哪怕失败的不是最后一条）
+      for (const receipt of recent.slice(-4)) {
+        const tool = /^FAILED\s+([^\s:：]+)/.exec(receipt)?.[1] ?? '';
+        if (tool !== 'ship_items' && tool !== 'eat' && tool !== 'trash_item') continue;
+        const item = failedItemOf(receipt);
+        if (item === '') continue;
+        if (tool === 'ship_items') this.rejectedShip.add(item);
+        else if (tool === 'eat') this.rejectedEat.add(item);
+        else this.rejectedTrash.add(item);
+      }
       const lastFail = failTools.at(-1) ?? '';
       if (RESCUE_TOOLS.has(lastFail) && lastFail !== this.lastRescueFail) {
         this.lastRescueFail = lastFail;
@@ -185,6 +205,9 @@ export class LlmPlanner implements Planner {
           this.rejectedShip.add(failedItem);
         } else if (lastFail === 'eat' && failedItem !== '') {
           this.rejectedEat.add(failedItem);
+        } else if (lastFail === 'trash_item' && failedItem !== '') {
+          // BWF 会拒绝扔贵重物（「普通窗户一个能卖 300g，没有扔」）→ 记住换下一个
+          this.rejectedTrash.add(failedItem);
         } else {
           // 策略级失败：跃迁到「该工具之后」的阶梯（ship 失败 → eat；eat 失败 → trash…）
           this.rescueStage = Math.min(
@@ -192,10 +215,6 @@ export class LlmPlanner implements Planner {
             5,
           );
         }
-      }
-      // 任何东西都腾不出来：别再空转，等主人处理（看门狗会把 wait 事件亮出来）
-      if (this.rescueStage === 5 && lastFail === 'trash_item') {
-        return { kind: 'wait', seconds: 30, reason: '背包卡死：没有可卖/可吃/可扔的东西了，主人给我造个箱子吧' };
       }
       const start = noChest ? Math.max(1, this.rescueStage) : this.rescueStage;
       for (let step = start; step <= 5; step++) {
@@ -205,7 +224,8 @@ export class LlmPlanner implements Planner {
           return decision;
         }
       }
-      return this.fallback.decide(state);
+      // 连鱼饵都不让扔/没有候选：别再空转，等主人处理（看门狗会把 wait 事件亮出来）
+      return { kind: 'wait', seconds: 30, reason: '背包卡死：没有可卖/可吃/可扔的东西了，主人给我造个箱子吧' };
     }
     if (repeated) {
       return this.fallback.decide(state);
@@ -269,8 +289,9 @@ export class LlmPlanner implements Planner {
       case 4:
         return { kind: 'act', tool: 'store_items', args: {}, intent: '把杂物存进箱子腾位置（箱子满了就只能先出货了）' };
       default: {
-        // 最后手段：家具之类卖不掉又不吃的非工具物品，扔一件换一格（绝不碰【留着】任务物品）
-        const item = pickAnyNonEssential(state.raw);
+        // 最后手段：家具之类卖不掉又不吃的非工具物品；贵重物被 BWF 拒绝时退到鱼饵/种子类
+        const item = pickAnyNonEssential(state.raw, this.rejectedTrash)
+          ?? pickTrashableFallback(state.raw, this.rejectedTrash);
         if (item === null) return null;
         return { kind: 'act', tool: 'trash_item', args: { item }, intent: `实在腾不出位置，只好忍痛扔掉${item}了` };
       }

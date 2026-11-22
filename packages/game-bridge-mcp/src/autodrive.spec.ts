@@ -165,6 +165,20 @@ describe('RulePlanner 确定性日程', () => {
     expect(withFish.kind === 'act' && withFish.args).toEqual({ item: '小嘴鲈鱼' });
   });
 
+  it('省略背包段时沿用上次空位（规则模式也不会当有空位去钓鱼）', async () => {
+    const p = new RulePlanner();
+    const full = {
+      ...base,
+      freeSlots: 0,
+      raw: `${STATE_OK}\n## 背包（序号: 物品）\n4: 小嘴鲈鱼 [可食用 +45 体力]\n背包空位：0 个（共 12 格）`,
+    };
+    const d1 = await p.decide(full);
+    expect(d1.kind === 'act' && d1.tool).toBe('ship_items');
+    const omitted = { ...base, freeSlots: 12 }; // raw 无背包段（BWF 省略未变化段落）
+    const d2 = await p.decide(omitted);
+    expect(d2.kind === 'act' && d2.tool).not.toBe('fish');
+  });
+
   it('商店/选择题界面：close_menu 与带选项 dialogue（确定性，不问 LLM）', async () => {
     const p = new RulePlanner();
     const shop = await p.decide({ ...base, menu: '商店界面（Shop）' });

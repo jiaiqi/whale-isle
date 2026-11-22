@@ -102,9 +102,15 @@ export function PetStagePanel({ events, running }: PetStagePanelProps): React.JS
         {/* 底部状态条 */}
         <div className="absolute bottom-2 left-4 right-4 flex items-center gap-3 text-[10px]" style={{ color: 'var(--text-3)' }}>
           <span className="flex items-center gap-1"><Fish size={11} style={{ color: 'var(--green)' }} />{running ? '自动驾驶中' : '待命'}</span>
-          <span className="mono">{latestState?.clock ?? '—'} · {latestState?.location ?? '—'}</span>
-          <span className="mono">{latestState === undefined ? '体力 —' : `体力 ${staminaPct}%`}</span>
-          <span className="mono">{latestState?.money != null ? `${latestState.money}g` : '—'}</span>
+          {latestState === undefined ? (
+            <span className="mono">等待游戏状态…</span>
+          ) : (
+            <>
+              <span className="mono">{latestState.clock} · {latestState.location}</span>
+              <span className="mono">体力 {staminaPct}%</span>
+              <span className="mono">{latestState.money != null ? `${latestState.money}g` : '—'}</span>
+            </>
+          )}
           {!showGoals && <button className="ml-auto pill" style={{ fontSize: 9 }} onClick={() => setShowGoals(true)}>显示目标</button>}
         </div>
       </section>

@@ -137,14 +137,30 @@ export function pickTrash(raw: string): string | null {
 }
 
 /** 最后手段：任何非工具、非任务、非消耗品的东西（宁可丢一件家具也别卡死） */
-export function pickAnyNonEssential(raw: string): string | null {
+export function pickAnyNonEssential(raw: string, rejected?: ReadonlySet<string>): string | null {
   let candidate: string | null = null;
   for (const text of inventoryTexts(raw)) {
     if (KEEP_TAG_RE.test(text)) continue;
     if (ESSENTIAL_RE.test(text)) continue;
     if (/\[可食用/.test(text)) continue; // 能吃的留给 eat 阶段
     const name = cleanItemName(text);
-    if (name !== '') candidate = name;
+    if (name !== '' && !(rejected?.has(name) ?? false)) candidate = name;
+  }
+  return candidate;
+}
+
+/**
+ * 比家具更低的最后兜底：BWF 明确建议「能扔的不值钱的东西：鱼饵」时，允许丢消耗品换一格。
+ * 只在不值钱物品也被拒绝（如贵重家具）后使用；仍不碰工具与任务物品。
+ */
+export function pickTrashableFallback(raw: string, rejected?: ReadonlySet<string>): string | null {
+  let candidate: string | null = null;
+  for (const text of inventoryTexts(raw)) {
+    if (KEEP_TAG_RE.test(text)) continue;
+    if (/^(?:斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)/.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name === '' || (rejected?.has(name) ?? false)) continue;
+    if (/鱼饵|种子|肥料|垃圾/.test(name)) candidate = name;
   }
   return candidate;
 }
@@ -182,6 +198,8 @@ export class RulePlanner implements Planner {
   readonly name = 'rule-schedule';
   private phase: 'morning-mail' | 'farm-work' | 'fishing' | 'forage' = 'farm-work';
   private lastPhaseDay = -1;
+  /** 上次解析到的背包空位（BWF get_state 会省掉未变化段落，不能把「省略」当「有空位」） */
+  private lastFreeSlots: number | null = null;
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
     const menu = handleMenu(state);
@@ -207,7 +225,10 @@ export class RulePlanner implements Planner {
     }
     // 背包塞满：任何采集/钓鱼都会失败（真机 2026-11-22 连续 FAILED fish 教训）。
     // 规则模式无回执上下文：优先出货（不依赖农场箱子，还能赚钱），没可卖的才整理。
-    if (state.freeSlots <= 0) {
+    const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
+    if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
+    const effectiveSlots = rawHasSlots ? state.freeSlots : (this.lastFreeSlots ?? state.freeSlots);
+    if (effectiveSlots <= 0) {
       const item = pickShippableItem(state.raw);
       if (item !== null) {
         return { kind: 'act', tool: 'ship_items', args: { item }, intent: `背包满了，先把${item}出货换米腾位置` };

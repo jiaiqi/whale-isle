@@ -172,6 +172,34 @@ describe('LlmPlanner 决策链', () => {
     expect(trash.kind === 'act' && trash.args).toEqual({ item: '破损的眼镜' });
   });
 
+  it('贵重家具被拒扔 → 记住并退到鱼饵（BWF「一个能卖 300g，没有扔」）', async () => {
+    const raw = `${STATE_FULL}
+6: 普通窗户
+11: 鱼饵 x25`;
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED trash_item: 失败：6:普通窗户x1 一个能卖 300g，没有扔。能扔的不值钱的东西：11:鱼饵x25',
+        'FAILED store_items: 失败：这里没有箱子',
+      ],
+    });
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind === 'act' && d.tool).toBe('trash_item');
+    expect(d.kind === 'act' && d.args).toEqual({ item: '鱼饵' });
+  });
+
+  it('get_state 省略背包段（未变化）→ 沿用上次空位 0，不误判为有空位', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED tidy_backpack: 失败：农场上没有箱子'],
+    });
+    const d1 = await planner.decide(parseGameState(STATE_FULL)); // 建立 lastFreeSlots=0
+    expect(d1.kind === 'act' && d1.tool).toBe('ship_items');
+    const noSlotsLine = STATE_FULL.replace('背包空位：0 个（共 12 格）', '');
+    const d2 = await planner.decide(parseGameState(noSlotsLine)); // 省略背包空位行
+    expect(d2.kind === 'act' && d2.tool).toBe('ship_items');
+  });
+
   it('腾出空位后救援阶段归零：恢复 LLM 正常决策', async () => {
     let asked = 0;
     const planner = new LlmPlanner({

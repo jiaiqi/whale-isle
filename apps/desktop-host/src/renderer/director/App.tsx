@@ -148,6 +148,16 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     if (el) el.scrollTop = el.scrollHeight;
   }, [events.length, tab]);
 
+  // 侧栏碗/记忆 badge 低频轮询（回执扣米与换日写日记不是推送式，15s 足够）
+  useEffect(() => {
+    const refresh = (): void => {
+      void window.directorBridge.riceStatus().then((r) => setRice(r.balance));
+      void window.directorBridge.memoryStats().then((m) => setMemoryStats(m));
+    };
+    const timer = setInterval(refresh, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('wb-tab', tab);
   }, [tab]);
