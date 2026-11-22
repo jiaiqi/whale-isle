@@ -42,7 +42,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
     },
     secretMaskingEnabled: true,
   };
-  let brainMode: 'rule' | 'llm' = 'rule';
+  let brainMode: 'rule' | 'llm' = 'llm'; // 默认 LLM 大脑（llmPlanner 未就绪时自动回落规则）
   let gateway: InstanceType<typeof ModelGateway> | null = null;
   let llmPlanner: LlmPlanner | null = null;
   let recentReceipts: string[] = [];
@@ -219,6 +219,13 @@ ${memoryContext}
     return { ok: true };
   });
   ipcMain.handle('autodrive:status', () => ({ running: runner.isRunning() }));
+
+  // 默认 LLM 大脑（用户指令 2026-11-22）：DeepSeek key 就绪即启用；未就绪自动回落规则日程
+  if (llmPlanner) {
+    (runner as unknown as { planner: unknown }).planner = llmPlanner;
+  } else {
+    brainMode = 'rule';
+  }
 
   return {
     runner,

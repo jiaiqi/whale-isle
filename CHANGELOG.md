@@ -9,6 +9,10 @@
 - **设计稿 v2 重做（ui-ux-pro-max 工作流，决策 D4/D9/D10）**：`design/` 全套升级——设计系统由 skill 数据库生成（Modern Dark 开发者工具风格、密度 8/10、Expo.out/spring 动效规格）；run-green 主操作色（#22C55E，"code dark + run green"）替代蓝紫 AI 味（v3 中绿转为纯运行/成功语义色）；lucide SVG 全量替换 emoji（本地 vendor/lucide.min.js，UI 零 emoji）；深/浅双主题完整 token（shell.js 持久切换）；7 页结构确立并经 Chrome headless 深浅双主题截图验证。
 - **产品功能设计 v2（定位升级）**：[docs/PRODUCT-DESIGN.md](docs/PRODUCT-DESIGN.md) 重写——从「AI VTuber 工作台」升级为**通用个人 AI 工作台**（用户决策 D6~D10）：桌宠/直播/星露谷等全部收编为**可开关插件**；插件系统对齐 dsh（Cordis 插件树/defineTool/三层约定）+ 兼容层规划；新增 **ACP Harness 层**（参考 pingdotgg/t3code，MIT 68.5k★，已克隆分析：providers-acp/线程/远程审批，`dsh --profile acp` 直连）；技术栈选型（React 19 + Tailwind v4 + zustand + motion + **lucide-react 图标** + Electron + WebUI 双形态 + Vite 评估）；主题系统（深/浅/跟随+主题色）；ROADMAP 新增 M6 批次 4 工单（Shell+插件内核 / ACP Harness / dsh 兼容层 / WebUI），原 T-M5-03 并入 T-M6-01、T-M5-07 并入 T-M6-02。
 
+### Changed
+
+- **默认启用 LLM 大脑（用户指令）**：`autodrive-host` 的 `brainMode` 默认 `'llm'` 且 `runner` 初始 planner 直接注入 `LlmPlanner`（DeepSeek key 就绪即用）；key 未配置时自动回落规则日程并在顶栏显示。真机验证：启动即 `{"mode":"llm","llmReady":true}`、顶栏按钮「LLM 大脑」、决策流 `planner=llm-xiaojing`；规则日程仍可一键切回。
+
 ### Added
 
 - **设计稿 v3 差异补齐 + T-M5-04 ✅ 记忆图谱（接续完善）**：
