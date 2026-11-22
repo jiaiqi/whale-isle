@@ -1,7 +1,7 @@
-# AI VTuber Workbench — AI 桌宠与虚拟主播工作台
+# 鲸屿 Whale Isle — AI 桌宠与虚拟主播工作台
 
-> 傲娇干饭蓝鲸女仆「**小鲸（大肥鱼）**」：桌面桌宠 × 《星露谷》丝滑共玩 × 抖音直播中控，**100% 本地优先、断网可用**。
-> 支持 macOS（Apple Silicon / `mps`）与 Windows（x64 / `cuda`）。
+> 一座住在桌面上的鲸屿。傲娇干饭蓝鲸女仆「**小鲸（大肥鱼）**」：桌面桌宠 × 《星露谷》丝滑共玩 × 抖音直播中控，**100% 本地优先、断网可用**。
+> 支持 macOS（Apple Silicon / `mps`）与 Windows（x64 / `cuda`）。仓库代号仍为 `ai-vtuber-workbench`。
 
 ## 文档导航（AI 编程代理与人类宿主必读）
 

@@ -6,7 +6,7 @@
  * 类型检查由根 tsc -b 负责（本脚本只做打包与拷贝）。
  */
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -80,8 +80,10 @@ const directorDir = join(appRoot, 'dist/renderer/director');
 mkdirSync(directorDir, { recursive: true });
 copyFileSync(join(appRoot, 'src/renderer/director/index.html'), join(directorDir, 'index.html'));
 
+// 品牌资源（应用图标 / 侧栏 favicon / WebUI logo）：assets/brand → dist/renderer/brand
+cpSync(join(appRoot, 'assets/brand'), join(appRoot, 'dist/renderer/brand'), { recursive: true });
+
 // pet 素材（D14 随包分发）：pet-renderer/assets → dist/renderer/assets
-import { cpSync } from 'node:fs';
 cpSync(
   join(repoRoot, 'packages/pet-renderer/assets'),
   join(appRoot, 'dist/renderer/pet-stage/assets'), // pet-stage html 在子目录，./assets 相对该目录解析

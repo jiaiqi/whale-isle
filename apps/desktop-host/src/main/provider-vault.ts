@@ -79,8 +79,15 @@ function storedKeyInner(vaultPath: string, providerId: string): string | null {
   const cipherB64 = loadVault(vaultPath)[providerId];
   if (!cipherB64) return null;
   if (!safeStorage.isEncryptionAvailable()) return null;
-  const buffer = safeStorage.decryptString(Buffer.from(cipherB64, 'base64'));
-  return buffer.length > 0 ? buffer : null;
+  try {
+    const buffer = safeStorage.decryptString(Buffer.from(cipherB64, 'base64'));
+    return buffer.length > 0 ? buffer : null;
+  } catch {
+    // Keychain 密钥失配（如应用重命名/换机器）时 fail-closed：不崩主进程，UI 显示为未配置，
+    // 由用户重新填写 Key；绝不回落明文或旧密钥。
+    console.warn(`[vault] 凭据解密失败（provider=${providerId}），请在模型与服务商页重新填写 Key`);
+    return null;
+  }
 }
 
 function isOpenCodeUrl(baseUrl: string): boolean {

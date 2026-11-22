@@ -30,6 +30,7 @@ import {
   readJsonBody,
   isRecord,
 } from '../webui/http-utils';
+import { APP_NAME, APP_NAME_EN, APP_TAGLINE, whaleMarkPaths } from '../shared/brand';
 
 interface WsModule {
   WebSocket: typeof WsSocket;
@@ -161,18 +162,22 @@ function normalizeBindHost(host: string | undefined): string {
  * 含指令输入与远程审批表单。token 通过 meta 注入（HTML 属性转义）。
  */
 function renderShellHtml(token: string): string {
+  const mark = whaleMarkPaths();
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="webui-token" content="${escapeHtml(token)}">
-<title>小鲸 WebUI · 远程中控</title>
+<meta name="application-name" content="${APP_NAME} ${APP_NAME_EN}">
+<meta name="description" content="${APP_TAGLINE}">
+<title>${APP_NAME} WebUI · 远程中控</title>
 <style>
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 body { margin: 0; padding: 24px; background: #020617; color: #e2e8f0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
 header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.logo { width: 42px; height: 42px; flex: 0 0 auto; filter: drop-shadow(0 8px 20px rgba(46,124,255,.32)); }
 h1 { font-size: 20px; margin: 0; }
 h1 small { font-size: 12px; color: #64748b; font-weight: 400; margin-left: 8px; }
 .badge { margin-left: auto; padding: 4px 10px; border-radius: 999px; font-size: 12px; background: #334155; }
@@ -196,7 +201,14 @@ ol li { font-size: 12px; background: #020617; border-radius: 6px; padding: 6px 8
 </head>
 <body>
 <header>
-  <h1>小鲸 WebUI <small>远程中控 · 仅本机回环</small></h1>
+  <svg class="logo" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="${mark.tail}" fill="#5BA9F7"/>
+    <path d="${mark.body}" fill="#5BA9F7"/>
+    <path d="${mark.band}" stroke="#F6FAFF" stroke-width="1.7" stroke-linecap="round"/>
+    <circle cx="${mark.eye.cx}" cy="${mark.eye.cy}" r="${mark.eye.r}" fill="#06182E"/>
+    <circle cx="${mark.glint.cx}" cy="${mark.glint.cy}" r="${mark.glint.r}" fill="#FFFFFF"/>
+  </svg>
+  <h1>${APP_NAME} WebUI <small>${APP_NAME_EN} · 远程中控 · 仅本机回环</small></h1>
   <span id="conn" class="badge">连接中…</span>
 </header>
 <main>

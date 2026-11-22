@@ -207,7 +207,7 @@ describe('[WebUI] 鉴权与状态', () => {
     expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
     expect(response.headers.get('content-security-policy')).toContain("default-src 'self'");
     const html = await response.text();
-    expect(html).toContain('小鲸 WebUI');
+    expect(html).toContain('鲸屿 WebUI');
     expect(html).toContain(`name="webui-token" content="${TEST_TOKEN}"`);
 
     const post = await fetch(`${base(server)}/?token=${TEST_TOKEN}`, { method: 'POST' });

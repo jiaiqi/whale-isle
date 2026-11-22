@@ -5,6 +5,12 @@
 
 ### Changed
 
+- **品牌升级：鲸屿 / Whale Isle（2026-11-22 用户指令）**：
+  - **命名与图标**：应用名定为「鲸屿」——鲸是桌面上陪你玩的小鲸，屿是承载她的桌面小岛；英文名 `Whale Isle`，标语「一座住在桌面上的鲸屿」。新图标为深空 squircle 上的蓝鲸侧身像（女仆扇贝头带 + 蝴蝶结 + 水花 + 星海底座），母版 SVG 导出 `icon.icns` / `icon.ico` / 16–1024 PNG 全套；`whale-isle-mark.svg` 与中控台/ WebUI 复用同一尾鳍 + 头带视觉语言。
+  - **品牌单点事实源**：新增 `src/shared/brand.ts`（`APP_NAME/APP_NAME_EN/APP_TAGLINE/APP_DATA_DIR/BRAND_ASSETS`）；主进程窗口标题、About 面板、Dock 图标、中控台侧栏、`director/index.html` 标题/favicon、WebUI 标题与内联 logo、`package.json productName`、README 全部改为鲸屿，构建时 `assets/brand → dist/renderer/brand` 随包分发。
+  - **数据与凭据迁移**：userData 从通用 `Electron` 一次性「薄迁移」到 `Whale Isle`（只拷 provider-vault / meter / memory / stardew-mods / IndexedDB / Local Storage，不覆盖已有文件、不动 `e2e-profile`，marker 幂等）；真实 key 在新目录用同一 Electron safeStorage 解密成功，Brain 启动无报错。
+  - **macOS safeStorage 坑（实测）**：Keychain 服务名是「`<app name> Safe Storage`」，`app.setName('鲸屿')` 后旧密文**无法解密**；因此开发态 macOS 保留 `Electron` 作为 Keychain 身份（菜单栏 dev 仍显示 Electron），窗口/侧栏/Dock/About 显式用鲸屿；打包后 `productName` 为鲸屿，Keychain 自然切换。另为解密失败加 fail-closed try/catch（UI 显示未配置、绝不崩主进程或回落明文）。
+  - **验收**：CDP 断言 `title=鲸屿 · 中控台`、侧栏 `鲸屿` + tagline tooltip + favicon 路径；WebUI `鲸屿 WebUI · 远程中控` + logo；`pnpm verify:gate` 5 过 / 0 跳过。
 - **设计稿 v3「曜石」（apple-ui-design 三原则：Clarity/Deference/Depth）**：iOS 系统色板（#0A84FF 主 accent + 系统语义色）、true-black 分层底（避开死黑）、**光影七层系统**（ambient 环境光斑慢漂移 / 玻璃卡 blur30+内高光 / 发丝分隔线 / 双层柔影 / Sheen 文本光泽 / 状态光晕）、SF Pro+PingFang 节奏、pill 按钮（980px）+ hover scale 1.02、连续曲率圆角 8/12/16/20；tokens 变量名保持兼容（全部页面自动继承质感），shell-chat 全面精修、其余 6 页注入 ambient 光影层；深浅双主题（#f5f5f7 Apple 浅灰对等实现）。功能结构沿 v2 已确认的 7 页（Shell+聊天/Harness/插件管理/星露谷/供应商/桌宠/OBS），插件化信息架构保证新功能融洽插入。
 - **设计稿 v2 重做（ui-ux-pro-max 工作流，决策 D4/D9/D10）**：`design/` 全套升级——设计系统由 skill 数据库生成（Modern Dark 开发者工具风格、密度 8/10、Expo.out/spring 动效规格）；run-green 主操作色（#22C55E，"code dark + run green"）替代蓝紫 AI 味（v3 中绿转为纯运行/成功语义色）；lucide SVG 全量替换 emoji（本地 vendor/lucide.min.js，UI 零 emoji）；深/浅双主题完整 token（shell.js 持久切换）；7 页结构确立并经 Chrome headless 深浅双主题截图验证。
 - **产品功能设计 v2（定位升级）**：[docs/PRODUCT-DESIGN.md](docs/PRODUCT-DESIGN.md) 重写——从「AI VTuber 工作台」升级为**通用个人 AI 工作台**（用户决策 D6~D10）：桌宠/直播/星露谷等全部收编为**可开关插件**；插件系统对齐 dsh（Cordis 插件树/defineTool/三层约定）+ 兼容层规划；新增 **ACP Harness 层**（参考 pingdotgg/t3code，MIT 68.5k★，已克隆分析：providers-acp/线程/远程审批，`dsh --profile acp` 直连）；技术栈选型（React 19 + Tailwind v4 + zustand + motion + **lucide-react 图标** + Electron + WebUI 双形态 + Vite 评估）；主题系统（深/浅/跟随+主题色）；ROADMAP 新增 M6 批次 4 工单（Shell+插件内核 / ACP Harness / dsh 兼容层 / WebUI），原 T-M5-03 并入 T-M6-01、T-M5-07 并入 T-M6-02。

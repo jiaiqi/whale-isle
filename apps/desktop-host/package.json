@@ -1,8 +1,9 @@
 {
   "name": "@workbench/desktop-host",
+  "productName": "鲸屿",
   "version": "0.1.0",
   "private": true,
-  "description": "[Electron 跨平台宿主] 主进程（透明穿透窗/IPC）+ pet-stage 渲染层（WebM 渲染 + alpha 穿透 + 拖拽甩抛）",
+  "description": "鲸屿 Whale Isle · Electron 跨平台宿主（透明桌宠 / AI 自治 / 直播中控台 / WebUI）",
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {

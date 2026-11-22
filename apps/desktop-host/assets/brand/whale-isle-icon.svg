@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1224"/>
+      <stop offset="0.55" stop-color="#060A14"/>
+      <stop offset="1" stop-color="#03050A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.72" cy="0.24" r="0.62">
+      <stop offset="0" stop-color="#2E7CFF" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#1B4BC4" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0.18" y1="0.05" x2="0.82" y2="0.95">
+      <stop offset="0" stop-color="#9CD8FF"/>
+      <stop offset="0.38" stop-color="#5BA9F7"/>
+      <stop offset="1" stop-color="#1D5FB8"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E9F6FF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#BBDDFB" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDEBFF"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="26" stdDeviation="34" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+    <filter id="blur18"><feGaussianBlur stdDeviation="18"/></filter>
+  </defs>
+
+  <!-- L2: true-black squircle + ambient -->
+  <rect x="40" y="40" width="944" height="944" rx="222" fill="url(#bg)"/>
+  <rect x="40" y="40" width="944" height="944" rx="222" fill="url(#glow)"/>
+  <rect x="41.5" y="41.5" width="941" height="941" rx="220" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="3"/>
+  <rect x="66" y="66" width="892" height="892" rx="198" fill="none" stroke="#7CC4FF" stroke-opacity="0.07" stroke-width="2"/>
+
+  <!-- stars -->
+  <g fill="#CFE9FF" opacity="0.55">
+    <circle cx="226" cy="248" r="5"/><circle cx="808" cy="196" r="4"/>
+    <circle cx="866" cy="318" r="3"/><circle cx="180" cy="430" r="3"/>
+  </g>
+
+  <!-- island horizon -->
+  <ellipse cx="540" cy="860" rx="318" ry="46" fill="#1E70FF" opacity="0.16" filter="url(#blur18)"/>
+  <path d="M214 846 C 330 800 720 798 850 848" fill="none" stroke="#7CC4FF" stroke-opacity="0.34" stroke-width="4" stroke-linecap="round"/>
+  <path d="M268 902 C 384 866 700 864 812 902" fill="none" stroke="#4E8DFF" stroke-opacity="0.18" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- whale body: side profile, head right / tail left -->
+  <g filter="url(#soft)">
+    <!-- tail fluke -->
+    <path d="M 352 646 C 300 612 236 602 172 620 C 214 646 248 676 268 708 C 240 736 204 762 160 782 C 224 790 292 768 336 728 Z"
+          fill="url(#body)" stroke="#BFE6FF" stroke-opacity="0.7" stroke-width="8" stroke-linejoin="round"/>
+    <!-- body -->
+    <path d="M 330 690 C 300 690 276 666 272 630 C 262 566 310 492 396 446 C 478 402 590 390 682 420 C 778 452 834 514 842 590 C 850 672 782 738 676 760 C 570 782 452 770 382 736 C 354 722 338 708 330 690 Z"
+          fill="url(#body)" stroke="#BFE6FF" stroke-opacity="0.8" stroke-width="10" stroke-linejoin="round"/>
+    <!-- back highlight -->
+    <path d="M 402 470 C 478 424 578 408 664 434 C 590 414 490 428 414 474 C 372 498 344 530 330 566 C 338 526 362 494 402 470 Z"
+          fill="#D8F1FF" opacity="0.45"/>
+    <!-- belly -->
+    <path d="M 404 700 C 472 734 568 748 654 730 C 728 714 784 674 810 624 C 802 712 738 764 654 780 C 554 798 450 780 392 740 Z"
+          fill="url(#belly)" opacity="0.45"/>
+    <!-- flipper -->
+    <path d="M 522 704 C 558 724 598 734 636 732 C 608 756 568 764 534 754 C 514 746 506 726 522 704 Z"
+          fill="#8FC8F8" opacity="0.5" stroke="#BFE6FF" stroke-opacity="0.35" stroke-width="4"/>
+    <!-- eye, tsundere brow, blush -->
+    <path d="M 686 516 L 746 502" stroke="#06182E" stroke-width="11" stroke-linecap="round" opacity="0.9"/>
+    <circle cx="718" cy="558" r="25" fill="#06182E"/>
+    <circle cx="726" cy="549" r="8" fill="#FFFFFF"/>
+    <ellipse cx="650" cy="622" rx="22" ry="13" fill="#FF9FB2" opacity="0.38"/>
+  </g>
+
+  <!-- maid headband: white band, scallops, tiny bow -->
+  <path d="M 576 432 C 640 390 738 396 802 444" fill="none" stroke="url(#band)" stroke-width="23" stroke-linecap="round"/>
+  <g fill="#F6FAFF">
+    <circle cx="606" cy="418" r="14"/><circle cx="660" cy="398" r="16"/><circle cx="720" cy="392" r="16"/><circle cx="776" cy="408" r="14"/>
+  </g>
+  <path d="M 584 436 C 646 402 738 408 796 450" fill="none" stroke="#5B8ED8" stroke-opacity="0.25" stroke-width="4"/>
+  <!-- ribbon bow: readable bowtie at band end -->
+  <g>
+    <path d="M 806 440 L 782 424 L 784 456 Z" fill="#A8D3FF"/>
+    <path d="M 814 440 L 840 422 L 838 458 Z" fill="#6FA8F0"/>
+    <circle cx="810" cy="440" r="9" fill="#4E8BE0"/>
+    <circle cx="808" cy="437" r="3" fill="#D8EEFF" opacity="0.9"/>
+  </g>
+
+  <!-- water spout -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M 820 416 C 812 368 820 326 848 294" stroke="url(#spout)" stroke-width="9"/>
+    <path d="M 834 420 C 832 376 842 340 864 312" stroke="#8CCBFF" stroke-opacity="0.55" stroke-width="6"/>
+  </g>
+  <g fill="#BFE8FF">
+    <circle cx="846" cy="286" r="12" opacity="0.95"/>
+    <circle cx="872" cy="276" r="8" opacity="0.8"/>
+    <circle cx="884" cy="304" r="6" opacity="0.7"/>
+    <circle cx="824" cy="268" r="6" opacity="0.7"/>
+  </g>
+
+</svg>

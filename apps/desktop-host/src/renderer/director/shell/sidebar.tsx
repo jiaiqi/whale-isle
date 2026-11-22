@@ -7,6 +7,7 @@ import {
   Search, Sprout, Terminal, Wheat,
   type LucideIcon,
 } from 'lucide-react';
+import { APP_NAME, APP_TAGLINE, whaleMarkPaths } from '../../../shared/brand';
 
 export type Tab =
   | 'chat' | 'memory' | 'voice' | 'pet' | 'stardew' | 'mods' | 'obs' | 'harness' | 'providers' | 'plugins';
@@ -53,11 +54,15 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   },
 ];
 
+const MARK = whaleMarkPaths();
+
 const WHALE_SVG = (
-  <svg style={{ width: 22, height: 22, flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
-    <path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".28" />
-    <path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="var(--blue)" strokeWidth="1.55" strokeLinejoin="round" />
-    <circle cx="17.5" cy="10.5" r="1" fill="var(--blue)" />
+  <svg style={{ width: 22, height: 22, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d={MARK.tail} fill="var(--blue)" />
+    <path d={MARK.body} fill="var(--blue)" />
+    <path d={MARK.band} stroke="#F6FAFF" strokeWidth="1.7" strokeLinecap="round" />
+    <circle cx={MARK.eye.cx} cy={MARK.eye.cy} r={MARK.eye.r} fill="#06182E" />
+    <circle cx={MARK.glint.cx} cy={MARK.glint.cy} r={MARK.glint.r} fill="#FFFFFF" />
   </svg>
 );
 
@@ -83,7 +88,7 @@ export function Sidebar({
     <aside className="wb-side">
       <div className="wb-brand">
         {WHALE_SVG}
-        <span className="t">大肥鱼工作台</span>
+        <span className="t" title={APP_TAGLINE}>{APP_NAME}</span>
         <span className="v">v4</span>
       </div>
       <div className="wb-nav-scroll">
