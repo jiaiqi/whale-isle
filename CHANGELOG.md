@@ -78,6 +78,13 @@
 
 ### Added
 
+- **星露谷自治打磨·第一轮（T-M6-10）**：
+  - **剧情菜单**：`当前界面` 改多行解析；选择题按 0 基 `choice` 回答（修复「这是个选择题，请用 choice」无限 FAILED）；起名界面 `set_name 小鲸`；过场无对话框 → `skip_event`。
+  - **背包只剩家具**：解析文字地图找最近空地 `place_item`；被挡自动换相邻格/采纳 BWF 建议坐标；6 次仍失败 → `trash_item force=true` 兜底。
+  - **长期箱子方案**：农场空闲且木材 ≥50 → `craft Chest` → `place_item` 摆箱；只剩【留着】收集包材料 → `donate_bundles` 捐掉腾格。
+  - **长动作超时**：`clear_area/till_area/plant_seeds/place_item/set_name` 纳入长动作（修复 clear_area 30s 假 TIMEOUT）。
+  - 单测新增 15+：菜单多行、choice/set_name/skip、家具摆放/建议坐标/force 丢弃、造箱/摆箱/捐赠、空地解析、长动作表；game-bridge 81 it，分支 90.35%。
+
 - **T-M6-09 模型与服务商 v5（2026-11-22 用户指令）**：
   - **取消三档干饭套餐**：UI 只保留单一当前生效配置（Dexie 写入 → `brain:apply-config` 热更新）；默认模型 Tab 六槽位从「已启用服务商 × 已启用模型」中选择，文本角色可一键跟随主脑。
   - **OpenCode Go 内置**：`opencode-go` OpenAI（`/zen/v1`）与 Anthropic（`/zen/anthropic/v1`）双变体 + 5 个预设模型；契约新增 provider/variant `protocol`，gateway 支持 Anthropic `/messages`（x-api-key + anthropic-version，无 Authorization）；sanitizer 增 `oc_sk_`/`or_sk_`。

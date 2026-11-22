@@ -9,9 +9,13 @@
 import {
   RulePlanner,
   cleanItemName,
+  countWood,
+  findFreeTile,
+  hasChestItem,
   listEdibleItems,
   listShippableItems,
   pickAnyNonEssential,
+  pickFurnitureToPlace,
   pickTrash,
   pickTrashableFallback,
   type GameStateSnapshot,
@@ -28,7 +32,7 @@ export const LLM_TOOL_WHITELIST = new Set([
   'ship_items', 'store_items', 'list_chests', 'map_info', 'take_items', 'trash_item',
   'eat', 'use_item', 'open_shop', 'buy', 'sell', 'craft', 'dialogue', 'menu_click',
   'close_menu', 'read_mail', 'tidy_backpack', 'choose_profession', 'skip_event', 'leave_festival',
-  'fish', 'care_animals', 'gift_info', 'give_gift', 'donate_museum', 'bundle_info',
+  'set_name', 'fish', 'care_animals', 'gift_info', 'give_gift', 'donate_museum', 'bundle_info',
   'donate_bundles', 'cook', 'check_crab_pots', 'fight', 'explore_mine', 'use_bomb',
   'upgrade_tool', 'crack_geodes', 'quest_board', 'special_orders', 'special_order_dropbox',
   'prize_machine', 'emote', 'perfection', 'pan', 'monster_goals', 'mastery',
@@ -124,6 +128,17 @@ const RESCUE_STEP: ReadonlyMap<string, number> = new Map([
   ['store_items', 4],
 ]);
 const RESCUE_TOOLS: ReadonlySet<string> = new Set(RESCUE_STEP.keys());
+/** 摆家具/箱子的相邻格尝试顺序（被挡住就换一个） */
+const PLACE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2],
+];
+
+/** 从 place_item 失败回执里读 BWF 推荐坐标（「最好的坐标 (x,y)」/「放在 (x,y)」） */
+function suggestedPlacementOf(receipt: string): { x: number; y: number } | null {
+  const m = /(?:最好的坐标|放在)[^0-9]*[（(](\d+)\s*,\s*(\d+)/.exec(receipt);
+  if (m?.[1] === undefined || m[2] === undefined) return null;
+  return { x: Number(m[1]), y: Number(m[2]) };
+}
 
 /** 从 BWF 失败回执里抠出被拒的单品名（「失败：普通窗户 不能出货」/「背包里没有“沙丁鱼 x3 金星”」） */
 function failedItemOf(receipt: string): string {
@@ -150,17 +165,30 @@ export class LlmPlanner implements Planner {
   private readonly rejectedShip = new Set<string>();
   private readonly rejectedEat = new Set<string>();
   private readonly rejectedTrash = new Set<string>();
+  private readonly rejectedPlace = new Set<string>();
+  private placeTarget: { x: number; y: number } | null = null;
+  private placeTryIndex = 0;
+  private handledPlaceFailures = 0;
+  private pendingPlaceItem: string | null = null;
+  private craftTried = false;
+  private chestPlaced = false;
 
   constructor(private readonly deps: LlmPlannerDeps) {}
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
     this.askCount++;
+    const recent = this.deps.recentReceipts ?? [];
     // 菜单优先（确定性处理，不烧 LLM）
     const menu = state.menu;
     if (menu !== '' && !/无（可以自由行动）/.test(menu)) {
+      // 剧情播放中但没有对话框：BWF 会拒绝 dialogue，此时用 skip_event 跳出过场，避免无限重试
+      if (/剧情|节日事件/.test(menu) && /没有对话框|剧情还在放/.test(recent.at(-1) ?? '')) {
+        return { kind: 'act', tool: 'skip_event', args: {}, intent: '过场没有对话框，跳过这段剧情' };
+      }
       return this.fallback.decide(state);
     }
-    const recent = this.deps.recentReceipts ?? [];
+    // 放置箱子成功 → 记住（本进程内不再重复 craft）
+    if (recent.some((r) => /^OK\s+place_item|^COMPLETED\s+place_item/i.test(r) && /箱子|Chest/i.test(r))) this.chestPlaced = true;
     // 确定性护栏（真机 2026-11-22：小模型看得到「背包空位：0」却仍连续选 fish）：
     //   ① 背包满 → 整理；若整理本身也连续失败 → 升级为出货卖钱腾位置
     //   ② 同一工具连续两次失败 → 换规则日程，绝不死磕同一动作
@@ -172,6 +200,42 @@ export class LlmPlanner implements Planner {
     const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
     if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
     const effectiveSlots = rawHasSlots ? state.freeSlots : (this.lastFreeSlots ?? state.freeSlots);
+    // 摆放失败计数（回执文本可能完全相同，不能按字符串去重）：失败一次换一个相邻格，
+    // 6 次都放不下 → 该家具改为 force 丢弃兜底（BWF trash_item force=true 可扔贵重物）
+    const placeFailureCount = recent.filter((r) => /^FAILED\s+place_item/.test(r)).length;
+    if (placeFailureCount > this.handledPlaceFailures) {
+      const delta = placeFailureCount - this.handledPlaceFailures;
+      this.handledPlaceFailures = placeFailureCount;
+      const suggested = suggestedPlacementOf(recent.at(-1) ?? '');
+      if (suggested !== null) {
+        this.placeTarget = suggested;
+      } else {
+        this.placeTryIndex = Math.min(this.placeTryIndex + delta, PLACE_OFFSETS.length);
+        if (this.placeTryIndex >= PLACE_OFFSETS.length && this.pendingPlaceItem !== null) {
+          this.rejectedPlace.add(this.pendingPlaceItem);
+          this.pendingPlaceItem = null;
+          this.placeTryIndex = 0;
+        }
+      }
+    }
+
+    // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）
+    if (!this.chestPlaced && effectiveSlots > 0) {
+      if (hasChestItem(state.raw)) {
+        if (state.location === 'Farm' && state.posX >= 0) {
+          const free = findFreeTile(state.raw, state.posX, state.posY);
+          const offset = PLACE_OFFSETS[0] ?? [1, 0];
+          return {
+            kind: 'act',
+            tool: 'place_item',
+            args: { item: 'Chest', x: free?.x ?? state.posX + offset[0], y: free?.y ?? state.posY + offset[1], force: true },
+            intent: '把箱子摆到农场，之后背包满就有地方存了',
+          };
+        }
+      } else if (!this.craftTried && countWood(state.raw) >= 50 && (state.location === 'Farm' || state.location === 'FarmHouse')) {
+        return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，先造一个箱子备用' };
+      }
+    }
     const inventoryFull =
       effectiveSlots <= 0 ||
       /背包满|背包.{0,6}满|空位：?0|空位 0|装不下/.test(recent.slice(-2).join(' '));
@@ -198,7 +262,7 @@ export class LlmPlanner implements Planner {
         else this.rejectedTrash.add(item);
       }
       const lastFail = failTools.at(-1) ?? '';
-      if (RESCUE_TOOLS.has(lastFail) && lastFail !== this.lastRescueFail) {
+      if (lastFail !== '' && lastFail !== this.lastRescueFail) {
         this.lastRescueFail = lastFail;
         const failedItem = failedItemOf(recent.at(-1) ?? '');
         if (lastFail === 'ship_items' && failedItem !== '') {
@@ -209,7 +273,9 @@ export class LlmPlanner implements Planner {
         } else if (lastFail === 'trash_item' && failedItem !== '') {
           // BWF 会拒绝扔贵重物（「普通窗户一个能卖 300g，没有扔」）→ 记住换下一个
           this.rejectedTrash.add(failedItem);
-        } else {
+        } else if (lastFail === 'craft') {
+          this.craftTried = true;
+        } else if (RESCUE_TOOLS.has(lastFail)) {
           // 策略级失败：跃迁到「该工具之后」的阶梯（ship 失败 → eat；eat 失败 → trash…）
           this.rescueStage = Math.min(
             Math.max(this.rescueStage + 1, (RESCUE_STEP.get(lastFail) ?? 0) + 1),
@@ -218,7 +284,7 @@ export class LlmPlanner implements Planner {
         }
       }
       const start = noChest ? Math.max(1, this.rescueStage) : this.rescueStage;
-      for (let step = start; step <= 5; step++) {
+      for (let step = start; step <= 10; step++) {
         const decision = this.rescueAction(step, state);
         if (decision) {
           this.rescueStage = step;
@@ -289,12 +355,58 @@ export class LlmPlanner implements Planner {
       }
       case 4:
         return { kind: 'act', tool: 'store_items', args: {}, intent: '把杂物存进箱子腾位置（箱子满了就只能先出货了）' };
-      default: {
-        // 最后手段：家具之类卖不掉又不吃的非工具物品；贵重物被 BWF 拒绝时退到鱼饵/种子类
+      case 5: {
+        // 家具之类卖不掉又不吃的非工具物品；贵重物被 BWF 拒绝时退到鱼饵/种子类
         const item = pickAnyNonEssential(state.raw, this.rejectedTrash)
           ?? pickTrashableFallback(state.raw, this.rejectedTrash);
         if (item === null) return null;
         return { kind: 'act', tool: 'trash_item', args: { item }, intent: `实在腾不出位置，只好忍痛扔掉${item}了` };
+      }
+      case 6: {
+        // 只剩家具：摆到农场腾格（BWF place_item）；不在农场先回去
+        const item = pickFurnitureToPlace(state.raw, this.rejectedPlace);
+        if (item === null) return null;
+        if (state.location !== 'Farm') {
+          return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把家具摆出来腾个背包格' };
+        }
+        const free = state.posX >= 0 ? findFreeTile(state.raw, state.posX, state.posY) : null;
+        const offset = PLACE_OFFSETS[Math.min(this.placeTryIndex, PLACE_OFFSETS.length - 1)] ?? [1, 0];
+        const x = this.placeTarget?.x ?? free?.x ?? (state.posX >= 0 ? state.posX + offset[0] : -1);
+        const y = this.placeTarget?.y ?? free?.y ?? (state.posY >= 0 ? state.posY + offset[1] : -1);
+        if (x < 0 || y < 0) return null;
+        this.pendingPlaceItem = item;
+        return { kind: 'act', tool: 'place_item', args: { item, x, y, force: true }, intent: `把${item}摆到农场上，腾出一个背包格` };
+      }
+      case 7: {
+        // 木材 ≥50 且有空位时造箱子（满包 craft 会掉地上，必须有空格）
+        if (this.craftTried || this.chestPlaced || state.freeSlots <= 0) return null;
+        if (hasChestItem(state.raw)) return null;
+        if (countWood(state.raw) < 50) return null;
+        return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，造个箱子用来整理背包' };
+      }
+      case 8: {
+        // 背包里已有箱子 → 摆到农场；不在农场先回去
+        if (!hasChestItem(state.raw)) return null;
+        if (state.location !== 'Farm') return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把箱子摆出来' };
+        const free = state.posX >= 0 ? findFreeTile(state.raw, state.posX, state.posY) : null;
+        const offset = PLACE_OFFSETS[Math.min(this.placeTryIndex, PLACE_OFFSETS.length - 1)] ?? [1, 0];
+        const x = free?.x ?? (state.posX >= 0 ? state.posX + offset[0] : -1);
+        const y = free?.y ?? (state.posY >= 0 ? state.posY + offset[1] : -1);
+        if (x < 0 || y < 0) return null;
+        this.pendingPlaceItem = 'Chest';
+        return { kind: 'act', tool: 'place_item', args: { item: 'Chest', x, y, force: true }, intent: '把箱子摆到农场，之后就能整理背包了' };
+      }
+      case 9: {
+        // 家具实在摆不下（墙饰/被挡）时强制丢弃一件贵重物换一格
+        // force 兜底刻意忽略 rejectedTrash：普通 trash 被拒的贵重家具正是这里要强删的对象
+        const item = pickAnyNonEssential(state.raw);
+        if (item === null) return null;
+        return { kind: 'act', tool: 'trash_item', args: { item, force: true }, intent: `家具摆不下，只好忍痛丢掉${item}换一格了` };
+      }
+      default: {
+        // 10：只剩任务/收集包材料 → 去社区中心捐掉（【留着】的正确出路，腾出多格）
+        if (!/【留着[^】]*】/.test(state.raw)) return null;
+        return { kind: 'act', tool: 'donate_bundles', args: {}, intent: '背包只剩收集包材料了，去社区中心捐掉换空位' };
       }
     }
   }

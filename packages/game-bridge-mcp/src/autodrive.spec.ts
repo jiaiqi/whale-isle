@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { actionTimeoutMs, BwfMcpClient, isLongAction } from './mcp-client';
 import { ActionLock, StuckSentinel } from './action-lock';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
-import { parseGameState, RulePlanner, type GameStateSnapshot } from './planner';
+import { findFreeTile, parseGameState, pickEdible, RulePlanner, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `【你的长期笔记】x
 ## 基本状态
@@ -62,6 +62,8 @@ describe('mcp-client', () => {
     expect(isLongAction('tidy_backpack')).toBe(true); // BWF 文档：最长约 5 分钟
     expect(isLongAction('store_items')).toBe(true);
     expect(isLongAction('travel_to')).toBe(true); // 自动多段寻路（真机 30s 超时误报修复）
+    expect(isLongAction('clear_area')).toBe(true); // BWF 最长 300s（真机 TIMEOUT 误报）
+    expect(isLongAction('place_item')).toBe(true); // 可能自动走回农场
     expect(isLongAction('give_gift')).toBe(true); // 传名字会自动走过去
     expect(actionTimeoutMs('fish')).toBe(600_000);
     expect(actionTimeoutMs('read_mail')).toBe(600_000); // read_mail 走回家路，也是长动作
@@ -111,6 +113,50 @@ describe('parseGameState', () => {
     expect(s.season).toBe('春');
     expect(s.day).toBe(16);
     expect(s.freeSlots).toBe(12); // 状态未报背包空位 → 不阻塞
+    // 菜单必须解析多行（选项在后续行，只取第一行会漏 choice）
+    const choiceRaw = `${STATE_OK.replace('无（可以自由行动）', '正在播放剧情/节日事件。对话框：你打算收养这只猫吗？\n选项（用 dialogue 并传 choice 序号回答）：\n  0: 是\n  1: 否')}`;
+    expect(parseGameState(choiceRaw).menu).toContain('0: 是');
+  });
+});
+
+describe('背包挑选边界', () => {
+  it('pickEdible：无可食用返回 null；可食用但【留着】也跳过', () => {
+    expect(pickEdible('0: 斧头')).toBeNull();
+    expect(pickEdible('5: 沙丁鱼 [可食用 +23体力]【留着：社区中心】')).toBeNull();
+    expect(pickEdible('5: 沙丁鱼 [可食用 +23体力]')).toBe('沙丁鱼');
+  });
+
+  it('菜单兜底：未知界面 → dialogue 无 choice', async () => {
+    const p = new RulePlanner();
+    const d = await p.decide({ ...parseGameState(STATE_OK), menu: '正在钓鱼小游戏' });
+    expect(d.kind === 'act' && d.tool).toBe('dialogue');
+    expect(d.kind === 'act' && d.args).toEqual({});
+  });
+
+  it('钓鱼阶段：抵达海滩后下一次决策给出 fish', async () => {
+    const atLocal = (clock: string, over: Partial<GameStateSnapshot> = {}): GameStateSnapshot => ({
+      ...parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, `第1年春16日 ${clock}`)),
+      ...over,
+    });
+    const p = new RulePlanner();
+    await p.decide(atLocal('11:30')); // read_mail
+    await p.decide(atLocal('11:30')); // travel_to Beach（phase=fishing）
+    const d = await p.decide(atLocal('12:00', { location: 'Beach' }));
+    expect(d.kind === 'act' && d.tool).toBe('fish');
+  });
+});
+
+describe('findFreeTile（文字地图找最近空地）', () => {
+  it('解析左上角坐标 + 网格，返回离玩家最近的 .', () => {
+    const raw = `## 文字地图（以你为中心，左上角坐标=(50,6)，每个字符一格，向右 x+1，向下 y+1）
+   6 ##~~~
+   7 ..~.@
+   8 ...~~`;
+    expect(findFreeTile(raw, 54, 7)).toEqual({ x: 53, y: 7 });
+    expect(findFreeTile(raw, 52, 7)).toEqual({ x: 51, y: 7 });
+  });
+  it('地图被省略/无坐标 → null', () => {
+    expect(findFreeTile('（和上次一样，省略）', 10, 10)).toBeNull();
   });
 });
 
@@ -179,13 +225,48 @@ describe('RulePlanner 确定性日程', () => {
     expect(d2.kind === 'act' && d2.tool).not.toBe('fish');
   });
 
+  it('只剩家具且空位 0 → 摆家具腾格（place_item）', async () => {
+    const p = new RulePlanner();
+    const d = await p.decide({
+      ...base,
+      freeSlots: 0,
+      posX: 12,
+      posY: 8,
+      raw: `${STATE_OK}\n## 背包（序号: 物品）\n0: 斧头\n6: 普通窗户\n背包空位：0 个（共 12 格）`,
+    });
+    expect(d.kind === 'act' && d.tool).toBe('place_item');
+    expect(d.kind === 'act' && d.args).toMatchObject({ item: '普通窗户', x: 13, y: 8 });
+  });
+
+  it('起名界面 → set_name 小鲸；剧情过场无对话框 → LlmPlanner skip_event', async () => {
+    const p = new RulePlanner();
+    const named = await p.decide({ ...base, menu: '正在播放剧情/节日事件\n要起名字（孩子或者刚出生的动物）：用 set_name 传一个名字' });
+    expect(named.kind === 'act' && named.tool).toBe('set_name');
+    expect(named.kind === 'act' && named.args).toEqual({ name: '小鲸' });
+
+    const planner = new (await import('./llm-planner')).LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED dialogue: 失败：剧情还在放，现在没有对话框，过一会儿再推进'],
+    });
+    const d = await planner.decide({ ...base, menu: '正在播放剧情/节日事件（可以用 skip_event 跳过）' });
+    expect(d.kind === 'act' && d.tool).toBe('skip_event');
+  });
+
+  it('剧情选择题：必须带 choice 序号（回归：无 choice 的 dialogue 会无限失败）', async () => {
+    const p = new RulePlanner();
+    const menu = '正在播放剧情/节日事件。对话框：你打算收养这只猫吗？\n选项（用 dialogue 并传 choice 序号回答）：\n  0: 是\n  1: 否';
+    const d = await p.decide({ ...base, menu });
+    expect(d.kind === 'act' && d.tool).toBe('dialogue');
+    expect(d.kind === 'act' && d.args).toEqual({ choice: 0 });
+  });
+
   it('商店/选择题界面：close_menu 与带选项 dialogue（确定性，不问 LLM）', async () => {
     const p = new RulePlanner();
     const shop = await p.decide({ ...base, menu: '商店界面（Shop）' });
     expect(shop.kind === 'act' && shop.tool).toBe('close_menu');
     const choice = await p.decide({ ...base, menu: '选择题：要帮他吗？' });
     expect(choice.kind === 'act' && choice.tool).toBe('dialogue');
-    expect(choice.kind === 'act' && choice.args).toEqual({ choice: 1 });
+    expect(choice.kind === 'act' && choice.args).toEqual({ choice: 0 });
   });
 
   it('钓鱼阶段 17:30 后转傍晚采集（去镇上）', async () => {

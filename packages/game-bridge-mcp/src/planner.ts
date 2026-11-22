@@ -20,6 +20,9 @@ export interface GameStateSnapshot {
   day: number;
   /** 背包剩余空位（真机 2026-11-22 教训：空位 0 时钓鱼必失败，必须先整理/出货） */
   freeSlots: number;
+  /** 玩家当前格坐标（place_item 需要 x/y；拿不到时 -1） */
+  posX: number;
+  posY: number;
 }
 
 export function parseGameState(raw: string): GameStateSnapshot {
@@ -27,8 +30,9 @@ export function parseGameState(raw: string): GameStateSnapshot {
   const staminaM = /体力：(\d+)\/(\d+)/.exec(raw);
   const moneyM = /金钱：(\d+)g/.exec(raw);
   const locM = /地点：([^\s（，。]+)/.exec(raw);
-  const menuM = /## 当前界面\n(.+)/.exec(raw);
+  const menuM = /## 当前界面\n([\s\S]*?)(?=\n## |\n\n|$)/.exec(raw);
   const freeM = /背包空位：(\d+)\s*个/.exec(raw);
+  const posM = /你站在 \((\d+),(\d+)\)/.exec(raw);
   const seasonM = /第\d+年(春|夏|秋冬|秋|冬)?/.exec(clockM?.[1] ?? '');
   const dayM = /年[春夏秋冬](\d+)日/.exec(clockM?.[1] ?? '');
   const hh = Number(clockM?.[2] ?? '6');
@@ -45,6 +49,8 @@ export function parseGameState(raw: string): GameStateSnapshot {
     season: seasonM?.[1] ?? '春',
     day: Number(dayM?.[1] ?? 1),
     freeSlots: Number(freeM?.[1] ?? 12), // 状态没报背包 → 视为有位置（不阻塞）
+    posX: Number(posM?.[1] ?? -1),
+    posY: Number(posM?.[2] ?? -1),
   };
 }
 
@@ -166,6 +172,70 @@ export function pickTrashableFallback(raw: string, rejected?: ReadonlySet<string
   return candidate;
 }
 
+/** 家具关键词（背包只剩家具时的摆放腾格；reference BWF place_item） */
+const FURNITURE_RE = /窗|桌|椅|床|灯|地毯|壁纸|地板|柜|架子|挂画|画|盆栽|装饰|沙发|电视|壁炉|火炉|浴缸|梳妆|镜子|屏风|雕像|鱼缸|水族箱|玩偶|抱枕|窗帘/;
+
+/** 挑一件可摆放的家具（跳过任务物品/工具/可食用/耗材） */
+export function pickFurnitureToPlace(raw: string, rejected?: ReadonlySet<string>): string | null {
+  let candidate: string | null = null;
+  for (const text of inventoryTexts(raw)) {
+    if (KEEP_TAG_RE.test(text)) continue;
+    if (ESSENTIAL_RE.test(text)) continue;
+    if (/\[可食用/.test(text)) continue;
+    if (!FURNITURE_RE.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name !== '' && !(rejected?.has(name) ?? false)) candidate = name;
+  }
+  return candidate;
+}
+
+/** 背包里木材数量（Chest 配方需要 50） */
+export function countWood(raw: string): number {
+  for (const text of inventoryTexts(raw)) {
+    if (!/木材/.test(text)) continue;
+    const m = /x(\d+)/i.exec(text);
+    return m?.[1] === undefined ? 1 : Number(m[1]);
+  }
+  return 0;
+}
+
+/** 从文字地图找离玩家最近的空地 `.`（place_item 目标格；地图被省略时返回 null） */
+export function findFreeTile(raw: string, posX: number, posY: number): { x: number; y: number } | null {
+  const header = /左上角坐标=\((\d+),(\d+)\)/.exec(raw);
+  if (!header?.[1] || header[2] === undefined) return null;
+  const x0 = Number(header[1]);
+  const y0 = Number(header[2]);
+  const mapStart = raw.indexOf('## 文字地图');
+  if (mapStart < 0) return null;
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const line of raw.slice(mapStart).split('\n').slice(1)) {
+    const m = /^\s*(\d+)\s(\S.*)$/.exec(line);
+    if (!m?.[1] || m[2] === undefined) continue;
+    const y = Number(m[1]);
+    const row = m[2];
+    for (let index = 0; index < row.length; index++) {
+      if (row[index] !== '.') continue;
+      const x = x0 + index;
+      const distance = Math.abs(x - posX) + Math.abs(y - posY);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
+
+/** 背包里是否已有箱子（Chest） */
+export function hasChestItem(raw: string): boolean {
+  for (const text of inventoryTexts(raw)) {
+    if (KEEP_TAG_RE.test(text)) continue;
+    if (/^(?:箱子|木箱|Chest)/i.test(cleanItemName(text))) return true;
+  }
+  return false;
+}
+
 export type PlannerDecision =  | { kind: 'act'; tool: string; args: Record<string, unknown>; intent: string }
   | { kind: 'wait'; seconds: number; reason: string }
   | { kind: 'stop'; reason: string };
@@ -179,9 +249,17 @@ export interface Planner {
 function handleMenu(state: GameStateSnapshot): PlannerDecision | null {
   const menu = state.menu;
   if (menu === '' || /无（可以自由行动）/.test(menu)) return null;
+  // 选择题必须先于剧情判断：BWF 的剧情选项文本里同样含「剧情」，但必须带 choice 序号（0 基）。
+  if (/起名字|set_name/.test(menu)) {
+    return { kind: 'act', tool: 'set_name', args: { name: '小鲸' }, intent: '给小家伙起名叫小鲸' };
+  }
+  if (/选项|选择题/.test(menu)) {
+    const first = /(\d+)\s*[:：]/.exec(menu);
+    const choice = first?.[1] === undefined ? 0 : Number(first[1]);
+    return { kind: 'act', tool: 'dialogue', args: { choice }, intent: `做选择题（选项 ${choice}）` };
+  }
   if (/剧情|节日事件/.test(menu)) return { kind: 'act', tool: 'dialogue', args: {}, intent: '推进剧情对话' };
   if (/商店|Shop/.test(menu)) return { kind: 'act', tool: 'close_menu', args: {}, intent: '关掉误开的商店界面' };
-  if (/选择题|选择/.test(menu)) return { kind: 'act', tool: 'dialogue', args: { choice: 1 }, intent: '做选择题' };
   return { kind: 'act', tool: 'dialogue', args: {}, intent: '推进当前界面' };
 }
 
@@ -201,6 +279,7 @@ export class RulePlanner implements Planner {
   private lastPhaseDay = -1;
   /** 上次解析到的背包空位（BWF get_state 会省掉未变化段落，不能把「省略」当「有空位」） */
   private lastFreeSlots: number | null = null;
+  private furniturePlaceTried = false;
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
     const menu = handleMenu(state);
@@ -229,10 +308,25 @@ export class RulePlanner implements Planner {
     const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
     if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
     const effectiveSlots = rawHasSlots ? state.freeSlots : (this.lastFreeSlots ?? state.freeSlots);
+    if (effectiveSlots > 0) this.furniturePlaceTried = false;
     if (effectiveSlots <= 0) {
       const item = pickShippableItem(state.raw);
       if (item !== null) {
         return { kind: 'act', tool: 'ship_items', args: { item }, intent: `背包满了，先把${item}出货换米腾位置` };
+      }
+      const furniture = pickFurnitureToPlace(state.raw);
+      if (furniture !== null) {
+        if (!this.furniturePlaceTried) {
+          this.furniturePlaceTried = true;
+          if (state.location !== 'Farm') {
+            return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把家具摆出来腾个背包格' };
+          }
+          if (state.posX >= 0) {
+            return { kind: 'act', tool: 'place_item', args: { item: furniture, x: state.posX + 1, y: state.posY, force: true }, intent: `把${furniture}摆到农场上腾位置` };
+          }
+        }
+        // 摆过一次仍卡住 → 强制丢弃兜底（墙饰类 BWF 无法摆到地面）
+        return { kind: 'act', tool: 'trash_item', args: { item: furniture, force: true }, intent: `家具摆不下，只好忍痛丢掉${furniture}换一格` };
       }
       return { kind: 'act', tool: 'tidy_backpack', args: { purpose: 'fish' }, intent: '背包塞得满满当当，先整理出空位再干活' };
     }
