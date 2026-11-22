@@ -12,6 +12,7 @@ import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
 import { createCharacterRegistry } from './character-registry';
 import { setCurrentPersonaPrompt } from './character-persona';
+import { createCoopHost } from './coop-host';
 import { createProviderImportHost } from './provider-import-host';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
@@ -111,6 +112,7 @@ if (TEST_MODE) {
 let stageWindow: BrowserWindow | null = null;
 let directorWindow: BrowserWindow | null = null;
 let petPrefsStore: ReturnType<typeof createPetPrefsStore> | null = null;
+let coopHost: ReturnType<typeof createCoopHost> | null = null;
 
 function createStageWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -227,6 +229,12 @@ app.whenReady().then(() => {
     builtinAssetsDir: join(here, '../renderer/pet-stage/assets'),
   });
   void characters;
+  // 多桌宠联机 agent 池（T-M6-22）：每端点一个 runner，事件带 agentId；不与单例 autodrive 共用动作锁
+  coopHost = createCoopHost({
+    userDataDir: app.getPath('userData'),
+    windows: () => [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+  });
+  void coopHost;
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
   const voice = createVoiceHost();
   registerVoiceHostIpc(voice);
@@ -295,5 +303,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // 多桌宠 agent 池先停，避免残留 MCP 长轮询阻止进程退出
+  coopHost?.stopAll();
   app.quit();
 });

@@ -182,6 +182,14 @@ export interface DirectorBridge {
   onHarnessEvent(handler: (event: HarnessEventMsg) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
+  // T-M6-20 桌宠缩放 + T-M6-21 角色 + T-M6-22 联机端点
+  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string }>;
+  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string }): Promise<unknown>;
+  characterList(): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string }>>;
+  characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;
+  coopEndpoints(): Promise<Array<{ id: string; displayName: string; gameId: string; endpoint: string; characterId: string; enabled: boolean; running: boolean; error: string | null }>>;
+  coopStart(id: string): Promise<{ ok: boolean; error?: string }>;
+  coopStop(id: string): Promise<{ ok: boolean }>;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
   prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string }>;
   prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string }): Promise<unknown>;

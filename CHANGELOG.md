@@ -5,6 +5,7 @@
 
 ### Changed
 
+- **多桌宠联机 agent 池 T-M6-22（2026-11-22 用户确认真联机多端点）**：契约 `McpEndpointSchema` + `mcp-endpoints.json` 多实例端口登记；独立 `coop-host.ts` 每端点一个 runner（复用 M7 GameAdapter 抽象，零侵入并行会话在制文件），事件带 agentId，动作锁/规划器/饭碗各自独立；IPC + 中控台联机面板（端点列表/接管/停止/轮询）；窗口关闭 stopAll。真机：默认端点启停绿、坏端点如实报错不误标运行；待用户多开游戏+不同端口双桌宠实测。
 - **多角色注册表与切换底座 T-M6-21（2026-11-22 用户「以后还会有更多角色」）**：契约 `PetCharacterSchema` 跨语言重生成 + 主进程注册表（内置 + userData 自定义 JSON，只下发元数据、manifest 走契约校验）；IPC 列表/切换/manifest；切换写 PetDesktopPrefs.characterId 并广播桌宠窗重载 manifest 与饭碗锚点；聊天口吻经独立桥接模块联动；中控台桌宠页角色胶囊。真机 E2E 验 manifest 11 动作、桌宠窗按注册表挂载视频。
 - **桌宠大小手动调节 T-M6-20（2026-11-22 用户确认：滚轮+滑块+右键菜单）**：三入口同源走 `pet:prefs-set(scale)`，主进程按**脚底中心锚点**改窗口 bounds（底边与水平中心不动）并广播渲染层；CSS 尺寸放大 + 双轨气泡 `setStageBox` 重排 + alpha 探针坐标换算。真机：连滚两格 1.0→1.3、底边/中心锚点不动、气泡不越界；顺带修「饭碗进度条错位」——以角色实测锚点 68.7% 水平居中于脚下。
 - **桌宠拖拽放哪停哪 + 位置持久化 T-M6-19（2026-11-22 用户指令：拖到别处会自动掉底）**：根因＝甩抛重力 1800 且只在触底才停、边界用裸 workArea 没扣窗高。新增 `PetDesktopPrefsSchema`（位置/缩放/拖拽模式/角色/联机端点）跨语言重生成 + 主进程文件 KV + IPC；拖拽三态 stick（默认，松手即停）/ glide（无重力轻惯性）/ gravity（旧甩抛），`screen:bounds` 增 `windowBounds` 防窗口滑出屏幕；启动恢复上次落点。真机 E2E：松手停在 (500,240) 不掉底、prefs 落盘、重启后位置恢复；`verify:gate` 5 过。

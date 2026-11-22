@@ -23,6 +23,9 @@ import { MemoryPanel } from './memory-panel';
 import { ObsPanel } from './obs-panel';
 import { PluginsPanel } from './plugins-panel';
 import { PetStagePanel } from './pet-stage-panel';
+import { CoopPanel } from './coop-panel'; // T-M6-22 多桌宠联机端点
+import { TerrariaPanel } from './terraria-panel';
+import { DstPanel, type DstPanelEvent } from './dst-panel';
 import { NAV_GROUPS, Sidebar, type Tab } from './shell/sidebar';
 import { Topbar } from './shell/topbar';
 import { CommandPalette, type CommandAction } from './shell/command-palette';
@@ -349,7 +352,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       .filter((n) => plugins.has(n.id))
       .map((n) => ({ id: `page:${n.id}`, label: n.label, group: '页面', icon: n.icon, run: () => setTab(n.id) }));
     const actions: CommandAction[] = [
-      { id: 'act:drive', label: running ? '停止自动驾驶' : '启动自动驾驶', group: '全局动作', icon: running ? Square : Play, hint: '星露谷', run: () => void (running ? stop() : start()) },
+      { id: 'act:drive', label: running ? '停止自动驾驶' : '启动自动驾驶', group: '全局动作', icon: running ? Square : Play, hint: '当前游戏', run: () => void (running ? stop() : start()) },
       { id: 'act:brain', label: brain.mode === 'llm' ? '切换规则日程' : '切换 LLM 大脑', group: '全局动作', icon: Brain, hint: brain.mode, run: () => void switchBrain() },
       { id: 'act:voice', label: voiceOn ? '静音语音' : '开启语音', group: '全局动作', icon: voiceOn ? VolumeX : Volume2, run: () => void toggleVoice() },
       { id: 'act:feed', label: '投喂 5,000 粒米', group: '全局动作', icon: Wheat, hint: '饭碗', run: () => void feedRice() },
@@ -538,6 +541,29 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               </div>
             </header>
             {petTab === 'stage' ? <PetStagePanel events={events} running={running} /> : <PetsPanel />}
+            <div className="mt-4"><CoopPanel /></div>
+          </div>
+        )}
+
+        {tab === 'terraria' && (
+          <div className="mx-auto max-w-[1320px] px-6 py-5">
+            <TerrariaPanel events={events} running={running} />
+          </div>
+        )}
+
+        {tab === 'dst' && (
+          <div className="mx-auto max-w-[1320px] px-6 py-5">
+            <DstPanel
+              bridge={{
+                dstStart: () => window.directorBridge.autodriveStart('dst'),
+                dstStop: () => window.directorBridge.autodriveStop(),
+                dstDirective: (tool, args, intent) => window.directorBridge.autodriveDirective(tool, args, intent),
+                onDstEvent: (handler) => window.directorBridge.onAutodriveEvent((event) => {
+                  if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt' || event.type === 'watchdog') handler(event as DstPanelEvent);
+                }),
+              }}
+              endpoint="http://127.0.0.1:18100"
+            />
           </div>
         )}
 

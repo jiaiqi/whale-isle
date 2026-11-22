@@ -61,6 +61,15 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> => ipcRenderer.invoke('rice:status'),
+  // T-M6-21 多角色注册表 + T-M6-22 联机端点
+  characterList: (): Promise<unknown> => ipcRenderer.invoke('pet:character-list'),
+  characterSelect: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('pet:character-select', id),
+  coopEndpoints: (): Promise<unknown> => ipcRenderer.invoke('coop:endpoints'),
+  coopStart: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('coop:start', id),
+  coopStop: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('coop:stop', id),
+  // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
+  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
+  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
   // T-M6-21 多角色注册表（切换由主进程写 prefs + 广播桌宠窗重载）
   characterList: (): Promise<unknown> => ipcRenderer.invoke('pet:character-list'),
   characterSelect: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('pet:character-select', id),
@@ -123,6 +132,7 @@ contextBridge.exposeInMainWorld('petStage', {
   ready: true,
   setPassthrough: (state: 'passthrough' | 'interactive') => ipcRenderer.invoke('passthrough:set', state),
   getState: (): Promise<'passthrough' | 'interactive'> => ipcRenderer.invoke('passthrough:get'),
+  forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
   // 右键菜单期间强制交互，防 alpha 探针把窗口切穿透导致菜单点不到（T-M6-20）
   forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
   // 右键菜单期间强制交互，防 alpha 探针把窗口切穿透导致菜单点不到（T-M6-20）
@@ -131,6 +141,14 @@ contextBridge.exposeInMainWorld('petStage', {
   mousePoint: () => ipcRenderer.invoke('cursor:point'),
   winPosition: (): Promise<[number, number] | null> => ipcRenderer.invoke('win:get-position'),
   dragTo: (x: number, y: number): Promise<[number, number] | null> => ipcRenderer.invoke('win:drag-to', x, y),
+  onScaleChanged: (handler: (scale: number) => void): void => {
+    ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
+  },
+  characterManifest: (id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }> =>
+    ipcRenderer.invoke('pet:character-manifest', id),
+  onCharacterChanged: (handler: (character: { id: string; anchorRatio: number }) => void): void => {
+    ipcRenderer.on('pet:character-changed', (_e, c: { id: string; anchorRatio: number }) => handler(c));
+  },
   onScaleChanged: (handler: (scale: number) => void): void => {
     ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
   },
