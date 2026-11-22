@@ -170,9 +170,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         </button>
         <button
           data-voice-test
-          onClick={() => void window.directorBridge.voiceSpeak('哼，本鱼才没有偷懒呢！', 'normal')}
+          onClick={() => void window.directorBridge.voiceSpeak('哼，本鱼才没有偷懒呢！主人今天要夸夸我吗？', 'normal')}
           className="px-3 py-1.5 rounded-full text-xs border border-slate-600 bg-slate-800/50 text-slate-400"
-          title="试听小鲸的声音"
+          title="试听小鲸的萝莉音（音调可在配置调）"
         >
           试听
         </button>

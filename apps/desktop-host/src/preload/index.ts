@@ -57,9 +57,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 语音（D11 第一版：macOS say 引擎）
   voiceSpeak: (text: string, scene: 'normal' | 'inner' | 'p0'): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('voice:speak', { text, scene }),
-  voiceConfigGet: (): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string }> =>
+  voiceConfigGet: (): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }> =>
     ipcRenderer.invoke('voice:config:get'),
-  voiceConfigSet: (patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string }> =>
+  voiceConfigSet: (patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }> =>
     ipcRenderer.invoke('voice:config:set', patch),
 });
 
