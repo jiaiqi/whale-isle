@@ -15,10 +15,16 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('providers:save-key', providerId, plainKey),
   providerKeyMask: (providerId: string): Promise<{ ok: boolean; error?: string; mask?: string }> =>
     ipcRenderer.invoke('providers:key-mask', providerId),
+  copyProviderKey: (providerId: string): Promise<{ ok: boolean; error?: string; mask?: string }> =>
+    ipcRenderer.invoke('providers:copy-key', providerId),
+  checkProviderBalance: (providerId: string): Promise<{ ok: boolean; error?: string; text?: string; raw?: string }> =>
+    ipcRenderer.invoke('providers:check-balance', providerId),
   discoverModels: (args: { providerId: string; baseUrl: string; protocol?: 'openai' | 'anthropic' }): Promise<{ ok: boolean; error?: string; models?: string[] }> =>
     ipcRenderer.invoke('providers:discover-models', args),
-  testProviderChat: (args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic' }): Promise<{ ok: boolean; error?: string; latencyMs?: number }> =>
+  testProviderChat: (args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic'; decision?: boolean }): Promise<{ ok: boolean; error?: string; latencyMs?: number }> =>
     ipcRenderer.invoke('providers:test-chat', args),
+  openKeyConsole: (url: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('providers:open-external', url),
   providerImportPickFile: (): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('providers:import-pick-file'),
   providerImportScan: (args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string }): Promise<unknown> =>
@@ -112,6 +118,9 @@ contextBridge.exposeInMainWorld('petStage', {
   mousePoint: () => ipcRenderer.invoke('cursor:point'),
   winPosition: (): Promise<[number, number] | null> => ipcRenderer.invoke('win:get-position'),
   dragTo: (x: number, y: number): Promise<[number, number] | null> => ipcRenderer.invoke('win:drag-to', x, y),
+  // T-M6-19：桌宠桌面偏好（位置/缩放/拖拽手感/角色/联机端点）文件 KV
+  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
+  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
   // T-M1-05 改版：桌宠窗自拉饭碗余额（默认隐藏 / hover 显示 / 饿态亮灯）
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> =>
     ipcRenderer.invoke('rice:status'),

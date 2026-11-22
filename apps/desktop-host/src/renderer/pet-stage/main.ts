@@ -6,7 +6,8 @@ import { WebmVideoRenderer, pickAmbient, type RendererHost, type VideoFactory, t
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
-import { createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
+import { createGlide, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
+import type { PetDesktopPrefs } from '@workbench/shared-protocol';
 import { AudioLeaseManager } from './audio-lease';
 import { mountBubbleWidgets } from './widgets/bubbles';
 import { mountRiceBowlWidget } from './widgets/rice-bowl-widget';
@@ -16,10 +17,12 @@ interface PetStageBridge {
   ready: boolean;
   setPassthrough(state: 'passthrough' | 'interactive'): Promise<boolean>;
   getState(): Promise<'passthrough' | 'interactive'>;
-  screenBounds(): Promise<Bounds>;
+  screenBounds(): Promise<Bounds & { windowBounds: Bounds }>;
   mousePoint(): Promise<{ x: number; y: number }>;
   winPosition(): Promise<[number, number] | null>;
   dragTo(x: number, y: number): Promise<[number, number] | null>;
+  prefsGet(): Promise<PetDesktopPrefs>;
+  prefsSet(update: Partial<PetDesktopPrefs>): Promise<PetDesktopPrefs>;
   riceStatus(): Promise<{ balance: number; budget: number; consumedToday: number; level: string }>;
   appMeta(): Promise<{ transparent: boolean; frame: boolean; alwaysOnTop: boolean; skipTaskbar: boolean; testMode: boolean }>;
   forceAlpha?(alpha: number): Promise<boolean>;
@@ -288,34 +291,59 @@ window.addEventListener('mouseup', () => {
     const bounds = await bridge.screenBounds();
     const winPos = await bridge.winPosition();
     if (!winPos) return;
-    throwSim = createThrow({
-      start: { x: winPos[0], y: winPos[1] },
-      velocity,
-      bounds: { minX: bounds.minX, minY: bounds.minY, maxX: bounds.maxX, maxY: bounds.maxY },
-    });
-    cancelAnimationFrame(raf);
-    let lastTs = performance.now();
-    const stepLoop = (ts: number) => {
-      if (!throwSim || throwSim.done()) {
-        // 落定：按冲击速度触发 Q 弹（squashAt），600ms 内收敛回恒等
-        const impact = throwSim?.landingImpact() ?? 0;
-        const started = performance.now();
-        const squashLoop = (now: number) => {
-          const pose = renderer.squashPoseAt(now - started, Math.min(impact / 400, 2));
-          host.applySquash(pose);
-          if (now - started < 600) raf = requestAnimationFrame(squashLoop);
-          else host.applySquash({ scaleX: 1, scaleY: 1 });
-        };
-        raf = requestAnimationFrame(squashLoop);
-        return;
-      }
-      const dt = ts - lastTs;
-      lastTs = ts;
-      const pos = throwSim.step(dt);
-      void bridge.dragTo(pos.x, pos.y);
-      raf = requestAnimationFrame(stepLoop);
+    const prefs = await bridge.prefsGet();
+    const start = { x: winPos[0], y: winPos[1] };
+    // 窗口左上角可达区域（已扣窗口宽高）——甩抛/惯性都必须用它，否则窗口会滑出屏幕
+    const wb = bounds.windowBounds ?? bounds;
+    const simBounds: Bounds = { minX: wb.minX, minY: wb.minY, maxX: wb.maxX, maxY: wb.maxY };
+    const mode = prefs.dragBehavior;
+
+    // 落定回调用释放速度驱动 Q 弹（stick 无位移也照常弹一下，手感还在）
+    const settle = (impact: number): void => {
+      cancelAnimationFrame(raf);
+      const started = performance.now();
+      const squashLoop = (now: number) => {
+        const pose = renderer.squashPoseAt(now - started, Math.min(impact / 400, 2));
+        host.applySquash(pose);
+        if (now - started < 600) raf = requestAnimationFrame(squashLoop);
+        else host.applySquash({ scaleX: 1, scaleY: 1 });
+      };
+      raf = requestAnimationFrame(squashLoop);
     };
-    raf = requestAnimationFrame(stepLoop);
+
+    if (mode === 'gravity') {
+      throwSim = createThrow({ start, velocity, bounds: simBounds });
+    } else if (mode === 'glide') {
+      throwSim = createGlide({ start, velocity, bounds: simBounds });
+    } else {
+      // stick（默认）：放哪停哪——不再创建位移模拟，窗口停在拖拽最后位置；只记位置持久化
+      throwSim = null;
+    }
+
+    if (throwSim !== null) {
+      let lastTs = performance.now();
+      const stepLoop = (ts: number) => {
+        if (!throwSim || throwSim.done()) {
+          const impact = throwSim?.landingImpact() ?? Math.hypot(velocity.vx, velocity.vy) * 0.4;
+          settle(impact);
+          // 持久化落定后的真实位置（不是拖拽起点）——否则重启后桌宠会回到松手前的位置
+          const rest = throwSim?.position() ?? start;
+          void bridge.prefsSet({ position: { x: Math.round(rest.x), y: Math.round(rest.y), displayId: prefs.position.displayId } });
+          return;
+        }
+        const dt = ts - lastTs;
+        lastTs = ts;
+        const pos = throwSim.step(dt);
+        void bridge.dragTo(pos.x, pos.y);
+        raf = requestAnimationFrame(stepLoop);
+      };
+      raf = requestAnimationFrame(stepLoop);
+    } else {
+      settle(Math.hypot(velocity.vx, velocity.vy) * 0.4);
+      // 拖拽期间窗口已跟手移动 → 用最终真实位置持久化（windowBounds 由主进程 dragTo 夹紧）
+      const final = await bridge.winPosition();
+      if (final !== null) void bridge.prefsSet({ position: { x: final[0], y: final[1], displayId: prefs.position.displayId } });
+    }
   })();
 });
 

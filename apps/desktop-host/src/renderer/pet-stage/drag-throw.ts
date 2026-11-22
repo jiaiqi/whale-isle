@@ -73,6 +73,42 @@ export interface ThrowSim {
 
 const DEFAULTS = { gravity: 1800, restitution: 0.55, friction: 0.35, stopSpeed: 40, maxDurationMs: 6000 };
 
+/**
+ * 无重力轻惯性（T-M6-19 glide 模式）：沿释放速度短距滑行，摩擦衰减后停在落点附近，
+ * 绝不往屏幕底部掉。边界须为「窗口左上角可达区域」（main 的 windowBounds）。
+ */
+export function createGlide(options: ThrowOptions): ThrowSim {
+  const cfg = { ...DEFAULTS, ...options, gravity: 0, restitution: 0, maxDurationMs: 450 };
+  let x = options.start.x;
+  let y = options.start.y;
+  let vx = options.velocity.vx;
+  let vy = options.velocity.vy;
+  let elapsedMs = 0;
+  const clampX = (n: number) => Math.min(Math.max(n, options.bounds.minX), options.bounds.maxX);
+  const clampY = (n: number) => Math.min(Math.max(n, options.bounds.minY), options.bounds.maxY);
+  return {
+    step(dtMs: number): Vec2 {
+      if (this.done()) return { x, y };
+      const dt = Math.max(dtMs, 0) / 1000;
+      elapsedMs += dtMs;
+      vx *= Math.pow(cfg.friction, dt);
+      vy *= Math.pow(cfg.friction, dt);
+      x = clampX(x + vx * dt);
+      y = clampY(y + vy * dt);
+      return { x, y };
+    },
+    position() {
+      return { x, y };
+    },
+    landingImpact() {
+      return null; // 无重力不触底，Q 弹用释放速度另算
+    },
+    done() {
+      return Math.hypot(vx, vy) < cfg.stopSpeed || elapsedMs >= cfg.maxDurationMs;
+    },
+  };
+}
+
 export function createThrow(options: ThrowOptions): ThrowSim {
   const cfg = { ...DEFAULTS, ...options };
   const clampX = (x: number) => Math.min(Math.max(x, options.bounds.minX), options.bounds.maxX);

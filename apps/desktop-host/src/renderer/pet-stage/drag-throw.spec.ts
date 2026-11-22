@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createThrow, velocityFromSamples, type DragSample } from './drag-throw';
+import { PetDesktopPrefsSchema } from '@workbench/shared-protocol';
+import { createGlide, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
 
 /** [SIMULATION] T-M1-02：拖拽甩抛物理（测速 / 重力反弹 / 落定与冲击） */
 
@@ -146,5 +147,33 @@ describe('createThrow（甩出物理）', () => {
     const pos = sim.step(16);
     expect(pos.x).toBeGreaterThanOrEqual(BOUNDS.minX);
     expect(pos.y).toBeLessThanOrEqual(BOUNDS.maxY);
+  });
+});
+
+describe('T-M6-19 三态拖拽：glide 无重力不落底', () => {
+  const bounds: Bounds = { minX: 0, minY: 0, maxX: 1000, maxY: 700 };
+  it('stick 模式（renderer 不建 sim）语义由 prefs 决定：默认 stick', () => {
+    expect(PetDesktopPrefsSchema.parse({}).dragBehavior).toBe('stick');
+  });
+  it('glide：向上/斜向甩出后落点停在起点附近，绝不掉到屏幕底部', () => {
+    const sim = createGlide({
+      start: { x: 300, y: 300 },
+      velocity: { vx: 800, vy: -600 },
+      bounds,
+    });
+    let pos = sim.position();
+    for (let i = 0; i < 40 && !sim.done(); i++) pos = sim.step(16);
+    expect(sim.done()).toBe(true);
+    expect(pos.y).toBeLessThan(300); // 向上甩 → 不往下掉
+    expect(pos.x).toBeGreaterThan(300);
+    expect(pos.x).toBeLessThan(bounds.maxX);
+    expect(pos.y).toBeGreaterThanOrEqual(bounds.minY);
+  });
+  it('glide：巨大速度也不越界（windowBounds 夹紧）', () => {
+    const sim = createGlide({ start: { x: 900, y: 600 }, velocity: { vx: 9000, vy: 9000 }, bounds });
+    let pos = sim.position();
+    for (let i = 0; i < 40 && !sim.done(); i++) pos = sim.step(16);
+    expect(pos.x).toBeLessThanOrEqual(bounds.maxX);
+    expect(pos.y).toBeLessThanOrEqual(bounds.maxY);
   });
 });

@@ -48,7 +48,23 @@ export function registerStageIpc(options: PassthroughIpcOptions): void {
 
   ipcMain.handle('passthrough:get', () => current);
 
-  ipcMain.handle('screen:bounds', () => computeScreenBounds());
+  // T-M6-19：同时给「工作区边界」与「窗口左上角可达边界」（扣掉窗口自身尺寸）——
+  // 甩抛物理必须用 windowBounds，否则重力/惯性会把窗口整个推出屏幕下沿
+  ipcMain.handle('screen:bounds', () => {
+    const work = computeScreenBounds();
+    const win = options.getWindow();
+    const wb = win && !win.isDestroyed() ? win.getBounds() : null;
+    if (!wb) return { ...work, windowBounds: work };
+    return {
+      ...work,
+      windowBounds: {
+        minX: work.minX,
+        minY: work.minY,
+        maxX: Math.max(work.minX, work.maxX - wb.width),
+        maxY: Math.max(work.minY, work.maxY - wb.height),
+      },
+    };
+  });
 
   ipcMain.handle('cursor:point', () => screen.getCursorScreenPoint());
 

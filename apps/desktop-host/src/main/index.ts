@@ -2,13 +2,14 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, screen } from 'electron';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
+import { createPetPrefsStore } from './pet-prefs';
 import { createProviderImportHost } from './provider-import-host';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
@@ -107,6 +108,7 @@ if (TEST_MODE) {
 
 let stageWindow: BrowserWindow | null = null;
 let directorWindow: BrowserWindow | null = null;
+let petPrefsStore: ReturnType<typeof createPetPrefsStore> | null = null;
 
 function createStageWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -130,6 +132,15 @@ function createStageWindow(): BrowserWindow {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  // T-M6-19：启动恢复桌宠上次落点（位置持久化）。越界/显示器已拔 → 回落主屏安全位置，绝不把桌宠放到屏幕外
+  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'))).get();
+  const { x, y } = prefs.position;
+  const onScreen = screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    return x >= a.x - 40 && y >= a.y - 40 && x <= a.x + a.width && y <= a.y + a.height;
+  });
+  if (onScreen) win.setPosition(Math.round(x), Math.round(y));
+  else win.setPosition(120, 120);
   win.loadFile(join(here, '../renderer/pet-stage/index.html'));
   win.once('ready-to-show', () => win.showInactive());
   return win;
