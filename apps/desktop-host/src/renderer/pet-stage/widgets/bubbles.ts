@@ -13,6 +13,7 @@ import {
 
 export { computeBubbleLayout, rectsOverlap, type BubbleLayout, type BubbleRect, type StageBox } from './bubble-layout';
 export interface BubbleWidgets {
+  setStageBox(box: StageBox): void; // T-M6-20 缩放后重排双轨气泡
   showThought(text: string): void;
   showDialog(text: string): void;
   hideThought(): void;
@@ -22,7 +23,8 @@ export interface BubbleWidgets {
 
 /** 舞台挂载双轨气泡（样式：云朵半透明 / 对话泡带尾巴；均不拦截穿透语义外的点击） */
 export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): BubbleWidgets {
-  const layout = computeBubbleLayout(stageBox);
+  let box = stageBox;
+  let layout = computeBubbleLayout(box);
 
   const thought = document.createElement('div');
   thought.className = 'pet-bubble pet-bubble--thought';
@@ -74,6 +76,18 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
   };
 
   return {
+    /** T-M6-20 缩放：舞台尺寸变化后重排气泡（保持双轨不重叠的几何保证） */
+    setStageBox(next: StageBox) {
+      box = next;
+      layout = computeBubbleLayout(next);
+      thought.style.left = `${layout.thought.x}px`;
+      thought.style.top = `${layout.thought.y}px`;
+      thought.style.width = `${layout.thought.width}px`;
+      thought.style.maxHeight = `${layout.thought.height + 16}px`;
+      dialog.style.left = `${layout.dialog.x}px`;
+      dialog.style.width = `${Math.round(box.width * 0.42)}px`;
+      dialog.style.maxHeight = `${Math.max(72, box.height - layout.thought.y - layout.thought.height - 24)}px`;
+    },
     showThought(text: string) {
       setBubbleText(thought, text);
     },

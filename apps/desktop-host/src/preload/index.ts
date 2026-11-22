@@ -61,6 +61,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> => ipcRenderer.invoke('rice:status'),
+  // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
+  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
+  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
   // 运行时大脑配置（Dexie 套餐/槽位 → 主进程 gateway；不含任何密钥）
   brainApplyConfig: (config: unknown): Promise<unknown> => ipcRenderer.invoke('brain:apply-config', config),
   // LLM 大脑（T-M6-01 完整版）
@@ -114,10 +117,15 @@ contextBridge.exposeInMainWorld('petStage', {
   ready: true,
   setPassthrough: (state: 'passthrough' | 'interactive') => ipcRenderer.invoke('passthrough:set', state),
   getState: (): Promise<'passthrough' | 'interactive'> => ipcRenderer.invoke('passthrough:get'),
+  // 右键菜单期间强制交互，防 alpha 探针把窗口切穿透导致菜单点不到（T-M6-20）
+  forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
   screenBounds: () => ipcRenderer.invoke('screen:bounds'),
   mousePoint: () => ipcRenderer.invoke('cursor:point'),
   winPosition: (): Promise<[number, number] | null> => ipcRenderer.invoke('win:get-position'),
   dragTo: (x: number, y: number): Promise<[number, number] | null> => ipcRenderer.invoke('win:drag-to', x, y),
+  onScaleChanged: (handler: (scale: number) => void): void => {
+    ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
+  },
   // T-M6-19：桌宠桌面偏好（位置/缩放/拖拽手感/角色/联机端点）文件 KV
   prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
   prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),

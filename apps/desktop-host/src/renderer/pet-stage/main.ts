@@ -16,6 +16,7 @@ import { buildPlaybackLease, sampleVisemeTimeline, type SpeakRequest } from './t
 interface PetStageBridge {
   ready: boolean;
   setPassthrough(state: 'passthrough' | 'interactive'): Promise<boolean>;
+  forceInteractive(on: boolean): Promise<boolean>;
   getState(): Promise<'passthrough' | 'interactive'>;
   screenBounds(): Promise<Bounds & { windowBounds: Bounds }>;
   mousePoint(): Promise<{ x: number; y: number }>;
@@ -23,6 +24,7 @@ interface PetStageBridge {
   dragTo(x: number, y: number): Promise<[number, number] | null>;
   prefsGet(): Promise<PetDesktopPrefs>;
   prefsSet(update: Partial<PetDesktopPrefs>): Promise<PetDesktopPrefs>;
+  onScaleChanged?(handler: (scale: number) => void): void;
   riceStatus(): Promise<{ balance: number; budget: number; consumedToday: number; level: string }>;
   appMeta(): Promise<{ transparent: boolean; frame: boolean; alwaysOnTop: boolean; skipTaskbar: boolean; testMode: boolean }>;
   forceAlpha?(alpha: number): Promise<boolean>;
@@ -225,11 +227,27 @@ probeCanvas.width = 1;
 probeCanvas.height = 1;
 const probeCtx = probeCanvas.getContext('2d', { willReadFrequently: true });
 let stageOffset = { x: 0, y: 0 };
+/** T-M6-20 缩放倍率：舞台/窗口按此倍率同步放大，探针采样需把窗口坐标换算回视频原始坐标 */
+let petScale = 1;
+const BASE_STAGE = { width: 400, height: 260 };
 const originalApplyLayout = host.applyLayout.bind(host);
 host.applyLayout = (layout) => {
   stageOffset = { x: layout.offsetX, y: layout.offsetY };
   originalApplyLayout(layout);
+  applyStageScale();
 };
+
+/** 直接放大 CSS 尺寸（不用 transform，避免与 Q 弹的 scale 属性互相干扰）；脚线 offset 同比例 */
+function applyStageScale(): void {
+  stage.style.width = `${BASE_STAGE.width * petScale}px`;
+  stage.style.height = `${BASE_STAGE.height * petScale}px`;
+  stage.style.left = `${stageOffset.x * petScale}px`;
+  stage.style.top = `${stageOffset.y * petScale}px`;
+  for (const video of stage.querySelectorAll('video')) {
+    video.style.width = `${BASE_STAGE.width * petScale}px`;
+    video.style.height = `${BASE_STAGE.height * petScale}px`;
+  }
+}
 
 async function sampleAlpha(): Promise<number> {
   const video = stage.querySelector('video');
@@ -237,7 +255,10 @@ async function sampleAlpha(): Promise<number> {
   const point = await bridge.mousePoint();
   const winPos = await bridge.winPosition();
   if (!winPos) return 0;
-  ctxDraw(video, point.x - winPos[0] - stageOffset.x, point.y - winPos[1] - stageOffset.y);
+  // 窗口 DIP → 舞台基准坐标（除缩放）→ 视频原始像素（drawImage 用 intrinsic 坐标）
+  const vx = (point.x - winPos[0]) / petScale - stageOffset.x;
+  const vy = (point.y - winPos[1]) / petScale - stageOffset.y;
+  ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
   return probeCtx.getImageData(0, 0, 1, 1).data[3] ?? 0;
 }
 
@@ -401,6 +422,63 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
 // 舞台 CSS 实际 400×260（窗口 400×284 留脚线 21px 余量）；旧代码按 440×300 算气泡会贴出窗右缘
 const widgets = mountBubbleWidgets(stage, { width: 400, height: 260 });
 const riceBowlWidget = mountRiceBowlWidget(stage);
+
+// ── T-M6-20 缩放：滚轮 / 右键菜单 / 主进程广播（中控台滑块）同步 ──
+const setScale = (next: number): void => {
+  const clamped = Math.min(Math.max(Math.round(next * 10) / 10, 0.6), 2);
+  if (clamped === petScale) return;
+  // 乐观更新：滚轮连续滚动时不等主进程广播回来就累计，否则连滚两格只生效一格
+  petScale = clamped;
+  applyStageScale();
+  widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+  void bridge.prefsSet({ scale: clamped }); // 主进程 patch 钩子改窗口 bounds + 广播
+};
+void bridge.prefsGet().then((p) => {
+  if (p.scale !== 1) {
+    petScale = p.scale;
+    applyStageScale();
+    widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+  }
+}).catch(() => undefined);
+bridge.onScaleChanged?.((scale) => {
+  petScale = scale;
+  applyStageScale();
+  widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+});
+// 滚轮缩放：只在桌宠实体区域触发（透明区仍穿透，不影响桌面操作）
+stage.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  setScale(petScale + (event.deltaY < 0 ? 0.1 : -0.1));
+}, { passive: false });
+
+// 右键菜单：设为交互态防止 alpha 探针把窗口切穿透导致菜单点不到；档位即时生效
+let scaleMenu: HTMLDivElement | null = null;
+const closeScaleMenu = (): void => {
+  scaleMenu?.remove();
+  scaleMenu = null;
+  void bridge.forceInteractive(false);
+};
+stage.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+  if (scaleMenu !== null) { closeScaleMenu(); return; }
+  void bridge.forceInteractive(true);
+  scaleMenu = document.createElement('div');
+  scaleMenu.style.cssText = `position:absolute; left:${Math.round(BASE_STAGE.width * petScale / 2 - 60)}px; bottom:8px;
+    display:flex; gap:4px; padding:6px; border-radius:12px; pointer-events:auto;
+    background:rgba(12,20,32,0.92); border:1px solid rgba(120,180,255,0.35); z-index:20;`;
+  for (const option of [0.6, 0.8, 1, 1.2, 1.5, 2]) {
+    const btn = document.createElement('button');
+    btn.textContent = `${option}×`;
+    btn.style.cssText = `font:11px monospace; color:${option === petScale ? '#8cc8ff' : '#cdd8e8'};
+      background:transparent; border:1px solid rgba(120,180,255,0.25); border-radius:8px; padding:4px 6px; cursor:pointer;`;
+    btn.addEventListener('click', () => { setScale(option); closeScaleMenu(); });
+    scaleMenu.appendChild(btn);
+  }
+  stage.appendChild(scaleMenu);
+  window.addEventListener('mousedown', (e) => {
+    if (scaleMenu !== null && !scaleMenu.contains(e.target as Node)) closeScaleMenu();
+  }, { once: true });
+});
 // 初始米量水合 + hover 显隐（默认隐藏；<15% 饿态强制亮灯）
 void bridge.riceStatus().then((st) => {
   if (st.budget > 0) refreshRiceWidget(st.balance / st.budget);

@@ -37,12 +37,25 @@ export interface PassthroughIpcOptions {
 
 export function registerStageIpc(options: PassthroughIpcOptions): void {
   let current: 'passthrough' | 'interactive' = 'passthrough';
+  /** 右键菜单/设置浮层期间强制交互：alpha 探针不得把窗口切成穿透（否则菜单点不到） */
+  let forceInteractive = false;
+  const applyState = (): void => {
+    const win = options.getWindow();
+    if (!win || win.isDestroyed()) return;
+    const passthrough = !forceInteractive && current === 'passthrough';
+    win.setIgnoreMouseEvents(passthrough, { forward: passthrough });
+  };
+  ipcMain.handle('passthrough:force', (_event, on: boolean) => {
+    forceInteractive = on === true;
+    applyState();
+    return true;
+  });
 
   ipcMain.handle('passthrough:set', (_event, state: 'passthrough' | 'interactive') => {
     const win = options.getWindow();
     if (!win || win.isDestroyed()) return false;
     current = state === 'interactive' ? 'interactive' : 'passthrough';
-    win.setIgnoreMouseEvents(current === 'passthrough', { forward: current === 'passthrough' });
+    applyState();
     return true;
   });
 

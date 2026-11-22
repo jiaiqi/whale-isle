@@ -133,14 +133,33 @@ function createStageWindow(): BrowserWindow {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   // T-M6-19：启动恢复桌宠上次落点（位置持久化）。越界/显示器已拔 → 回落主屏安全位置，绝不把桌宠放到屏幕外
-  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'))).get();
+  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'), (prev, next) => {
+    // T-M6-20 缩放：窗口按「脚底中心」放大/缩小（底边不动、左右对称伸缩）
+    if (prev.scale === next.scale) return;
+    const win = stageWindow;
+    if (!win || win.isDestroyed()) return;
+    const old = win.getBounds();
+    const nw = Math.round(400 * next.scale);
+    const nh = Math.round(284 * next.scale);
+    win.setBounds({
+      x: Math.round(old.x + (old.width - nw) / 2),
+      y: Math.round(old.y + old.height - nh), // 底边锚点不动
+      width: nw,
+      height: nh,
+    });
+    for (const target of [stageWindow, directorWindow]) {
+      if (target && !target.isDestroyed()) target.webContents.send('pet:scale-changed', next.scale);
+    }
+  })).get();
   const { x, y } = prefs.position;
   const onScreen = screen.getAllDisplays().some((d) => {
     const a = d.workArea;
     return x >= a.x - 40 && y >= a.y - 40 && x <= a.x + a.width && y <= a.y + a.height;
   });
-  if (onScreen) win.setPosition(Math.round(x), Math.round(y));
-  else win.setPosition(120, 120);
+  const scale = prefs.scale;
+  const bx = onScreen ? Math.round(x) : 120;
+  const by = onScreen ? Math.round(y) : 120;
+  win.setBounds({ x: bx, y: by, width: Math.round(400 * scale), height: Math.round(284 * scale) });
   win.loadFile(join(here, '../renderer/pet-stage/index.html'));
   win.once('ready-to-show', () => win.showInactive());
   return win;

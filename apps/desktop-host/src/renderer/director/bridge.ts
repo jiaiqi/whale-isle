@@ -182,6 +182,9 @@ export interface DirectorBridge {
   onHarnessEvent(handler: (event: HarnessEventMsg) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
+  // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
+  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity' }>;
+  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity' }): Promise<unknown>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
   riceStatus(): Promise<import('@workbench/shared-protocol').RiceBowlStatus>;
   brainApplyConfig(config: import('@workbench/shared-protocol').BrainRuntimeConfig): Promise<BrainApplyView>;

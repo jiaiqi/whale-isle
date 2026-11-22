@@ -14,7 +14,11 @@ export interface PetPrefsStore {
   patch(update: Partial<PetDesktopPrefs>): PetDesktopPrefs;
 }
 
-export function createPetPrefsStore(userDataDir: string): PetPrefsStore {
+export function createPetPrefsStore(
+  userDataDir: string,
+  /** scale 等字段变化通知（主进程据此调整桌宠窗 bounds / 广播渲染层） */
+  onPatch?: (prev: PetDesktopPrefs, next: PetDesktopPrefs) => void,
+): PetPrefsStore {
   const path = join(userDataDir, 'pet-desktop-prefs.json');
   let current = read();
 
@@ -41,7 +45,9 @@ export function createPetPrefsStore(userDataDir: string): PetPrefsStore {
   function patch(update: Partial<PetDesktopPrefs>): PetDesktopPrefs {
     const candidate = PetDesktopPrefsSchema.safeParse({ ...current, ...(update ?? {}) });
     const next = candidate.success ? candidate.data : current;
+    const prev = current;
     save(next);
+    onPatch?.(prev, next);
     return next;
   }
 
