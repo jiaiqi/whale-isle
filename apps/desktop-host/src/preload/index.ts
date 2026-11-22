@@ -59,8 +59,15 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('voice:speak', { text, scene }),
   voiceConfigGet: (): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }> =>
     ipcRenderer.invoke('voice:config:get'),
-  voiceConfigSet: (patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }> =>
+  voiceConfigSet: (patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number; voiceId?: string }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number; voiceId: string }> =>
     ipcRenderer.invoke('voice:config:set', patch),
+  voiceCatalog: (): Promise<{
+    voices: Array<{ id: string; label: string; desc: string }>;
+    modes: Array<{ id: string; label: string; emotion: string; pitch: number; speed: number; volume: number }>;
+    currentVoiceId: string;
+  }> => ipcRenderer.invoke('voice:catalog'),
+  voiceAudition: (voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('voice:audition', voiceId, mode, text),
 });
 
 contextBridge.exposeInMainWorld('petStage', {

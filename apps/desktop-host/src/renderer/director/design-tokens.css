@@ -1,0 +1,128 @@
+/* ==========================================================================
+   设计稿 v3「曜石」tokens（apple-ui-design：Clarity/Deference/Depth）
+   从 design/tokens.css 同步——工作台 Shell 的唯一视觉事实源
+   ========================================================================== */
+:root.dark {
+  --bg: #050507;
+  --bg-elev: #101014;
+  --surface: rgba(28, 28, 32, 0.72);
+  --surface-solid: #1c1c20;
+  --surface-2: rgba(44, 44, 48, 0.72);
+  --inset: rgba(0, 0, 0, 0.42);
+  --stroke: rgba(255, 255, 255, 0.08);
+  --stroke-2: rgba(255, 255, 255, 0.16);
+  --hi: rgba(255, 255, 255, 0.09);
+  --text-1: #f5f5f7;
+  --text-2: #98989f;
+  --text-3: #636368;
+  --blue: #0a84ff;
+  --blue-dim: rgba(10, 132, 255, 0.14);
+  --blue-line: rgba(10, 132, 255, 0.45);
+  --green: #30d158;
+  --green-dim: rgba(48, 209, 88, 0.13);
+  --green-line: rgba(48, 209, 88, 0.42);
+  --amber: #ff9f0a;
+  --amber-dim: rgba(255, 159, 10, 0.13);
+  --amber-line: rgba(255, 159, 10, 0.42);
+  --violet: #bf5af2;
+  --violet-dim: rgba(191, 90, 242, 0.12);
+  --violet-line: rgba(191, 90, 242, 0.4);
+  --red: #ff453a;
+  --red-dim: rgba(255, 69, 58, 0.13);
+  --red-line: rgba(255, 69, 58, 0.42);
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --glow-blue: 0 0 0 1px var(--blue-line), 0 0 24px rgba(10, 132, 255, 0.22);
+}
+:root:not(.dark) {
+  --bg: #f5f5f7;
+  --bg-elev: #ffffff;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-solid: #ffffff;
+  --surface-2: rgba(240, 240, 244, 0.9);
+  --inset: rgba(0, 0, 0, 0.045);
+  --stroke: rgba(0, 0, 0, 0.07);
+  --stroke-2: rgba(0, 0, 0, 0.14);
+  --hi: rgba(255, 255, 255, 0.85);
+  --text-1: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #86868b;
+  --blue: #0071e3;
+  --blue-dim: rgba(0, 113, 227, 0.09);
+  --blue-line: rgba(0, 113, 227, 0.4);
+  --green: #28a745;
+  --green-dim: rgba(40, 167, 69, 0.09);
+  --green-line: rgba(40, 167, 69, 0.4);
+  --amber: #c93400;
+  --amber-dim: rgba(201, 52, 0, 0.08);
+  --amber-line: rgba(201, 52, 0, 0.36);
+  --violet: #8944ab;
+  --violet-dim: rgba(137, 68, 171, 0.08);
+  --violet-line: rgba(137, 68, 171, 0.36);
+  --red: #d70015;
+  --red-dim: rgba(215, 0, 21, 0.08);
+  --red-line: rgba(215, 0, 21, 0.36);
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-2: 0 12px 40px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --glow-blue: 0 0 0 1px var(--blue-line);
+}
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 300ms;
+  --dur-hover: 200ms;
+}
+body { font-family: var(--font-ui); background: var(--bg); color: var(--text-1); }
+
+/* L1 ambient 光斑 */
+.ambient { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.ambient::before, .ambient::after { content: ''; position: absolute; border-radius: 50%; filter: blur(90px); }
+.ambient::before { width: 620px; height: 420px; top: -160px; right: -80px;
+  background: radial-gradient(circle, rgba(10,132,255,0.10), transparent 70%);
+  animation: drift 26s ease-in-out infinite alternate; }
+.ambient::after { width: 540px; height: 380px; bottom: -140px; left: -100px;
+  background: radial-gradient(circle, rgba(48,209,88,0.06), transparent 70%);
+  animation: drift 32s ease-in-out infinite alternate-reverse; }
+@keyframes drift { from { transform: translate(0,0) scale(1) } to { transform: translate(-70px, 50px) scale(1.12) } }
+
+/* L3 玻璃卡 */
+.card {
+  background: var(--surface);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-backdrop-filter: blur(30px) saturate(1.6);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--hi);
+}
+.card-hover { transition: background var(--dur-hover) var(--ease), border-color var(--dur-hover) var(--ease), transform var(--dur-hover) var(--ease), box-shadow var(--dur-hover) var(--ease); }
+.card-hover:hover { background: var(--surface-2); border-color: var(--stroke-2); box-shadow: var(--shadow-2), inset 0 1px 0 var(--hi); }
+.inset { background: var(--inset); border: 1px solid var(--stroke); border-radius: var(--r-md); }
+.pill { border: 1px solid var(--stroke); border-radius: 980px; font-size: 11px; padding: 3px 11px; color: var(--text-2); }
+.pill-green { background: var(--green-dim); border-color: var(--green-line); color: var(--green); }
+.pill-amber { background: var(--amber-dim); border-color: var(--amber-line); color: var(--amber); }
+.pill-red { background: var(--red-dim); border-color: var(--red-line); color: var(--red); }
+.pill-violet { background: var(--violet-dim); border-color: var(--violet-line); color: var(--violet); }
+.pill-blue { background: var(--blue-dim); border-color: var(--blue-line); color: var(--blue); }
+.mono { font-family: var(--font-mono); font-size: 11.5px; }
+.k { color: var(--text-3); }
+
+/* L7 状态光晕 / L6 文本光泽 */
+.pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green), 0 0 2px var(--green); animation: blink 2.2s infinite; }
+.sheen { background: linear-gradient(180deg, var(--text-1) 40%, color-mix(in srgb, var(--text-1) 62%, transparent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+@keyframes blink { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+@keyframes rise { from { opacity: 0; transform: translateY(20px) } to { opacity: 1; transform: none } }
+@keyframes floaty { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+.rise { animation: rise .5s var(--ease-out) both; }
+.stagger > * { animation: rise .55s var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: .03s } .stagger > *:nth-child(2) { animation-delay: .1s }
+.stagger > *:nth-child(3) { animation-delay: .17s } .stagger > *:nth-child(4) { animation-delay: .24s }
+.stagger > *:nth-child(5) { animation-delay: .31s } .stagger > *:nth-child(6) { animation-delay: .38s }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--stroke-2); border-radius: 999px; }

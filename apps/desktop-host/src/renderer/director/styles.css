@@ -1,3 +1,50 @@
 @import "tailwindcss";
+
+/* ============================================================
+   设计稿 v3「曜石」皮肤：把 Tailwind 调色板整体映射到 iOS 系统色，
+   使全部既有面板（providers/harness/pets）自动继承设计语言。
+   ============================================================ */
+@theme {
+  --color-slate-950: #050507;
+  --color-slate-900: #17171b;
+  --color-slate-800: rgba(255, 255, 255, 0.09);
+  --color-slate-700: rgba(255, 255, 255, 0.16);
+  --color-slate-600: rgba(255, 255, 255, 0.24);
+  --color-slate-500: #7a7a82;
+  --color-slate-400: #98989f;
+  --color-slate-300: #d8d8de;
+  --color-slate-200: #ececf0;
+  --color-slate-100: #f5f5f7;
+  --color-sky-300: #7cc4ff;
+  --color-sky-500: #0a84ff;
+  --color-sky-600: #0a84ff;
+  --color-sky-700: #0060cc;
+  --color-emerald-300: #6ee7a0;
+  --color-emerald-400: #30d158;
+  --color-emerald-500: #30d158;
+  --color-emerald-600: #28b34c;
+  --color-emerald-700: #208a3c;
+  --color-amber-300: #ffc453;
+  --color-amber-400: #ff9f0a;
+  --color-rose-300: #ff8f88;
+  --color-rose-400: #ff453a;
+  --color-rose-500: #ff453a;
+  --color-violet-300: #d9a7fb;
+  --color-violet-400: #bf5af2;
+  --color-violet-500: #bf5af2;
+}
+
+@import "./design-tokens.css";
 @source "./main.tsx";
 @source "./App.tsx";
+@source "./providers-panel.tsx";
+@source "./harness-panel.tsx";
+@source "./pets-panel.tsx";
+@source "./voice-panel.tsx";
+
+/* 圆角节奏：Tailwind rounded-lg/md 统一为设计稿的连续曲率 */
+@layer utilities {
+  .rounded-lg { border-radius: var(--r-lg) !important; }
+  .rounded-md { border-radius: var(--r-md) !important; }
+  .rounded-xl { border-radius: var(--r-xl) !important; }
+}

@@ -27,6 +27,8 @@ export interface VoiceConfig {
   volume: number; // 0-1
   ratePercent: number; // 基准语速百分比（say -r 字/分钟，默认 200）
   voice: string;
+  /** mcode 音色 id（音色页可选；默认定稿音色） */
+  voiceId: string;
   /** 音调倍率（D11 萝莉音）：1.0=原声；1.18=轻萝莉；1.25=标准萝莉；1.32=高音萝莉。
    *  实现：say 输出 aiff → ffmpeg asetrate 变调（+4 半音≈1.25）→ afplay 播放 */
   pitchMul: number;
@@ -38,7 +40,8 @@ const DEFAULT_CONFIG: VoiceConfig = {
   volume: 1,
   ratePercent: 100,
   voice: 'Tingting',
-  pitchMul: 1.25, // 默认标准萝莉（+4 半音）
+  voiceId: 'qiaopi_mengmei', // = MCODE_VOICE_ID（常量声明在本文件后方，避免 TDZ）
+  pitchMul: 1.25, // 默认标准萝莉（+4 半音，say 回落链用）
 };
 
 const SCENE_RATE: Record<string, number> = { normal: 1, inner: 0.82, p0: 1.15 };
@@ -48,6 +51,19 @@ const SCENE_TAG: Record<string, string> = { normal: '台词', inner: '心声', p
 export interface McodeMode {
   label: string; emotion: string; pitch: number; speed: number; volume: number;
 }
+/** 音色目录（可选音色，工作台音色页可选；来自 mcode matrix TTS 的音色库） */
+export interface McodeVoiceOption {
+  id: string;
+  label: string;
+  desc: string;
+}
+export const MCODE_VOICES: McodeVoiceOption[] = [
+  { id: 'qiaopi_mengmei', label: '俏皮萌妹', desc: '13-16 岁二次元少女，清亮甜美＋娇俏懒散反差（默认，已定稿）' },
+  { id: 'diadia_xuemei', label: '嗲嗲学妹', desc: '软糯撒娇学妹音，尾音拖腔重' },
+  { id: 'Chinese (Mandarin)_Crisp_Girl', label: '清脆少女', desc: '清亮干脆的标准少女音，咬字清晰' },
+  { id: 'Arrogant_Miss', label: '傲娇大小姐', desc: '高傲挑剔的大小姐音，适合傲娇炸毛' },
+  { id: 'Chinese (Mandarin)_Stubborn_Friend', label: '倔强朋友', desc: '带点倔强的同级生口吻' },
+];
 export const MCODE_VOICE_ID = 'qiaopi_mengmei';
 export const MCODE_MODES: Record<string, McodeMode> = {
   daily:    { label: '软萌小女仆', emotion: 'happy',     pitch: 0,  speed: 0.95, volume: 1.0 },
@@ -67,7 +83,7 @@ export interface VoiceHost {
 }
 
 /** mcode-tools 合成链：connector batch_text_to_audio → get_asset_url → afplay（用户定稿音色管线） */
-function speakViaMcode(text: string, mode: string): Promise<void> {
+function speakViaMcode(text: string, mode: string, voiceId: string): Promise<void> {
   const m = MCODE_MODES[mode] ?? MCODE_MODES.daily!;
   return new Promise<void>((resolve, reject) => {
     try {
@@ -75,7 +91,7 @@ function speakViaMcode(text: string, mode: string): Promise<void> {
       const out = join(tmpDir, 'out.mp3');
       const argsFile = join(tmpDir, 'args.json');
       writeFileSync(argsFile, JSON.stringify({ requests: [{
-        voice_id: MCODE_VOICE_ID, emotion: m.emotion, pitch: m.pitch,
+        voice_id: voiceId, emotion: m.emotion, pitch: m.pitch,
         speed: m.speed, volume: m.volume, text, output_file: out,
       }] }));
       const res = JSON.parse(execFileSync('mcode-tools', ['connector', 'call',
@@ -135,6 +151,21 @@ function spawnSynthesize(config: VoiceConfig, rate: number, text: string): Child
 
 export function registerVoiceHostIpc(host: VoiceHost): void {
   ipcMain.handle('voice:speak', (_e, voice: VoiceScene) => host.speak(voice));
+  // 音色试听（音色页）：任意 voiceId × 任意档位直合成，不改全局配置
+  ipcMain.handle('voice:audition', async (_e, voiceId: string, mode: string, text?: string) => {
+    const probe = text ?? '哼，本鱼才没有偷懒呢！主人快夸夸我嘛～';
+    try {
+      await speakViaMcode(probe, mode, voiceId);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle('voice:catalog', () => ({
+    voices: MCODE_VOICES,
+    modes: Object.entries(MCODE_MODES).map(([id, m]) => ({ id, ...m })),
+    currentVoiceId: host.config.voiceId,
+  }));
   ipcMain.handle('voice:config:get', () => host.config);
   ipcMain.handle('voice:config:set', (_e, patch: Partial<VoiceConfig>) => host.setConfig(patch));
 }
@@ -175,7 +206,7 @@ export function createVoiceHost(platform = process.platform): VoiceHost {
 
     const spoken = scene === 'inner' ? `…${text}` : text;
     // 首选：mcode-tools「俏皮萌妹」；失败回落 say 变调链（D11 三层保底）
-    speakViaMcode(text, SCENE_MODE[scene] ?? 'daily')
+    speakViaMcode(text, SCENE_MODE[scene] ?? 'daily', config.voiceId)
       .then(() => undefined)
       .catch(() => {
         const rate = Math.round(200 * (config.ratePercent / 100) * (SCENE_RATE[scene] ?? 1));
@@ -199,6 +230,7 @@ export function createVoiceHost(platform = process.platform): VoiceHost {
         volume: typeof patch.volume === 'number' ? Math.min(1, Math.max(0, patch.volume)) : config.volume,
         ratePercent: typeof patch.ratePercent === 'number' ? Math.min(200, Math.max(50, patch.ratePercent)) : config.ratePercent,
         voice: typeof patch.voice === 'string' && patch.voice.length > 0 ? patch.voice : config.voice,
+        voiceId: typeof patch.voiceId === 'string' && patch.voiceId.length > 0 ? patch.voiceId : config.voiceId,
         pitchMul: typeof patch.pitchMul === 'number' ? Math.min(1.6, Math.max(1, patch.pitchMul)) : config.pitchMul,
       };
       return config;

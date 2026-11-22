@@ -90,7 +90,13 @@ export interface DirectorBridge {
   guidesLoad(): Promise<{ ok: boolean; error?: string; topics?: string[] }>;
   voiceSpeak(text: string, scene: 'normal' | 'inner' | 'p0'): Promise<{ ok: boolean; error?: string }>;
   voiceConfigGet(): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }>;
-  voiceConfigSet(patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }>;
+  voiceConfigSet(patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number; voiceId?: string }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number; voiceId: string }>;
+  voiceCatalog(): Promise<{
+    voices: Array<{ id: string; label: string; desc: string }>;
+    modes: Array<{ id: string; label: string; emotion: string; pitch: number; speed: number; volume: number }>;
+    currentVoiceId: string;
+  }>;
+  voiceAudition(voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }>;
 }
 
 declare global {

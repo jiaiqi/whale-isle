@@ -10,15 +10,16 @@
     "start": "node scripts/build.mjs && electron dist/main/index.js"
   },
   "dependencies": {
+    "@workbench/agent-harness": "workspace:*",
+    "@workbench/game-bridge-mcp": "workspace:*",
     "@workbench/local-store": "workspace:*",
     "@workbench/model-gateway": "workspace:*",
     "@workbench/pet-renderer": "workspace:*",
     "@workbench/shared-protocol": "workspace:*",
+    "lucide-react": "^1.77.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "zod": "^4.6.7",
-    "@workbench/game-bridge-mcp": "workspace:*",
-    "@workbench/agent-harness": "workspace:*"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.13",
