@@ -238,20 +238,28 @@ let dragging = false;
 let samples: DragSample[] = [];
 let throwSim: ReturnType<typeof createThrow> | null = null;
 let raf = 0;
+/** 抓取锚点：按下瞬间指针相对窗口左上角的真实偏移（真机修复：旧版写死 20×20 近似，
+ *  抓哪里都变成「拖窗口左上角」——必须按真实偏移拖拽，桌宠才不会在按下瞬间跳位） */
+let grabOffset: { x: number; y: number } | null = null;
 
 stage.addEventListener('mousedown', (event) => {
   if (event.button !== 0) return;
   dragging = true;
   throwSim = null;
+  grabOffset = null;
   samples = [{ t: performance.now(), x: event.screenX, y: event.screenY }];
+  // 按下瞬间取窗口原点 → 锚点 = 指针屏幕坐标 − 窗口原点（异步取位，就绪前的 mousemove 先不挪窗）
+  void bridge.winPosition().then((pos) => {
+    if (!dragging || pos === null) return;
+    grabOffset = { x: event.screenX - pos[0], y: event.screenY - pos[1] };
+  });
 });
 
 window.addEventListener('mousemove', (event) => {
   if (!dragging) return;
   samples.push({ t: performance.now(), x: event.screenX, y: event.screenY });
-  const grabOffsetX = 20; // 抓取点近似（窗口内指针相对位置）
-  const grabOffsetY = 20;
-  void bridge.dragTo(event.screenX - grabOffsetX, event.screenY - grabOffsetY);
+  if (grabOffset === null) return; // 锚点未就绪：跳过本帧，避免按旧偏移跳位
+  void bridge.dragTo(event.screenX - grabOffset.x, event.screenY - grabOffset.y);
 });
 
 window.addEventListener('mouseup', () => {
