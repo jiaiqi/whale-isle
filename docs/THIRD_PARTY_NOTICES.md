@@ -40,7 +40,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `PC2005-cloud/dsh-pet` | **代码 MIT** | 渲染物理（Q 弹/甩抛/DPI 边界）、睡觉安静模式、余额分档动画、绿幕转 WebM 资产链 | `packages/pet-renderer`、`services/audio-ai-worker/asset_pipeline` | 移植须保留 MIT 版权头；二创公开渠道须附原作者仓库地址（README 约定） | ✅ 已登记（代码） |
 | `PC2005-cloud/dsh-pet` + `luckui/dsh-livestream`（大肥鱼形象/动画素材） | **CC BY-NC-SA 4.0**（形象原型声明：溟月 @上善无形；女仆鲸鱼娘设计 @ZipZipPipe） | "蓝色大肥鱼" webm 动作资产包 | `assets/pets/blue-whale-maid/` | **`licenseScope: DEV_ONLY_NON_COMMERCIAL`，禁止商用**；必须提供一键替换自制素材包管线 | ⚠️ 仅限本地开发测试 |
-| `Darianliu23/dsh-stardew-blind-whale-farmer` | **MIT**（原"待核实"已解除） | Observer 状态树、A*/跨地图寻路、游戏原生执行、F7 接管、游玩预算、攻略分层 | `mods/stardew-mcp-mod`、`packages/game-bridge-mcp` | 传输改为本仓 WS+JSON-RPC 2.0；保留版权头；C# 改造（MIT 允许直接改造，非仅思想参考） | ✅ 已登记 |
+| `Darianliu23/dsh-stardew-blind-whale-farmer` | **MIT**（原"待核实"已解除） | Observer 状态树、A*/跨地图寻路、游戏原生执行、F7 接管、游玩预算、攻略分层；**本地补丁**：showHud 进 /settings 远程设置（`mods/bwf-patches/2026-11-22-showhud-settings.patch`，保留版权头，上游升级时需重放） | `mods/stardew-mcp-mod`、`packages/game-bridge-mcp`、`mods/bwf-patches/`（补丁与构建流程） | 传输改为本仓 WS+JSON-RPC 2.0；保留版权头；C# 改造（MIT 允许直接改造，非仅思想参考） | ✅ 已登记 |
 | `LockyBee/dsh-douyin-agent` | **MIT** | 收据基线/验证记录/额度账本的纪律参照；分镜拼图思路 | `packages/live-stream-hub`、`docs/VERIFY.md` | 不引入其浏览器自动化源码 | ✅ 已登记 |
 | `SAOS-3624/dsh-video-storyboard` | **Apache-2.0**（v0.5.0 起） | evidence.json 证据链格式、token 预算/dryRun 思想 | `packages/live-stream-hub`（切片器） | **必须保留 NOTICE 与署名**（Apache-2.0 §4） | ✅ 已登记 |
 | `luckui/dsh-livestream` | **代码 MIT** | 注意力调度原型、情绪标记换表情、谢幕结算、模拟观众思想 | `packages/live-stream-hub` | 代码引用保留版权头；其 dafeiyu 素材同上 CC BY-NC-SA | ✅ 已登记（代码） |

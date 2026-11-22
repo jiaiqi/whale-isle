@@ -7,7 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Toaster, toast } from 'sonner';
 import {
-  Activity, Brain, ChevronRight, Play, Radio, RotateCcw, Send, ShieldAlert,
+  Activity, Brain, ChevronRight, Monitor, Play, Radio, RotateCcw, Send, ShieldAlert,
   Sprout, Square, Volume2, VolumeX, Wheat, Zap,
 } from 'lucide-react';
 import { ModelProviderConfigSchema, type DiningProfilePreset, type ModelProviderConfig, type WorkbenchRoleSlot } from '@workbench/shared-protocol';
@@ -124,6 +124,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [chatFilter, setChatFilter] = useState<'all' | 'COMPLETED' | 'FAILED'>('all');
   const [voiceTab, setVoiceTab] = useState<'library' | 'studio'>('library');
   const [petTab, setPetTab] = useState<'stage' | 'library'>('stage');
+  // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
+  const [bwfHud, setBwfHud] = useState(false);
   const flowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -140,6 +142,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
     void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
+    // BWF HUD 偏好水合（T-M6-16）：主进程 mods:state 顺带触发一次自愈推送
+    void window.directorBridge.modsState().then((s) => { if (s.bwfShowHud === true) setBwfHud(true); });
     // 启动即把 Dexie 里的单一配置 + 服务商清单/模型启停同步给主进程
     void Promise.all([
       store.getConfig<DiningProfilePreset[]>('diningProfiles'),
@@ -286,6 +290,21 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     const next = await window.directorBridge.voiceConfigSet({ enabled: !voiceOn });
     setVoiceOn(next.enabled);
     toast(next.enabled ? '语音已开启' : '已静音：仅字幕与云朵气泡');
+  };
+
+  /** BWF 游戏内左上角 MCP 提示 HUD（T-M6-16）：默认关闭；主进程持久化 + /settings 运行时下发 */
+  const toggleBwfHud = async (): Promise<void> => {
+    const next = !bwfHud;
+    setBwfHud(next);
+    const res = await window.directorBridge.modsSetBwfHud(next);
+    if (!res.ok) {
+      setBwfHud(!next);
+      toast.error(res.error ?? 'HUD 开关保存失败');
+      return;
+    }
+    if (res.gameOffline === true) toast(`已保存：HUD ${next ? '显示' : '关闭'}（游戏没在跑，开游戏后自动生效）`);
+    else if (res.needsGameRestart === true) toast.warning('已保存，但游戏内还是旧版 Mod——重启一次游戏后生效');
+    else toast.success(`游戏内 MCP 提示已${next ? '打开' : '关闭'}（即时生效）`);
   };
 
   const feedRice = async (): Promise<void> => {
@@ -526,9 +545,17 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           <div className="mx-auto max-w-[1320px] px-6 py-5">
             <div className="card mb-4 flex flex-wrap items-center gap-2 px-4 py-2.5">
               <span className="pill pill-violet"><Brain size={11} />{brain.mode === 'llm' ? 'LlmPlanner' : 'RulePlanner'}</span>
-              <span className="pill">白名单 75 工具</span>
+              <span className="pill">白名单 78 工具</span>
               <span className="pill pill-amber">30 粒米 / 回执</span>
               <span className="pill pill-green">guide-forager {guides.length} 专题</span>
+              <button
+                data-bwf-hud={bwfHud ? 'on' : 'off'}
+                onClick={() => void toggleBwfHud()}
+                title="游戏画面左上角的 MCP 提示信息（连接/思考/执行状态）——默认关闭不显示"
+                className={`pill cursor-pointer${bwfHud ? ' pill-green' : ''}`}
+              >
+                <Monitor size={11} />游戏内提示 {bwfHud ? '开' : '关'}
+              </button>
               <div className="flex-1" />
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
             </div>

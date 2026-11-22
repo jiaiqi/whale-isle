@@ -212,6 +212,10 @@ export interface DirectorBridge {
   webuiInfo(): Promise<{ ok: boolean; port: number; token: string }>;
   // 星露谷 Mod 管理（T-M6-06）
   modsState(): Promise<ModsStateView>;
+  // BWF 游戏内 HUD 开关（T-M6-16）：默认关闭；applied=运行时已生效 / needsGameRestart=旧 DLL 需换补丁版 / gameOffline=游戏没开
+  modsSetBwfHud(value: boolean): Promise<{
+    ok: boolean; showHud?: boolean; applied?: boolean; needsGameRestart?: boolean; gameOffline?: boolean; error?: string;
+  }>;
   modsSetDir(dir: string): Promise<ModsOpView>;
   modsScan(): Promise<ModsOpView>;
   modsToggle(folderName: string, enabled: boolean): Promise<ModsOpView>;
@@ -244,6 +248,8 @@ export interface ModsSnapshotView {
 export interface ModsStateView {
   ok: boolean;
   configured?: boolean;
+  /** BWF 游戏内 HUD 当前偏好（T-M6-16，默认 false 不显示） */
+  bwfShowHud?: boolean;
   candidates?: Array<{ path: string; exists: boolean }>;
   snapshot?: ModsSnapshotView | null;
   error?: string;

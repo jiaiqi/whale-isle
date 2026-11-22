@@ -20,6 +20,7 @@ import {
   scanModsDir,
   setModEnabled,
 } from '@workbench/stardew-mods';
+import { pushBwfShowHud } from './bwf-settings';
 
 const run = promisify(execFile);
 
@@ -74,18 +75,38 @@ export function createModsHost(userDataDir: string): ModsHost {
   ipcMain.handle('mods:state', async () => {
     const { dir, configured } = resolveDir();
     const snapshot = dir === '' ? null : await scanModsDir(dir);
+    // 自愈同步（T-M6-16）：打开星露谷/Mod 页时把本地偏好推给 BWF（Mod 升级重置 config.json 后自动纠正）；
+    // 游戏没开就静默跳过，开关切换与下次打开页面时再推
+    void pushBwfShowHud(config.bwfShowHud).catch(() => undefined);
     return {
       ok: true,
       configured,
+      bwfShowHud: config.bwfShowHud,
       candidates: candidates().map((path) => ({ path, exists: existsSync(path) })),
       snapshot,
+    };
+  });
+
+  // BWF 游戏内 HUD 开关（T-M6-16 用户指令）：默认关闭；本地持久化 + /settings 运行时下发
+  ipcMain.handle('mods:set-bwf-hud', async (_e, value: boolean) => {
+    if (typeof value !== 'boolean') return { ok: false, error: 'value 必须是布尔值' };
+    config = { ...config, bwfShowHud: value };
+    writeConfig(configPath, config);
+    const push = await pushBwfShowHud(value);
+    return {
+      ok: true,
+      showHud: value,
+      applied: push.applied,
+      // 旧 DLL（无 showHud 远程键）→ 如实提示需重启游戏加载补丁版
+      needsGameRestart: push.reachable && !push.applied,
+      gameOffline: !push.reachable,
     };
   });
 
   ipcMain.handle('mods:set-dir', async (_e, dir: string) => {
     if (typeof dir !== 'string' || dir.trim() === '') return { ok: false, error: '目录不能为空' };
     if (!existsSync(dir)) return { ok: false, error: `目录不存在：${dir}` };
-    config = { modsDir: dir.trim() };
+    config = { ...config, modsDir: dir.trim() };
     writeConfig(configPath, config);
     return { ok: true, snapshot: await scanModsDir(config.modsDir) };
   });

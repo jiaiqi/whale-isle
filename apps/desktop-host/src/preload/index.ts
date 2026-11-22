@@ -78,6 +78,10 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('voice:audition', voiceId, mode, text),
   // 星露谷 Mod 管理（T-M6-06）：只经主进程读写玩家 Mods 目录
   modsState: (): Promise<unknown> => ipcRenderer.invoke('mods:state'),
+  // BWF 游戏内 HUD 开关（T-M6-16）：默认关闭；主进程持久化 + /settings 运行时下发
+  modsSetBwfHud: (value: boolean): Promise<{
+    ok: boolean; showHud?: boolean; applied?: boolean; needsGameRestart?: boolean; gameOffline?: boolean; error?: string;
+  }> => ipcRenderer.invoke('mods:set-bwf-hud', value),
   modsSetDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('mods:set-dir', dir),
   modsScan: (): Promise<unknown> => ipcRenderer.invoke('mods:scan'),
   modsToggle: (folderName: string, enabled: boolean): Promise<unknown> => ipcRenderer.invoke('mods:toggle', folderName, enabled),

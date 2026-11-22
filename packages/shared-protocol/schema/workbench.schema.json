@@ -2201,6 +2201,10 @@
         "modsDir": {
           "type": "string",
           "default": ""
+        },
+        "bwfShowHud": {
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false

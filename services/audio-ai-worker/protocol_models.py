@@ -789,6 +789,7 @@ class StardewModsConfig(BaseModel):
         extra='forbid',
     )
     modsDir: str | None = ''
+    bwfShowHud: bool | None = False
 
 
 class NodeType(StrEnum):

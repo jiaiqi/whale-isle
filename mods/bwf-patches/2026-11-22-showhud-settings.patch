@@ -1,0 +1,26 @@
+diff --git a/BlindWhaleFarmer/McpServer.cs b/BlindWhaleFarmer/McpServer.cs
+index 335cedb..d2451da 100644
+--- a/BlindWhaleFarmer/McpServer.cs
++++ b/BlindWhaleFarmer/McpServer.cs
+@@ -641,6 +641,7 @@ namespace BlindWhaleFarmer
+                     ["freezeTime"] = c.McpFreezeTime,
+                     ["idleSeconds"] = c.McpIdleSeconds,
+                     ["allowChat"] = c.AllowChat,
++                    ["showHud"] = c.ShowHud,
+                     ["extraInstructions"] = c.ExtraInstructions,
+                     ["reservedItems"] = c.ReservedItems,
+                     ["guideFile"] = c.GuideFile
+diff --git a/BlindWhaleFarmer/ModEntry.cs b/BlindWhaleFarmer/ModEntry.cs
+index e482c9c..bf19458 100644
+--- a/BlindWhaleFarmer/ModEntry.cs
++++ b/BlindWhaleFarmer/ModEntry.cs
+@@ -182,6 +182,9 @@ namespace BlindWhaleFarmer
+                 GameActions.ForageRadius = Config.ForageRadius = Math.Clamp(fr.GetValue<int>(), 0, 10);
+             if (s["allowChat"] is { } chat)
+                 GameActions.AllowChat = Config.AllowChat = chat.GetValue<bool>();
++            // 鲸屿中控台 HUD 开关（T-M6-16）：DrawHud 每帧读 Config.ShowHud，改这里即时生效
++            if (s["showHud"] is { } hud)
++                Config.ShowHud = hud.GetValue<bool>();
+             if (s["companionMode"] is { } mode)
+             {
+                 string newMode = GameActions.NormalizeMode(mode.GetValue<string>());

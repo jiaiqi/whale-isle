@@ -490,6 +490,8 @@ export type StardewModsOpResult = z.infer<typeof StardewModsOpResultSchema>;
 /** Mod 目录配置（userData/stardew-mods.json） */
 export const StardewModsConfigSchema = z.object({
   modsDir: z.string().default(''),
+  /** BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭不显示；经 /settings 远程下发运行时生效 */
+  bwfShowHud: z.boolean().default(false),
 });
 export type StardewModsConfig = z.infer<typeof StardewModsConfigSchema>;
 
