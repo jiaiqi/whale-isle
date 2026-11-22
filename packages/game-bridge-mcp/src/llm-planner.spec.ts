@@ -1,6 +1,7 @@
 /**
  * T-M6-01 完整版门禁：LLM Planner 决策协议 / 坏输出回落 / 白名单越权拦截 / 攻略检索。
- * chat 全注入 mock（零网络）。
+ * T-M6-12 决策循环防抖门禁：单日失败预算与冷却 / dialogue 效果核验 / donate→bundle_info / 真纠错重问。
+ * chat 全注入 mock（零网络）。真机病灶：同一冻结分钟 dialogue×191 / place_item×96 / donate_bundles×29。
  */
 import { describe, expect, it } from 'vitest';
 import { extractDecisionJson, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickShippableItem } from './llm-planner';
@@ -555,5 +556,175 @@ describe('LlmPlanner 决策链', () => {
     const d = await planner.decide(state());
     expect(d.kind === 'act' && d.tool).not.toBe('fish');
     expect(asked).toBe(0);
+  });
+});
+
+describe('T-M6-12 决策循环防抖（真机死循环回归）', () => {
+  /** 玛妮送宠剧情现场：界面文本从头到尾只有 2 种，真机被 dialogue「推进成功」×191 */
+  const EVENT_MENU = '正在播放剧情/节日事件（可以用 skip_event 跳过）。剧情中出现对话时用 dialogue 推进。 对话框（玛妮）：你看见这只猫了吗？ （用 dialogue 不带参数继续/关闭对话）';
+  const OK_DIALOGUE = 'OK dialogue: 成功：对话已推进。当前界面：正在播放剧情/节日事件';
+  const fullFurnitureFarm = (): GameStateSnapshot => parseGameState(`${STATE_OK.replace('地点：Farm（泡泡湾农场）', '地点：Farm（泡泡湾农场）').replace('邮箱里有 7 封未读信件', '')}
+## 背包（序号: 物品）
+0: 斧头
+6: 普通窗户
+## 位置
+你站在 (64,15)，面朝右
+背包空位：0 个（共 12 格）`);
+
+  it('place_item 六个相邻格轮换不复读同一坐标；预算耗尽 → 单日冷却 → force 丢弃兜底（96 次同坐标复读回归）', async () => {
+    const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const s = fullFurnitureFarm();
+    await planner.decide(s); // store_items
+    receipts.push('FAILED store_items: 失败：这里没有箱子');
+    await planner.decide(s); // trash 普通窗户（会被 BWF 拒）
+    receipts.push('FAILED trash_item: 失败：6:普通窗户x1 一个能卖 300g，没有扔');
+    const coords: string[] = [];
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const d = await planner.decide(s);
+      expect(d.kind === 'act' && d.tool).toBe('place_item');
+      if (d.kind !== 'act') throw new Error('unreachable');
+      coords.push(`${String(d.args.x)},${String(d.args.y)}`);
+      receipts.push(`FAILED place_item: 失败：(${String(d.args.x)},${String(d.args.y)}) 被挡着，放不了普通窗户`);
+    }
+    // 六次尝试坐标两两不同（真机 96 次全部 (65,15) 的反例）
+    expect(new Set(coords).size).toBe(6);
+    // 第 7 次：单日预算（6 格）耗尽 → place_item 冷却 → 阶梯降级到 force 丢弃
+    const fallbackDecision = await planner.decide(s);
+    expect(fallbackDecision.kind === 'act' && fallbackDecision.tool).toBe('trash_item');
+    expect(fallbackDecision.kind === 'act' && fallbackDecision.args).toEqual({ item: '普通窗户', force: true });
+  });
+
+  it('重启/插队场景：缓冲区尾部一排 place 失败 → 直接拉黑该家具 + 冷却（不依赖本进程计数）', async () => {
+    const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const s = fullFurnitureFarm();
+    await planner.decide(s);
+    receipts.push('FAILED store_items: 失败：这里没有箱子');
+    await planner.decide(s);
+    receipts.push('FAILED trash_item: 失败：6:普通窗户x1 一个能卖 300g，没有扔');
+    await planner.decide(s); // place_item 第一次
+    receipts.push(...Array.from({ length: 6 }, () => 'FAILED place_item: 失败：(64,16) 被挡着，放不了普通窗户'));
+    const d = await planner.decide(s);
+    // 摆放已单日冷却：不再选 place_item，直接 force 丢弃兜底
+    expect(d.kind === 'act' && d.tool).toBe('trash_item');
+    expect(d.kind === 'act' && d.args).toEqual({ item: '普通窗户', force: true });
+  });
+
+  it('dialogue 效果核验：同一界面文本连续推进 8 次不变 → skip_event（191 次循环回归）', async () => {
+    let asked = 0;
+    const planner = new LlmPlanner({
+      chat: async () => { asked++; return { content: '{"tool":"fish","args":{}}' }; },
+      recentReceipts: [OK_DIALOGUE],
+    });
+    const s = { ...state(), menu: EVENT_MENU };
+    for (let i = 0; i < 7; i++) {
+      const d = await planner.decide(s);
+      expect(d.kind === 'act' && d.tool).toBe('dialogue');
+    }
+    const stuck = await planner.decide(s);
+    expect(stuck.kind === 'act' && stuck.tool).toBe('skip_event');
+    expect(stuck.kind === 'act' && stuck.intent).toContain('推不动');
+    expect(asked).toBe(0); // 全程确定性处理，不烧 token
+  });
+
+  it('skip_event 也失败 → close_menu；两个逃生口都失败 → wait 求主人接管', async () => {
+    const closePlanner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED skip_event: 失败：现在没在放剧情', ...Array.from({ length: 7 }, () => OK_DIALOGUE)],
+    });
+    const s = { ...state(), menu: EVENT_MENU };
+    for (let i = 0; i < 7; i++) await closePlanner.decide(s);
+    const d = await closePlanner.decide(s);
+    expect(d.kind === 'act' && d.tool).toBe('close_menu');
+
+    const deadPlanner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED skip_event: 失败：现在没在放剧情', 'FAILED close_menu: 失败：现在没有打开的界面', ...Array.from({ length: 6 }, () => OK_DIALOGUE)],
+    });
+    for (let i = 0; i < 7; i++) await deadPlanner.decide(s);
+    const dead = await deadPlanner.decide(s);
+    expect(dead.kind).toBe('wait');
+    expect(dead.kind === 'wait' && dead.reason).toContain('F7');
+  });
+
+  it('donate_bundles 失败 → bundle_info 查缺料（当天一次）→ 再失败 → 冷却 → wait；跨日预算重置', async () => {
+    const raw = `${STATE_OK}
+## 背包（序号: 物品）
+0: 斧头
+5: 黄水仙【留着：社区中心“春季采集”要交】
+6: 石头【留着：社区中心“建筑”要交】
+## 位置
+你站在 (64,15)，面朝右
+背包空位：0 个（共 12 格）`;
+    const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const s = parseGameState(raw);
+    await planner.decide(s); // store_items
+    receipts.push('FAILED store_items: 失败：这里没有箱子');
+    const donate = await planner.decide(s); // 只剩【留着】 → donate_bundles
+    expect(donate.kind === 'act' && donate.tool).toBe('donate_bundles');
+    receipts.push('FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料（用 bundle_info 看看缺什么）');
+    const info = await planner.decide(s); // BWF 提示 → 查一次缺料
+    expect(info.kind === 'act' && info.tool).toBe('bundle_info');
+    receipts.push('OK bundle_info: 成功：春季采集：黄水仙×1；建筑：石头×99');
+    const retry = await planner.decide(s); // 再试一次 donate（预算 2）
+    expect(retry.kind === 'act' && retry.tool).toBe('donate_bundles');
+    receipts.push('FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料');
+    const cooled = await planner.decide(s); // 冷却 + bundle_info 已查过 → 不再空转
+    expect(cooled.kind).toBe('wait');
+    expect(cooled.kind === 'wait' && cooled.reason).toContain('背包卡死');
+    // 省略快照回归（真机根因）：wait 后 BWF 会「（和上次一样，省略）」，时钟行缺失时 day 回落 1——
+    // 绝不能把省略快照当跨日，否则单日冷却被误清空、donate 第三次空转
+    const elided = await planner.decide(parseGameState(raw.replace('时间：第1年春16日 07:30（Tue），天气：晴', '（和上次一样，省略）')));
+    expect(elided.kind).toBe('wait'); // 冷却仍在
+    // 真跨日重置：新的一天预算与冷却清零，donate 重新可用
+    const nextDay = parseGameState(raw.replace('第1年春16日', '第1年春17日'));
+    const fresh = await planner.decide(nextDay);
+    expect(fresh.kind === 'act' && fresh.tool).toBe('donate_bundles');
+  });
+
+  it('真纠错重问：坏输出 + 具体原因追加进对话再问（不再是原样重发）', async () => {
+    const calls: Array<Array<{ role: string; content: string }>> = [];
+    const bad = '我觉得今天应该去钓鱼，但是我不太想输出 JSON。';
+    const planner = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        calls.push(messages.map((m) => ({ role: m.role, content: m.content })));
+        return { content: calls.length === 1 ? bad : '{"tool":"water_crops","args":{},"intent":"浇水"}' };
+      },
+    });
+    const d = await planner.decide(state());
+    expect(d.kind === 'act' && d.tool).toBe('water_crops');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toHaveLength(4); // system + user + 原始坏输出 + 纠错指令
+    expect(calls[1]?.[2]).toMatchObject({ role: 'assistant', content: bad });
+    expect(calls[1]?.[3]?.content).toContain('没有解析出');
+  });
+
+  it('越权工具名 → 纠错消息点名白名单；LLM 选到单日冷却工具 → 提示换做法', async () => {
+    const calls: Array<Array<{ role: string; content: string }>> = [];
+    const planner = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        calls.push(messages.map((m) => ({ role: m.role, content: m.content })));
+        return { content: calls.length === 1 ? '{"tool":"exec_shell","args":{}}' : '{"tool":"sleep","args":{}}' };
+      },
+    });
+    const d = await planner.decide(state());
+    expect(d.kind === 'act' && d.tool).toBe('sleep');
+    expect(calls[1]?.[3]?.content).toContain('不在 BWF 工具白名单里');
+
+    const switchCalls: Array<Array<{ role: string; content: string }>> = [];
+    const cool = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        switchCalls.push(messages.map((m) => ({ role: m.role, content: m.content })));
+        return { content: switchCalls.length === 1 ? '{"tool":"fish","args":{}}' : '{"tool":"forage","args":{}}' };
+      },
+    });
+    // 冷却发生在真实流程的 decide 中段（planDay 已锚定），直接注入要先把日锚设好，否则首个 decide 会当跨日清零
+    (cool as unknown as { planDay: string; cooledTools: Set<string> }).planDay = '春16';
+    (cool as unknown as { planDay: string; cooledTools: Set<string> }).cooledTools.add('fish');
+    const switched = await cool.decide(state());
+    expect(switched.kind === 'act' && switched.tool).toBe('forage');
+    expect(switchCalls[1]?.[3]?.content).toContain('冷却');
   });
 });

@@ -1,10 +1,17 @@
 /**
  * LLM Planner（T-M6-01 完整版核心）：小鲸的「聪明大脑」——
  * get_state + 攻略摘要 → model-gateway（DeepSeek 等）→ JSON 工具决策。
- * 健壮性铁律：LLM 输出解析失败/超时/越权工具名 → 逐级回落（重问一次 → RulePlanner 兜底），
+ * 健壮性铁律：LLM 输出解析失败/超时/越权工具名 → 逐级回落（真纠错重问一次 → RulePlanner 兜底），
  * 绝不让坏输出卡死自动驾驶。
  * 决策协议（user 消息尾部约定）：
  *   只输出一行 JSON：{"tool":"动作名","args":{},"intent":"一句话人设化意图"}
+ *
+ * T-M6-12 决策循环防抖（真机 transcript 实证：同一冻结分钟内 dialogue×191 / place_item×96 /
+ * trash_item×59 / donate_bundles×29 死循环）：
+ *   - 单日失败预算：BWF 内置 AI 规则第 4 条「同一失败动作不重复超过两次」的跨轮持久化——
+ *     只按「我上一条下发动作」的失败回执计数一次（从定长缓冲区数总数会在饱和后冻结，96 次同坐标复读的根因）；
+ *   - dialogue 效果核验（Junimo 思想）：连续 N 次「推进成功」但界面文本一字未变 = 卡死 → skip_event/close_menu/求接管；
+ *   - donate_bundles 失败按 BWF 回执提示自动查 bundle_info（当天一次），失败预算耗尽即冷却不再空转。
  */
 import {
   RulePlanner,
@@ -138,6 +145,26 @@ const RESCUE_TOOLS: ReadonlySet<string> = new Set(RESCUE_STEP.keys());
 const PLACE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2],
 ];
+/** 同一工具单日失败预算（BWF Agent 规则 4：同一失败动作不重复超过两次）；place_item 允许把 6 个相邻格试完 */
+const TOOL_FAIL_BUDGET_DEFAULT = 2;
+const TOOL_FAIL_BUDGET: Readonly<Record<string, number>> = { place_item: PLACE_OFFSETS.length };
+/** 生存护栏与只读信息工具不参与单日冷却（回家/睡觉/逃生口/查资料不能被预算卡死） */
+const COOLDOWN_EXEMPT: ReadonlySet<string> = new Set([
+  'travel_to', 'sleep', 'get_state', 'cancel_action', 'bundle_info',
+]);
+/** dialogue 效果核验阈值：同一界面文本连续推进 N 次没变化 → 判定卡死（真机玛妮剧情 191 次教训） */
+const DIALOGUE_STUCK_LIMIT = 8;
+
+/** 缓冲区尾部连续同工具失败回执数（重启/插队场景下没发过的失败也能被看见；饱和不影响「尾部」语义） */
+function trailingFailedCount(recent: readonly string[], tool: string): number {
+  const re = new RegExp(`^FAILED\\s+${tool}(?![\\w])`, 'i');
+  let count = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    if (re.test(recent[i] ?? '')) count++;
+    else break;
+  }
+  return count;
+}
 
 /** 从 place_item 失败回执里读 BWF 推荐坐标（「最好的坐标 (x,y)」/「放在 (x,y)」） */
 function suggestedPlacementOf(receipt: string): { x: number; y: number } | null {
@@ -173,17 +200,54 @@ export class LlmPlanner implements Planner {
   private readonly rejectedTrash = new Set<string>();
   private readonly rejectedPlace = new Set<string>();
   private placeTarget: { x: number; y: number } | null = null;
-  private placeTryIndex = 0;
-  private handledPlaceFailures = 0;
   private pendingPlaceItem: string | null = null;
   private craftTried = false;
   private chestPlaced = false;
+  /** T-M6-12 单日防抖状态（跨日清零）：失败预算 / 已冷却工具 / 当天只查一次的信息工具 */
+  private planDay = '';
+  private readonly dayFails = new Map<string, number>();
+  private readonly cooledTools = new Set<string>();
+  private readonly dayInfoDone = new Set<string>();
+  /** 我上一条下发动作（失败回执只按它结算一次，杜绝从定长缓冲区重复计数） */
+  private lastIssued: string | null = null;
+  /** 最近回执快照（rescueAction 内读 BWF 建议坐标 / 尾部失败计数用） */
+  private lastRecent: readonly string[] = [];
+  /** dialogue 效果核验：连续「推进成功但界面没变」计数与当时的界面文本 */
+  private dialogueStreak = 0;
+  private dialogueStreakMenu = '';
 
   constructor(private readonly deps: LlmPlannerDeps) {}
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
+    const decision = await this.decideCore(state);
+    if (decision.kind === 'act') this.lastIssued = decision.tool;
+    return decision;
+  }
+
+  private async decideCore(state: GameStateSnapshot): Promise<PlannerDecision> {
     this.askCount++;
     const recent = this.deps.recentReceipts ?? [];
+    this.lastRecent = recent;
+    // ── T-M6-12 单日失败预算结算（跨日清零；只认「我上一条下发动作」的最新失败回执，一次一条）──
+    // BWF 对未变化段落会「（和上次一样，省略）」：wait/冻结后的快照可能没有时钟行，此时 day 会回落到
+    // 默认 1——绝不能把省略快照当跨日（真机春19 donate 冷却被误清零、第三次捐空转的根因）。
+    const hasClock = /时间：第\d+年[春夏秋冬]\d+日/.test(state.raw);
+    const dayKey = hasClock ? `${state.season}${state.day}` : this.planDay;
+    if (dayKey !== this.planDay) {
+      this.planDay = dayKey;
+      this.dayFails.clear();
+      this.cooledTools.clear();
+      this.dayInfoDone.clear();
+    }
+    const failedTool = /^FAILED\s+([^\s:：]+)/.exec(recent.at(-1) ?? '')?.[1] ?? '';
+    if (this.lastIssued !== null && failedTool !== '' && failedTool === this.lastIssued) {
+      const budget = TOOL_FAIL_BUDGET[failedTool] ?? TOOL_FAIL_BUDGET_DEFAULT;
+      const fails = (this.dayFails.get(failedTool) ?? 0) + 1;
+      this.dayFails.set(failedTool, fails);
+      if (fails >= budget && !COOLDOWN_EXEMPT.has(failedTool)) this.cooledTools.add(failedTool);
+    }
+    this.lastIssued = null;
+
     // 菜单优先（确定性处理，不烧 LLM）
     const menu = state.menu;
     if (menu !== '' && !/无（可以自由行动）/.test(menu)) {
@@ -191,7 +255,30 @@ export class LlmPlanner implements Planner {
       if (/剧情|节日事件/.test(menu) && /没有对话框|剧情还在放/.test(recent.at(-1) ?? '')) {
         return { kind: 'act', tool: 'skip_event', args: {}, intent: '过场没有对话框，跳过这段剧情' };
       }
-      return this.fallback.decide(state);
+      // dialogue 效果核验（真机：玛妮送宠剧情 191 次「推进成功」、界面文本从头到尾只有 2 种）：
+      // 连续 N 次推进成功但界面一字未变 = 卡死，按逃生阶梯 skip_event → close_menu → 求主人接管
+      const prevWasDialogue = /^OK\s+dialogue/i.test(recent.at(-1) ?? '');
+      if (prevWasDialogue && menu === this.dialogueStreakMenu) this.dialogueStreak++;
+      else this.dialogueStreak = prevWasDialogue ? 1 : 0;
+      this.dialogueStreakMenu = menu;
+      if (this.dialogueStreak >= DIALOGUE_STUCK_LIMIT) {
+        const skipFailed = recent.some((r) => /^FAILED\s+skip_event/i.test(r));
+        const closeFailed = recent.some((r) => /^FAILED\s+close_menu/i.test(r));
+        if (skipFailed && closeFailed) {
+          return { kind: 'wait', seconds: 30, reason: '剧情卡死了：skip_event 和关界面都失败，请主人按 F7 接管处理一下' };
+        }
+        if (skipFailed) return { kind: 'act', tool: 'close_menu', args: {}, intent: '跳不过去就先把界面关掉' };
+        return { kind: 'act', tool: 'skip_event', args: {}, intent: '这段剧情推不动了，直接跳过（都推了好几遍啦！）' };
+      }
+      const menuDecision = await this.fallback.decide(state);
+      if (menuDecision.kind === 'act' && this.cooledTools.has(menuDecision.tool)) {
+        // 菜单处理工具今天已失败到冷却（如反复「没有对话框」）→ 换逃生口，两个都冷却才求助
+        if (!this.cooledTools.has('close_menu')) {
+          return { kind: 'act', tool: 'close_menu', args: {}, intent: '这个界面今天处理不动了，先关掉它' };
+        }
+        return { kind: 'wait', seconds: 30, reason: '界面卡死：dialogue/close_menu 都失败，请主人按 F7 接管看看' };
+      }
+      return menuDecision;
     }
     // 放置箱子成功 → 记住（本进程内不再重复 craft）
     if (recent.some((r) => /^OK\s+place_item|^COMPLETED\s+place_item/i.test(r) && /箱子|Chest/i.test(r))) this.chestPlaced = true;
@@ -206,22 +293,20 @@ export class LlmPlanner implements Planner {
     const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
     if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
     const effectiveSlots = rawHasSlots ? state.freeSlots : (this.lastFreeSlots ?? state.freeSlots);
-    // 摆放失败计数（回执文本可能完全相同，不能按字符串去重）：失败一次换一个相邻格，
-    // 6 次都放不下 → 该家具改为 force 丢弃兜底（BWF trash_item force=true 可扔贵重物）
-    const placeFailureCount = recent.filter((r) => /^FAILED\s+place_item/.test(r)).length;
-    if (placeFailureCount > this.handledPlaceFailures) {
-      const delta = placeFailureCount - this.handledPlaceFailures;
-      this.handledPlaceFailures = placeFailureCount;
-      const suggested = suggestedPlacementOf(recent.at(-1) ?? '');
+    // 摆放失败轮换已并入 rescueAction case 6（T-M6-12）：按「单日失败计数 + 缓冲区尾部连续失败」
+    // 取相邻格，取代旧的「从缓冲区数总数做 delta」——定长缓冲区饱和后 delta 恒为 0，真机 96 次同坐标复读的根因。
+    // BWF「最好的坐标 (x,y)」建议仍然即时记忆（重启/插队场景下缓冲区里已有的失败建议也要能用上）：
+    const lastReceipt = recent.at(-1) ?? '';
+    if (/^FAILED\s+place_item/.test(lastReceipt)) {
+      const suggested = suggestedPlacementOf(lastReceipt);
       if (suggested !== null) {
         this.placeTarget = suggested;
-      } else {
-        this.placeTryIndex = Math.min(this.placeTryIndex + delta, PLACE_OFFSETS.length);
-        if (this.placeTryIndex >= PLACE_OFFSETS.length && this.pendingPlaceItem !== null) {
-          this.rejectedPlace.add(this.pendingPlaceItem);
-          this.pendingPlaceItem = null;
-          this.placeTryIndex = 0;
-        }
+      } else if (trailingFailedCount(recent, 'place_item') >= PLACE_OFFSETS.length && this.pendingPlaceItem !== null) {
+        // 重启/插队场景：缓冲区尾部一排无建议坐标的 place 失败（每条都真实试过一个相邻格）→
+        // 这件家具今天摆不下了，直接拉黑 + 单日冷却（真机 96 次同坐标复读教训）
+        this.rejectedPlace.add(this.pendingPlaceItem);
+        this.pendingPlaceItem = null;
+        this.cooledTools.add('place_item');
       }
     }
 
@@ -243,7 +328,7 @@ export class LlmPlanner implements Planner {
     // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）
     if (!this.chestPlaced && effectiveSlots > 0) {
       if (hasChestItem(state.raw)) {
-        if (state.location === 'Farm' && state.posX >= 0) {
+        if (!this.cooledTools.has('place_item') && state.location === 'Farm' && state.posX >= 0) {
           const free = findFreeTile(state.raw, state.posX, state.posY);
           const offset = PLACE_OFFSETS[0] ?? [1, 0];
           return {
@@ -322,30 +407,48 @@ export class LlmPlanner implements Planner {
     const receipts = recent.slice(-3).map((r) => `- ${r}`).join('\n');
     const user = `当前游戏状态：\n${state.raw.slice(0, 4000)}\n\n最近回执：\n${receipts || '（刚开始）'}\n\n请决定下一步动作，只输出一行 JSON。`;
 
+    // 真纠错重问（T-M6-12 修复：旧实现注释写着「带纠错提示重问」，实际只是原样重发，
+    // 大概率得到同样的坏输出）：把上一条原始输出 + 具体错误原因追加进对话再问一次
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: SYSTEM_TEMPLATE(guidesHint) },
+      { role: 'user', content: user },
+    ];
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const receipt = await this.deps.chat('STARDEW_GAME_PLANNER', [
-          { role: 'system', content: SYSTEM_TEMPLATE(guidesHint) },
-          { role: 'user', content: user },
-        ], { maxTokens: 300 });
+        const receipt = await this.deps.chat('STARDEW_GAME_PLANNER', messages, { maxTokens: 400 });
         const decision = extractDecisionJson(receipt.content);
-        if (decision && LLM_TOOL_WHITELIST.has(decision.tool)) {
+        if (decision !== null && LLM_TOOL_WHITELIST.has(decision.tool)) {
+          if (this.cooledTools.has(decision.tool)) {
+            messages.push({ role: 'assistant', content: receipt.content });
+            messages.push({
+              role: 'user',
+              content: `${decision.tool} 今天已经失败到冷却了，别再试它。换一个不同的做法，只输出一行 JSON。`,
+            });
+            continue;
+          }
           return { kind: 'act', tool: decision.tool, args: decision.args, intent: decision.intent };
         }
-        // 坏输出 → 带纠错提示重问一次
-        void attempt;
+        const reason = decision === null
+          ? '上一条输出里没有解析出 {"tool":...} 一行 JSON（可能被截断或夹了解释文字）'
+          : `"${decision.tool}" 不在 BWF 工具白名单里`;
+        messages.push({ role: 'assistant', content: receipt.content });
+        messages.push({
+          role: 'user',
+          content: `${reason}。重新决定下一步，只输出一行 JSON：{"tool":"白名单工具名","args":{参数},"intent":"一句话"}，不要任何解释。`,
+        });
       } catch {
-        /* 网络/网关错误 → 重试一次，再坏就回落 */
+        /* 网络/网关错误 → 原样重试一次（消息不变），再坏就回落 */
       }
     }
     // LLM 两连失败 → 规则引擎兜底（自动驾驶绝不因大脑掉线而停摆）
     return this.fallback.decide(state);
   }
 
-  /** 救援阶梯单步决策（无该步可用对象时返回 null，调用方继续下一步） */
+  /** 救援阶梯单步决策（无该步可用对象或工具已单日冷却时返回 null，调用方继续下一步） */
   private rescueAction(step: number, state: GameStateSnapshot): PlannerDecision | null {
     switch (step) {
       case 0: {
+        if (this.cooledTools.has('tidy_backpack')) return null;
         const fishingTime = state.clockMinutes >= 11 * 60 && state.clockMinutes < 17 * 60 + 30;
         return {
           kind: 'act',
@@ -355,6 +458,7 @@ export class LlmPlanner implements Planner {
         };
       }
       case 1: {
+        if (this.cooledTools.has('ship_items')) return null;
         const item = listShippableItems(state.raw).find((n) => !this.rejectedShip.has(n));
         if (item === undefined) return null;
         return {
@@ -365,19 +469,23 @@ export class LlmPlanner implements Planner {
         };
       }
       case 2: {
+        if (this.cooledTools.has('eat')) return null;
         const item = listEdibleItems(state.raw).find((n) => !this.rejectedEat.has(n));
         if (item === undefined) return null;
         return { kind: 'act', tool: 'eat', args: { item }, intent: `吃掉${item}腾一格，顺便回点体力` };
       }
       case 3: {
+        if (this.cooledTools.has('trash_item')) return null;
         const item = pickTrash(state.raw);
         if (item === null) return null;
         return { kind: 'act', tool: 'trash_item', args: { item }, intent: `把这件没用的${item}扔掉腾位置` };
       }
       case 4:
+        if (this.cooledTools.has('store_items')) return null;
         return { kind: 'act', tool: 'store_items', args: {}, intent: '把杂物存进箱子腾位置（箱子满了就只能先出货了）' };
       case 5: {
         // 家具之类卖不掉又不吃的非工具物品；贵重物被 BWF 拒绝时退到鱼饵/种子类
+        if (this.cooledTools.has('trash_item')) return null;
         const item = pickAnyNonEssential(state.raw, this.rejectedTrash)
           ?? pickTrashableFallback(state.raw, this.rejectedTrash);
         if (item === null) return null;
@@ -385,13 +493,25 @@ export class LlmPlanner implements Planner {
       }
       case 6: {
         // 只剩家具：摆到农场腾格（BWF place_item）；不在农场先回去
+        if (this.cooledTools.has('place_item')) return null;
+        // 失败轮换依据：单日失败计数（每下发一次只记一条，绝不饱和）+ 缓冲区尾部连续失败（覆盖重启/插队场景）
+        const fails = Math.max(this.dayFails.get('place_item') ?? 0, trailingFailedCount(this.lastRecent, 'place_item'));
+        if (fails >= PLACE_OFFSETS.length) {
+          // 6 个相邻格全试过仍放不下（墙饰/被挡死）→ 记住这件家具并单日冷却 place_item，换 force 丢弃兜底
+          if (this.pendingPlaceItem !== null) this.rejectedPlace.add(this.pendingPlaceItem);
+          this.pendingPlaceItem = null;
+          this.cooledTools.add('place_item');
+          return null;
+        }
         const item = pickFurnitureToPlace(state.raw, this.rejectedPlace);
         if (item === null) return null;
+        // 换了一件家具 → 上一件的建议坐标已过期
+        if (this.pendingPlaceItem !== null && item !== this.pendingPlaceItem) this.placeTarget = null;
         if (state.location !== 'Farm') {
           return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把家具摆出来腾个背包格' };
         }
         const free = state.posX >= 0 ? findFreeTile(state.raw, state.posX, state.posY) : null;
-        const offset = PLACE_OFFSETS[Math.min(this.placeTryIndex, PLACE_OFFSETS.length - 1)] ?? [1, 0];
+        const offset = PLACE_OFFSETS[Math.min(fails, PLACE_OFFSETS.length - 1)] ?? [1, 0];
         const x = this.placeTarget?.x ?? free?.x ?? (state.posX >= 0 ? state.posX + offset[0] : -1);
         const y = this.placeTarget?.y ?? free?.y ?? (state.posY >= 0 ? state.posY + offset[1] : -1);
         if (x < 0 || y < 0) return null;
@@ -400,17 +520,19 @@ export class LlmPlanner implements Planner {
       }
       case 7: {
         // 木材 ≥50 且有空位时造箱子（满包 craft 会掉地上，必须有空格）
-        if (this.craftTried || this.chestPlaced || state.freeSlots <= 0) return null;
+        if (this.cooledTools.has('craft') || this.craftTried || this.chestPlaced || state.freeSlots <= 0) return null;
         if (hasChestItem(state.raw)) return null;
         if (countWood(state.raw) < 50) return null;
         return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，造个箱子用来整理背包' };
       }
       case 8: {
         // 背包里已有箱子 → 摆到农场；不在农场先回去
+        if (this.cooledTools.has('place_item')) return null;
         if (!hasChestItem(state.raw)) return null;
         if (state.location !== 'Farm') return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把箱子摆出来' };
+        const fails = Math.max(this.dayFails.get('place_item') ?? 0, trailingFailedCount(this.lastRecent, 'place_item'));
         const free = state.posX >= 0 ? findFreeTile(state.raw, state.posX, state.posY) : null;
-        const offset = PLACE_OFFSETS[Math.min(this.placeTryIndex, PLACE_OFFSETS.length - 1)] ?? [1, 0];
+        const offset = PLACE_OFFSETS[Math.min(fails, PLACE_OFFSETS.length - 1)] ?? [1, 0];
         const x = free?.x ?? (state.posX >= 0 ? state.posX + offset[0] : -1);
         const y = free?.y ?? (state.posY >= 0 ? state.posY + offset[1] : -1);
         if (x < 0 || y < 0) return null;
@@ -420,13 +542,26 @@ export class LlmPlanner implements Planner {
       case 9: {
         // 家具实在摆不下（墙饰/被挡）时强制丢弃一件贵重物换一格
         // force 兜底刻意忽略 rejectedTrash：普通 trash 被拒的贵重家具正是这里要强删的对象
+        if (this.cooledTools.has('trash_item')) return null;
         const item = pickAnyNonEssential(state.raw);
         if (item === null) return null;
         return { kind: 'act', tool: 'trash_item', args: { item, force: true }, intent: `家具摆不下，只好忍痛丢掉${item}换一格了` };
       }
       default: {
-        // 10：只剩任务/收集包材料 → 去社区中心捐掉（【留着】的正确出路，腾出多格）
+        // 10：只剩任务/收集包材料 → 去社区中心捐掉（【留着】的正确出路，腾出多格）。
+        // BWF 拒捐时会提示「用 bundle_info 看看缺什么」：按提示查一次（当天一次），失败预算耗尽即冷却不再空转
         if (!/【留着[^】]*】/.test(state.raw)) return null;
+        if (this.cooledTools.has('donate_bundles')) {
+          if (!this.dayInfoDone.has('bundle_info')) {
+            this.dayInfoDone.add('bundle_info');
+            return { kind: 'act', tool: 'bundle_info', args: {}, intent: '收集包材料捐不了，查查到底还缺什么（BWF 提示的）' };
+          }
+          return null;
+        }
+        if ((this.dayFails.get('donate_bundles') ?? 0) >= 1 && !this.dayInfoDone.has('bundle_info')) {
+          this.dayInfoDone.add('bundle_info');
+          return { kind: 'act', tool: 'bundle_info', args: {}, intent: '第一次捐失败了，先看看收集包缺什么材料再捐' };
+        }
         return { kind: 'act', tool: 'donate_bundles', args: {}, intent: '背包只剩收集包材料了，去社区中心捐掉换空位' };
       }
     }
