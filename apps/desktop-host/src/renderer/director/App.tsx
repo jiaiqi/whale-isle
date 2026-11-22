@@ -777,6 +777,19 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
     );
   }
   if (event.type === 'receipt') {
+    // T-M6-17 接单卡：聊天下单成功 → 琥珀卡展示「接单 → 工具｜意图」，与她的回话气泡紧邻
+    if (event.tool === 'chat_order') {
+      const [tool, ...rest] = (event.summary ?? '').split('｜');
+      return (
+        <div data-event="chat-order" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)' }}>
+          <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--amber)' }}>
+            <Zap size={12} />接单——马上就去做
+            <span style={{ color: 'var(--text-3)' }}>{tool}</span>
+          </div>
+          <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{rest.join('｜') || event.summary}</div>
+        </div>
+      );
+    }
     const c = STATUS_COLOR[event.status ?? 'ERROR'] ?? STATUS_COLOR.ERROR!;
     return (
       <div data-event="receipt" className="mb-3 rounded-2xl p-3" style={{ border: `1px solid ${c.line}`, background: c.bg }}>
