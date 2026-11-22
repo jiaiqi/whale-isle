@@ -17,10 +17,10 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
   const LOW_RICE_WARNING_RATIO = 0.15;
   const root = document.createElement('div');
   root.className = 'pet-widget--rice-bowl';
-  // 真机测量：当前 blue-whale-maid 角色主体水平中心在舞台约 68.7%（视频里角色偏右，不是几何中心）——
-  // 用 translateX(-50%) 以角色脚下为锚水平居中。T-M6-21 多角色时改为读角色 manifest 的 anchorRatio 字段。
+  // 角色主体水平锚点（T-M6-21）：由当前角色 manifest 的 anchorRatio 写入 CSS 变量；
+  // 默认 68.7% = 小鲸真机截图测量值；translateX(-50%) 以角色脚下水平居中
   root.style.cssText = `
-    position:absolute; left:68.7%; transform:translateX(-50%); bottom:6px;
+    position:absolute; left:var(--pet-anchor-ratio, 68.7%); transform:translateX(-50%); bottom:6px;
     display:none; align-items:center; gap:6px;
     background:rgba(15,43,76,0.55); border-radius:12px;
     padding:3px 8px; pointer-events:none; font:11px/1.4 monospace; color:#ffe9b8;`;

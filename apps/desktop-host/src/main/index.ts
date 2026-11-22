@@ -10,6 +10,8 @@ import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
+import { createCharacterRegistry } from './character-registry';
+import { setCurrentPersonaPrompt } from './character-persona';
 import { createProviderImportHost } from './provider-import-host';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
@@ -208,6 +210,23 @@ app.whenReady().then(() => {
   // 星露谷 Mod 管理（T-M6-06）：只读写玩家 Mods 目录，配置落 userData
   const modsHost = createModsHost(app.getPath('userData'));
   void modsHost;
+  // 桌宠角色注册表（T-M6-21）：内置 + userData 自定义角色，切换落 PetDesktopPrefs（单点事实源）
+  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData')));
+  const characters = createCharacterRegistry({
+    userDataDir: app.getPath('userData'),
+    getPrefs: () => prefs.get(),
+    setCharacter: (id) => {
+      prefs.patch({ characterId: id });
+      const next = characters.selected();
+      setCurrentPersonaPrompt(next.personaPrompt);
+      // 桌宠窗重新加载该角色 manifest + 锚点（renderer 监听 reselect 事件）
+      for (const target of [stageWindow, directorWindow]) {
+        if (target && !target.isDestroyed()) target.webContents.send('pet:character-changed', next);
+      }
+    },
+    builtinAssetsDir: join(here, '../renderer/pet-stage/assets'),
+  });
+  void characters;
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
   const voice = createVoiceHost();
   registerVoiceHostIpc(voice);

@@ -25,6 +25,8 @@ interface PetStageBridge {
   prefsGet(): Promise<PetDesktopPrefs>;
   prefsSet(update: Partial<PetDesktopPrefs>): Promise<PetDesktopPrefs>;
   onScaleChanged?(handler: (scale: number) => void): void;
+  characterManifest(id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
+  onCharacterChanged?(handler: (character: { id: string; anchorRatio: number }) => void): void;
   riceStatus(): Promise<{ balance: number; budget: number; consumedToday: number; level: string }>;
   appMeta(): Promise<{ transparent: boolean; frame: boolean; alwaysOnTop: boolean; skipTaskbar: boolean; testMode: boolean }>;
   forceAlpha?(alpha: number): Promise<boolean>;
@@ -107,22 +109,30 @@ const videoFactory: VideoFactory = (src): VideoHandle => {
 
 const renderer = new WebmVideoRenderer({ host, videoFactory });
 
-// 装载真形象清单（T-M5-01：114 官方 VP9-alpha webm，随包分发 assets/blue-whale-maid/）
-// webmPath 为「仓库视角」相对路径（assets/blue-whale-maid/x.webm）→ 渲染进程相对当前 html 即 ./assets/...
-void fetch('./assets/blue-whale-maid/manifest.json')
-  .then((res) => res.json())
-  .then((rawManifest: import('@workbench/shared-protocol').PetAvatarManifest) => {
-    // webmPath 为仓库视角（assets/...）→ 渲染进程相对 html 改写为 ./assets/...
-    for (const action of rawManifest.actions) {
-      for (const clip of action.clips) {
-        if (clip.webmPath.startsWith('assets/')) clip.webmPath = `./${clip.webmPath}`;
-      }
+// 装载当前角色真形象清单（T-M6-21：manifest 经主进程契约校验后由 IPC 下发，不再写死 blue-whale-maid）
+type PetAvatarManifest = import('@workbench/shared-protocol').PetAvatarManifest;
+async function loadCharacterManifest(id: string): Promise<void> {
+  const res = await bridge.characterManifest(id);
+  if (!res.ok || res.manifest === undefined) throw new Error(res.error ?? 'manifest 不可用');
+  const rawManifest = res.manifest as PetAvatarManifest;
+  // webmPath 为仓库视角（assets/...）→ 渲染进程相对 html 改写为 ./assets/...
+  for (const action of rawManifest.actions) {
+    for (const clip of action.clips) {
+      if (clip.webmPath.startsWith('assets/')) clip.webmPath = `./${clip.webmPath}`;
     }
-    return rawManifest;
-  })
-  .then((manifest) => renderer.load(manifest))
-  .then(() => renderer.play('idle'))
-  .catch((error) => console.warn('[pet-stage] 真形象清单未就绪（回退占位渲染）：', error));
+  }
+  await renderer.load(rawManifest);
+  await renderer.play('idle');
+}
+void bridge.prefsGet()
+  .then((p) => loadCharacterManifest(p.characterId))
+  .catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
+bridge.onCharacterChanged?.((character) => {
+  if (typeof character.anchorRatio === 'number') {
+    document.documentElement.style.setProperty('--pet-anchor-ratio', String(character.anchorRatio));
+  }
+  void loadCharacterManifest(character.id).catch((error) => console.warn('[pet-stage] 角色切换失败：', error));
+});
 
 // ---- T-M5-16（D16）：动作库预览 + ambient 空闲随机链 + 三层情绪映射 ----
 let lastEventAt = Date.now();

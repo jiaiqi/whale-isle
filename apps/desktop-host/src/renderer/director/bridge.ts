@@ -183,6 +183,12 @@ export interface DirectorBridge {
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
+  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string }>;
+  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string }): Promise<unknown>;
+  // T-M6-21 多角色注册表
+  characterList(): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string; anchorRatio?: number }>>;
+  characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;
+  // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
   prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity' }>;
   prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity' }): Promise<unknown>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;

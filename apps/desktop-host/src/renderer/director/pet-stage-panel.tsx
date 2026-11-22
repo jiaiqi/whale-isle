@@ -29,6 +29,9 @@ export function PetStagePanel({ events, running }: PetStagePanelProps): React.JS
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
+  interface CharacterView { id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string }
+  const [characters, setCharacters] = useState<CharacterView[]>([]);
+  const [characterId, setCharacterId] = useState('blue-whale-maid');
 
   useEffect(() => {
     void window.directorBridge.petsManifest().then((res) => {
@@ -37,7 +40,11 @@ export function PetStagePanel({ events, running }: PetStagePanelProps): React.JS
       if (idle !== undefined) setClip(`../pet-stage/${idle.replace(/^\.\//, '')}`);
     });
     void window.directorBridge.voiceConfigGet().then((c) => setVoice({ enabled: c.enabled, innerVoice: c.innerVoice, volume: c.volume }));
-    void window.directorBridge.prefsGet().then((p) => setScale(p.scale)).catch(() => undefined);
+    void window.directorBridge.prefsGet().then((p) => {
+      setScale(p.scale);
+      if (typeof p.characterId === 'string') setCharacterId(p.characterId);
+    }).catch(() => undefined);
+    void window.directorBridge.characterList().then((list) => setCharacters(list as CharacterView[])).catch(() => undefined);
   }, []);
 
   const latestState = [...events].reverse().find((e) => e.type === 'state');
@@ -118,6 +125,28 @@ export function PetStagePanel({ events, running }: PetStagePanelProps): React.JS
       </section>
 
       <section className="flex flex-col gap-3">
+        <div className="card px-4 py-3.5">
+          <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>当前角色</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {characters.map((c) => (
+              <button
+                key={c.id}
+                data-character={c.id}
+                onClick={() => void window.directorBridge.characterSelect(c.id).then((r) => {
+                  if (!r.ok) toast.error(r.error ?? '角色切换失败');
+                  else setCharacterId(c.id);
+                })}
+                className={`pill${characterId === c.id ? ' pill-blue' : ''}`}
+                style={{ fontSize: 10, cursor: 'pointer' }}
+                title={`${c.displayName} · 音色 ${c.voiceId}${c.licenseScope === 'DEV_ONLY_NON_COMMERCIAL' ? ' · 非商用素材' : ''}`}
+              >
+                {c.displayName}
+              </button>
+            ))}
+            {characters.length === 0 && <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>正在读取角色注册表…</span>}
+          </div>
+        </div>
+
         <div className="card px-4 py-3.5">
           <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>桌宠大小</h3>
           <label className="block text-[11px]" style={{ color: 'var(--text-2)' }}>
