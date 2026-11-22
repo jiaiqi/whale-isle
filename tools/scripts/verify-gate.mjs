@@ -7,7 +7,8 @@
  *   Gate 2 许可证与密钥  ✅ 台账校验 + 密钥泄漏/禁源痕迹扫描（T-M0-04 将升级为独立扫描器）
  *   Gate 3 确定性单测    ✅ vitest（TS 契约单测）+ pytest（Python 夹具回放）（T-M0-02 接线；
  *                        覆盖率 ≥90% 门槛自 T-M0-03 随包接入）
- *   Gate 4 沙盒 E2E      ⏳ TODO(T-M0-04 起)：tools/mock-harness 全链路回归接入
+ *   Gate 4 沙盒 E2E      ✅ apps/desktop-host/e2e/gate4-loopback.spec.ts（[SIMULATION] 骂大肥鱼 →
+ *                        0-token 喷水反射 → 单端语音锁释放 → 记仇账本落盘；<15s）
  *
  * 注意：本脚本自身包含检测规则字面量，已被排除在扫描范围之外。
  */
@@ -164,8 +165,21 @@ gate(
   `${gate3Label}${gate3Notes.length > 0 ? `\n${gate3Notes.join('\n')}` : ''}`
 );
 
-// ---- Gate 4：沙盒 E2E（随 T-M0-04 接线） ----
-gate('Gate 4 沙盒 E2E', 'PENDING', 'TODO(T-M0-04)：tools/mock-harness 全链路回归（骂大肥鱼 → 喷水反驳 → 语音锁 → 账本落盘 ≤15s）接线');
+// ---- Gate 4：沙盒 E2E（[SIMULATION] 回环：雷区 → 喷水 → 语音锁 → 账本） ----
+const e2eStarted = Date.now();
+const e2e = spawnSync(
+  'pnpm',
+  ['exec', 'vitest', 'run', 'apps/desktop-host/e2e/gate4-loopback.spec.ts', '--coverage.enabled=false'],
+  { cwd: ROOT, encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' } },
+);
+const e2eMs = Date.now() - e2eStarted;
+if (e2e.error) {
+  gate('Gate 4 沙盒 E2E', 'FAIL', `无法启动 vitest：${e2e.error.message}`);
+} else if (e2e.status !== 0) {
+  gate('Gate 4 沙盒 E2E', 'FAIL', truncate(`${e2e.stdout}\n${e2e.stderr}`));
+} else {
+  gate('Gate 4 沙盒 E2E', 'PASS', `[SIMULATION] 骂大肥鱼 → 0-token 喷水 → 语音锁释放 → 记仇账本落盘（${(e2eMs / 1000).toFixed(1)}s < 15s）`);
+}
 
 // ---- 汇总 ----
 console.log('');

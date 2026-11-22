@@ -71,6 +71,7 @@ export function cleanItemName(text: string): string {
     .replace(/\[[^\]]*\]/g, '')
     .replace(/\s*x\d+\b/gi, ' ')
     .replace(/\s*(?:金星|银星|铱星)\s*/g, ' ')
+    .replace(/[（(]手持[）)]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

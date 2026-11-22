@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RiceBowlStatus",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/RiceBowlStatus",
+  "$defs": {
+    "RiceBowlStatus": {
+      "type": "object",
+      "properties": {
+        "balance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "consumedToday": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "starving",
+            "hungry",
+            "ok",
+            "full",
+            "fed_buff"
+          ]
+        }
+      },
+      "required": [
+        "balance",
+        "budget",
+        "consumedToday",
+        "level"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BrainRuntimeConfig",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/BrainRuntimeConfig",
+  "$defs": {
+    "BrainRuntimeConfig": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object",
+          "properties": {
+            "profileId": {
+              "type": "string",
+              "enum": [
+                "BUDGET_SLACKING",
+                "DELUXE_LIVESTREAM",
+                "OFFLINE_SURVIVAL"
+              ]
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "roleBindings": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "enum": [
+                  "MAIN_PERSONA_BRAIN",
+                  "STARDEW_GAME_PLANNER",
+                  "DANMAKU_FAST_ROUTER",
+                  "VISION_STORYBOARD",
+                  "VOICE_TTS_SPEECH",
+                  "VOICE_SVC_SINGING"
+                ]
+              }
+            },
+            "secretMaskingEnabled": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "required": [
+            "profileId",
+            "displayName",
+            "roleBindings"
+          ],
+          "additionalProperties": false
+        },
+        "providerModels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

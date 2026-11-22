@@ -78,6 +78,13 @@
 
 ### Added
 
+- **P0 正确性收尾（2026-11-22 用户选定方向）**：
+  - **套餐/槽位真正驱动运行时**：新增 `BrainRuntimeConfig` 契约（38 域）；App 启动与供应商页每次改套餐/槽位/激活模型 → `brain:apply-config` → 主进程用 vault 里对应供应商 key 重建 `ModelGateway`，`planner:status` 如实返回 `providers/missingKeys`；不再硬编码 DELUXE。UI 顶栏大脑状态跨面板同步（`wb:brain`）。
+  - **真实 Token 饭碗**：`token-meter`（`userData/meter/`）消费 gateway `onUsage` 真实 usage → JSONL 流水（slot/provider/model/输入输出/latency/米粒）+ 日预算 500,000（1 粒米 = 1 Token），支持跨重启、跨日重置与投喂 bonus；删除「1 回执 = 30 粒」模拟扣米。真机：聊天 478 tokens → 499,522 并跨重启保持。
+  - **Gate 4 回环 E2E 接线**：`apps/desktop-host/e2e/gate4-loopback.spec.ts`（live-stream-hub 收弹幕 → persona 0-token 喷水 → 单端语音锁 COMPLETED/active≤1 → SQLite 记仇账本 + 0 token 断言 + 600 米粒记账），`verify:gate` 现在 **5 过 / 0 待接线**。
+  - **wait 可见化**：planner 返回 wait 时广播 `watchdog stuck`，中控台显示停滞原因，不再只有静默 cycle-end。
+  - 物品名归一剥离 `（手持）`；BWF「没有能扔的…」拒绝文案纳入黑名单解析，避免救援空转。
+
 - **产品功能设计 v1 定稿**（[docs/PRODUCT-DESIGN.md](docs/PRODUCT-DESIGN.md)，用户决策 D1~D5）：基于 21 个参考仓库的代码级深挖（克隆至 `~/Documents/vibe/reference-clones/`，5 个分析代理并行产出文件级结论），确定六大子系统升级方案——桌宠素材包（dsh-pet 114 alpha webm）、记忆图谱引擎移植（feiyuos-memory-graph）、星露谷自动驾驶（BWF 主线+守护脚本层+CheatBridge 开关）、聊天主界面（Codex 式，D3 最高优先）、三级注意力调度公式移植、鱼鳍安全模板；ROADMAP 新增 M5 批次 12 张工单（T-M5-01~12），当前激活 T-M5-01。
 - **docs/REFERENCES.md §4 第二轮代码级复评**：21 仓库总表（定位/可移植点/素材清单，含素材 alpha 与否实测）；D5 用户豁免声明（本地自用可移植、须登记来源）。
 - **全界面高保真交互设计稿**（`design/`，决策 D4）：6 页 HTML——`index.html`（设计语言总览：色板/排版/语义）+ `chat.html`（Codex 式聊天主界面：会话列表/think 折叠/工具卡片三态/审批卡 YNA//指令菜单/模拟流式）+ `stardew.html`（自动驾驶监控：动作互斥大卡/真实回执时间线/看门狗六宫格/CheatBridge 开关+审计流水/技能卡/ASCII 地图）+ `providers.html`（Magpie 单屏：套餐/六槽位/供应商卡升级版）+ `pet-stage.html`（桌宠舞台：双轨气泡/饭碗挂件/剪影点击分区/114 动作库网格分类筛选）+ `obs-overlay.html`（18765 挂件：投票板/歌词卡/双轨气泡/弹幕互动）。共享 `tokens.css` 设计 token（深空玻璃拟态）。Chrome headless 截图全页视觉验证通过；设计数据取自真机实测状态（春16日/体力98/竹鱼竿/鳀鱼完美）。

@@ -10,6 +10,15 @@ export interface ProviderVaultResponse {
   latencyMs?: number;
 }
 
+export interface BrainApplyView {
+  ok: boolean;
+  mode: 'rule' | 'llm';
+  llmReady: boolean;
+  providers: string[];
+  missingKeys: string[];
+  error?: string;
+}
+
 export interface HarnessPresetInfo {
   id: string; label: string; command: string | null; authHint: string;
 }
@@ -51,6 +60,15 @@ export interface AutodriveEventView {
   seq?: number;
 }
 
+export interface BrainApplyView {
+  ok: boolean;
+  mode: 'rule' | 'llm';
+  llmReady: boolean;
+  providers: string[];
+  missingKeys: string[];
+  error?: string;
+}
+
 export interface HarnessPresetInfo {
   id: string; label: string; command: string | null; authHint: string;
 }
@@ -85,7 +103,8 @@ export interface DirectorBridge {
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
-  riceStatus(): Promise<{ balance: number }>;
+  riceStatus(): Promise<import('@workbench/shared-protocol').RiceBowlStatus>;
+  brainApplyConfig(config: import('@workbench/shared-protocol').BrainRuntimeConfig): Promise<BrainApplyView>;
   plannerSwitch(mode: 'rule' | 'llm'): Promise<{ ok: boolean; error?: string; mode?: string }>;
   plannerStatus(): Promise<{ mode: string; llmReady: boolean }>;
   chatSay(text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }>;

@@ -16,7 +16,15 @@ import {
   type AutodriveEvent,
 } from '@workbench/game-bridge-mcp';
 import { ModelGateway } from '@workbench/model-gateway';
+import {
+  BrainRuntimeConfigSchema,
+  DiningProfilePresetSchema,
+  type BrainRuntimeConfig,
+  type DiningProfilePreset,
+  type WorkbenchRoleSlot,
+} from '@workbench/shared-protocol';
 import { readVaultKey } from './provider-vault';
+import { createTokenMeter } from './token-meter';
 import type { MemoryHost } from './memory-host';
 import type { VoiceHost } from './voice-host';
 
@@ -35,9 +43,9 @@ export interface AutodriveHost {
 export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vaultPath?: string, voiceHost?: VoiceHost, memoryHost?: MemoryHost): AutodriveHost {
   const windows: WebContents[] = [];
 
-  // ---- T-M6-01 完整版：LLM 大脑（vault key → model-gateway → LlmPlanner） ----
-  // 干饭套餐（Magpie 范式）：全部槽位绑定 deepseek-official/deepseek-flash（用户已配 key）
-  const DELUXE_PROFILE = {
+  // ---- LLM 大脑（vault key → model-gateway → LlmPlanner） ----
+  // 默认套餐仅作为「从未同步过配置」的兜底；渲染层会把 Dexie 里的真实套餐/槽位通过 brain:apply-config 同步进来。
+  const FALLBACK_PROFILE: DiningProfilePreset = DiningProfilePresetSchema.parse({
     profileId: 'DELUXE_LIVESTREAM',
     displayName: 'LIVE 档',
     roleBindings: {
@@ -49,22 +57,89 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
       VOICE_SVC_SINGING: 'deepseek-official/deepseek-flash',
     },
     secretMaskingEnabled: true,
-  };
+  });
   let brainMode: 'rule' | 'llm' = 'llm'; // 默认 LLM 大脑（llmPlanner 未就绪时自动回落规则）
   let gateway: InstanceType<typeof ModelGateway> | null = null;
   let llmPlanner: LlmPlanner | null = null;
+  let activeProfile: DiningProfilePreset = FALLBACK_PROFILE;
+  let brainProviders: string[] = [];
+  let brainMissingKeys: string[] = [];
   let recentReceipts: string[] = [];
   let lastGameClock = '';
   let eventSeq = 0;
   const eventHistory: (AutodriveEvent & { seq: number })[] = [];
   const busListeners = new Set<(event: AutodriveEvent & { seq: number }) => void>();
-  const buildBrain = (): void => {
-    if (!vaultPath || !safeStorage.isEncryptionAvailable()) return;
-    const key = readVaultKey(vaultPath, 'deepseek-official');
-    if (!key) return;
+
+  // 饭碗：真实 token 计量（1 粒米 = 1 Token，日预算 500,000）；流水落 userData/meter/token-ledger.jsonl
+  const meter = createTokenMeter({ dir: vaultPath ? join(dirname(vaultPath), 'meter') : join(process.cwd(), '.workbench-meter') });
+  let riceStatus = meter.status();
+  let riceBalance = riceStatus.balance;
+  let riceLevel: string = riceStatus.level;
+
+  interface BrainApplyResult {
+    ok: boolean;
+    mode: 'rule' | 'llm';
+    llmReady: boolean;
+    providers: string[];
+    missingKeys: string[];
+    error?: string;
+  }
+
+  /** 用给定套餐重建 gateway/planner（key 只从主进程 vault 解密，绝不来自渲染层） */
+  const buildBrain = (config?: BrainRuntimeConfig): BrainApplyResult => {
+    const candidate = config?.profile ?? activeProfile ?? FALLBACK_PROFILE;
+    const parsed = DiningProfilePresetSchema.safeParse(candidate);
+    if (!parsed.success) {
+      return { ok: false, mode: 'rule', llmReady: false, providers: [], missingKeys: [], error: '套餐配置不合法（Schema 校验失败）' };
+    }
+    const profile = parsed.data;
+    // 槽位里的 provider/model：模型段为空时用供应商卡里选中的 activeModelId 兜底
+    const bindings: Partial<Record<WorkbenchRoleSlot, string>> = {};
+    const providerIds = new Set<string>();
+    for (const [slot, binding] of Object.entries(profile.roleBindings)) {
+      if (typeof binding !== 'string' || binding.trim() === '') continue;
+      const [providerId, modelPart] = binding.split('/');
+      if (providerId === undefined || providerId === '') continue;
+      const model = (modelPart ?? '').trim() === '' ? (config?.providerModels?.[providerId] ?? '') : (modelPart ?? '');
+      if (model === '') continue;
+      bindings[slot as WorkbenchRoleSlot] = `${providerId}/${model}`;
+      providerIds.add(providerId);
+    }
+    const nextProfile: DiningProfilePreset = { ...profile, roleBindings: bindings };
+
+    const keys: Record<string, string> = {};
+    const missingKeys: string[] = [];
+    for (const providerId of providerIds) {
+      const key = vaultPath ? readVaultKey(vaultPath, providerId) : null;
+      if (key === null) missingKeys.push(providerId);
+      else keys[providerId] = key;
+    }
+    activeProfile = nextProfile;
+    brainProviders = Object.keys(keys);
+    brainMissingKeys = missingKeys;
+    if (Object.keys(keys).length === 0 || !safeStorage.isEncryptionAvailable()) {
+      gateway = null;
+      llmPlanner = null;
+      brainMode = 'rule';
+      return { ok: false, mode: 'rule', llmReady: false, providers: [], missingKeys, error: '没有可用的供应商 Key（先在供应商页保存 Key）' };
+    }
     gateway = new ModelGateway({
-      profile: DELUXE_PROFILE as never,
-      keys: { 'deepseek-official': key },
+      profile: nextProfile,
+      keys,
+      onUsage: (usage) => {
+        const recorded = meter.recordUsage({
+          slot: String(usage.slot),
+          providerId: usage.providerId,
+          modelId: usage.modelId,
+          inputTokens: usage.inputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          outputTokens: usage.outputTokens,
+          latencyMs: usage.latencyMs,
+        });
+        riceStatus = recorded.status;
+        riceBalance = riceStatus.balance;
+        broadcastRice(riceStatus.level);
+      },
     });
     llmPlanner = new LlmPlanner({
       chat: (slot, messages, opts) =>
@@ -74,8 +149,9 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
         }),
       recentReceipts,
     });
+    brainMode = 'llm';
+    return { ok: true, mode: brainMode, llmReady: true, providers: brainProviders, missingKeys };
   };
-  buildBrain();
   ipcMain.handle('planner:switch', (_e, mode: string) => {
     if (mode === 'llm' && !llmPlanner) {
       return { ok: false, error: 'LLM 大脑未就绪（供应商 key 未配置或未重启工作台）' };
@@ -88,7 +164,7 @@ export function createAutodriveHost(endpoint = 'http://127.0.0.1:18080/mcp', vau
     }
     return { ok: true, mode: brainMode };
   });
-  ipcMain.handle('planner:status', () => ({ mode: brainMode, llmReady: llmPlanner !== null }));
+  ipcMain.handle('planner:status', () => ({ mode: brainMode, llmReady: llmPlanner !== null, providers: brainProviders, missingKeys: brainMissingKeys }));
 
   // 聊天回话（D3）：雷区反射先行（不烧主脑）→ 主脑回话 → 广播两窗
   const XIAOJING_SYSTEM = '你是「小鲸」——一条傲娇干饭蓝鲸女仆，住在主人 Mac 桌面上，正在替主人自动游玩《星露谷物语》。口吻：嘴硬心软的傲娇女仆；回复短小精悍（≤80字）；偶尔提到饭碗/米粒；不解释自己是 AI；用中文。';
@@ -201,9 +277,7 @@ ${memoryContext}
     }
     return { ok: true };
   });
-  // ---- D16：饭碗档位联动（每回执扣米 → 档位广播 → 桌宠档位动作） ----
-  let riceBalance = 12_480; // 初始（与 fixtures 一致）；后续接 token_ledger 真实计量（T-M5-04）
-  let riceLevel = 'hungry'; // 初始 12.48% 即在饥饿线下——首个回执前不发（避免启动即广播）
+  // ---- D16：饭碗档位联动（真实 token 扣米 → 档位广播 → 桌宠档位动作） ----
   const broadcastRice = (level: string): void => {
     // D16 边沿触发：仅档位变化时广播（同档持续不重复刷桌宠动作）
     if (level === riceLevel) return;
@@ -212,13 +286,15 @@ ${memoryContext}
       if (!wc.isDestroyed()) wc.send('pet:rice', { level, balance: riceBalance });
     }
   };
+  const initialBrain = buildBrain();
+  void initialBrain;
   ipcMain.handle('rice:feed', (_e, grains: number) => {
-    riceBalance += Math.max(0, grains);
-    // 投喂下饭菜 → fed_buff 档（dsh-pet Buff 思想）；低于满 buff 线回落 ok
-    broadcastRice(riceBalance > 100_000 * 0.9 ? 'fed_buff' : riceBalance > 80_000 ? 'full' : 'ok');
-    return { ok: true, balance: riceBalance };
+    riceStatus = meter.feed(grains);
+    riceBalance = riceStatus.balance;
+    broadcastRice(riceStatus.level);
+    return { ok: true, ...riceStatus };
   });
-  ipcMain.handle('rice:status', () => ({ balance: riceBalance }));
+  ipcMain.handle('rice:status', () => ({ ...riceStatus, balance: riceBalance }));
   const broadcast = (event: AutodriveEvent): void => {
     // 环形缓冲（≤200 条）+ 单调 seq：中控台刷新后水合历史，不丢对话也不重复插卡
     const withSeq = { ...event, seq: ++eventSeq };
@@ -264,13 +340,6 @@ ${memoryContext}
       if (recentReceipts.length > 8) recentReceipts = recentReceipts.slice(-8);
       if (llmPlanner) (llmPlanner as unknown as { deps: { recentReceipts: string[] } }).deps.recentReceipts = recentReceipts;
     }
-    // 回执扣米（1 回执 = 30 粒模拟计量；真实 token 计量待 T-M5-04 token_ledger 接线）
-    if (event.type === 'receipt' && event.tool !== 'autodrive') {
-      riceBalance = Math.max(0, riceBalance - 30);
-      const ratio = riceBalance / 100_000;
-      broadcastRice(ratio < 0.05 ? 'starving' : ratio < 0.15 ? 'hungry' : ratio > 0.8 ? 'full' : 'ok');
-      void riceLevel;
-    }
     broadcast(event);
   }, { endpoint });
 
@@ -292,12 +361,19 @@ ${memoryContext}
   });
   ipcMain.handle('autodrive:status', () => ({ running: runner.isRunning(), events: [...eventHistory] }));
 
-  // 默认 LLM 大脑（用户指令 2026-11-22）：DeepSeek key 就绪即启用；未就绪自动回落规则日程
-  if (llmPlanner) {
-    (runner as unknown as { planner: unknown }).planner = llmPlanner;
-  } else {
-    brainMode = 'rule';
-  }
+  // 初始/热切换后统一应用 planner（runner 已就绪）
+  const applyPlanner = (): void => {
+    (runner as unknown as { planner: unknown }).planner = brainMode === 'llm' && llmPlanner ? llmPlanner : new RulePlanner();
+  };
+  applyPlanner();
+  // 渲染层同步真实套餐/槽位（Dexie → 主进程）；key 只在主进程 vault 解密
+  ipcMain.handle('brain:apply-config', (_e, payload: unknown) => {
+    const parsed = BrainRuntimeConfigSchema.safeParse(payload);
+    if (!parsed.success) return { ok: false, error: '配置不合法（Schema 校验失败）', mode: brainMode, llmReady: llmPlanner !== null, providers: brainProviders, missingKeys: brainMissingKeys };
+    const result = buildBrain(parsed.data);
+    applyPlanner();
+    return result;
+  });
 
   return {
     runner,

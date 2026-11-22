@@ -48,7 +48,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   petsPreview: (action: string, clipId: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke('pets:preview', action, clipId),
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
-  riceStatus: (): Promise<{ balance: number }> => ipcRenderer.invoke('rice:status'),
+  riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> => ipcRenderer.invoke('rice:status'),
+  // 运行时大脑配置（Dexie 套餐/槽位 → 主进程 gateway；不含任何密钥）
+  brainApplyConfig: (config: unknown): Promise<unknown> => ipcRenderer.invoke('brain:apply-config', config),
   // LLM 大脑（T-M6-01 完整版）
   plannerSwitch: (mode: 'rule' | 'llm'): Promise<{ ok: boolean; error?: string; mode?: string }> => ipcRenderer.invoke('planner:switch', mode),
   plannerStatus: (): Promise<{ mode: string; llmReady: boolean }> => ipcRenderer.invoke('planner:status'),

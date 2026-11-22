@@ -127,7 +127,8 @@ const RESCUE_TOOLS: ReadonlySet<string> = new Set(RESCUE_STEP.keys());
 
 /** 从 BWF 失败回执里抠出被拒的单品名（「失败：普通窗户 不能出货」/「背包里没有“沙丁鱼 x3 金星”」） */
 function failedItemOf(receipt: string): string {
-  const noSuch = /(?:背包里没有|没有)[“"]([^”"]+)[”"]/.exec(receipt);
+  const noSuch =
+    /(?:背包里没有|没有能扔的|没有可以吃的|没有可吃的)[“"]([^”"]+)[”"]/.exec(receipt);
   if (noSuch?.[1]) return cleanItemName(noSuch[1]);
   const trash = /失败：(?:\d+:)?(.+?)x\d+.*没有扔/.exec(receipt);
   if (trash?.[1]) return cleanItemName(trash[1]);

@@ -47,6 +47,9 @@ importers:
       '@workbench/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@workbench/persona-brain':
+        specifier: workspace:*
+        version: link:../../packages/persona-brain
       '@workbench/pet-renderer':
         specifier: workspace:*
         version: link:../../packages/pet-renderer

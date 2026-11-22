@@ -200,6 +200,21 @@ describe('LlmPlanner 决策链', () => {
     expect(d2.kind === 'act' && d2.tool).toBe('ship_items');
   });
 
+  it('手持家具被拒扔（名字带“（手持）”）→ 记住并终止空转（wait + 原因）', async () => {
+    const raw = `${STATE_FULL}
+6: 普通窗户（手持）`;
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED trash_item: 失败：背包里没有能扔的“普通窗户（手持）”（工具、武器、任务物品不能扔）。名字相近的：普通窗户',
+        'FAILED store_items: 失败：这里没有箱子',
+      ],
+    });
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind).toBe('wait');
+    expect(d.kind === 'wait' && d.reason).toContain('背包卡死');
+  });
+
   it('腾出空位后救援阶段归零：恢复 LLM 正常决策', async () => {
     let asked = 0;
     const planner = new LlmPlanner({

@@ -141,6 +141,8 @@ export class AutodriveRunner {
 
         // 4. 执行
         if (decision.kind === 'wait') {
+          // wait 必须可见：把原因作为 stuck 事件亮到中控台/桌宠，避免「看起来没反应」
+          this.onEvent({ type: 'watchdog', kind: 'stuck', detail: decision.reason });
           this.onEvent({ type: 'cycle-end', delayMs: decision.seconds * 1000 });
           await sleep(Math.min(decision.seconds, 10) * 1000);
           continue;

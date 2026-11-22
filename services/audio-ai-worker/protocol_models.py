@@ -865,6 +865,52 @@ class MemoryGraphView(BaseModel):
     stats: Stats
 
 
+class Profile1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    profileId: ProfileId
+    displayName: str
+    roleBindings: dict[
+        Literal[
+            'MAIN_PERSONA_BRAIN',
+            'STARDEW_GAME_PLANNER',
+            'DANMAKU_FAST_ROUTER',
+            'VISION_STORYBOARD',
+            'VOICE_TTS_SPEECH',
+            'VOICE_SVC_SINGING',
+        ],
+        str,
+    ]
+    secretMaskingEnabled: bool | None = True
+
+
+class BrainRuntimeConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    profile: Profile1
+    providerModels: dict[str, str] | None = {}
+
+
+class Level(StrEnum):
+    starving = 'starving'
+    hungry = 'hungry'
+    ok = 'ok'
+    full = 'full'
+    fed_buff = 'fed_buff'
+
+
+class RiceBowlStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    balance: Annotated[int, Field(ge=0)]
+    budget: Annotated[int, Field(gt=0)]
+    consumedToday: Annotated[int, Field(ge=0)]
+    level: Level
+
+
 class Action(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -994,3 +1040,7 @@ class AIWorkbenchContracts(BaseModel):
     MemoryNodeView_1: Annotated[MemoryNodeView, Field(alias='MemoryNodeView')]
     MemoryEdgeView_1: Annotated[MemoryEdgeView, Field(alias='MemoryEdgeView')]
     MemoryGraphView_1: Annotated[MemoryGraphView, Field(alias='MemoryGraphView')]
+    BrainRuntimeConfig_1: Annotated[
+        BrainRuntimeConfig, Field(alias='BrainRuntimeConfig')
+    ]
+    RiceBowlStatus_1: Annotated[RiceBowlStatus, Field(alias='RiceBowlStatus')]

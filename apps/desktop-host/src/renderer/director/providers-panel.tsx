@@ -81,10 +81,29 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
   );
 
   const activeProfile = profileList.find((p) => p.profileId === activeProfileId) ?? profileList[0];
+  /** 套餐/槽位/激活模型变化 → 主进程 gateway 热重建（key 只留在主进程 vault） */
+  const syncBrain = (profile: DiningProfilePreset | undefined, o: ProviderOverrides): void => {
+    if (profile === undefined) return;
+    const providerModels = Object.fromEntries(
+      Object.entries(o)
+        .map(([id, x]) => [id, x.activeModelId ?? ''] as const)
+        .filter(([, model]) => model !== ''),
+    );
+    void window.directorBridge.brainApplyConfig({ profile, providerModels }).then((r) => {
+      window.dispatchEvent(new CustomEvent('wb:brain', { detail: { mode: r.mode, llmReady: r.llmReady } }));
+      setNotices((n) => ({
+        ...n,
+        brain: r.ok
+          ? `大脑已应用：${r.providers.join(' / ') || '—'}${r.missingKeys.length > 0 ? `（缺 Key：${r.missingKeys.join(', ')}）` : ''}`
+          : `大脑回落规则：${r.error ?? '未知错误'}`,
+      }));
+    });
+  };
 
   const switchProfile = (profileId: string): void => {
     setActiveProfileId(profileId);
     void store.setConfig('activeDiningProfile', profileId);
+    syncBrain(profileList.find((p) => p.profileId === profileId), overrides);
   };
 
   const bindSlot = (slot: WorkbenchRoleSlot, value: string): void => {
@@ -95,6 +114,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     setProfileList(next);
     void store.setConfig(DINING_KEY, next);
     setNotices((n) => ({ ...n, [`slot-${slot}`]: '已保存' }));
+    syncBrain(next.find((p) => p.profileId === activeProfile.profileId), overrides);
   };
 
   const setBusyFor = (id: string, what: string | null): void =>
@@ -121,6 +141,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     setKeyDrafts((d) => ({ ...d, [provider.id]: '' }));
     persistOverrides({ ...overrides, [provider.id]: { ...overrides[provider.id], keyMask: result.mask ?? '' } });
     setNotices((n) => ({ ...n, [provider.id]: '✅ Key 已加密保存' }));
+    syncBrain(activeProfile, overrides);
   };
 
   const discover = async (provider: UiProvider): Promise<void> => {
@@ -156,8 +177,11 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     }));
   };
 
-  const setOverrideFor = (providerId: string, patch: ProviderOverride): void =>
-    persistOverrides({ ...overrides, [providerId]: { ...overrides[providerId], ...patch } });
+  const setOverrideFor = (providerId: string, patch: ProviderOverride): void => {
+    const next = { ...overrides, [providerId]: { ...overrides[providerId], ...patch } };
+    persistOverrides(next);
+    if (patch.activeModelId !== undefined) syncBrain(activeProfile, next);
+  };
 
   const slotOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
@@ -175,6 +199,19 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
 
   return (
     <div className="p-5 pb-10">
+      {notices['brain'] !== undefined && (
+        <div
+          data-brain-notice
+          className="mono mb-3 rounded-xl px-3 py-2 text-[11px]"
+          style={{
+            background: notices['brain'].startsWith('大脑已应用') ? 'var(--blue-dim)' : 'var(--amber-dim)',
+            border: `1px solid ${notices['brain'].startsWith('大脑已应用') ? 'var(--blue-line)' : 'var(--amber-line)'}`,
+            color: notices['brain'].startsWith('大脑已应用') ? 'var(--blue)' : 'var(--amber)',
+          }}
+        >
+          {notices['brain']}
+        </div>
+      )}
       {/* 干饭套餐 */}
       <section>
         <h2 className="text-sm font-semibold text-slate-300 mb-2">干饭套餐</h2>

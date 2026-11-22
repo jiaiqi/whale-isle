@@ -34,6 +34,8 @@ import {
   MemoryNodeViewSchema,
   MemoryEdgeViewSchema,
   MemoryGraphViewSchema,
+  BrainRuntimeConfigSchema,
+  RiceBowlStatusSchema,
   StickyRoutingGroupSchema,
   WorkbenchRoleSlotSchema,
 } from './index';
@@ -84,4 +86,6 @@ export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
   MemoryNodeView: MemoryNodeViewSchema,
   MemoryEdgeView: MemoryEdgeViewSchema,
   MemoryGraphView: MemoryGraphViewSchema,
+  BrainRuntimeConfig: BrainRuntimeConfigSchema,
+  RiceBowlStatus: RiceBowlStatusSchema,
 };

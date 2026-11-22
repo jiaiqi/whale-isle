@@ -118,6 +118,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('wb-theme') === 'light' ? 'light' : 'dark'));
   const [plugins, setPlugins] = useState<Set<string>>(readPlugins);
   const [rice, setRice] = useState(0);
+  const [riceCap, setRiceCap] = useState(500_000);
   const [memoryStats, setMemoryStats] = useState<{ nodes: number; edges: number; lastDay: string | null } | null>(null);
   const [guides, setGuides] = useState<string[]>([]);
   const [chatFilter, setChatFilter] = useState<'all' | 'COMPLETED' | 'FAILED'>('all');
@@ -138,7 +139,25 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     });
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
-    void window.directorBridge.riceStatus().then((r) => setRice(r.balance));
+    void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
+    // 启动即把 Dexie 里的真实套餐/槽位同步给主进程（否则会一直用兜底 DELUXE）
+    void Promise.all([
+      store.getConfig<DiningProfilePreset[]>('diningProfiles'),
+      store.getConfig<string>('activeDiningProfile'),
+      store.getConfig<Record<string, { activeModelId?: string }>>('providerOverrides'),
+    ]).then(([storedProfiles, activeId, overrides]) => {
+      const list = storedProfiles !== undefined && storedProfiles.length > 0 ? storedProfiles : profiles;
+      const chosen = list.find((p) => p.profileId === activeId) ?? list[0];
+      if (chosen === undefined) return;
+      const providerModels = Object.fromEntries(
+        Object.entries(overrides ?? {})
+          .map(([id, o]) => [id, o.activeModelId ?? ''] as const)
+          .filter(([, model]) => model !== ''),
+      );
+      void window.directorBridge.brainApplyConfig({ profile: chosen, providerModels }).then((r) => {
+        setBrain({ mode: r.mode, llmReady: r.llmReady });
+      });
+    });
     void window.directorBridge.memoryStats().then((m) => setMemoryStats(m));
     void window.directorBridge.guidesLoad().then((g) => { if (g.ok) setGuides(g.topics ?? []); });
   }, []);
@@ -151,7 +170,25 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   // 侧栏碗/记忆 badge 低频轮询（回执扣米与换日写日记不是推送式，15s 足够）
   useEffect(() => {
     const refresh = (): void => {
-      void window.directorBridge.riceStatus().then((r) => setRice(r.balance));
+      void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
+    // 启动即把 Dexie 里的真实套餐/槽位同步给主进程（否则会一直用兜底 DELUXE）
+    void Promise.all([
+      store.getConfig<DiningProfilePreset[]>('diningProfiles'),
+      store.getConfig<string>('activeDiningProfile'),
+      store.getConfig<Record<string, { activeModelId?: string }>>('providerOverrides'),
+    ]).then(([storedProfiles, activeId, overrides]) => {
+      const list = storedProfiles !== undefined && storedProfiles.length > 0 ? storedProfiles : profiles;
+      const chosen = list.find((p) => p.profileId === activeId) ?? list[0];
+      if (chosen === undefined) return;
+      const providerModels = Object.fromEntries(
+        Object.entries(overrides ?? {})
+          .map(([id, o]) => [id, o.activeModelId ?? ''] as const)
+          .filter(([, model]) => model !== ''),
+      );
+      void window.directorBridge.brainApplyConfig({ profile: chosen, providerModels }).then((r) => {
+        setBrain({ mode: r.mode, llmReady: r.llmReady });
+      });
+    });
       void window.directorBridge.memoryStats().then((m) => setMemoryStats(m));
     };
     const timer = setInterval(refresh, 15000);
@@ -175,6 +212,15 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       if (first !== undefined) setTab(first.id);
     }
   }, [plugins, tab]);
+
+  useEffect(() => {
+    const onBrain = (e: Event): void => {
+      const detail = (e as CustomEvent<{ mode: string; llmReady: boolean }>).detail;
+      if (detail !== undefined) setBrain({ mode: detail.mode, llmReady: detail.llmReady });
+    };
+    window.addEventListener('wb:brain', onBrain);
+    return () => window.removeEventListener('wb:brain', onBrain);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -287,7 +333,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         onSelect={setTab}
         running={running}
         rice={rice}
-        riceCap={100000}
+        riceCap={riceCap}
         onFeed={() => void feedRice()}
         onOpenCommandPalette={() => setCmdkOpen(true)}
         isPluginEnabled={isPluginEnabled}
@@ -555,7 +601,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         )}
 
         {tab === 'mods' && <div className="h-full overflow-y-auto"><ModsPanel /></div>}
-        {tab === 'obs' && <div className="h-full overflow-y-auto"><ObsPanel rice={rice} riceCap={100000} events={events} /></div>}
+        {tab === 'obs' && <div className="h-full overflow-y-auto"><ObsPanel rice={rice} riceCap={riceCap} events={events} /></div>}
         {tab === 'harness' && <div className="h-full overflow-y-auto"><HarnessPanel /></div>}
         {tab === 'providers' && (
           <div className="h-full overflow-y-auto">

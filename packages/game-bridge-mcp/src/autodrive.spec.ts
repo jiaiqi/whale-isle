@@ -331,6 +331,9 @@ describe('autodrive/planner/lock 分支补强', () => {
     runner.stop();
     expect(events.some((e) => e.type === 'decision')).toBe(false); // wait 不产生 decision/receipt
     expect(events.filter((e) => e.type === 'state').length).toBeGreaterThanOrEqual(2);
+    // wait 原因必须可见（watchdog stuck）
+    const waited = events.find((e) => e.type === 'watchdog');
+    expect(waited?.type === 'watchdog' && waited.detail).toContain('商店');
   });
 
   it('get_state 非 ok → watchdog heartbeat 事件 + 重试', async () => {

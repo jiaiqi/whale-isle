@@ -23,6 +23,9 @@
     },
     {
       "path": "../../packages/stardew-mods"
+    },
+    {
+      "path": "../../packages/persona-brain"
     }
   ]
 }

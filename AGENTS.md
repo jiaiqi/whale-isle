@@ -70,7 +70,7 @@
 - **Gate 3 (Deterministic Unit Tests)**：核心逻辑包（`persona-brain`、`model-gateway`、`game-bridge-mcp`、`live-stream-hub`）单元测试通过且分支覆盖率 ≥ 90%。
 - **Gate 4 (Loopback Sandbox E2E)**：在 `tools/mock-harness` 仿真沙盒下跑通端到端回归测试。
 
-> 当前接线进度见 `tools/scripts/verify-gate.mjs` 头注释与 `docs/ROADMAP.md`：Gate 1/2 已随 M0 前置脚手架接线，Gate 3/4 分别在 T-M0-03 / T-M0-04 落地接入。
+> 当前接线进度见 `tools/scripts/verify-gate.mjs` 头注释与 `docs/ROADMAP.md`：Gate 1/2 已随 M0 前置脚手架接线，Gate 3 随 T-M0-03 接入，Gate 4 于 2026-11-22（T-M6-08）以回环 E2E 接入。
 
 ### 2.4 文档同步铁律（Documentation Sync）
 

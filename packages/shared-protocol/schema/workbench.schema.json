@@ -39,7 +39,9 @@
     "StardewModsConfig",
     "MemoryNodeView",
     "MemoryEdgeView",
-    "MemoryGraphView"
+    "MemoryGraphView",
+    "BrainRuntimeConfig",
+    "RiceBowlStatus"
   ],
   "properties": {
     "PetRendererType": {
@@ -149,6 +151,12 @@
     },
     "MemoryGraphView": {
       "$ref": "#/$defs/MemoryGraphView"
+    },
+    "BrainRuntimeConfig": {
+      "$ref": "#/$defs/BrainRuntimeConfig"
+    },
+    "RiceBowlStatus": {
+      "$ref": "#/$defs/RiceBowlStatus"
     }
   },
   "additionalProperties": false,
@@ -2383,6 +2391,98 @@
         "edges",
         "days",
         "stats"
+      ],
+      "additionalProperties": false
+    },
+    "BrainRuntimeConfig": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object",
+          "properties": {
+            "profileId": {
+              "type": "string",
+              "enum": [
+                "BUDGET_SLACKING",
+                "DELUXE_LIVESTREAM",
+                "OFFLINE_SURVIVAL"
+              ]
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "roleBindings": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "enum": [
+                  "MAIN_PERSONA_BRAIN",
+                  "STARDEW_GAME_PLANNER",
+                  "DANMAKU_FAST_ROUTER",
+                  "VISION_STORYBOARD",
+                  "VOICE_TTS_SPEECH",
+                  "VOICE_SVC_SINGING"
+                ]
+              }
+            },
+            "secretMaskingEnabled": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "required": [
+            "profileId",
+            "displayName",
+            "roleBindings"
+          ],
+          "additionalProperties": false
+        },
+        "providerModels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "additionalProperties": false
+    },
+    "RiceBowlStatus": {
+      "type": "object",
+      "properties": {
+        "balance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "consumedToday": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "starving",
+            "hungry",
+            "ok",
+            "full",
+            "fed_buff"
+          ]
+        }
+      },
+      "required": [
+        "balance",
+        "budget",
+        "consumedToday",
+        "level"
       ],
       "additionalProperties": false
     }

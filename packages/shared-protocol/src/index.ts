@@ -524,3 +524,24 @@ export const MemoryGraphViewSchema = z.object({
   }),
 });
 export type MemoryGraphView = z.infer<typeof MemoryGraphViewSchema>;
+
+// ───────────────────────── 运行时大脑配置与饭碗状态（T-M6-08 P0 收尾） ─────────────────────────
+/**
+ * 渲染层 → 主进程的大脑配置（不含任何密钥；key 仍只在主进程 vault 解密）。
+ * providerModels 用于「供应商卡选中的激活模型」覆盖槽位里的空模型（通常槽位已是 provider/model 全串）。
+ */
+export const BrainRuntimeConfigSchema = z.object({
+  profile: DiningProfilePresetSchema,
+  providerModels: z.record(z.string(), z.string()).default({}),
+});
+export type BrainRuntimeConfig = z.infer<typeof BrainRuntimeConfigSchema>;
+
+/** 饭碗实时状态（1 粒米 = 1 Token；budget 默认 500,000/日） */
+export const RiceBowlStatusSchema = z.object({
+  balance: z.number().int().min(0),
+  budget: z.number().int().positive(),
+  consumedToday: z.number().int().min(0),
+  /** 剩余比例档位（供桌宠动作/气泡使用） */
+  level: z.enum(['starving', 'hungry', 'ok', 'full', 'fed_buff']),
+});
+export type RiceBowlStatus = z.infer<typeof RiceBowlStatusSchema>;
