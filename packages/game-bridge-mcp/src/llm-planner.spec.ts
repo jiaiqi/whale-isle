@@ -458,6 +458,29 @@ describe('LlmPlanner 决策链', () => {
     expect(d.kind === 'act' && d.intent).toContain('社区中心');
   });
 
+  it('作息护栏：23:00 回家/睡觉；体力 <8% 吃或回家睡（先于背包救援）', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const lateBeach = parseGameState(`${STATE_OK.replace('第1年春16日 07:30', '第1年春16日 23:10').replace('地点：Farm（泡泡湾农场）', '地点：Beach（沙滩）')}`);
+    const d1 = await planner.decide(lateBeach);
+    expect(d1.kind === 'act' && d1.tool).toBe('travel_to');
+    expect(d1.kind === 'act' && d1.args).toEqual({ location: 'FarmHouse' });
+    const lateHome = parseGameState(`${STATE_OK.replace('第1年春16日 07:30', '第1年春16日 23:10').replace('地点：Farm（泡泡湾农场）', '地点：FarmHouse（农舍）')}`);
+    const d2 = await planner.decide(lateHome);
+    expect(d2.kind === 'act' && d2.tool).toBe('sleep');
+
+    const weak = parseGameState(`${STATE_OK.replace('体力：98/270', '体力：10/270')}
+## 背包（序号: 物品）
+5: 沙丁鱼 [可食用 +23 体力]`);
+    const d3 = await planner.decide(weak);
+    expect(d3.kind === 'act' && d3.tool).toBe('eat');
+    const weakNoFood = parseGameState(`${STATE_OK.replace('体力：98/270', '体力：10/270').replace('地点：Farm（泡泡湾农场）', '地点：Beach（沙滩）')}`);
+    const d4 = await planner.decide(weakNoFood);
+    expect(d4.kind === 'act' && d4.tool).toBe('travel_to');
+    const weakHome = parseGameState(`${STATE_OK.replace('体力：98/270', '体力：10/270').replace('地点：Farm（泡泡湾农场）', '地点：FarmHouse（农舍）')}`);
+    const d5 = await planner.decide(weakHome);
+    expect(d5.kind === 'act' && d5.tool).toBe('sleep');
+  });
+
   it('腾出空位后救援阶段归零：恢复 LLM 正常决策', async () => {
     let asked = 0;
     const planner = new LlmPlanner({

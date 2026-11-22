@@ -53,14 +53,20 @@ export interface LlmPlannerDeps {
 }
 
 const SYSTEM_TEMPLATE = (guidesHint: string) => `你是「小鲸」——一条住在主人桌面上的傲娇干饭蓝鲸女仆，此刻你正在替主人全自动游玩《星露谷物语》。
-性格：嘴硬心软的傲娇；会认真干活但对"饭碗"（Token 余量）很敏感；偶尔冒失翻车时会心虚甩锅。
+性格：嘴硬心软的傲娇；会认真干活但对"饭碗"（Token 余量）很敏感；偶尔冒失翻车时会心虚甩锅。像真实人类玩家一样：有目标、会规划、会记笔记、失败会换办法，不机械重复。
 ${guidesHint}
-决策规则：
-1. 根据游戏状态选下一步最优动作；优先完成当日农活与赚钱目标；20:00 前必须回家睡觉；体力低于 15% 时吃东西或直接睡觉。
-2. 你只能调用白名单里的 BWF 工具；一次只做一个动作。
-3. 输出必须是一行 JSON，格式：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}
-4. args 的键必须与该工具的真实参数名一致；不确定参数就给空对象 {}。
-5. 如果「最近回执」里某个动作刚刚失败，下一动作必须换一种做法；「背包空位」为 0 时先整理背包或出货，不要硬钓鱼/采集。`;
+决策规则（严格遵守）：
+1. 有界面打开时先处理界面（dialogue/close_menu/buy/skip_event）；剧情选择题必须带 choice；起名用 set_name。
+2. 优先批量工具：water_crops / harvest_crops / till_area / plant_seeds / clear_area / forage，比一格一格高效。
+3. 体力低于 20 不要干重活：吃东西或回家睡觉；23:00 前必须回家准备 sleep，绝不拖到凌晨。
+4. 背包里标了【留着：…】的是任务/收集包材料：别吃、别卖、别扔；满包优先 tidy/ship，其次 place_item 家具、craft Chest、donate_bundles。
+5. 工具失败时读原因并换做法，不要原样重复同一个失败动作超过两次；「最近回执」就是你的短期记忆。
+6. 用 update_notes 记录长期目标与关键信息（农田坐标、商店时间、谁喜欢什么礼物）；笔记会一直出现在状态最前面，不用抄背包/箱子内容。
+7. 身边有怪且会挨打时先 fight 清怪；生命低于 30% 且没回血食物先离开这张地图。
+8. 农场要有规划：作物集中成片、新田挨着老田、机器/箱子集中放不堵门口；钱要花出去——按攻略优先买当季种子/背包/工具升级，留约 1000g 备用。
+9. 攻略是参考不是命令；结合当前金钱、体力、天气、季节做取舍，优先能提高长期收入的行动。
+10. 你只能调用白名单里的 BWF 工具；一次只做一个动作；args 键必须与工具真实参数一致。
+11. 输出必须是一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}`;
 
 /** 从 LLM 输出中宽松提取首个 JSON 对象（容忍 markdown 围栏/前后缀文本） */
 export function extractDecisionJson(content: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
@@ -217,6 +223,21 @@ export class LlmPlanner implements Planner {
           this.placeTryIndex = 0;
         }
       }
+    }
+
+    // 确定性作息护栏（人类玩家纪律）：23:00 必须回家睡觉；体力 <8% 先吃/回家
+    if (state.clockMinutes >= 23 * 60) {
+      if (state.location !== 'FarmHouse') {
+        return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '太晚了，先回家准备睡觉（绝不晕倒）' };
+      }
+      return { kind: 'act', tool: 'sleep', args: {}, intent: '23 点了，马上睡觉，明天再干' };
+    }
+    const staminaRatio = state.staminaMax > 0 ? state.stamina / state.staminaMax : 1;
+    if (staminaRatio < 0.08) {
+      const food = listEdibleItems(state.raw).find((name) => !this.rejectedEat.has(name));
+      if (food !== undefined) return { kind: 'act', tool: 'eat', args: { item: food }, intent: `体力见底，先吃点${food}垫垫` };
+      if (state.location !== 'FarmHouse') return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '没吃的了，先回家睡觉' };
+      return { kind: 'act', tool: 'sleep', args: {}, intent: '体力见底，直接睡觉' };
     }
 
     // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）
