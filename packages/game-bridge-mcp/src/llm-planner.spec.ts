@@ -4,8 +4,8 @@
  * chat 全注入 mock（零网络）。真机病灶：同一冻结分钟 dialogue×191 / place_item×96 / donate_bundles×29。
  */
 import { describe, expect, it } from 'vitest';
-import { extractDecisionJson, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickShippableItem } from './llm-planner';
-import { countWood, hasChestItem, parseGameState, pickFurnitureToPlace, type GameStateSnapshot } from './planner';
+import { extractDecisionJson, festivalWindowOf, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickShippableItem } from './llm-planner';
+import { countWood, hasChestItem, isRaining, parseGameState, pickFurnitureToPlace, RulePlanner, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `时间：第1年春16日 07:30（Tue），天气：晴
 金钱：640g  体力：98/270
@@ -726,5 +726,135 @@ describe('T-M6-12 决策循环防抖（真机死循环回归）', () => {
     const switched = await cool.decide(state());
     expect(switched.kind === 'act' && switched.tool).toBe('forage');
     expect(switchCalls[1]?.[3]?.content).toContain('冷却');
+  });
+});
+
+describe('T-M6-14 状态感知升级（天气/生命/生日/节日）', () => {
+  const FESTIVAL_HINT = '今天是花舞节：建议参加（节日上打招呼加好感，主活动有奖励）。先 get_guide topic=节日 看这个节日做什么，9:00-14:00 之间用 festival enter 入场 → greet → start。节日当天镇上商店都关门；不参加的话这段时间别走 Forest（travel_to 会拦下）';
+  const IN_FESTIVAL_MENU = '你在节日里：时间停止，移动和干活的工具都不能用。用 leave_festival 离开节日回去继续干活（对话框打开时先用 dialogue 说完）。';
+
+  it('festivalWindowOf：从 BWF 提示行抠 9:00-14:00 窗口；无提示行 → null', () => {
+    expect(festivalWindowOf(FESTIVAL_HINT)).toEqual({ start: 540, end: 840 });
+    expect(festivalWindowOf('今天没有节日，普通状态文本')).toBeNull();
+    expect(festivalWindowOf('')).toBeNull();
+  });
+
+  it('parseGameState：天气/生命/生日/节日 四字段真机格式全解析', () => {
+    const raw = `时间：第1年春20日 16:00（Sat），天气：下雨，明天天气：刮风
+金钱：2790g  体力：180/270  生命：100/100  今日运气：+0.03
+今日：生日 谢恩（生日当天送最爱的礼物好感 8 倍，不受每周 2 次限制）；节日 无`;
+    const s = parseGameState(raw);
+    expect(s.weather).toBe('下雨');
+    expect(s.health).toBe(100);
+    expect(s.healthMax).toBe(100);
+    expect(s.birthday).toBe('谢恩');
+    expect(s.festival).toBeNull();
+    expect(isRaining(s)).toBe(true);
+    expect(isRaining(parseGameState('时间：第1年春16日 07:30（Tue），天气：晴'))).toBe(false);
+    const festDay = parseGameState('今日：生日 无；节日 花舞节（9:00-14:00）');
+    expect(festDay.birthday).toBeNull();
+    expect(festDay.festival).toBe('花舞节');
+  });
+
+  it('RulePlanner 雨天免浇：状态写着要浇但下雨 → 跳过浇水直接走日程', async () => {
+    const rainy = parseGameState(`时间：第1年春20日 07:00（Sat），天气：下雨
+金钱：100g  体力：270/270  生命：100/100
+今日：生日 无；节日 无
+## 背包（序号: 物品）
+0: 斧头
+背包空位：10 个（共 12 格）`);
+    const rule = new RulePlanner();
+    const d = await rule.decide(rainy);
+    expect(d.kind === 'act' && d.tool).not.toBe('water_crops');
+    const sunny = parseGameState(rainy.raw.replace('天气：下雨', '天气：晴') + '\n剩 3 株没浇');
+    expect(sunny.weather).toBe('晴');
+  });
+
+  it('RulePlanner 生命 <30% 撤退：有吃的吃，没吃的回家', async () => {
+    const hurt = parseGameState(`时间：第1年春20日 12:00（Sat），天气：晴
+金钱：100g  体力：200/270  生命：20/100
+## 背包（序号: 物品）
+5: 沙丁鱼 [可食用 +23 体力]
+背包空位：5 个（共 12 格）`);
+    const rule = new RulePlanner();
+    const d = await rule.decide(hurt);
+    expect(d.kind === 'act' && d.tool).toBe('eat');
+    const noFood = parseGameState(hurt.raw.replace('5: 沙丁鱼 [可食用 +23 体力]', '0: 斧头').replace('地点：', '') + '\n## 位置\n地点：Mine（矿洞）');
+    const rule2 = new RulePlanner();
+    const d2 = await rule2.decide(noFood);
+    expect(d2.kind === 'act' && d2.tool).toBe('travel_to');
+    expect(d2.kind === 'act' && d2.args).toEqual({ location: 'FarmHouse' });
+  });
+
+  it('LlmPlanner 节日入场：窗口内确定性 enter 一次；同日不重复、窗外不盲试', async () => {
+    const base = `时间：第1年春24日 10:00（Sat），天气：晴
+金钱：100g  体力：270/270  生命：100/100
+${FESTIVAL_HINT}
+今日：生日 无；节日 花舞节
+## 当前界面
+无（可以自由行动）`;
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const s = parseGameState(base);
+    const d1 = await planner.decide(s);
+    expect(d1.kind === 'act' && d1.tool).toBe('festival');
+    expect(d1.kind === 'act' && d1.args).toEqual({ action: 'enter' });
+    // 同日再决策：入场已试过 → 不再 enter（回落 LLM/日程）
+    const d2 = await planner.decide(s);
+    expect(d2.kind === 'act' && d2.args).not.toEqual({ action: 'enter' });
+    // 窗外（16:00 > 14:00）从头也不入场
+    const late = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const lateState = parseGameState(base.replace('10:00', '16:00').replace('9:00-14:00', '9:00-14:00'));
+    const d3 = await late.decide(lateState);
+    expect(d3.kind === 'act' && d3.tool).not.toBe('festival');
+  });
+
+  it('节日场内状态机：greet 一次 → start 一次 → leave 兜底；主活动进行中直接 start', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const inFest = { ...state(), menu: IN_FESTIVAL_MENU };
+    const g = await planner.decide(inFest);
+    expect(g.kind === 'act' && g.tool).toBe('festival');
+    expect(g.kind === 'act' && g.args).toEqual({ action: 'greet' });
+    const st = await planner.decide(inFest);
+    expect(st.kind === 'act' && st.args).toEqual({ action: 'start' });
+    const lv = await planner.decide(inFest);
+    expect(lv.kind === 'act' && lv.tool).toBe('leave_festival');
+
+    const running = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const d = await running.decide({ ...state(), menu: '节日主活动进行中：用 festival start 接着参加（会自动过对白、捡彩蛋或钓鱼）。' });
+    expect(d.kind === 'act' && d.args).toEqual({ action: 'start' });
+  });
+
+  it('节日里对话框打开时先 dialogue（BWF 提示「先用 dialogue 说完」），不抢节日动作', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const d = await planner.decide({ ...state(), menu: `${IN_FESTIVAL_MENU} 对话框（刘易斯）：大家节日快乐！` });
+    expect(d.kind === 'act' && d.tool).toBe('dialogue');
+  });
+
+  it('LlmPlanner 生命护栏：血线 <30% 先吃/回家（先于日程与背包救援）', async () => {
+    const hurtRaw = `${STATE_OK.replace('体力：98/270', '体力：200/270').replace('天气：晴', '天气：晴')}
+生命：20/100
+## 背包（序号: 物品）
+5: 沙丁鱼 [可食用 +23 体力]`;
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const d = await planner.decide(parseGameState(hurtRaw));
+    expect(d.kind === 'act' && d.tool).toBe('eat');
+    expect(d.kind === 'act' && d.args).toEqual({ item: '沙丁鱼' });
+    const noFood = parseGameState(hurtRaw.replace('地点：Farm（泡泡湾农场）', '地点：Mine（矿洞）').replace('5: 沙丁鱼 [可食用 +23 体力]', '0: 斧头'));
+    const d2 = await planner.decide(noFood);
+    expect(d2.kind === 'act' && d2.tool).toBe('travel_to');
+    expect(d2.kind === 'act' && d2.args).toEqual({ location: 'FarmHouse' });
+  });
+
+  it('跨日重置节日一次性状态：春24 入场后，春25 提示仍在窗口 → 可再入场', async () => {
+    const base = `时间：第1年春24日 10:00（Sat），天气：晴
+金钱：100g  体力：270/270  生命：100/100
+${FESTIVAL_HINT}
+今日：生日 无；节日 花舞节`;
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    await planner.decide(parseGameState(base));
+    const nextDay = parseGameState(base.replace('第1年春24日', '第1年夏1日').replace('花舞节', '夏威夷宴会').replace('花舞节：建议参加', '夏威夷宴会：建议参加'));
+    const d = await planner.decide(nextDay);
+    expect(d.kind === 'act' && d.tool).toBe('festival');
+    expect(d.kind === 'act' && d.args).toEqual({ action: 'enter' });
   });
 });

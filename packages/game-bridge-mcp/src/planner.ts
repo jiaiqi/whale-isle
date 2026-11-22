@@ -23,20 +23,40 @@ export interface GameStateSnapshot {
   /** 玩家当前格坐标（place_item 需要 x/y；拿不到时 -1） */
   posX: number;
   posY: number;
+  /** 天气（T-M6-14）：「晴 / 下雨 / 刮风 / 雪」——雨天作物自动喝饱不用浇 */
+  weather: string;
+  /** 生命（T-M6-14）：矿洞/战斗后血线护栏用 */
+  health: number;
+  healthMax: number;
+  /** 今日生日村民（T-M6-14 解析；生日送礼 8 倍好感属 T-M6-16 社交工单消费） */
+  birthday: string | null;
+  /** 今日节日名（T-M6-14）：「节日 无」→ null；BWF 另有「今天是X：建议参加…{起}-{止}」入场窗口提示行 */
+  festival: string | null;
+}
+
+/** 雨天（含雷雨/雪天视同）：不用浇水，把时间花在别处 */
+export function isRaining(state: Pick<GameStateSnapshot, 'weather'>): boolean {
+  return /雨|雪/.test(state.weather);
 }
 
 export function parseGameState(raw: string): GameStateSnapshot {
   const clockM = /时间：(第\d+年[春夏秋冬]\d+日) (\d{2}):(\d{2})/.exec(raw);
   const staminaM = /体力：(\d+)\/(\d+)/.exec(raw);
+  const healthM = /生命：(\d+)\/(\d+)/.exec(raw);
   const moneyM = /金钱：(\d+)g/.exec(raw);
   const locM = /地点：([^\s（，。]+)/.exec(raw);
   const menuM = /## 当前界面\n([\s\S]*?)(?=\n## |\n\n|$)/.exec(raw);
   const freeM = /背包空位：(\d+)\s*个/.exec(raw);
   const posM = /你站在 \((\d+),(\d+)\)/.exec(raw);
+  const weatherM = /天气：([^，,\n]+)/.exec(raw);
+  // 「今日：」行可能带生日括注（好感 8 倍说明），两个字段都限定在该行内解析，避免误吃别的「节日」字样
+  const todayLine = /^.*今日：.*$/m.exec(raw)?.[0] ?? '';
   const seasonM = /第\d+年(春|夏|秋冬|秋|冬)?/.exec(clockM?.[1] ?? '');
   const dayM = /年[春夏秋冬](\d+)日/.exec(clockM?.[1] ?? '');
   const hh = Number(clockM?.[2] ?? '6');
   const mm = Number(clockM?.[3] ?? '0');
+  const birthdayRaw = /生日 ([^（；;\n]+)/.exec(todayLine)?.[1]?.trim() ?? '无';
+  const festivalRaw = /节日 (无|[^（；\n]+)/.exec(todayLine)?.[1]?.trim() ?? '无';
   return {
     raw,
     gameClock: clockM?.[0]?.slice(3) ?? '未知',
@@ -51,6 +71,11 @@ export function parseGameState(raw: string): GameStateSnapshot {
     freeSlots: Number(freeM?.[1] ?? 12), // 状态没报背包 → 视为有位置（不阻塞）
     posX: Number(posM?.[1] ?? -1),
     posY: Number(posM?.[2] ?? -1),
+    weather: (weatherM?.[1] ?? '').trim(),
+    health: Number(healthM?.[1] ?? 100),
+    healthMax: Number(healthM?.[2] ?? 100),
+    birthday: birthdayRaw === '' || birthdayRaw === '无' ? null : birthdayRaw,
+    festival: festivalRaw === '' || festivalRaw === '无' ? null : festivalRaw,
   };
 }
 
@@ -300,6 +325,16 @@ export class RulePlanner implements Planner {
     if (staminaRatio < 0.12 && state.clockMinutes < 18 * 60) {
       return { kind: 'act', tool: 'eat', args: {}, intent: '体力不足先吃点东西垫垫' };
     }
+    // 生命护栏（T-M6-14）：矿洞/战斗后血线 <30% 先回血或回家（真机提示词第 7 条的确定性兜底）
+    const healthRatio = state.healthMax > 0 ? state.health / state.healthMax : 1;
+    if (healthRatio < 0.3) {
+      const food = pickEdible(state.raw);
+      if (food !== null) return { kind: 'act', tool: 'eat', args: { item: food }, intent: `血量见底了，先吃个${food}回回血` };
+      if (state.location !== 'FarmHouse') {
+        return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '血量危险又没吃的，先回家躲一躲' };
+      }
+      return { kind: 'act', tool: 'sleep', args: {}, intent: '血量见底，睡觉回血（明天又是好鲸）' };
+    }
     if (state.clockMinutes >= 18 * 60 + 30) {
       return this.goSleep(state);
     }
@@ -360,7 +395,7 @@ export class RulePlanner implements Planner {
       this.phase = 'fishing';
       return { kind: 'act', tool: 'travel_to', args: { location: 'Beach' }, intent: '上午农活干完，去海滩钓鱼！' };
     }
-    if (/剩 \d+ 株没浇|需要浇水/.test(state.raw)) {
+    if (!isRaining(state) && /剩 \d+ 株没浇|需要浇水/.test(state.raw)) {
       return { kind: 'act', tool: 'water_crops', args: {}, intent: '给作物浇水——今天浇了才算长一天' };
     }
     if (/成熟的作物/.test(state.raw)) {

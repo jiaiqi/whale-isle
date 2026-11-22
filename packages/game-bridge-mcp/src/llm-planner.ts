@@ -19,6 +19,7 @@ import {
   countWood,
   findFreeTile,
   hasChestItem,
+  isRaining,
   listEdibleItems,
   listShippableItems,
   pickAnyNonEssential,
@@ -31,6 +32,18 @@ import {
 } from './planner';
 
 export { pickEdible, pickShippableItem, pickTrash } from './planner';
+
+/**
+ * 从 BWF「今天是花舞节：建议参加… 9:00-14:00 之间用 festival enter 入场」提示行抠入场窗口。
+ * 没有节日 / 窗口行被省略 → null（当天不赴会，日程照旧——绝不凭空猜窗口盲试 enter）。
+ */
+export function festivalWindowOf(raw: string): { start: number; end: number } | null {
+  const m = /今天是[^：]+：建议参加[^\n]*?(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2}) 之间用 festival enter/.exec(raw);
+  if (m?.[1] === undefined || m[2] === undefined || m[3] === undefined || m[4] === undefined) return null;
+  const start = Number(m[1]) * 60 + Number(m[2]);
+  const end = Number(m[3]) * 60 + Number(m[4]);
+  return end > start ? { start, end } : null;
+}
 
 /** BWF 工具白名单（越权工具名一律拒绝——运行期安全锁） */
 export const LLM_TOOL_WHITELIST = new Set([
@@ -46,6 +59,7 @@ export const LLM_TOOL_WHITELIST = new Set([
   'mermaid_show', 'feed_parrot', 'collect_walnuts', 'repair_boat', 'joja', 'field_office',
   'grandpa', 'buy_animal', 'build', 'upgrade_house', 'sleep', 'wait', 'say', 'set_mode',
   'reserve_items', 'wait_chat', 'follow', 'propose', 'update_notes', 'cancel_action', 'play_for',
+  'festival',
 ]);
 
 export interface LlmPlannerDeps {
@@ -64,14 +78,14 @@ const SYSTEM_TEMPLATE = (guidesHint: string) => `你是「小鲸」——一条�
 ${guidesHint}
 决策规则（严格遵守）：
 1. 有界面打开时先处理界面（dialogue/close_menu/buy/skip_event）；剧情选择题必须带 choice；起名用 set_name。
-2. 优先批量工具：water_crops / harvest_crops / till_area / plant_seeds / clear_area / forage，比一格一格高效。
+2. 优先批量工具：water_crops / harvest_crops / till_area / plant_seeds / clear_area / forage，比一格一格高效。下雨天作物自动喝饱，别浇水，把时间花在钓鱼/采集上。
 3. 体力低于 20 不要干重活：吃东西或回家睡觉；23:00 前必须回家准备 sleep，绝不拖到凌晨。
 4. 背包里标了【留着：…】的是任务/收集包材料：别吃、别卖、别扔；满包优先 tidy/ship，其次 place_item 家具、craft Chest、donate_bundles。
 5. 工具失败时读原因并换做法，不要原样重复同一个失败动作超过两次；「最近回执」就是你的短期记忆。
 6. 用 update_notes 记录长期目标与关键信息（农田坐标、商店时间、谁喜欢什么礼物）；笔记会一直出现在状态最前面，不用抄背包/箱子内容。
 7. 身边有怪且会挨打时先 fight 清怪；生命低于 30% 且没回血食物先离开这张地图。
 8. 农场要有规划：作物集中成片、新田挨着老田、机器/箱子集中放不堵门口；钱要花出去——按攻略优先买当季种子/背包/工具升级，留约 1000g 备用。
-9. 攻略是参考不是命令；结合当前金钱、体力、天气、季节做取舍，优先能提高长期收入的行动。
+9. 攻略是参考不是命令；结合当前金钱、体力、天气、季节做取舍，优先能提高长期收入的行动。状态里出现节日提示时按它说的做（窗口内 festival enter → greet → start），节日当天镇上商店关门别白跑；今天是某位村民生日时优先安排送他喜欢的礼物（好感 8 倍）。
 10. 你只能调用白名单里的 BWF 工具；一次只做一个动作；args 键必须与工具真实参数一致。
 11. 输出必须是一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}`;
 
@@ -148,9 +162,10 @@ const PLACE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
 /** 同一工具单日失败预算（BWF Agent 规则 4：同一失败动作不重复超过两次）；place_item 允许把 6 个相邻格试完 */
 const TOOL_FAIL_BUDGET_DEFAULT = 2;
 const TOOL_FAIL_BUDGET: Readonly<Record<string, number>> = { place_item: PLACE_OFFSETS.length };
-/** 生存护栏与只读信息工具不参与单日冷却（回家/睡觉/逃生口/查资料不能被预算卡死） */
+/** 生存护栏与只读信息工具不参与单日冷却（回家/睡觉/逃生口/查资料不能被预算卡死）；
+ * festival/leave_festival 是时机性动作（「X 才开始」属于等待而非死磕），同样豁免 */
 const COOLDOWN_EXEMPT: ReadonlySet<string> = new Set([
-  'travel_to', 'sleep', 'get_state', 'cancel_action', 'bundle_info',
+  'travel_to', 'sleep', 'get_state', 'cancel_action', 'bundle_info', 'festival', 'leave_festival',
 ]);
 /** dialogue 效果核验阈值：同一界面文本连续推进 N 次没变化 → 判定卡死（真机玛妮剧情 191 次教训） */
 const DIALOGUE_STUCK_LIMIT = 8;
@@ -215,6 +230,11 @@ export class LlmPlanner implements Planner {
   /** dialogue 效果核验：连续「推进成功但界面没变」计数与当时的界面文本 */
   private dialogueStreak = 0;
   private dialogueStreakMenu = '';
+  /** T-M6-14 节日单日一次性状态机：入场（窗口内一次）→ 场内 greet 一次 → start 一次 → 兜底 leave；
+   *  全部确定性不烧 token，且每步只发一次，绝不空转（「入场窗口」从 BWF 提示行解析，绝不盲试） */
+  private festivalEnterTried = false;
+  private festivalGreeted = false;
+  private festivalStartTried = false;
 
   constructor(private readonly deps: LlmPlannerDeps) {}
 
@@ -238,6 +258,9 @@ export class LlmPlanner implements Planner {
       this.dayFails.clear();
       this.cooledTools.clear();
       this.dayInfoDone.clear();
+      this.festivalEnterTried = false;
+      this.festivalGreeted = false;
+      this.festivalStartTried = false;
     }
     const failedTool = /^FAILED\s+([^\s:：]+)/.exec(recent.at(-1) ?? '')?.[1] ?? '';
     if (this.lastIssued !== null && failedTool !== '' && failedTool === this.lastIssued) {
@@ -251,6 +274,25 @@ export class LlmPlanner implements Planner {
     // 菜单优先（确定性处理，不烧 LLM）
     const menu = state.menu;
     if (menu !== '' && !/无（可以自由行动）/.test(menu)) {
+      // 节日状态机（T-M6-14）：「当前界面」出现节日行时走 enter→greet→start→leave 一次性链；
+      // 真有对话框打开（「对话框（NPC）：」行）时先走 dialogue 路径说完，再继续节日动作。
+      // 注意提示文本里本身就有「（对话框打开时先用 dialogue 说完）」，不能拿裸「对话框」三字当判据
+      if (!/对话框（/.test(menu)) {
+        if (/节日主活动(已经开始了|进行中)/.test(menu)) {
+          return { kind: 'act', tool: 'festival', args: { action: 'start' }, intent: '节日主活动开始了，一起上（自动过对白）' };
+        }
+        if (/你.{0,2}节日里/.test(menu)) {
+          if (!this.festivalGreeted) {
+            this.festivalGreeted = true;
+            return { kind: 'act', tool: 'festival', args: { action: 'greet' }, intent: '先跟节日上的大家打个招呼，好感要攒起来' };
+          }
+          if (!this.festivalStartTried) {
+            this.festivalStartTried = true;
+            return { kind: 'act', tool: 'festival', args: { action: 'start' }, intent: '找刘易斯开始主活动（没有主活动就撤）' };
+          }
+          return { kind: 'act', tool: 'leave_festival', args: {}, intent: '这个节逛完啦，回去继续干活' };
+        }
+      }
       // 剧情播放中但没有对话框：BWF 会拒绝 dialogue，此时用 skip_event 跳出过场，避免无限重试
       if (/剧情|节日事件/.test(menu) && /没有对话框|剧情还在放/.test(recent.at(-1) ?? '')) {
         return { kind: 'act', tool: 'skip_event', args: {}, intent: '过场没有对话框，跳过这段剧情' };
@@ -323,6 +365,22 @@ export class LlmPlanner implements Planner {
       if (food !== undefined) return { kind: 'act', tool: 'eat', args: { item: food }, intent: `体力见底，先吃点${food}垫垫` };
       if (state.location !== 'FarmHouse') return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '没吃的了，先回家睡觉' };
       return { kind: 'act', tool: 'sleep', args: {}, intent: '体力见底，直接睡觉' };
+    }
+    // 生命护栏（T-M6-14）：血线 <30% 先回血/回家（矿洞战斗后的确定性兜底，优先于日常日程）
+    const healthRatio = state.healthMax > 0 ? state.health / state.healthMax : 1;
+    if (healthRatio < 0.3) {
+      const food = listEdibleItems(state.raw).find((name) => !this.rejectedEat.has(name));
+      if (food !== undefined) return { kind: 'act', tool: 'eat', args: { item: food }, intent: `血量见底了，先吃个${food}回回血` };
+      if (state.location !== 'FarmHouse') return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '血量危险又没吃的，先回家躲一躲' };
+      return { kind: 'act', tool: 'sleep', args: {}, intent: '血量见底，睡觉回血（明天又是好鲸）' };
+    }
+    // 节日赴会（T-M6-14）：入场窗口来自 BWF 提示行（「今天是X：建议参加… 9:00-14:00 用 festival enter」），
+    // 窗口内一次性入场；窗口缺失/已试过/超窗都不盲试——节日错过就错过，日程照旧不空转
+    const festivalWindow = festivalWindowOf(state.raw);
+    if (festivalWindow !== null && !this.festivalEnterTried
+      && state.clockMinutes >= festivalWindow.start && state.clockMinutes <= festivalWindow.end) {
+      this.festivalEnterTried = true;
+      return { kind: 'act', tool: 'festival', args: { action: 'enter' }, intent: '今天有节日！按提示的窗口去凑热闹，打招呼攒好感～' };
     }
 
     // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）
