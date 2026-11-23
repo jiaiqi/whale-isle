@@ -358,6 +358,8 @@ export type PlannerDecision =  | { kind: 'act'; tool: string; args: Record<strin
 export interface Planner {
   readonly name: string;
   decide(state: GameStateSnapshot): Promise<PlannerDecision>;
+  /** 可选：团队/主人下达的当前目标（不替代工具白名单与安全护栏；规则规划器可忽略） */
+  setObjective?(objective: string | null): void;
   /** 可选：编排器回执反馈（规则兜底据此做失败升级，避免离线模式死循环） */
   observeReceipt?(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void;
 }

@@ -1443,3 +1443,41 @@ describe('T-M6-15 死锁自主解（为未解锁收集包过早预留）', () =>
     expect(eat.kind === 'act' && eat.args).toEqual({ item: '沙丁鱼' });
   });
 });
+
+describe('T-M6-39 团队黑板动态注入', () => {
+  it('每轮注入 ≤300 字摘要与当前 objective；personaPrompt 替换角色段', async () => {
+    const seen: Array<Array<{ role: string; content: string }>> = [];
+    const planner = new LlmPlanner({
+      personaPrompt: '你是泡芙——软萌柴犬队友。',
+      contextProvider: () => `目标：建鸡舍\n${'长'.repeat(400)}`,
+      chat: async (_slot, messages) => {
+        seen.push(messages);
+        return { content: '{"tool":"fish","args":{"casts":2},"intent":"钓鱼"}' };
+      },
+    });
+    planner.setObjective('去海滩钓 5 条鱼');
+    const decision = await planner.decide(state());
+    expect(decision).toMatchObject({ kind: 'act', tool: 'fish' });
+    const first = seen[0]!;
+    expect(first[0]?.content).toContain('泡芙');
+    expect(first[1]?.content).toContain('团队协作黑板');
+    expect(first[1]?.content).toContain('当前目标：去海滩钓 5 条鱼');
+    expect(first[1]?.content.length).toBeLessThan(4_500);
+    planner.setObjective('   ');
+    await planner.decide(state());
+    expect(seen[1]?.[1]?.content).not.toContain('当前目标：');
+  });
+
+  it('contextProvider 抛异常/返回空串时不污染规划', async () => {
+    const planner = new LlmPlanner({
+      contextProvider: () => { throw new Error('board down'); },
+      chat: async () => ({ content: '{"tool":"read_mail","args":{},"intent":"读信"}' }),
+    });
+    expect(await planner.decide(state())).toMatchObject({ kind: 'act', tool: 'read_mail' });
+    const empty = new LlmPlanner({
+      contextProvider: () => '   ',
+      chat: async () => ({ content: '{"tool":"read_mail","args":{},"intent":"读信"}' }),
+    });
+    expect(await empty.decide(state())).toMatchObject({ kind: 'act', tool: 'read_mail' });
+  });
+});
