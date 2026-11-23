@@ -50,6 +50,10 @@ export interface GameAdapter {
   readonly guideTopics?: readonly string[];
   /** 规则模式/LLM 离线回退规划器；省略时使用星露谷 RulePlanner */
   createRulePlanner?(): Planner;
+  /** 长时间只有 get_state 时，用游戏原生 wait 维持“有动作”心跳，避免 BWF 120s 无动作暂停。 */
+  readonly keepaliveAction?: { tool: string; args: Record<string, unknown> };
+  /** 卡死哨兵检测到时钟冻结后的最小恢复动作（通常与 keepalive 相同）。 */
+  readonly staleRecoveryAction?: { tool: string; args: Record<string, unknown> };
 }
 
 /** BWF 回执里的英文工具名 → 中文（英文留在括号里，方便对照日志） */
@@ -147,13 +151,22 @@ export class StardewAdapter implements GameAdapter {
     return new RulePlanner();
   }
 
+  readonly keepaliveAction = { tool: 'wait', args: { minutes: 1 } };
+  readonly staleRecoveryAction = { tool: 'wait', args: { minutes: 1 } };
+
   classifyReceipt(input: Parameters<typeof classifyStardewReceipt>[0]): ReceiptClassification {
     return classifyStardewReceipt(input);
   }
 }
 
 /** 适配器工厂（每次 start 独立实例，避免 fetchImpl 注入互相污染） */
-export type GameAdapterFactory = (options: { endpoint?: string; fetchImpl?: typeof fetch }) => GameAdapter;
+export interface GameAdapterOptions {
+  endpoint?: string;
+  fetchImpl?: typeof fetch;
+  /** 多逻辑玩家路由：DST 同一 sidecar 下按 agentId 区分玩家；其他游戏可忽略 */
+  agentId?: string;
+}
+export type GameAdapterFactory = (options: GameAdapterOptions) => GameAdapter;
 
 export class GameAdapterRegistry {
   private readonly factories = new Map<GameId, GameAdapterFactory>();
@@ -162,7 +175,7 @@ export class GameAdapterRegistry {
     this.factories.set(gameId, factory);
   }
 
-  create(gameId: GameId, options: { endpoint?: string; fetchImpl?: typeof fetch } = {}): GameAdapter {
+  create(gameId: GameId, options: GameAdapterOptions = {}): GameAdapter {
     const factory = this.factories.get(gameId);
     if (!factory) throw new Error(`未注册的游戏适配器：${gameId}（已注册：${this.list().join(', ') || '无'}）`);
     return factory(options);

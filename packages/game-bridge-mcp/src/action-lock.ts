@@ -63,12 +63,21 @@ export class ActionLock {
   /** 显式中止（P0 插队 / 看门狗兜底）：cancel_action 后清锁（execute 的 finally 也会清，双保险幂等）。
    *  返回值只表示「cancel_action 工具调用本身是否成功」——锁一定被清（callTool 失败/超时也算清）。 */
   async cancel(reason: string, timeoutMs = 15_000): Promise<boolean> {
-    if (!this.current) return false;
-    const res = await this.client.callTool(this.cancelTool, {}, { timeoutMs });
-    this.current = null;
-    this.stats.released++;
+    // 即使本地没有在途动作，也要把 cancel 真正发给游戏：BWF 可能因 120s 无动作自行暂停，
+    // 旧实现直接 return false，watchdog 文案却声称“已 cancel_action 兜底”（真机春24 死锁根因）。
+    const hadActive = this.current !== null;
+    let res: McpCallResult;
+    try {
+      res = await this.client.callTool(this.cancelTool, {}, { timeoutMs });
+    } catch {
+      res = { kind: 'error', message: 'cancel_action 调用异常' };
+    }
+    if (hadActive) {
+      this.current = null;
+      this.stats.released++;
+    }
     void reason;
-    return res.kind === 'ok' && !res.isError;
+    return hadActive && res.kind === 'ok' && !res.isError;
   }
 }
 
@@ -85,6 +94,11 @@ export class StuckSentinel {
     /** 时钟提取器按游戏注入（默认星露谷正则；新游戏 adapter 提供自己的时钟/昼夜摘要） */
     private readonly extractClock: (stateText: string) => string | null = (text) => DEFAULT_CLOCK_RE.exec(text)?.[0] ?? null,
   ) {}
+
+  /** 本轮恢复已处理：重置 stale 计时，避免每 2 秒重复 watchdog/恢复动作。 */
+  reset(): void {
+    this.lastChangeAt = this.now();
+  }
 
   /** 从 get_state 文本提取游戏时钟摘要；变化则刷新计时 */
   observe(stateText: string): { stale: boolean; staleMs: number } {

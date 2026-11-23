@@ -231,6 +231,8 @@ export class TerrariaAdapter implements GameAdapter {
   readonly displayName = '泰拉瑞亚';
   readonly transport: TerrariaBridgeClient;
   readonly toolWhitelist = TERRARIA_TOOL_WHITELIST;
+  readonly keepaliveAction = { tool: 'wait', args: { seconds: 10 } };
+  readonly staleRecoveryAction = { tool: 'wait', args: { seconds: 10 } };
   readonly guideTopics: readonly string[] = [];
   readonly unreachableMessage: string;
 

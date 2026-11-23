@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { actionTimeoutMs, BwfMcpClient, isLongAction } from './mcp-client';
 import { ActionLock, StuckSentinel } from './action-lock';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
+import { StardewAdapter } from './adapter';
 import { findFreeTile, parseGameState, pickEdible, RulePlanner, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `【你的长期笔记】x
@@ -651,7 +652,7 @@ describe('收尾分支：不可解析状态 / sleeping / 异常输入', () => {
 });
 
 describe('时钟注入 stuck / planner fallback / JSON 前缀边界', () => {
-  it('注入时钟：游戏时间冻结 → watchdog stuck → cancel 兜底', async () => {
+  it('注入时钟：90s 无变更动作先发 keepalive，避免落入 BWF 120s 自暂停', async () => {
     const events: AutodriveEvent[] = [];
     let vnow = 1_000_000;
     const impl = async (): Promise<Response> => {
@@ -669,8 +670,9 @@ describe('时钟注入 stuck / planner fallback / JSON 前缀边界', () => {
     vnow += 5 * 60_000; // 时钟推进 5 分钟（游戏时间冻结 → staleMs 超 4min 阈值）
     await new Promise((r) => setTimeout(r, 150));
     runner.stop();
-    const stuck = events.filter((e) => e.type === 'watchdog' && e.kind === 'stuck');
-    expect(stuck.length).toBeGreaterThanOrEqual(1);
+    const heartbeat = events.filter((e) => e.type === 'watchdog' && e.kind === 'heartbeat');
+    expect(heartbeat.some((e) => e.type === 'watchdog' && e.detail.includes('keepalive'))).toBe(true);
+    expect(events.some((e) => e.type === 'receipt' && e.tool === 'wait' && e.status === 'COMPLETED')).toBe(true);
   });
 
   it('RulePlanner：农活全无 → 直接进钓鱼阶段（fallback travel Beach）', async () => {
@@ -889,5 +891,79 @@ describe('T-M6-27 会话归属', () => {
     await runner.stopAndWait();
     expect(calls).toBeGreaterThan(0);
     expect(runner.sessionId).toBe(before);
+  });
+});
+
+
+describe('T-M6-10 真机回归：BWF 自暂停与冻结恢复', () => {
+  it('无在途动作时 cancel 仍真实发往游戏（不再假称兜底）', async () => {
+    const calls: string[] = [];
+    const impl = async (_url: unknown, init?: { body?: string }) => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      calls.push(tool);
+      return {
+        text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: '成功：没有在途动作' }], isError: false } }),
+      } as unknown as Response;
+    };
+    const lock = new ActionLock(new BwfMcpClient('http://mock/mcp', impl as unknown as typeof fetch));
+    expect(await lock.cancel('idle')).toBe(false);
+    expect(calls).toEqual(['cancel_action']);
+  });
+
+  it('时钟冻结且恢复动作成功 → 发 wait 唤醒并记录真实回执，不进入 planner 空转', async () => {
+    const events: AutodriveEvent[] = [];
+    let now = 1_000_000;
+    const impl = async (_url: unknown, init?: { body?: string }) => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      const text = tool === 'get_state'
+        ? '时间：第1年春16日 09:00（Tue），天气：晴\n金钱：640g  体力：98/270\n无（可以自由行动）'
+        : tool === 'cancel_action' ? '成功：没有在途动作' : '成功：等待结束';
+      return { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError: false } }) } as unknown as Response;
+    };
+    const adapter = new StardewAdapter('http://mock/mcp');
+    Object.defineProperty(adapter, 'keepaliveAction', { value: undefined, configurable: true });
+    const runner = new AutodriveRunner((event) => { if (events.length < 200) events.push(event); }, {
+      endpoint: 'http://mock/mcp',
+      maxCycles: 20,
+      now: () => now,
+      sleep: async (ms) => { await new Promise((resolve) => setTimeout(resolve, Math.min(ms, 2))); },
+    }, adapter);
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    now += 5 * 60_000;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    runner.stop();
+    expect(events.some((event) => event.type === 'watchdog' && event.kind === 'stuck' && event.detail.includes('唤醒'))).toBe(true);
+    expect(events.some((event) => event.type === 'receipt' && event.tool === 'wait' && event.summary.includes('卡死恢复'))).toBe(true);
+    expect(events.some((event) => event.type === 'decision' && event.planner === 'remote')).toBe(false);
+  });
+
+  it('恢复动作失败 → 明确交还 planner，仍产生决策而非每 2 秒刷 watchdog', async () => {
+    const events: AutodriveEvent[] = [];
+    let now = 1_000_000;
+    const impl = async (_url: unknown, init?: { body?: string }) => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      const text = tool === 'get_state'
+        ? '时间：第1年春16日 09:00（Tue），天气：晴\n金钱：640g  体力：98/270\n无（可以自由行动）'
+        : tool === 'cancel_action' ? '成功：没有在途动作' : '失败：wait 不认识参数';
+      return { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError: tool !== 'get_state' && text.startsWith('失败') } }) } as unknown as Response;
+    };
+    const adapter = new StardewAdapter('http://mock/mcp');
+    Object.defineProperty(adapter, 'keepaliveAction', { value: undefined, configurable: true });
+    const runner = new AutodriveRunner((event) => { if (events.length < 300) events.push(event); }, {
+      endpoint: 'http://mock/mcp',
+      maxCycles: 20,
+      now: () => now,
+      sleep: async (ms) => { await new Promise((resolve) => setTimeout(resolve, Math.min(ms, 2))); },
+    }, adapter);
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    now += 5 * 60_000;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    runner.stop();
+    expect(events.some((event) => event.type === 'watchdog' && event.kind === 'stuck' && event.detail.includes('交还 planner'))).toBe(true);
+    expect(events.some((event) => event.type === 'decision')).toBe(true);
   });
 });

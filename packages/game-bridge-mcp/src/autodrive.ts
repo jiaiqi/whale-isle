@@ -14,7 +14,7 @@ import { StardewAdapter, type GameAdapter, type GameBridgeTransport } from './ad
 import { parseGameState, RulePlanner, type Planner, type PlannerDecision } from './planner';
 
 export type AutodriveEvent =
-  | { type: 'state'; clock: string; stamina: number; staminaMax: number; money: number; location: string }
+  | { type: 'state'; clock: string; stamina: number; staminaMax: number; money: number; location: string; health?: number; healthMax?: number; freeSlots?: number }
   | { type: 'decision'; planner: string; tool: string; args: Record<string, unknown>; intent: string }
   | { type: 'receipt'; tool: string; status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR'; summary: string }
   | { type: 'watchdog'; kind: 'stuck' | 'heartbeat'; detail: string }
@@ -52,8 +52,13 @@ export class AutodriveRunner {
   readonly adapter: GameAdapter;
   private planner: Planner;
   private pendingDirective: { tool: string; args: Record<string, unknown>; intent: string } | null = null;
+  private pendingObjective: string | null = null;
   /** 上一次 wait 的原因：相同原因的重复 wait 不再刷 watchdog/cycle-end（求助态防噪声） */
   private lastWaitReason: string | null = null;
+  /** 上一次真正发往游戏的变更动作时间：BWF 120s 无动作会自暂停，需 keepalive。 */
+  private lastMutationAt: number;
+  /** 最近一次 watchdog/恢复尝试时间，防止冻结时每 2 秒重复调用 */
+  private lastStaleRecoveryAt = 0;
 
   constructor(
     private readonly onEvent: (event: AutodriveEvent) => void,
@@ -73,6 +78,7 @@ export class AutodriveRunner {
       (text) => this.adapter.extractClock(text),
     );
     this.planner = new RulePlanner();
+    this.lastMutationAt = (options.now ?? Date.now)();
   }
 
   setPlanner(planner: Planner): void {
@@ -82,6 +88,12 @@ export class AutodriveRunner {
   /** 人工/远程 P0 插队：下一次循环优先执行（不重发语义——插队的是新动作） */
   submitDirective(tool: string, args: Record<string, unknown>, intent: string): void {
     this.pendingDirective = { tool, args, intent };
+  }
+
+  /** 团队目标：不锁死具体工具，由当前 planner 在安全护栏内决定动作。 */
+  submitObjective(objective: string, intent = objective): void {
+    this.pendingObjective = objective.trim().slice(0, 300);
+    this.onEvent({ type: 'decision', planner: 'team-objective', tool: 'wait', args: {}, intent: intent.trim().slice(0, 160) });
   }
 
   isRunning(): boolean {
@@ -119,6 +131,7 @@ export class AutodriveRunner {
 
   private async loop(): Promise<void> {
     const sleep = this.options.sleep ?? defaultSleep;
+    const clock = this.options.now ?? Date.now;
     const stepDelay = this.options.stepDelayMs ?? 3_000;
     const errorDelay = this.options.errorDelayMs ?? 8_000;
     while (this.running) {
@@ -145,18 +158,78 @@ export class AutodriveRunner {
           await sleep(errorDelay);
           continue;
         }
-        this.onEvent({ type: 'state', clock: state.gameClock, stamina: state.stamina, staminaMax: state.staminaMax, money: state.money, location: state.location });
+        this.onEvent({
+          type: 'state',
+          clock: state.gameClock,
+          stamina: state.stamina,
+          staminaMax: state.staminaMax,
+          money: state.money,
+          location: state.location,
+          health: state.health,
+          healthMax: state.healthMax,
+          freeSlots: state.freeSlots,
+        });
 
-        // 2. 卡死哨兵
-        const stuck = this.sentinel.observe(stateRes.text);
-        if (stuck.stale) {
-          this.onEvent({ type: 'watchdog', kind: 'stuck', detail: `游戏时间 ${Math.round(stuck.staleMs / 1000)}s 无变化 → cancel_action 兜底后重查` });
-          await this.lock.cancel('stuck-sentinel');
-          await sleep(2_000);
+        // 1.5 BWF 防自暂停心跳：连续 90s 只有 get_state（或 planner 一直 wait）会被 BWF 判为
+        // “120 秒没有动作”并暂停游戏；发一次游戏原生安全 wait，保持时钟推进。
+        if (!this.lock.isBusy() && this.adapter.keepaliveAction !== undefined && clock() - this.lastMutationAt >= 90_000) {
+          this.lastMutationAt = clock();
+          const keepalive = this.adapter.keepaliveAction;
+          this.onEvent({ type: 'watchdog', kind: 'heartbeat', detail: '90s 无变更动作 → 发送游戏 keepalive，防止 BWF 120s 自暂停' });
+          const keepaliveResult = await this.lock.execute(keepalive.tool, keepalive.args, 60_000);
+          const keepaliveReceipt = this.adapter.classifyReceipt({
+            text: keepaliveResult.kind === 'ok' ? keepaliveResult.text : '',
+            kind: keepaliveResult.kind,
+            isError: keepaliveResult.kind === 'ok' && keepaliveResult.isError,
+            tool: keepalive.tool,
+            errorMessage: keepaliveResult.kind === 'error' ? keepaliveResult.message : undefined,
+          });
+          this.onEvent({ type: 'receipt', tool: keepalive.tool, status: keepaliveReceipt.status, summary: keepaliveReceipt.summary });
+          this.sentinel.reset();
           continue;
         }
 
-        // 3. 决策（P0 插队 > Planner）
+        // 2. 卡死哨兵：时钟冻结多因 BWF 自暂停/菜单；先发真实 cancel（无在途也发），
+        // 再用最小游戏动作唤醒；只有恢复动作也失败才交回 planner，绝不再空喊 watchdog。
+        const stuck = this.sentinel.observe(stateRes.text);
+        if (stuck.stale) {
+          const elapsed = clock() - this.lastStaleRecoveryAt;
+          if (elapsed < 30_000) {
+            await sleep(3_000);
+            continue;
+          }
+          this.lastStaleRecoveryAt = clock();
+          this.onEvent({ type: 'watchdog', kind: 'stuck', detail: `游戏时间 ${Math.round(stuck.staleMs / 1000)}s 无变化 → 尝试 cancel + 游戏动作唤醒` });
+          await this.lock.cancel('stuck-sentinel');
+          const recovery = this.adapter.staleRecoveryAction ?? this.adapter.keepaliveAction;
+          let recovered = false;
+          if (recovery !== undefined) {
+            const result = await this.lock.execute(recovery.tool, recovery.args, 60_000);
+            const receipt = this.adapter.classifyReceipt({
+              text: result.kind === 'ok' ? result.text : '',
+              kind: result.kind,
+              isError: result.kind === 'ok' && result.isError,
+              tool: recovery.tool,
+              errorMessage: result.kind === 'error' ? result.message : undefined,
+            });
+            recovered = receipt.status === 'COMPLETED';
+            this.onEvent({ type: 'receipt', tool: recovery.tool, status: receipt.status, summary: `卡死恢复（${recovery.tool}）：${receipt.summary}` });
+          }
+          this.lastMutationAt = clock();
+          this.sentinel.reset();
+          if (recovered) {
+            await sleep(1_000);
+            continue;
+          }
+          this.onEvent({ type: 'watchdog', kind: 'stuck', detail: '游戏动作恢复失败 → 交还 planner 决策，30s 后再重试恢复' });
+          // 不 continue：让 planner 尝试其他能解除暂停的动作（如 travel_to/节日）。
+        }
+
+        // 3. 决策（P0 插队 > Planner）；团队目标只注入 planner 上下文，不直接变成工具调用
+        if (this.pendingObjective !== null) {
+          this.planner.setObjective?.(this.pendingObjective);
+          this.pendingObjective = null;
+        }
         let decision: PlannerDecision;
         let fromDirective = false;
         if (this.pendingDirective) {
@@ -188,6 +261,7 @@ export class AutodriveRunner {
 
         this.onEvent({ type: 'decision', planner: fromDirective ? 'remote' : this.planner.name, tool: decision.tool, args: decision.args, intent: decision.intent });
         const result = await this.lock.execute(decision.tool, decision.args);
+        this.lastMutationAt = clock();
         const receipt = this.adapter.classifyReceipt({
           text: result.kind === 'ok' ? result.text : '',
           kind: result.kind,
