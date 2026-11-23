@@ -52,6 +52,45 @@ export interface GameAdapter {
   createRulePlanner?(): Planner;
 }
 
+/** BWF 回执里的英文工具名 → 中文（英文留在括号里，方便对照日志） */
+const BWF_TOOL_LABELS: Array<[RegExp, string]> = [
+  [/(?<!（)[ \t]*craft Chest(?!）)[ \t]*/g, '制作宝箱（craft Chest）'],
+  [/(?<!（)[ \t]*tidy_backpack(?!）)[ \t]*/g, '整理背包（tidy_backpack）'],
+  [/(?<!（)[ \t]*store_items(?!）)[ \t]*/g, '存入箱子（store_items）'],
+  [/(?<!（)[ \t]*take_items(?!）)[ \t]*/g, '取回物品（take_items）'],
+  [/(?<!（)[ \t]*place_item(?!）)[ \t]*/g, '摆放物品（place_item）'],
+  [/(?<!（)[ \t]*clear_area(?!）)[ \t]*/g, '清理（clear_area）'],
+  [/(?<!（)[ \t]*bundle_info(?!）)[ \t]*/g, '查看收集包（bundle_info）'],
+  [/(?<!（)[ \t]*donate_bundles(?!）)[ \t]*/g, '捐赠收集包（donate_bundles）'],
+  [/(?<!（)[ \t]*travel_to(?!）)[ \t]*/g, '前往（travel_to）'],
+  [/(?<!（)[ \t]*use_tool(?!）)[ \t]*/g, '使用工具（use_tool）'],
+];
+
+/**
+ * BWF 回执人话化（2026-11-23 用户反馈）：
+ *   - `\u6E7F...` 这类 JSON 转义还原成中文（BWF 会把收到的参数原样回显）；
+ *   - 中文引号里的 JSON 数组/对象转成「a、b、c」；
+ *   - 英文工具名后面补中文，英文保留在括号里（例：制作宝箱（craft Chest））。
+ * 只做展示层清洗，不改回执状态与工具名；幂等（已带中文括号的不会套娃）。
+ */
+export function humanizeBwfReceipt(text: string): string {
+  let out = text.replace(/\\u([0-9a-fA-F]{4})/g, (_match, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+  out = out.replace(/“(\[[\s\S]*?\]|\{[\s\S]*?\})”/g, (whole, json: string) => {
+    try {
+      // 某些回执会把引号再转义一层（[\\"湿透的报纸\\"]），先还原再 parse
+      const parsed = JSON.parse(json.replace(/\\"/g, '"')) as unknown;
+      if (Array.isArray(parsed)) return `“${parsed.map((item) => String(item)).join('、')}”`;
+      // 正则保证这里只可能是对象（数组已提前返回）
+      return `“${Object.keys(parsed as Record<string, unknown>).join('、')}”`;
+    } catch {
+      // 不是合法 JSON：保持原样，绝不猜
+    }
+    return whole;
+  });
+  for (const [pattern, label] of BWF_TOOL_LABELS) out = out.replace(pattern, label);
+  return out;
+}
+
 /** 星露谷 BWF 文本回执分类（从 autodrive.ts 原样迁移，行为零变化） */
 export function classifyStardewReceipt(input: {
   text: string;
@@ -65,13 +104,13 @@ export function classifyStardewReceipt(input: {
     return { status: 'TIMEOUT', summary: `超时（${tool} 仍在游戏侧执行的风险——下次 get_state 复核，不重发）` };
   }
   if (kind === 'error') {
-    return { status: 'ERROR', summary: (errorMessage ?? '') + (text.slice(0, 200) || '客户端错误') };
+    return { status: 'ERROR', summary: humanizeBwfReceipt((errorMessage ?? '') + (text.slice(0, 200) || '客户端错误')) };
   }
   if (isError) {
     const status = /UNCERTAIN|不确定|可能|unknown/i.test(text) ? 'UNCERTAIN' : 'FAILED';
-    return { status, summary: text.slice(0, 300) };
+    return { status, summary: humanizeBwfReceipt(text).slice(0, 300) };
   }
-  return { status: 'COMPLETED', summary: text.slice(0, 300) };
+  return { status: 'COMPLETED', summary: humanizeBwfReceipt(text).slice(0, 300) };
 }
 
 const STARDEW_CLOCK_RE = /时间：第\d+年[春夏秋冬]\d+日 \d{2}:\d{2}/;

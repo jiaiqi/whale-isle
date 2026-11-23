@@ -99,7 +99,7 @@ ${guidesHint}
 8. 农场要有规划：作物集中成片、新田挨着老田、机器/箱子集中放不堵门口；钱要花出去——按攻略优先买当季种子/背包/工具升级，留约 1000g 备用。
 9. 攻略是参考不是命令；结合当前金钱、体力、天气、季节做取舍，优先能提高长期收入的行动。状态里出现节日提示时按它说的做（窗口内 festival enter → greet → start），节日当天镇上商店关门别白跑；今天是某位村民生日时优先安排送他喜欢的礼物（好感 8 倍）。
 10. 你只能调用白名单里的 BWF 工具；一次只做一个动作；args 键必须与工具真实参数一致。
-11. 输出必须是一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}`;
+11. intent 必须用中文口语；工具/配方英文名放在中文后的括号里（例：制作宝箱（craft Chest））。输出必须是一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}`;
 
 /**
  * 满包救援问询（2026-11-22 用户指令「不要把卡死写成机制，让 AI 判断该怎么做」）：
@@ -113,9 +113,31 @@ const RESCUE_SYSTEM = `你是「小鲸」，正在替主人自动游玩《星露
 2. 可再生牺牲：预留的鱼可以带 force 吃掉（钓鱼天天有，还能回体力）；海边采集（牡蛎/蚌）可以带 force 扔（海滩再走一圈就有）。攒箱子的本钱（【留着】的木材/石头）能不碰就不碰。
 3. 不可逆丢弃是最后手段。
 工具事实（BWF 实测）：craft 满包会被直接拒绝且不消耗材料；木材 ≥50 时 craft Chest 立刻可行；不足 50 就先腾一格，去农场 clear_area {"include_trees":true} 砍树攒木，攒够再造；trash_item 不带 count 是清空整格。
-只输出一行 JSON：{"tool":"...","args":{...},"intent":"一句话（小鲸口吻）"}。一次只做一个动作；绝不原样重复刚失败的动作。`;
+只输出一行 JSON：{"tool":"...","args":{...},"intent":"一句中文（小鲸口吻；工具名放括号里，如 制作宝箱（craft Chest））"}。一次只做一个动作；绝不原样重复刚失败的动作。`;
 
 /** 从 LLM 输出中宽松提取首个 JSON 对象（容忍 markdown 围栏/前后缀文本） */
+/** 只收单数 item 的 BWF 工具（schema required: item）；LLM 偶尔发 items 数组/对象 */
+const SINGLE_ITEM_TOOLS = new Set(['ship_items', 'trash_item', 'place_item', 'eat', 'buy', 'sell', 'give_gift']);
+
+/** 数组/对象 map 里取一个物品名（不丢自然语言，绝不把 JSON 原样发给 BWF） */
+function firstItemName(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const first = value.find((item) => typeof item === 'string' || typeof item === 'number') ?? value[0];
+    return firstItemName(first);
+  }
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
+    for (const key of ['name', 'itemName', 'item', 'id']) {
+      if (typeof record[key] === 'string') return record[key];
+    }
+    // {"湿透的报纸":1,"浮木":1} 这种 map：键就是物品名；空对象没有物品名
+    const keys = Object.keys(record);
+    if (keys.length > 0) return keys[0] ?? value;
+    return undefined;
+  }
+  return normalizeToolArg(value);
+}
+
 /** 把 LLM 常见的「数组/对象包一层」参数压成 BWF 期望的标量（真机 2026-11-23：item 传成 ["湿透的报纸"]） */
 export function normalizeToolArg(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -143,9 +165,49 @@ export function normalizeToolArg(value: unknown): unknown {
   return value;
 }
 
-export function normalizeToolArgs(args: Record<string, unknown>): Record<string, unknown> {
+export function normalizeToolArgs(args: Record<string, unknown>, tool = ''): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) out[key] = normalizeToolArg(value);
+  // 参数键也要对齐 BWF schema：真机 2026-11-23 大脑发 {"items":[...]} 给 ship_items，
+  // BWF 只认 item 字符串，于是失败回执把整段 JSON 原样显示给主人看。
+  if (SINGLE_ITEM_TOOLS.has(tool) && out.item === undefined) {
+    const source = args.items ?? args.itemName ?? args.name;
+    if (source !== undefined) {
+      const name = firstItemName(source);
+      if (name !== undefined) out.item = name;
+      delete out.items;
+      delete out.itemName;
+      delete out.name;
+    }
+  }
+  // take_items 的 items 是逗号分隔字符串；LLM 发数组时合并而不是只取第一个
+  if (tool === 'take_items') {
+    const source = args.items ?? args.item;
+    if (Array.isArray(source)) {
+      out.items = source.map((value) => String(firstItemName(value))).filter((value) => value !== '').join(',');
+    } else if (typeof source === 'object' && source !== null) {
+      out.items = Object.keys(source).join(',');
+    } else if (source !== undefined && out.items === undefined) {
+      out.items = normalizeToolArg(source);
+    }
+  }
+  if (tool === 'plant_seeds' && out.seed === undefined) {
+    const source = args.seeds ?? args.item;
+    if (source !== undefined) {
+      out.seed = firstItemName(source);
+      delete out.seeds;
+      delete out.item;
+    }
+  }
+  if (tool === 'craft' && out.recipe === undefined) {
+    const source = args.recipeName ?? args.item ?? args.name;
+    if (source !== undefined) {
+      out.recipe = firstItemName(source);
+      delete out.recipeName;
+      delete out.item;
+      delete out.name;
+    }
+  }
   return out;
 }
 
@@ -174,7 +236,7 @@ export function extractDecisionJson(content: string): { tool: string; args: Reco
           if (typeof obj.tool !== 'string' || obj.tool.length === 0) return null;
           return {
             tool: obj.tool,
-            args: normalizeToolArgs((typeof obj.args === 'object' && obj.args !== null ? obj.args : {}) as Record<string, unknown>),
+            args: normalizeToolArgs((typeof obj.args === 'object' && obj.args !== null ? obj.args : {}) as Record<string, unknown>, obj.tool),
             intent: typeof obj.intent === 'string' ? obj.intent : '小鲸的下一步',
           };
         } catch {
@@ -609,7 +671,7 @@ export class LlmPlanner implements Planner {
     // 因此回执里的「背包满了 / 拿不下 / 没有箱子先 craft Chest」同样视为满包（真机 2026-11-23 钓鱼收尾现场）。
     // 状态里明确报了空位时以状态为准；只有 BWF 省略背包段（rawHasSlots=false）才用回执兜底，
     // 否则旧的满包回执会在腾出空位后继续误判（真机 2026-11-23）。
-    const receiptFull = /背包满|背包.{0,8}满|背包塞得满满|空位[：:]?\s*0|装不下|拿不下|没有箱子。先 craft Chest|农场上没有箱子/.test(recent.slice(-3).join(' '));
+    const receiptFull = /背包满|背包.{0,8}满|背包塞得满满|空位[：:]?\s*0|装不下|拿不下|没有箱子[^。\n]{0,16}craft Chest|农场上没有箱子/.test(recent.slice(-3).join(' '));
     const inventoryFull = effectiveSlots <= 0 || (!rawHasSlots && receiptFull);
     // 用户明确要求（2026-11-23 真机）：「背包满了就去整理，没有箱子就造」。
     // 满包且无箱子时提前激活攒木计划：救援腾出一格后，上方 chestGathering 分支会去农场 clear_area

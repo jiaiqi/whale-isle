@@ -169,6 +169,32 @@ describe('T-M6-10 真机回归：LLM 输出参数归一化与低空位', () => {
     expect(objectArg?.args.item).toBe('湿透的报纸');
   });
 
+  it('参数键对齐 BWF schema：items→item、对象 map、craft.item→recipe、take_items 数组', () => {
+    const shipArray = extractDecisionJson('{"tool":"ship_items","args":{"items":["湿透的报纸"]},"intent":"把报纸出货"}');
+    expect(shipArray?.args).toEqual({ item: '湿透的报纸' });
+    // 真机 2026-11-23：LLM 发 {"items":{"湿透的报纸":1,...}}，BWF 回执原样回显整段 JSON
+    const shipMap = extractDecisionJson('{"tool":"ship_items","args":{"items":{"湿透的报纸":1,"浮木":1}},"intent":"把杂物出货"}');
+    expect(shipMap?.args).toEqual({ item: '湿透的报纸' });
+    const take = extractDecisionJson('{"tool":"take_items","args":{"items":["铁锭","煤炭"]},"intent":"把材料取回来"}');
+    expect(take?.args).toEqual({ items: '铁锭,煤炭' });
+    const takeMap = extractDecisionJson('{"tool":"take_items","args":{"items":{"铁锭":5}},"intent":"取回铁锭"}');
+    expect(takeMap?.args).toEqual({ items: '铁锭' });
+    const takeScalar = extractDecisionJson('{"tool":"take_items","args":{"items":"铁锭"},"intent":"取回铁锭"}');
+    expect(takeScalar?.args).toEqual({ items: '铁锭' });
+    const craft = extractDecisionJson('{"tool":"craft","args":{"item":"Chest"},"intent":"制作宝箱"}');
+    expect(craft?.args).toEqual({ recipe: 'Chest' });
+    const plant = extractDecisionJson('{"tool":"plant_seeds","args":{"seeds":["防风草种子"],"x1":1,"y1":2},"intent":"播种"}');
+    expect(plant?.args).toEqual({ seed: '防风草种子', x1: 1, y1: 2 });
+  });
+
+  it('空对象/坏 JSON 不伪造参数（宁可少传也不把 JSON 原样发给 BWF）', () => {
+    const emptyMap = extractDecisionJson('{"tool":"ship_items","args":{"items":{}},"intent":"出货"}');
+    expect(emptyMap?.args.item).toBeUndefined();
+    expect(emptyMap?.args.items).toBeUndefined();
+    const broken = extractDecisionJson('{"tool":"ship_items","args":{"item":"[坏掉]"},"intent":"出货"}');
+    expect(broken?.args.item).toBe('[坏掉]');
+  });
+
   it('攒木计划 + 文字地图有树 → 用 use_tool axe 定向砍树（不再空 clear_area）', async () => {
     const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
     (planner as unknown as { chestGathering: boolean }).chestGathering = true;

@@ -8,6 +8,7 @@ import {
   classifyStardewReceipt,
   GameAdapterRegistry,
   gameAdapters,
+  humanizeBwfReceipt,
   StardewAdapter,
   type GameAdapter,
   type GameBridgeTransport,
@@ -75,6 +76,44 @@ describe('classifyStardewReceipt（星露谷四态原样迁移）', () => {
     expect(classifyStardewReceipt({ text: 'UNCERTAIN 石头挡路', kind: 'ok', isError: true, tool: 'move_to' }).status).toBe('UNCERTAIN');
     expect(classifyStardewReceipt({ text: '失败：没鱼饵', kind: 'ok', isError: true, tool: 'fish' }).status).toBe('FAILED');
     expect(classifyStardewReceipt({ text: '成功：钓到鱼', kind: 'ok', isError: false, tool: 'fish' }).status).toBe('COMPLETED');
+  });
+});
+
+describe('humanizeBwfReceipt（回执人话化，2026-11-23 用户反馈）', () => {
+  it('\\uXXXX 转义还原 + JSON 数组转自然语言', () => {
+    const raw = '失败：背包里没有“[\\"\\u6E7F\\u900F\\u7684\\u62A5\\u7EB8\\"]”。背包里能用的有：斧头、锄头';
+    expect(humanizeBwfReceipt(raw)).toContain('背包里没有“湿透的报纸”');
+    expect(humanizeBwfReceipt(raw)).not.toContain('\\u6E7F');
+  });
+
+  it('JSON 对象 map 转物品列表', () => {
+    const raw = '失败：背包里没有“{"\\u6E7F\\u900F\\u7684\\u62A5\\u7EB8":1,"\\u6D6E\\u6728":1,"\\u868C":2}”';
+    expect(humanizeBwfReceipt(raw)).toContain('背包里没有“湿透的报纸、浮木、蚌”');
+  });
+
+  it('英文工具名补中文，英文保留在括号里且不套娃', () => {
+    const raw = '失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上';
+    const once = humanizeBwfReceipt(raw);
+    expect(once).toContain('先制作宝箱（craft Chest）（50 木材）');
+    expect(once).toContain('再摆放物品（place_item）放在农场上');
+    expect(humanizeBwfReceipt(once)).toBe(once);
+  });
+
+  it('非法 JSON / 普通回执保持原样（绝不猜）', () => {
+    expect(humanizeBwfReceipt('成功：钓到 1 条鱼')).toBe('成功：钓到 1 条鱼');
+    expect(humanizeBwfReceipt('“{坏掉的 json}”')).toBe('“{坏掉的 json}”');
+  });
+
+  it('classifyStardewReceipt 的 summary 已人话化（失败回执不再显示原始 JSON）', () => {
+    const summary = classifyStardewReceipt({
+      text: '失败：背包里没有“["\\u6E7F\\u900F\\u7684\\u62A5\\u7EB8"]”。背包里能用的有：斧头',
+      kind: 'ok',
+      isError: true,
+      tool: 'ship_items',
+    }).summary;
+    expect(summary).toContain('湿透的报纸');
+    expect(summary).not.toContain('\\u6E7F');
+    expect(summary).not.toContain('["');
   });
 });
 
