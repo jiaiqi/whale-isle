@@ -1,0 +1,124 @@
+# CI —— 全量门禁与 Electron E2E 的最小可用编排（AGENTS.md §2.3 / §3.3）。
+#
+# 设计约束（刻意保持最小）：
+#   · Node 20（与根 package.json engines.node >=20 一致）；pnpm 12（本地与 lockfile v9 兼容）。
+#   · 不注入任何 secrets；不跑真实游戏（星露谷/泰拉瑞亚/DST）、真实抖音直播间、真实模型 key。
+#   · ubuntu：typecheck + dependency-cruiser + 单元测试（排除 Electron E2E）+ Python ruff/mypy/pytest。
+#     Electron 二进制不下载（ELECTRON_SKIP_BINARY_DOWNLOAD=1），因此不跑宿主 E2E。
+#   · macOS：构建 desktop-host 后跑完整 `pnpm verify:gate`（含 Gate 4 回环），
+#     再单独跑 Electron UI E2E（[E2E-HOST]，仍需人类真机抽检 OS 级穿透/手感）。
+#   · 缓存只用 setup-node 的 pnpm store 缓存与 setup-uv 缓存；超时按当前实测留出余量。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    name: ubuntu · 类型/边界/单测/Python（Electron E2E 除外）
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        # ubuntu 不跑 Electron E2E：跳过 Electron 二进制下载，节省时间与磁盘。
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: pnpm install --frozen-lockfile
+
+      - name: Gate 1a · TypeScript 类型编译
+        run: pnpm typecheck
+
+      - name: Gate 1b · dependency-cruiser 架构边界
+        run: pnpm lint:deps
+
+      - name: Gate 3 · 单元/契约测试
+        # vitest.config.mts 只包含 packages/apps/services 的 src/**/*.spec.ts；
+        # Electron E2E 不在此步（macOS job 单独跑），ubuntu 无需 Electron。
+        run: pnpm test
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Gate 1c · Python ruff + mypy --strict
+        run: pnpm py:type
+
+      - name: Gate 3b · Python pytest
+        run: pnpm py:test
+
+      - name: Gate 2c · DST Lua 语法（luac -p）
+        # 覆盖 mods/dst-bridge；编译期语法校验不等于游戏内加载，真机验收仍在 VERIFY 右栏。
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+          find mods/dst-bridge -name '*.lua' -print0 | xargs -0 -n1 luac5.4 -p
+
+      - name: Gate 2b · 依赖漏洞（仅阻断 critical）
+        # 当前存在 high 级 Electron/Zod 告警，另有 T-M6-30 跟进；先阻断 critical 防止继续恶化。
+        run: pnpm audit --audit-level critical
+
+  macos:
+    name: macOS · 完整 verify:gate + Electron E2E
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop-host（Electron E2E 前置）
+        run: pnpm --filter @workbench/desktop-host build
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Full gate · pnpm verify:gate
+        # Gate 1/2/3/4 全跑；若 uv 缺失 Python 侧会 SKIP（这里已安装 uv，故要求真跑）。
+        run: pnpm verify:gate
+
+      - name: Electron E2E（[E2E-HOST]，仅 macOS）
+        # 仅两个宿主 E2E 文件；Gate 4 回环已在 verify:gate 内跑过，避免重复。
+        run: >
+          pnpm exec vitest run --config vitest.e2e.config.mts
+          apps/desktop-host/e2e/desktop.e2e.spec.ts
+          apps/desktop-host/e2e/ui.e2e.spec.ts

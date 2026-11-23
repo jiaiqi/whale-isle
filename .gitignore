@@ -36,3 +36,9 @@ recordings/
 
 # E2E 截图等验证产物（本地留证，不入库）
 artifacts/
+
+# 构建包与本地工具缓存
+release/
+.v2c/
+.zcode/
+apps/desktop-host/.v2c/

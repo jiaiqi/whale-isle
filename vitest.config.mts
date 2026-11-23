@@ -3,11 +3,14 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['packages/*/src/**/*.spec.ts', 'tools/*/src/**/*.spec.ts', 'apps/*/src/**/*.spec.ts', 'apps/*/e2e/**/*.spec.ts'],
+    // Gate 3 只跑确定性单元/契约测试。Electron 宿主 E2E（apps/*/e2e/**）依赖先构建 dist，
+    // 由 CI 的 macOS job 与 `pnpm exec vitest run apps/desktop-host/e2e` 单独执行；
+    // Gate 4 的 gate4-loopback 由 verify-gate.mjs 显式点名运行，不受此 include 影响。
+    include: ['packages/*/src/**/*.spec.ts', 'tools/*/src/**/*.spec.ts', 'apps/*/src/**/*.spec.ts', 'services/*/src/**/*.spec.ts'],
     coverage: {
       enabled: true,
       provider: 'v8',
-      include: ['packages/*/src/**/*.ts', 'tools/*/src/**/*.ts', 'apps/*/src/**/*.ts'],
+      include: ['packages/*/src/**/*.ts', 'tools/*/src/**/*.ts', 'apps/*/src/**/*.ts', 'services/*/src/**/*.ts'],
       // Electron 主进程/preload/装配层由 E2E 运行覆盖（v8 无法计入 Electron 进程），排除出统计
       exclude: [
         '**/*.spec.ts',

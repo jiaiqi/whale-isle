@@ -195,7 +195,9 @@ describe('分支收口：stdin 不可写 / 未知通知 / 未知 id / 超时 / s
       "setTimeout(() => send({ id: msg.id, result: { sessionId: 'late' } }), 10_000);",
     );
     const impl = ((_c: string, _a: string[]) => spawn(process.execPath, ['-e', code])) as unknown as typeof spawn;
-    const agent = new AcpAgent({ label: 'sim-slow', command: 'sim', spawnImpl: impl, requestTimeoutMs: 150 }, () => undefined);
+    // 150ms 曾把 initialize 握手也一起超时（负载下 spawn+握手偶发 >150ms → 抖动）；
+    // 800ms 给握手留余量，newSession 仍延迟 10s，超时 reject 语义不变。
+    const agent = new AcpAgent({ label: 'sim-slow', command: 'sim', spawnImpl: impl, requestTimeoutMs: 800 }, () => undefined);
     agents.push(agent);
     await agent.start();
     await expect(agent.newSession('/tmp')).rejects.toThrow(/超时/);

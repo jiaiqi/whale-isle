@@ -7,8 +7,9 @@
  *   Gate 2 许可证与密钥  ✅ 台账校验 + 密钥泄漏/禁源痕迹扫描（T-M0-04 将升级为独立扫描器）
  *   Gate 3 确定性单测    ✅ vitest（TS 契约单测）+ pytest（Python 夹具回放）（T-M0-02 接线；
  *                        覆盖率 ≥90% 门槛自 T-M0-03 随包接入）
- *   Gate 4 沙盒 E2E      ✅ apps/desktop-host/e2e/gate4-loopback.spec.ts（[SIMULATION] 骂大肥鱼 →
- *                        0-token 喷水反射 → 单端语音锁释放 → 记仇账本落盘；<15s）
+ *   Gate 4 回环契约 E2E  ✅ apps/desktop-host/e2e/gate4-loopback.spec.ts（[SIMULATION] 测试内手工组合：
+ *                        骂大肥鱼 → 0-token 喷水 → 语音锁（假适配器）→ SQLite(:memory:) 记账；<15s。
+ *                        注意：这不是 Electron/Python/真实发声/磁盘账本的端到端，详见 VERIFY 顶部口径）
  *
  * 注意：本脚本自身包含检测规则字面量，已被排除在扫描范围之外。
  */
@@ -165,20 +166,20 @@ gate(
   `${gate3Label}${gate3Notes.length > 0 ? `\n${gate3Notes.join('\n')}` : ''}`
 );
 
-// ---- Gate 4：沙盒 E2E（[SIMULATION] 回环：雷区 → 喷水 → 语音锁 → 账本） ----
+// ---- Gate 4：回环契约 E2E（[SIMULATION] 测试内组合：雷区 → 喷水 → 语音锁(假适配器) → SQLite(:memory:) 账本；不是生产端到端） ----
 const e2eStarted = Date.now();
 const e2e = spawnSync(
   'pnpm',
-  ['exec', 'vitest', 'run', 'apps/desktop-host/e2e/gate4-loopback.spec.ts', '--coverage.enabled=false'],
+  ['exec', 'vitest', 'run', '--config', 'vitest.e2e.config.mts', 'apps/desktop-host/e2e/gate4-loopback.spec.ts'],
   { cwd: ROOT, encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' } },
 );
 const e2eMs = Date.now() - e2eStarted;
 if (e2e.error) {
-  gate('Gate 4 沙盒 E2E', 'FAIL', `无法启动 vitest：${e2e.error.message}`);
+  gate('Gate 4 回环契约 E2E', 'FAIL', `无法启动 vitest：${e2e.error.message}`);
 } else if (e2e.status !== 0) {
-  gate('Gate 4 沙盒 E2E', 'FAIL', truncate(`${e2e.stdout}\n${e2e.stderr}`));
+  gate('Gate 4 回环契约 E2E', 'FAIL', truncate(`${e2e.stdout}\n${e2e.stderr}`));
 } else {
-  gate('Gate 4 沙盒 E2E', 'PASS', `[SIMULATION] 骂大肥鱼 → 0-token 喷水 → 语音锁释放 → 记仇账本落盘（${(e2eMs / 1000).toFixed(1)}s < 15s）`);
+  gate('Gate 4 回环契约 E2E', 'PASS', `[SIMULATION] 骂大肥鱼 → 0-token 喷水 → 语音锁释放 → 记仇账本落盘（${(e2eMs / 1000).toFixed(1)}s < 15s）\nsoak 可用：pnpm soak:autodrive [分钟]（默认 1；[SIMULATION] 长时浸泡，不替代真机）`);
 }
 
 // ---- 汇总 ----

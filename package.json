@@ -17,6 +17,7 @@
     "py:test": "uv run --quiet --with pytest --with pydantic --with fastapi --with httpx --with websockets pytest services/audio-ai-worker -q",
     "py:check": "pnpm py:type && pnpm py:test",
     "verify:gate": "node tools/scripts/verify-gate.mjs",
+    "soak:autodrive": "node tools/scripts/soak-autodrive.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "gen:pet-manifest": "tsx tools/scripts/gen-pet-manifest.mjs",
     "forage:guides": "node tools/guide-forager/run.mjs",
@@ -26,6 +27,7 @@
     "@types/node": "^22.10.0",
     "@vitest/coverage-v8": "^5.1.0",
     "dependency-cruiser": "^16.5.0",
+    "electron-builder": "^26.18.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.2",
     "vitest": "^5.1.0"
