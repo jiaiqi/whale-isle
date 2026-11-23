@@ -209,8 +209,11 @@ export class ModelGateway {
         continue;
       }
 
-      const protocol = resolveProtocol(provider);
-      const url = buildChatUrl(provider);
+      // 契约没有 variant 索引字段：渲染层（providers-panel toConfig / App 水合）把当前选中变体的
+      // 协议写入 provider.protocol，这里显式传给解析器，才能区分 OpenCode Go/Console 共享同一
+      // Region+Plan 的双协议变体；目标协议无变体时解析器回退首个匹配变体（旧行为）。
+      const protocol = resolveProtocol(provider, provider.protocol);
+      const url = buildChatUrl(provider, provider.protocol);
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       // OpenCode Go 强制要求稳定会话头 + 客户端 UA（否则 400 MissingSessionID）
       if (isOpenCodeHost(url)) {

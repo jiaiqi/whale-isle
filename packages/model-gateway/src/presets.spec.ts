@@ -71,13 +71,14 @@ describe('opencode-go 预设（OpenAI / Anthropic 双协议端点）', () => {
     expect(opencode.variants[1]?.baseUrl).toBe('https://opencode.ai/inference/go/anthropic/v1');
   });
 
-  it('预置 5 个模型：kimi-k3.1-pro 带 reasoning 标签，其余默认工具调用', () => {
+  it('预置 6 个模型：kimi-k3.1-pro 带 reasoning 标签，其余默认工具调用（hy4-flash-free 为 Go 配额外免费档）', () => {
     expect(opencode.discoveredModels.map((model) => model.id)).toEqual([
       'deepseek-v4.1-flash',
       'glm-5.3-flash',
       'kimi-k3.1-pro',
       'mimo-v2.6-flash',
       'minimax-m3.1-flash',
+      'hy4-flash-free',
     ]);
     const kimi = opencode.discoveredModels.find((model) => model.id === 'kimi-k3.1-pro');
     expect(kimi?.supportsReasoningThink).toBe(true);
@@ -141,10 +142,129 @@ describe('opencode-go 预设（OpenAI / Anthropic 双协议端点）', () => {
     expect(sovits.variants.every((variant) => variant.protocol === 'openai')).toBe(true);
     expect(buildChatUrl(sovits)).toBe('http://127.0.0.1:9880'); // 免拼接且不参与 LLM 路由
 
+    // 双协议家族（OpenCode Go / Console-Zen + Anthropic 官方）除外，其余预设变体全为 openai
+    const dualProtocol = new Set(['anthropic', 'opencode-go', 'opencode-zen']);
     for (const provider of BUILTIN_PROVIDER_PRESETS) {
-      if (provider.id === 'anthropic' || provider.id === 'opencode-go') continue;
+      if (dualProtocol.has(provider.id)) continue;
       expect(provider.variants.every((variant) => variant.protocol === 'openai'), provider.id).toBe(true);
     }
+  });
+});
+
+// ---- 双协议变体显式选择（审计缺陷：同 Region+Plan 的两个变体只能靠协议区分）----
+describe('双协议变体显式选择（resolveEndpoint / buildChatUrl 的 variant 参数）', () => {
+  const DUAL: Array<{ id: string; openai: string; anthropic: string }> = [
+    {
+      id: 'opencode-go',
+      openai: 'https://opencode.ai/inference/go/openai/v1',
+      anthropic: 'https://opencode.ai/inference/go/anthropic/v1',
+    },
+    {
+      id: 'opencode-zen',
+      openai: 'https://opencode.ai/inference/openai/v1',
+      anthropic: 'https://opencode.ai/inference/anthropic/v1',
+    },
+  ];
+
+  for (const expected of DUAL) {
+    const provider = BUILTIN_PROVIDER_PRESETS.find((preset) => preset.id === expected.id)!;
+
+    it(`${expected.id}：anthropic 变体 → /inference/anthropic/v1/messages`, () => {
+      expect(resolveEndpoint(provider, 'anthropic')).toMatchObject({
+        baseUrl: expected.anthropic,
+        protocol: 'anthropic',
+      });
+      expect(resolveProtocol(provider, 'anthropic')).toBe('anthropic');
+      expect(buildChatUrl(provider, 'anthropic')).toBe(`${expected.anthropic}/messages`);
+    });
+
+    it(`${expected.id}：openai 变体 → /inference/openai/v1/chat/completions`, () => {
+      expect(resolveEndpoint(provider, 'openai')).toMatchObject({
+        baseUrl: expected.openai,
+        protocol: 'openai',
+      });
+      expect(resolveProtocol(provider, 'openai')).toBe('openai');
+      expect(buildChatUrl(provider, 'openai')).toBe(`${expected.openai}/chat/completions`);
+    });
+
+    it(`${expected.id}：省略 variant → 保持旧行为（首个 Region+Plan 变体）`, () => {
+      expect(resolveEndpoint(provider).baseUrl).toBe(expected.openai);
+      expect(resolveProtocol(provider)).toBe('openai');
+      expect(buildChatUrl(provider)).toBe(`${expected.openai}/chat/completions`);
+    });
+
+    it(`${expected.id}：渲染层把所选变体协议写入 provider.protocol → 按协议解析到对应端点`, () => {
+      // UI 契约没有 activeVariant 字段：toConfig/App 水合把所选变体协议写进 provider.protocol。
+      const uiSelected = ModelProviderConfigSchema.parse({ ...provider, protocol: 'anthropic' });
+      expect(resolveEndpoint(uiSelected, uiSelected.protocol).baseUrl).toBe(expected.anthropic);
+      expect(buildChatUrl(uiSelected, uiSelected.protocol)).toBe(`${expected.anthropic}/messages`);
+    });
+  }
+
+  it('目标协议无匹配变体 → 候选集整体回退旧选择，不抛错', () => {
+    const go = BUILTIN_PROVIDER_PRESETS.find((preset) => preset.id === 'opencode-go')!;
+    const onlyOpenAi = ModelProviderConfigSchema.parse({ ...go, variants: [go.variants[0]] });
+    expect(resolveEndpoint(onlyOpenAi, 'anthropic').baseUrl).toBe('https://opencode.ai/inference/go/openai/v1');
+    expect(resolveProtocol(onlyOpenAi, 'anthropic')).toBe('openai');
+    expect(buildChatUrl(onlyOpenAi, 'anthropic')).toBe('https://opencode.ai/inference/go/openai/v1/chat/completions');
+  });
+
+  it('variant 过滤不破坏 Region/Plan 胶囊优先级（单协议供应商行为不变）', () => {
+    const deepseek = BUILTIN_PROVIDER_PRESETS.find((preset) => preset.id === 'deepseek-official')!;
+    expect(resolveEndpoint(deepseek, 'openai').region).toBe('CN');
+    expect(
+      resolveEndpoint({ ...deepseek, activeRegion: 'GLOBAL', activePlanType: 'PAY_AS_YOU_GO' }, 'openai').region,
+    ).toBe('GLOBAL');
+  });
+});
+
+// ---- OpenCode Console（原 Zen，2026-11-22 实证端点与免费档）----
+describe('opencode-zen 预设（OpenCode Console：按量 + 免费档）', () => {
+  const zen = BUILTIN_PROVIDER_PRESETS.find((p) => p.id === 'opencode-zen')!;
+
+  it('存在且为 AGGREGATOR_LLM：OpenAI/Anthropic 双变体指向 /inference/{openai,anthropic}/v1（非 /inference/zen 旧路径）', () => {
+    expect(zen.name).toBe('OpenCode Console（原 Zen）');
+    expect(zen.category).toBe('AGGREGATOR_LLM');
+    expect(zen.variants.map((variant) => variant.protocol)).toEqual(['openai', 'anthropic']);
+    expect(zen.variants[0]?.baseUrl).toBe('https://opencode.ai/inference/openai/v1');
+    expect(zen.variants[1]?.baseUrl).toBe('https://opencode.ai/inference/anthropic/v1');
+    for (const variant of zen.variants) {
+      expect(variant.planType).toBe('PAY_AS_YOU_GO');
+    }
+    expect(buildChatUrl(zen)).toBe('https://opencode.ai/inference/openai/v1/chat/completions');
+  });
+
+  it('决策模型 jev-1.13-free/jev-1.13 在清单且 toolCalling=false（System One 决策协议，不可当聊天模型）', () => {
+    const free = zen.discoveredModels.find((model) => model.id === 'jev-1.13-free');
+    const paid = zen.discoveredModels.find((model) => model.id === 'jev-1.13');
+    expect(free).toBeDefined();
+    expect(paid).toBeDefined();
+    expect(free?.supportsToolCalling).toBe(false);
+    expect(paid?.supportsToolCalling).toBe(false);
+    // 免费档 chat（big-pickle 等）是普通聊天模型：免费≠决策协议，保持工具调用默认开启；
+    // 免费/决策的真实分类由 /inference/v1/models 的 type/cost 元数据给出（vault discoverModels 解析）
+    for (const id of ['big-pickle', 'deepseek-v4.1-flash-free', 'longcat-2.5-free']) {
+      expect(zen.discoveredModels.find((model) => model.id === id)?.supportsToolCalling, id).toBe(true);
+    }
+    expect(zen.discoveredModels.find((model) => model.id === 'glm-5.3')?.supportsToolCalling).toBe(true);
+    expect(zen.discoveredModels.find((model) => model.id === 'gpt-5')?.supportsToolCalling).toBe(true);
+  });
+});
+
+// ---- TypeSafe Jev 官方托管（jevmodel.org，2026-11-22 真实 key 探针实证）----
+describe('typesafe-jev 预设（System One 决策协议官方直连）', () => {
+  const tsjev = BUILTIN_PROVIDER_PRESETS.find((p) => p.id === 'typesafe-jev')!;
+
+  it('端点指向 jevmodel.org/v1，全部模型为决策协议（toolCalling=false，行内测试走原生探针）', () => {
+    expect(tsjev.name).toBe('TypeSafe Jev');
+    expect(tsjev.variants).toHaveLength(1);
+    expect(tsjev.variants[0]?.baseUrl).toBe('https://jevmodel.org/v1');
+    expect(tsjev.variants[0]?.protocol).toBe('openai');
+    for (const model of tsjev.discoveredModels) {
+      expect(model.supportsToolCalling, model.id).toBe(false);
+    }
+    expect(tsjev.discoveredModels.map((model) => model.id)).toContain('jev-latest');
+    expect(tsjev.discoveredModels.map((model) => model.id)).toContain('jev-1.13.0');
   });
 });
 
@@ -182,12 +302,17 @@ describe('内置展示模型清单', () => {
   const EXPECTED_MODELS: Record<string, string[]> = {
     'deepseek-official': ['deepseek-chat', 'deepseek-reasoner', 'deepseek-flash'],
     siliconflow: ['Qwen/Qwen2.5-7B-Instruct', 'Qwen/Qwen2.5-VL-7B-Instruct'],
-    openrouter: ['anthropic/claude-sonnet', 'google/gemini-2.5-pro'],
+    openrouter: ['typesafe/jev-router', 'anthropic/claude-sonnet', 'google/gemini-2.5-pro'],
     'volcano-ark': ['doubao-1-5-pro-32k'],
     openai: ['gpt-4.1-mini'],
     anthropic: ['claude-3-7-sonnet'],
     minimax: ['MiniMax-M2.5'],
-    'opencode-go': ['deepseek-v4.1-flash', 'glm-5.3-flash', 'kimi-k3.1-pro', 'mimo-v2.6-flash', 'minimax-m3.1-flash'],
+    'opencode-go': ['deepseek-v4.1-flash', 'glm-5.3-flash', 'kimi-k3.1-pro', 'mimo-v2.6-flash', 'minimax-m3.1-flash', 'hy4-flash-free'],
+    'opencode-zen': [
+      'jev-1.13-free', 'jev-1.13', 'big-pickle', 'deepseek-v4.1-flash-free', 'mimo-v2.6-flash-free',
+      'longcat-2.5-free', 'glm-5.3', 'kimi-k3', 'deepseek-v4.1-flash', 'gpt-5', 'claude-opus-5-5',
+    ],
+    'typesafe-jev': ['jev-latest', 'jev-1.14.0', 'jev-1.13.0'],
     'local-ollama': ['qwen2.5:14b', 'qwen2.5:7b', 'qwen2.5-vl:7b'],
     'local-gpt-sovits': ['gpt-sovits-v2', 'rvc-v2'],
   };

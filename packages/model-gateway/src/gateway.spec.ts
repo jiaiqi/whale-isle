@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiningProfilePreset, ModelProviderConfig, StickyRoutingGroup } from '@workbench/shared-protocol';
 import { ModelGateway, GatewayError, type FetchLike, type UsageRecord } from './gateway';
+import { BUILTIN_PROVIDER_PRESETS } from './presets';
 import { MASK } from './sanitizer';
 
 /** T-M1-03 门禁：模拟上游 429 → 100ms 内静默切换备用 Key；敏感路径 100% → {{MASKED}}；usage 计量与回执 */
@@ -541,6 +542,43 @@ describe('ModelGateway · Anthropic 协议', () => {
     expect(body.temperature).toBe(0.3);
     expect('system' in body).toBe(false);
     expect(body.messages).toEqual([{ role: 'user', content: 'x' }]);
+  });
+
+  it('双协议变体 + provider.protocol=anthropic（UI 选中 Anthropic）→ 不再命中首个 OpenAI 变体', async () => {
+    // 审计缺陷回归：两个变体共享 GLOBAL/CODING_PLAN，旧 resolveEndpoint 永远命中第一个 OpenAI 变体。
+    const dual = BUILTIN_PROVIDER_PRESETS.find((preset) => preset.id === 'opencode-go')!;
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [{ ...dual, protocol: 'anthropic' }],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async (url, init) => {
+        calls.push({ url, headers: init.headers });
+        return anthropicOkResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe('https://opencode.ai/inference/go/anthropic/v1/messages');
+    expect(calls[0]?.headers['x-api-key']).toBe(ANTHROPIC_KEYS['opencode-go']);
+    expect(calls[0]?.headers.authorization).toBeUndefined();
+  });
+
+  it('双协议变体 + provider.protocol=openai → 仍走 OpenAI 变体（向后兼容）', async () => {
+    const dual = BUILTIN_PROVIDER_PRESETS.find((preset) => preset.id === 'opencode-go')!;
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [{ ...dual, protocol: 'openai' }],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async (url, init) => {
+        calls.push({ url, headers: init.headers });
+        return okResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: 'x' }]);
+    expect(calls[0]?.url).toBe('https://opencode.ai/inference/go/openai/v1/chat/completions');
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${ANTHROPIC_KEYS['opencode-go']}`);
   });
 
   it('响应：仅拼接 text block、usage input/output 映射、reasoningContent=null、onUsage 真实用量', async () => {

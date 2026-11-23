@@ -68,7 +68,10 @@ export const BUILTIN_PROVIDER_PRESETS: ModelProviderConfig[] = [
     category: 'AGGREGATOR_LLM',
     variants: [{ region: 'GLOBAL', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://openrouter.ai/api/v1', isFullUrl: false, protocol: 'openai' }],
     apiKeyMaskedOrRef: '',
+    // 2026-11-22 真机实测（用户 OpenRouter key）：typesafe/jev-router 2070ms 回话——OpenRouter 把
+    // TypeSafe 的 Jev（System One）包装成标准聊天模型，无需 System One 适配即可用；定价动态（路由子模型计费）。
     discoveredModels: [
+      model('typesafe/jev-router', { reasoning: true, vision: true }),
       model('anthropic/claude-sonnet', { reasoning: true, vision: true }),
       model('google/gemini-2.5-pro', { reasoning: true, vision: true }),
     ],
@@ -96,12 +99,84 @@ export const BUILTIN_PROVIDER_PRESETS: ModelProviderConfig[] = [
       },
     ],
     apiKeyMaskedOrRef: '',
+    // 2026-11-22 真机实测（Go $10 订阅 key）：hy4-flash-free 走 Go 端点免费可用（不占 Go 配额，1396ms 回话）；
+    // 其余为包月配额内主力。免费/分类以 /inference/go/v1/models 元数据为准。
     discoveredModels: [
       model('deepseek-v4.1-flash'),
       model('glm-5.3-flash'),
       model('kimi-k3.1-pro', { reasoning: true }),
       model('mimo-v2.6-flash'),
       model('minimax-m3.1-flash'),
+      model('hy4-flash-free'),
+    ],
+  }),
+  preset({
+    id: 'opencode-zen',
+    name: 'OpenCode Console（原 Zen）',
+    category: 'AGGREGATOR_LLM',
+    activeRegion: 'GLOBAL',
+    activePlanType: 'PAY_AS_YOU_GO',
+    variants: [
+      {
+        region: 'GLOBAL',
+        planType: 'PAY_AS_YOU_GO',
+        baseUrl: 'https://opencode.ai/inference/openai/v1',
+        isFullUrl: false,
+        protocol: 'openai',
+      },
+      {
+        region: 'GLOBAL',
+        planType: 'PAY_AS_YOU_GO',
+        baseUrl: 'https://opencode.ai/inference/anthropic/v1',
+        isFullUrl: false,
+        protocol: 'anthropic',
+      },
+    ],
+    apiKeyMaskedOrRef: '',
+    // 2026-11-22 实证（https://opencode.ai/docs/console/models/）：原 Zen 已更名 Console，
+    // 旧 /inference/zen/* 全 404；清单 105 个 = chat 83（免费 11）+ decision 4 + embedding/image/realtime/video 18。
+    // 免费档 chat 是普通聊天模型（官方仅保证 OpenCode 客户端内可用，第三方可能 403）——免费≠决策协议，
+    // 免费/决策分类以 /inference/v1/models 的 type/cost 元数据为准（vault discoverModels 解析）；
+    // 仅 jev 系（System One 决策协议，不吃 /chat/completions）标 toolCalling=false 防误当聊天模型。
+    discoveredModels: [
+      model('jev-1.13-free', { toolCalling: false }),
+      model('jev-1.13', { toolCalling: false }),
+      model('big-pickle'),
+      model('deepseek-v4.1-flash-free'),
+      model('mimo-v2.6-flash-free'),
+      model('longcat-2.5-free'),
+      model('glm-5.3'),
+      model('kimi-k3'),
+      model('deepseek-v4.1-flash'),
+      model('gpt-5'),
+      model('claude-opus-5-5'),
+    ],
+  }),
+  preset({
+    id: 'typesafe-jev',
+    name: 'TypeSafe Jev',
+    category: 'AGGREGATOR_LLM',
+    activeRegion: 'GLOBAL',
+    activePlanType: 'PAY_AS_YOU_GO',
+    variants: [
+      {
+        region: 'GLOBAL',
+        planType: 'PAY_AS_YOU_GO',
+        baseUrl: 'https://jevmodel.org/v1',
+        isFullUrl: false,
+        protocol: 'openai',
+      },
+    ],
+    apiKeyMaskedOrRef: '',
+    // 2026-11-22 实证（https://jevmodel.org/zh/playground/ + 真实 key 探针 200）：
+    // TypeSafe Jev 官方独立托管，System One 决策协议 POST /v1/systemone（choice/noul/score，响应带概率分布），
+    // 不吃 /chat/completions——全部模型标 toolCalling=false（决策类），行内「测试」自动走原生探针；
+    // 计费：登录送 10 万输入 token，¥49 起 1500 万永不过期，成功按输入 token 扣费输出免费。
+    // jev-latest 实测解析为 jev-1.14.0；1.13 为官方建议的阈值稳定版。
+    discoveredModels: [
+      model('jev-latest', { toolCalling: false }),
+      model('jev-1.14.0', { toolCalling: false }),
+      model('jev-1.13.0', { toolCalling: false }),
     ],
   }),
   preset({
@@ -168,23 +243,34 @@ export const PROVIDER_PRESET_IDS = BUILTIN_PROVIDER_PRESETS.map((provider) => pr
 
 export type ProviderProtocol = 'openai' | 'anthropic';
 
-/** Region/Plan 胶囊切换：精确匹配 → 同 Region 任一 → 首个变体 */
+/**
+ * Region/Plan 胶囊切换 + 协议变体显式选择：
+ * - 传 `variant`：先按协议收窄候选（OpenCode Go / Console 的两个变体共享同一 Region+Plan，
+ *   只有协议能区分），再走「精确匹配 → 同 Region 任一 → 首个变体」；
+ *   目标协议无任何变体时整个候选集回退，保持旧行为不抛错；
+ * - 不传：完全保持旧行为（既有调用方零改动）。
+ */
 export function resolveEndpoint(
   provider: ModelProviderConfig,
+  variant?: ProviderProtocol,
 ): ModelProviderConfig['variants'][number] {
-  const exact = provider.variants.find(
-    (variant) => variant.region === provider.activeRegion && variant.planType === provider.activePlanType,
+  const byProtocol = variant === undefined
+    ? provider.variants
+    : provider.variants.filter((item) => item.protocol === variant);
+  const scoped = byProtocol.length > 0 ? byProtocol : provider.variants;
+  const exact = scoped.find(
+    (item) => item.region === provider.activeRegion && item.planType === provider.activePlanType,
   );
-  const sameRegion = provider.variants.find((variant) => variant.region === provider.activeRegion);
-  const variant = exact ?? sameRegion ?? provider.variants[0];
-  if (!variant) throw new Error(`供应商 ${provider.id} 未配置任何端点变体`);
-  return variant;
+  const sameRegion = scoped.find((item) => item.region === provider.activeRegion);
+  const resolved = exact ?? sameRegion ?? scoped[0];
+  if (!resolved) throw new Error(`供应商 ${provider.id} 未配置任何端点变体`);
+  return resolved;
 }
 
 /** 变体协议优先，其次供应商默认协议，最后回退 OpenAI 兼容（手写残缺配置兜底） */
-export function resolveProtocol(provider: ModelProviderConfig): ProviderProtocol {
-  const variant = resolveEndpoint(provider);
-  const protocol = variant.protocol ?? provider.protocol;
+export function resolveProtocol(provider: ModelProviderConfig, variant?: ProviderProtocol): ProviderProtocol {
+  const endpoint = resolveEndpoint(provider, variant);
+  const protocol = endpoint.protocol ?? provider.protocol;
   return protocol === 'anthropic' ? 'anthropic' : 'openai';
 }
 
@@ -192,9 +278,9 @@ export function resolveProtocol(provider: ModelProviderConfig): ProviderProtocol
  * 允许免拼接的端点则直接使用；否则按协议拼接：
  * OpenAI 兼容 → /chat/completions；Anthropic 兼容 → /messages（base 已含 /v1 时不重复）。
  */
-export function buildChatUrl(provider: ModelProviderConfig): string {
-  const variant = resolveEndpoint(provider);
-  if (variant.isFullUrl) return variant.baseUrl;
-  const base = variant.baseUrl.replace(/\/+$/, '');
-  return resolveProtocol(provider) === 'anthropic' ? `${base}/messages` : `${base}/chat/completions`;
+export function buildChatUrl(provider: ModelProviderConfig, variant?: ProviderProtocol): string {
+  const endpoint = resolveEndpoint(provider, variant);
+  if (endpoint.isFullUrl) return endpoint.baseUrl;
+  const base = endpoint.baseUrl.replace(/\/+$/, '');
+  return resolveProtocol(provider, variant) === 'anthropic' ? `${base}/messages` : `${base}/chat/completions`;
 }
