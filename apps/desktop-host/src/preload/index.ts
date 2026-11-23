@@ -98,6 +98,44 @@ contextBridge.exposeInMainWorld('directorBridge', {
   coopEndpoints: (): Promise<unknown> => ipcRenderer.invoke('coop:endpoints'),
   coopStart: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('coop:start', id),
   coopStop: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('coop:stop', id),
+  coopEndpointsSave: (endpoints: unknown[]): Promise<{ ok: boolean; error?: string; endpoints?: unknown[] }> =>
+    ipcRenderer.invoke('coop:endpoints-save', endpoints),
+  coopBlackboardGet: (): Promise<{ snapshot: unknown; messages: unknown[] }> => ipcRenderer.invoke('coop:blackboard-get'),
+  coopGoalSet: (goal: unknown): Promise<{ ok: boolean; error?: string; goal?: unknown }> => ipcRenderer.invoke('coop:goal-set', goal),
+  coopChatSend: (input: { text: string; mentions?: string[] }): Promise<{ ok: boolean; error?: string; route?: string; fallback?: boolean }> =>
+    ipcRenderer.invoke('coop:chat-send', input),
+  coopHuddleStart: (input?: { goalTitle?: string; reason?: string; note?: string }): Promise<{ ok: boolean; error?: string; fallback?: boolean; rounds?: number }> =>
+    ipcRenderer.invoke('coop:huddle-start', input),
+  coopHelpRequest: (input: { agentId: string; reason: string }): Promise<{ ok: boolean; error?: string; mode?: string; helperAgentId?: string; fallback?: boolean }> =>
+    ipcRenderer.invoke('coop:help-request', input),
+  onCoopBlackboardUpdate: (handler: (payload: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, payload: unknown): void => handler(payload);
+    ipcRenderer.on('coop:blackboard-update', listener);
+    return () => ipcRenderer.removeListener('coop:blackboard-update', listener);
+  },
+  onCoopCommsMessage: (handler: (message: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, message: unknown): void => handler(message);
+    ipcRenderer.on('coop:comms-message', listener);
+    return () => ipcRenderer.removeListener('coop:comms-message', listener);
+  },
+  // T-M6-38 多桌宠窗口（agentId 级独立坐标/缩放/锁定）
+  petWindowOpen: (agentId: string, characterId?: string): Promise<{ ok: boolean; error?: string; window?: unknown }> =>
+    ipcRenderer.invoke('pet:window-open', agentId, characterId),
+  petWindowClose: (agentId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:window-close', agentId),
+  petWindowList: (): Promise<Array<{ agentId: string; characterId: string; visible: boolean; locked: boolean; bounds: { x: number; y: number; width: number; height: number } }>> =>
+    ipcRenderer.invoke('pet:window-list'),
+  petWindowPrefsSet: (agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown> =>
+    ipcRenderer.invoke('pet:window-prefs-set', agentId, update),
+  onPetWindowListChanged: (handler: (list: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, list: unknown): void => handler(list);
+    ipcRenderer.on('pet:window-list-changed', listener);
+    return () => ipcRenderer.removeListener('pet:window-list-changed', listener);
+  },
+  onCoopSpeaker: (handler: (event: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, event: unknown): void => handler(event);
+    ipcRenderer.on('coop:speaker', listener);
+    return () => ipcRenderer.removeListener('coop:speaker', listener);
+  },
   // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
   prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
   prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
@@ -165,6 +203,25 @@ contextBridge.exposeInMainWorld('petStage', {
   // T-M6-19：桌宠桌面偏好（位置/缩放/拖拽手感/角色/联机端点）文件 KV
   prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
   prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
+  // T-M6-38：按 agentId 隔离的窗口坐标/缩放/锁定
+  windowPrefsGet: (agentId: string): Promise<unknown> => ipcRenderer.invoke('pet:window-prefs-get', agentId),
+  windowPrefsSet: (agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown> =>
+    ipcRenderer.invoke('pet:window-prefs-set', agentId, update),
+  onWindowPrefsChanged: (handler: (prefs: { scale: number; locked: boolean; characterId: string }) => void): void => {
+    ipcRenderer.on('pet:window-prefs-changed', (_e, prefs) => handler(prefs));
+  },
+  onCoopSpeaker: (handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void => {
+    ipcRenderer.on('coop:speaker', (_e, event) => handler(event));
+  },
+  onPetAction: (handler: (event: { agentId: string; action: string }) => void): void => {
+    ipcRenderer.on('pet:action', (_e, event) => handler(event));
+  },
+  onPetBubble: (handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void => {
+    ipcRenderer.on('pet:bubble', (_e, event) => handler(event));
+  },
+  onPetState: (handler: (event: { agentId: string; state?: unknown }) => void): void => {
+    ipcRenderer.on('pet:state', (_e, event) => handler(event));
+  },
   onScaleChanged: (handler: (scale: number) => void): void => {
     ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
   },

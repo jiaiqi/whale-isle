@@ -52,6 +52,23 @@ export interface AutodriveHost {
   getBrainMode(): { mode: 'rule' | 'llm'; llmReady: boolean };
   /** 当前接管的游戏（M7 多游戏；默认 stardew） */
   getGameId(): GameId;
+  /** T-M6-39：联机 Agent 复用同一 Gateway/key/饭碗，但各自独立 LlmPlanner 实例 */
+  createPlanner(slot: WorkbenchRoleSlot, options?: {
+    fallbackPlanner?: ConstructorParameters<typeof LlmPlanner>[0]['fallbackPlanner'];
+    toolWhitelist?: readonly string[];
+    systemPrompt?: string;
+    personaPrompt?: string;
+    contextProvider?: () => string;
+  }): LlmPlanner | null;
+  /** token-meter 当前可用余量（供协商预算护栏使用） */
+  tokenBalance(): number;
+  /** T-M6-39：联机协商/指令解析复用当前 Gateway 与饭碗计量；未配置 Key 返回 null */
+  completeForCoop(
+    slot: WorkbenchRoleSlot,
+    system: string,
+    user: string,
+    maxTokens?: number,
+  ): Promise<{ content: string; tokensUsed: number } | null>;
 }
 
 /** 游戏 → 规划器角色槽位（M7：槽位名按游戏分组，不改星露谷原名） */
@@ -101,6 +118,8 @@ export function createAutodriveHost(
   memoryHost?: MemoryHost,
   gameId: GameId = 'stardew',
   initialDirectiveProfile?: DirectiveProfile,
+  /** 与联机协作互斥：返回非空字符串表示本端被其他 Runner 占用，拒绝启动 */
+  canStart?: () => string | null,
 ): AutodriveHost {
   const windows: WebContents[] = [];
   const initialGameId = gameId;
@@ -487,6 +506,8 @@ ${ackHint}`;
   runner = createRunner();
 
   ipcMain.handle('autodrive:start', async (_e, requestedGameId?: GameId) => {
+    const blocked = canStart?.();
+    if (blocked !== undefined && blocked !== null) return { ok: false, error: blocked };
     if (requestedGameId !== undefined && !gameAdapters.has(requestedGameId)) {
       return { ok: false, error: `未注册的游戏适配器：${String(requestedGameId)}` };
     }
@@ -573,6 +594,36 @@ ${ackHint}`;
     },
     getGameId() {
       return gameId;
+    },
+    createPlanner(slot, plannerOptions = {}) {
+      if (gateway === null) return null;
+      return new LlmPlanner({
+        slot,
+        chat: (requestedSlot, messages, opts) =>
+          gateway!.chat(requestedSlot as never, messages, { maxTokens: opts?.maxTokens }).catch((error: unknown) => {
+            console.error('[coop-planner] gateway.chat 失败:', error instanceof Error ? error.message : String(error));
+            throw error;
+          }),
+        ...(plannerOptions.fallbackPlanner === undefined ? {} : { fallbackPlanner: plannerOptions.fallbackPlanner }),
+        ...(plannerOptions.toolWhitelist === undefined ? {} : { toolWhitelist: plannerOptions.toolWhitelist }),
+        ...(plannerOptions.systemPrompt === undefined ? {} : { systemPrompt: plannerOptions.systemPrompt }),
+        ...(plannerOptions.personaPrompt === undefined ? {} : { personaPrompt: plannerOptions.personaPrompt }),
+        ...(plannerOptions.contextProvider === undefined ? {} : { contextProvider: plannerOptions.contextProvider }),
+      });
+    },
+    tokenBalance() {
+      return meter.status().balance;
+    },
+    async completeForCoop(slot, system, user, maxTokens = 400) {
+      if (gateway === null) return null;
+      const receipt = await gateway.chat(slot, [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ], { maxTokens });
+      return {
+        content: receipt.content,
+        tokensUsed: receipt.usage.inputTokens + receipt.usage.outputTokens,
+      };
     },
   };
 }

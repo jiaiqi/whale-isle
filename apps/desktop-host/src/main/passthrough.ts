@@ -5,7 +5,7 @@
  * 'passthrough:set' 到这里 → win.setIgnoreMouseEvents(passthrough, { forward })。
  * 拖拽坐标一律 DIP（Electron 原生处理多屏异构 DPI）；位置约束按每块屏幕工作区分别计算。
  */
-import { BrowserWindow, ipcMain, screen } from 'electron';
+import { BrowserWindow, ipcMain, screen, type IpcMainInvokeEvent } from 'electron';
 import {
   boundingRect,
   clampWindowPosition,
@@ -61,36 +61,44 @@ export interface PassthroughIpcOptions {
 }
 
 export function registerStageIpc(options: PassthroughIpcOptions): void {
-  let current: 'passthrough' | 'interactive' = 'passthrough';
-  /** 右键菜单/设置浮层期间强制交互：alpha 探针不得把窗口切成穿透（否则菜单点不到） */
-  let forceInteractive = false;
-  const applyState = (): void => {
-    const win = options.getWindow();
-    if (!win || win.isDestroyed()) return;
-    const passthrough = !forceInteractive && current === 'passthrough';
+  /** 多桌宠：穿透/强制交互状态必须按发送窗口隔离，不能一个窗口切换影响所有桌宠。 */
+  const currentByWindow = new Map<number, 'passthrough' | 'interactive'>();
+  const forceByWindow = new Map<number, boolean>();
+  const windowFor = (event: IpcMainInvokeEvent): BrowserWindow | null =>
+    BrowserWindow.fromWebContents(event.sender) ?? options.getWindow();
+  const currentOf = (id: number): 'passthrough' | 'interactive' => currentByWindow.get(id) ?? 'passthrough';
+  const applyState = (win: BrowserWindow): void => {
+    if (win.isDestroyed()) return;
+    const id = win.webContents.id;
+    const passthrough = !(forceByWindow.get(id) ?? false) && currentOf(id) === 'passthrough';
     win.setIgnoreMouseEvents(passthrough, { forward: passthrough });
   };
-  ipcMain.handle('passthrough:force', (_event, on: boolean) => {
-    forceInteractive = on === true;
-    applyState();
-    return true;
-  });
-
-  ipcMain.handle('passthrough:set', (_event, state: 'passthrough' | 'interactive') => {
-    const win = options.getWindow();
+  ipcMain.handle('passthrough:force', (event, on: boolean) => {
+    const win = windowFor(event);
     if (!win || win.isDestroyed()) return false;
-    current = state === 'interactive' ? 'interactive' : 'passthrough';
-    applyState();
+    forceByWindow.set(win.webContents.id, on === true);
+    applyState(win);
     return true;
   });
 
-  ipcMain.handle('passthrough:get', () => current);
+  ipcMain.handle('passthrough:set', (event, state: 'passthrough' | 'interactive') => {
+    const win = windowFor(event);
+    if (!win || win.isDestroyed()) return false;
+    currentByWindow.set(win.webContents.id, state === 'interactive' ? 'interactive' : 'passthrough');
+    applyState(win);
+    return true;
+  });
+
+  ipcMain.handle('passthrough:get', (event) => {
+    const win = windowFor(event);
+    return win && !win.isDestroyed() ? currentOf(win.webContents.id) : 'passthrough';
+  });
 
   // The overall hull remains useful to callers, but physics receives the active
   // display's feasible window-origin region so a throw cannot enter a screen gap.
-  ipcMain.handle('screen:bounds', () => {
+  ipcMain.handle('screen:bounds', (event) => {
     const work = computeScreenBounds();
-    const win = options.getWindow();
+    const win = windowFor(event);
     if (!win || win.isDestroyed()) {
       const primary = screen.getPrimaryDisplay();
       return { ...work, displayId: String(primary.id), windowBounds: work };
@@ -115,13 +123,13 @@ export function registerStageIpc(options: PassthroughIpcOptions): void {
 
   ipcMain.handle('cursor:point', () => screen.getCursorScreenPoint());
 
-  ipcMain.handle('win:get-position', () => {
-    const win = options.getWindow();
+  ipcMain.handle('win:get-position', (event) => {
+    const win = windowFor(event);
     return win && !win.isDestroyed() ? win.getPosition() : null;
   });
 
-  ipcMain.handle('win:drag-to', (_event, x: number, y: number) => {
-    const win = options.getWindow();
+  ipcMain.handle('win:drag-to', (event, x: number, y: number) => {
+    const win = windowFor(event);
     if (!win || win.isDestroyed()) return null;
     const size = win.getBounds();
     const regions = windowPlacementRegions(getDisplayWorkAreas(), size.width, size.height);

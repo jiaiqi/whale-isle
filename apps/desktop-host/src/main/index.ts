@@ -10,7 +10,7 @@ import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
-import { clampWindowPosition, windowPlacementRegions } from './display-region';
+import { PetWindowManager, type ManagedPetWindow, type PetWindowCreateInput, type WindowBounds } from './pet-window-manager';
 import { createCharacterRegistry } from './character-registry';
 import { setCurrentPersonaPrompt } from './character-persona';
 import { createCoopHost } from './coop-host';
@@ -116,16 +116,23 @@ if (TEST_MODE) {
 
 let stageWindow: BrowserWindow | null = null;
 let directorWindow: BrowserWindow | null = null;
+let petWindowManager: PetWindowManager | null = null;
+/** agentId → 真实 BrowserWindow：旧 IPC 仍需要默认主窗，协作主机按 id 定向投递。 */
+const petBrowserWindows = new Map<string, BrowserWindow>();
 let petPrefsStore: ReturnType<typeof createPetPrefsStore> | null = null;
 let coopHost: ReturnType<typeof createCoopHost> | null = null;
 
-function createStageWindow(): BrowserWindow {
+/**
+ * Electron 适配层：PetWindowManager 只依赖最小窗口接口，真实 BrowserWindow 在此创建。
+ * 每个 agentId 的 bounds / scale 由 manager 决定，窗口本身不再读写全局 PetDesktopPrefs。
+ */
+function createManagedPetWindow(input: PetWindowCreateInput): ManagedPetWindow {
   const win = new BrowserWindow({
-    // 窗口贴合舞台 400×260（footline 21px 余量 → 284）：旧 440×300 右侧 40px、底部 19px
-    // 是纯透明死区，用户真机反馈「透明宽度影响桌面操作」——收边减少屏幕占用与命中面积
-    width: 400,
-    height: 284,
-    title: `${APP_NAME} · 桌宠`,
+    x: input.bounds.x,
+    y: input.bounds.y,
+    width: input.bounds.width,
+    height: input.bounds.height,
+    title: `${APP_NAME} · 桌宠 ${input.agentId === 'default' ? '' : input.agentId}`.trim(),
     icon: brandAssetPath(BRAND_ASSETS.iconPng),
     frame: false,
     transparent: true,
@@ -141,68 +148,42 @@ function createStageWindow(): BrowserWindow {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
-  // T-M6-19：启动恢复桌宠上次落点（位置持久化）。越界/显示器已拔 → 回落主屏安全位置，绝不把桌宠放到屏幕外
-  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'), (prev, next) => {
-    // T-M6-20 缩放：窗口按「脚底中心」放大/缩小（底边不动、左右对称伸缩）
-    if (prev.scale === next.scale) return;
-    const win = stageWindow;
-    if (!win || win.isDestroyed()) return;
-    const old = win.getBounds();
-    const nw = Math.round(400 * next.scale);
-    const nh = Math.round(284 * next.scale);
-    win.setBounds({
-      x: Math.round(old.x + (old.width - nw) / 2),
-      y: Math.round(old.y + old.height - nh), // 底边锚点不动
-      width: nw,
-      height: nh,
-    });
-    for (const target of [stageWindow, directorWindow]) {
-      if (target && !target.isDestroyed()) target.webContents.send('pet:scale-changed', next.scale);
-    }
-  })).get();
-  const scale = prefs.scale;
-  const width = Math.round(400 * scale);
-  const height = Math.round(284 * scale);
-  const primary = screen.getPrimaryDisplay();
-  const displays = screen.getAllDisplays();
-  const sources = displays.length > 0 ? displays : [primary];
-  const areas = sources.map((display) => ({
-    displayId: String(display.id),
-    x: display.workArea.x,
-    y: display.workArea.y,
-    width: display.workArea.width,
-    height: display.workArea.height,
-  }));
-  const regions = windowPlacementRegions(areas, width, height);
-  // Prefer the saved screen. If it was unplugged, choose the nearest remaining work area.
-  const restored = clampWindowPosition(
-    regions,
-    prefs.position.x,
-    prefs.position.y,
-    prefs.position.displayId || undefined,
-  );
-  const fallback = clampWindowPosition(
-    windowPlacementRegions([{
-      displayId: String(primary.id),
-      x: primary.workArea.x,
-      y: primary.workArea.y,
-      width: primary.workArea.width,
-      height: primary.workArea.height,
-    }], width, height),
-    prefs.position.x,
-    prefs.position.y,
-    String(primary.id),
-  );
-  const position = restored.displayId === null ? fallback : restored;
-  win.setBounds({
-    x: position.displayId === null ? primary.workArea.x : position.x,
-    y: position.displayId === null ? primary.workArea.y : position.y,
-    width,
-    height,
+  petBrowserWindows.set(input.agentId, win);
+  if (input.agentId === 'default') stageWindow = win;
+  win.on('closed', () => {
+    if (petBrowserWindows.get(input.agentId) === win) petBrowserWindows.delete(input.agentId);
+    if (stageWindow === win) stageWindow = null;
   });
-  win.loadFile(join(here, '../renderer/pet-stage/index.html'));
-  win.once('ready-to-show', () => win.showInactive());
-  return win;
+  const windowPath = join(here, '../renderer/pet-stage/index.html');
+  return {
+    isDestroyed: () => win.isDestroyed(),
+    isVisible: () => win.isVisible(),
+    isMinimized: () => win.isMinimized(),
+    focus: () => win.focus(),
+    showInactive: () => win.showInactive(),
+    close: () => win.close(),
+    setBounds: (bounds: WindowBounds) => win.setBounds(bounds),
+    getBounds: () => win.getBounds(),
+    send: (channel, payload) => {
+      if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    },
+    loadStage: async (hash: string) => {
+      await win.loadFile(windowPath, { hash });
+    },
+    onBoundsChanged: (listener) => {
+      const notify = (): void => listener(win.getBounds());
+      win.on('move', notify);
+      win.on('resize', notify);
+      return () => {
+        win.removeListener('move', notify);
+        win.removeListener('resize', notify);
+      };
+    },
+    onClosed: (listener) => {
+      win.on('closed', listener);
+      return () => win.removeListener('closed', listener);
+    },
+  };
 }
 
 function createDirectorWindow(): BrowserWindow {
@@ -227,7 +208,7 @@ function createDirectorWindow(): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   const dockIcon = nativeImage.createFromPath(brandAssetPath(BRAND_ASSETS.iconPng));
   if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon);
@@ -249,7 +230,20 @@ app.whenReady().then(() => {
   const modsHost = createModsHost(app.getPath('userData'));
   void modsHost;
   // 桌宠角色注册表（T-M6-21）：内置 + userData 自定义角色，切换落 PetDesktopPrefs（单点事实源）
-  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData')));
+  const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'), (prev, next) => {
+    // 旧全局 API 仅作用于 default 窗口；新协作大厅走 pet:window-prefs-set 按 agent 隔离。
+    const windowPrefs = petWindowManager?.prefs('default');
+    if (windowPrefs === null || windowPrefs === undefined) return;
+    if (windowPrefs.scale !== next.scale) petWindowManager?.patch('default', { scale: next.scale });
+    if (
+      windowPrefs.position.x !== next.position.x
+      || windowPrefs.position.y !== next.position.y
+      || windowPrefs.position.displayId !== next.position.displayId
+    ) {
+      petWindowManager?.setPosition('default', next.position);
+    }
+    void prev;
+  }));
   const characters = createCharacterRegistry({
     userDataDir: app.getPath('userData'),
     getPrefs: () => prefs.get(),
@@ -257,36 +251,85 @@ app.whenReady().then(() => {
       prefs.patch({ characterId: id });
       const next = characters.selected();
       setCurrentPersonaPrompt(next.personaPrompt);
-      // 桌宠窗重新加载该角色 manifest + 锚点（renderer 监听 reselect 事件）
-      for (const target of [stageWindow, directorWindow]) {
-        if (target && !target.isDestroyed()) target.webContents.send('pet:character-changed', next);
-      }
+      // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
+      petWindowManager?.patch('default', { characterId: next.id });
+      petWindowManager?.send('pet:character-changed', 'default', next);
+      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:character-changed', next);
     },
     builtinAssetsDir: join(here, '../renderer/pet-stage/assets'),
   });
   void characters;
+
+  // T-M6-38：多桌宠窗口管理器。所有窗口创建/坐标/缩放/锁定/事件定向在这里收口。
+  petWindowManager = new PetWindowManager({
+    userDataDir: app.getPath('userData'),
+    createWindow: createManagedPetWindow,
+    workArea: () => {
+      const area = screen.getPrimaryDisplay().workArea;
+      return { x: area.x, y: area.y, width: area.width, height: area.height };
+    },
+    legacyDefault: () => ({
+      ...prefs.get().position,
+      scale: prefs.get().scale,
+      characterId: prefs.get().characterId,
+    }),
+    onWindowsChanged: (list) => {
+      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:window-list-changed', list);
+    },
+  });
+  ipcMain.handle('pet:window-open', async (_event, agentId: string, characterId?: string) => {
+    const known = characterId === undefined ? undefined : characters.list().find((character) => character.id === characterId);
+    if (characterId !== undefined && known === undefined) return { ok: false, error: `未知角色：${characterId}` };
+    return petWindowManager!.open(agentId, known?.id ?? prefs.get().characterId);
+  });
+  ipcMain.handle('pet:window-close', (_event, agentId: string) => ({ ok: petWindowManager!.close(agentId) }));
+  ipcMain.handle('pet:window-list', () => petWindowManager!.list());
+  ipcMain.handle('pet:window-prefs-get', (_event, agentId: string) => petWindowManager!.prefs(agentId));
+  ipcMain.handle('pet:window-prefs-set', (_event, agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }) =>
+    petWindowManager!.patch(agentId, update ?? {}));
   // T-M6-31：外部插件生产链路（发现/启停/工具注册/审批/崩溃隔离）
   const plugins = createPluginHost({
     userDataDir: app.getPath('userData'),
-    windows: () => [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+    windows: () => [...petBrowserWindows.values(), directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
   });
-  // 多桌宠联机 agent 池（T-M6-22）：每端点一个 runner，事件带 agentId；不与单例 autodrive 共用动作锁
-  coopHost = createCoopHost({
-    userDataDir: app.getPath('userData'),
-    windows: () => [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
-  });
-  void coopHost;
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
-  const voice = createVoiceHost();
+  const voice = createVoiceHost(process.platform, {
+    resolveVoiceId: (characterId) => characters.list().find((character) => character.id === characterId)?.voiceId ?? null,
+    onSpeakerChange: (event) => {
+      petWindowManager?.send('coop:speaker', '*', event);
+      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('coop:speaker', event);
+    },
+  });
   registerVoiceHostIpc(voice);
   // 记忆图谱（T-M5-04）：回执入图谱 + 聊天检索
   const memory = createMemoryHost(app.getPath('userData'));
   void dayKeyOf;
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
-  const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice, memory);
+  const MAIN_GAME_ENDPOINT = 'http://127.0.0.1:18080/mcp';
+  const autodrive = createAutodriveHost(
+    MAIN_GAME_ENDPOINT,
+    join(app.getPath('userData'), 'provider-vault.json'),
+    voice,
+    memory,
+    'stardew',
+    undefined,
+    () => coopHost?.list().some((agent) => agent.running && agent.endpoint === MAIN_GAME_ENDPOINT)
+      ? '该端点已被「联机协作」页接管；请先停止对应 AI 队友，避免两个 Runner 抢同一角色'
+      : null,
+  );
+  // 多桌宠联机协作（T-M6-39）：复用 autodrive 的 Gateway/饭碗，但每 Agent 独立 planner/persona/voice。
+  coopHost = createCoopHost({
+    userDataDir: app.getPath('userData'),
+    windows: () => [...petBrowserWindows.values(), directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+    brain: autodrive,
+    voiceHost: voice,
+    petWindows: petWindowManager,
+    characters,
+    isEndpointBusyByMain: (endpoint) => endpoint === MAIN_GAME_ENDPOINT && autodrive.runner.isRunning(),
+  });
   // T-M6-37：直播最小链路（弹幕回放 → 护栏 → 注意力 → 中控台/插件总线/语音）
   const live = createLiveHost({
-    windows: () => [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+    windows: () => [...petBrowserWindows.values(), directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
     voiceHost: voice,
     onPluginEvent: (event, payload) => plugins.emit(event, payload),
   });
@@ -354,20 +397,27 @@ app.whenReady().then(() => {
     console.warn('[webui] 初始化失败（不影响主进程）:', error);
   }
   const wireTargets = () => {
-    const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);
+    const targets = [...petBrowserWindows.values(), directorWindow]
+      .filter((w): w is NonNullable<typeof w> => w !== null)
+      .map((w) => w.webContents);
     autodrive.setTargets(targets);
     harness.setTargets(targets);
     plugins.setTargets(targets);
     live.setTargets(targets);
   };
-  stageWindow = createStageWindow();
+  // 中控台先立即可用；默认桌宠需要在 loadFile 完成后才出现在窗口列表，避免 UI 空等。
   directorWindow = createDirectorWindow();
+  const openedDefault = await petWindowManager.open('default', prefs.get().characterId);
+  if (!openedDefault.ok) console.error('[pet-window] 默认桌宠窗启动失败：', openedDefault.error);
+  stageWindow = petBrowserWindows.get('default') ?? null;
   wireTargets();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      stageWindow = createStageWindow();
       directorWindow = createDirectorWindow();
-      wireTargets();
+      void petWindowManager?.open('default', prefs.get().characterId).then(() => {
+        stageWindow = petBrowserWindows.get('default') ?? null;
+        wireTargets();
+      });
     }
   });
 });

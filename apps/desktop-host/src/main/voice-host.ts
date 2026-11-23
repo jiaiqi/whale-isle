@@ -13,12 +13,22 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CoopSpeakerEvent } from '@workbench/shared-protocol';
+import { GlobalAudioLeaseManager } from './audio-lease';
 
 export interface VoiceScene {
   /** 台词 */
   text: string;
   /** 场景：normal 正式 / inner 内心戏 / p0 雷区 */
   scene?: 'normal' | 'inner' | 'p0';
+  /** T-M6-38：多桌宠归属（默认 default，兼容旧单窗） */
+  agentId?: string;
+  /** 说话人显示名（群聊/发言态广播） */
+  speakerName?: string;
+  /** 角色包 id；未显式给 voiceId 时由宿主按注册表解析该角色默认音色 */
+  characterId?: string;
+  /** 显式音色覆盖（高于角色默认音色） */
+  voiceId?: string;
 }
 
 export interface VoiceConfig {
@@ -76,10 +86,14 @@ export const MCODE_MODES: Record<string, McodeMode> = {
 const SCENE_MODE: Record<string, string> = { normal: 'daily', inner: 'sleepy', p0: 'tsundere' };
 
 export interface VoiceHost {
-  /** 入队播报（场景音速自动调整） */
-  speak(voice: VoiceScene): { ok: boolean; error?: string };
+  /** 入队播报（场景音速自动调整）；queued=true 表示已排队，不是已播放 */
+  speak(voice: VoiceScene): { ok: boolean; error?: string; queued?: boolean; leaseId?: string };
   readonly config: VoiceConfig;
   setConfig(patch: Partial<VoiceConfig>): VoiceConfig;
+  /** 当前全局抢麦状态（多桌宠动作/UI 高亮共用） */
+  speakerState(): CoopSpeakerEvent;
+  /** 应用退出：停止在播并清空队列 */
+  stopAll(): void;
 }
 
 /** 实际语音后端（T-M6-33）：界面如实展示「现在到底用哪条链路发声」，不再让用户以为一定是角色 TTS。 */
@@ -122,7 +136,12 @@ function defaultHasCommand(command: string): boolean {
 }
 
 /** mcode-tools 合成链：connector batch_text_to_audio → get_asset_url → afplay（用户定稿音色管线） */
-function speakViaMcode(text: string, mode: string, voiceId: string): Promise<void> {
+function speakViaMcode(
+  text: string,
+  mode: string,
+  voiceId: string,
+  onPlayer?: (player: ChildProcess | null) => void,
+): Promise<void> {
   const m = MCODE_MODES[mode] ?? MCODE_MODES.daily!;
   return new Promise<void>((resolve, reject) => {
     try {
@@ -142,51 +161,105 @@ function speakViaMcode(text: string, mode: string, voiceId: string): Promise<voi
       if (!url.download_url) { reject(new Error('无下载地址')); return; }
       execFileSync('curl', ['-sL', '-m', '60', '-o', out, url.download_url], { timeout: 70_000 });
       const player = spawn('afplay', [out], { stdio: 'ignore' });
-      player.on('exit', () => { void rmSync(tmpDir, { recursive: true, force: true }); resolve(); });
-      player.on('error', () => { reject(new Error('afplay 失败')); });
+      onPlayer?.(player);
+      player.on('exit', () => { onPlayer?.(null); void rmSync(tmpDir, { recursive: true, force: true }); resolve(); });
+      player.on('error', () => { onPlayer?.(null); reject(new Error('afplay 失败')); });
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
 }
 
-/** 合成+播放链（D11 萝莉音）：say 产 aiff → [pitch>1: ffmpeg asetrate 变调] → afplay。
- *  返回代表整条链的进程句柄：杀 afplay 即打断播放（say/ffmpeg 极短）。 */
-function spawnSynthesize(config: VoiceConfig, rate: number, text: string): ChildProcess {
+export interface PlaybackControl {
+  done: Promise<void>;
+  abort(): void;
+}
+
+
+/** 启动一个子进程并等待退出；abort 时杀当前段，保证下一条语音能开始。 */
+function runProcess(command: string, args: string[], onSpawn: (proc: ChildProcess | null) => void): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const proc = spawn(command, args, { stdio: 'ignore' });
+    onSpawn(proc);
+    proc.on('exit', (code) => {
+      onSpawn(null);
+      if (code === 0) resolve();
+      else reject(new Error(`${command} 退出码 ${String(code)}`));
+    });
+    proc.on('error', (error) => {
+      onSpawn(null);
+      reject(error);
+    });
+  });
+}
+
+/** say 合成链（D11 萝莉音）：say aiff → 可选 ffmpeg 变调 → afplay，整链可中断。 */
+function playViaSay(config: VoiceConfig, rate: number, text: string, pitchMul: number): PlaybackControl {
   const tmpDir = mkdtempSync(join(tmpdir(), 'whale-voice-'));
   const aiff = join(tmpDir, 'say.aiff');
   const wav = join(tmpDir, 'loli.wav');
-  const base = spawn('say', ['-v', config.voice, '-r', String(rate), '-o', aiff, text], { stdio: 'ignore' });
-  // 串联：say 结束后转调播放；链句柄以最后段（afplay）为代表
-  const chain: import('node:child_process').ChildProcess = base;
-  void chain;
-  base.on('exit', (code: number | null) => {
-    if (code !== 0) return;
-    const finish = (): void => {
-      const player = spawn('afplay', [wav], { stdio: 'ignore' });
-      player.on('exit', () => { void rmSync(tmpDir, { recursive: true, force: true }); });
-      // 把 active 更新到播放段（通过事件冒泡：调用方监听的是 base——为支持打断，
-      // 直接把 player pid 传播：简单法——播放前 unlink 不可行；用同进程组：base.kill 已无法覆盖。
-      // 这里用「链对象」：返回一个轻量 EventEmitter-like ChildProcess 代理不可行——
-      // 实际方案：voice-host 的 active 存 { kill }；本次用 spawn 的返回 player 挂到 base 上供 kill）
-      (base as unknown as { player?: import('node:child_process').ChildProcess }).player = player;
-    };
-    if (config.pitchMul > 1.001) {
-      const conv = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-i', aiff,
-        '-filter:a', `asetrate=22050*${config.pitchMul.toFixed(3)},aresample=22050,atempo=0.94`, wav], { stdio: 'ignore' });
-      conv.on('exit', (c: number | null) => { if (c === 0) finish(); else void rmSync(tmpDir, { recursive: true, force: true }); });
-    } else {
-      finish(); // 原声直接播 aiff
+  let current: ChildProcess | null = null;
+  let aborted = false;
+  const onSpawn = (proc: ChildProcess | null): void => {
+    current = proc;
+    if (aborted && proc !== null) proc.kill('SIGKILL');
+  };
+  const done = (async () => {
+    try {
+      await runProcess('say', ['-v', config.voice, '-r', String(rate), '-o', aiff, text], onSpawn);
+      if (aborted) return;
+      const playPath = pitchMul > 1.001 ? wav : aiff;
+      if (pitchMul > 1.001) {
+        await runProcess('ffmpeg', ['-y', '-loglevel', 'error', '-i', aiff,
+          '-filter:a', `asetrate=22050*${pitchMul.toFixed(3)},aresample=22050,atempo=0.94`, wav], onSpawn);
+      }
+      if (aborted) return;
+      await runProcess('afplay', [playPath], onSpawn);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
     }
-  });
-  // 打断支持：kill 时同时杀播放段
-  const origKill = base.kill.bind(base);
-  base.kill = ((signal?: NodeJS.Signals) => {
-    (base as unknown as { player?: import('node:child_process').ChildProcess }).player?.kill('SIGKILL');
-    return origKill(signal);
-  }) as typeof base.kill;
-  return base;
+  })();
+  return {
+    done,
+    abort() {
+      aborted = true;
+      current?.kill('SIGKILL');
+    },
+  };
 }
+
+/** 首选 mcode 角色音色 → 失败回落 say 变调链；整个降级链共享一个可中断句柄。 */
+function playVoice(config: VoiceConfig, scene: string, sceneMode: string, text: string, spoken: string, voiceId: string): PlaybackControl {
+  let active: PlaybackControl | null = null;
+  let mcodePlayer: ChildProcess | null = null;
+  let aborted = false;
+  const done = (async () => {
+    try {
+      active = {
+        done: speakViaMcode(text, sceneMode, voiceId, (player) => {
+          mcodePlayer = player;
+          if (aborted) player?.kill('SIGKILL');
+        }),
+        abort() { mcodePlayer?.kill('SIGKILL'); },
+      };
+      await active.done;
+    } catch {
+      if (aborted) return;
+      const rate = Math.round(200 * (config.ratePercent / 100) * (SCENE_RATE[scene] ?? 1));
+      active = playViaSay(config, rate, spoken, config.pitchMul);
+      await active.done;
+    }
+  })();
+  return {
+    done,
+    abort() {
+      aborted = true;
+      active?.abort();
+      mcodePlayer?.kill('SIGKILL');
+    },
+  };
+}
+
 
 export function registerVoiceHostIpc(host: VoiceHost): void {
   ipcMain.handle('voice:speak', (_e, voice: VoiceScene) => host.speak(voice));
@@ -211,52 +284,77 @@ export function registerVoiceHostIpc(host: VoiceHost): void {
   ipcMain.handle('voice:config:set', (_e, patch: Partial<VoiceConfig>) => host.setConfig(patch));
 }
 
-export function createVoiceHost(platform = process.platform): VoiceHost {
-  let config: VoiceConfig = { ...DEFAULT_CONFIG };
-  let active: ChildProcess | null = null;
-  let lastTextAt = new Map<string, number>();
+export interface VoiceHostPlaybackInput {
+  text: string;
+  voiceId: string;
+  scene: string;
+}
 
-  const speak = (voice: VoiceScene): { ok: boolean; error?: string } => {
+export interface CreateVoiceHostOptions {
+  /** character-registry 注入：charId → 默认 voiceId */
+  resolveVoiceId?: (characterId: string) => string | null;
+  /** 主进程广播 coop:speaker（所有桌宠窗 + 中控台） */
+  onSpeakerChange?: (event: CoopSpeakerEvent) => void;
+  /** 测试注入：替代真实 mcode/say 播放；返回可中断句柄 */
+  play?: (input: VoiceHostPlaybackInput) => PlaybackControl;
+}
+
+export function createVoiceHost(platform = process.platform, options: CreateVoiceHostOptions = {}): VoiceHost {
+  let config: VoiceConfig = { ...DEFAULT_CONFIG };
+  const lastTextAt = new Map<string, number>();
+  const leases = new GlobalAudioLeaseManager({
+    onActiveChange: (event) => {
+      const state = event.activeAgentId === null
+        ? { activeAgentId: null, speakerName: '', state: 'idle' as const }
+        : {
+            activeAgentId: event.activeAgentId,
+            speakerName: event.activeSpeakerName,
+            state: 'speaking' as const,
+            ...(event.activeVoiceId === undefined ? {} : { voiceId: event.activeVoiceId }),
+          };
+      options.onSpeakerChange?.(state);
+    },
+  });
+
+  const speak = (voice: VoiceScene): { ok: boolean; error?: string; queued?: boolean; leaseId?: string } => {
     const scene = voice.scene ?? 'normal';
     if (!config.enabled) return { ok: false, error: '语音总开关关闭' };
     if (scene === 'inner' && !config.innerVoice) return { ok: false, error: '内心戏发声关闭' };
     const text = voice.text.trim();
     if (text === '') return { ok: false, error: '空台词' };
 
-    // 节流：同文本 8s 内不重播
+    const agentId = voice.agentId ?? 'default';
+    const resolvedVoiceId = voice.voiceId
+      ?? (voice.characterId === undefined ? null : options.resolveVoiceId?.(voice.characterId) ?? null)
+      ?? config.voiceId;
+    // 节流按 agent + 音色隔离：不同角色说同一句台词不能被互相吞掉
     const now = Date.now();
-    const key = `${scene}:${text}`;
+    const key = `${agentId}:${resolvedVoiceId}:${scene}:${text}`;
     const last = lastTextAt.get(key) ?? 0;
     if (now - last < 8_000) return { ok: true };
     lastTextAt.set(key, now);
-    if (lastTextAt.size > 100) lastTextAt.clear();
+    if (lastTextAt.size > 200) lastTextAt.clear();
 
-    if (platform !== 'darwin') {
-      // Windows/其他平台：T-M6-05 打包工单适配 SAPI；当前如实报未支持
+    if (platform !== 'darwin' && options.play === undefined) {
       return { ok: false, error: `平台 ${platform} 语音引擎待适配（当前支持 darwin）` };
     }
 
-    // P0 场景：立即打断在播（单端不变式——雷区抢占）
-    if (scene === 'p0' && active) {
-      active.kill('SIGKILL');
-      active = null;
-    } else if (active) {
-      // 队列串行：上条还在播时忽略新条（非 P0 不抢）——8s 节流已过滤大部分
-      return { ok: true, error: '队列占用（上一条在播）' };
-    }
-
     const spoken = scene === 'inner' ? `…${text}` : text;
-    // 首选：mcode-tools「俏皮萌妹」；失败回落 say 变调链（D11 三层保底）
-    speakViaMcode(text, SCENE_MODE[scene] ?? 'daily', config.voiceId)
-      .then(() => undefined)
-      .catch(() => {
-        const rate = Math.round(200 * (config.ratePercent / 100) * (SCENE_RATE[scene] ?? 1));
-        const proc = spawnSynthesize(config, rate, spoken);
-        active = proc;
-        proc.on('exit', () => { if (active === proc) active = null; });
-        proc.on('error', () => { if (active === proc) active = null; });
-      });
-    return { ok: true };
+    let playback: PlaybackControl | null = null;
+    const result = leases.acquire({
+      agentId,
+      speakerName: voice.speakerName ?? '小鲸',
+      voiceId: resolvedVoiceId,
+      priority: scene === 'p0' ? 'P0_INTERRUPT' : scene === 'inner' ? 'P2_IDLE' : 'P1_CADENCE',
+      ttlMs: 120_000,
+      start: async () => {
+        playback = options.play?.({ text, voiceId: resolvedVoiceId, scene })
+          ?? playVoice(config, scene, SCENE_MODE[scene] ?? 'daily', text, spoken, resolvedVoiceId);
+        await playback.done;
+      },
+      abort: () => playback?.abort(),
+    });
+    return { ok: true, queued: result === 'queued' };
   };
 
   return {
@@ -275,6 +373,20 @@ export function createVoiceHost(platform = process.platform): VoiceHost {
         pitchMul: typeof patch.pitchMul === 'number' ? Math.min(1.6, Math.max(1, patch.pitchMul)) : config.pitchMul,
       };
       return config;
+    },
+    speakerState() {
+      const current = leases.current();
+      return current.activeAgentId === null
+        ? { activeAgentId: null, speakerName: '', state: 'idle' }
+        : {
+            activeAgentId: current.activeAgentId,
+            speakerName: current.activeSpeakerName,
+            state: 'speaking',
+            ...(current.activeVoiceId === undefined ? {} : { voiceId: current.activeVoiceId }),
+          };
+    },
+    stopAll() {
+      leases.stopAll();
     },
   };
 }
