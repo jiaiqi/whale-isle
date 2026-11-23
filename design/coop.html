@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>多桌宠联机协作 — 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<style>
+  .page { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* 顶部共同目标条 */
+  .goal-bar {
+    padding: 12px 22px; border-bottom: 1px solid var(--stroke);
+    background: color-mix(in srgb, var(--bg-elev) 44%, transparent);
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex-shrink: 0;
+  }
+  .goal-main { flex: 1; min-width: 260px; }
+  .goal-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .goal-meters { display: flex; gap: 16px; margin-top: 7px; flex-wrap: wrap; }
+  .meter { min-width: 160px; flex: 1; max-width: 220px; }
+  .meter-h { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-2); margin-bottom: 4px; }
+  .meter-h b { font-family: var(--font-mono); color: var(--text-1); }
+  .meter-track { height: 5px; border-radius: 999px; background: var(--inset); overflow: hidden; }
+  .meter-track i { display: block; height: 100%; border-radius: 999px; background: var(--blue); transition: width .35s var(--ease-out); }
+
+  /* 联机一键启动向导（可折叠） */
+  .launch-bar {
+    border-bottom: 1px solid var(--stroke);
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
+    flex-shrink: 0;
+  }
+  .launch-head {
+    padding: 8px 22px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .game-seg {
+    display: inline-flex; padding: 2px; border-radius: 980px;
+    background: var(--inset); border: 1px solid var(--stroke);
+  }
+  .game-seg button {
+    border: none; background: transparent; color: var(--text-2); font-size: 11.5px; font-weight: 600;
+    padding: 4px 11px; border-radius: 980px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    transition: all var(--dur-hover) var(--ease);
+  }
+  .game-seg button.on { background: var(--blue-dim); color: var(--blue); }
+  .port-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .port-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 980px;
+    font-size: 11px; font-family: var(--font-mono); border: 1px solid var(--stroke);
+    background: var(--inset); color: var(--text-2);
+  }
+  .port-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+  .port-chip.online { border-color: var(--green-line); background: var(--green-dim); color: var(--green); }
+  .port-chip.online .port-dot { background: var(--green); }
+  .port-chip.pending { border-color: var(--amber-line); background: var(--amber-dim); color: var(--amber); }
+  .port-chip.pending .port-dot { background: var(--amber); }
+
+  .launch-body {
+    padding: 0 22px 13px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+  }
+  .launch-body.collapsed { display: none; }
+  .step-card {
+    padding: 11px 13px; border-radius: var(--r-md); border: 1px solid var(--stroke);
+    background: var(--bg-elev); display: flex; flex-direction: column; gap: 7px;
+  }
+  .step-card.done { border-color: var(--green-line); background: color-mix(in srgb, var(--green-dim) 45%, var(--bg-elev)); }
+  .step-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .step-num { font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; color: var(--text-1); }
+  .step-desc { font-size: 11px; color: var(--text-2); line-height: 1.55; }
+  .step-code {
+    font-size: 10.5px; font-family: var(--font-mono); padding: 4px 8px; border-radius: var(--r-sm);
+    background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .step-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; flex-wrap: wrap; }
+
+  /* 主体三栏 */
+  .body-grid {
+    flex: 1; min-height: 0; display: grid;
+    grid-template-columns: 288px 1fr 296px; overflow: hidden;
+  }
+
+  /* 左栏：小队成员与桌面多开控制 */
+  .col-side {
+    border-right: 1px solid var(--stroke); padding: 14px; overflow-y: auto;
+    background: color-mix(in srgb, var(--bg-elev) 24%, transparent);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .sec-h { font-size: 10.5px; font-weight: 650; color: var(--text-3); letter-spacing: 0.8px; display: flex; align-items: center; justify-content: space-between; }
+  .member-card { padding: 12px 13px; border-radius: var(--r-lg); transition: border-color var(--dur-hover) var(--ease); }
+  .member-card.speaking { border-color: var(--blue-line); box-shadow: var(--glow-blue), inset 0 1px 0 var(--hi); }
+  .m-top { display: flex; align-items: center; gap: 9px; }
+  .m-ava {
+    width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .m-ava.whale { background: var(--blue-dim); border: 1px solid var(--blue-line); color: var(--blue); }
+  .m-ava.puff { background: var(--amber-dim); border: 1px solid var(--amber-line); color: var(--amber); }
+  .m-ava.human { background: var(--green-dim); border: 1px solid var(--green-line); color: var(--green); }
+  .m-ava.extra { background: var(--violet-dim); border: 1px solid var(--violet-line); color: var(--violet); }
+  .m-nm { font-size: 12.5px; font-weight: 650; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .m-sub { font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono); margin-top: 2px; }
+  .m-task { font-size: 11.5px; color: var(--text-2); margin-top: 8px; padding: 6px 9px; border-radius: var(--r-sm); background: var(--inset); border: 1px solid var(--stroke); }
+  .m-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; font-size: 11px; color: var(--text-3); gap: 6px; }
+
+  /* 中栏：小队群聊与协商流 */
+  .col-chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .chat-flow { flex: 1; overflow-y: auto; padding: 16px 22px 10px; display: flex; flex-direction: column; gap: 13px; }
+  .msg { max-width: 680px; }
+  .msg.me { align-self: flex-end; max-width: 78%; }
+  .msg-h { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; font-size: 11.5px; }
+  .msg.me .msg-h { justify-content: flex-end; }
+  .msg-bub {
+    padding: 10px 14px; border-radius: 16px; font-size: 12.5px; line-height: 1.75;
+    background: var(--surface); border: 1px solid var(--stroke);
+    box-shadow: var(--shadow-1), inset 0 1px 0 var(--hi);
+  }
+  .msg.me .msg-bub {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 20%, transparent), color-mix(in srgb, var(--blue) 10%, transparent));
+    border-color: var(--blue-line);
+  }
+  .msg.huddle .msg-bub { border-left: 3px solid var(--violet); }
+  .msg.help .msg-bub { border-color: var(--amber-line); background: var(--amber-dim); }
+  .plan-card {
+    padding: 12px 14px; border-radius: var(--r-lg); border: 1px solid var(--green-line);
+    background: var(--green-dim); font-size: 12px;
+  }
+  .plan-card h5 { font-size: 12px; font-weight: 650; color: var(--green); display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .plan-row { display: flex; justify-content: space-between; padding: 3.5px 0; border-bottom: 1px dashed var(--stroke); font-size: 11.5px; }
+  .plan-row:last-child { border: none; }
+
+  .composer-box { padding: 10px 20px 14px; border-top: 1px solid var(--stroke); flex-shrink: 0; }
+  .mention-bar { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+  .at-btn {
+    font-size: 11px; padding: 3.5px 10px; border-radius: 980px; border: 1px solid var(--stroke);
+    background: var(--surface); color: var(--text-2); cursor: pointer;
+    transition: all var(--dur-hover) var(--ease);
+  }
+  .at-btn:hover { border-color: var(--blue-line); color: var(--blue); background: var(--blue-dim); }
+  .inp-row { display: flex; gap: 8px; }
+  .inp-row input {
+    flex: 1; padding: 9px 14px; border-radius: 980px; border: 1px solid var(--stroke-2);
+    background: var(--surface); color: var(--text-1); font-size: 13px; outline: none;
+  }
+  .inp-row input:focus { border-color: var(--blue-line); box-shadow: var(--glow-blue); }
+
+  /* 右栏：TeamBlackboard 黑板 */
+  .col-board {
+    border-left: 1px solid var(--stroke); padding: 14px; overflow-y: auto;
+    background: color-mix(in srgb, var(--bg-elev) 24%, transparent);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .b-card { padding: 13px 14px; border-radius: var(--r-lg); }
+  .b-card h4 { font-size: 12px; font-weight: 650; margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
+  .b-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5.5px 0; border-bottom: 1px dashed var(--stroke); font-size: 11.5px; }
+  .b-row:last-child { border: none; }
+
+  /* 弹窗通用 + 9 角色商店弹窗 */
+  .modal-mask { position: fixed; inset: 0; z-index: 150; background: rgba(0,0,0,.56); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 16px; }
+  .modal-mask.open { display: flex; }
+  .modal-box { width: 450px; max-width: 94vw; padding: 20px; border-radius: var(--r-xl); background: var(--bg-elev); border: 1px solid var(--stroke-2); box-shadow: var(--shadow-2); }
+  .modal-box.wide { width: 820px; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+  .f-g { margin-bottom: 12px; }
+  .f-g label { display: block; font-size: 11.5px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
+  .f-g input, .f-g select { width: 100%; padding: 8px 11px; border-radius: var(--r-sm); border: 1px solid var(--stroke); background: var(--inset); color: var(--text-1); font-size: 12.5px; outline: none; }
+
+  .store-banner {
+    padding: 11px 14px; border-radius: var(--r-md); border: 1px solid var(--blue-line);
+    background: var(--blue-dim); display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .store-progress { margin-bottom: 12px; display: none; }
+  .store-progress.show { display: block; }
+  .store-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+    overflow-y: auto; padding-right: 4px; flex: 1;
+  }
+  .pack-card {
+    padding: 12px; border-radius: var(--r-md); border: 1px solid var(--stroke);
+    background: var(--surface); display: flex; flex-direction: column; gap: 8px;
+  }
+  .pack-card.installed { border-color: var(--green-line); }
+  .pack-head { display: flex; align-items: center; gap: 9px; }
+  .pack-meta { font-size: 10.5px; color: var(--text-2); line-height: 1.55; }
+  .pack-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .pack-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: auto; padding-top: 4px; }
+
+  @media (max-width: 1060px) {
+    .body-grid { grid-template-columns: 1fr; overflow-y: auto; }
+    .col-side, .col-board { border: none; }
+    .launch-body, .store-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body data-wb-page="coop" data-wb-group="游戏与直播" data-wb-title="多桌宠联机协作">
+  <main class="wb-main page">
+    <!-- 顶部团队共同目标条 -->
+    <div class="goal-bar">
+      <div class="goal-main">
+        <div class="goal-title">
+          <i data-lucide="flag" class="sm" style="color:var(--blue)"></i>
+          <span id="goal-name">共同目标：今天凑齐 4,000g 与 300 木材建造鸡舍</span>
+          <span class="pill pill-green" id="goal-game-pill">星露谷物语 · 3 人联机</span>
+        </div>
+        <div class="goal-meters">
+          <div class="meter">
+            <div class="meter-h"><span>团队金币</span><b id="m-gold">2,640 / 4,000g</b></div>
+            <div class="meter-track"><i id="bar-gold" style="width:66%;background:var(--amber)"></i></div>
+          </div>
+          <div class="meter">
+            <div class="meter-h"><span>公共木材</span><b id="m-wood">145 / 300</b></div>
+            <div class="meter-track"><i id="bar-wood" style="width:48%;background:var(--green)"></i></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-pill ghost" onclick="openStore()"><i data-lucide="sparkles" class="xs" style="color:var(--blue)"></i>角色包商店 <span class="mono" id="store-cnt-badge">3/9</span></button>
+        <button class="btn-pill violet" onclick="runHuddle()"><i data-lucide="messages-square" class="xs"></i>发起开麦商量</button>
+        <button class="btn-pill ghost" onclick="simulateHelp()"><i data-lucide="life-buoy" class="xs"></i>模拟队友求助</button>
+        <button class="btn-pill primary" onclick="openAddMate()"><i data-lucide="user-plus" class="xs"></i>添加 AI 队友</button>
+      </div>
+    </div>
+
+    <!-- 三游戏联机一键启动向导（可折叠） -->
+    <section class="launch-bar">
+      <div class="launch-head">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-weight:650;color:var(--text-1)">
+          <i data-lucide="rocket" class="xs" style="color:var(--blue)"></i>联机一键启动向导
+        </span>
+        <div class="game-seg" id="launch-game-seg">
+          <button class="on" data-g="stardew" onclick="switchLaunchGame('stardew')"><i data-lucide="sprout" class="xs"></i>星露谷物语</button>
+          <button data-g="terraria" onclick="switchLaunchGame('terraria')"><i data-lucide="swords" class="xs"></i>泰拉瑞亚</button>
+          <button data-g="dst" onclick="switchLaunchGame('dst')"><i data-lucide="flame" class="xs"></i>饥荒 DST</button>
+        </div>
+        <div class="port-chips" id="launch-port-chips"></div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <button class="btn-pill ghost" style="padding:4px 10px;font-size:11px" onclick="probePorts()"><i data-lucide="refresh-cw" class="xs"></i>重新探测</button>
+          <button class="btn-pill ghost" style="padding:4px 10px;font-size:11px" id="launch-toggle-btn" onclick="toggleLaunchBody()">
+            <i data-lucide="chevron-up" class="xs"></i><span>收起向导</span>
+          </button>
+        </div>
+      </div>
+      <div class="launch-body" id="launch-body"></div>
+    </section>
+
+    <div class="body-grid">
+      <!-- 左栏：联机小队与桌面窗控制 -->
+      <aside class="col-side">
+        <div class="sec-h"><span>联机小队成员（桌面可多开）</span><span class="mono" id="mate-cnt">3 人</span></div>
+        <div id="member-list" style="display:flex;flex-direction:column;gap:10px"></div>
+        <div class="card b-card" style="margin-top:auto">
+          <h4><i data-lucide="layers" class="xs" style="color:var(--blue)"></i>精灵图零转码 &amp; 音效联动</h4>
+          <div style="font-size:11px;color:var(--text-2);line-height:1.65">
+            全部 9 套角色包存放在本机 <span class="mono">userData/pet-characters/</span>，由 <span class="mono">SpritesheetRenderer</span> 直接播放透明 WebP 与 <span class="mono">.m4a</span> 动作音轨，不膨胀安装包。
+          </div>
+        </div>
+      </aside>
+
+      <!-- 中栏：群聊协商与 @ 指挥 -->
+      <section class="col-chat">
+        <div class="chat-flow" id="chat-flow"></div>
+        <div class="composer-box">
+          <div class="mention-bar" id="mention-bar"></div>
+          <div class="inp-row">
+            <input id="coop-inp" placeholder="输入 @小鲸 / @星璃 单人指挥，或 @全队 商量新目标…" onkeydown="if(event.key==='Enter')sendCoop()">
+            <button class="btn-pill primary" onclick="sendCoop()"><i data-lucide="send" class="xs"></i>发送</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右栏：TeamBlackboard 共享黑板 -->
+      <aside class="col-board">
+        <div class="card b-card">
+          <h4><i data-lucide="clipboard-list" class="xs" style="color:var(--blue)"></i>分工认领表（TeamBlackboard）</h4>
+          <div id="board-assigns"></div>
+        </div>
+
+        <div class="card b-card">
+          <h4><i data-lucide="lock" class="xs" style="color:var(--amber)"></i>软互斥区域锁（防抢活）</h4>
+          <div id="board-locks"></div>
+        </div>
+
+        <div class="card b-card">
+          <h4><i data-lucide="shield-check" class="xs" style="color:var(--green)"></i>协作与语音防冲突护栏</h4>
+          <div class="b-row"><span class="k">开麦协商上限</span><b class="mono">≤ 3 轮 / 次</b></div>
+          <div class="b-row"><span class="k">自动协商冷却</span><b class="mono">5 分钟</b></div>
+          <div class="b-row"><span class="k">全局语音抢麦锁</span><b class="mono" style="color:var(--green)">串行轮流播报</b></div>
+          <div class="b-row">
+            <span class="k">动作原声音效（说话自动 ducking）</span>
+            <div class="sw on" id="sfx-duck-sw" onclick="toggleSfxDuck()"></div>
+          </div>
+          <div class="b-row"><span class="k">黑板注入预算</span><b class="mono">≤ 300 字</b></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- 9 角色包商店弹窗（aboutme-pets 全量导入） -->
+  <div class="modal-mask" id="store-modal" onclick="if(event.target===this)closeStore()">
+    <div class="modal-box wide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <h3 style="font-size:15.5px;font-weight:700;display:flex;align-items:center;gap:8px">
+            <i data-lucide="sparkles" class="sm" style="color:var(--blue)"></i>
+            角色包商店 · aboutme-pets 全量素材库
+          </h3>
+          <div style="font-size:11.5px;color:var(--text-3);margin-top:2px">
+            来源 hunmer/aboutme-pets + lokicorvus/crosspet（CC BY-NC-SA 4.0 · 仅本地自用）· 9 角色 1,040 动作 + 480 条原生音轨
+          </div>
+        </div>
+        <button class="icon-btn" onclick="closeStore()"><i data-lucide="x" class="sm"></i></button>
+      </div>
+
+      <div class="store-banner">
+        <div style="font-size:12px;line-height:1.55">
+          <b>一键全量同步全部 9 套形象、全部动作精灵图与原生语音/音效</b>
+          <div style="font-size:11px;color:var(--text-2)">支持断点续传与 6 并发下载，落盘到本机 <span class="mono">userData/pet-characters/</span>，零转码即时切换。</div>
+        </div>
+        <button class="btn-pill primary" id="btn-import-all" onclick="importAllPacks()">
+          <i data-lucide="download-cloud" class="xs"></i><span>一键导入全部 9 套</span>
+        </button>
+      </div>
+
+      <div class="store-progress" id="store-progress">
+        <div class="meter-h"><span id="store-prog-text">准备拉取 pets.json 目录…</span><b id="store-prog-pct">0%</b></div>
+        <div class="meter-track"><i id="store-prog-bar" style="width:0%;background:var(--blue)"></i></div>
+      </div>
+
+      <div class="store-grid" id="store-grid"></div>
+    </div>
+  </div>
+
+  <!-- 添加 AI 队友弹窗 -->
+  <div class="modal-mask" id="mate-modal" onclick="if(event.target===this)closeAddMate()">
+    <div class="modal-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="font-size:15px;font-weight:650">添加 AI 联机队友</h3>
+        <button class="icon-btn" onclick="closeAddMate()"><i data-lucide="x" class="sm"></i></button>
+      </div>
+      <div class="f-g">
+        <label style="display:flex;justify-content:space-between;align-items:center">
+          <span>选择已导入角色包</span>
+          <button type="button" style="border:none;background:none;color:var(--blue);font-size:11px;cursor:pointer" onclick="closeAddMate();openStore()">打开角色包商店 →</button>
+        </label>
+        <select id="m-char"></select>
+      </div>
+      <div class="f-g">
+        <label>所属游戏（自动分配不冲突端口）</label>
+        <select id="m-game" onchange="autoAssignPort()">
+          <option value="stardew">星露谷物语（独立 --mods-path 实例）</option>
+          <option value="terraria">泰拉瑞亚（独立 terraria-bridge 端口）</option>
+          <option value="dst">饥荒：联机版（复用 :18100 单 Sidecar）</option>
+        </select>
+      </div>
+      <div class="f-g"><label>自动分配端点 / Agent ID</label><input id="m-ep" value="127.0.0.1:18082" class="mono"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+        <button class="btn-pill ghost" onclick="closeAddMate()">取消</button>
+        <button class="btn-pill primary" onclick="confirmAddMate()">加入小队并召唤桌宠</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const PACKS = [
+    { id: 'dsh', name: '小鲸', sub: '蓝毛小女仆（主宠）', clips: 114, audio: 0, voice: '俏皮萌妹', cls: 'whale', role: '嘴硬心软干饭女仆', installed: true, builtin: true },
+    { id: 'dsh1', name: '小鲸·新动作包', sub: '蓝毛小女仆扩展池', clips: 167, audio: 2, voice: '俏皮萌妹', cls: 'whale', role: '小鲸 2026-11 新动作扩展', installed: false },
+    { id: 'grok', name: '星璃', sub: '金发小魔女版', clips: 106, audio: 106, voice: '傲娇大小姐', cls: 'puff', role: '效率毒舌军师 · 抢矿战斗', installed: true },
+    { id: 'gemini', name: '泡芙', sub: '猫耳娘版', clips: 100, audio: 96, voice: '嗲嗲学妹', cls: 'extra', role: '软萌好奇采集手 · 后勤', installed: true },
+    { id: 'kimi', name: '星芒', sub: '星芒小女仆版', clips: 105, audio: 105, voice: '清脆少女', cls: 'extra', role: '条理控副手 · 整理算账', installed: false },
+    { id: 'glm', name: '青岚', sub: '蓝狐耳娘版', clips: 97, audio: 97, voice: '清脆少女(-2)', cls: 'whale', role: '冷静观察者 · 补位支援', installed: false },
+    { id: 'qwen', name: '千羽', sub: 'Qwen 动作包', clips: 106, audio: 66, voice: '倔强朋友', cls: 'puff', role: '倔强实干派 · 认准目标死磕', installed: false },
+    { id: 'claude', name: '克洛伊', sub: 'Claude 动作包', clips: 166, audio: 8, voice: '清脆少女(慢)', cls: 'extra', role: '温和规划师 · 商量汇总', installed: false },
+    { id: 'gpt', name: '小智', sub: 'GPT 动作包', clips: 92, audio: 0, voice: '倔强朋友(+2)', cls: 'human', role: '元气全能补位队员', installed: false },
+  ];
+
+  const MEMBERS = [
+    { id: 'human', name: '主人', role: '真人房主 · 键鼠游玩', cls: 'human', badge: '未托管', endpoint: '主客户端', task: '矿洞 12 层挖铜矿（血量 42%）', zone: '矿洞 12 层', status: '进行中', petWin: false, human: true },
+    { id: 'whale', name: '小鲸', role: '蓝鲸女仆 · 俏皮萌妹', cls: 'whale', badge: '接管中', endpoint: ':18080', task: '海滩码头钓鱼凑金币', zone: '海滩码头', status: '进行中', petWin: true, speaking: false },
+    { id: 'grok', name: '星璃', role: '金发小魔女 · 傲娇大小姐 · 106 音轨', cls: 'puff', badge: '接管中', endpoint: ':18081', task: '农场浇水并砍树攒木材', zone: '农场南区', status: '进行中', petWin: true, speaking: false },
+  ];
+
+  const LOCKS = [
+    { area: '海滩东侧码头', owner: '小鲸' },
+    { area: '农场作物与树林', owner: '星璃' },
+    { area: '矿洞 12 层', owner: '主人（真人）' },
+    { area: '农场公共箱子', owner: '空闲' },
+  ];
+
+  const MESSAGES = [
+    { who: '小鲸', cls: 'whale', tag: '开麦商量 · 1/3', time: '06:05', type: 'huddle', text: '今天大晴天！咱们的目标是凑齐 4000g 和 300 木材建鸡舍。本鱼钓鱼手感好，我去海滩出货；星璃你去农场浇水顺便砍树行不行？' },
+    { who: '星璃', cls: 'puff', tag: '开麦商量 · 2/3', time: '06:06', type: 'huddle', text: '哼，算你安排得还像样！我先把防风草全浇完，再一口气砍 150 木材塞进农场公共箱子，你可别在海滩摸鱼钓海草！' },
+    { type: 'plan', time: '06:06', rows: [['小鲸', '海滩钓鱼出货（目标 +1400g）'], ['星璃', '农场浇水 + 砍树 150 木材'], ['主人（真人）', '自由探索 / 矿洞挖矿（AI 自动避让）']] },
+    { who: '星璃', cls: 'puff', tag: '进度报点', time: '10:12', type: 'normal', text: '搞定！防风草全浇完了，145 根木材已放进农场公共箱子，效率比某条鱼高多了吧。' },
+    { who: '小鲸', cls: 'whale', tag: '感知真人', time: '10:24', type: 'normal', text: '喂！主人你在矿洞 12 层血量只剩 42% 了！别硬撑着晕倒又扣医疗费，要不要本鱼把钓到的鱼做成料理给你送过去？' },
+  ];
+
+  let activeLaunchGame = 'stardew';
+  let launchExpanded = true;
+  let sfxDuckOn = true;
+
+  const LAUNCH_STATE = {
+    stardew: { humanStarted: true, ai1Online: true, ai2Online: false },
+    terraria: { serverStarted: false, ai1Online: false, ai2Online: false },
+    dst: { tokenSaved: false, clusterStarted: false },
+  };
+
+  function switchLaunchGame(g) {
+    activeLaunchGame = g;
+    document.querySelectorAll('#launch-game-seg button').forEach((b) => b.classList.toggle('on', b.dataset.g === g));
+    const names = { stardew: '星露谷物语', terraria: '泰拉瑞亚', dst: '饥荒：联机版' };
+    document.getElementById('goal-game-pill').textContent = `${names[g]} · ${MEMBERS.length} 人联机`;
+    renderLaunchWizard();
+  }
+
+  function toggleLaunchBody() {
+    launchExpanded = !launchExpanded;
+    document.getElementById('launch-body').classList.toggle('collapsed', !launchExpanded);
+    document.getElementById('launch-toggle-btn').innerHTML = launchExpanded
+      ? '<i data-lucide="chevron-up" class="xs"></i><span>收起向导</span>'
+      : '<i data-lucide="chevron-down" class="xs"></i><span>展开向导</span>';
+    lucide.createIcons();
+  }
+
+  function renderLaunchWizard() {
+    const chips = document.getElementById('launch-port-chips');
+    const body = document.getElementById('launch-body');
+    if (activeLaunchGame === 'stardew') {
+      const s = LAUNCH_STATE.stardew;
+      chips.innerHTML = `
+        <span class="port-chip ${s.humanStarted ? 'online' : ''}"><i class="port-dot"></i>真人主机</span>
+        <span class="port-chip ${s.ai1Online ? 'online' : 'pending'}"><i class="port-dot"></i>小鲸 :18080</span>
+        <span class="port-chip ${s.ai2Online ? 'online' : 'pending'}"><i class="port-dot"></i>星璃 :18081</span>`;
+      body.innerHTML = `
+        <div class="step-card ${s.humanStarted ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">1. 启动真人主机</span><span class="pill ${s.humanStarted ? 'pill-green' : ''}" style="font-size:10px">${s.humanStarted ? '已就绪' : '待启动'}</span></div>
+          <div class="step-desc">拉起默认 Mods 游戏，进「合作 → 主持」并确认农场已放好联机小屋（Cabin）。</div>
+          <div class="step-foot">
+            <button class="btn-pill ${s.humanStarted ? 'ghost' : 'primary'}" style="font-size:11px;padding:5px 11px" onclick="launchStardewHuman()"><i data-lucide="play" class="xs"></i>${s.humanStarted ? '重新拉起主机' : '一键启动真人主机'}</button>
+          </div>
+        </div>
+        <div class="step-card ${s.ai1Online && s.ai2Online ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">2. 自动生成隔离 Mods 并拉起 AI</span><span class="pill ${s.ai1Online && s.ai2Online ? 'pill-green' : 'pill-amber'}" style="font-size:10px">${s.ai1Online && s.ai2Online ? '2/2 在线' : '1/2 在线'}</span></div>
+          <div class="step-desc">软链复用其他 Mod，仅独立拷贝 BWF 并改写 <span class="mono">McpPort</span>，免复制游戏本体。</div>
+          <div class="step-code">StardewModdingAPI --mods-path ".../stardew/grok/Mods"</div>
+          <div class="step-foot">
+            <button class="btn-pill primary" style="font-size:11px;padding:5px 11px" onclick="launchStardewAi()"><i data-lucide="zap" class="xs"></i>一键拉起未在线 AI 实例</button>
+          </div>
+        </div>
+        <div class="step-card ${s.humanStarted && s.ai1Online && s.ai2Online ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">3. 加入局域网房并开麦协作</span><span class="pill pill-blue" style="font-size:10px">127.0.0.1</span></div>
+          <div class="step-desc">AI 窗口点「合作 → 加入局域网游戏」输入 <span class="mono">127.0.0.1</span>，端口全绿后即可开麦分工。</div>
+          <div class="step-foot">
+            <button class="btn-pill violet" style="font-size:11px;padding:5px 11px" onclick="runHuddle()"><i data-lucide="messages-square" class="xs"></i>进房后立刻开麦分工</button>
+          </div>
+        </div>`;
+    } else if (activeLaunchGame === 'terraria') {
+      const s = LAUNCH_STATE.terraria;
+      chips.innerHTML = `
+        <span class="port-chip ${s.serverStarted ? 'online' : 'pending'}"><i class="port-dot"></i>tML Server :7777</span>
+        <span class="port-chip ${s.ai1Online ? 'online' : ''}"><i class="port-dot"></i>小鲸 :18090</span>
+        <span class="port-chip ${s.ai2Online ? 'online' : ''}"><i class="port-dot"></i>星璃 :18091</span>`;
+      body.innerHTML = `
+        <div class="step-card ${s.serverStarted ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">1. 启动本地 tModLoader 专用服</span><span class="pill ${s.serverStarted ? 'pill-green' : 'pill-amber'}" style="font-size:10px">${s.serverStarted ? '7777 在线' : '未启动'}</span></div>
+          <div class="step-desc">自动检测 <span class="mono">terraria-bridge.tmod</span> 并拉起本机局域网服（7777），真人走 Steam 直连。</div>
+          <div class="step-foot">
+            <button class="btn-pill primary" style="font-size:11px;padding:5px 11px" onclick="launchTerrariaServer()"><i data-lucide="server" class="xs"></i>一键启动本地服</button>
+          </div>
+        </div>
+        <div class="step-card ${s.ai1Online && s.ai2Online ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">2. 分配 AI 端口并拉起客户端</span><span class="pill ${s.ai1Online && s.ai2Online ? 'pill-green' : ''}" style="font-size:10px">18090 / 18091</span></div>
+          <div class="step-desc">为每只 AI 写入独立 <span class="mono">terraria-bridge</span> HTTP 端口并探活 <span class="mono">/health</span>。</div>
+          <div class="step-foot">
+            <button class="btn-pill primary" style="font-size:11px;padding:5px 11px" onclick="launchTerrariaAi()"><i data-lucide="zap" class="xs"></i>拉起双 AI 桥接</button>
+          </div>
+        </div>
+        <div class="step-card ${s.serverStarted && s.ai1Online ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">3. 真人连入 127.0.0.1:7777</span><span class="pill pill-blue" style="font-size:10px">F8 随时接管</span></div>
+          <div class="step-desc">首夜分工推荐：小鲸负责砍树建掩体，星璃负责插火把与矿洞探路。</div>
+          <div class="step-foot">
+            <button class="btn-pill ghost" style="font-size:11px;padding:5px 11px" onclick="probePorts()"><i data-lucide="activity" class="xs"></i>检测 /health</button>
+          </div>
+        </div>`;
+    } else {
+      const s = LAUNCH_STATE.dst;
+      chips.innerHTML = `
+        <span class="port-chip ${s.tokenSaved ? 'online' : 'pending'}"><i class="port-dot"></i>cluster_token</span>
+        <span class="port-chip ${s.clusterStarted ? 'online' : 'pending'}"><i class="port-dot"></i>单 Sidecar :18100（多 Agent）</span>`;
+      body.innerHTML = `
+        <div class="step-card ${s.tokenSaved ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">1. 配置 Klei cluster_token</span><span class="pill ${s.tokenSaved ? 'pill-green' : 'pill-amber'}" style="font-size:10px">${s.tokenSaved ? '已落盘' : '缺失'}</span></div>
+          <div class="step-desc">DST 无需多开游戏客户端，单专用服即可由 Sidecar 按 <span class="mono">agentId</span> 驱动多 AI。</div>
+          <div class="step-foot">
+            <input id="dst-token-inp" type="password" placeholder="粘贴 Klei 专用服 token…" style="flex:1;min-width:110px;padding:4px 8px;border-radius:6px;border:1px solid var(--stroke);background:var(--inset);color:var(--text-1);font-size:11px">
+            <button class="btn-pill primary" style="font-size:11px;padding:4px 10px" onclick="saveDstToken()">保存</button>
+          </div>
+        </div>
+        <div class="step-card ${s.tokenSaved ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">2. 勾选托管角色写入 modoverrides</span><span class="pill pill-blue" style="font-size:10px">T-M6-40</span></div>
+          <div class="step-desc">自动把小鲸、星璃的受控 UserID 逗号写入 <span class="mono">dst-bridge</span> 配置，互不串槽。</div>
+          <div class="step-code">controlled_users = "KU_whale,KU_grok"</div>
+        </div>
+        <div class="step-card ${s.clusterStarted ? 'done' : ''}">
+          <div class="step-top"><span class="step-num">3. 启动本地专用服 + Sidecar</span><span class="pill ${s.clusterStarted ? 'pill-green' : ''}" style="font-size:10px">${s.clusterStarted ? '18100 在线' : '待启动'}</span></div>
+          <div class="step-desc">一键起服后，真人打开 DST 客户端加入局域网房即可与多只 AI 共同求生。</div>
+          <div class="step-foot">
+            <button class="btn-pill primary" style="font-size:11px;padding:5px 11px" onclick="launchDstCluster()"><i data-lucide="flame" class="xs"></i>一键启动 DST 本地服</button>
+          </div>
+        </div>`;
+    }
+    lucide.createIcons();
+  }
+
+  function launchStardewHuman() {
+    LAUNCH_STATE.stardew.humanStarted = true;
+    renderLaunchWizard();
+    wbToast('已拉起星露谷真人主机（默认 Mods 目录）');
+  }
+  function launchStardewAi() {
+    wbToast('正在生成星璃隔离 Mods 目录并写入 McpPort=18081…');
+    setTimeout(() => {
+      LAUNCH_STATE.stardew.ai1Online = true;
+      LAUNCH_STATE.stardew.ai2Online = true;
+      renderLaunchWizard();
+      wbToast('小鲸 (:18080) 与星璃 (:18081) 均已探测在线');
+    }, 650);
+  }
+  function launchTerrariaServer() {
+    LAUNCH_STATE.terraria.serverStarted = true;
+    renderLaunchWizard();
+    wbToast('tModLoaderServer 本地服已在 127.0.0.1:7777 启动');
+  }
+  function launchTerrariaAi() {
+    LAUNCH_STATE.terraria.ai1Online = true;
+    LAUNCH_STATE.terraria.ai2Online = true;
+    renderLaunchWizard();
+    wbToast('泰拉瑞亚双 AI 桥接（:18090 / :18091）探测在线');
+  }
+  function saveDstToken() {
+    LAUNCH_STATE.dst.tokenSaved = true;
+    renderLaunchWizard();
+    wbToast('已写入本地集群 cluster_token.txt（不回传明文）');
+  }
+  function launchDstCluster() {
+    LAUNCH_STATE.dst.tokenSaved = true;
+    LAUNCH_STATE.dst.clusterStarted = true;
+    renderLaunchWizard();
+    wbToast('DST 专用服与单 Sidecar (:18100) 已启动，支持多 Agent 路由');
+  }
+  function probePorts() {
+    wbToast('已完成所有桥接端口探活（18080/18081/18090/18100）');
+  }
+  function toggleSfxDuck() {
+    sfxDuckOn = !sfxDuckOn;
+    document.getElementById('sfx-duck-sw').classList.toggle('on', sfxDuckOn);
+    wbToast(sfxDuckOn ? '动作原声音效已开启（TTS 说话时自动 ducking 至 15%）' : '已静音动作原声音效，仅保留对话 TTS');
+  }
+
+  /* 9 角色商店逻辑 */
+  function syncStoreBadge() {
+    const cnt = PACKS.filter((p) => p.installed).length;
+    document.getElementById('store-cnt-badge').textContent = `${cnt}/${PACKS.length}`;
+  }
+  function openStore() {
+    renderStoreGrid();
+    document.getElementById('store-modal').classList.add('open');
+  }
+  function closeStore() { document.getElementById('store-modal').classList.remove('open'); }
+  function renderStoreGrid() {
+    syncStoreBadge();
+    document.getElementById('store-grid').innerHTML = PACKS.map((p, idx) => `
+      <div class="pack-card ${p.installed ? 'installed' : ''}">
+        <div class="pack-head">
+          <div class="m-ava ${p.cls}">${p.name[0]}</div>
+          <div style="min-width:0">
+            <div style="font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:5px">
+              <span>${p.name}</span>
+              ${p.builtin ? '<span class="pill pill-blue" style="font-size:9px;padding:1px 6px">默认主宠</span>' : ''}
+            </div>
+            <div style="font-size:10.5px;color:var(--text-3)">${p.sub} · pets/${p.id}</div>
+          </div>
+        </div>
+        <div class="pack-tags">
+          <span class="pill" style="font-size:9.5px;padding:1px 7px">${p.clips} 动作</span>
+          <span class="pill ${p.audio > 0 ? 'pill-violet' : ''}" style="font-size:9.5px;padding:1px 7px">${p.audio > 0 ? p.audio + ' 原声音轨' : '纯视觉'}</span>
+          <span class="pill" style="font-size:9.5px;padding:1px 7px">${p.voice}</span>
+        </div>
+        <div class="pack-meta">${p.role}</div>
+        <div class="pack-foot">
+          <span style="font-size:10.5px;color:${p.installed ? 'var(--green)' : 'var(--text-3)'}">${p.installed ? '已就绪（Spritesheet）' : '未下载'}</span>
+          ${p.installed
+            ? `<button class="btn-pill ghost" style="font-size:11px;padding:3px 9px" onclick="inviteFromPack(${idx})">拉入小队</button>`
+            : `<button class="btn-pill primary" style="font-size:11px;padding:3px 9px" onclick="importSinglePack(${idx})">导入</button>`}
+        </div>
+      </div>`).join('');
+    lucide.createIcons();
+  }
+  function importSinglePack(idx) {
+    PACKS[idx].installed = true;
+    renderStoreGrid();
+    wbToast(`已导入「${PACKS[idx].name}」（${PACKS[idx].clips} 动作 + ${PACKS[idx].audio} 音轨），零转码即时可用`);
+  }
+  function importAllPacks() {
+    const pending = PACKS.filter((p) => !p.installed);
+    if (!pending.length) { wbToast('全部 9 套角色包（1,040 动作 + 480 音轨）均已导入完成'); return; }
+    const box = document.getElementById('store-progress');
+    const txt = document.getElementById('store-prog-text');
+    const pct = document.getElementById('store-prog-pct');
+    const bar = document.getElementById('store-prog-bar');
+    box.classList.add('show');
+    let done = 0;
+    const timer = setInterval(() => {
+      const target = pending[done];
+      if (!target) {
+        clearInterval(timer);
+        txt.textContent = '全部 9 套角色包已同步至 userData/pet-characters/（1,040 动作 + 480 音轨就绪）';
+        pct.textContent = '100%';
+        bar.style.width = '100%';
+        wbToast('全部 9 套角色包导入完成，可在多桌宠中随时召唤');
+        return;
+      }
+      target.installed = true;
+      done += 1;
+      const ratio = Math.round((done / pending.length) * 100);
+      txt.textContent = `正在同步 pets/${target.id}（${target.name} · ${target.clips} 动作 / ${target.audio} 音轨）…`;
+      pct.textContent = `${ratio}%`;
+      bar.style.width = `${ratio}%`;
+      renderStoreGrid();
+    }, 260);
+  }
+  function inviteFromPack(idx) {
+    const p = PACKS[idx];
+    const port = activeLaunchGame === 'dst' ? `dst:${p.id}` : activeLaunchGame === 'terraria' ? `:${18090 + MEMBERS.length - 1}` : `:${18080 + MEMBERS.length - 1}`;
+    MEMBERS.push({ id: p.id + '-' + Date.now(), name: p.name, role: `${p.sub} · ${p.voice}`, cls: p.cls, badge: '接管中', endpoint: port, task: '刚加入小队，等待下轮开麦分工', zone: '农场出生点', status: '待命', petWin: true, speaking: false });
+    closeStore();
+    renderMembers();
+    wbToast(`已邀请「${p.name}」加入小队（${port}），并召唤独立桌宠窗`);
+  }
+
+  /* 小队与群聊逻辑 */
+  function renderMembers() {
+    document.getElementById('mate-cnt').textContent = `${MEMBERS.length} 人`;
+    document.getElementById('member-list').innerHTML = MEMBERS.map((m, i) => `
+      <div class="card member-card${m.speaking ? ' speaking' : ''}">
+        <div class="m-top">
+          <div class="m-ava ${m.cls}">${m.name[0]}</div>
+          <div style="flex:1;min-width:0">
+            <div class="m-nm">${m.name}<span class="pill ${m.speaking ? 'pill-blue' : m.human ? 'pill-green' : ''}" style="font-size:9.5px;padding:1px 7px">${m.speaking ? '正在说话' : m.badge}</span></div>
+            <div class="m-sub">${m.role} · ${m.endpoint}</div>
+          </div>
+        </div>
+        <div class="m-task">${m.task}</div>
+        ${m.human ? '' : `<div class="m-foot">
+          <span>桌面独立桌宠窗</span>
+          <div class="sw${m.petWin ? ' on' : ''}" onclick="togglePetWin(${i})"></div>
+        </div>`}
+      </div>`).join('');
+    renderMentions();
+    renderBoard();
+    lucide.createIcons();
+  }
+
+  function renderMentions() {
+    const aiMates = MEMBERS.filter((m) => !m.human);
+    document.getElementById('mention-bar').innerHTML = `
+      <span style="font-size:11px;color:var(--text-3)">快速点名：</span>
+      ${aiMates.map((m) => `<button class="at-btn" onclick="insertAt('@${m.name} ')">@${m.name}</button>`).join('')}
+      <button class="at-btn" onclick="insertAt('@全队 ')">@全队（重议分工）</button>
+      <button class="at-btn" onclick="quickCmd('@小鲸 别钓了，来矿洞 12 层帮我！')">示例：叫小鲸来矿洞</button>`;
+  }
+
+  function renderBoard() {
+    document.getElementById('board-assigns').innerHTML = MEMBERS.map((m) => `
+      <div class="b-row">
+        <div><b>${m.name}</b><div style="font-size:10.5px;color:var(--text-3)">${m.task}</div></div>
+        <span class="pill ${m.status === '求助中' ? 'pill-amber' : 'pill-green'}" style="font-size:9.5px">${m.status}</span>
+      </div>`).join('');
+    document.getElementById('board-locks').innerHTML = LOCKS.map((l) => `
+      <div class="b-row"><span class="k">${l.area}</span><b class="mono">${l.owner}</b></div>`).join('');
+  }
+
+  function renderMessages() {
+    const box = document.getElementById('chat-flow');
+    box.innerHTML = MESSAGES.map((m) => {
+      if (m.type === 'plan') {
+        return `<div class="plan-card rise">
+          <h5><i data-lucide="check-circle-2" class="xs"></i>协商达成 · 已写入小队黑板 (${m.time})</h5>
+          ${m.rows.map(([k, v]) => `<div class="plan-row"><b>${k}</b><span>${v}</span></div>`).join('')}
+        </div>`;
+      }
+      const isMe = m.who === '主人';
+      return `<div class="msg ${isMe ? 'me' : ''} ${m.type || ''} rise">
+        <div class="msg-h">
+          ${!isMe ? `<div class="m-ava ${m.cls}" style="width:22px;height:22px;font-size:10.5px;border-radius:7px">${m.who[0]}</div>` : ''}
+          <b>${m.who}</b>
+          ${m.tag ? `<span class="pill ${m.type === 'huddle' ? 'pill-violet' : m.type === 'help' ? 'pill-amber' : ''}" style="font-size:9.5px;padding:1px 7px">${m.tag}</span>` : ''}
+          <span class="mono k" style="font-size:10px">${m.time}</span>
+        </div>
+        <div class="msg-bub">${m.text}</div>
+      </div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+    lucide.createIcons();
+  }
+
+  function togglePetWin(i) {
+    MEMBERS[i].petWin = !MEMBERS[i].petWin;
+    renderMembers();
+    wbToast(`${MEMBERS[i].name} 独立透明桌宠窗已${MEMBERS[i].petWin ? '召唤到桌面' : '收起'}`);
+  }
+
+  function setSpeaker(id) {
+    MEMBERS.forEach((m) => { m.speaking = m.id === id; });
+    renderMembers();
+  }
+
+  function runHuddle() {
+    wbToast('已发起小队开麦商量（上限 3 轮 · 语音锁串行播报 + 动作音效自动 ducking）');
+    setSpeaker('whale');
+    MESSAGES.push({ who: '小鲸', cls: 'whale', tag: '开麦商量 · 1/3', time: '刚刚', type: 'huddle', text: '快到下午啦，木材还差 155 个、金币差 1360g！星璃你去煤矿森林补完木头，我去卖鱼顺便给矿洞的主人带补给！' });
+    renderMessages();
+    setTimeout(() => {
+      setSpeaker('grok');
+      MESSAGES.push({ who: '星璃', cls: 'puff', tag: '开麦商量 · 2/3', time: '刚刚', type: 'huddle', text: '没问题，最后 155 根木头包在我身上！砍完我直接回农场箱子等你清点金币！' });
+      MEMBERS[1].task = '出货卖鱼并给矿洞主人送补给';
+      MEMBERS[2].task = '煤矿森林补齐剩余 155 木材';
+      renderMessages();
+      setTimeout(() => {
+        setSpeaker(null);
+        MESSAGES.push({ type: 'plan', time: '刚刚', rows: [['小鲸', '出货卖鱼 + 送补给给矿洞主人'], ['星璃', '煤矿森林补齐 155 木材']] });
+        renderMessages();
+      }, 850);
+    }, 850);
+  }
+
+  function simulateHelp() {
+    MEMBERS[2].status = '求助中';
+    setSpeaker('grok');
+    MESSAGES.push({ who: '星璃', cls: 'puff', tag: '队友求助 · need_help', time: '刚刚', type: 'help', text: '喂！背包满了而且体力只剩 15%，谁有空位顺路来煤矿森林接一下木头？' });
+    renderMessages(); renderMembers();
+    setTimeout(() => {
+      setSpeaker('whale');
+      MEMBERS[2].status = '进行中';
+      MEMBERS[1].task = '接力支援星璃（带料理 + 收木头）';
+      MESSAGES.push({ who: '小鲸', cls: 'whale', tag: '求助接力', time: '刚刚', type: 'normal', text: '真是拿你没办法！本鱼正好刚卖完鱼有空位，马上带海草过来接手你的木头！' });
+      renderMessages(); renderMembers();
+      setTimeout(() => setSpeaker(null), 1100);
+    }, 900);
+  }
+
+  function insertAt(txt) { const inp = document.getElementById('coop-inp'); inp.value = txt + inp.value; inp.focus(); }
+  function quickCmd(txt) { document.getElementById('coop-inp').value = txt; sendCoop(); }
+  function sendCoop() {
+    const inp = document.getElementById('coop-inp');
+    const txt = inp.value.trim();
+    if (!txt) return;
+    MESSAGES.push({ who: '主人', cls: 'human', tag: 'P0 指挥', time: '刚刚', type: 'normal', text: txt });
+    inp.value = '';
+    renderMessages();
+    if (txt.includes('@全队')) {
+      setTimeout(runHuddle, 400);
+    } else if (txt.includes('@星璃')) {
+      setTimeout(() => {
+        setSpeaker('grok');
+        MEMBERS[2].task = `执行主人指令：${txt.replace('@星璃', '').trim()}`;
+        MESSAGES.push({ who: '星璃', cls: 'puff', tag: 'P0 接单', time: '刚刚', type: 'normal', text: '收到！我马上切手头任务，搞定后在群里报点。' });
+        renderMessages(); renderMembers();
+        setTimeout(() => setSpeaker(null), 1100);
+      }, 450);
+    } else {
+      setTimeout(() => {
+        setSpeaker('whale');
+        MEMBERS[1].task = `执行主人指令：${txt.replace('@小鲸', '').trim()}`;
+        MESSAGES.push({ who: '小鲸', cls: 'whale', tag: 'P0 接单', time: '刚刚', type: 'normal', text: '哼，收到啦！本鱼立刻把鱼竿收起来赶过去支援主人！' });
+        renderMessages(); renderMembers();
+        setTimeout(() => setSpeaker(null), 1100);
+      }, 450);
+    }
+  }
+
+  function autoAssignPort() {
+    const g = document.getElementById('m-game').value;
+    const n = MEMBERS.filter((m) => !m.human).length;
+    document.getElementById('m-ep').value = g === 'dst' ? `127.0.0.1:18100 (agent-${n + 1})` : g === 'terraria' ? `127.0.0.1:${18090 + n}` : `127.0.0.1:${18080 + n}`;
+  }
+  function openAddMate() {
+    const sel = document.getElementById('m-char');
+    sel.innerHTML = PACKS.filter((p) => p.installed).map((p) => `<option value="${p.id}">${p.name}（${p.sub} · ${p.voice} · ${p.clips} 动作）</option>`).join('');
+    document.getElementById('m-game').value = activeLaunchGame;
+    autoAssignPort();
+    document.getElementById('mate-modal').classList.add('open');
+  }
+  function closeAddMate() { document.getElementById('mate-modal').classList.remove('open'); }
+  function confirmAddMate() {
+    const pid = document.getElementById('m-char').value;
+    const p = PACKS.find((x) => x.id === pid) || PACKS[2];
+    const ep = document.getElementById('m-ep').value.trim() || ':18082';
+    MEMBERS.push({ id: p.id + '-' + Date.now(), name: p.name, role: `${p.sub} · ${p.voice}`, cls: p.cls, badge: '已入队', endpoint: ep, task: '等待下轮开麦分配任务', zone: '农场出生点', status: '待命', petWin: true, speaking: false });
+    closeAddMate();
+    renderMembers();
+    wbToast(`已邀请「${p.name}」加入联机小队，并弹出独立桌宠窗`);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    syncStoreBadge();
+    renderLaunchWizard();
+    renderMembers();
+    renderMessages();
+  });
+</script>
+</body>
+</html>

@@ -102,6 +102,7 @@
       label: '游戏与直播',
       items: [
         { id: 'stardew', href: 'stardew.html', icon: 'gamepad-2', label: '游戏共玩', liveKey: 'autodrive' },
+        { id: 'coop', href: 'coop.html', icon: 'users', label: '联机协作', badge: '3 人' },
         { id: 'obs', href: 'obs-overlay.html', icon: 'monitor-play', label: 'OBS 透明挂件' },
       ],
     },
