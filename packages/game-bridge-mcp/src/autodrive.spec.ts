@@ -793,6 +793,37 @@ describe('autodrive 默认 sleep / UNCERTAIN-Failed 双分支', () => {
   });
 });
 
+describe('T-M6-10 真机回归：并发 start 只启一个循环', () => {
+  it('两次并发 start() 不会启动两个 loop（避免同一 ActionLock 互斥风暴）', async () => {
+    let decideCount = 0;
+    const adapter = {
+      gameId: 'stardew',
+      displayName: 'test',
+      transport: { callTool: async () => ({ kind: 'ok' as const, text: STATE_OK, isError: false }) },
+      ping: async () => { await new Promise((r) => setTimeout(r, 15)); return true; },
+      unreachableMessage: 'unreachable',
+      extractClock: () => null,
+      isLongAction: () => false,
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: 'ok' }),
+    } as unknown as import('./adapter').GameAdapter;
+    const runner = new AutodriveRunner(() => undefined, {
+      maxCycles: 2, stepDelayMs: 1, pollDelayMs: 1, sleep: async () => undefined,
+    }, adapter);
+    runner.setPlanner({
+      name: 'counting',
+      decide: async () => {
+        decideCount += 1;
+        return { kind: 'wait', seconds: 1, reason: 'count' };
+      },
+    });
+    await Promise.all([runner.start(), runner.start(), runner.start()]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await runner.stopAndWait();
+    // 单循环 maxCycles=2 → decide 最多 2 次；双循环会接近 4 次
+    expect(decideCount).toBeLessThanOrEqual(2);
+  });
+});
+
 describe('T-M6-10 真机回归：wait 求助去重', () => {
   it('相同原因的连续 wait 只发一次 watchdog / cycle-end（不刷屏）', async () => {
     const events: AutodriveEvent[] = [];

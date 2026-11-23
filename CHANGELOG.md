@@ -73,7 +73,7 @@
 
 ### Fixed
 
-- **满包无箱子死循环（T-M6-10 真机 2026-11-23）**：真实存档春21 08:30、背包空位 0、全是【留着】收集包材料、农场无箱子时，规则模式反复执行 `tidy_backpack` 并 15 次 FAILED，游戏时间冻结（BWF `McpFreezeTime`）形成空转。修复：`Planner.observeReceipt` 回执反馈 + `RulePlanner` 有界救援阶梯（可出货→`donate_bundles`→有箱才 tidy 且只试一次→`wait` 求助，绝不重复同一工具）；`wait` 相同原因只发一次 watchdog/cycle-end。真机新增高价值出路：识别「背包扩到 N 格：Ng」与 `[BuyBackpack]` 坐标，钱够时自动去皮埃尔 `interact` 并 `dialogue choice 0` 购买（真机实测 12→24 格、2890→890g），扩容后自驾恢复 `travel_to COMPLETED → fish`、时钟 09:00→10:10、watchdog 0。验证：planner-rescue 8/8、autodrive 55/55。**注意**：本轮用 `--use-mock-keychain` 启动，`brainMode=rule`，LLM 大脑路径未真机覆盖。
+- **满包无箱子死循环（T-M6-10 真机 2026-11-23）**：真实存档春21 08:30、背包空位 0、全是【留着】收集包材料、农场无箱子时，规则模式反复执行 `tidy_backpack` 并 15 次 FAILED，游戏时间冻结（BWF `McpFreezeTime`）形成空转。修复：`Planner.observeReceipt` 回执反馈 + `RulePlanner` 有界救援阶梯（可出货→`donate_bundles`→有箱才 tidy 且只试一次→`wait` 求助，绝不重复同一工具）；`wait` 相同原因只发一次 watchdog/cycle-end。真机新增高价值出路：识别「背包扩到 N 格：Ng」与 `[BuyBackpack]` 坐标，钱够时自动去皮埃尔 `interact` 并 `dialogue choice 0` 购买（真机实测 12→24 格、2890→890g），扩容后自驾恢复 `travel_to COMPLETED → fish`、时钟 09:00→10:10、watchdog 0。验证：planner-rescue 8/8、autodrive 55/55。**第二批真机**又抓到 `AutoDriveRunner.start()` 并发重入导致双循环共用 ActionLock（fish 互斥 ERROR 33 条），已加重入锁并复验：扩容后 travel_to/fish/ship_items 全 COMPLETED、0 ERROR / 0 watchdog，19:00 睡觉→春22 06:00 换日→出货→钓鱼持续正常。**注意**：本轮用 `--use-mock-keychain` 启动，`brainMode=rule`，LLM 大脑路径未真机覆盖。
 - **全功能真机回归修复（2026-11-22，用户指令「把所有功能都测试一遍」）**：
   - **浅色主题 legacy 面板黑块**：供应商/Harness/动作库仍在用 `bg-slate-900` 等深色写死类 → 浅色下把 `--color-slate-*` 色阶整体翻转（截图复验白卡）。
   - **饭碗/记忆 badge 不刷新**：回执扣米与换日日记不是推送式 → 15s 轮询 `rice:status`/`memory:stats`。

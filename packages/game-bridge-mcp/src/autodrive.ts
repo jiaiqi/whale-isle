@@ -42,6 +42,8 @@ export class AutodriveRunner {
   /** 会话标识：宿主事件出站与 P0 指令入站都以它为归属键（T-M6-27） */
   readonly sessionId: string = randomUUID();
   private running = false;
+  /** start() 重入锁：并发的两次 start（双击/外部+UI）只能启动一个循环 */
+  private starting = false;
   private cycle = 0;
   private loopTask: Promise<void> | null = null;
   readonly client: GameBridgeTransport;
@@ -87,16 +89,22 @@ export class AutodriveRunner {
   }
 
   async start(): Promise<void> {
-    if (this.running) return;
-    const alive = await this.adapter.ping();
-    if (!alive) throw new Error(this.adapter.unreachableMessage);
-    this.running = true;
-    const task = this.loop();
-    this.loopTask = task;
-    void task.then(
-      () => { if (this.loopTask === task) this.loopTask = null; },
-      () => { if (this.loopTask === task) this.loopTask = null; },
-    );
+    if (this.running || this.starting) return;
+    this.starting = true;
+    try {
+      const alive = await this.adapter.ping();
+      if (!alive) throw new Error(this.adapter.unreachableMessage);
+      if (this.running) return; // ping 期间可能被另一路 start 抢先
+      this.running = true;
+      const task = this.loop();
+      this.loopTask = task;
+      void task.then(
+        () => { if (this.loopTask === task) this.loopTask = null; },
+        () => { if (this.loopTask === task) this.loopTask = null; },
+      );
+    } finally {
+      this.starting = false;
+    }
   }
 
   stop(): void {
