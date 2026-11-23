@@ -5,6 +5,7 @@
 
 ### Added
 
+- **OBS 只读透明挂件 `/obs`（T-M6-34，T-M6-31 首个最小真实链路）**：内嵌 WebUI 新增 `GET /obs`——透明底、`STAGE_PROTOCOL=1`、token 鉴权、`obs-readonly` 声明；页面通过 `/ws` 订阅动作/回执并回放最近 20 条，只读、无任何指令/审批入口。中控台 OBS 页改为「复制 OBS 源地址」（含本机 token，提示勿外传），文案从「18765 接线中」改为真实的 18780 `/obs`。验证：webui-server 23/23、Electron UI E2E 4/4（真实内嵌服务 401/200 与协议标记）。投票/歌词/点歌层仍未接线，OBS 叠加观感待真机。
 - **语音后端如实展示（T-M6-33，审计发现）**：新增 `voice:backend` 只读探测与顶栏标识——`mcode` 角色音色链不额外标注，`say` 兜底显示「· say」，非 macOS 显示「· 未适配」，title 展示具体链路说明。此前界面只有「语音开/关」，容易让用户误以为始终在用角色 TTS。验证：探测单测 4/4、Electron UI E2E 断言 `data-voice-backend` 三态；真实听感与 Windows 适配仍待真机。
 - **CI 与仿真长时浸泡（T-M6-29 部分）**：新增 `.github/workflows/ci.yml`（ubuntu：typecheck / depcruise / 单测排除 Electron E2E / ruff+mypy+pytest；macOS：完整 `pnpm verify:gate` + Electron `desktop.e2e`/`ui.e2e`，不注入 secrets、不跑真实游戏）；新增 `pnpm soak:autodrive [分钟]`（`tools/scripts/soak-autodrive.mjs`），在本地星露谷仿真器上按 autodrive 节奏长跑，统计 get_state 失败率、异常回执率与 RSS/heap 趋势，12 秒冒烟实测 445 轮 / 1335 事件 / 0 失败 / 0 异常回执。Gate 4 更名为「回环契约 E2E」并在脚本与 VERIFY 顶部写明它是测试内手工组合（假语音适配器 + `:memory:` SQLite），**不是**生产端到端。CI 尚未在远端实际跑过，如实记录。
 - **多游戏/多端点事件与指令隔离（T-M6-27，P0 正确性）**：autodrive 事件现在强制携带 `sessionId / gameId / generation`，联机 agent 池事件另带 `agentId + sessionId`；渲染层与桌宠只消费当前会话事件，旧 generation、异 sessionId、异 gameId 与联机端点事件一律丢弃，切换游戏后不再出现「星露谷页显示泰拉瑞亚动作」或旧回执污染语音/记忆。P0 指令新增可选 `expectedSessionId`，主进程拒绝来自已切换会话的迟到指令（不误发到新游戏），省略时保持旧调用兼容。验证：会话过滤纯函数 6 项、双 runner 并发隔离 1 项、runner 会话标识 2 项、Electron E2E 1 项（状态含会话标识 + 过期指令被拒绝），相关包单测 223 项全绿。仍属 `[E2E-HOST]`/`[SIMULATION]`，真实多游戏并发仍待真机。

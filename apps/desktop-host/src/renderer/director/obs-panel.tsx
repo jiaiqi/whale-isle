@@ -1,9 +1,11 @@
 /**
- * OBS 透明挂件（v4 设计稿 06）：图层开关 + 520px 预演 + 接入状态。
- * 预演用真实 autodrive 事件渲染双轨气泡、真实饭碗余额；投票/歌词层来自 STAGE_PROTOCOL（T-M5-09 接线中）。
+ * OBS 透明挂件（v4 设计稿 06）：图层开关 + 520px 预演 + 真实浏览器源。
+ * T-M6-34：内嵌 WebUI 的 `/obs` 只读透明挂件已接通（STAGE_PROTOCOL=1，WebSocket 推送
+ * 动作/回执，token 鉴权）；本页预演用真实 autodrive 事件渲染，投票/歌词层仍为预演。
  */
 import { useState } from 'react';
-import { MonitorPlay, Radio, Wheat } from 'lucide-react';
+import { toast } from 'sonner';
+import { Copy, MonitorPlay, Radio, Wheat } from 'lucide-react';
 import type { AutodriveEventView } from './bridge';
 
 const LAYERS = [
@@ -35,10 +37,29 @@ export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.El
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold"><MonitorPlay size={18} /> OBS 透明挂件</h1>
           <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
-            18765 浏览器源 · STAGE_PROTOCOL=1 SSE · 透明底双轨气泡 / 议会投票 / 歌词卡 / 饭碗徽
+            内嵌 18780 <span className="mono">/obs</span> 浏览器源 · STAGE_PROTOCOL=1（WebSocket）· 只读透明底
           </p>
         </div>
-        <span className="pill pill-amber"><Radio size={11} /> STAGE_PROTOCOL 接线中（T-M5-09）</span>
+        <div className="flex items-center gap-1.5">
+          <span className="pill pill-green"><Radio size={11} />只读挂件已接通</span>
+          <button
+            className="pill"
+            data-obs-copy
+            onClick={() => {
+              void window.directorBridge.webuiInfo().then(async (info) => {
+                const url = `http://127.0.0.1:${info.port}/obs?token=${encodeURIComponent(info.token)}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  toast.success('OBS 浏览器源地址已复制（含本机 token，勿外传）');
+                } catch {
+                  toast.error(`复制失败，请手动使用：${url}`);
+                }
+              }).catch(() => toast.error('WebUI 未启动，无法生成 OBS 源地址'));
+            }}
+          >
+            <Copy size={11} />复制 OBS 源地址
+          </button>
+        </div>
       </header>
 
       <div className="mb-3 flex flex-wrap gap-1.5">

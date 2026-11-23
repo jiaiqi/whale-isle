@@ -390,6 +390,118 @@ ol li { font-size: 12px; background: #020617; border-radius: 6px; padding: 6px 8
 </html>`;
 }
 
+/**
+ * OBS 透明挂件（T-M6-34，ADR-9 `/obs` 最小真实链路）。
+ * - 只读：仅订阅 `/ws` 事件与 `/api/state` 快照，不包含任何指令/审批入口。
+ * - 透明背景：OBS 浏览器源直接叠加；文本带阴影保证亮/暗场景可读。
+ * - `data-stage-protocol="1"` 供 OBS/中控端做版本协商（STAGE_PROTOCOL）。
+ */
+function renderObsHtml(token: string): string {
+  return `<!doctype html>
+<html lang="zh-CN" data-stage-protocol="1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="stage-protocol" content="1">
+<meta name="obs-readonly" content="1">
+<meta name="webui-token" content="${escapeHtml(token)}">
+<title>鲸屿 · OBS 挂件</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif; }
+  .stack { position: fixed; left: 28px; bottom: 28px; display: flex; flex-direction: column; gap: 8px; max-width: 620px; }
+  .card {
+    padding: 10px 14px; border-radius: 16px;
+    background: rgba(10, 10, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #f5f5f7; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #b9b9c0; }
+  .dot { width: 7px; height: 7px; border-radius: 99px; background: #8d8d93; }
+  .dot.live { background: #30d158; box-shadow: 0 0 8px rgba(48, 209, 88, 0.8); }
+  .action { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; color: #6fb7ff; }
+  .intent { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #d5d5dc; }
+  .receipt { font-size: 12px; line-height: 1.55; color: #c9c9d1; }
+  .receipt b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .ok b { color: #48d38d; } .warn b { color: #f5b74a; } .fail b { color: #ff7b7b; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<div class="stack">
+  <div class="card" id="action-card">
+    <div class="row"><span class="dot" id="dot"></span><span id="status">待命</span></div>
+    <div class="action" id="action">idle</div>
+    <div class="intent" id="intent">等待自动驾驶启动…</div>
+  </div>
+  <div class="card receipt hide" id="receipt-card"><b id="receipt-status"></b> <span id="receipt-text"></span></div>
+</div>
+<script>
+(function () {
+  var meta = document.querySelector('meta[name="webui-token"]');
+  var token = meta ? meta.getAttribute('content') || '' : '';
+  var actionEl = document.getElementById('action');
+  var intentEl = document.getElementById('intent');
+  var statusEl = document.getElementById('status');
+  var dotEl = document.getElementById('dot');
+  var receiptCard = document.getElementById('receipt-card');
+  var receiptStatus = document.getElementById('receipt-status');
+  var receiptText = document.getElementById('receipt-text');
+  var hideTimer = 0;
+  function setRunning(running) {
+    statusEl.textContent = running ? '自动驾驶中' : '待命';
+    dotEl.className = 'dot' + (running ? ' live' : '');
+  }
+  function applyEvent(event) {
+    if (!event || typeof event !== 'object') return;
+    if (event.type === 'state') { setRunning(true); return; }
+    if (event.type === 'decision' && event.tool !== 'think') {
+      actionEl.textContent = String(event.tool || 'idle');
+      intentEl.textContent = String(event.intent || '');
+      setRunning(true);
+      return;
+    }
+    if (event.type === 'receipt' && event.status) {
+      var cls = event.status === 'COMPLETED' ? 'ok' : (event.status === 'UNCERTAIN' || event.status === 'TIMEOUT') ? 'warn' : 'fail';
+      receiptCard.className = 'card receipt ' + cls;
+      receiptStatus.textContent = event.status;
+      receiptText.textContent = String(event.tool || '') + ' · ' + String(event.summary || '').slice(0, 120);
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(function () { receiptCard.className = 'card receipt hide'; }, 12000);
+    }
+  }
+  function api(path) {
+    return fetch(path, { headers: { Authorization: 'Bearer ' + token } }).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).catch(function () { return null; });
+  }
+  api('/api/state').then(function (state) {
+    if (!state) return;
+    setRunning(state.running === true);
+    var events = Array.isArray(state.events) ? state.events : [];
+    for (var i = events.length - 1; i >= 0 && i >= events.length - 20; i -= 1) applyEvent(events[i]);
+  });
+  function connect() {
+    var scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var socket = new WebSocket(scheme + location.host + '/ws?token=' + encodeURIComponent(token));
+    socket.addEventListener('message', function (event) {
+      var message;
+      try { message = JSON.parse(String(event.data)); } catch (error) { return; }
+      if (!message) return;
+      if (message.type === 'event') applyEvent(message.data);
+      else if (message.type === 'hello' && message.data && Array.isArray(message.data.events)) {
+        message.data.events.slice(-20).forEach(applyEvent);
+      }
+    });
+    socket.addEventListener('close', function () { setTimeout(connect, 2000); });
+  }
+  connect();
+})();
+</script>
+</body>
+</html>`;
+}
+
 /** 升级握手失败：直接写 HTTP 响应后销毁 socket（不能走 ServerResponse） */
 function rejectUpgrade(socket: Duplex, status: number, message: string): void {
   const body = JSON.stringify({ ok: false, error: message });
@@ -631,6 +743,23 @@ export function createWebUIServer(options: WebUIServerOptions = {}): WebUIServer
         return;
       }
       const html = renderShellHtml(token);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Length', String(Buffer.byteLength(html, 'utf8')));
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; img-src 'self' data:; media-src 'self'",
+      );
+      res.end(html);
+      return;
+    }
+
+    if (pathname === '/obs') {
+      if (method !== 'GET') {
+        methodNotAllowed(res, ['GET']);
+        return;
+      }
+      const html = renderObsHtml(token);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Length', String(Buffer.byteLength(html, 'utf8')));

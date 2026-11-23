@@ -436,4 +436,42 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       await app.close();
     }
   }, 90_000);
+
+  /**
+   * [E2E-HOST] T-M6-34：OBS 只读透明挂件 `/obs`。
+   * 真实 Electron 内嵌 WebUI 上：无 token 401、有 token 200、声明 STAGE_PROTOCOL=1、
+   * 页面不含任何写入口（只读）。
+   */
+  it('OBS /obs 只读挂件：鉴权 + STAGE_PROTOCOL', { timeout: 90_000 }, async () => {
+    const app = await electron.launch({
+      // Electron 45 新二进制会让 macOS 弹「Safe Storage」钥匙串授权框并阻塞启动；
+      // 测试用 mock keychain 隔离（CI 同理）。
+      args: ['--use-mock-keychain', mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(
+        () => Boolean((window as unknown as { directorBridge?: { webuiInfo?: unknown } }).directorBridge?.webuiInfo),
+        { timeout: 30_000 },
+      );
+      const info = await page.evaluate(() => (window as unknown as {
+        directorBridge: { webuiInfo(): Promise<{ ok: boolean; port: number; token: string }> };
+      }).directorBridge.webuiInfo());
+      expect(info.ok).toBe(true);
+
+      const denied = await fetch(`http://127.0.0.1:${info.port}/obs`);
+      expect(denied.status).toBe(401);
+
+      const ok = await fetch(`http://127.0.0.1:${info.port}/obs?token=${encodeURIComponent(info.token)}`);
+      expect(ok.status).toBe(200);
+      const html = await ok.text();
+      expect(html).toContain('data-stage-protocol="1"');
+      expect(html).toContain('name="obs-readonly" content="1"');
+      expect(html).not.toContain('/api/command');
+    } finally {
+      await app.close();
+    }
+  }, 90_000);
 });

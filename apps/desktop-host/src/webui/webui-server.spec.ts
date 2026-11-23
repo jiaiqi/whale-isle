@@ -216,6 +216,35 @@ describe('[WebUI] 鉴权与状态', () => {
   });
 });
 
+describe('[WebUI] OBS 透明挂件 /obs（T-M6-34）', () => {
+  it('无 token → 401；有 token → 200 且声明 stage protocol / 只读', async () => {
+    const server = await startWebUI();
+    const denied = await fetch(`${base(server)}/obs`);
+    expect(denied.status).toBe(401);
+
+    const response = await fetch(`${base(server)}/obs?token=${TEST_TOKEN}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const html = await response.text();
+    // 版本协商 + 只读声明（OBS 端可据此拒绝注入指令）
+    expect(html).toContain('data-stage-protocol="1"');
+    expect(html).toContain('name="stage-protocol" content="1"');
+    expect(html).toContain('name="obs-readonly" content="1"');
+    // 挂件只读：不得包含任何写操作入口
+    expect(html).not.toContain('/api/command');
+    expect(html).not.toContain('/api/approve');
+    // WS 令牌通过 meta 注入，且已 HTML 转义
+    expect(html).toContain(`name="webui-token" content="${TEST_TOKEN}"`);
+  });
+
+  it('/obs 非 GET → 405', async () => {
+    const server = await startWebUI();
+    const response = await fetch(`${base(server)}/obs?token=${TEST_TOKEN}`, { method: 'POST' });
+    expect(response.status).toBe(405);
+  });
+});
+
 describe('[WebUI] /api/command', () => {
   it('转发 text（trim 后）并返回 onCommand 结果', async () => {
     const onCommand = vi.fn(async (text: string) => ({ reply: `收到：${text}` }));
