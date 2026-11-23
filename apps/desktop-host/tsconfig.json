@@ -26,6 +26,27 @@
     },
     {
       "path": "../../packages/persona-brain"
+    },
+    {
+      "path": "../../packages/agent-harness"
+    },
+    {
+      "path": "../../packages/game-bridge-mcp"
+    },
+    {
+      "path": "../../packages/live-stream-hub"
+    },
+    {
+      "path": "../../packages/local-store"
+    },
+    {
+      "path": "../../packages/memory-graph"
+    },
+    {
+      "path": "../../packages/model-gateway"
+    },
+    {
+      "path": "../../packages/plugin-kit"
     }
   ]
 }
