@@ -132,6 +132,8 @@ function isGameId(value: string | null): value is GameId {
 }
 
 function isTabEnabled(tab: Tab, enabledPlugins: Set<string>): boolean {
+  // 联机协作是核心内置页：旧 localStorage 插件集合没有 coop 时也必须可见
+  if (tab === 'coop') return true;
   if (tab === 'stardew') return GAME_OPTIONS.some((game) => enabledPlugins.has(game.id)) || enabledPlugins.has('mods');
   return enabledPlugins.has(tab);
 }
@@ -691,9 +693,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             {petTab === 'stage'
               ? <PetStagePanel events={events} running={running} characters={characters} characterId={characterId} onSelectCharacter={(id) => void selectCharacter(id)} />
               : <PetsPanel />}
-            <div className="mt-4"><CoopPanel /></div>
           </div>
         )}
+
+        {tab === 'coop' && <CoopPanel />}
 
         {tab === 'stardew' && (
           <section data-game-panel data-active-game={activeGame} data-active-subtab={gameSubtab} className="h-full overflow-y-auto">

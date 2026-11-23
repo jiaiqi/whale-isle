@@ -561,4 +561,56 @@ export default {
       await app.close();
     }
   }, 90_000);
+
+  /** [E2E-HOST] T-M6-38/39：独立联机协作页 + agentId 多桌宠窗口开关。 */
+  it('联机协作大厅可渲染，且多桌宠窗口按 agentId 独立打开/关闭', { timeout: 90_000 }, async () => {
+    const app = await electron.launch({
+      args: ['--use-mock-keychain', mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(
+        () => Boolean((window as unknown as { directorBridge?: { coopBlackboardGet?: unknown } }).directorBridge?.coopBlackboardGet),
+        { timeout: 30_000 },
+      );
+      await page.evaluate(() => localStorage.setItem('wb-tab', 'coop'));
+      await page.reload();
+      await page.waitForSelector('[data-coop-page]', { timeout: 20_000 });
+      expect(await page.locator('[data-coop-member="human"]').count()).toBe(1);
+      expect(await page.locator('[data-coop-send]').count()).toBe(1);
+      await page.evaluate(() => (window as unknown as {
+        directorBridge: { coopGoalSet(goal: unknown): Promise<{ ok: boolean }> };
+      }).directorBridge.coopGoalSet({
+        id: 'e2e-goal', title: 'E2E 建鸡舍', gameId: 'stardew', deadline: '', status: 'active',
+        metrics: [{ label: '团队金币', current: 0, target: 4_000, unit: 'g', source: 'team_money' }],
+      }));
+      await page.waitForFunction(() => document.querySelector('[data-coop-page]')?.textContent?.includes('E2E 建鸡舍'), { timeout: 10_000 });
+      expect((await page.locator('[data-coop-page]').innerText())).toContain('0 / 4,000g');
+
+      const opened = await page.evaluate(() => (window as unknown as {
+        directorBridge: { petWindowOpen(agentId: string, characterId?: string): Promise<{ ok: boolean; error?: string }> };
+      }).directorBridge.petWindowOpen('agent-e2e', 'blue-whale-maid'));
+      expect(opened, opened.error).toMatchObject({ ok: true });
+      const extra = await waitForWindow(app, 'agentId=agent-e2e', 20_000);
+      await extra.waitForFunction(() => Boolean((window as unknown as { __petStageReady?: boolean }).__petStageReady), { timeout: 20_000 });
+      const list = await page.evaluate(() => (window as unknown as {
+        directorBridge: { petWindowList(): Promise<Array<{ agentId: string; characterId: string }>> };
+      }).directorBridge.petWindowList());
+      expect(list.find((item) => item.agentId === 'agent-e2e')).toMatchObject({ characterId: 'blue-whale-maid' });
+
+      await page.evaluate(() => (window as unknown as {
+        directorBridge: { petWindowClose(agentId: string): Promise<{ ok: boolean }> };
+      }).directorBridge.petWindowClose('agent-e2e'));
+      await waitFor(page, async () => {
+        const latest = await page.evaluate(() => (window as unknown as {
+          directorBridge: { petWindowList(): Promise<Array<{ agentId: string }>> };
+        }).directorBridge.petWindowList());
+        return latest.every((item) => item.agentId !== 'agent-e2e');
+      }, 10_000);
+    } finally {
+      await app.close();
+    }
+  }, 90_000);
 });

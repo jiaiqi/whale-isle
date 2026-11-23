@@ -24,6 +24,13 @@ interface PetStageBridge {
   dragTo(x: number, y: number): Promise<[number, number] | null>;
   prefsGet(): Promise<PetDesktopPrefs>;
   prefsSet(update: Partial<PetDesktopPrefs>): Promise<PetDesktopPrefs>;
+  windowPrefsGet(agentId: string): Promise<{ scale: number; locked: boolean; characterId: string } | null>;
+  windowPrefsSet(agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown>;
+  onWindowPrefsChanged?(handler: (prefs: { scale: number; locked: boolean; characterId: string }) => void): void;
+  onCoopSpeaker?(handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void;
+  onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
+  onPetBubble?(handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void;
+  onPetState?(handler: (event: { agentId: string; state?: unknown }) => void): void;
   onScaleChanged?(handler: (scale: number) => void): void;
   characterManifest(id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   onCharacterChanged?(handler: (character: { id: string; anchorRatio: number }) => void): void;
@@ -40,6 +47,23 @@ declare global {
 }
 
 const bridge = window.petStage;
+/**
+ * 多桌宠：窗口身份只从 URL hash 读取（`#/pet-stage?agentId=...&characterId=...`）。
+ * 无 hash 的旧启动方式回落 default，保持单窗兼容。
+ */
+function readPetStageContext(): { agentId: string; characterId?: string } {
+  const decode = (url: URLSearchParams): { agentId: string; characterId?: string } => {
+    const agentId = url.get('agentId')?.trim() || 'default';
+    const characterId = url.get('characterId')?.trim() || undefined;
+    return { agentId, ...(characterId === undefined ? {} : { characterId }) };
+  };
+  const hashQuery = location.hash.includes('?') ? location.hash.slice(location.hash.indexOf('?') + 1) : '';
+  if (hashQuery !== '') return decode(new URLSearchParams(hashQuery));
+  return decode(new URLSearchParams(location.search));
+}
+const petContext = readPetStageContext();
+const isEventForThisPet = (agentId: string | undefined): boolean =>
+  agentId === undefined ? petContext.agentId === 'default' : agentId === '*' || agentId === petContext.agentId;
 const stage = document.getElementById('stage') as HTMLDivElement;
 const badgeEl = document.getElementById('dev-badge') as HTMLDivElement;
 
@@ -124,10 +148,17 @@ async function loadCharacterManifest(id: string): Promise<void> {
   await renderer.load(rawManifest);
   await renderer.play('idle');
 }
-void bridge.prefsGet()
-  .then((p) => loadCharacterManifest(p.characterId))
-  .catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
+void (async () => {
+  const globals = await bridge.prefsGet();
+  let characterId = petContext.characterId;
+  if (characterId === undefined) {
+    const own = await bridge.windowPrefsGet(petContext.agentId).catch(() => null);
+    characterId = own?.characterId ?? globals.characterId;
+  }
+  await loadCharacterManifest(characterId);
+})().catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
 bridge.onCharacterChanged?.((character) => {
+  // manager 只会向 default 窗口发送全局角色快切；各联机窗角色由 URL/窗口 prefs 固定
   if (typeof character.anchorRatio === 'number') {
     document.documentElement.style.setProperty('--pet-anchor-ratio', String(character.anchorRatio));
   }
@@ -210,8 +241,9 @@ type AutodriveEventLite = {
 if (window.directorBridge?.onAutodriveEvent) {
   let latestGeneration = -1;
   window.directorBridge.onAutodriveEvent((event: AutodriveEventLite) => {
-    // 联机端点事件由各自 agent 负责，不混入主桌宠动作/气泡
-    if (event.agentId !== undefined) return;
+    // T-M6-38：只消费本窗 agent 的事件；无 agentId 的旧单机事件只归 default，
+    // 避免单机自驾回执把其他联机桌宠也带着播动作/气泡。
+    if (!isEventForThisPet(event.agentId)) return;
     // 旧会话的迟到事件（切游戏/重启后）不得再驱动动画与内心戏
     if (typeof event.generation === 'number') {
       if (event.generation < latestGeneration) return;
@@ -240,6 +272,49 @@ if (window.directorBridge?.onAutodriveEvent) {
     }
   });
 }
+
+// ── T-M6-38：多桌宠发言态 / 定向动作 / 定向气泡 ──
+// 同一时刻最多一只 speaking；非发言桌宠切倾听微动作，idle 后回无事态。
+let listeningToTeammate = false;
+bridge.onCoopSpeaker?.((event) => {
+  if (event.state === 'speaking') {
+    if (event.activeAgentId === petContext.agentId) {
+      listeningToTeammate = false;
+      lastEventAt = Date.now();
+      // 现有角色动作库没有独立 talk 槽位：用「认真状态」承载开口播报，避免假装有口型资产
+      void renderer.play('game_focus').catch(() => undefined);
+    } else if (event.activeAgentId !== null) {
+      listeningToTeammate = true;
+      void renderer.play('thinking_tail_wag').catch(() => undefined);
+    }
+  } else if (listeningToTeammate) {
+    listeningToTeammate = false;
+    void renderer.play('idle').catch(() => undefined);
+  }
+});
+bridge.onPetAction?.((event) => {
+  if (!isEventForThisPet(event.agentId)) return;
+  lastEventAt = Date.now();
+  void renderer.play(event.action as PetActionState).catch(() => undefined);
+});
+bridge.onPetBubble?.((event) => {
+  if (!isEventForThisPet(event.agentId)) return;
+  lastEventAt = Date.now();
+  if (event.kind === 'thought') {
+    widgets.showThought(event.text);
+    clearTimeout(thoughtTimer);
+    thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
+  } else {
+    widgets.showDialog(event.text);
+    clearTimeout(dialogTimer);
+    dialogTimer = setTimeout(() => widgets.hideDialog(), 10_000);
+  }
+});
+bridge.onPetState?.((event) => {
+  if (!isEventForThisPet(event.agentId)) return;
+  lastEventAt = Date.now();
+  if (typeof event.state === 'string') widgets.showThought(event.state);
+});
 
 // ---- alpha 穿透探针 ----
 const probeCanvas = document.createElement('canvas');
@@ -296,6 +371,7 @@ probe.start();
 bridge.onTestAlpha?.((alpha) => void probe.force(alpha));
 
 // ---- 拖拽甩抛 ----
+let petLocked = false;
 let dragging = false;
 let samples: DragSample[] = [];
 let throwSim: ReturnType<typeof createThrow> | null = null;
@@ -305,7 +381,7 @@ let raf = 0;
 let grabOffset: { x: number; y: number } | null = null;
 
 stage.addEventListener('mousedown', (event) => {
-  if (event.button !== 0) return;
+  if (event.button !== 0 || petLocked) return;
   dragging = true;
   throwSim = null;
   grabOffset = null;
@@ -445,21 +521,32 @@ const riceBowlWidget = mountRiceBowlWidget(stage);
 
 // ── T-M6-20 缩放：滚轮 / 右键菜单 / 主进程广播（中控台滑块）同步 ──
 const setScale = (next: number): void => {
+  if (petLocked) return;
   const clamped = Math.min(Math.max(Math.round(next * 10) / 10, 0.6), 2);
   if (clamped === petScale) return;
   // 乐观更新：滚轮连续滚动时不等主进程广播回来就累计，否则连滚两格只生效一格
   petScale = clamped;
   applyStageScale();
   widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  void bridge.prefsSet({ scale: clamped }); // 主进程 patch 钩子改窗口 bounds + 广播
+  void bridge.windowPrefsSet(petContext.agentId, { scale: clamped }); // manager 改本窗 bounds + 广播
 };
-void bridge.prefsGet().then((p) => {
+void bridge.windowPrefsGet(petContext.agentId).then((p) => {
+  if (p === null) return;
+  petLocked = p.locked;
   if (p.scale !== 1) {
     petScale = p.scale;
     applyStageScale();
     widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
   }
 }).catch(() => undefined);
+bridge.onWindowPrefsChanged?.((prefs) => {
+  petLocked = prefs.locked;
+  if (prefs.scale !== petScale) {
+    petScale = prefs.scale;
+    applyStageScale();
+    widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+  }
+});
 bridge.onScaleChanged?.((scale) => {
   petScale = scale;
   applyStageScale();
@@ -468,6 +555,7 @@ bridge.onScaleChanged?.((scale) => {
 // 滚轮缩放：只在桌宠实体区域触发（透明区仍穿透，不影响桌面操作）
 stage.addEventListener('wheel', (event) => {
   event.preventDefault();
+  if (petLocked) return;
   setScale(petScale + (event.deltaY < 0 ? 0.1 : -0.1));
 }, { passive: false });
 

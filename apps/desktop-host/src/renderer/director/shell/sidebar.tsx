@@ -5,14 +5,14 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AudioLines, Blocks, Brain, ChevronDown, Cpu, Fish, Gamepad2, MessageSquare, MonitorPlay, Plus,
-  Search, Terminal, Wheat,
+  Search, Terminal, Users, Wheat,
   type LucideIcon,
 } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE, whaleMarkPaths } from '../../../shared/brand';
 import type { CharacterSummary } from '../bridge';
 
 export type Tab =
-  | 'chat' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'obs' | 'harness' | 'providers' | 'plugins';
+  | 'chat' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'coop' | 'obs' | 'harness' | 'providers' | 'plugins';
 
 export interface NavItem {
   id: Tab;
@@ -41,6 +41,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: '游戏与直播',
     items: [
       { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '游戏与直播', live: true },
+      { id: 'coop', label: '联机协作', icon: Users, group: '游戏与直播' },
       { id: 'obs', label: 'OBS 透明挂件', icon: MonitorPlay, group: '游戏与直播' },
     ],
   },

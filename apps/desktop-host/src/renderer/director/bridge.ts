@@ -2,6 +2,16 @@
  * preload directorBridge 的 renderer 侧类型（T-dir-01）。
  * 明文 key 只上行；渲染进程永远只见掩码（运行期安全锁）。
  */
+import type {
+  CoopSpeakerEvent,
+  McpEndpoint,
+  PetWindowView,
+  TeamBlackboardSnapshot,
+  TeamCommsMessage,
+  TeamGoal,
+  TeamPlan,
+} from '@workbench/shared-protocol';
+
 export const GAME_OPTIONS = [
   { id: 'stardew', label: '星露谷物语', shortLabel: '星露谷' },
   { id: 'terraria', label: '泰拉瑞亚', shortLabel: '泰拉瑞亚' },
@@ -43,6 +53,20 @@ export interface CharacterSummary {
   builtin: boolean;
   licenseScope: string;
   voiceId: string;
+}
+
+/** 联机端点视图（主进程 coop:endpoints） */
+export interface CoopEndpointView {
+  id: string;
+  displayName: string;
+  gameId: GameId;
+  endpoint: string;
+  characterId: string;
+  routingId: string;
+  enabled: boolean;
+  running: boolean;
+  error: string | null;
+  characterName: string;
 }
 
 export interface ProviderVaultResponse {
@@ -269,9 +293,24 @@ export interface DirectorBridge {
   characterList(): Promise<CharacterSummary[]>;
   characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;
   // T-M6-22 多桌宠联机端点池
-  coopEndpoints(): Promise<Array<{ id: string; displayName: string; gameId: string; endpoint: string; characterId: string; enabled: boolean; running: boolean; error: string | null }>>;
+  coopEndpoints(): Promise<CoopEndpointView[]>;
   coopStart(id: string): Promise<{ ok: boolean; error?: string }>;
   coopStop(id: string): Promise<{ ok: boolean }>;
+  coopEndpointsSave(endpoints: McpEndpoint[]): Promise<{ ok: boolean; error?: string; endpoints?: CoopEndpointView[] }>;
+  coopBlackboardGet(): Promise<{ snapshot: TeamBlackboardSnapshot; messages: TeamCommsMessage[] }>;
+  coopGoalSet(goal: TeamGoal): Promise<{ ok: boolean; error?: string; goal?: TeamGoal }>;
+  coopChatSend(input: { text: string; mentions?: string[] }): Promise<{ ok: boolean; error?: string; route?: string; fallback?: boolean }>;
+  coopHuddleStart(input?: { goalTitle?: string; reason?: string; note?: string }): Promise<{ ok: boolean; error?: string; fallback?: boolean; rounds?: number; plan?: TeamPlan }>;
+  coopHelpRequest(input: { agentId: string; reason: string }): Promise<{ ok: boolean; error?: string; mode?: string; helperAgentId?: string; fallback?: boolean }>;
+  onCoopBlackboardUpdate(handler: (payload: { snapshot: TeamBlackboardSnapshot; messages: TeamCommsMessage[] }) => void): () => void;
+  onCoopCommsMessage(handler: (message: TeamCommsMessage) => void): () => void;
+  onCoopSpeaker(handler: (event: CoopSpeakerEvent) => void): () => void;
+  // T-M6-38 多桌宠窗口
+  petWindowOpen(agentId: string, characterId?: string): Promise<{ ok: boolean; error?: string; window?: PetWindowView }>;
+  petWindowClose(agentId: string): Promise<{ ok: boolean }>;
+  petWindowList(): Promise<PetWindowView[]>;
+  petWindowPrefsSet(agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown>;
+  onPetWindowListChanged(handler: (list: PetWindowView[]) => void): () => void;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
   riceStatus(): Promise<import('@workbench/shared-protocol').RiceBowlStatus>;
   brainApplyConfig(config: import('@workbench/shared-protocol').BrainRuntimeConfig): Promise<BrainApplyView>;
