@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CoopSpeakerEvent",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/CoopSpeakerEvent",
+  "$defs": {
+    "CoopSpeakerEvent": {
+      "type": "object",
+      "properties": {
+        "activeAgentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speakerName": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "speaking",
+            "idle"
+          ]
+        },
+        "voiceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "activeAgentId",
+        "speakerName",
+        "state"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

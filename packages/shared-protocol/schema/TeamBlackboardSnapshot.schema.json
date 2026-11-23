@@ -1,0 +1,212 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamBlackboardSnapshot",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/TeamBlackboardSnapshot",
+  "$defs": {
+    "TeamBlackboardSnapshot": {
+      "type": "object",
+      "properties": {
+        "goal": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "gameId": {
+              "type": "string",
+              "enum": [
+                "stardew",
+                "terraria",
+                "dst"
+              ]
+            },
+            "metrics": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "current": {
+                    "type": "number"
+                  },
+                  "target": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "default": "manual",
+                    "type": "string",
+                    "enum": [
+                      "manual",
+                      "team_money",
+                      "shared_wood"
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "current",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "deadline": {
+              "default": "",
+              "type": "string"
+            },
+            "status": {
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "completed",
+                "paused"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "gameId"
+          ],
+          "additionalProperties": false
+        },
+        "assignments": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "human",
+                  "ai"
+                ]
+              },
+              "task": {
+                "type": "string"
+              },
+              "zone": {
+                "type": "string"
+              },
+              "status": {
+                "default": "idle",
+                "type": "string",
+                "enum": [
+                  "working",
+                  "idle",
+                  "need_help",
+                  "offline"
+                ]
+              },
+              "progressNote": {
+                "default": "",
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "agentId",
+              "displayName",
+              "role",
+              "task",
+              "zone",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "zoneLocks": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "zone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ownerAgentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expiresAt": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "zone",
+              "ownerAgentId",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "huddleState": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "default": false,
+              "type": "boolean"
+            },
+            "round": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "maxRounds": {
+              "default": 3,
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 3
+            },
+            "cooldownUntil": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "version": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "goal",
+        "huddleState"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

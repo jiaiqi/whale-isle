@@ -32,6 +32,11 @@
           "default": "blue-whale-maid",
           "type": "string"
         },
+        "routingId": {
+          "default": "",
+          "type": "string",
+          "maxLength": 128
+        },
         "enabled": {
           "default": true,
           "type": "boolean"

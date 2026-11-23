@@ -11,6 +11,10 @@
           "type": "string",
           "format": "uuid"
         },
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
         "tool": {
           "type": "string",
           "minLength": 1

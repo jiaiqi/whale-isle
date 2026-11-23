@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamCommsMessage",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/TeamCommsMessage",
+  "$defs": {
+    "TeamCommsMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromAgentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromRole": {
+          "type": "string",
+          "enum": [
+            "human",
+            "ai",
+            "system"
+          ]
+        },
+        "mentions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "proposal",
+            "plan_commit",
+            "need_help",
+            "handoff",
+            "directive"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "planCard": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "summary": {
+              "default": "",
+              "type": "string"
+            },
+            "assignments": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "displayName": {
+                    "default": "",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "task": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "zone": {
+                    "default": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "agentId",
+                  "task"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "fromAgentId",
+        "fromName",
+        "fromRole",
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

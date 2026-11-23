@@ -313,6 +313,8 @@ export type GameBridgeReceiptStatus = z.infer<typeof GameBridgeReceiptStatusSche
 /** 桥接动作请求（工作台 → 游戏桥） */
 export const GameBridgeActionRequestSchema = z.object({
   actionId: z.string().uuid(),
+  /** T-M6-40：同一 sidecar 下多个逻辑玩家的路由键；单玩家省略保持兼容 */
+  agentId: z.string().min(1).optional(),
   tool: z.string().min(1),
   args: z.record(z.string(), z.unknown()).default({}),
 });
@@ -816,6 +818,54 @@ export const PetDesktopPrefsSchema = z.object({
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 
+// ───────────────────────── 多桌宠窗口（T-M6-38：同屏多开，每 Agent 独立窗口状态） ─────────────────────────
+/** 单只桌宠的窗口偏好；与 PetDesktopPrefs（应用级拖拽手感/当前角色）分文件持久化。 */
+export const PetWindowPreferencesSchema = z.object({
+  agentId: z.string().min(1),
+  characterId: z.string().min(1).default('blue-whale-maid'),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+    displayId: z.string().default(''),
+  }),
+  scale: z.number().min(0.6).max(2).default(1),
+  /** 锁定后桌宠窗不可拖拽/缩放（仍可正常接收动作与语音） */
+  locked: z.boolean().default(false),
+  /** 上次是否处于显示状态；关闭窗口时保留坐标，下次 open 原位恢复 */
+  visible: z.boolean().default(true),
+});
+export type PetWindowPreferences = z.infer<typeof PetWindowPreferencesSchema>;
+
+export const PetWindowPreferencesFileSchema = z.object({
+  version: z.literal(1).default(1),
+  windows: z.record(z.string(), PetWindowPreferencesSchema).default({}),
+});
+export type PetWindowPreferencesFile = z.infer<typeof PetWindowPreferencesFileSchema>;
+
+/** 主进程 → 中控台的运行中桌宠窗口视图（不含 Electron 对象） */
+export const PetWindowViewSchema = z.object({
+  agentId: z.string().min(1),
+  characterId: z.string().min(1),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  bounds: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
+});
+export type PetWindowView = z.infer<typeof PetWindowViewSchema>;
+
+/** 全局串行抢麦状态：同一时刻最多一只桌宠 speaking，其余 idle/倾听。 */
+export const CoopSpeakerEventSchema = z.object({
+  activeAgentId: z.string().nullable(),
+  speakerName: z.string(),
+  state: z.enum(['speaking', 'idle']),
+  voiceId: z.string().optional(),
+});
+export type CoopSpeakerEvent = z.infer<typeof CoopSpeakerEventSchema>;
+
 // ───────────────────────── 桌宠角色注册表（T-M6-21：多角色底座） ─────────────────────────
 /** 角色包元数据（不含密钥/大资产；资产由 manifest 的 webmPath 指向） */
 export const PetCharacterSchema = z.object({
@@ -843,6 +893,97 @@ export const McpEndpointSchema = z.object({
   /** MCP Streamable HTTP 根（默认 127.0.0.1:18080/mcp；多开时各实例不同端口） */
   endpoint: z.string().url(),
   characterId: z.string().default('blue-whale-maid'),
+  /** 游戏侧逻辑玩家路由键：DST 必须等于 Mod 上报的 Klei UserID；留空回退端点 id */
+  routingId: z.string().max(128).default(''),
   enabled: z.boolean().default(true),
 });
 export type McpEndpoint = z.infer<typeof McpEndpointSchema>;
+
+// ───────────────────────── 多 AI 联机协作（T-M6-39：目标 / 分工 / 黑板 / 群聊） ─────────────────────────
+export const TeamGoalMetricSchema = z.object({
+  label: z.string().min(1),
+  current: z.number(),
+  target: z.number(),
+  unit: z.string().default(''),
+  /** 真实数据源；manual 由人/商定计划维护，其余由 CoopHost 从游戏状态聚合 */
+  source: z.enum(['manual', 'team_money', 'shared_wood']).default('manual'),
+});
+export type TeamGoalMetric = z.infer<typeof TeamGoalMetricSchema>;
+
+export const TeamGoalSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  gameId: z.enum(['stardew', 'terraria', 'dst']),
+  metrics: z.array(TeamGoalMetricSchema).default([]),
+  /** ISO 时间或游戏内日期文本；空串表示无硬截止 */
+  deadline: z.string().default(''),
+  status: z.enum(['active', 'completed', 'paused']).default('active'),
+});
+export type TeamGoal = z.infer<typeof TeamGoalSchema>;
+
+export const TeamAssignmentSchema = z.object({
+  agentId: z.string().min(1),
+  displayName: z.string().min(1),
+  role: z.enum(['human', 'ai']),
+  task: z.string(),
+  zone: z.string(),
+  status: z.enum(['working', 'idle', 'need_help', 'offline']).default('idle'),
+  progressNote: z.string().default(''),
+  updatedAt: z.number().int().nonnegative(),
+});
+export type TeamAssignment = z.infer<typeof TeamAssignmentSchema>;
+
+export const TeamZoneLockSchema = z.object({
+  zone: z.string().min(1),
+  ownerAgentId: z.string().min(1),
+  expiresAt: z.number().int().nonnegative(),
+});
+export type TeamZoneLock = z.infer<typeof TeamZoneLockSchema>;
+
+export const TeamHuddleStateSchema = z.object({
+  active: z.boolean().default(false),
+  round: z.number().int().min(0).max(3).default(0),
+  maxRounds: z.number().int().min(2).max(3).default(3),
+  /** epoch ms；0 表示从未自动协商，可立即触发 */
+  cooldownUntil: z.number().int().nonnegative().default(0),
+});
+export type TeamHuddleState = z.infer<typeof TeamHuddleStateSchema>;
+
+export const TeamBlackboardSnapshotSchema = z.object({
+  goal: TeamGoalSchema,
+  assignments: z.array(TeamAssignmentSchema).default([]),
+  zoneLocks: z.array(TeamZoneLockSchema).default([]),
+  huddleState: TeamHuddleStateSchema,
+  version: z.number().int().nonnegative().default(0),
+});
+export type TeamBlackboardSnapshot = z.infer<typeof TeamBlackboardSnapshotSchema>;
+
+/** 开麦商量最终可执行的分工卡（由 HuddleOrchestrator 产出并写入黑板） */
+export const TeamPlanTaskSchema = z.object({
+  agentId: z.string().min(1),
+  displayName: z.string().min(1).default(''),
+  task: z.string().min(1),
+  zone: z.string().default(''),
+});
+export type TeamPlanTask = z.infer<typeof TeamPlanTaskSchema>;
+
+export const TeamPlanSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().default(''),
+  assignments: z.array(TeamPlanTaskSchema).default([]),
+});
+export type TeamPlan = z.infer<typeof TeamPlanSchema>;
+
+export const TeamCommsMessageSchema = z.object({
+  id: z.string().min(1),
+  ts: z.number().int().nonnegative(),
+  fromAgentId: z.string().min(1),
+  fromName: z.string().min(1),
+  fromRole: z.enum(['human', 'ai', 'system']),
+  mentions: z.array(z.string()).default([]),
+  kind: z.enum(['chat', 'proposal', 'plan_commit', 'need_help', 'handoff', 'directive']),
+  text: z.string(),
+  planCard: TeamPlanSchema.optional(),
+});
+export type TeamCommsMessage = z.infer<typeof TeamCommsMessageSchema>;

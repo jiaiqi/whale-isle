@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamAssignment",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/TeamAssignment",
+  "$defs": {
+    "TeamAssignment": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "human",
+            "ai"
+          ]
+        },
+        "task": {
+          "type": "string"
+        },
+        "zone": {
+          "type": "string"
+        },
+        "status": {
+          "default": "idle",
+          "type": "string",
+          "enum": [
+            "working",
+            "idle",
+            "need_help",
+            "offline"
+          ]
+        },
+        "progressNote": {
+          "default": "",
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "agentId",
+        "displayName",
+        "role",
+        "task",
+        "zone",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -663,6 +663,7 @@ class GameBridgeActionRequest(BaseModel):
         extra='forbid',
     )
     actionId: UUID
+    agentId: Annotated[str | None, Field(min_length=1)] = None
     tool: Annotated[str, Field(min_length=1)]
     args: dict[str, Any] | None = {}
 
@@ -1495,7 +1496,267 @@ class McpEndpoint(BaseModel):
     gameId: GameId | None = 'stardew'
     endpoint: AnyUrl
     characterId: str | None = 'blue-whale-maid'
+    routingId: Annotated[str | None, Field(max_length=128)] = ''
     enabled: bool | None = True
+
+
+class PetWindowPreferences(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str | None, Field(min_length=1)] = 'blue-whale-maid'
+    position: Position12
+    scale: Annotated[float | None, Field(ge=0.6, le=2.0)] = 1
+    locked: bool | None = False
+    visible: bool | None = True
+
+
+class Windows(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str | None, Field(min_length=1)] = 'blue-whale-maid'
+    position: Position12
+    scale: Annotated[float | None, Field(ge=0.6, le=2.0)] = 1
+    locked: bool | None = False
+    visible: bool | None = True
+
+
+class PetWindowPreferencesFile(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    version: Literal[1] = 1
+    windows: Annotated[dict[str, Windows] | None, Field(validate_default=True)] = {}
+
+
+class Bounds(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class PetWindowView(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str, Field(min_length=1)]
+    visible: bool
+    locked: bool
+    bounds: Bounds
+
+
+class State(StrEnum):
+    speaking = 'speaking'
+    idle = 'idle'
+
+
+class CoopSpeakerEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    activeAgentId: str | None
+    speakerName: str
+    state: State
+    voiceId: str | None = None
+
+
+class Source(StrEnum):
+    manual = 'manual'
+    team_money = 'team_money'
+    shared_wood = 'shared_wood'
+
+
+class Metric(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    label: Annotated[str, Field(min_length=1)]
+    current: float
+    target: float
+    unit: str | None = ''
+    source: Source | None = 'manual'
+
+
+class Status6(StrEnum):
+    active = 'active'
+    completed = 'completed'
+    paused = 'paused'
+
+
+class TeamGoal(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(min_length=1)]
+    gameId: GameId
+    metrics: Annotated[list[Metric] | None, Field(validate_default=True)] = []
+    deadline: str | None = ''
+    status: Status6 | None = 'active'
+
+
+class Role(StrEnum):
+    human = 'human'
+    ai = 'ai'
+
+
+class Status7(StrEnum):
+    working = 'working'
+    idle = 'idle'
+    need_help = 'need_help'
+    offline = 'offline'
+
+
+class TeamAssignment(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    displayName: Annotated[str, Field(min_length=1)]
+    role: Role
+    task: str
+    zone: str
+    status: Status7 | None = 'idle'
+    progressNote: str | None = ''
+    updatedAt: Annotated[int, Field(ge=0)]
+
+
+class Metric1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    label: Annotated[str, Field(min_length=1)]
+    current: float
+    target: float
+    unit: str | None = ''
+    source: Source | None = 'manual'
+
+
+class Status8(StrEnum):
+    active = 'active'
+    completed = 'completed'
+    paused = 'paused'
+
+
+class Goal(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(min_length=1)]
+    gameId: GameId
+    metrics: Annotated[list[Metric1] | None, Field(validate_default=True)] = []
+    deadline: str | None = ''
+    status: Status8 | None = 'active'
+
+
+class Status9(StrEnum):
+    working = 'working'
+    idle = 'idle'
+    need_help = 'need_help'
+    offline = 'offline'
+
+
+class Assignment(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    displayName: Annotated[str, Field(min_length=1)]
+    role: Role
+    task: str
+    zone: str
+    status: Status9 | None = 'idle'
+    progressNote: str | None = ''
+    updatedAt: Annotated[int, Field(ge=0)]
+
+
+class ZoneLock(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    zone: Annotated[str, Field(min_length=1)]
+    ownerAgentId: Annotated[str, Field(min_length=1)]
+    expiresAt: Annotated[int, Field(ge=0)]
+
+
+class HuddleState(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    active: bool | None = False
+    round: Annotated[int | None, Field(ge=0, le=3)] = 0
+    maxRounds: Annotated[int | None, Field(ge=2, le=3)] = 3
+    cooldownUntil: Annotated[int | None, Field(ge=0)] = 0
+
+
+class TeamBlackboardSnapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    goal: Goal
+    assignments: Annotated[list[Assignment] | None, Field(validate_default=True)] = []
+    zoneLocks: Annotated[list[ZoneLock] | None, Field(validate_default=True)] = []
+    huddleState: HuddleState
+    version: Annotated[int | None, Field(ge=0)] = 0
+
+
+class FromRole(StrEnum):
+    human = 'human'
+    ai = 'ai'
+    system = 'system'
+
+
+class Kind(StrEnum):
+    chat = 'chat'
+    proposal = 'proposal'
+    plan_commit = 'plan_commit'
+    need_help = 'need_help'
+    handoff = 'handoff'
+    directive = 'directive'
+
+
+class Assignment1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    displayName: Annotated[str | None, Field(min_length=1)] = ''
+    task: Annotated[str, Field(min_length=1)]
+    zone: str | None = ''
+
+
+class PlanCard(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(min_length=1)]
+    summary: str | None = ''
+    assignments: Annotated[list[Assignment1] | None, Field(validate_default=True)] = []
+
+
+class TeamCommsMessage(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    ts: Annotated[int, Field(ge=0)]
+    fromAgentId: Annotated[str, Field(min_length=1)]
+    fromName: Annotated[str, Field(min_length=1)]
+    fromRole: FromRole
+    mentions: list[str] | None = []
+    kind: Kind
+    text: str
+    planCard: PlanCard | None = None
 
 
 class NodeType(StrEnum):
@@ -1519,7 +1780,7 @@ class MemoryNodeView(BaseModel):
     instanceCount: Annotated[int | None, Field(ge=1)] = 1
 
 
-class Kind(StrEnum):
+class Kind1(StrEnum):
     temporal = 'temporal'
     causal = 'causal'
     semantic = 'semantic'
@@ -1533,7 +1794,7 @@ class MemoryEdgeView(BaseModel):
     )
     from_: Annotated[str, Field(alias='from')]
     to: str
-    kind: Kind
+    kind: Kind1
     weight: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -1557,7 +1818,7 @@ class Edge(BaseModel):
     )
     from_: Annotated[str, Field(alias='from')]
     to: str
-    kind: Kind
+    kind: Kind1
     weight: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -1759,6 +2020,20 @@ class AIWorkbenchContracts(BaseModel):
     PetDesktopPrefs_1: Annotated[PetDesktopPrefs, Field(alias='PetDesktopPrefs')]
     PetCharacter_1: Annotated[PetCharacter, Field(alias='PetCharacter')]
     McpEndpoint_1: Annotated[McpEndpoint, Field(alias='McpEndpoint')]
+    PetWindowPreferences_1: Annotated[
+        PetWindowPreferences, Field(alias='PetWindowPreferences')
+    ]
+    PetWindowPreferencesFile_1: Annotated[
+        PetWindowPreferencesFile, Field(alias='PetWindowPreferencesFile')
+    ]
+    PetWindowView_1: Annotated[PetWindowView, Field(alias='PetWindowView')]
+    CoopSpeakerEvent_1: Annotated[CoopSpeakerEvent, Field(alias='CoopSpeakerEvent')]
+    TeamGoal_1: Annotated[TeamGoal, Field(alias='TeamGoal')]
+    TeamAssignment_1: Annotated[TeamAssignment, Field(alias='TeamAssignment')]
+    TeamBlackboardSnapshot_1: Annotated[
+        TeamBlackboardSnapshot, Field(alias='TeamBlackboardSnapshot')
+    ]
+    TeamCommsMessage_1: Annotated[TeamCommsMessage, Field(alias='TeamCommsMessage')]
     MemoryNodeView_1: Annotated[MemoryNodeView, Field(alias='MemoryNodeView')]
     MemoryEdgeView_1: Annotated[MemoryEdgeView, Field(alias='MemoryEdgeView')]
     MemoryGraphView_1: Annotated[MemoryGraphView, Field(alias='MemoryGraphView')]

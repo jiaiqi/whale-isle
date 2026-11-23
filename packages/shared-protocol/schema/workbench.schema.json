@@ -52,6 +52,14 @@
     "PetDesktopPrefs",
     "PetCharacter",
     "McpEndpoint",
+    "PetWindowPreferences",
+    "PetWindowPreferencesFile",
+    "PetWindowView",
+    "CoopSpeakerEvent",
+    "TeamGoal",
+    "TeamAssignment",
+    "TeamBlackboardSnapshot",
+    "TeamCommsMessage",
     "MemoryNodeView",
     "MemoryEdgeView",
     "MemoryGraphView",
@@ -202,6 +210,30 @@
     },
     "McpEndpoint": {
       "$ref": "#/$defs/McpEndpoint"
+    },
+    "PetWindowPreferences": {
+      "$ref": "#/$defs/PetWindowPreferences"
+    },
+    "PetWindowPreferencesFile": {
+      "$ref": "#/$defs/PetWindowPreferencesFile"
+    },
+    "PetWindowView": {
+      "$ref": "#/$defs/PetWindowView"
+    },
+    "CoopSpeakerEvent": {
+      "$ref": "#/$defs/CoopSpeakerEvent"
+    },
+    "TeamGoal": {
+      "$ref": "#/$defs/TeamGoal"
+    },
+    "TeamAssignment": {
+      "$ref": "#/$defs/TeamAssignment"
+    },
+    "TeamBlackboardSnapshot": {
+      "$ref": "#/$defs/TeamBlackboardSnapshot"
+    },
+    "TeamCommsMessage": {
+      "$ref": "#/$defs/TeamCommsMessage"
     },
     "MemoryNodeView": {
       "$ref": "#/$defs/MemoryNodeView"
@@ -1775,6 +1807,10 @@
         "actionId": {
           "type": "string",
           "format": "uuid"
+        },
+        "agentId": {
+          "type": "string",
+          "minLength": 1
         },
         "tool": {
           "type": "string",
@@ -4149,6 +4185,11 @@
           "default": "blue-whale-maid",
           "type": "string"
         },
+        "routingId": {
+          "default": "",
+          "type": "string",
+          "maxLength": 128
+        },
         "enabled": {
           "default": true,
           "type": "boolean"
@@ -4158,6 +4199,659 @@
         "id",
         "displayName",
         "endpoint"
+      ],
+      "additionalProperties": false
+    },
+    "PetWindowPreferences": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "default": "blue-whale-maid",
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "displayId": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "scale": {
+          "default": 1,
+          "type": "number",
+          "minimum": 0.6,
+          "maximum": 2
+        },
+        "locked": {
+          "default": false,
+          "type": "boolean"
+        },
+        "visible": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "agentId",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    "PetWindowPreferencesFile": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "default": 1,
+          "type": "number",
+          "const": 1
+        },
+        "windows": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "agentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "characterId": {
+                "default": "blue-whale-maid",
+                "type": "string",
+                "minLength": 1
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "displayId": {
+                    "default": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "scale": {
+                "default": 1,
+                "type": "number",
+                "minimum": 0.6,
+                "maximum": 2
+              },
+              "locked": {
+                "default": false,
+                "type": "boolean"
+              },
+              "visible": {
+                "default": true,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "agentId",
+              "position"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PetWindowView": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "agentId",
+        "characterId",
+        "visible",
+        "locked",
+        "bounds"
+      ],
+      "additionalProperties": false
+    },
+    "CoopSpeakerEvent": {
+      "type": "object",
+      "properties": {
+        "activeAgentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speakerName": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "speaking",
+            "idle"
+          ]
+        },
+        "voiceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "activeAgentId",
+        "speakerName",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "TeamGoal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gameId": {
+          "type": "string",
+          "enum": [
+            "stardew",
+            "terraria",
+            "dst"
+          ]
+        },
+        "metrics": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "current": {
+                "type": "number"
+              },
+              "target": {
+                "type": "number"
+              },
+              "unit": {
+                "default": "",
+                "type": "string"
+              },
+              "source": {
+                "default": "manual",
+                "type": "string",
+                "enum": [
+                  "manual",
+                  "team_money",
+                  "shared_wood"
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "current",
+              "target"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "deadline": {
+          "default": "",
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "type": "string",
+          "enum": [
+            "active",
+            "completed",
+            "paused"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "gameId"
+      ],
+      "additionalProperties": false
+    },
+    "TeamAssignment": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "human",
+            "ai"
+          ]
+        },
+        "task": {
+          "type": "string"
+        },
+        "zone": {
+          "type": "string"
+        },
+        "status": {
+          "default": "idle",
+          "type": "string",
+          "enum": [
+            "working",
+            "idle",
+            "need_help",
+            "offline"
+          ]
+        },
+        "progressNote": {
+          "default": "",
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "agentId",
+        "displayName",
+        "role",
+        "task",
+        "zone",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "TeamBlackboardSnapshot": {
+      "type": "object",
+      "properties": {
+        "goal": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "gameId": {
+              "type": "string",
+              "enum": [
+                "stardew",
+                "terraria",
+                "dst"
+              ]
+            },
+            "metrics": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "current": {
+                    "type": "number"
+                  },
+                  "target": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "source": {
+                    "default": "manual",
+                    "type": "string",
+                    "enum": [
+                      "manual",
+                      "team_money",
+                      "shared_wood"
+                    ]
+                  }
+                },
+                "required": [
+                  "label",
+                  "current",
+                  "target"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "deadline": {
+              "default": "",
+              "type": "string"
+            },
+            "status": {
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "completed",
+                "paused"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "gameId"
+          ],
+          "additionalProperties": false
+        },
+        "assignments": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "agentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "human",
+                  "ai"
+                ]
+              },
+              "task": {
+                "type": "string"
+              },
+              "zone": {
+                "type": "string"
+              },
+              "status": {
+                "default": "idle",
+                "type": "string",
+                "enum": [
+                  "working",
+                  "idle",
+                  "need_help",
+                  "offline"
+                ]
+              },
+              "progressNote": {
+                "default": "",
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "agentId",
+              "displayName",
+              "role",
+              "task",
+              "zone",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "zoneLocks": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "zone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ownerAgentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expiresAt": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "zone",
+              "ownerAgentId",
+              "expiresAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "huddleState": {
+          "type": "object",
+          "properties": {
+            "active": {
+              "default": false,
+              "type": "boolean"
+            },
+            "round": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "maxRounds": {
+              "default": 3,
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 3
+            },
+            "cooldownUntil": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "version": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "goal",
+        "huddleState"
+      ],
+      "additionalProperties": false
+    },
+    "TeamCommsMessage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromAgentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromRole": {
+          "type": "string",
+          "enum": [
+            "human",
+            "ai",
+            "system"
+          ]
+        },
+        "mentions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "chat",
+            "proposal",
+            "plan_commit",
+            "need_help",
+            "handoff",
+            "directive"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "planCard": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "summary": {
+              "default": "",
+              "type": "string"
+            },
+            "assignments": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "displayName": {
+                    "default": "",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "task": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "zone": {
+                    "default": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "agentId",
+                  "task"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "ts",
+        "fromAgentId",
+        "fromName",
+        "fromRole",
+        "kind",
+        "text"
       ],
       "additionalProperties": false
     },
