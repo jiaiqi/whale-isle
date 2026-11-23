@@ -3,9 +3,9 @@
  * T-M6-34：内嵌 WebUI 的 `/obs` 只读透明挂件已接通（STAGE_PROTOCOL=1，WebSocket 推送
  * 动作/回执，token 鉴权）；本页预演用真实 autodrive 事件渲染，投票/歌词层仍为预演。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, MonitorPlay, Radio, Wheat } from 'lucide-react';
+import { Copy, MonitorPlay, Play, Radio, RefreshCw, Wheat } from 'lucide-react';
 import type { AutodriveEventView } from './bridge';
 
 const LAYERS = [
@@ -23,8 +23,25 @@ export interface ObsPanelProps {
   events: AutodriveEventView[];
 }
 
+interface LiveBatchView {
+  tier: string;
+  at: number;
+  events: Array<{ eventId: string; eventType: string; nickname: string; text: string; priority: string }>;
+}
+
 export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.Element {
   const [on, setOn] = useState<Record<LayerId, boolean>>({ bubbles: true, vote: true, lyrics: true, rice: true, bar: true });
+  const [liveBatches, setLiveBatches] = useState<LiveBatchView[]>([]);
+  const [liveStats, setLiveStats] = useState<Record<string, unknown> | null>(null);
+  const refreshLive = (): void => {
+    void Promise.all([window.directorBridge.liveHistory(), window.directorBridge.liveSnapshot()])
+      .then(([history, snapshot]) => { setLiveBatches(history); setLiveStats(snapshot); })
+      .catch(() => undefined);
+  };
+  useEffect(() => {
+    refreshLive();
+    window.directorBridge.onLiveBatch(() => refreshLive());
+  }, []);
   const [votes, setVotes] = useState([12, 7, 4]);
   const latestThink = [...events].reverse().find((e) => e.type === 'decision')?.intent ?? '（小鲸还没有内心戏）';
   const latestTalk = [...events].reverse().find((e) => e.tool === 'chat_reply' || e.type === 'receipt')?.summary ?? '（暂无正式台词）';
@@ -165,6 +182,44 @@ export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.El
           </div>
         ))}
       </div>
+
+      <section className="card mt-4 overflow-hidden" data-live-panel>
+        <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid var(--stroke)' }}>
+          <Radio size={14} />
+          <h3 className="text-xs font-semibold">直播事件流（[SIMULATION] 回放）</h3>
+          <span className="pill" style={{ fontSize: 9 }}>护栏 · 注意力 · 去重</span>
+          <div className="flex-1" />
+          <button className="pill" onClick={() => { void window.directorBridge.liveClear().then(refreshLive); }}><RefreshCw size={11} />清空</button>
+          <button
+            className="btn-pill primary px-3"
+            data-live-replay
+            onClick={() => { void window.directorBridge.liveReplay().then(refreshLive); }}
+          ><Play size={11} />回放样本弹幕</button>
+        </div>
+        <div className="grid grid-cols-3 gap-2 px-4 py-2.5">
+          {([
+            ['收到', String(liveStats?.received ?? 0)],
+            ['护栏拦截', String(liveStats?.droppedByGuard ?? 0)],
+            ['当前档位', String(liveStats?.tier ?? '—')],
+          ] as Array<[string, string]>).map(([k, v]) => (
+            <div key={String(k)} className="inset px-2.5 py-1.5">
+              <div className="text-[9.5px]" style={{ color: 'var(--text-3)' }}>{k}</div>
+              <div className="mono text-[11px]">{String(v)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 pb-3">
+          {liveBatches.length === 0 && <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>点「回放样本弹幕」查看护栏/注意力流水线；这不是真实直播间数据。</p>}
+          {liveBatches.flatMap((batch, bi) => batch.events.map((event, ei) => (
+            <div key={`${bi}-${ei}`} data-live-event={event.eventType} className="flex items-center gap-2 py-1 text-[11px]" style={{ borderBottom: '1px dashed var(--stroke)' }}>
+              <span className="mono" style={{ color: 'var(--text-3)' }}>{event.priority}</span>
+              <span style={{ color: 'var(--text-2)' }}>{event.nickname}</span>
+              <span className="min-w-0 flex-1 truncate">{event.text}</span>
+              <span className="pill" style={{ fontSize: 9 }}>{batch.tier}</span>
+            </div>
+          )))}
+        </div>
+      </section>
     </div>
   );
 }

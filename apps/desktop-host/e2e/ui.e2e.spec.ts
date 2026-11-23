@@ -534,4 +534,31 @@ export default {
       rmSync(pluginDir, { recursive: true, force: true });
     }
   }, 90_000);
+
+  /** [E2E-HOST] T-M6-37：直播最小链路（本地回放，经真实 hub 管线）→ OBS 页可见事件。 */
+  it('直播回放：护栏/注意力后的事件流出现在 OBS 页', { timeout: 90_000 }, async () => {
+    const app = await electron.launch({
+      args: ['--use-mock-keychain', mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(
+        () => Boolean((window as unknown as { directorBridge?: { liveReplay?: unknown } }).directorBridge?.liveReplay),
+        { timeout: 30_000 },
+      );
+      await page.click('[data-tab="obs"]');
+      await page.waitForSelector('[data-live-panel]', { timeout: 10_000 });
+      await page.click('[data-live-replay]');
+      await page.waitForSelector('[data-live-event]', { timeout: 15_000 });
+      expect(await page.locator('[data-live-event]').count()).toBeGreaterThan(0);
+      const snapshot = await page.evaluate(() => (window as unknown as {
+        directorBridge: { liveSnapshot(): Promise<{ received: number; accepted: number }> };
+      }).directorBridge.liveSnapshot());
+      expect(snapshot.received).toBeGreaterThanOrEqual(4);
+    } finally {
+      await app.close();
+    }
+  }, 90_000);
 });

@@ -21,6 +21,7 @@ import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
+import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
@@ -283,6 +284,12 @@ app.whenReady().then(() => {
   void dayKeyOf;
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
   const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice, memory);
+  // T-M6-37：直播最小链路（弹幕回放 → 护栏 → 注意力 → 中控台/插件总线/语音）
+  const live = createLiveHost({
+    windows: () => [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+    voiceHost: voice,
+    onPluginEvent: (event, payload) => plugins.emit(event, payload),
+  });
   // 自驾事件进插件总线（插件只能经总线观察，不直接访问 autodrive）
   autodrive.subscribe((event) => plugins.emit('autodrive:event', event));
   const harness = createHarnessHost();
@@ -351,6 +358,7 @@ app.whenReady().then(() => {
     autodrive.setTargets(targets);
     harness.setTargets(targets);
     plugins.setTargets(targets);
+    live.setTargets(targets);
   };
   stageWindow = createStageWindow();
   directorWindow = createDirectorWindow();

@@ -253,6 +253,13 @@ export interface DirectorBridge {
   pluginErrors(): Promise<Array<{ id: string; error: string; phase: string }>>;
   pluginClearErrors(): Promise<void>;
   onPluginEvent(handler: (event: { event: string; payload: unknown }) => void): void;
+  // T-M6-37 直播最小链路
+  liveIngest(raw: unknown): Promise<{ status: string; reason?: string }>;
+  liveReplay(): Promise<number>;
+  liveSnapshot(): Promise<Record<string, unknown>>;
+  liveHistory(): Promise<Array<{ tier: string; at: number; events: Array<{ eventId: string; eventType: string; nickname: string; text: string; priority: string }> }>>;
+  liveClear(): Promise<void>;
+  onLiveBatch(handler: (batch: unknown) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸

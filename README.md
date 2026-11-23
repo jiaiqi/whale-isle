@@ -14,7 +14,7 @@
 | 模型供应商与主脑 | 可用（用户自配 Key）；纯决策服务商走 System One 探针 |
 | 语音 | 桌面主路径为 macOS `mcode-tools → say → afplay`；Python 声音工坊含 stub；Windows 语音待适配 |
 | 插件系统 | 外部 dsh 插件可从 `userData/plugins` 发现/启停/调用工具（见 [docs/PLUGINS.md](./docs/PLUGINS.md)）；插件页面开关仍控制内置入口 |
-| 直播 / 点歌 / OBS | 注意力调度与面板 UI 已有；**OBS `/obs` 只读透明挂件已接通**（STAGE_PROTOCOL=1）；真实弹幕接入与点歌执行链未闭环 |
+| 直播 / 点歌 / OBS | 注意力调度已接生产链路（本地回放 `[SIMULATION]`）；**OBS `/obs` 只读透明挂件已接通**（STAGE_PROTOCOL=1）；真实 dyhub 弹幕接入与点歌执行链未闭环 |
 | 独立安装包 | macOS arm64 DMG 可运行（未签名）；自包含 Python worker 与跨平台语音未完成 |
 
 > 「断网可用」仅指本地数据与不依赖网络的规则功能；LLM、在线语音与真实游戏联机需要对应外部组件或服务。详见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) §6 风险清单 R1~R11 与 [docs/VERIFY.md](./docs/VERIFY.md)。

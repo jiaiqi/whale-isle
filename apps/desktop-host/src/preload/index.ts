@@ -73,6 +73,15 @@ contextBridge.exposeInMainWorld('directorBridge', {
   onPluginEvent: (handler: (event: { event: string; payload: unknown }) => void): void => {
     ipcRenderer.on('plugin:event', (_e, event) => handler(event));
   },
+  // T-M6-37 直播最小链路（[SIMULATION] 回放 + 真实 hub 管线）
+  liveIngest: (raw: unknown): Promise<{ status: string; reason?: string }> => ipcRenderer.invoke('live:ingest', raw),
+  liveReplay: (): Promise<number> => ipcRenderer.invoke('live:replay'),
+  liveSnapshot: (): Promise<unknown> => ipcRenderer.invoke('live:snapshot'),
+  liveHistory: (): Promise<unknown> => ipcRenderer.invoke('live:history'),
+  liveClear: (): Promise<void> => ipcRenderer.invoke('live:clear'),
+  onLiveBatch: (handler: (batch: unknown) => void): void => {
+    ipcRenderer.on('live:batch', (_e, batch) => handler(batch));
+  },
   onHarnessEvent: (handler: (event: unknown) => void) => {
     ipcRenderer.on('harness:event', (_e, event) => handler(event));
   },
