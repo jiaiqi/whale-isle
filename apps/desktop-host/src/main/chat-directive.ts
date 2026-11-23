@@ -39,6 +39,7 @@ const KEYWORD_DIRECTIVES: ChatDirective[] = [
   { source: 'keyword', tool: 'quest_board', args: {}, intent: '看看告示板的任务' },
   { source: 'keyword', tool: 'donate_bundles', args: {}, intent: '把收集包材料捐给社区中心' },
   { source: 'keyword', tool: 'sleep', args: {}, intent: '回家睡觉' },
+  { source: 'keyword', tool: 'craft', args: { recipe: 'Chest' }, intent: '造一个箱子放杂物' },
 ];
 
 /** 关键词 → 触发正则（按表序匹配第一个命中；「疑问/回忆」直接不接单走 LLM 复核） */
@@ -50,6 +51,7 @@ const KEYWORD_PATTERNS: Array<{ directive: ChatDirective; re: RegExp }> = [
   { directive: KEYWORD_DIRECTIVES[4] as ChatDirective, re: /(去|到|回|先去).{0,4}(社区中心|社区|CommunityCenter)/i },
   { directive: KEYWORD_DIRECTIVES[5] as ChatDirective, re: /回.{0,2}家|FarmHouse|回房|回屋|睡觉前|先回家/i },
   { directive: KEYWORD_DIRECTIVES[6] as ChatDirective, re: /钓鱼|钓一(竿|会|会儿)|甩竿|fish/i },
+  { directive: KEYWORD_DIRECTIVES[15] as ChatDirective, re: /(造|做|合成|craft).{0,4}(箱|Chest)/i },
   { directive: KEYWORD_DIRECTIVES[7] as ChatDirective, re: /(整理|清理|清空|收拾).{0,3}背包|背包.{0,4}满|腾.{0,3}(位置|空位|地方|格子)/ },
   { directive: KEYWORD_DIRECTIVES[8] as ChatDirective, re: /浇水|浇一(下|遍)|灌溉/ },
   { directive: KEYWORD_DIRECTIVES[9] as ChatDirective, re: /(收获|收一(下|遍)|收菜|收作物)/ },

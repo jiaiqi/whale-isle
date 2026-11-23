@@ -20,6 +20,9 @@ describe('resolveKeywordDirective（确定性直译）', () => {
     expect(resolveKeywordDirective('先回家')).toMatchObject({ tool: 'travel_to', args: { location: 'FarmHouse' } });
     expect(resolveKeywordDirective('去社区中心看看')).toMatchObject({ tool: 'travel_to', args: { location: 'CommunityCenter' } });
     expect(resolveKeywordDirective('整理一下背包')).toMatchObject({ tool: 'tidy_backpack' });
+    // 真机 2026-11-23：用户说「背包满了，先造箱子」被误判成 tidy → 先造箱优先于泛化「背包满」
+    expect(resolveKeywordDirective('钓你个头，背包满了，先造箱子把用不上的放进箱子'))
+      .toMatchObject({ tool: 'craft', args: { recipe: 'Chest' } });
     expect(resolveKeywordDirective('去矿洞'))?.toMatchObject({ tool: 'travel_to', args: { location: 'Mine' } });
     expect(resolveKeywordDirective('睡觉吧')).toMatchObject({ tool: 'sleep' });
     expect(resolveKeywordDirective('浇水')).toMatchObject({ tool: 'water_crops' });
