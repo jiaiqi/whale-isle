@@ -83,7 +83,9 @@ export function parseGameState(raw: string): GameStateSnapshot {
  * 背包救援工具（T-M5-18，参考 BWF `GameActions.Tidy.cs` 与 feiyuos-stardew-ai-farmer LESSONS）：
  *   - 出货按「排除法 + 值钱线索」：工具/种子/肥料/鱼饵/炸弹/花束/吊坠/家具/任务物品绝不卖；
  *   - 背包满时优先 ship_items（有无箱子都能用，且能赚钱）；没有可卖物再 eat/trash 腾位；
- *   - **禁止满包 craft**（feiyu LESSONS：合成物会掉地上，反而卡死）。
+ *   - ~~禁止满包 craft~~（2026-11-22 BWF GameActions.cs 源码实证推翻：BWF Craft 满包直接拒绝
+ *     且不消耗材料「材料不够或背包满了」，feiyu「合成物掉地上」对 BWF 不适用——
+ *     满包自救改为先腾一格（卖/扔低价值材料）再 craft Chest，见 llm-planner case 7）。
  */
 const KEEP_TAG_RE = /【(?:留着|保留)[^】]*】/;
 const NON_SELLABLE_RE = new RegExp(
@@ -223,6 +225,49 @@ export function countWood(raw: string): number {
     return m?.[1] === undefined ? 1 : Number(m[1]);
   }
   return 0;
+}
+
+/**
+ * 满包造箱自救的牺牲格（2026-11-22 用户指令「应该造箱子腾背包空间」）：
+ * BWF GameActions.cs 实证——Craft 满包直接拒绝且不耗材（「材料不够或背包满了」），
+ * 所以先 trash 整格低价值材料腾一格再 craft。优先 BWF 官方建议的「石头、泥土、杂物」；
+ * 绝不碰木材本身（马上要用 50 木造箱）、【留着】、可食用（留给 eat 档）与家具（留给 place 档）。
+ */
+export function pickChestSacrifice(raw: string): string | null {
+  let candidate: string | null = null;
+  for (const text of inventoryTexts(raw)) {
+    if (KEEP_TAG_RE.test(text)) continue;
+    if (/木材/.test(text)) continue;
+    if (ESSENTIAL_RE.test(text)) continue;
+    if (/\[可食用/.test(text)) continue;
+    if (FURNITURE_RE.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name === '') continue;
+    // BWF 拒扔贵重物时点名的低价值材料：石头、泥土、杂物——扔整格换一个箱子最划算
+    if (/石头|石料|黏土|粘土|泥土|纤维|树液|树胶/.test(name)) return name;
+    if (candidate === null && /垃圾|报纸|Joja|浮木|破/.test(name)) candidate = name;
+  }
+  return candidate;
+}
+
+/**
+ * 满包全预留绝境的牺牲格（2026-11-22 真机现场实证：木材 x22<50 且全部非工具物品带【留着】，
+ * pickChestSacrifice 被 KEEP_TAG 全挡 → 无牺牲格可用）：只在【留着】里挑**可再生**的——
+ * 可食用鱼优先（天天钓得到，走 BWF eat force 还能回体力）；其次海边采集（牡蛎/蚌/蛤，
+ * 海滩走一圈就有）走 trash force。绝不碰木材/石头（那是攒箱子的本钱）。
+ * 没有可再生预留物 → null（保留到底部 wait 求助，此时背包全是工具+囤货，人手才解得开）。
+ */
+export function pickRenewableReserved(raw: string): { item: string; mode: 'eat' | 'trash' } | null {
+  let trashCandidate: { item: string; mode: 'trash' } | null = null;
+  for (const text of inventoryTexts(raw)) {
+    if (!KEEP_TAG_RE.test(text)) continue;
+    const name = cleanItemName(text);
+    if (name === '') continue;
+    if (/木材|石头/.test(name)) continue;
+    if (/\[可食用/.test(text)) return { item: name, mode: 'eat' };
+    if (trashCandidate === null && /牡蛎|蚌|蛤|贝壳|珊瑚/.test(name)) trashCandidate = { item: name, mode: 'trash' };
+  }
+  return trashCandidate;
 }
 
 /** 从文字地图找离玩家最近的空地 `.`（place_item 目标格；地图被省略时返回 null） */

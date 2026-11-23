@@ -43,6 +43,9 @@
     },
     {
       "path": "./packages/stardew-mods"
+    },
+    {
+      "path": "services/dst-bridge-sidecar"
     }
   ]
 }

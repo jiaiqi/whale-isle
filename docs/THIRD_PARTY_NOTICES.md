@@ -38,7 +38,7 @@
 
 | 来源项目 | 许可证（核实结果） | 移植范围 | 本仓库落点 | 备注与约束 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `PC2005-cloud/dsh-pet` | **代码 MIT** | 渲染物理（Q 弹/甩抛/DPI 边界）、睡觉安静模式、余额分档动画、绿幕转 WebM 资产链 | `packages/pet-renderer`、`services/audio-ai-worker/asset_pipeline` | 移植须保留 MIT 版权头；二创公开渠道须附原作者仓库地址（README 约定） | ✅ 已登记（代码） |
+| `PC2005-cloud/dsh-pet` | **代码 MIT** | 渲染物理（Q 弹/甩抛/DPI 边界）；多显示器矩形并集/最近屏/窗口区域夹紧（`src/shared/displays.ts` 移植子集）；睡觉安静模式、余额分档动画、绿幕转 WebM 资产链 | `packages/pet-renderer`、`apps/desktop-host/src/main/display-region.ts`、`services/audio-ai-worker/asset_pipeline` | 移植代码保留 MIT 版权/许可声明；全文归档 `docs/licenses/dsh-pet-2026.txt`；二创公开渠道须附原作者仓库地址（README 约定） | ✅ 已登记（代码） |
 | `PC2005-cloud/dsh-pet` + `luckui/dsh-livestream`（大肥鱼形象/动画素材） | **CC BY-NC-SA 4.0**（形象原型声明：溟月 @上善无形；女仆鲸鱼娘设计 @ZipZipPipe） | "蓝色大肥鱼" webm 动作资产包 | `assets/pets/blue-whale-maid/` | **`licenseScope: DEV_ONLY_NON_COMMERCIAL`，禁止商用**；必须提供一键替换自制素材包管线 | ⚠️ 仅限本地开发测试 |
 | `Darianliu23/dsh-stardew-blind-whale-farmer` | **MIT**（原"待核实"已解除） | Observer 状态树、A*/跨地图寻路、游戏原生执行、F7 接管、游玩预算、攻略分层；**本地补丁**：showHud 进 /settings 远程设置（`mods/bwf-patches/2026-11-22-showhud-settings.patch`，保留版权头，上游升级时需重放） | `mods/stardew-mcp-mod`、`packages/game-bridge-mcp`、`mods/bwf-patches/`（补丁与构建流程） | 传输改为本仓 WS+JSON-RPC 2.0；保留版权头；C# 改造（MIT 允许直接改造，非仅思想参考） | ✅ 已登记 |
 | `LockyBee/dsh-douyin-agent` | **MIT** | 收据基线/验证记录/额度账本的纪律参照；分镜拼图思路 | `packages/live-stream-hub`、`docs/VERIFY.md` | 不引入其浏览器自动化源码 | ✅ 已登记 |
@@ -50,6 +50,10 @@
 | `fore-vip/dsh-live` | **None（无 LICENSE）** | — | — | **⛔ 严禁复制任何源码**；README 自述"模拟引擎"码率/观看/时长为模拟值（虚假指标反面样本） | ⛔ 禁止引入 |
 | `cortico-world-douyin-live` | **GPL-3.0-or-later** | — | — | **⛔ 禁止 vendor 引入**（传染性）；抖音弹幕直连主线为 dyhub，不可用则自研协议并立合规工单 | ⛔ 禁止引入 |
 | `dyhub` / `CC Switch` / `Magpie` / `awesome-codex-pet` | ⚠️ 待核实（用户未提供仓库） | — | — | 补档前一律按"仅思想参考、禁止复制源码"处置 | ⚠️ 待核实 |
+| `Reisenbug/TerraBlind`（+ `MutantPilot`、`musharna/tmodloader-mcp`） | ✅ **MIT**（LICENSE 原文核实） | **仅思想吸收，未复制源码**：模组内 HTTP 三段式回执、世界事实终止、生存反射、物理预测寻路、工具面语感 | `mods/terraria-bridge/`、`packages/game-bridge-mcp/src/terraria-adapter.ts`、`docs/REFERENCE-terrariablind.md` | 原创 C#/TS 实现；若后续直接复制 MIT 代码片段须保留版权头并改本行状态 | ✅ 已登记（思想参考） |
+| `fruitstarzero/Don-t-Starve-Together-AI-Companion`（+ `qinming99/dst-admin`、`mathielo/dst-dedicated-server`） | ✅ **MIT**（LICENSE 原文核实） | **仅思想吸收，未复制源码**：QueryServer localhost tick、服务器侧权威 vanilla 动作、专用服 stdin 运维兜底 | `mods/dst-bridge/`、`services/dst-bridge-sidecar/`、`packages/game-bridge-mcp/src/dst-adapter.ts`、`docs/REFERENCE-dst-ai-companion.md` | 原创 Lua/Node/TS 实现；cluster_token 须人类配置不可绕过 | ✅ 已登记（思想参考） |
+| `Pryaxis/TShock`、`Pryaxis/TSAPI`、`JavidPack/HEROsMod`、`newcovid/TerraNoneBridge`、`carrot-hu23/dst-admin-go` | ⛔ **GPL-3.0**（传染性） | — | — | **⛔ 禁止复制任何源码/整体引入**（M7 调研核实）；仅机制思想可参考 | ⛔ 禁止引入 |
+| `Im-Chuyu/Journey-Together`、`Insight`、`Combined-Status`、`ActionQueue`、`DontStarveAI`、`xNarnia/TCR` | ⛔ **无 LICENSE / RecEx 受限**（核实） | — | — | 仅参考架构设计（如 Journey-Together 38 动作权限校验），**一行代码不能抄** | ⛔ 禁止引入 |
 
 ## 3. 素材资产台账
 
@@ -58,6 +62,7 @@
 | 蓝色大肥鱼 .webm 动作包 | dsh-pet 内置 | 非商用（形象 CC BY-NC-SA 4.0） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 仅开发测试，商用前必须整包替换 |
 | **114 个 VP9-alpha webm 已入库**（T-M5-01，55MB） | `packages/pet-renderer/assets/blue-whale-maid/`（源自 dsh-pet/dsh-pet/assets/webm） | CC BY-NC-SA 4.0 | `DEV_ONLY_NON_COMMERCIAL`（manifest.json licenseScope 强制） | ⚠️ 入库即随安装包分发——D14 自包含 vs 商用清洗冲突时以商用清洗优先（删包+换装管线） |
 | dsh-livestream dafeiyu 动画片段 | `packages/dsh-livestream/assets/characters/dafeiyu/` | CC BY-NC-SA 4.0（目录级声明） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 同上，未引入则不登记落点 |
+| **供应商官方 logo 10 枚**（openrouter/deepseek/siliconflow/openai/anthropic/minimax/volcano-ark/opencode/ollama/typesafe-jev，2026-11-22 从各家官网 favicon 与 GitHub 官方组织头像收集；typesafe-jev 取 jevmodel.org 官方声明 favicon.png） | `apps/desktop-host/assets/brand/providers/`（~90KB） | **商标权属各公司**，非开源许可素材；仅作服务商身份识别的指称性使用（nominative use），不用于暗示背书 | `PROVIDER_IDENTIFICATION_ONLY` | ✅ 个人本地工具使用；GPT-SoVITS 未取官方标识（无商标级 logo，保留 lucide 图标） |
 
 ## 4. 许可证文本归档
 

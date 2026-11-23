@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    tModLoader 1.4.4.9 / Terraria 1.4.4.9 / .NET 8 / FNA。
+    本模组为思想重写（TerraBlind / MutantPilot / tmodloader-mcp 均 MIT，见
+    docs/REFERENCE-terrariablind.md）；未复制其任何一行源码，故无需移植版权头。
+    本机 dotnet build 需要设置 TModLoaderInstall 指向 tModLoader 1.4.4.9 安装目录
+    （内含 tModLoader.dll / FNA.dll）。未安装时构建会如实失败，不得假报通过。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>terraria-bridge</AssemblyName>
+    <RootNamespace>TerrariaBridge</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TModLoaderInstall Condition="'$(TModLoaderInstall)' == ''">$(HOME)/.local/share/Terraria/tModLoader/1.4.4.9</TModLoaderInstall>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="tModLoader">
+      <HintPath>$(TModLoaderInstall)/tModLoader.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="FNA">
+      <HintPath>$(TModLoaderInstall)/FNA.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

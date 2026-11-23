@@ -1,0 +1,20 @@
+{
+  "name": "@workbench/dst-bridge-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[M7] 饥荒 DST 桥接 sidecar：宿主面统一协议 18100 + 游戏面 /v1/tick（Klei 653007 localhost 通道）+ 专用服托管兜底",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit --target ES2022 --module esnext --moduleResolution bundler --strict --noUncheckedIndexedAccess --skipLibCheck --types node src/*.ts"
+  },
+  "dependencies": {
+    "@workbench/shared-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.2"
+  }
+}

@@ -5,7 +5,8 @@
   "description": "[T-M5-02] 星露谷 BWF MCP 客户端：SSE/JSON 双解析 + 动作互斥锁 + 看门狗 + autodrive 编排器",
   "type": "module",
   "main": "./dist/index.js",
-  "sideEffects": false,
+  "//sideEffects": "不能标 false：泰拉瑞亚 / DST 适配器靠 index.ts 的副作用导入自注册，标 false 会被 esbuild tree-shaking 掉（真机表现为「未注册的游戏适配器」）",
+  "sideEffects": true,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

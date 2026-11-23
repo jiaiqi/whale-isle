@@ -5,7 +5,8 @@
  *   2. 卡死哨兵 —— 游戏内时间（get_state 文本）超过 staleLimit 无变化 → 触发 cancel_action 兜底
  *   3. 回执唯一事实 —— COMPLETED/FAILED/UNCERTAIN 以 BWF 文本回执为准
  */
-import { actionTimeoutMs, BwfMcpClient, type McpCallResult } from './mcp-client';
+import { actionTimeoutMs, type McpCallResult } from './mcp-client';
+import type { GameBridgeTransport } from './adapter';
 
 export interface InFlightAction {
   tool: string;
@@ -24,7 +25,13 @@ export class ActionLock {
   private current: InFlightAction | null = null;
   readonly stats: LockStats = { taken: 0, released: 0, timeouts: 0, errors: 0 };
 
-  constructor(private readonly client: BwfMcpClient) {}
+  constructor(
+    private readonly client: GameBridgeTransport,
+    /** 分层超时表按游戏注入（默认 BWF 语义）；新游戏 adapter 提供自己的长动作表 */
+    private readonly timeoutFor: (tool: string) => number = actionTimeoutMs,
+    /** 显式中止工具名（默认 BWF cancel_action；新游戏可覆盖） */
+    private readonly cancelTool = 'cancel_action',
+  ) {}
 
   get inFlight(): InFlightAction | null {
     return this.current;
@@ -41,7 +48,7 @@ export class ActionLock {
     }
     this.current = { tool, args, startedAt: Date.now() };
     this.stats.taken++;
-    const effective = timeoutMs ?? actionTimeoutMs(tool);
+    const effective = timeoutMs ?? this.timeoutFor(tool);
     try {
       const result = await this.client.callTool(tool, args, { timeoutMs: effective });
       if (result.kind === 'timeout') this.stats.timeouts++;
@@ -57,13 +64,15 @@ export class ActionLock {
    *  返回值只表示「cancel_action 工具调用本身是否成功」——锁一定被清（callTool 失败/超时也算清）。 */
   async cancel(reason: string, timeoutMs = 15_000): Promise<boolean> {
     if (!this.current) return false;
-    const res = await this.client.callTool('cancel_action', {}, { timeoutMs });
+    const res = await this.client.callTool(this.cancelTool, {}, { timeoutMs });
     this.current = null;
     this.stats.released++;
     void reason;
     return res.kind === 'ok' && !res.isError;
   }
 }
+
+const DEFAULT_CLOCK_RE = /时间：第\d+年[春夏秋冬]\d+日 \d{2}:\d{2}/;
 
 /** 卡死哨兵：比较两次 get_state 摘要中的游戏时间，超过 staleLimitMs 未变化视为卡死。 */
 export class StuckSentinel {
@@ -73,12 +82,13 @@ export class StuckSentinel {
   constructor(
     private readonly staleLimitMs: number = 4 * 60_000, // ARCHITECTURE：4min 游戏时间不动
     private readonly now: () => number = Date.now,
+    /** 时钟提取器按游戏注入（默认星露谷正则；新游戏 adapter 提供自己的时钟/昼夜摘要） */
+    private readonly extractClock: (stateText: string) => string | null = (text) => DEFAULT_CLOCK_RE.exec(text)?.[0] ?? null,
   ) {}
 
-  /** 从 get_state 文本提取「时间：第x年春x日 HH:MM」摘要；变化则刷新计时 */
+  /** 从 get_state 文本提取游戏时钟摘要；变化则刷新计时 */
   observe(stateText: string): { stale: boolean; staleMs: number } {
-    const m = /时间：第\d+年[春夏秋冬]\d+日 \d{2}:\d{2}/.exec(stateText);
-    const time = m?.[0] ?? null;
+    const time = this.extractClock(stateText);
     if (time !== null && time !== this.lastGameTime) {
       this.lastGameTime = time;
       this.lastChangeAt = this.now();
