@@ -28,6 +28,9 @@
 | `CC Switch` | ⏳ 待补充（用户未提供仓库） | 供应商预设、Region/Plan 胶囊切换 | 待补充 |
 | `Magpie` | ⏳ 待补充（用户未提供仓库） | 6 角色绑定、干饭套餐、粘性路由、隐私脱敏 | 待补充 |
 | `awesome-codex-pet` | ⏳ 待补充（用户未提供仓库） | 桌宠实现横向参考 | 待补充 |
+| [`Reisenbug/TerraBlind`](https://github.com/Reisenbug/TerraBlind) | ✅ **MIT**（LICENSE 原文核实） | M7 泰拉瑞亚首选蓝本（思想吸收 + 未复制源码）：模组内 HTTP 17878、ASCII 地形与 find_tiles、三段式回执 + 世界事实终止、SurvivalReflex、物理预测寻路；辅助 MutantPilot（MIT）、tmodloader-mcp（MIT） | [REFERENCE-terrariablind.md](./REFERENCE-terrariablind.md) |
+| [`fruitstarzero/Don-t-Starve-Together-AI-Companion`](https://github.com/fruitstarzero/Don-t-Starve-Together-AI-Companion) | ✅ **MIT**（LICENSE 原文核实） | M7 饥荒 DST 首选蓝本（思想吸收 + 未复制源码）：服务器侧权威 mod + Node HTTP 桥 + 2s QueryServer tick + 0.25s vanilla 动作执行；辅助 qinming99/dst-admin（MIT）、mathielo/dst-dedicated-server（MIT）；Journey-Together 无 LICENSE 仅思想 | [REFERENCE-dst-ai-companion.md](./REFERENCE-dst-ai-companion.md) |
+| [`mlkgrnt/Junimo-MCP`](https://github.com/mlkgrnt/Junimo-MCP) | ✅ **MIT**（LICENSE 原文核实，Copyright (c) 2026 mlkgrnt；与 README 声明一致，无素材二段式） | M3/T-M6-29 星露谷**第二参考实现**（思想吸收 + 未复制源码）：mock 与真机同源测试纪律（157 项免游戏断言、发布产物自测）、效果核验式回执（回读地块终态）、逐格三态计分、sleep 存档 mtime 回读、长动作停滞哨兵/分段兜底、菜单/剧情/NamingMenu 盲区兜底、`live_soak.py` 长时压测；仅 Windows 端到端（/focus 依赖 Win32、NagiBridge /press_key 用 user32，已如实标注）；不采用其 OCaml/stdio/私有 HTTP 形态与 NagiBridge-Remix（PolyForm NC）代码 | [REFERENCE-junimo-mcp.md](./REFERENCE-junimo-mcp.md) |
 
 ## 3. 硬性红线（与 AGENTS.md §2.2 对应，Gate 2 自动扫描）
 
@@ -67,5 +70,6 @@
 | dsh-desktop-petbox | Live2D 桌宠舞台 | **engine.js 参数单出口**（854 行）、mood.js 纯函数、gaze.js 注射手感、interact.js alpha 剪影分区、HTTP 控制口、RMS 口型 | 无 |
 | agent-pet | Tauri/Rust AI 监视桌宠 | codex_monitor jsonl→事件映射（1410 行）、双层映射（原始事件→语义→动画）、9 态状态机 | 12 个像素宠精灵图 |
 | **pingdotgg/t3code** | **coding agents 开源控制平面**（MIT，68.5k★，2026-11-21 补档） | **ACP（Agent Client Protocol）v1/v2 统一接入** Claude Code/Codex/Cursor/OpenCode/dsh（`dsh --profile acp`）；Provider 实例模型（Registry 搜索/本地命令/凭据自管）；线程/中途换 agent/checkpoint/任务委派；桌面↔手机远程审批；monorepo 多端（desktop/server/web/mobile）+ libghostty-vt 终端渲染 | 无 |
+| Junimo-MCP | OCaml 手写星露谷 MCP 桥（41 工具，MIT，3.3.1 / HEAD 717218b，2026-11-23 补档） | **mock 与真机同源测试纪律**（`mock_smoke` 157 项免游戏断言驱动待发布二进制，仅换 `STARDEW_API_URL`；mock 复刻 `/move` race 与 `/use` 校验）、**效果核验式动作**（`/use` ok 后回读地块终态，固定 sleep 会丢中间格）、**sleep 以 `SaveGameInfo` mtime 为准**、**`live_soak` 长时压测**（不可达单列不计错 + 子进程泄漏检查）、**菜单/剧情盲区处理**（无选项自动按掉、带选项绝不代答、NamingMenu 坐标兜底）；只读源码级复核，未执行 | 无素材（纯代码仓库） |
 
 > 12 个新仓库的第一轮档案尚未单独建 `REFERENCE-*.md`，按工单开工必查原则：各工单开工前以本表结论为索引、深读对应仓库源码复核。

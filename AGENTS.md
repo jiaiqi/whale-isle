@@ -140,6 +140,8 @@ AI 只能在开发期修改仓库代码；软件编译运行后，线上环境�
 | **桌宠渲染、透明窗、物理与语音锁** | `dsh-pet` (`REFERENCE-dsh-pet.md`)、`awesome-codex-pet` | 吸收 TTL 语音锁、播放回执、睡眠安静模式、脚底对齐与 WebM 生成链；内置素材仅作开发测试 |
 | **模型网关、供应商接入、Token 饭碗** | `CC Switch`、`Magpie`、`dsh-douyin-agent`、`dsh-live-studio` | 吸收 CC Switch 两步式预设+Region/Plan 胶囊；吸收 Magpie 单屏 6 角色绑定、干饭套餐切换、粘性路由与隐私脱敏 |
 | **星露谷 MCP、动作回执、键鼠接管** | `BlindWhaleFarmer` (`REFERENCE-dsh-stardew-blind-whale-farmer.md`) | 吸收动作互斥锁、`uncertain` 处理、玩家物理键鼠一动即接管、游玩预算控制 |
+| **泰拉瑞亚 MCP、平台寻路、生存反射** | `TerraBlind` (`REFERENCE-terrariablind.md`)、`MutantPilot`、`tmodloader-mcp` | 吸收模组内 HTTP 三段式回执（accepted→status→outcome）、世界事实终止判据、receding-horizon 物理预测寻路、岩浆跳出/低血喝药反射；TShock/TSAPI/HEROsMod/TerraNoneBridge 为 GPL-3.0 禁止抄码；无许可证项目仅参考思想 |
+| **饥荒 DST MCP、服务器侧权威、昼夜生存** | `fruitstarzero AI Companion` (`REFERENCE-dst-ai-companion.md`)、`dst-admin`、`Journey-Together`（仅思想） | IPC 只押 Klei 官方 653007 通道（localhost QueryServer / unsafedata/*.json / `-allow_ioopenwrite_sandbox_escape`），勿用第三方 URL 或任意 io 写；dst-admin-go 为 GPL-3.0 禁止抄码；cluster_token 须人类 Klei 账号生成不可绕过 |
 | **弹幕归一、礼物连击、常客记仇账本** | `dsh-livestream`、`dsh-live-studio`、`dyhub` | 保持 `dyhub` 为抖音弹幕主线，不采用浏览器方案；吸收事件归一协议、同观众短时弹幕合并与本地 SQLite 账本 |
 | **长时直播防呆、节目状态机** | `Dsh_douyin` (`REFERENCE-dsh-douyin.md`)、`dsh-livestream` | 仅参考节目状态机思想（打游戏 ↔ 点歌 ↔ 杂谈），防止游戏卡住变成无意义重复动作；严禁抄袭源码 |
 | **高光切片、翻车复盘、视觉理解** | `dsh-video-storyboard` (`REFERENCE-dsh-video-storyboard.md`) | 视觉仅用于事后复盘与 45s 环形缓存切片生成，实时游戏控制 100% 走 MCP 文本结构化状态 |
