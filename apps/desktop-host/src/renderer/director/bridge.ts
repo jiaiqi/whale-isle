@@ -244,6 +244,15 @@ export interface DirectorBridge {
   harnessStop(presetId: string): Promise<{ ok: boolean }>;
   harnessStatus(): Promise<HarnessStatusInfo[]>;
   onHarnessEvent(handler: (event: HarnessEventMsg) => void): void;
+  // T-M6-31 外部插件
+  pluginList(): Promise<Array<{ id: string; name: string; version: string; description: string; enabled: boolean; tools: string[]; error?: string }>>;
+  pluginToggle(id: string, enabled: boolean): Promise<{ ok: boolean; error?: string }>;
+  pluginTools(): Promise<Array<{ name: string; pluginId: string; policy: 'allow' | 'ask' | 'deny'; description: string }>>;
+  pluginInvoke(name: string, args?: unknown): Promise<{ ok: boolean; result?: unknown; error?: string }>;
+  pluginApprove(name: string): Promise<{ ok: boolean; error?: string }>;
+  pluginErrors(): Promise<Array<{ id: string; error: string; phase: string }>>;
+  pluginClearErrors(): Promise<void>;
+  onPluginEvent(handler: (event: { event: string; payload: unknown }) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸

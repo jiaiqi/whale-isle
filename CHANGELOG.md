@@ -9,6 +9,7 @@
 
 ### Added
 
+- **外部插件生产链路（T-M6-36，T-M6-31 切片一）**：`userData/plugins/<id>/{manifest.json,index.mjs}` 发现真实 dsh 插件，清单过 Zod、id 与目录名一致、符号链接越界拦截；`vault://*`（密钥单咽喉）与 `shell://*`（审批 UI 未接线）装载期硬拒；dsh 工具默认 ask 策略，需 `pluginApprove` 会话授权；setup 崩溃回滚、工具异常隔离、禁用注销工具/订阅。中控台插件页显示真实外部插件、工具与错误；新增 `docs/PLUGINS.md` 与可复制示例 `docs/examples/plugins/hello-whale/`。验证：plugin-host 6/6、Electron E2E 5/5（真实动态 import → 启用 → 工具调用）。**注意**：插件在主进程运行，Policy 不是 JS 沙箱，只装载用户本机可信代码。
 - **自治质量指标（T-M6-35，审计 Phase 2 切片）**：`packages/game-bridge-mcp/metrics.ts` 从真实事件流派生有效回执率、失败/错误率、重复动作率、动作覆盖面与最长同工具连击；口径明确（TIMEOUT 不计成功也不计失败、`think` 不算动作、编排器汇总回执排除、空集显示「—」不伪造 0%/100%）。星露谷与泰拉瑞亚面板新增「自治质量（本会话）」卡；渲染层通过 `@workbench/game-bridge-mcp/metrics` 子路径导入，避免把适配器副作用打进前端包。验证：metrics 8/8（分支 100%）、Electron UI E2E 4/4。
 - **OBS 只读透明挂件 `/obs`（T-M6-34，T-M6-31 首个最小真实链路）**：内嵌 WebUI 新增 `GET /obs`——透明底、`STAGE_PROTOCOL=1`、token 鉴权、`obs-readonly` 声明；页面通过 `/ws` 订阅动作/回执并回放最近 20 条，只读、无任何指令/审批入口。中控台 OBS 页改为「复制 OBS 源地址」（含本机 token，提示勿外传），文案从「18765 接线中」改为真实的 18780 `/obs`。验证：webui-server 23/23、Electron UI E2E 4/4（真实内嵌服务 401/200 与协议标记）。投票/歌词/点歌层仍未接线，OBS 叠加观感待真机。
 - **语音后端如实展示（T-M6-33，审计发现）**：新增 `voice:backend` 只读探测与顶栏标识——`mcode` 角色音色链不额外标注，`say` 兜底显示「· say」，非 macOS 显示「· 未适配」，title 展示具体链路说明。此前界面只有「语音开/关」，容易让用户误以为始终在用角色 TTS。验证：探测单测 4/4、Electron UI E2E 断言 `data-voice-backend` 三态；真实听感与 Windows 适配仍待真机。

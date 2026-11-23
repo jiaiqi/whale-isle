@@ -1,4 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join as joinPath } from 'node:path';
 import { tmpdir } from 'node:os';
 import { _electron as electron } from 'playwright-core';
 import { createRequire } from 'node:module';
@@ -474,6 +476,62 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       expect(html).not.toContain('/api/command');
     } finally {
       await app.close();
+    }
+  }, 90_000);
+
+  /**
+   * [E2E-HOST] T-M6-31：外部插件生产链路（真实 Electron main 动态 import）。
+   * 在 E2E userData 放一个 dsh 形态插件 → 中控台插件页发现/启用/调用工具。
+   */
+  it('外部插件：发现 → 启用 → 工具调用（ask 审批）', { timeout: 90_000 }, async () => {
+    const appData = process.platform === 'darwin'
+      ? joinPath(homedir(), 'Library', 'Application Support', 'Whale Isle', 'e2e-profile')
+      : joinPath(process.env.APPDATA ?? homedir(), 'Whale Isle', 'e2e-profile');
+    const id = `e2ehello${Date.now()}`;
+    const pluginDir = joinPath(appData, 'plugins', id);
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(joinPath(pluginDir, 'manifest.json'), JSON.stringify({
+      id, name: 'E2E Hello Whale', version: '1.0.0', description: '插件生产链路验收', extensions: ['tool'],
+    }), 'utf8');
+    writeFileSync(joinPath(pluginDir, 'index.mjs'), `
+export default {
+  name: '${id}',
+  apply(ctx) {
+    ctx.tool('e2e_ping', (args) => ({ pong: true, who: args?.who ?? 'whale' }));
+  },
+};
+`, 'utf8');
+
+    const app = await electron.launch({
+      args: ['--use-mock-keychain', mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(
+        () => Boolean((window as unknown as { directorBridge?: { pluginList?: unknown } }).directorBridge?.pluginList),
+        { timeout: 30_000 },
+      );
+      await page.click('[data-tab="plugins"]');
+      await page.waitForSelector(`[data-external-plugin="${id}"]`, { timeout: 15_000 });
+
+      const row = page.locator(`[data-external-plugin="${id}"]`);
+      await row.locator('button[aria-pressed]').click();
+      await page.waitForSelector('[data-plugin-tool="e2e_ping"]', { timeout: 15_000 });
+
+      // 工具策略来自 dsh 适配默认 ask：UI 自动走 pluginApprove 后调用
+      await page.click('[data-plugin-tool="e2e_ping"]');
+      await page.waitForTimeout(800);
+      const list = await page.evaluate(() => (window as unknown as {
+        directorBridge: { pluginList(): Promise<Array<{ id: string; enabled: boolean; tools: string[] }>> };
+      }).directorBridge.pluginList());
+      const entry = list.find((p) => p.id === id);
+      expect(entry?.enabled).toBe(true);
+      expect(entry?.tools).toContain('e2e_ping');
+    } finally {
+      await app.close();
+      rmSync(pluginDir, { recursive: true, force: true });
     }
   }, 90_000);
 });

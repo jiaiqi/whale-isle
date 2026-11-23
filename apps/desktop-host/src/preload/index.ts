@@ -58,6 +58,21 @@ contextBridge.exposeInMainWorld('directorBridge', {
   harnessStop: (presetId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('harness:stop', presetId),
   harnessStatus: (): Promise<Array<{ presetId: string; label: string; running: boolean; sessions: string[] }>> =>
     ipcRenderer.invoke('harness:status'),
+  // T-M6-31：外部插件生产链路（发现/启停/工具/审批/错误）
+  pluginList: (): Promise<unknown> => ipcRenderer.invoke('plugin:list'),
+  pluginToggle: (id: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('plugin:toggle', id, enabled),
+  pluginTools: (): Promise<Array<{ name: string; pluginId: string; policy: 'allow' | 'ask' | 'deny'; description: string }>> =>
+    ipcRenderer.invoke('plugin:tools'),
+  pluginInvoke: (name: string, args?: unknown): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    ipcRenderer.invoke('plugin:invoke', name, args ?? {}),
+  pluginApprove: (name: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('plugin:approve', name),
+  pluginErrors: (): Promise<Array<{ id: string; error: string; phase: string }>> => ipcRenderer.invoke('plugin:errors'),
+  pluginClearErrors: (): Promise<void> => ipcRenderer.invoke('plugin:clear-errors'),
+  onPluginEvent: (handler: (event: { event: string; payload: unknown }) => void): void => {
+    ipcRenderer.on('plugin:event', (_e, event) => handler(event));
+  },
   onHarnessEvent: (handler: (event: unknown) => void) => {
     ipcRenderer.on('harness:event', (_e, event) => handler(event));
   },

@@ -1,0 +1,8 @@
+{
+  "id": "hello-whale",
+  "name": "Hello Whale（示例插件）",
+  "version": "1.0.0",
+  "description": "最小 dsh 形态示例：注册一个 hello_ping 工具并订阅自驾事件",
+  "extensions": ["tool"],
+  "permissions": []
+}

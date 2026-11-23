@@ -20,6 +20,7 @@ import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
+import { createPluginHost } from './plugin-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
@@ -263,6 +264,11 @@ app.whenReady().then(() => {
     builtinAssetsDir: join(here, '../renderer/pet-stage/assets'),
   });
   void characters;
+  // T-M6-31：外部插件生产链路（发现/启停/工具注册/审批/崩溃隔离）
+  const plugins = createPluginHost({
+    userDataDir: app.getPath('userData'),
+    windows: () => [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+  });
   // 多桌宠联机 agent 池（T-M6-22）：每端点一个 runner，事件带 agentId；不与单例 autodrive 共用动作锁
   coopHost = createCoopHost({
     userDataDir: app.getPath('userData'),
@@ -277,6 +283,8 @@ app.whenReady().then(() => {
   void dayKeyOf;
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
   const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice, memory);
+  // 自驾事件进插件总线（插件只能经总线观察，不直接访问 autodrive）
+  autodrive.subscribe((event) => plugins.emit('autodrive:event', event));
   const harness = createHarnessHost();
   // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100，结果如实回报（不伪造「已连接」）
   ipcMain.handle('game:health', async (_event, gameId: GameId, endpoint?: string) => {
@@ -342,6 +350,7 @@ app.whenReady().then(() => {
     const targets = [stageWindow, directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents);
     autodrive.setTargets(targets);
     harness.setTargets(targets);
+    plugins.setTargets(targets);
   };
   stageWindow = createStageWindow();
   directorWindow = createDirectorWindow();

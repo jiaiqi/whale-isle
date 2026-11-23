@@ -13,7 +13,7 @@
 | 桌宠渲染 / 拖拽 / 多屏 / 多角色 | macOS 已验收；Windows 与异构 DPI 待真机 |
 | 模型供应商与主脑 | 可用（用户自配 Key）；纯决策服务商走 System One 探针 |
 | 语音 | 桌面主路径为 macOS `mcode-tools → say → afplay`；Python 声音工坊含 stub；Windows 语音待适配 |
-| 插件系统 | `plugin-kit` 兼容层与单测完成；外部插件装载/热插拔未接入主进程 |
+| 插件系统 | 外部 dsh 插件可从 `userData/plugins` 发现/启停/调用工具（见 [docs/PLUGINS.md](./docs/PLUGINS.md)）；插件页面开关仍控制内置入口 |
 | 直播 / 点歌 / OBS | 注意力调度与面板 UI 已有；**OBS `/obs` 只读透明挂件已接通**（STAGE_PROTOCOL=1）；真实弹幕接入与点歌执行链未闭环 |
 | 独立安装包 | macOS arm64 DMG 可运行（未签名）；自包含 Python worker 与跨平台语音未完成 |
 

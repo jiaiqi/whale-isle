@@ -2,8 +2,10 @@
  * 插件与权限策略（v4 设计稿 09）：插件热开关（影响侧栏/页面可见性）+ 只读策略表。
  * 插件模型对齐 plugin-kit（manifest/defineTool/事件总线），热插拔执行点由主进程承载（T-M6-01 收尾）。
  */
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import {
-  AudioLines, Blocks, Brain, Cpu, Fish, Flame, MessageSquare, MonitorPlay, Package, Sprout, Swords, Terminal,
+  AudioLines, Blocks, Brain, Cpu, Fish, Flame, MessageSquare, MonitorPlay, Package, Play, RefreshCw, ShieldCheck, Sprout, Swords, Terminal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -46,8 +48,65 @@ export interface PluginsPanelProps {
   onToggle: (id: string, enabled: boolean) => void;
 }
 
+interface ExternalPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  tools: string[];
+  error?: string;
+}
+interface PluginToolEntry {
+  name: string;
+  pluginId: string;
+  policy: 'allow' | 'ask' | 'deny';
+  description: string;
+}
+
 export function PluginsPanel({ enabled, onToggle }: PluginsPanelProps): React.JSX.Element {
   const activeCount = PLUGIN_CATALOG.filter((p) => enabled.has(p.id)).length;
+  const [external, setExternal] = useState<ExternalPlugin[]>([]);
+  const [tools, setTools] = useState<PluginToolEntry[]>([]);
+  const [errors, setErrors] = useState<Array<{ id: string; error: string; phase: string }>>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const refresh = useCallback((): void => {
+    void Promise.all([
+      window.directorBridge.pluginList(),
+      window.directorBridge.pluginTools(),
+      window.directorBridge.pluginErrors(),
+    ]).then(([list, toolList, errorList]) => {
+      setExternal(list);
+      setTools(toolList);
+      setErrors(errorList);
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    refresh();
+    const timer = setInterval(refresh, 10_000);
+    window.directorBridge.onPluginEvent(() => refresh());
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  const toggleExternal = (id: string, next: boolean): void => {
+    setBusy(id);
+    void window.directorBridge.pluginToggle(id, next).then((res) => {
+      if (!res.ok) toast.error(res.error ?? '插件操作失败');
+      else toast.success(`${id} 已${next ? '启用' : '停用'}`);
+    }).finally(() => { setBusy(null); refresh(); });
+  };
+  const callTool = async (tool: PluginToolEntry): Promise<void> => {
+    setBusy(tool.name);
+    if (tool.policy === 'ask') {
+      const approved = await window.directorBridge.pluginApprove(tool.name);
+      if (!approved.ok) { toast.error(approved.error ?? '审批失败'); setBusy(null); return; }
+      toast('已批准本次会话内调用该工具');
+    }
+    const res = await window.directorBridge.pluginInvoke(tool.name, {});
+    toast(res.ok ? `${tool.name} → ${JSON.stringify(res.result ?? null).slice(0, 80)}` : `${tool.name}：${res.error ?? '调用失败'}`);
+    setBusy(null);
+  };
   return (
     <div className="mx-auto max-w-[1000px] px-6 py-5">
       <header className="mb-4">
@@ -118,6 +177,66 @@ export function PluginsPanel({ enabled, onToggle }: PluginsPanelProps): React.JS
           </p>
         </section>
       </div>
+
+      <section className="card mt-4 overflow-hidden" data-external-plugins>
+        <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: '1px solid var(--stroke)' }}>
+          <Package size={14} />
+          <h3 className="text-xs font-semibold">外部插件（userData/plugins）</h3>
+          <span className="pill" style={{ fontSize: 9 }}>{external.length} found</span>
+          <div className="flex-1" />
+          <button className="pill" onClick={refresh} title="重新扫描插件目录"><RefreshCw size={11} />刷新</button>
+        </div>
+        {external.length === 0 && (
+          <p className="px-4 py-3 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            尚无外部插件。将 dsh 形态插件放入 <span className="mono">userData/plugins/&lt;id&gt;/manifest.json</span> 与 <span className="mono">index.mjs</span> 后点刷新。
+          </p>
+        )}
+        {external.map((p) => (
+          <div key={p.id} data-external-plugin={p.id} className="px-4 py-3" style={{ borderBottom: '1px solid var(--stroke)' }}>
+            <div className="flex items-center gap-2">
+              <span className="text-[12.5px] font-semibold">{p.name}</span>
+              <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{p.id}@{p.version}</span>
+              <div className="flex-1" />
+              <button
+                className={`sw${p.enabled ? ' on' : ''}`}
+                aria-pressed={p.enabled}
+                aria-label={`${p.enabled ? '停用' : '启用'}${p.name}`}
+                disabled={busy === p.id}
+                onClick={() => toggleExternal(p.id, !p.enabled)}
+              />
+            </div>
+            <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>{p.description}</p>
+            {p.error !== undefined && <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>{p.error}</p>}
+            {p.tools.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {p.tools.map((name) => {
+                  const tool = tools.find((t) => t.name === name);
+                  return (
+                    <button
+                      key={name}
+                      className="pill"
+                      data-plugin-tool={name}
+                      disabled={!p.enabled || busy === name}
+                      onClick={() => { if (tool !== undefined) void callTool(tool); }}
+                      title={tool?.description ?? name}
+                    >
+                      {tool?.policy === 'ask' ? <ShieldCheck size={10} /> : <Play size={10} />}{name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+        {errors.length > 0 && (
+          <div className="px-4 py-2.5 text-[11px]" style={{ color: 'var(--amber)' }}>
+            <div className="mb-1 flex items-center gap-2">运行期错误 {errors.length}
+              <button className="pill" onClick={() => { window.directorBridge.pluginClearErrors(); refresh(); }}>清空</button>
+            </div>
+            {errors.slice(-5).map((e, i) => <div key={i} className="mono truncate" title={e.error}>{e.id} [{e.phase}] {e.error.slice(0, 140)}</div>)}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
