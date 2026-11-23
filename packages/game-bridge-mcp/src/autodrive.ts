@@ -50,6 +50,8 @@ export class AutodriveRunner {
   readonly adapter: GameAdapter;
   private planner: Planner;
   private pendingDirective: { tool: string; args: Record<string, unknown>; intent: string } | null = null;
+  /** 上一次 wait 的原因：相同原因的重复 wait 不再刷 watchdog/cycle-end（求助态防噪声） */
+  private lastWaitReason: string | null = null;
 
   constructor(
     private readonly onEvent: (event: AutodriveEvent) => void,
@@ -160,12 +162,16 @@ export class AutodriveRunner {
 
         // 4. 执行
         if (decision.kind === 'wait') {
-          // wait 必须可见：把原因作为 stuck 事件亮到中控台/桌宠，避免「看起来没反应」
-          this.onEvent({ type: 'watchdog', kind: 'stuck', detail: decision.reason });
-          this.onEvent({ type: 'cycle-end', delayMs: decision.seconds * 1000 });
+          // wait 必须可见，但相同原因的求助态只报一次：避免每 10s 刷一条 watchdog
+          if (decision.reason !== this.lastWaitReason) {
+            this.onEvent({ type: 'watchdog', kind: 'stuck', detail: decision.reason });
+            this.onEvent({ type: 'cycle-end', delayMs: decision.seconds * 1000 });
+            this.lastWaitReason = decision.reason;
+          }
           await sleep(Math.min(decision.seconds, 10) * 1000);
           continue;
         }
+        this.lastWaitReason = null;
         if (decision.kind === 'stop') {
           this.onEvent({ type: 'receipt', tool: 'autodrive', status: 'COMPLETED', summary: decision.reason });
           this.running = false;
@@ -181,6 +187,8 @@ export class AutodriveRunner {
           tool: decision.tool,
           errorMessage: result.kind === 'error' ? result.message : undefined,
         });
+        // 回执反馈给规划器（规则兜底据此升级救援阶梯，避免满包死循环）
+        this.planner.observeReceipt?.(decision.tool, receipt.status, receipt.summary);
         this.onEvent({ type: 'receipt', tool: decision.tool, status: receipt.status, summary: receipt.summary });
 
         // 5. 间步延迟（长动作回执后稍等游戏结算）

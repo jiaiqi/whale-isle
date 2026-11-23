@@ -793,6 +793,39 @@ describe('autodrive 默认 sleep / UNCERTAIN-Failed 双分支', () => {
   });
 });
 
+describe('T-M6-10 真机回归：wait 求助去重', () => {
+  it('相同原因的连续 wait 只发一次 watchdog / cycle-end（不刷屏）', async () => {
+    const events: AutodriveEvent[] = [];
+    const adapter = {
+      gameId: 'stardew',
+      displayName: 'test',
+      transport: { callTool: async () => ({ kind: 'ok' as const, text: STATE_OK, isError: false }) },
+      ping: async () => true,
+      unreachableMessage: 'unreachable',
+      extractClock: () => null,
+      isLongAction: () => false,
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: 'ok' }),
+    } as unknown as import('./adapter').GameAdapter;
+    const runner = new AutodriveRunner((e) => events.push(e), {
+      maxCycles: 4, stepDelayMs: 1, pollDelayMs: 1, sleep: async () => undefined,
+    }, adapter);
+    let waits = 0;
+    runner.setPlanner({
+      name: 'test-blocked',
+      decide: async () => {
+        waits += 1;
+        return { kind: 'wait', seconds: 60, reason: '满包且无可出货/可捐——需要主人造箱' };
+      },
+    });
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await runner.stopAndWait();
+    expect(waits).toBeGreaterThan(1);
+    expect(events.filter((e) => e.type === 'watchdog').length).toBe(1);
+    expect(events.filter((e) => e.type === 'cycle-end').length).toBe(1);
+  });
+});
+
 describe('T-M6-27 会话归属', () => {
   it('每次创建的 runner 拥有独立且非空的 sessionId', () => {
     const a = new AutodriveRunner(() => undefined);

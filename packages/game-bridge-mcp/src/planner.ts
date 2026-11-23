@@ -217,6 +217,20 @@ export function pickFurnitureToPlace(raw: string, rejected?: ReadonlySet<string>
   return candidate;
 }
 
+/** 背包扩容提示：`背包扩到 24 格：2000g` → { capacity, cost } */
+export function parseBackpackUpgrade(raw: string): { capacity: number; cost: number } | null {
+  const m = /背包扩到\s*(\d+)\s*格[：:]\s*(\d+)\s*g/.exec(raw);
+  if (!m?.[1] || m[2] === undefined) return null;
+  return { capacity: Number(m[1]), cost: Number(m[2]) };
+}
+
+/** 杂货店柜台背包交互点：`[BuyBackpack] [interact]：(7,18)` */
+export function findBuyBackpackSpot(raw: string): { x: number; y: number } | null {
+  const m = /\[BuyBackpack\][^\n]*?\((\d+)\s*,\s*(\d+)\)/.exec(raw);
+  if (!m?.[1] || m[2] === undefined) return null;
+  return { x: Number(m[1]), y: Number(m[2]) };
+}
+
 /** 背包里木材数量（Chest 配方需要 50） */
 export function countWood(raw: string): number {
   for (const text of inventoryTexts(raw)) {
@@ -314,7 +328,14 @@ export type PlannerDecision =  | { kind: 'act'; tool: string; args: Record<strin
 export interface Planner {
   readonly name: string;
   decide(state: GameStateSnapshot): Promise<PlannerDecision>;
+  /** 可选：编排器回执反馈（规则兜底据此做失败升级，避免离线模式死循环） */
+  observeReceipt?(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void;
 }
+
+/** 满包救援工具集合：只有这些工具的回执会推进规则模式的救援阶梯 */
+const RESCUE_TOOLS = new Set([
+  'tidy_backpack', 'ship_items', 'store_items', 'donate_bundles', 'craft', 'place_item', 'trash_item', 'interact',
+]);
 
 /** 对话框/菜单优先处理表（BWF 语义：有界面时其他动作会被拒绝） */
 function handleMenu(state: GameStateSnapshot): PlannerDecision | null {
@@ -351,6 +372,20 @@ export class RulePlanner implements Planner {
   /** 上次解析到的背包空位（BWF get_state 会省掉未变化段落，不能把「省略」当「有空位」） */
   private lastFreeSlots: number | null = null;
   private furniturePlaceTried = false;
+  /** 满包救援阶梯（T-M6-10 真机：tidy 无箱子必败，连续失败会空转） */
+  private rescueTried = new Set<string>();
+  private lastRescueFail = '';
+
+  observeReceipt(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void {
+    if (!RESCUE_TOOLS.has(tool)) return;
+    if (status === 'COMPLETED') {
+      this.rescueTried.clear();
+      this.lastRescueFail = '';
+      return;
+    }
+    this.lastRescueFail = `${tool}:${status}${summary === '' ? '' : `（${summary.slice(0, 60)}）`}`;
+    this.rescueTried.add(tool);
+  }
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
     const menu = handleMenu(state);
@@ -361,6 +396,8 @@ export class RulePlanner implements Planner {
     if (this.lastPhaseDay !== state.day) {
       this.lastPhaseDay = state.day;
       this.phase = 'morning-mail';
+      this.rescueTried.clear();
+      this.lastRescueFail = '';
     }
     void dayKey;
 
@@ -389,15 +426,47 @@ export class RulePlanner implements Planner {
     const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
     if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
     const effectiveSlots = rawHasSlots ? state.freeSlots : (this.lastFreeSlots ?? state.freeSlots);
-    if (effectiveSlots > 0) this.furniturePlaceTried = false;
+    if (effectiveSlots > 0) {
+      this.furniturePlaceTried = false;
+      this.rescueTried.clear();
+      this.lastRescueFail = '';
+    }
     if (effectiveSlots <= 0) {
+      // 最高优先：钱够且游戏提示可扩容 → 去皮埃尔买背包（一次性解决满包，真机 2026-11-23 实测）。
+      const upgrade = parseBackpackUpgrade(state.raw);
+      if (upgrade !== null && state.money >= upgrade.cost && !this.rescueTried.has('backpack_upgrade')) {
+        if (state.location !== 'SeedShop') {
+          return {
+            kind: 'act',
+            tool: 'travel_to',
+            args: { location: 'SeedShop' },
+            intent: `背包满了，钱够扩容（${upgrade.cost}g → ${upgrade.capacity} 格），去皮埃尔杂货店`,
+          };
+        }
+        const spot = findBuyBackpackSpot(state.raw);
+        if (spot !== null) {
+          this.rescueTried.add('backpack_upgrade');
+          return {
+            kind: 'act',
+            tool: 'interact',
+            args: { x: spot.x, y: spot.y },
+            intent: `买背包扩容（${upgrade.cost}g → ${upgrade.capacity} 格）`,
+          };
+        }
+      }
+      // 有可卖物优先出货（不依赖农场箱子，还能赚钱）。
       const item = pickShippableItem(state.raw);
-      if (item !== null) {
+      if (item !== null && !this.rescueTried.has('ship_items')) {
         return { kind: 'act', tool: 'ship_items', args: { item }, intent: `背包满了，先把${item}出货换米腾位置` };
       }
+      // 只剩【留着】的收集包材料：donate_bundles 是唯一无损腾格途径（只试一次）。
+      const hasReserved = /【留着/.test(state.raw);
+      if (hasReserved && !this.rescueTried.has('donate_bundles')) {
+        return { kind: 'act', tool: 'donate_bundles', args: {}, intent: '背包只剩收集包材料，去社区中心捐掉腾格（不卖不扔）' };
+      }
       const furniture = pickFurnitureToPlace(state.raw);
-      if (furniture !== null) {
-        if (!this.furniturePlaceTried) {
+      if (furniture !== null && (!this.rescueTried.has('place_item') || !this.rescueTried.has('trash_item'))) {
+        if (!this.furniturePlaceTried && !this.rescueTried.has('place_item')) {
           this.furniturePlaceTried = true;
           if (state.location !== 'Farm') {
             return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把家具摆出来腾个背包格' };
@@ -406,10 +475,21 @@ export class RulePlanner implements Planner {
             return { kind: 'act', tool: 'place_item', args: { item: furniture, x: state.posX + 1, y: state.posY, force: true }, intent: `把${furniture}摆到农场上腾位置` };
           }
         }
-        // 摆过一次仍卡住 → 强制丢弃兜底（墙饰类 BWF 无法摆到地面）
-        return { kind: 'act', tool: 'trash_item', args: { item: furniture, force: true }, intent: `家具摆不下，只好忍痛丢掉${furniture}换一格` };
+        if (!this.rescueTried.has('trash_item')) {
+          return { kind: 'act', tool: 'trash_item', args: { item: furniture, force: true }, intent: `家具摆不下，只好忍痛丢掉${furniture}换一格` };
+        }
       }
-      return { kind: 'act', tool: 'tidy_backpack', args: { purpose: 'fish' }, intent: '背包塞得满满当当，先整理出空位再干活' };
+      // tidy 只试一次：BWF 在「农场没有箱子」时会直接失败，但世界箱子未必能从状态文本可靠判定，
+      // 所以保留一次尝试；失败后由 rescueTried 记住，绝不重复空转。
+      if (!this.rescueTried.has('tidy_backpack')) {
+        return { kind: 'act', tool: 'tidy_backpack', args: { purpose: 'fish' }, intent: '背包塞得满满当当，先整理出空位再干活' };
+      }
+      // 无可出货 / 无可捐 / 无箱子：停止空转，明确求助（wait 不产生游戏动作）。
+      return {
+        kind: 'wait',
+        seconds: 60,
+        reason: `满包且农场无箱子、无可出货/可捐物品（${this.lastRescueFail || '首次判断'}）——需要主人造箱或手动腾格；规则模式暂停动作，不空转`,
+      };
     }
 
     switch (this.phase) {
