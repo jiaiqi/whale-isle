@@ -3,9 +3,16 @@
  *
  * 穿透策略（SPEC §3.1）：renderer 每 50ms 采样鼠标处 alpha，仅状态翻转时经
  * 'passthrough:set' 到这里 → win.setIgnoreMouseEvents(passthrough, { forward })。
- * 拖拽坐标一律 DIP（Electron 原生处理多屏异构 DPI）；边界为多屏合并 workArea。
+ * 拖拽坐标一律 DIP（Electron 原生处理多屏异构 DPI）；位置约束按每块屏幕工作区分别计算。
  */
 import { BrowserWindow, ipcMain, screen } from 'electron';
+import {
+  boundingRect,
+  clampWindowPosition,
+  windowPlacementRegions,
+  type DisplayWorkArea,
+  type Rect,
+} from './display-region';
 
 export interface ScreenBounds {
   minX: number;
@@ -14,18 +21,36 @@ export interface ScreenBounds {
   maxY: number;
 }
 
-export function computeScreenBounds(): ScreenBounds {
+function getDisplayWorkAreas(): DisplayWorkArea[] {
   const displays = screen.getAllDisplays();
-  const areas = displays.map((display) => display.workArea);
-  if (areas.length === 0) {
-    const primary = screen.getPrimaryDisplay().workArea;
-    return { minX: primary.x, minY: primary.y, maxX: primary.x + primary.width, maxY: primary.y + primary.height };
-  }
+  const sources = displays.length > 0 ? displays : [screen.getPrimaryDisplay()];
+  return sources.map((display) => ({
+    displayId: String(display.id),
+    x: display.workArea.x,
+    y: display.workArea.y,
+    width: display.workArea.width,
+    height: display.workArea.height,
+  }));
+}
+
+function boundsOf(rect: Rect): ScreenBounds {
   return {
-    minX: Math.min(...areas.map((a) => a.x)),
-    minY: Math.min(...areas.map((a) => a.y)),
-    maxX: Math.max(...areas.map((a) => a.x + a.width)),
-    maxY: Math.max(...areas.map((a) => a.y + a.height)),
+    minX: rect.x,
+    minY: rect.y,
+    maxX: rect.x + rect.width - 1,
+    maxY: rect.y + rect.height - 1,
+  };
+}
+
+export function computeScreenBounds(): ScreenBounds {
+  const areas = getDisplayWorkAreas();
+  const union = boundingRect(areas);
+  return {
+    minX: union.x,
+    minY: union.y,
+    // This hull is informational only. Placement uses the original work-area union.
+    maxX: union.x + union.width,
+    maxY: union.y + union.height,
   };
 }
 
@@ -61,21 +86,30 @@ export function registerStageIpc(options: PassthroughIpcOptions): void {
 
   ipcMain.handle('passthrough:get', () => current);
 
-  // T-M6-19：同时给「工作区边界」与「窗口左上角可达边界」（扣掉窗口自身尺寸）——
-  // 甩抛物理必须用 windowBounds，否则重力/惯性会把窗口整个推出屏幕下沿
+  // The overall hull remains useful to callers, but physics receives the active
+  // display's feasible window-origin region so a throw cannot enter a screen gap.
   ipcMain.handle('screen:bounds', () => {
     const work = computeScreenBounds();
     const win = options.getWindow();
-    const wb = win && !win.isDestroyed() ? win.getBounds() : null;
-    if (!wb) return { ...work, windowBounds: work };
+    if (!win || win.isDestroyed()) {
+      const primary = screen.getPrimaryDisplay();
+      return { ...work, displayId: String(primary.id), windowBounds: work };
+    }
+
+    const windowBounds = win.getBounds();
+    const regions = windowPlacementRegions(getDisplayWorkAreas(), windowBounds.width, windowBounds.height);
+    const display = screen.getDisplayMatching(windowBounds);
+    const placement = clampWindowPosition(
+      regions,
+      windowBounds.x,
+      windowBounds.y,
+      String(display.id),
+    );
+    const activeRegion = regions[placement.index];
     return {
       ...work,
-      windowBounds: {
-        minX: work.minX,
-        minY: work.minY,
-        maxX: Math.max(work.minX, work.maxX - wb.width),
-        maxY: Math.max(work.minY, work.maxY - wb.height),
-      },
+      displayId: placement.displayId ?? String(display.id),
+      windowBounds: activeRegion ? boundsOf(activeRegion) : work,
     };
   });
 
@@ -89,11 +123,17 @@ export function registerStageIpc(options: PassthroughIpcOptions): void {
   ipcMain.handle('win:drag-to', (_event, x: number, y: number) => {
     const win = options.getWindow();
     if (!win || win.isDestroyed()) return null;
-    const bounds = computeScreenBounds();
-    // 拖拽边界夹紧（多屏合并 workArea）
-    const clampedX = Math.min(Math.max(Math.round(x), bounds.minX), Math.max(bounds.minX, bounds.maxX - win.getBounds().width));
-    const clampedY = Math.min(Math.max(Math.round(y), bounds.minY), Math.max(bounds.minY, bounds.maxY - win.getBounds().height));
-    win.setPosition(clampedX, clampedY);
+    const size = win.getBounds();
+    const regions = windowPlacementRegions(getDisplayWorkAreas(), size.width, size.height);
+    const placement = clampWindowPosition(regions, x, y);
+    if (placement.displayId === null) {
+      const hull = computeScreenBounds();
+      const fallbackX = Math.min(Math.max(Math.round(x), hull.minX), Math.max(hull.minX, hull.maxX - size.width));
+      const fallbackY = Math.min(Math.max(Math.round(y), hull.minY), Math.max(hull.minY, hull.maxY - size.height));
+      win.setPosition(fallbackX, fallbackY);
+      return win.getPosition();
+    }
+    win.setPosition(Math.round(placement.x), Math.round(placement.y));
     return win.getPosition();
   });
 
