@@ -6,12 +6,12 @@
  *   - 自定义服务商全生命周期（Dexie customProviders）+ Magpie / CC Switch 只读导入
  * 密钥永远只在主进程 safeStorage；本组件只持有掩码。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Activity, AudioLines, Box, Brain, Check, CheckCircle2, Compass, Database, Download, Eye,
-  FileJson, Fish, Flame, Info, MessageSquare, Music, Plug, Plus, RefreshCw, Rocket, Search,
-  Server, Shield, SlidersHorizontal, Sparkles, Sprout, Trash2, Volume2, Waves, X, Zap,
+  Activity, AudioLines, Box, Brain, Check, CheckCircle2, Compass, Copy, Database, Download, Eye,
+  ExternalLink, FileJson, Fish, Flame, Info, MessageSquare, Music, Plug, Plus, RefreshCw, Rocket, Scale, Search,
+  Server, Shield, SlidersHorizontal, Sparkles, Sprout, Swords, Trash2, TriangleAlert, Volume2, Waves, X, Zap,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -29,11 +29,22 @@ type Protocol = 'openai' | 'anthropic';
 const OVERRIDES_KEY = 'providerOverrides';
 const DINING_KEY = 'diningProfiles';
 const CUSTOM_KEY = 'customProviders';
+/** 槽位自动挑选开关（渲染层专用 Dexie 键，不进契约：主进程只消费解析后的具体绑定） */
+const AUTO_KEY = 'slotAutoFlags';
+
+/** 支持查余额的厂商（与主进程 BALANCE_PROBES 对应） */
+const BALANCE_SUPPORTED: ReadonlySet<string> = new Set(['openrouter', 'deepseek-official', 'siliconflow', 'opencode-go']);
 
 interface ModelEntry {
   id: string;
   enabled: boolean;
   caps: string[];
+}
+
+interface ModelTestEntry {
+  ok: boolean;
+  latencyMs?: number;
+  error?: string;
 }
 
 interface ProviderOverride {
@@ -42,6 +53,12 @@ interface ProviderOverride {
   models?: ModelEntry[];
   variants?: ProviderEndpointVariant[];
   activeVariant?: number;
+  /** 最近一次「保存并检测」的连通结论：true=已连通；false=凭据已存但检测未通过；undefined=未检测过 */
+  testOk?: boolean;
+  /** 逐模型连通测试结果（自动挑选的依据，跨会话持久） */
+  tested?: Record<string, ModelTestEntry>;
+  /** 最近一次余额查询结果（可读文案 + 时间戳） */
+  balance?: { text: string; at: number };
 }
 
 interface CustomProviderRecord {
@@ -63,6 +80,7 @@ interface UiProvider {
   tag: string;
   group: UiGroup;
   icon: LucideIcon;
+  logoSrc?: string;
   protocol: Protocol;
   variants: ProviderEndpointVariant[];
   activeVariant: number;
@@ -70,6 +88,8 @@ interface UiProvider {
   enabled: boolean;
   configured: boolean;
   keyMask: string;
+  testOk?: boolean;
+  balance?: { text: string; at: number };
   local: boolean;
   audio: boolean;
   custom: boolean;
@@ -79,6 +99,8 @@ interface UiProvider {
 const SLOT_META: Array<{ slot: WorkbenchRoleSlot; name: string; desc: string; group: 'llm' | 'audio'; icon: LucideIcon }> = [
   { slot: 'MAIN_PERSONA_BRAIN', name: '主脑与内心戏', desc: '日常聊天、人设表达与 <think> 推理', group: 'llm', icon: Brain },
   { slot: 'STARDEW_GAME_PLANNER', name: '星露谷规划器', desc: '自动驾驶工具决策与攻略应用', group: 'llm', icon: Sprout },
+  { slot: 'TERRARIA_GAME_PLANNER', name: '泰拉瑞亚规划器', desc: 'tModLoader 桥接动作决策与生存反射', group: 'llm', icon: Swords },
+  { slot: 'DST_GAME_PLANNER', name: '饥荒 DST 规划器', desc: '专用服侧动作决策与昼夜生存', group: 'llm', icon: Flame },
   { slot: 'DANMAKU_FAST_ROUTER', name: '弹幕快反路由', desc: '低延迟弹幕清洗、打分与快速回应', group: 'llm', icon: MessageSquare },
   { slot: 'VISION_STORYBOARD', name: '翻车视觉复盘', desc: '截图与宫格分镜画面理解', group: 'llm', icon: Eye },
   { slot: 'VOICE_TTS_SPEECH', name: '日常说话 TTS', desc: '五档情绪台词与心声气声合成', group: 'audio', icon: Volume2 },
@@ -87,6 +109,8 @@ const SLOT_META: Array<{ slot: WorkbenchRoleSlot; name: string; desc: string; gr
 
 const TAG: Record<string, string> = {
   'opencode-go': '包月订阅 · 30+ 模型',
+  'opencode-zen': '原 Zen · 免费档 + 按量',
+  'typesafe-jev': '决策协议 · System One',
   'deepseek-official': '官方直连',
   siliconflow: '模型聚合',
   openrouter: '全球聚合',
@@ -99,6 +123,7 @@ const TAG: Record<string, string> = {
 };
 const ICON: Record<string, LucideIcon> = {
   'opencode-go': Rocket,
+  'typesafe-jev': Scale,
   'deepseek-official': Fish,
   siliconflow: Zap,
   openrouter: Compass,
@@ -110,6 +135,72 @@ const ICON: Record<string, LucideIcon> = {
   'local-gpt-sovits': AudioLines,
 };
 
+/**
+ * 供应商官方 logo（2026-11-22 从各家官网 favicon / GitHub 官方组织头像收集，
+ * 台账见 docs/THIRD_PARTY_NOTICES.md §3；商标权属各公司，仅作身份识别的指称性使用）。
+ * 无官方标识的（自定义 / GPT-SoVITS 等本地引擎）回落 lucide 图标，绝不生成或乱用替代图。
+ */
+const LOGO: Record<string, string> = {
+  'opencode-go': '../brand/providers/opencode.svg',
+  'opencode-zen': '../brand/providers/opencode.svg',
+  'typesafe-jev': '../brand/providers/typesafe-jev.jpg',
+  'deepseek-official': '../brand/providers/deepseek-official.png',
+  siliconflow: '../brand/providers/siliconflow.png',
+  openrouter: '../brand/providers/openrouter.png',
+  'volcano-ark': '../brand/providers/volcano-ark.jpg',
+  openai: '../brand/providers/openai.svg',
+  anthropic: '../brand/providers/anthropic.png',
+  minimax: '../brand/providers/minimax.png',
+  'local-ollama': '../brand/providers/local-ollama.png',
+};
+
+/** logo 优先、lucide 兜底的供应商图标；className 控制外框尺寸与圆角 */
+function ProviderLogo({ src, icon: Icon, size = 14, className = '' }: { src?: string; icon: LucideIcon; size?: number; className?: string }): React.JSX.Element {
+  return src !== undefined
+    ? <img src={src} alt="" className={`object-contain ${className}`} style={{ width: size, height: size }} />
+    : <Icon size={size} />;
+}
+
+/** 侧栏供应商行（与「已关闭」折叠子区共用；dimmed = Magpie 停用沉降态） */
+function ProviderRow({ p, activeId, dimmed, onSelect }: { p: UiProvider; activeId: string | undefined; dimmed?: boolean; onSelect: () => void }): React.JSX.Element {
+  const Icon = p.icon;
+  const on = p.id === activeId;
+  return (
+    <button
+      data-provider-item={p.id}
+      data-active={on ? 'true' : 'false'}
+      onClick={onSelect}
+      className="mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-[7px] text-left text-[12.5px] transition-colors"
+      style={on ? { background: 'var(--blue-dim)', color: 'var(--blue)', fontWeight: 600 } : { color: 'var(--text-2)', opacity: dimmed === true ? 0.55 : 1 }}
+    >
+      <span
+        className="grid h-6 w-6 place-items-center rounded-lg"
+        style={{ background: p.logoSrc !== undefined ? '#fff' : on ? 'var(--blue-dim)' : 'var(--inset)', border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}` }}
+      >
+        <ProviderLogo src={p.logoSrc} icon={Icon} size={p.logoSrc !== undefined ? 15 : 12} />
+      </span>
+      <span className="flex-1 truncate">{p.name}</span>
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ background: p.enabled && p.configured ? 'var(--green)' : 'var(--text-3)', opacity: p.enabled && p.configured ? 1 : 0.3, boxShadow: p.enabled && p.configured ? '0 0 6px var(--green)' : 'none' }}
+      />
+    </button>
+  );
+}
+
+/** 副行 host 文案：无效/空地址如实兜底 */
+function safeHostOf(url: string): string {
+  if (url === '') return '未设置地址';
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+/** 测试错误短文案：优先抽 HTTP 状态码，悬浮提示里有原文 */
+function shortError(error?: string): string {
+  const code = /HTTP (\d+)/.exec(error ?? '')?.[1];
+  if (code !== undefined) return `HTTP ${code}`;
+  return (error ?? '未知错误').slice(0, 40);
+}
+
 const CAP_LABEL: Record<string, { text: string; cls: string }> = {
   reason: { text: '推理', cls: 'pill-violet' },
   vision: { text: '视觉', cls: 'pill-blue' },
@@ -118,6 +209,61 @@ const CAP_LABEL: Record<string, { text: string; cls: string }> = {
   anth: { text: 'Anthropic', cls: 'pill-amber' },
   tts: { text: 'TTS', cls: 'pill-green' },
   svc: { text: 'SVC', cls: 'pill-violet' },
+  decision: { text: '决策 S1', cls: 'pill-amber' },
+  free: { text: '免费', cls: '' },
+};
+
+/** 「获取 Key ↗」直达各厂商控制台（Magpie 交互；主进程侧主机白名单校验） */
+const KEY_URL: Record<string, string> = {
+  'opencode-go': 'https://opencode.ai/go',
+  'opencode-zen': 'https://opencode.ai/console',
+  'typesafe-jev': 'https://jevmodel.org/zh/dashboard/',
+  'deepseek-official': 'https://platform.deepseek.com/api_keys',
+  siliconflow: 'https://cloud.siliconflow.cn/account/ak',
+  openrouter: 'https://openrouter.ai/settings/keys',
+  'volcano-ark': 'https://console.volcengine.com/ark',
+  openai: 'https://platform.openai.com/api-keys',
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  minimax: 'https://platform.minimaxi.com/',
+};
+
+/**
+ * 智能粘贴（Magpie 交互）：curl 命令 / export 环境变量 / 裸端点 URL → 自动填 Base URL + 协议 + isFullUrl。
+ * 只识别明确可解析的形态，识别不了就原样交给输入框。
+ */
+function parsePastedEndpoint(text: string): { baseUrl: string; protocol?: Protocol; isFullUrl?: boolean; note: string } | null {
+  const trimmed = text.trim();
+  const envMatch = /(?:export\s+)?(OPENAI_BASE_URL|OPENAI_API_BASE|ANTHROPIC_BASE_URL|BASE_URL)\s*=\s*["']?(https?:\/\/[^\s"']+)/.exec(trimmed);
+  if (envMatch !== null) {
+    return {
+      baseUrl: envMatch[2] ?? '',
+      protocol: (envMatch[1] ?? '').startsWith('ANTHROPIC') ? 'anthropic' : 'openai',
+      note: `已从环境变量 ${envMatch[1]} 智能填充`,
+    };
+  }
+  const urlMatch = /^curl\b/i.test(trimmed)
+    ? /["'](https?:\/\/[^"']+)["']|(https?:\/\/[^\s'"]+)/.exec(trimmed)
+    : /^(https?:\/\/\S+)$/i.exec(trimmed);
+  if (urlMatch !== null) {
+    const raw = urlMatch[1] ?? urlMatch[2] ?? '';
+    if (/\/chat\/completions\/?$/i.test(raw)) {
+      return { baseUrl: raw, protocol: 'openai', isFullUrl: true, note: '已按完整端点填充（OpenAI /chat/completions，isFullUrl 开启）' };
+    }
+    if (/\/messages\/?$/i.test(raw)) {
+      return { baseUrl: raw, protocol: 'anthropic', isFullUrl: true, note: '已按完整端点填充（Anthropic /messages，isFullUrl 开启）' };
+    }
+    return { baseUrl: raw.replace(/\/+$/, ''), note: /^curl\b/i.test(trimmed) ? '已从 curl 命令填充 Base URL' : '已填充 Base URL' };
+  }
+  return null;
+}
+
+/** 面板备注（详情页 Base URL 下方）：OpenCode 两档计划的官方限制如实告知 */
+const NOTE: Record<string, string> = {
+  'opencode-go': 'OpenCode 官方低价包月计划（Go $10 / Go Plus $40），同一服务商可切换 OpenAI / Anthropic 兼容端点。',
+  'opencode-zen':
+    '原 OpenCode Zen，现为 OpenCode Console：oc_sk_ 前缀 Key、按量计费 + 免费档 12 个（清单以「拉取模型」为准）。免费档 chat 官方仅保证在 OpenCode 客户端内可用，第三方客户端可能被拒（403 时如实显示）；jev 系列为 System One 决策协议模型、不适用聊天端点，测试连通请选 chat 模型，jev 待专用适配工单接入弹幕快反决策槽。',
+  'typesafe-jev':
+    'TypeSafe Jev 官方独立托管（jevmodel.org）：登录送 10 万输入 token，¥49 起 1500 万永不过期，成功按输入 token 扣费、输出免费。模型走 System One 决策协议（POST /v1/systemone，choice/noul/score 返回概率分布），不吃聊天端点——「测试」按钮已自动走原生决策探针，「保存并检测」用决策探针验证连通；T-M6-14 将把弹幕快反打分等判断点切到原生 choice/noul 调用。',
 };
 
 interface Props {
@@ -156,11 +302,13 @@ function toUiProvider(provider: ModelProviderConfig, override: ProviderOverride 
       enabled: true,
       caps: audio
         ? [/rvc|svc/i.test(m.id) ? 'svc' : 'tts']
-        : [
-          ...(m.supportsReasoningThink ? ['reason'] : []),
-          ...(m.supportsVision ? ['vision'] : []),
-          protocol === 'anthropic' ? 'anth' : 'tool',
-        ],
+        : m.supportsToolCalling === false
+          ? ['decision']
+          : [
+            ...(m.supportsReasoningThink ? ['reason'] : []),
+            ...(m.supportsVision ? ['vision'] : []),
+            protocol === 'anthropic' ? 'anth' : 'tool',
+          ],
     }));
   return {
     id: provider.id,
@@ -168,6 +316,7 @@ function toUiProvider(provider: ModelProviderConfig, override: ProviderOverride 
     tag: TAG[provider.id] ?? provider.category,
     group,
     icon: ICON[provider.id] ?? Server,
+    logoSrc: LOGO[provider.id],
     protocol,
     variants,
     activeVariant: variantIndex,
@@ -175,10 +324,12 @@ function toUiProvider(provider: ModelProviderConfig, override: ProviderOverride 
     enabled: override?.enabled ?? true,
     configured: (override?.keyMask ?? provider.apiKeyMaskedOrRef) !== '',
     keyMask: override?.keyMask ?? provider.apiKeyMaskedOrRef,
+    testOk: override?.testOk,
+    balance: override?.balance,
     local: group === '本地引擎' && !audio,
     audio,
     custom: false,
-    note: provider.id === 'opencode-go' ? 'OpenCode 官方低价包月计划（Go $10 / Go Plus $40），同一服务商可切换 OpenAI / Anthropic 兼容端点。' : '',
+    note: NOTE[provider.id] ?? '',
   };
 }
 
@@ -210,7 +361,9 @@ function toConfig(provider: UiProvider): ModelProviderConfig {
     id: provider.id,
     name: provider.name,
     category,
-    protocol: provider.protocol,
+    // 契约无 variant 索引字段：把 activeVariant 的协议写进 provider.protocol，主进程网关据此
+    // 区分同 Region+Plan 的双协议变体（OpenCode Go / Console 的 OpenAI 与 Anthropic 端点）。
+    protocol: variant?.protocol ?? provider.protocol,
     activeRegion: variant?.region ?? 'GLOBAL',
     activePlanType: variant?.planType ?? 'PAY_AS_YOU_GO',
     variants: provider.variants,
@@ -220,9 +373,67 @@ function toConfig(provider: UiProvider): ModelProviderConfig {
       id: m.id,
       supportsReasoningThink: m.caps.includes('reason'),
       supportsVision: m.caps.includes('vision'),
-      supportsToolCalling: !m.caps.includes('tts') && !m.caps.includes('svc'),
+      supportsToolCalling: !m.caps.includes('tts') && !m.caps.includes('svc') && !m.caps.includes('decision'),
     })),
   });
+}
+
+/**
+ * 槽位自动挑选（2026-11-22 用户指令：从「已测通 + 已开启」的模型里选合适模型）——纯函数，
+ * 挂载水合 / 批量测试完成 / 手动触发三处共用。主进程永远只见到解析后的具体绑定。
+ * 评分：延迟为底（越快越高）；推理 +500（主脑/规划器）；免费 +300（同等条件白嫖优先）；
+ * 弹幕快反槽 `typesafe/jev-router` +1000（TypeSafe Jev 决策路由的本职，充分利用 jev 能力）；
+ * 视觉槽硬性要求 vision；音频槽只在音频商里挑延迟最低；决策协议（System One/jev 系）不进聊天槽。
+ */
+function resolveAutoBindings(
+  builtin: ModelProviderConfig[],
+  overrides: ProviderOverrides,
+  customs: CustomProviderRecord[],
+  slots: WorkbenchRoleSlot[],
+): { bindings: Partial<Record<WorkbenchRoleSlot, string>>; missing: WorkbenchRoleSlot[] } {
+  const ui = [
+    ...builtin.map((p) => toUiProvider(p, overrides[p.id])),
+    ...customs.map((c) => toUiCustom(c, overrides[c.id]?.keyMask ?? '')),
+  ];
+  const bindings: Partial<Record<WorkbenchRoleSlot, string>> = {};
+  const missing: WorkbenchRoleSlot[] = [];
+  for (const slot of slots) {
+    const meta = SLOT_META.find((s) => s.slot === slot);
+    if (meta === undefined) {
+      missing.push(slot);
+      continue;
+    }
+    const pool: Array<{ fullId: string; score: number }> = [];
+    for (const p of ui) {
+      if (!p.enabled) continue;
+      const tested = overrides[p.id]?.tested ?? {};
+      for (const m of p.models) {
+        if (!m.enabled) continue;
+        const t = tested[m.id];
+        if (t === undefined || t.ok !== true) continue;
+        if (meta.group === 'audio') {
+          if (!p.audio) continue;
+          pool.push({ fullId: `${p.id}/${m.id}`, score: -(t.latencyMs ?? 9999) });
+          continue;
+        }
+        if (p.audio) continue;
+        if (m.caps.includes('decision')) continue;
+        if (slot === 'VISION_STORYBOARD' && !m.caps.includes('vision')) continue;
+        let score = -(t.latencyMs ?? 9999);
+        if (slot !== 'DANMAKU_FAST_ROUTER' && m.caps.includes('reason')) score += 500;
+        if (m.caps.includes('free')) score += 300;
+        if (slot === 'DANMAKU_FAST_ROUTER' && m.id === 'typesafe/jev-router') score += 1000;
+        pool.push({ fullId: `${p.id}/${m.id}`, score });
+      }
+    }
+    if (pool.length === 0) {
+      missing.push(slot);
+      continue;
+    }
+    pool.sort((a, b) => b.score - a.score);
+    bindings[slot] = pool[0]?.fullId ?? '';
+  }
+  return { bindings, missing };
 }
 
 export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props): React.JSX.Element {
@@ -233,6 +444,16 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
   const [profile, setProfile] = useState<DiningProfilePreset | null>(null);
   const [activeProvId, setActiveProvId] = useState<string>('opencode-go');
   const [search, setSearch] = useState('');
+  const [modelSearch, setModelSearch] = useState('');
+  /** 当前服务商的逐模型连通测试结果（Magpie「Test models」交互）：modelId → ✓延迟 / ✗原因 */
+  const [modelTests, setModelTests] = useState<Record<string, { ok: boolean; latencyMs?: number; error?: string }>>({});
+  const [rowTesting, setRowTesting] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const batchCancelRef = useRef(false);
+  /** 槽位自动挑选开关（Dexie 持久；Partial——未开启的槽位无键） */
+  const [autoFlags, setAutoFlags] = useState<Partial<Record<WorkbenchRoleSlot, boolean>>>({});
+  /** overrides 的同步镜像：批量测试循环里逐条写 tested，函数式 setState 的闭包会过期 */
+  const overridesRef = useRef<ProviderOverrides>({});
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err' | 'info'; text: string } | null>(null);
@@ -256,17 +477,67 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
       store.getConfig<DiningProfilePreset[]>(DINING_KEY),
       store.getConfig<ProviderOverrides>(OVERRIDES_KEY),
       store.getConfig<CustomProviderRecord[]>(CUSTOM_KEY),
-    ]).then(([activeId, storedProfiles, storedOverrides, storedCustoms]) => {
+      store.getConfig<Partial<Record<WorkbenchRoleSlot, boolean>>>(AUTO_KEY),
+    ]).then(async ([activeId, storedProfiles, storedOverrides, storedCustoms, storedAuto]) => {
       const base = (storedProfiles ?? []).find((p) => p.profileId === activeId) ?? storedProfiles?.[0] ?? profiles[0];
       if (base !== undefined) {
         setProfile({ ...base, displayName: '当前生效配置' });
         if (activeId === undefined) void store.setConfig('activeDiningProfile', base.profileId);
       }
       setOverrides(storedOverrides ?? {});
+      overridesRef.current = storedOverrides ?? {};
       setCustoms(storedCustoms ?? []);
+      const flags = storedAuto ?? {};
+      setAutoFlags(flags);
       setHydrated(true);
+      setModelTests((storedOverrides ?? {})['opencode-go']?.tested ?? {});
+      // 凭据真相在主进程 vault：水合时对账掩码，修复历史 override 缺/残留 keyMask
+      // （T-M6-09 遗留 bug——内置服务商保存 Key 后 keymask 未写 Dexie，重开面板显示未连接）
+      const ids = [...providers.map((p) => p.id), ...(storedCustoms ?? []).map((c) => c.id)];
+      const masks = await Promise.all(
+        ids.map(async (id) => ({ id, mask: (await window.directorBridge.providerKeyMask(id)).mask ?? '' })),
+      );
+      const reconciled = { ...(storedOverrides ?? {}) };
+      let changed = false;
+      for (const { id, mask } of masks) {
+        if ((reconciled[id]?.keyMask ?? '') !== mask) {
+          reconciled[id] = { ...reconciled[id], keyMask: mask };
+          changed = true;
+        }
+      }
+      if (changed) {
+        setOverrides(reconciled);
+        overridesRef.current = reconciled;
+        void store.setConfig(OVERRIDES_KEY, reconciled);
+      }
+      // 已启用自动挑选的槽位：按持久化测试结果静默重解析并落绑定
+      const flagged = (Object.entries(flags) as Array<[WorkbenchRoleSlot, boolean]>).filter(([, v]) => v === true).map(([slot]) => slot);
+      if (flagged.length > 0 && base !== undefined) {
+        const resolved = resolveAutoBindings(providers, reconciled, storedCustoms ?? [], flagged);
+        if (Object.keys(resolved.bindings).length > 0 || resolved.missing.length > 0) {
+          const roleBindings = { ...base.roleBindings, ...resolved.bindings };
+          const next = { ...base, roleBindings };
+          setProfile({ ...next, displayName: '当前生效配置' });
+          void store.setConfig(DINING_KEY, [{ ...next, displayName: '当前生效配置' }]);
+          const uiMerged = [
+            ...providers.map((p) => toUiProvider(p, reconciled[p.id])),
+            ...(storedCustoms ?? []).map((c) => toUiCustom(c, reconciled[c.id]?.keyMask ?? '')),
+          ];
+          void window.directorBridge.brainApplyConfig({
+            profile: { ...next, displayName: '当前生效配置' },
+            providerModels: {},
+            providers: uiMerged.filter((p) => p.enabled).map(toConfig),
+          }).then((r) => {
+            window.dispatchEvent(new CustomEvent('wb:brain', { detail: {
+              mode: r.mode,
+              llmReady: r.llmReady,
+              mainModelId: next.roleBindings.MAIN_PERSONA_BRAIN ?? '',
+            } }));
+          });
+        }
+      }
     });
-  }, [profiles, store]);
+  }, [profiles, providers, store]);
 
   const merged = useMemo<UiProvider[]>(() => {
     const builtin = providers.map((p) => toUiProvider(p, overrides[p.id]));
@@ -279,8 +550,22 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
   const providerUrl = active !== undefined ? (active.variants[active.activeVariant]?.baseUrl ?? '') : '';
 
   const persistOverrides = useCallback((next: ProviderOverrides): void => {
+    overridesRef.current = next;
     setOverrides(next);
     void store.setConfig(OVERRIDES_KEY, next);
+  }, [store]);
+
+  /** 逐模型测试结果落 override.tested（跨会话持久，自动挑选的依据）；不触发主脑热更新——批量 58 次也不打主进程 */
+  const persistTested = useCallback((providerId: string, modelId: string, entry: ModelTestEntry): void => {
+    setModelTests((prev) => ({ ...prev, [modelId]: entry }));
+    const current = overridesRef.current;
+    const next: ProviderOverrides = {
+      ...current,
+      [providerId]: { ...current[providerId], tested: { ...(current[providerId]?.tested ?? {}), [modelId]: entry } },
+    };
+    overridesRef.current = next;
+    void store.setConfig(OVERRIDES_KEY, next);
+    setOverrides(next);
   }, [store]);
 
   const persistCustoms = useCallback((next: CustomProviderRecord[]): void => {
@@ -303,12 +588,19 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
         providers: nextProviders.filter((p) => p.enabled).map(toConfig),
       })
       .then((r) => {
-        window.dispatchEvent(new CustomEvent('wb:brain', { detail: { mode: r.mode, llmReady: r.llmReady } }));
-        setNotice(
-          r.ok
-            ? { kind: 'ok', text: `主脑已热更新：${r.providers.join(' / ') || '—'}${r.missingKeys.length > 0 ? `（缺 Key：${r.missingKeys.join(', ')}）` : ''}` }
-            : { kind: 'err', text: `主脑回落规则：${r.error ?? '未知错误'}` },
-        );
+        window.dispatchEvent(new CustomEvent('wb:brain', { detail: {
+          mode: r.mode,
+          llmReady: r.llmReady,
+          mainModelId: nextProfile.roleBindings.MAIN_PERSONA_BRAIN ?? '',
+        } }));
+        // 成功/失败都只 toast：异步回调若 setNotice 会把「保存并检测」刚显示的结果条
+        // （已连接/凭据已保存·检测未通过）约 1s 后整个覆盖掉——真机实证：多内置商缺 Key 时
+        // 失败回调用红色「主脑回落规则」盖掉了检测结果，用户误读成保存失败
+        if (r.ok) {
+          toast(`主脑已热更新：${r.providers.join(' / ') || '—'}${r.missingKeys.length > 0 ? `（缺 Key：${r.missingKeys.join(', ')}）` : ''}`);
+        } else {
+          toast.error(`主脑回落规则：${r.error ?? '未知错误'}（顶栏大脑状态同步）`);
+        }
       });
   }, []);
 
@@ -319,11 +611,14 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
       persistCustoms(customs.map((c) =>
         c.id === ui.id ? { ...c, name: ui.name, protocol: ui.protocol, variants: ui.variants, models: ui.models, enabled: ui.enabled } : c,
       ));
-      persistOverrides({ ...overrides, [ui.id]: { ...overrides[ui.id], keyMask: ui.keyMask } });
+      persistOverrides({ ...overridesRef.current, [ui.id]: { ...overridesRef.current[ui.id], keyMask: ui.keyMask, testOk: ui.testOk } });
     } else {
+      // keyMask/testOk 必须一并落 Dexie：configured 是从 override.keyMask 派生的，
+      // 漏存会让「保存并检测」刚成功就回退成「未配置」（OpenCode Go 已连接不显示的根因）。
+      // 展开基准用 overridesRef：逐模型测试 persistTested 也会写 overrides，闭包态会把它冲掉
       persistOverrides({
-        ...overrides,
-        [ui.id]: { ...overrides[ui.id], enabled: ui.enabled, models: ui.models, variants: ui.variants, activeVariant: ui.activeVariant },
+        ...overridesRef.current,
+        [ui.id]: { ...overridesRef.current[ui.id], keyMask: ui.keyMask, testOk: ui.testOk, enabled: ui.enabled, models: ui.models, variants: ui.variants, activeVariant: ui.activeVariant },
       });
     }
     syncBrain(profile, nextMerged);
@@ -383,6 +678,131 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     patchActive({ models });
   };
 
+  /** 一键全开/全关当前服务商的全部模型（作用于全部而非仅搜索过滤结果）；全关时清空相关角色绑定 */
+  const toggleAllModels = (enabled: boolean): void => {
+    if (active === undefined || profile === null || active.models.length === 0) return;
+    if (active.models.every((m) => m.enabled) === enabled) return;
+    const models = active.models.map((m) => ({ ...m, enabled }));
+    if (!enabled) {
+      const roleBindings = { ...profile.roleBindings };
+      let changed = false;
+      for (const [slot, binding] of Object.entries(roleBindings)) {
+        if (active.models.some((m) => binding === `${active.id}/${m.id}`)) {
+          roleBindings[slot as WorkbenchRoleSlot] = '';
+          changed = true;
+        }
+      }
+      if (changed) persistProfile({ ...profile, roleBindings });
+    }
+    patchActive({ models });
+    toast(
+      enabled
+        ? `已开启 ${active.name} 全部 ${active.models.length} 个模型`
+        : `已关闭 ${active.name} 全部 ${active.models.length} 个模型（相关角色绑定已清空）`,
+    );
+  };
+
+  /** 单模型连通测试（Magpie「Test this model」）：决策协议模型自动改走 System One 探针；结果持久化 */
+  const testModelOne = useCallback(async (modelId: string): Promise<{ ok: boolean; latencyMs?: number; error?: string }> => {
+    if (active === undefined) return { ok: false, error: '未选中服务商' };
+    const isDecision = active.models.find((m) => m.id === modelId)?.caps.includes('decision') ?? false;
+    const res = await window.directorBridge.testProviderChat({
+      providerId: active.id,
+      baseUrl: providerUrl,
+      modelId,
+      protocol: active.protocol,
+      decision: isDecision,
+    });
+    const entry: ModelTestEntry = res.ok ? { ok: true, latencyMs: res.latencyMs } : { ok: false, error: res.error ?? '未知错误' };
+    persistTested(active.id, modelId, entry);
+    return entry;
+  }, [active, providerUrl, persistTested]);
+
+  const testRow = async (modelId: string): Promise<void> => {
+    setRowTesting(modelId);
+    try {
+      const r = await testModelOne(modelId);
+      if (!r.ok) toast.error(`${modelId}：${shortError(r.error)}`);
+    } finally {
+      setRowTesting(null);
+    }
+  };
+
+  /**
+   * 批量测试当前服务商全部开启的模型（Magpie「Test models」）：4 并发微型请求，
+   * 行内 ✓延迟/✗状态码实时更新；再次点击 = 停止；>50 个先确认（防误点大清单烧 token/时间）。
+   */
+  const testAllModels = async (): Promise<void> => {
+    if (active === undefined) return;
+    if (batchProgress !== null) {
+      batchCancelRef.current = true;
+      return;
+    }
+    const targets = active.models.filter((m) => m.enabled);
+    if (targets.length === 0) {
+      toast.error('没有开启的模型可测试');
+      return;
+    }
+    if (targets.length > 50 && !window.confirm(`将对 ${targets.length} 个开启的模型各发一次微型请求（约 ${Math.ceil((targets.length / 4) * 1.5)} 秒，消耗少量 token），继续？`)) {
+      return;
+    }
+    batchCancelRef.current = false;
+    setBatchProgress({ done: 0, total: targets.length });
+    let done = 0;
+    let okCount = 0;
+    const queue = [...targets];
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        if (batchCancelRef.current) return;
+        const m = queue.shift();
+        if (m === undefined) return;
+        const res = await testModelOne(m.id);
+        if (res.ok) okCount += 1;
+        done += 1;
+        setBatchProgress({ done, total: targets.length });
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    setBatchProgress(null);
+    const bad = targets.length - okCount;
+    toast(
+      bad === 0
+        ? `全部 ${targets.length} 个模型应答正常`
+        : `${bad}/${targets.length} 个模型未应答（行内红标，悬浮可看原因）`,
+    );
+    // 有槽位开着自动挑选 → 按最新测试结果立即重解析
+    const flagged = (Object.entries(autoFlags) as Array<[WorkbenchRoleSlot, boolean]>).filter(([, v]) => v === true).map(([slot]) => slot);
+    if (flagged.length > 0) applyAutoBindings(flagged, true);
+  };
+
+  /**
+   * 自动挑选落绑定（纯解析在 resolveAutoBindings）：绑定值永远是具体 `${provider}/${model}`，
+   * 主进程与 App 启动路径零改动；auto 标记单独存 Dexie。missing 槽位保留现有绑定只在提示里点名。
+   */
+  const applyAutoBindings = (slots: WorkbenchRoleSlot[], silent = false): void => {
+    if (profile === null) return;
+    const resolved = resolveAutoBindings(providers, overridesRef.current, customs, slots);
+    if (Object.keys(resolved.bindings).length > 0) {
+      const roleBindings = { ...profile.roleBindings, ...resolved.bindings };
+      const next = { ...profile, roleBindings };
+      persistProfile(next);
+      syncBrain(next, merged);
+    }
+    const flags = { ...autoFlags };
+    for (const slot of slots) flags[slot] = true;
+    setAutoFlags(flags);
+    void store.setConfig(AUTO_KEY, flags);
+    if (!silent) {
+      if (resolved.missing.length === slots.length) {
+        toast.error('没有「已测通且开启」的模型：先对目标服务商点「测试模型」再自动挑选');
+      } else if (resolved.missing.length > 0) {
+        toast(`已自动分配 ${slots.length - resolved.missing.length} 个槽位；${resolved.missing.map((s) => slotLabels[s]).join('、')} 缺可测通模型（先「测试模型」）`);
+      } else {
+        toast(`已按测试结果自动分配 ${slots.length} 个槽位`);
+      }
+    }
+  };
+
   const setAsMain = (fullId: string): void => {
     if (profile === null) return;
     const next = { ...profile, roleBindings: { ...profile.roleBindings, MAIN_PERSONA_BRAIN: fullId } };
@@ -420,7 +840,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     if (!window.confirm(`确认删除自定义服务商「${active.name}」？相关角色绑定会同步清理。`)) return;
     persistCustoms(customs.filter((c) => c.id !== active.id));
     const rest: ProviderOverrides = {};
-    for (const [id, value] of Object.entries(overrides)) if (id !== active.id) rest[id] = value;
+    for (const [id, value] of Object.entries(overridesRef.current)) if (id !== active.id) rest[id] = value;
     persistOverrides(rest);
     const roleBindings = { ...profile.roleBindings };
     for (const [slot, binding] of Object.entries(roleBindings)) {
@@ -431,12 +851,48 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     toast(`已删除自定义服务商「${active.name}」`);
   };
 
+  /** 复制已保存 Key 到系统剪贴板（2026-11-22 用户指令）：主进程解密直写剪贴板，明文不回传渲染层、不在界面显示 */
+  const copySavedKey = async (): Promise<void> => {
+    if (active === undefined) return;
+    const r = await window.directorBridge.copyProviderKey(active.id);
+    if (r.ok && (r.mask ?? '') !== '') {
+      toast(`Key 已复制到系统剪贴板（${r.mask}），可粘贴到任何地方`);
+    } else {
+      toast.error(r.error ?? '该供应商尚未保存 API Key');
+    }
+  };
+
+  /** 查询余额/额度（Magpie keybalance 思想）：主进程持 key 请求厂商公开余额 API，结果持久化到 override.balance */
+  const checkBalance = async (): Promise<void> => {
+    if (active === undefined) return;
+    setBusy(`balance:${active.id}`);
+    try {
+      const r = await window.directorBridge.checkProviderBalance(active.id);
+      if (!r.ok || r.text === undefined) {
+        toast.error(r.error ?? '查询失败');
+        setNotice({ kind: 'err', text: `余额查询失败：${r.error ?? '未知错误'}` });
+        return;
+      }
+      const entry = { text: r.text, at: Date.now() };
+      const current = overridesRef.current;
+      const next: ProviderOverrides = { ...current, [active.id]: { ...current[active.id], balance: entry } };
+      overridesRef.current = next;
+      void store.setConfig(OVERRIDES_KEY, next);
+      setOverrides(next);
+      setNotice({ kind: 'ok', text: `${active.name} 余额：${r.text}` });
+      toast(`余额：${r.text}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const saveAndTest = async (): Promise<void> => {
     if (active === undefined) return;
     setBusy(`save:${active.id}`);
     setNotice(null);
     try {
-      const draft = (keyDrafts[active.id] ?? '').trim();
+      // 智能清洗：整段粘贴「Authorization: Bearer sk-xxx」时剥掉前缀与引号，只留 Key 本体
+      const draft = (keyDrafts[active.id] ?? '').trim().replace(/^["']|["']$/g, '').replace(/^Bearer\s+/i, '');
       let keyMask = active.keyMask;
       if (draft !== '') {
         const saved = await window.directorBridge.saveProviderKey(active.id, draft);
@@ -448,28 +904,86 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
         keyMask = saved.mask ?? '';
         setKeyDrafts((d) => ({ ...d, [active.id]: '' }));
       }
-      const modelId = active.models.find((m) => m.enabled)?.id ?? active.models[0]?.id;
-      if (modelId === undefined) {
-        setNotice({ kind: 'err', text: '请先拉取或手动添加至少一个模型' });
+      if (keyMask === '') {
+        setNotice({ kind: 'err', text: '尚未保存凭据：先粘贴 Key 再点「保存并检测」' });
         return;
       }
-      const tested = await window.directorBridge.testProviderChat({ providerId: active.id, baseUrl: providerUrl, modelId, protocol: active.protocol });
-      if (!tested.ok) {
-        setNotice({ kind: 'err', text: `连接失败：${tested.error ?? '未知错误'}` });
-        toast.error(`连接失败：${tested.error ?? '未知错误'}`);
-        return;
-      }
+      // 先拉真实模型清单（顺带校验 Key），测试模型以清单为准——
+      // 预设模型 ID 失效（如 OpenRouter 下架旧型号）不再把「检测 404」误报成「保存失败」
       let models = active.models;
+      let discovered: Set<string> | null = null;
+      let freeIds: Set<string> = new Set();
+      const decisionIds = new Set<string>();
       if (active.protocol === 'openai' && !active.local) {
-        const discovered = await window.directorBridge.discoverModels({ providerId: active.id, baseUrl: providerUrl, protocol: active.protocol });
-        if (discovered.ok && discovered.models !== undefined) {
+        const res = await window.directorBridge.discoverModels({ providerId: active.id, baseUrl: providerUrl, protocol: active.protocol });
+        if (res.ok && res.models !== undefined) {
+          discovered = new Set(res.models);
+          freeIds = new Set(res.freeModels ?? []);
+          for (const id of res.decisionModels ?? []) decisionIds.add(id);
           const known = new Set(models.map((m) => m.id));
-          models = [...models, ...discovered.models.filter((id) => !known.has(id)).map((id) => ({ id, enabled: true, caps: ['tool'] }))];
+          // 元数据分类（Console 清单的 type+cost 是服务端真相）：决策协议 / 免费档 / 普通 chat
+          const capsOfId = (id: string): string[] =>
+            decisionIds.has(id) ? ['decision'] : freeIds.has(id) ? ['free'] : ['tool'];
+          models = [...models, ...res.models.filter((id) => !known.has(id)).map((id) => ({ id, enabled: true, caps: capsOfId(id) }))];
         }
       }
-      commitProvider({ ...active, keyMask, configured: true, enabled: true, models });
-      setNotice({ kind: 'ok', text: `已连接 · 响应 ${tested.latencyMs ?? 0}ms · 已启用 ${models.filter((m) => m.enabled).length} 个模型` });
-      toast(`${active.name} 凭据已加密保存，连通检测通过（${tested.latencyMs ?? 0}ms）`);
+      // 检测候选：决策协议模型（System One/jev）不吃 /chat/completions 必失败，排除；
+      // 免费档优先（用户动机就是免费模型），清单内模型优先；Key 级/余额级错误（401/402）换模型无意义即止
+      const chatEnabled = models.filter((m) => m.enabled && !m.caps.includes('decision')).map((m) => m.id);
+      const pool = discovered !== null ? chatEnabled.filter((id) => discovered.has(id)) : chatEnabled;
+      const candidates = [...pool.filter((id) => freeIds.has(id)), ...pool.filter((id) => !freeIds.has(id))];
+      const fallbackId = models.find((m) => !m.caps.includes('decision'))?.id;
+      if (fallbackId !== undefined && !candidates.includes(fallbackId)) candidates.push(fallbackId);
+      if (candidates.length === 0) {
+        // 纯决策协议服务商（TypeSafe Jev / Console jev 系）：没有 chat 模型不是错误——用原生 System One 探针做连通检测
+        const decisionModel = models.find((m) => m.caps.includes('decision'))?.id;
+        if (decisionModel === undefined) {
+          setNotice({ kind: 'err', text: '没有可用于连通测试的模型，请先拉取或手动添加' });
+          return;
+        }
+        const probe = await window.directorBridge.testProviderChat({ providerId: active.id, baseUrl: providerUrl, modelId: decisionModel, protocol: active.protocol, decision: true });
+        persistTested(active.id, decisionModel, probe.ok ? { ok: true, latencyMs: probe.latencyMs } : { ok: false, error: probe.error ?? '未知错误' });
+        commitProvider({ ...active, keyMask, configured: true, enabled: true, models, testOk: probe.ok });
+        if (probe.ok) {
+          setNotice({ kind: 'ok', text: `已连接（决策探针 ${decisionModel}）· 响应 ${probe.latencyMs ?? 0}ms · 已启用 ${models.filter((m) => m.enabled).length} 个模型` });
+          toast(`${active.name} 凭据已加密保存，System One 决策探针通过（${probe.latencyMs ?? 0}ms）`);
+        } else {
+          setNotice({ kind: 'err', text: `凭据已加密保存（${keyMask}），但 System One 决策探针未通过（${decisionModel}）：${probe.error ?? '未知错误'}` });
+          toast.error(`决策探针未通过：${probe.error ?? '未知错误'}`);
+        }
+        return;
+      }
+      const attempts: string[] = [];
+      let okModel = '';
+      let latencyMs = 0;
+      // 定向两探：免费档一次（用户动机）+ 付费档一次（余额真相）——真机实证免费档全档同错（429 FreeUsageLimit），
+      // 连试第二个免费模型毫无信息量；付费档失败即定论（402 无余额），Key 级错误（401）立即止
+      const firstFree = candidates.find((id) => freeIds.has(id));
+      const firstPaid = candidates.find((id) => !freeIds.has(id));
+      const attemptIds = [...new Set([firstFree, firstPaid])].filter((id): id is string => id !== undefined);
+      for (const modelId of attemptIds) {
+        const tested = await window.directorBridge.testProviderChat({ providerId: active.id, baseUrl: providerUrl, modelId, protocol: active.protocol });
+        // 两档结果同步进逐模型 tested（自动挑选据此避开通不过的模型）
+        persistTested(active.id, modelId, tested.ok ? { ok: true, latencyMs: tested.latencyMs } : { ok: false, error: tested.error ?? '未知错误' });
+        if (tested.ok) {
+          okModel = modelId;
+          latencyMs = tested.latencyMs ?? 0;
+          break;
+        }
+        attempts.push(`${modelId}：${tested.error ?? '未知错误'}`);
+        if (/HTTP 401|invalid credential|unauthorized/i.test(tested.error ?? '')) break;
+      }
+      if (okModel === '') {
+        // Key 已成功加密落盘：不能把「检测失败」误报成「保存失败」——保留掩码与配置态，如实汇总每档失败原因
+        // （真机实证：Console 免费档 403 官方锁客户端 + 付费档 402 无余额，逐条展示用户才能看懂该充哪边）
+        commitProvider({ ...active, keyMask, configured: true, enabled: true, models, testOk: false });
+        setNotice({ kind: 'err', text: `凭据已加密保存（${keyMask}），但连通检测未通过 — ${attempts.join('；')}` });
+        toast.error(`连通检测未通过：${attempts[attempts.length - 1] ?? ''}`);
+        return;
+      }
+      commitProvider({ ...active, keyMask, configured: true, enabled: true, models, testOk: true });
+      setNotice({ kind: 'ok', text: `已连接（${okModel}${freeIds.has(okModel) ? ' · 免费档' : ''}）· 响应 ${latencyMs}ms · 已启用 ${models.filter((m) => m.enabled).length} 个模型` });
+      toast(`${active.name} 凭据已加密保存，连通检测通过（${latencyMs}ms）`);
     } finally {
       setBusy(null);
     }
@@ -499,7 +1013,13 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
         return;
       }
       const known = new Set(active.models.map((m) => m.id));
-      const models = [...active.models, ...res.models.filter((id) => !known.has(id)).map((id) => ({ id, enabled: true, caps: ['tool'] }))];
+      const freeIds = new Set(res.freeModels ?? []);
+      const decisionIds = new Set(res.decisionModels ?? []);
+      const models = [...active.models, ...res.models.filter((id) => !known.has(id)).map((id) => ({
+        id,
+        enabled: true,
+        caps: decisionIds.has(id) ? ['decision'] : freeIds.has(id) ? ['free'] : ['tool'],
+      }))];
       commitProvider({ ...active, models });
       toast(`已从 ${active.name} 同步 ${res.models.length} 个可用模型`);
     } finally {
@@ -657,12 +1177,21 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
   }
 
   const keyword = search.trim().toLowerCase();
+  const modelKeyword = modelSearch.trim().toLowerCase();
+  const filteredModels = active === undefined
+    ? []
+    : active.models.filter((m) => modelKeyword === '' || m.id.toLowerCase().includes(modelKeyword));
+  // 开启的模型排最前、停用的沉底（组内保持原相对顺序）——2026-11-22 用户指令
+  const shownModels = [...filteredModels.filter((m) => m.enabled), ...filteredModels.filter((m) => !m.enabled)];
   const groups: UiGroup[] = ['云端服务', '自定义服务商', '本地引擎'];
   const enabledCount = merged.filter((p) => p.enabled).length;
   const configuredCount = merged.filter((p) => p.configured).length;
   const slotOptions = merged
     .filter((p) => p.enabled)
-    .flatMap((p) => p.models.filter((m) => m.enabled).map((m) => ({ value: `${p.id}/${m.id}`, label: `${p.name} · ${m.id}`, audio: p.audio })));
+    .flatMap((p) => p.models
+      // 决策协议（System One）模型暂不进聊天槽位下拉：网关尚无适配，绑定即坏；适配工单落地后放开
+      .filter((m) => m.enabled && !m.caps.includes('decision'))
+      .map((m) => ({ value: `${p.id}/${m.id}`, label: `${p.name} · ${m.id}`, audio: p.audio })));
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -721,34 +1250,25 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
               {groups.map((group) => {
                 const list = merged.filter((p) => p.group === group && (keyword === '' || p.name.toLowerCase().includes(keyword)));
                 if (list.length === 0) return null;
+                // Magpie「Turned off」交互：停用的服务商沉底到折叠子区，不与启用项混排
+                const onList = list.filter((p) => p.enabled);
+                const offList = list.filter((p) => !p.enabled);
                 return (
                   <div key={group}>
                     <div className="flex justify-between px-2.5 pb-1 pt-2 text-[10px] font-semibold tracking-wider" style={{ color: 'var(--text-3)' }}>
                       <span>{group}</span><span className="mono">{list.length}</span>
                     </div>
-                    {list.map((p) => {
-                      const Icon = p.icon;
-                      const on = p.id === active?.id;
-                      return (
-                        <button
-                          key={p.id}
-                          data-provider-item={p.id}
-                          data-active={on ? 'true' : 'false'}
-                          onClick={() => setActiveProvId(p.id)}
-                          className="mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-[7px] text-left text-[12.5px] transition-colors"
-                          style={on ? { background: 'var(--blue-dim)', color: 'var(--blue)', fontWeight: 600 } : { color: 'var(--text-2)' }}
-                        >
-                          <span className="grid h-6 w-6 place-items-center rounded-lg" style={{ background: on ? 'var(--blue-dim)' : 'var(--inset)', border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}` }}>
-                            <Icon size={12} />
-                          </span>
-                          <span className="flex-1 truncate">{p.name}</span>
-                          <span
-                            className="h-1.5 w-1.5 rounded-full"
-                            style={{ background: p.enabled && p.configured ? 'var(--green)' : 'var(--text-3)', opacity: p.enabled && p.configured ? 1 : 0.3, boxShadow: p.enabled && p.configured ? '0 0 6px var(--green)' : 'none' }}
-                          />
-                        </button>
-                      );
-                    })}
+                    {onList.map((p) => (
+                      <ProviderRow key={p.id} p={p} activeId={active?.id} onSelect={() => { setActiveProvId(p.id); setModelSearch(''); setModelTests(overridesRef.current[p.id]?.tested ?? {}); batchCancelRef.current = true; }} />
+                    ))}
+                    {offList.length > 0 && (
+                      <div className="mb-1 mt-1.5 rounded-xl px-2.5 py-1 text-[10px]" style={{ background: 'var(--inset)', color: 'var(--text-3)' }} data-off-section={offList.length}>
+                        已关闭 · {offList.length}（配置保留，开关随时找回）
+                      </div>
+                    )}
+                    {offList.map((p) => (
+                      <ProviderRow key={p.id} p={p} activeId={active?.id} dimmed onSelect={() => { setActiveProvId(p.id); setModelSearch(''); setModelTests(overridesRef.current[p.id]?.tested ?? {}); batchCancelRef.current = true; }} />
+                    ))}
                   </div>
                 );
               })}
@@ -766,8 +1286,11 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
             ) : (
               <div className="mx-auto max-w-[780px]">
                 <div className="mb-4 flex items-center gap-3 pb-4" style={{ borderBottom: '1px solid var(--stroke)' }}>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: 'var(--blue-dim)', border: '1px solid var(--blue-line)', color: 'var(--blue)' }}>
-                    <ActiveIcon size={18} />
+                  <span
+                    className="grid h-10 w-10 place-items-center rounded-xl"
+                    style={active.logoSrc !== undefined ? { background: '#fff', border: '1px solid var(--stroke-2)' } : { background: 'var(--blue-dim)', border: '1px solid var(--blue-line)', color: 'var(--blue)' }}
+                  >
+                    <ProviderLogo src={active.logoSrc} icon={ActiveIcon} size={active.logoSrc !== undefined ? 24 : 18} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <h2 className="flex flex-wrap items-center gap-2 text-[17px] font-bold">
@@ -775,7 +1298,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                       <span className="pill" style={{ fontSize: 10 }}>{active.tag}</span>
                     </h2>
                     <div className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                      {active.enabled ? '已启用 · 模型可在「默认模型」中直接选用' : '未启用 · 开启后将在模型选择器中显示'}
+                      {`${safeHostOf(providerUrl)} · ${active.models.length} 模型 · ${active.enabled ? '已启用，可在「默认模型」中选用' : '未启用，开启后进入模型选择器'}`}
                     </div>
                   </div>
                   {active.custom && (
@@ -854,13 +1377,60 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                           <button className="btn-pill primary whitespace-nowrap" onClick={() => void saveAndTest()} disabled={busy !== null} data-save-test>
                             <Check size={13} />{busy === `save:${active.id}` ? '检测中…' : '保存并检测'}
                           </button>
+                          {KEY_URL[active.id] !== undefined && (
+                            <button
+                              className="btn-pill ghost whitespace-nowrap"
+                              data-get-key
+                              onClick={() => { void window.directorBridge.openKeyConsole(KEY_URL[active.id] ?? ''); }}
+                              title="直达该厂商的控制台/密钥页（主进程白名单校验后用系统浏览器打开）"
+                            >
+                              <ExternalLink size={13} />获取 Key
+                            </button>
+                          )}
+                          {active.configured && (
+                            <button
+                              className="btn-pill ghost whitespace-nowrap"
+                              data-copy-key
+                              onClick={() => { void copySavedKey(); }}
+                              title="把已保存的明文 Key 复制到系统剪贴板（主进程直写，界面不显示明文）"
+                            >
+                              <Copy size={13} />复制 Key
+                            </button>
+                          )}
+                          {BALANCE_SUPPORTED.has(active.id) && !active.local && (
+                            <button
+                              className="btn-pill ghost whitespace-nowrap"
+                              data-check-balance
+                              onClick={() => { void checkBalance(); }}
+                              disabled={busy !== null}
+                              title="查询该厂商的余额/额度（走公开余额 API，主进程持 Key 请求）"
+                            >
+                              <Database size={13} />{busy === `balance:${active.id}` ? '查询中…' : '查余额'}
+                            </button>
+                          )}
                         </div>
-                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px]" style={{ color: active.configured ? 'var(--green)' : 'var(--text-3)' }}>
-                          {active.configured ? <CheckCircle2 size={12} /> : <Info size={12} />}
-                          {active.configured
-                            ? `已连接 · 已启用 ${active.models.filter((m) => m.enabled).length} 个模型`
-                            : '填写凭据后点「保存并检测」，自动验证连通性并尝试拉取模型列表'}
+                        <div
+                          className="mt-1.5 flex items-center gap-1.5 text-[11px]"
+                          style={{ color: active.configured ? (active.testOk === false ? 'var(--amber)' : 'var(--green)') : 'var(--text-3)' }}
+                        >
+                          {active.configured && active.testOk === false
+                            ? <TriangleAlert size={12} />
+                            : active.configured
+                              ? <CheckCircle2 size={12} />
+                              : <Info size={12} />}
+                          {active.configured && active.testOk === false
+                            ? `凭据已保存（${active.keyMask}）· 连通检测未通过，可修改后重试「保存并检测」`
+                            : active.configured
+                              ? `已连接 · 已启用 ${active.models.filter((m) => m.enabled).length} 个模型`
+                              : '填写凭据后点「保存并检测」，自动验证连通性并尝试拉取模型列表'}
                         </div>
+                        {active.balance !== undefined && (
+                          <div className="mono mt-1 flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-2)' }} data-balance={active.id}>
+                            <Database size={11} style={{ color: 'var(--green)' }} />
+                            余额 {active.balance.text}
+                            <span style={{ color: 'var(--text-3)' }}>· {new Date(active.balance.at).toLocaleTimeString('zh-CN', { hour12: false })} 查询</span>
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -913,6 +1483,22 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                 <div className="mb-2 mt-4 flex flex-wrap items-center gap-2">
                   <h3 className="text-[13px] font-semibold">模型列表 ({active.models.filter((m) => m.enabled).length} / {active.models.length})</h3>
                   <div className="flex-1" />
+                  <div className="flex items-center gap-1.5 rounded-lg px-2.5" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)' }}>
+                    <Search size={12} style={{ color: 'var(--text-3)' }} />
+                    <input
+                      data-model-search
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      placeholder="搜索模型…"
+                      className="w-28 bg-transparent py-1.5 text-[12px] outline-none"
+                      style={{ color: 'var(--text-1)' }}
+                    />
+                  </div>
+                  <button className="btn-pill ghost" onClick={() => toggleAllModels(true)} data-models-all-on>全部开启</button>
+                  <button className="btn-pill ghost" onClick={() => toggleAllModels(false)} data-models-all-off>全部关闭</button>
+                  <button className="btn-pill ghost" onClick={() => { void testAllModels(); }} disabled={busy !== null} data-test-all>
+                    <Activity size={12} />{batchProgress !== null ? `停止 ${batchProgress.done}/${batchProgress.total}` : '测试模型'}
+                  </button>
                   <button className="btn-pill ghost" onClick={() => void pullModels()} disabled={busy !== null} data-pull-models>
                     <RefreshCw size={12} />{busy === `pull:${active.id}` ? '拉取中…' : '拉取模型'}
                   </button>
@@ -924,7 +1510,10 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                   {active.models.length === 0 && (
                     <div className="px-4 py-6 text-center text-[12px]" style={{ color: 'var(--text-3)' }}>暂无模型，可点击「拉取模型」或「手动添加」</div>
                   )}
-                  {active.models.map((m) => (
+                  {active.models.length > 0 && shownModels.length === 0 && (
+                    <div className="px-4 py-6 text-center text-[12px]" style={{ color: 'var(--text-3)' }}>没有匹配「{modelSearch.trim()}」的模型</div>
+                  )}
+                  {shownModels.map((m) => (
                     <div key={m.id} className="flex items-center gap-2.5 px-3.5 py-2.5" style={{ borderBottom: '1px solid var(--stroke)' }}>
                       <span className="font-mono text-[12.5px] font-medium" style={{ color: 'var(--text-1)' }}>{m.id}</span>
                       <div className="flex flex-wrap gap-1">
@@ -934,7 +1523,30 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                         })}
                       </div>
                       <div className="flex-1" />
-                      {!active.audio && (
+                      {(() => {
+                        const testResult = modelTests[m.id];
+                        if (testResult === undefined) return null;
+                        return (
+                          <span
+                            className="mono whitespace-nowrap text-[10px]"
+                            style={{ color: testResult.ok === true ? 'var(--green)' : 'var(--red)' }}
+                            title={testResult.error ?? ''}
+                            data-model-status={m.id}
+                          >
+                            {testResult.ok === true ? `✓ ${testResult.latencyMs ?? 0}ms` : `✗ ${shortError(testResult.error)}`}
+                          </span>
+                        );
+                      })()}
+                      <button
+                        className="pill whitespace-nowrap"
+                        style={{ fontSize: 10.5 }}
+                        onClick={() => { void testRow(m.id); }}
+                        data-model-test={m.id}
+                        title="对该模型发一次微型请求验证连通（决策协议模型自动走 System One 探针）"
+                      >
+                        {rowTesting === m.id ? '测试中…' : '测试'}
+                      </button>
+                      {!active.audio && !m.caps.includes('decision') && (
                         <button className="pill" style={{ fontSize: 10.5 }} onClick={() => setAsMain(`${active.id}/${m.id}`)} data-set-main={m.id}>设为主脑</button>
                       )}
                       {active.custom && (
@@ -958,6 +1570,9 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                 <div className="text-sm font-semibold">功能默认模型</div>
                 <div className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>仅从已启用的服务商模型中选择，修改后自动保存并立即同步主脑路由</div>
               </div>
+              <button className="btn-pill ghost" onClick={() => applyAutoBindings(SLOT_META.map((s) => s.slot))} data-auto-assign>
+                <Sparkles size={12} />一键智能分配
+              </button>
               <button className="btn-pill ghost" onClick={syncAllToMain} data-sync-all-main>
                 <SlidersHorizontal size={12} />文本角色全部跟随主脑
               </button>
@@ -989,9 +1604,21 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
                           data-slot-select={meta.slot}
                           className="w-full rounded-lg px-2.5 py-2 font-mono text-[12px] outline-none"
                           style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
-                          value={optionExists ? current : ''}
-                          onChange={(e) => bindSlot(meta.slot, e.target.value)}
+                          value={autoFlags[meta.slot] === true ? 'auto' : optionExists ? current : ''}
+                          onChange={(e) => {
+                            if (e.target.value === 'auto') {
+                              applyAutoBindings([meta.slot]);
+                              return;
+                            }
+                            if (autoFlags[meta.slot] === true) {
+                              const flags = { ...autoFlags, [meta.slot]: false };
+                              setAutoFlags(flags);
+                              void store.setConfig(AUTO_KEY, flags);
+                            }
+                            bindSlot(meta.slot, e.target.value);
+                          }}
                         >
+                          <option value="auto">自动挑选{autoFlags[meta.slot] === true && current !== '' ? ` → ${current.split('/').pop() ?? ''}` : '（按测试结果）'}</option>
                           <option value="">（未绑定）</option>
                           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
@@ -1032,7 +1659,24 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
             </div>
             <label className="mb-1 block">
               <span className="mb-1.5 block text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>接口地址（Base URL）</span>
-              <input className="w-full rounded-lg px-3 py-2 font-mono text-[12.5px] outline-none" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }} value={newUrl} onChange={(e) => setNewUrl(e.target.value)} placeholder="例如：http://127.0.0.1:8000/v1" data-new-url />
+              <input
+                className="w-full rounded-lg px-3 py-2 font-mono text-[12.5px] outline-none"
+                style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                onPaste={(e) => {
+                  // Magpie 智能粘贴：curl / export 环境变量 / 带端点后缀的裸 URL → 自动填 URL + 协议 + isFullUrl
+                  const parsed = parsePastedEndpoint(e.clipboardData.getData('text'));
+                  if (parsed === null) return;
+                  e.preventDefault();
+                  setNewUrl(parsed.baseUrl);
+                  if (parsed.protocol !== undefined) setNewProto(parsed.protocol);
+                  setNewFullUrl(parsed.isFullUrl ?? false);
+                  toast(parsed.note);
+                }}
+                placeholder="支持直接粘贴 curl / export 命令自动填充，例如：http://127.0.0.1:8000/v1"
+                data-new-url
+              />
             </label>
             <label className="mb-3 flex cursor-pointer items-center gap-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
               <input type="checkbox" checked={newFullUrl} onChange={(e) => setNewFullUrl(e.target.checked)} style={{ accentColor: 'var(--blue)' }} />

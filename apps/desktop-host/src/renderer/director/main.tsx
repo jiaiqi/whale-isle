@@ -12,6 +12,8 @@ const DEFAULT_PROFILE: DiningProfilePreset = {
   roleBindings: {
     MAIN_PERSONA_BRAIN: 'deepseek-official/deepseek-chat',
     STARDEW_GAME_PLANNER: 'deepseek-official/deepseek-chat',
+    TERRARIA_GAME_PLANNER: 'deepseek-official/deepseek-chat',
+    DST_GAME_PLANNER: 'deepseek-official/deepseek-chat',
     DANMAKU_FAST_ROUTER: 'deepseek-official/deepseek-flash',
     VISION_STORYBOARD: 'deepseek-official/deepseek-chat',
     VOICE_TTS_SPEECH: 'local-gpt-sovits/gpt-sovits-v2',
@@ -23,6 +25,8 @@ const DEFAULT_PROFILE: DiningProfilePreset = {
 const SLOT_LABELS: Record<WorkbenchRoleSlot, string> = {
   MAIN_PERSONA_BRAIN: '主脑与内心戏',
   STARDEW_GAME_PLANNER: '星露谷规划器',
+  TERRARIA_GAME_PLANNER: '泰拉瑞亚规划器',
+  DST_GAME_PLANNER: '饥荒 DST 规划器',
   DANMAKU_FAST_ROUTER: '弹幕快反路由',
   VISION_STORYBOARD: '翻车视觉复盘',
   VOICE_TTS_SPEECH: '日常说话 TTS',

@@ -114,14 +114,112 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       await director.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
       const snapshot = async () => (await director.evaluate(() => (window as unknown as { __directorSnapshot: () => Promise<Record<string, unknown>> }).__directorSnapshot())) as Record<string, unknown>;
 
-      await director.click('[data-tab="providers"]');
-      await director.waitForSelector('[data-provider-item="opencode-go"]', { timeout: 10_000 });
+      // 旧独立游戏路由迁移到聚合页，并保留原先选中的游戏。
+      await director.evaluate(() => {
+        localStorage.setItem('wb-tab', 'terraria');
+        localStorage.removeItem('wb-game');
+        localStorage.removeItem('wb-game-subtab');
+      });
+      await director.reload();
+      await director.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
+      await director.waitForFunction(() => document.querySelector('[data-game-panel]')?.getAttribute('data-active-game') === 'terraria', { timeout: 5_000 });
+      expect(await director.locator('[data-tab="stardew"]').innerText()).toContain('游戏共玩');
+      expect(await director.locator('[data-tab="terraria"]').count()).toBe(0);
+      expect(await director.locator('[data-tab="dst"]').count()).toBe(0);
+      expect(await director.locator('[data-tab="mods"]').count()).toBe(0);
+      expect(await director.locator('[data-game-select]').count()).toBe(3);
 
-      // 双 Tab：服务商配置 / 默认模型(6)
+      // 旧 Mod 管理路由迁移为聚合页子视图。
+      await director.evaluate(() => {
+        localStorage.setItem('wb-tab', 'mods');
+        localStorage.removeItem('wb-game-subtab');
+      });
+      await director.reload();
+      await director.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
+      await director.waitForSelector('[data-mods-page]', { timeout: 5_000 });
+      expect(await director.locator('[data-tab="stardew"]').getAttribute('data-active')).toBe('true');
+      expect(await director.locator('[data-game-panel]').getAttribute('data-active-subtab')).toBe('mods');
+
+      // 游戏页与顶栏互相同步，Mod 管理保留为星露谷子页。
+      await director.click('[data-game-select="terraria"]');
+      expect(await director.locator('[data-game-picker]').getAttribute('data-active-game')).toBe('terraria');
+      await director.click('[data-game-picker]');
+      await director.click('[data-game-option="dst"]');
+      expect(await director.locator('[data-game-panel]').getAttribute('data-active-game')).toBe('dst');
+      await director.click('[data-game-select="stardew"]');
+      await director.click('[data-game-subtab="mods"]');
+      expect(await director.locator('[data-mods-page]').count()).toBe(1);
+      await director.click('[data-game-subtab="monitor"]');
+
+      // 品牌区角色选择与舞台页共用同一份活动状态。
+      await director.click('[data-character-switch]');
+      await director.waitForSelector('[data-character-option]', { timeout: 5_000 });
+      const characterIds = await director.locator('[data-character-option]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-character-option') ?? ''));
+      expect(characterIds.length).toBeGreaterThan(0);
+      const selectedCharacterId = await director.locator('[data-character-option][aria-checked="true"]').getAttribute('data-character-option');
+      const nextCharacterId = characterIds.find((id) => id !== selectedCharacterId) ?? characterIds[0]!;
+      const nextCharacterName = (await director.locator(`[data-character-option="${nextCharacterId}"] span`).first().innerText()).trim();
+      await director.click(`[data-character-option="${nextCharacterId}"]`);
+      expect(await director.locator('[data-character-switch]').innerText()).toContain(nextCharacterName);
+      await director.click('[data-tab="pet"]');
+      await director.waitForSelector(`[data-character="${nextCharacterId}"]`, { timeout: 5_000 });
+      expect(await director.locator(`[data-character="${nextCharacterId}"]`).getAttribute('aria-pressed')).toBe('true');
+
+      // 主脑回落提示使用琥珀色语义状态，并将用户带到服务商页。
+      await director.evaluate(() => window.dispatchEvent(new CustomEvent('wb:brain', {
+        detail: { mode: 'rule', llmReady: false, mainModelId: 'deepseek/deepseek-chat' },
+      })));
+      await director.waitForFunction(() => {
+        const brain = document.querySelector('[data-brain-toggle]');
+        return brain?.getAttribute('data-brain-fallback') === 'true'
+          && brain.getAttribute('data-brain-model') === 'deepseek/deepseek-chat';
+      }, { timeout: 5_000 });
+      await director.click('[data-brain-toggle]');
+      await director.waitForFunction(() => document.querySelector('[data-tab="providers"]')?.getAttribute('data-active') === 'true', { timeout: 5_000 });
+
+      // 深浅主题的三级文字与绿色状态文字都达到 WCAG AA 小字对比度。
+      const readThemeContrast = async () => director.evaluate(() => {
+        const parse = (value: string): number[] => {
+          const hex = /^#([\da-f]{6})$/i.exec(value.trim())?.[1];
+          if (hex === undefined) return [0, 0, 0];
+          return [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
+        };
+        const luminance = (value: string): number => parse(value).map((channel) => channel <= 0.04045
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4).reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index]!, 0);
+        const contrast = (foreground: string, background: string): number => {
+          const a = luminance(foreground);
+          const b = luminance(background);
+          return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        };
+        const css = getComputedStyle(document.documentElement);
+        const surface = css.getPropertyValue('--surface-solid');
+        return {
+          isDark: document.documentElement.classList.contains('dark'),
+          tertiary: contrast(css.getPropertyValue('--text-3'), surface),
+          green: contrast(css.getPropertyValue('--green'), surface),
+        };
+      });
+      const firstTheme = await readThemeContrast();
+      expect(firstTheme.tertiary).toBeGreaterThanOrEqual(4.5);
+      expect(firstTheme.green).toBeGreaterThanOrEqual(4.5);
+      await director.click('[data-theme-toggle]');
+      await director.waitForFunction((wasDark) => document.documentElement.classList.contains('dark') !== wasDark, firstTheme.isDark, { timeout: 5_000 });
+      const secondTheme = await readThemeContrast();
+      expect(secondTheme.tertiary).toBeGreaterThanOrEqual(4.5);
+      expect(secondTheme.green).toBeGreaterThanOrEqual(4.5);
+      await director.click('[data-theme-toggle]');
+      await director.waitForFunction((wasDark) => document.documentElement.classList.contains('dark') === wasDark, firstTheme.isDark, { timeout: 5_000 });
+
+      await director.click('[data-tab="providers"]');
+      // 全量并行 47 workers 下 Electron 冷启动 + 渲染可达 ~11s（单跑实测），给足 30s 避免负载抖动
+      await director.waitForSelector('[data-provider-item="opencode-go"]', { timeout: 30_000 });
+
+      // 双 Tab：服务商配置 / 默认模型（M7 起 8 槽位：新增泰拉瑞亚/DST 两个规划器）
       expect(await director.locator('[data-ptab]').count()).toBe(2);
       await director.click('[data-ptab="defaults"]');
       await director.waitForSelector('[data-slot-select="MAIN_PERSONA_BRAIN"]', { timeout: 5_000 });
-      expect(await director.locator('[data-slot-select]').count()).toBe(6);
+      expect(await director.locator('[data-slot-select]').count()).toBe(8);
       await director.click('[data-ptab="providers"]');
 
       // OpenCode Go 内置条目 + 协议变体
@@ -193,4 +291,143 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       await app.close();
     }
   }, 120_000);
+
+  /**
+   * [E2E-HOST] T-M6-25：三游戏共玩页统一与连接引导。
+   *   ① 三游戏各自渲染连接引导条（连接状态取自主进程只读探活，未连通时给人类可执行的启动指引）
+   *   ② 「重新探测」按钮真实往返主进程 IPC，结果如实刷新
+   *   ③ 高级诊断默认折叠；三游戏共用当前动作/回执/快捷指令区块
+   */
+  it('三游戏连接引导 + 重新探测 + 折叠诊断', { timeout: 120_000 }, async () => {
+    const app = await electron.launch({
+      args: [mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const stageWin = await waitForWindow(app, 'pet-stage');
+      await waitFor(
+        stageWin,
+        () => stageWin.evaluate(() => Boolean((window as unknown as PetStageWindow).__petStageReady)),
+        20_000,
+      );
+      const director = app.windows().find((candidate) => candidate.url().includes('director'));
+      expect(director).toBeDefined();
+      const page = director!;
+      await page.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
+
+      await page.evaluate(() => {
+        localStorage.setItem('wb-tab', 'stardew');
+        localStorage.setItem('wb-game', 'stardew');
+        localStorage.setItem('wb-game-subtab', 'monitor');
+      });
+      await page.reload();
+      await page.waitForFunction(() => Boolean((window as unknown as { __directorSnapshot?: () => Promise<unknown> }).__directorSnapshot), { timeout: 20_000 });
+      await page.waitForSelector('[data-game-panel][data-active-game="stardew"]', { timeout: 10_000 });
+
+      // ① 星露谷：连接引导条（真机未开游戏 → offline；真开了则 online，断言不依赖具体态）
+      const conn = page.locator('[data-game-conn-banner]');
+      await conn.waitFor({ timeout: 15_000 });
+      const stardewConn = await conn.getAttribute('data-game-conn');
+      expect(['online', 'reachable', 'offline']).toContain(stardewConn);
+      expect(await page.locator('[data-game-reprobe]').count()).toBe(1);
+      if (stardewConn !== 'online') {
+        expect(await page.locator('[data-game-conn-banner] ol li').count()).toBeGreaterThan(0);
+      }
+      // 共用区块：当前动作 / 回执时间线 / 快捷指令
+      expect(await page.locator('[data-game-quick="/fish 5"]').count()).toBe(1);
+      expect(await page.locator('text=执行记录与回执').count()).toBe(1);
+
+      // ② 高级诊断默认折叠，点击后展开
+      const diag = page.locator('[data-game-diagnostics]');
+      await diag.waitFor({ timeout: 10_000 });
+      expect(await diag.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(false);
+      await diag.locator('summary').click();
+      expect(await diag.evaluate((node) => (node as HTMLDetailsElement).open)).toBe(true);
+
+      // ③ 重新探测：真实走主进程 IPC，状态如实刷新（不伪造「已连接」）
+      const probe = await page.evaluate(() => (window as unknown as {
+        directorBridge: { gameHealth(gameId: string): Promise<{ status: string; ok: boolean; guidance: string[]; detail: string }> };
+      }).directorBridge.gameHealth('stardew'));
+      expect(['online', 'reachable', 'offline']).toContain(probe.status);
+      expect(Array.isArray(probe.guidance)).toBe(true);
+      await page.click('[data-game-reprobe]');
+      await page.waitForTimeout(500);
+      expect(['online', 'reachable', 'offline']).toContain(await page.locator('[data-game-conn-banner]').getAttribute('data-game-conn'));
+
+      // ④ 泰拉瑞亚 / DST：同一套区块与引导条
+      await page.click('[data-game-select="terraria"]');
+      await page.waitForSelector('[data-game-panel][data-active-game="terraria"]', { timeout: 10_000 });
+      await page.waitForSelector('[data-game-quick="mine"]', { timeout: 10_000 });
+      expect(await page.locator('[data-game-conn-banner]').count()).toBe(1);
+      expect(await page.locator('[data-game-diagnostics]').count()).toBe(1);
+
+      await page.click('[data-game-select="dst"]');
+      await page.waitForSelector('[data-game-panel][data-active-game="dst"]', { timeout: 10_000 });
+      await page.waitForSelector('[data-game-quick="eat"]', { timeout: 10_000 });
+      const dstText = await page.locator('[data-game-conn-banner]').innerText();
+      expect(dstText).toContain('饥荒');
+      // DST 状态快照 IPC：未开 sidecar 时如实失败，不返回假快照
+      const dstState = await page.evaluate(() => (window as unknown as {
+        directorBridge: { gameDstState(): Promise<{ ok: boolean; snapshot?: unknown; error?: string }> };
+      }).directorBridge.gameDstState());
+      expect(typeof dstState.ok).toBe('boolean');
+      if (!dstState.ok) expect(dstState.error).toBeTruthy();
+
+      // T-M6-33：顶栏如实展示实际语音后端（mcode / say / 未适配）
+      const voiceBackend = await page.locator('[data-voice-toggle]').getAttribute('data-voice-backend');
+      expect(['mcode', 'say', 'unsupported']).toContain(voiceBackend);
+
+      mkdirSync(artifactsDir, { recursive: true });
+      await page.screenshot({ path: join(artifactsDir, 'game-panel-connection.png') });
+    } finally {
+      await app.close();
+    }
+  }, 120_000);
+
+  /**
+   * [E2E-HOST] T-M6-27：会话归属。
+   *   ① autodrive:status 必须带 sessionId + generation（渲染层据此过滤迟到/异会话事件）
+   *   ② 携带过期 sessionId 的 P0 指令被主进程拒绝（不误发到新游戏）
+   *   ③ 省略 sessionId 的旧调用保持兼容
+   */
+  it('会话归属：状态带会话标识 + 过期指令被拒绝', { timeout: 90_000 }, async () => {
+    const app = await electron.launch({
+      args: [mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      // 只依赖 preload 桥（不等 React/Dexie 启动），避免与并行 Electron 实例抢 e2e-profile
+      const page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(
+        () => Boolean((window as unknown as { directorBridge?: { autodriveStatus?: unknown } }).directorBridge?.autodriveStatus),
+        { timeout: 30_000 },
+      );
+
+      const status = await page.evaluate(() => (window as unknown as {
+        directorBridge: {
+          autodriveStatus(): Promise<{ running: boolean; gameId?: string; sessionId?: string; generation?: number; events?: unknown[] }>;
+        };
+      }).directorBridge.autodriveStatus());
+      expect(typeof status.sessionId).toBe('string');
+      expect((status.sessionId ?? '').length).toBeGreaterThan(0);
+      expect(typeof status.generation).toBe('number');
+
+      // 过期会话：必须拒绝，且错误信息说明会话已切换
+      const stale = await page.evaluate(() => (window as unknown as {
+        directorBridge: { autodriveDirective(tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }> };
+      }).directorBridge.autodriveDirective('fish', {}, 'stale directive', '00000000-0000-4000-8000-000000000000'));
+      expect(stale.ok).toBe(false);
+      expect(stale.error ?? '').toContain('会话已切换');
+
+      // 兼容：不带 sessionId 的旧调用仍接受（入队等待自动驾驶循环消费）
+      const compat = await page.evaluate(() => (window as unknown as {
+        directorBridge: { autodriveDirective(tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }> };
+      }).directorBridge.autodriveDirective('wait', { seconds: 1 }, 'compat directive'));
+      expect(compat.ok).toBe(true);
+    } finally {
+      await app.close();
+    }
+  }, 90_000);
 });

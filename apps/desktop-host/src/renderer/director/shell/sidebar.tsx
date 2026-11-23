@@ -2,22 +2,23 @@
  * v4 Shell 左侧栏（设计稿：分组插件导航 + 赛博饭碗 footer）。
  * 插件启停会过滤这里的入口 —— 与「插件与权限」页联动（localStorage 持久）。
  */
+import { useEffect, useRef, useState } from 'react';
 import {
-  AudioLines, Blocks, Brain, Cpu, Fish, MessageSquare, MonitorPlay, Package, Plus,
-  Search, Sprout, Terminal, Wheat,
+  AudioLines, Blocks, Brain, ChevronDown, Cpu, Fish, Gamepad2, MessageSquare, MonitorPlay, Plus,
+  Search, Terminal, Wheat,
   type LucideIcon,
 } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE, whaleMarkPaths } from '../../../shared/brand';
+import type { CharacterSummary } from '../bridge';
 
 export type Tab =
-  | 'chat' | 'memory' | 'voice' | 'pet' | 'stardew' | 'mods' | 'obs' | 'harness' | 'providers' | 'plugins';
+  | 'chat' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'obs' | 'harness' | 'providers' | 'plugins';
 
 export interface NavItem {
   id: Tab;
   label: string;
   icon: LucideIcon;
   group: string;
-  badge?: string;
   live?: boolean;
 }
 
@@ -32,16 +33,15 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: '声形与舞台',
     items: [
-      { id: 'voice', label: '声音工坊与音色库', icon: AudioLines, group: '声形与舞台', badge: '5×5' },
-      { id: 'pet', label: '桌宠舞台与动作库', icon: Fish, group: '声形与舞台', badge: '114' },
+      { id: 'voice', label: '声音工坊与音色库', icon: AudioLines, group: '声形与舞台' },
+      { id: 'pet', label: '桌宠舞台与动作库', icon: Fish, group: '声形与舞台' },
     ],
   },
   {
     label: '游戏与直播',
     items: [
-      { id: 'stardew', label: '星露谷共玩', icon: Sprout, group: '游戏与直播', live: true },
-      { id: 'mods', label: 'Mod 管理', icon: Package, group: '游戏与直播' },
-      { id: 'obs', label: 'OBS 透明挂件', icon: MonitorPlay, group: '游戏与直播', badge: '18765' },
+      { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '游戏与直播', live: true },
+      { id: 'obs', label: 'OBS 透明挂件', icon: MonitorPlay, group: '游戏与直播' },
     ],
   },
   {
@@ -76,20 +76,81 @@ export interface SidebarProps {
   onOpenCommandPalette: () => void;
   /** 插件启停过滤：返回 false 的入口隐藏 */
   isPluginEnabled: (id: Tab) => boolean;
-  /** 动态 badge 文案（如记忆节点数、Mod 数） */
+  characters: CharacterSummary[];
+  characterId: string;
+  onSelectCharacter: (id: string) => void;
+  /** 动态 badge 文案（如记忆节点数） */
   badges?: Partial<Record<Tab, string>>;
 }
 
 export function Sidebar({
-  tab, onSelect, running, rice, riceCap, onFeed, onOpenCommandPalette, isPluginEnabled, badges,
+  tab, onSelect, running, rice, riceCap, onFeed, onOpenCommandPalette, isPluginEnabled,
+  characters, characterId, onSelectCharacter, badges,
 }: SidebarProps): React.JSX.Element {
   const pct = Math.min(100, Math.round((rice / riceCap) * 100));
+  const [characterMenuOpen, setCharacterMenuOpen] = useState(false);
+  const characterMenuRef = useRef<HTMLDivElement>(null);
+  const selectedCharacter = characters.find((character) => character.id === characterId);
+
+  useEffect(() => {
+    if (!characterMenuOpen) return;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (!characterMenuRef.current?.contains(event.target as Node)) setCharacterMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setCharacterMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [characterMenuOpen]);
   return (
     <aside className="wb-side">
       <div className="wb-brand">
         {WHALE_SVG}
-        <span className="t" title={APP_TAGLINE}>{APP_NAME}</span>
-        <span className="v">v4</span>
+        <span className="t" title={APP_TAGLINE} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{APP_NAME}</span>
+        <div ref={characterMenuRef} style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0 }}>
+          <button
+            type="button"
+            data-character-switch
+            aria-label={`切换陪伴角色，当前${selectedCharacter?.displayName ?? '未选择'}`}
+            aria-haspopup="menu"
+            aria-expanded={characterMenuOpen}
+            disabled={characters.length === 0}
+            onClick={() => setCharacterMenuOpen((open) => !open)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 108, padding: '5px 7px', borderRadius: 999, border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 10.5, whiteSpace: 'nowrap', opacity: characters.length === 0 ? 0.6 : 1 }}
+          >
+            <Fish size={12} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedCharacter?.displayName ?? '角色'}</span>
+            <ChevronDown size={11} />
+          </button>
+          {characterMenuOpen && (
+            <div
+              role="menu"
+              aria-label="选择陪伴角色"
+              className="card"
+              style={{ position: 'absolute', zIndex: 60, top: 'calc(100% + 6px)', right: 0, width: 190, maxHeight: 280, overflowY: 'auto', padding: 5, background: 'var(--surface-solid)', boxShadow: 'var(--shadow-2)' }}
+            >
+              {characters.map((character) => (
+                <button
+                  key={character.id}
+                  type="button"
+                  role="menuitemradio"
+                  data-character-option={character.id}
+                  aria-checked={characterId === character.id}
+                  onClick={() => { onSelectCharacter(character.id); setCharacterMenuOpen(false); }}
+                  style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 9px', border: 0, borderRadius: 8, background: characterId === character.id ? 'var(--blue-dim)' : 'transparent', color: characterId === character.id ? 'var(--blue)' : 'var(--text-1)', textAlign: 'left', fontSize: 11.5 }}
+                >
+                  <span>{character.displayName}</span>
+                  {characterId === character.id && <span aria-hidden="true">当前</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="wb-nav-scroll">
         {NAV_GROUPS.map((group) => {
@@ -101,7 +162,7 @@ export function Sidebar({
               {items.map((item) => {
                 const Icon = item.icon;
                 const active = tab === item.id;
-                const badge = badges?.[item.id] ?? item.badge;
+                const badge = badges?.[item.id];
                 return (
                   <button
                     key={item.id}

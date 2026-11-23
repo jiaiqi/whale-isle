@@ -2,250 +2,409 @@
 <html lang="zh-CN" class="dark">
 <head>
 <meta charset="UTF-8">
-<title>星露谷共玩监控 — 大肥鱼工作台 v4</title>
+<title>游戏共玩 — 鲸屿 Whale Isle</title>
 <link rel="stylesheet" href="tokens.css">
 <script src="vendor/lucide.min.js"></script>
 <script src="shell.js"></script>
 <style>
-  .page { max-width: 1320px; margin: 0 auto; padding: 18px 24px 44px; }
-  /* 双脑与攻略注入横幅 */
-  .brain-banner {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 13px 16px; border-radius: var(--r-xl); margin-bottom: 16px;
+  .page { max-width: 1280px; margin: 0 auto; padding: 18px 24px 48px; }
+
+  /* 顶部游戏切换栏 */
+  .game-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    flex-wrap: wrap; margin-bottom: 14px;
   }
-  .guide-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .g-pill {
-    font-size: 11px; padding: 3.5px 11px; border-radius: 980px; cursor: pointer;
-    border: 1px solid var(--stroke); background: var(--inset); color: var(--text-2);
+  .game-head-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .sub-tabs { display: inline-flex; gap: 6px; }
+  .sub-tab {
+    font-size: 11.5px; padding: 5px 12px; border-radius: 980px; border: 1px solid var(--stroke);
+    background: var(--surface); color: var(--text-2); cursor: pointer;
     transition: all var(--dur-hover) var(--ease);
   }
-  .g-pill:hover, .g-pill.on { border-color: var(--green-line); background: var(--green-dim); color: var(--green); }
-  .guide-preview {
-    margin-top: 9px; padding: 9px 12px; border-radius: var(--r-md);
-    background: var(--inset); border: 1px solid var(--stroke); font-size: 11.5px; color: var(--text-2); line-height: 1.7;
+  .sub-tab.on { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); font-weight: 600; }
+
+  /* 未连接引导横幅（解决空白满屏 "—" 痛点） */
+  .conn-banner {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 13px 16px; border-radius: var(--r-xl); margin-bottom: 16px;
+    border: 1px solid var(--amber-line); background: var(--amber-dim);
   }
+  .conn-banner.ok { border-color: var(--green-line); background: var(--green-dim); }
+  .conn-banner .title { font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 7px; }
+  .conn-banner .steps { font-size: 11.5px; color: var(--text-2); margin-top: 3px; line-height: 1.65; }
 
-  .wrap { display: grid; grid-template-columns: 1.2fr .95fr .85fr; gap: 14px; align-items: start; }
+  /* 三栏主布局（全语义变量，浅色主题零发灰） */
+  .wrap { display: grid; grid-template-columns: 1.18fr 0.98fr 0.84fr; gap: 14px; align-items: start; }
   .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-  .sec { font-size: 10px; letter-spacing: 1.2px; color: var(--text-3); font-weight: 650; margin-bottom: -6px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
   .panel { padding: 15px 16px; border-radius: var(--r-xl); }
-  .panel h4 { font-size: 12.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 7px; }
+  .panel h4 { font-size: 12.5px; font-weight: 650; margin-bottom: 10px; display: flex; align-items: center; gap: 7px; }
 
-  .now-label { font-size: 10px; color: var(--green); letter-spacing: 1px; font-weight: 650; font-family: var(--font-mono); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-  .now-name { font-size: 18px; font-weight: 700; font-family: var(--font-mono); margin-bottom: 4px; }
-  .now-args { font-size: 11.5px; color: var(--text-2); font-family: var(--font-mono); margin-bottom: 10px; }
-  .now-progress { height: 6px; border-radius: 999px; background: var(--inset); overflow: hidden; margin-bottom: 9px; }
-  .now-progress i { display: block; height: 100%; width: 66%; border-radius: 999px; background: var(--green); }
-  .now-meta { display: flex; gap: 12px; font-size: 11px; color: var(--text-3); flex-wrap: wrap; }
-  .now-meta b { color: var(--text-1); font-family: var(--font-mono); }
+  .now-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 11px; color: var(--text-2); }
+  .now-name { font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--blue); }
+  .now-desc { font-size: 12px; color: var(--text-2); margin: 4px 0 11px; line-height: 1.6; }
+  .now-bar { height: 5px; border-radius: 999px; background: var(--inset); overflow: hidden; margin-bottom: 11px; }
+  .now-bar i { display: block; height: 100%; border-radius: 999px; background: var(--green); transition: width .35s var(--ease-out); }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat-box { padding: 8px 10px; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--stroke); }
+  .stat-box .k2 { font-size: 10px; color: var(--text-3); }
+  .stat-box .v2 { font-family: var(--font-mono); font-size: 12px; font-weight: 650; margin-top: 3px; color: var(--text-1); }
 
   .goal { display: flex; align-items: center; gap: 9px; padding: 6.5px 0; font-size: 12px; border-bottom: 1px dashed var(--stroke); }
   .goal:last-child { border: none; }
-  .goal .st { margin-left: auto; font-size: 10px; font-family: var(--font-mono); }
   .goal.done { color: var(--text-3); text-decoration: line-through; }
+  .goal .st { margin-left: auto; font-size: 10px; font-family: var(--font-mono); }
 
-  .ascii { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--text-2); background: var(--inset); border: 1px solid var(--stroke); border-radius: var(--r-md); padding: 11px 13px; white-space: pre; overflow-x: auto; }
-  .ascii .me { color: var(--green); font-weight: 700; }
-  .ascii .water { color: var(--blue); opacity: 0.65; }
-  .ascii .npc { color: var(--violet); }
-  .note { font-size: 11px; color: var(--text-3); line-height: 1.7; margin-top: 9px; }
+  /* 攻略胶囊 */
+  .guide-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .g-pill {
+    font-size: 11px; padding: 3px 10px; border-radius: 980px; border: 1px solid var(--stroke);
+    background: var(--inset); color: var(--text-2); cursor: pointer;
+  }
+  .g-pill.on { border-color: var(--green-line); background: var(--green-dim); color: var(--green); font-weight: 600; }
+  .guide-txt { font-size: 11.5px; color: var(--text-2); line-height: 1.7; background: var(--inset); border: 1px solid var(--stroke); border-radius: var(--r-md); padding: 9px 11px; }
 
+  /* 回执时间线（纯语义色） */
   .filter-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
-  .f-btn { font-size: 10px; padding: 2.5px 9px; border-radius: 980px; border: 1px solid var(--stroke); background: var(--inset); color: var(--text-2); cursor: pointer; }
-  .f-btn.on { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); }
+  .f-btn { font-size: 10.5px; padding: 3px 9px; border-radius: 980px; border: 1px solid var(--stroke); background: var(--inset); color: var(--text-2); cursor: pointer; }
+  .f-btn.on { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); font-weight: 600; }
+  .r-list { display: flex; flex-direction: column; gap: 8px; }
+  .r-item { border-left: 2.5px solid var(--stroke-2); padding: 4px 0 4px 11px; }
+  .r-item.ok { border-color: var(--green); }
+  .r-item.unc { border-color: var(--amber); }
+  .r-item.fail { border-color: var(--red); }
+  .r-head { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+  .r-st { font-family: var(--font-mono); font-size: 10px; font-weight: 650; }
+  .r-item.ok .r-st { color: var(--green); }
+  .r-item.unc .r-st { color: var(--amber); }
+  .r-item.fail .r-st { color: var(--red); }
+  .r-dt { font-size: 11px; color: var(--text-3); margin-top: 2px; line-height: 1.55; }
 
-  .receipt { position: relative; padding-left: 18px; }
-  .receipt::before { content: ''; position: absolute; left: 5px; top: 7px; bottom: 7px; width: 2px; background: var(--stroke); }
-  .r { position: relative; padding: 6px 0; font-size: 12px; }
-  .r::before { content: ''; position: absolute; left: -17px; top: 11px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
-  .r.ok::before { background: var(--green); }
-  .r.run::before { background: var(--amber); animation: blink 1.5s infinite; }
-  .r.fail::before { background: var(--red); }
-  .r.unc::before { background: var(--violet); }
-  .r .t { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); margin-right: 6px; }
-  .r .nm { font-weight: 650; font-family: var(--font-mono); font-size: 11.5px; }
-  .r .st { float: right; font-size: 9.5px; padding: 1.5px 7px; border-radius: 999px; font-family: var(--font-mono); }
-  .st-ok { background: var(--green-dim); color: var(--green); }
-  .st-run { background: var(--amber-dim); color: var(--amber); }
-  .st-fail { background: var(--red-dim); color: var(--red); }
-  .st-unc { background: var(--violet-dim); color: var(--violet); }
-  .r .dt { color: var(--text-3); font-size: 10.5px; margin-top: 3px; line-height: 1.6; }
+  /* 快捷指令 */
+  .cmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .cmd-btn {
+    padding: 8px 10px; border-radius: var(--r-md); border: 1px solid var(--stroke);
+    background: var(--inset); color: var(--text-1); font-size: 12px; font-weight: 550;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: all var(--dur-hover) var(--ease);
+  }
+  .cmd-btn:hover { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); }
 
-  .wd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .wd-cell { border: 1px solid var(--stroke); border-radius: var(--r-md); padding: 9px 11px; background: var(--inset); }
-  .wd-cell .kk { font-size: 10px; color: var(--text-3); margin-bottom: 3px; display: flex; align-items: center; gap: 5px; }
-  .wd-cell .vv { font-size: 12px; font-weight: 700; font-family: var(--font-mono); }
+  /* 折叠式高级诊断（把技术细节收起来，保持主界面清爽） */
+  details.diag { border-radius: var(--r-xl); }
+  details.diag summary {
+    list-style: none; cursor: pointer; padding: 13px 16px; font-size: 12px; font-weight: 600;
+    color: var(--text-2); display: flex; align-items: center; justify-content: space-between;
+  }
+  details.diag summary::-webkit-details-marker { display: none; }
+  .diag-body { padding: 0 16px 14px; border-top: 1px dashed var(--stroke); padding-top: 10px; font-size: 11.5px; color: var(--text-2); }
+  .kv { display: flex; justify-content: space-between; padding: 4px 0; }
+  .kv b { font-family: var(--font-mono); color: var(--text-1); font-size: 11px; }
 
-  .sw-row { display: flex; align-items: center; justify-content: space-between; padding: 7.5px 0; font-size: 12px; border-bottom: 1px dashed var(--stroke); }
-  .sw-row:last-of-type { border: none; }
-  .sw-row .ds2 { font-size: 10px; color: var(--text-3); margin-top: 2px; }
-  .audit { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); padding: 4px 0; line-height: 1.75; }
-  .skill { font-size: 11.5px; line-height: 1.7; color: var(--text-2); }
-  .skill .fn { color: var(--blue); font-weight: 650; font-family: var(--font-mono); font-size: 11px; }
-  .skill > div { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--stroke); }
-  .skill > div:last-child { border: none; margin: 0; padding: 0; }
-  @media (max-width: 1080px) { .wrap { grid-template-columns: 1fr; } }
+  /* Mod 管理子视图 */
+  .mod-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--stroke); }
+  .mod-row:last-child { border-bottom: none; }
+
+  @media (max-width: 1040px) { .wrap { grid-template-columns: 1fr; } }
 </style>
 </head>
-<body data-wb-page="stardew" data-wb-group="游戏与直播" data-wb-title="星露谷共玩监控">
+<body data-wb-page="stardew" data-wb-group="游戏与直播" data-wb-title="游戏共玩">
   <main class="wb-main">
     <div class="page">
-      <!-- 新增：LLM 大脑 + 75 工具白名单 + guide-forager 7 专题攻略注入 -->
-      <section class="card brain-banner">
-        <div style="flex:1;min-width:280px">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="pill pill-violet" id="sd-brain-badge"><i data-lucide="brain" class="xs"></i>LlmPlanner · deepseek-chat</span>
-            <span class="pill pill-green"><i data-lucide="shield-check" class="xs"></i>75 工具白名单校验</span>
-            <span class="pill pill-amber"><i data-lucide="wheat" class="xs"></i>30 粒米 / 回执</span>
-            <span class="pill">RulePlanner 掉线自动兜底</span>
+      <!-- 顶部统一游戏切换条（替代侧栏 4 个割裂入口） -->
+      <div class="game-head">
+        <div class="game-head-left">
+          <div class="seg-tabs" role="tablist">
+            <button class="seg-tab on" data-gtab="stardew" onclick="switchGame('stardew')"><i data-lucide="sprout" class="xs"></i>星露谷物语</button>
+            <button class="seg-tab" data-gtab="terraria" onclick="switchGame('terraria')"><i data-lucide="swords" class="xs"></i>泰拉瑞亚</button>
+            <button class="seg-tab" data-gtab="dst" onclick="switchGame('dst')"><i data-lucide="flame" class="xs"></i>饥荒：联机版</button>
           </div>
-          <div class="guide-pills" id="guide-pills"></div>
-          <div class="guide-preview" id="guide-preview"></div>
-        </div>
-      </section>
-
-      <div class="wrap">
-        <div class="col stagger">
-          <div class="sec">当前动作 · 动作互斥锁（单在途）</div>
-          <div class="card panel">
-            <div class="now-label"><span class="pulse-dot"></span>RUNNING · a-1042</div>
-            <div class="now-name">fish(casts: 3)</div>
-            <div class="now-args">Beach (38,36) · 竹鱼竿 · 落点离岸 2 格</div>
-            <div class="now-progress"><i></i></div>
-            <div class="now-meta">
-              <span>已抛竿 <b>2/3</b></span>
-              <span>用时 <b>01:47</b></span>
-              <span>体力 <b>98 / 270</b></span>
-              <span>金钱 <b>640g</b></span>
-            </div>
-          </div>
-
-          <div class="card panel">
-            <h4><i data-lucide="list-todo" class="sm" style="color:var(--blue)"></i>今日目标链（春 16 · 泡泡湾）</h4>
-            <div class="goal done"><i data-lucide="mail" class="xs"></i>读信（7 封，领鱼竿线索）<span class="st" style="color:var(--green)">done</span></div>
-            <div class="goal done"><i data-lucide="fish" class="xs"></i>找威利拿竹鱼竿<span class="st" style="color:var(--green)">done</span></div>
-            <div class="goal"><i data-lucide="waves" class="xs" style="color:var(--amber)"></i>在海滩钓 5 条鱼（卖钱赚米）<span class="st" style="color:var(--amber)">2/5</span></div>
-            <div class="goal"><i data-lucide="utensils" class="xs" style="color:var(--violet)"></i>背包满时吃海草腾格（LLM 自主决策）<span class="st" style="color:var(--green)">已完成</span></div>
-            <div class="goal"><i data-lucide="bed" class="xs"></i>20:00 / 体力&lt;8% 强制睡觉防晕倒<span class="st">看护锁定</span></div>
-          </div>
-
-          <div class="card panel">
-            <h4><i data-lucide="map" class="sm" style="color:var(--blue)"></i>周边地图（fish-eye 人话翻译）</h4>
-            <div class="ascii">  <span class="water">~~~~~ ~~~~~</span>
-  <span class="water">~~~</span>·<span class="water">~</span><span class="water">~~~</span>·<span class="me">@</span>·<span class="water">~~</span>
-  <span class="water">~~</span>·<span class="water">~</span>o<span class="water">~~~</span>·<span class="water">~~~</span>
-  · · · [桥断] · · <span class="npc">N</span> · · · · · ·</div>
-            <div class="note">站在码头东侧沙滩面朝右；左上 3 格冒泡点；镇上入口在西边 (38,0)。</div>
+          <div class="sub-tabs" id="stardew-subtabs">
+            <button class="sub-tab on" data-sub="monitor" onclick="switchSub('monitor')">共玩监控</button>
+            <button class="sub-tab" data-sub="mods" onclick="switchSub('mods')">Mod 管理 (3)</button>
           </div>
         </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn-pill ghost" id="sim-conn-btn" onclick="toggleSimConn()"><i data-lucide="wifi" class="xs"></i>预览未连接引导态</button>
+        </div>
+      </div>
 
-        <div class="col stagger">
-          <div class="sec">真实回执时间线（COMPLETED / FAILED / UNCERTAIN）</div>
-          <div class="card panel">
-            <div class="filter-row">
-              <button class="f-btn on" onclick="filterReceipts('all',this)">全部 (6)</button>
-              <button class="f-btn" onclick="filterReceipts('ok',this)">COMPLETED</button>
-              <button class="f-btn" onclick="filterReceipts('unc',this)">UNCERTAIN</button>
-              <button class="f-btn" onclick="filterReceipts('fail',this)">FAILED</button>
-            </div>
-            <div class="receipt" id="receipt-list">
-              <div class="r ok" data-st="ok"><span class="t">09:41</span><span class="nm">read_mail</span><span class="st st-ok">COMPLETED</span><div class="dt">7 封信 · 领取威利线索 · 自动入记忆图谱</div></div>
-              <div class="r ok" data-st="ok"><span class="t">09:44</span><span class="nm">travel_to(Beach)</span><span class="st st-ok">COMPLETED</span><div class="dt">触发威利剧情 → dialogue ×6 → 获得竹鱼竿</div></div>
-              <div class="r ok" data-st="ok"><span class="t">10:20</span><span class="nm">fish(casts:2)</span><span class="st st-ok">COMPLETED</span><div class="dt">鳀鱼(完美)×1 · 触发 happy_maid 动作与短评</div></div>
-              <div class="r fail" data-st="fail"><span class="t">10:26</span><span class="nm">open_shop(FishShop)</span><span class="st st-fail">FAILED</span><div class="dt">店主不在柜台 → 写入记忆：威利 9:00 后在码头</div></div>
-              <div class="r unc" data-st="unc"><span class="t">10:28</span><span class="nm">move_to(60,12)</span><span class="st st-unc">UNCERTAIN</span><div class="dt">寻路卡石头 → 触发 clumsy_panic 甩锅台词 → 改走 (58,13)</div></div>
-              <div class="r run" data-st="run"><span class="t">10:32</span><span class="nm">fish(casts:3)</span><span class="st st-run">RUNNING</span><div class="dt">45s 心跳轮询中 · 第 2 竿咬钩</div></div>
-            </div>
-          </div>
+      <!-- 连接状态与开箱引导条 -->
+      <div class="conn-banner ok" id="conn-banner"></div>
 
-          <div class="sec">看门狗与守护层</div>
-          <div class="card panel">
-            <div class="wd-grid">
-              <div class="wd-cell"><div class="kk"><i data-lucide="heart-pulse" class="xs"></i>动作心跳</div><div class="vv" style="color:var(--green)">正常 · 12s</div></div>
-              <div class="wd-cell"><div class="kk"><i data-lucide="shield-alert" class="xs"></i>卡死哨兵</div><div class="vv" style="color:var(--green)">0 / 4min 阈值</div></div>
-              <div class="wd-cell"><div class="kk"><i data-lucide="rotate-ccw" class="xs"></i>uncertain 重试</div><div class="vv" style="color:var(--amber)">1 / 上限 2</div></div>
-              <div class="wd-cell"><div class="kk"><i data-lucide="cable" class="xs"></i>BWF MCP</div><div class="vv" style="color:var(--green)">18080 · SSE</div></div>
-              <div class="wd-cell"><div class="kk"><i data-lucide="bed" class="xs"></i>防晕倒看护</div><div class="vv" style="color:var(--amber)">&lt;8% 强制睡</div></div>
-              <div class="wd-cell"><div class="kk"><i data-lucide="clock" class="xs"></i>长动作超时</div><div class="vv">10min 分层</div></div>
-            </div>
+      <!-- 视图 A：统一三游戏共玩监控 -->
+      <div id="view-monitor" class="wrap">
+        <div class="col stagger" id="col-left"></div>
+        <div class="col stagger" id="col-mid"></div>
+        <div class="col stagger" id="col-right"></div>
+      </div>
+
+      <!-- 视图 B：星露谷 Mod 管理（收拢为星露谷二级 Tab） -->
+      <div id="view-mods" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:12px;color:var(--text-2)">SMAPI 目录：<span class="mono">~/Library/Application Support/Steam/.../Mods</span></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-pill ghost" onclick="wbToast('已打开本地 Mods 文件夹')"><i data-lucide="folder-open" class="xs"></i>打开目录</button>
+            <button class="btn-pill primary" onclick="wbToast('请选择 .zip 格式的 SMAPI Mod 压缩包')"><i data-lucide="upload" class="xs"></i>安装 ZIP Mod</button>
           </div>
         </div>
-
-        <div class="col stagger">
-          <div class="sec">CheatBridge 作弊桥（独立开关 + 审计）</div>
-          <div class="card panel">
-            <div class="sw-row">
-              <div>总开关<div class="ds2">关闭时直写端点 401 拒绝</div></div>
-              <div class="sw on" onclick="toggleCB(this)"></div>
-            </div>
-            <div style="font-size:11px;color:var(--text-3);margin:4px 0 8px">当前：<b id="cbState" style="color:var(--amber)">开启（测试模式）</b></div>
-            <div class="sw-row"><div>直改金钱 / 体力 / 生命<div class="ds2">stamina · money · health</div></div><span class="pill pill-amber">需审批</span></div>
-            <div class="sw-row"><div>walk.cross 边界传送<div class="ds2">治边界切图死局</div></div><span class="pill pill-green">放行</span></div>
-            <div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--stroke)">
-              <div style="font-size:10px;color:var(--text-3);margin-bottom:4px">审计流水 · cheat-audit.jsonl</div>
-              <div class="audit">10:35:12 <b style="color:var(--amber)">stamina</b> 98→270 <span style="color:var(--green)">[已审批] 主人</span></div>
-              <div class="audit">10:35:31 <b style="color:var(--amber)">walk.cross</b> Farm→Town <span style="color:var(--green)">[已放行] 自动</span></div>
-              <div class="audit">10:36:04 <b style="color:var(--amber)">money</b> +5000 <span style="color:var(--red)">[已拒绝] 主人(N)</span></div>
-            </div>
-          </div>
-
-          <div class="sec">技能卡（翻车知识闭环）</div>
-          <div class="card panel">
-            <div class="skill">
-              <div><span class="fn">SKILL-fishing.md</span><br>浅水鱼小品质差 → 优先码头尽头抛远；冒泡点咬钩更快。</div>
-              <div><span class="fn">SKILL-stamina.md</span><br>体力 &lt;80 别接长动作链；背包满可吃海草回体并腾格子。</div>
-              <div><span class="fn">SKILL-willy.md</span><br>威利 9:00-17:00 在码头柜台；雨天不出海。</div>
-            </div>
-          </div>
-        </div>
+        <div class="card" style="overflow:hidden" id="mods-list"></div>
       </div>
     </div>
   </main>
 
 <script>
-  const GUIDES = [
-    { id: '钓鱼', body: '[guide-forager · MediaWiki 清洗归档] 钓鱼专题：春季海滩优先找冒泡点与码头尽头抛远提升品质；竹鱼竿适合鳀鱼/沙丁鱼，背包满时可食用海草腾格。已直通 BWF get_guide("钓鱼")。' },
-    { id: '采矿', body: '[guide-forager] 采矿专题：每 5 层解锁电梯；15 层前带足食物，体力低于 25% 及时返程防 Joja 50g 医疗费。' },
-    { id: '节日', body: '[guide-forager] 节日专题：春 13 复活节（9:00-14:00 广场）可买草莓种子 100g，当晚种下可收两茬。' },
-    { id: '结婚', body: '[guide-forager] 结婚专题：8 心送花束解锁恋爱，10 心雨天向海滩老水手买美人鱼吊坠（5000g）。' },
-    { id: '沙漠', body: '[guide-forager] 沙漠专题：修复社区巴士（42,500g）后乘潘姆巴士前往，周四绿洲可买杨桃种子。' },
-    { id: '姜岛', body: '[guide-forager] 姜岛专题：修复威利后院渔船（200 硬木 + 5 电池组 + 5 铱锭），收集金色核桃解锁农场。' },
-    { id: '农场类型', body: '[guide-forager] 农场类型专题：标准农场耕地最多，海滩农场洒水器受限但有漂流箱补给。' },
-  ];
-  let activeGuide = '钓鱼';
+  const GAME_DATA = {
+    stardew: {
+      name: '星露谷物语',
+      connectedHint: '星露谷物语已连接 · 泡泡湾农场（春 16 日）· 大脑救援问询已就绪',
+      offlineTitle: '等待连接到《星露谷物语》',
+      offlineSteps: '1. 通过 SMAPI 启动《星露谷物语》并加载存档； 2. 确认「Mod 管理」中 Blind Whale Farmer 处于开启状态。',
+      action: { name: 'fish(casts: 3)', source: '智能决策', desc: '在海滩码头东侧抛竿钓鱼，准备顺手卖掉腾背包格。', pct: 66 },
+      stats: [['游戏时间', '春 16 · 10:34'], ['体力', '98 / 270'], ['位置与金钱', 'Beach · 640g']],
+      goals: [
+        ['读完农场信箱（7 封）', '已完成', true],
+        ['去海滩找威利拿竹鱼竿', '已完成', true],
+        ['海滩钓 5 条鱼赚取日常米粒', '2 / 5', false],
+        ['23:00 前自动回家睡觉防晕倒', '安全锁定', false],
+      ],
+      guideTitle: '星露谷百科攻略（自动注入大脑）',
+      guides: {
+        钓鱼: '春季海滩优先找冒泡点与码头尽头抛远；背包满时可先吃海草回体并腾出格子。',
+        采矿: '每 5 层解锁电梯；体力低于 25% 及时返程，避免晕倒扣医疗费。',
+        节日: '复活节广场可买草莓种子（100g），当晚种下春季可收两茬。',
+      },
+      receipts: [
+        { st: 'ok', label: '完成', time: '09:41', tool: 'read_mail', dt: '读完 7 封信，已记录威利鱼竿线索到记忆图谱' },
+        { st: 'ok', label: '完成', time: '09:58', tool: 'travel_to(Beach)', dt: '触发威利剧情并推进对白，获得竹鱼竿' },
+        { st: 'unc', label: '不确定', time: '10:28', tool: 'move_to(60,12)', dt: '寻路遇到石头阻挡，已自动换路线绕开并触发心虚台词' },
+        { st: 'fail', label: '失败', time: '10:30', tool: 'tidy_backpack', dt: '农场暂无箱子，大脑自动改走「出货沙丁鱼 180g」腾出空位' },
+      ],
+      cmds: [['去海滩', 'travel_to'], ['钓 5 竿', 'fish'], ['整理/出货', 'ship_items'], ['去采集', 'forage'], ['回家睡觉', 'sleep'], ['汇报状态', 'get_state']],
+      diag: [['桥接方式', 'BWF Mod 本机服务 (:18080)'], ['可用动作', '78 个白名单动作'], ['卡死策略', '大脑救援问询 + 离线阶梯兜底'], ['防晕倒护栏', '23:00 / 体力 <8% 强制回家']],
+    },
+    terraria: {
+      name: '泰拉瑞亚',
+      connectedHint: '泰拉瑞亚已连接 · 森林地表（第 1 天 15:20）· 模组生存反射已开启',
+      offlineTitle: '等待连接到《泰拉瑞亚》',
+      offlineSteps: '1. 在 Steam 启动 tModLoader（免费 DLC）； 2. 在模组列表启用已打包好的 terraria-bridge 并进入世界。',
+      action: { name: 'build_shelter', source: '本地规则兜底', desc: '天黑前在出生点附近搭一座简易木屋并插上火把。', pct: 48 },
+      stats: [['游戏时间', '第 1 天 · 15:20'], ['生命 / 魔力', '100 / 20'], ['生物群系', '森林地表']],
+      goals: [
+        ['砍伐附近树木收集木材', '已完成', true],
+        ['搭建防僵尸简易掩体与工作台', '进行中', false],
+        ['插上火把并安全度过首夜', '计划 19:30', false],
+        ['低血自动喝药 / 岩浆瞬时跳出', '模组反射', false],
+      ],
+      guideTitle: '泰拉瑞亚开荒策略',
+      guides: {
+        首夜生存: '第一天 19:30 前备齐 80 木材与火把，优先封门防僵尸，低血量自动触发喝药反射。',
+        地下探索: '洞穴卡死连续 3 次不确定时自动改道或搭平台脱困，按 F8 可 0.1 秒人工接管。',
+      },
+      receipts: [
+        { st: 'ok', label: '完成', time: '14:10', tool: 'chop_tree', dt: '砍伐 4 棵树，获得木材 ×68' },
+        { st: 'unc', label: '不确定', time: '14:42', tool: 'move_to(pit)', dt: '前方坑洞落差过大，已自动搭木平台跨越' },
+        { st: 'ok', label: '完成', time: '15:12', tool: 'craft(workbench)', dt: '合成并摆放工作台，准备制作木门与火把' },
+      ],
+      cmds: [['去挖矿', 'mine'], ['跳跃脱困', 'jump'], ['喝血药', 'drink_potion'], ['紧急撤退', 'flee'], ['插火把', 'torch'], ['原地守夜', 'wait']],
+      diag: [['桥接方式', 'tModLoader 模组 (:18090)'], ['可用动作', '32 个白名单动作'], ['玩家接管', '按 F8 键 100ms 内释放控制权'], ['生存反射', '模组侧帧级岩浆/低血保护']],
+    },
+    dst: {
+      name: '饥荒：联机版',
+      connectedHint: '饥荒：联机版已连接 · 第 1 天 黄昏（秋）· 本地专用服同步正常',
+      offlineTitle: '等待连接到《饥荒：联机版》',
+      offlineSteps: '1. 在 Klei 官网生成 cluster_token.txt 放入本地集群目录； 2. 点击右侧「启动本地服」并用客户端加入本机房间。',
+      action: { name: 'build_campfire', source: '智能决策', desc: '黄昏临近，在浆果丛旁生起营火并备好树枝防查理袭击。', pct: 74 },
+      stats: [['昼夜 / 季节', '第 1 天 · 黄昏(秋)'], ['血 / 饿 / 理智', '150 / 118 / 185'], ['位置', '桦树林边缘']],
+      goals: [
+        ['采集燧石、树枝与干草', '已完成', true],
+        ['制作斧头与鹤嘴锄', '已完成', true],
+        ['黄昏前生起营火并烤浆果', '进行中', false],
+        ['保持火堆燃烧与理智安全线', '自动看护', false],
+      ],
+      guideTitle: '饥荒生存策略',
+      guides: {
+        首日开局: '白天优先攒燧石、树枝、干草和木头，黄昏前务必做出火把或营火防暗夜查理。',
+        理智与猎犬: '理智偏低时顺手采花做花环；听到猎犬吠叫优先就近找牛群或切武器应对。',
+      },
+      receipts: [
+        { st: 'ok', label: '完成', time: '白天 30%', tool: 'gather(flint)', dt: '采集燧石 ×4、树枝 ×8、干草 ×10' },
+        { st: 'ok', label: '完成', time: '白天 75%', tool: 'craft(axe)', dt: '合成斧头并砍伐 3 棵常青树' },
+        { st: 'ok', label: '完成', time: '黄昏 10%', tool: 'build_campfire', dt: '营火已点燃，自动进入夜间添柴看护' },
+      ],
+      cmds: [['采集资源', 'gather'], ['生起营火', 'campfire'], ['火堆添柴', 'add_fuel'], ['吃背包食物', 'eat'], ['采花回理智', 'pick_flower'], ['准备战斗', 'combat']],
+      diag: [['桥接方式', 'Lua 权威模组 + 本地桥 (:18100)'], ['同步节拍', '2s 状态 tick + 0.25s 动作层'], ['可用动作', '30 个白名单动作'], ['接管机制', '客户端操作自动暂停托管']],
+    },
+  };
 
-  function renderGuides() {
-    document.getElementById('guide-pills').innerHTML = GUIDES.map((g) =>
-      `<button class="g-pill${g.id === activeGuide ? ' on' : ''}" onclick="pickGuide('${g.id}')">${g.id}</button>`
-    ).join('');
-    document.getElementById('guide-preview').textContent = GUIDES.find((g) => g.id === activeGuide).body;
+  const MODS = [
+    { name: '大肥鱼种白饭（Blind Whale Farmer）', ver: '1.1.27', desc: '星露谷自动驾驶核心桥接模组', on: true },
+    { name: 'Console Commands', ver: '4.5.2', desc: 'SMAPI 内置控制台工具', on: true },
+    { name: 'Save Backup', ver: '4.5.2', desc: '启动时自动备份农场存档', on: true },
+  ];
+
+  let curGame = 'stardew';
+  let curSub = 'monitor';
+  let simConnected = true;
+  let receiptFilter = 'all';
+  let activeGuideKey = '';
+
+  function switchGame(gid) {
+    curGame = gid;
+    curSub = 'monitor';
+    receiptFilter = 'all';
+    activeGuideKey = Object.keys(GAME_DATA[gid].guides)[0];
+    window.wbState?.patch({ activeGame: gid });
+    renderAll();
   }
-  function pickGuide(id) { activeGuide = id; renderGuides(); }
-  function toggleCB(el) {
-    el.classList.toggle('on');
-    const on = el.classList.contains('on');
-    document.getElementById('cbState').textContent = on ? '开启（测试模式）' : '关闭（401 拒绝）';
-    wbToast(on ? 'CheatBridge 已开启（写操作需审批并落审计日志）' : 'CheatBridge 已关闭');
+  function switchSub(sub) {
+    curSub = sub;
+    renderAll();
   }
-  function filterReceipts(st, btn) {
-    document.querySelectorAll('.f-btn').forEach((b) => b.classList.remove('on'));
-    btn.classList.add('on');
-    document.querySelectorAll('#receipt-list .r').forEach((row) => {
-      row.style.display = st === 'all' || row.dataset.st === st ? 'block' : 'none';
-    });
+  function toggleSimConn() {
+    simConnected = !simConnected;
+    renderAll();
   }
-  function syncBrain() {
-    const st = window.wbState?.get?.();
-    if (!st) return;
-    const el = document.getElementById('sd-brain-badge');
-    if (el) {
-      el.className = 'pill ' + (st.brainMode === 'llm' ? 'pill-violet' : '');
-      el.innerHTML = `<i data-lucide="brain" class="xs"></i>${st.brainMode === 'llm' ? 'LlmPlanner · deepseek-chat' : 'RulePlanner · 确定性日程兜底'}`;
-      lucide.createIcons();
+
+  function renderAll() {
+    const g = GAME_DATA[curGame];
+    if (!activeGuideKey || !g.guides[activeGuideKey]) activeGuideKey = Object.keys(g.guides)[0];
+
+    document.querySelectorAll('[data-gtab]').forEach((b) => b.classList.toggle('on', b.dataset.gtab === curGame));
+    document.getElementById('stardew-subtabs').style.display = curGame === 'stardew' ? 'inline-flex' : 'none';
+    document.querySelectorAll('[data-sub]').forEach((b) => b.classList.toggle('on', b.dataset.sub === curSub));
+    document.getElementById('sim-conn-btn').innerHTML = `<i data-lucide="${simConnected ? 'wifi-off' : 'wifi'}" class="xs"></i>${simConnected ? '预览未连接引导态' : '恢复已连接态'}`;
+
+    const banner = document.getElementById('conn-banner');
+    if (simConnected) {
+      banner.className = 'conn-banner ok';
+      banner.innerHTML = `
+        <div style="flex:1"><div class="title" style="color:var(--green)"><span class="pulse-dot"></span>${g.connectedHint}</div></div>
+        <button class="btn-pill ghost" onclick="wbToast('已重新探测《${g.name}》状态：连接正常')"><i data-lucide="refresh-cw" class="xs"></i>刷新状态</button>`;
+    } else {
+      banner.className = 'conn-banner';
+      banner.innerHTML = `
+        <div style="flex:1">
+          <div class="title" style="color:var(--amber)"><i data-lucide="plug-zap" class="sm"></i>${g.offlineTitle}</div>
+          <div class="steps">${g.offlineSteps}</div>
+        </div>
+        <button class="btn-pill primary" onclick="toggleSimConn()"><i data-lucide="refresh-cw" class="xs"></i>重新探测连接</button>`;
     }
+
+    document.getElementById('view-monitor').style.display = curSub === 'monitor' ? 'grid' : 'none';
+    document.getElementById('view-mods').style.display = curSub === 'mods' ? 'block' : 'none';
+
+    if (curSub === 'mods') {
+      document.getElementById('mods-list').innerHTML = MODS.map((m, i) => `
+        <div class="mod-row">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:650">${m.name} <span class="pill" style="font-size:10px;margin-left:6px">v${m.ver}</span></div>
+            <div style="font-size:11.5px;color:var(--text-3);margin-top:3px">${m.desc}</div>
+          </div>
+          <div class="sw${m.on ? ' on' : ''}" onclick="MODS[${i}].on=!MODS[${i}].on;renderAll();wbToast('${m.name} 已'+(MODS[${i}].on?'启用':'停用'))"></div>
+        </div>`).join('');
+      lucide.createIcons();
+      return;
+    }
+
+    // 左栏：当前动作 + 目标链 + 攻略
+    document.getElementById('col-left').innerHTML = `
+      <div class="card panel">
+        <div class="now-top">
+          <span>当前执行动作</span>
+          <span class="pill ${simConnected ? 'pill-blue' : ''}">${simConnected ? g.action.source : '待连接'}</span>
+        </div>
+        <div class="now-name">${simConnected ? g.action.name : '等待游戏接入'}</div>
+        <div class="now-desc">${simConnected ? g.action.desc : '完成上方启动指引并连接后，这里会实时显示角色正在进行的动作与进度。'}</div>
+        <div class="now-bar"><i style="width:${simConnected ? g.action.pct : 0}%"></i></div>
+        <div class="stat-grid">
+          ${g.stats.map(([k, v]) => `<div class="stat-box"><div class="k2">${k}</div><div class="v2">${simConnected ? v : '—'}</div></div>`).join('')}
+        </div>
+      </div>
+
+      <div class="card panel">
+        <h4><i data-lucide="list-todo" class="sm" style="color:var(--blue)"></i>当前目标链</h4>
+        ${g.goals.map(([txt, st, done]) => `
+          <div class="goal${done ? ' done' : ''}">
+            <i data-lucide="${done ? 'check-circle-2' : 'circle-dot'}" class="xs" style="color:${done ? 'var(--green)' : 'var(--blue)'}"></i>
+            <span>${txt}</span>
+            <span class="st" style="color:${done ? 'var(--green)' : 'var(--text-3)'}">${st}</span>
+          </div>`).join('')}
+      </div>
+
+      <div class="card panel">
+        <h4><i data-lucide="book-open" class="sm" style="color:var(--green)"></i>${g.guideTitle}</h4>
+        <div class="guide-pills">
+          ${Object.keys(g.guides).map((k) => `<button class="g-pill${k === activeGuideKey ? ' on' : ''}" onclick="activeGuideKey='${k}';renderAll()">${k}</button>`).join('')}
+        </div>
+        <div class="guide-txt">${g.guides[activeGuideKey]}</div>
+      </div>
+    `;
+
+    // 中栏：回执时间线（全语义色）
+    const filteredR = g.receipts.filter((r) => receiptFilter === 'all' || r.st === receiptFilter);
+    document.getElementById('col-mid').innerHTML = `
+      <div class="card panel">
+        <h4><i data-lucide="history" class="sm" style="color:var(--blue)"></i>执行记录与回执</h4>
+        <div class="filter-row">
+          ${[['all', '全部'], ['ok', '完成'], ['unc', '不确定'], ['fail', '失败']].map(([k, lbl]) =>
+            `<button class="f-btn${receiptFilter === k ? ' on' : ''}" onclick="receiptFilter='${k}';renderAll()">${lbl}</button>`
+          ).join('')}
+        </div>
+        <div class="r-list">
+          ${simConnected ? filteredR.map((r) => `
+            <div class="r-item ${r.st}">
+              <div class="r-head">
+                <span class="r-st">${r.label}</span>
+                <b class="mono" style="font-size:11.5px">${r.tool}</b>
+                <span class="mono k" style="margin-left:auto;font-size:10px">${r.time}</span>
+              </div>
+              <div class="r-dt">${r.dt}</div>
+            </div>`).join('') : '<div style="padding:18px 0;text-align:center;color:var(--text-3);font-size:12px">游戏连接后，这里会按时间线记录每一步动作与结果。</div>'}
+        </div>
+      </div>
+    `;
+
+    // 右栏：快捷指令 + 折叠式高级诊断
+    document.getElementById('col-right').innerHTML = `
+      <div class="card panel">
+        <h4><i data-lucide="zap" class="sm" style="color:var(--amber)"></i>主人快捷插队</h4>
+        <div class="cmd-grid">
+          ${g.cmds.map(([lbl, tool]) => `<button class="cmd-btn" onclick="wbToast('已向《${g.name}》插队指令：${lbl} (${tool})')">${lbl}</button>`).join('')}
+        </div>
+        <button class="btn-pill red" style="width:100%;margin-top:10px" onclick="wbToast('已发送中止指令：停下当前动作')">
+          <i data-lucide="square" class="xs"></i>立即停下当前动作
+        </button>
+      </div>
+
+      <details class="card diag">
+        <summary>
+          <span style="display:flex;align-items:center;gap:7px"><i data-lucide="wrench" class="xs" style="color:var(--text-3)"></i>高级诊断与连接参数</span>
+          <i data-lucide="chevron-down" class="xs"></i>
+        </summary>
+        <div class="diag-body">
+          ${g.diag.map(([k, v]) => `<div class="kv"><span class="k">${k}</span><b>${v}</b></div>`).join('')}
+        </div>
+      </details>
+    `;
+
+    lucide.createIcons();
   }
-  window.addEventListener('wb:state', syncBrain);
-  document.addEventListener('DOMContentLoaded', () => { renderGuides(); setTimeout(syncBrain, 30); });
+
+  window.addEventListener('wb:state', (e) => {
+    const gid = e.detail?.activeGame;
+    if (gid && gid !== curGame && GAME_DATA[gid]) {
+      curGame = gid;
+      curSub = 'monitor';
+      activeGuideKey = Object.keys(GAME_DATA[gid].guides)[0];
+      renderAll();
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const st = window.wbState?.get?.();
+    if (st?.activeGame && GAME_DATA[st.activeGame]) curGame = st.activeGame;
+    renderAll();
+  });
 </script>
 </body>
 </html>

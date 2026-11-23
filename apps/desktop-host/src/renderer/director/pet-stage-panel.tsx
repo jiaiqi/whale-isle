@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Fish, Hand, Volume2 } from 'lucide-react';
-import type { AutodriveEventView } from './bridge';
+import type { AutodriveEventView, CharacterSummary } from './bridge';
 
 interface ManifestClip { webmPath: string }
 interface ManifestAction { actionState: string; clips: ManifestClip[] }
@@ -14,6 +14,9 @@ interface ManifestShape { actions?: ManifestAction[] }
 export interface PetStagePanelProps {
   events: AutodriveEventView[];
   running: boolean;
+  characters: CharacterSummary[];
+  characterId: string;
+  onSelectCharacter: (id: string) => void;
 }
 
 function goalOf(clock: string): string[] {
@@ -24,14 +27,11 @@ function goalOf(clock: string): string[] {
   return ['回家睡觉（绝不晕倒）', '确认出货箱收益', '明早 6:00 起床'];
 }
 
-export function PetStagePanel({ events, running }: PetStagePanelProps): React.JSX.Element {
+export function PetStagePanel({ events, running, characters, characterId, onSelectCharacter }: PetStagePanelProps): React.JSX.Element {
   const [clip, setClip] = useState<string>('../pet-stage/assets/blue-whale-maid/待机呼吸休闲.webm');
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
-  interface CharacterView { id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string }
-  const [characters, setCharacters] = useState<CharacterView[]>([]);
-  const [characterId, setCharacterId] = useState('blue-whale-maid');
 
   useEffect(() => {
     void window.directorBridge.petsManifest().then((res) => {
@@ -40,11 +40,7 @@ export function PetStagePanel({ events, running }: PetStagePanelProps): React.JS
       if (idle !== undefined) setClip(`../pet-stage/${idle.replace(/^\.\//, '')}`);
     });
     void window.directorBridge.voiceConfigGet().then((c) => setVoice({ enabled: c.enabled, innerVoice: c.innerVoice, volume: c.volume }));
-    void window.directorBridge.prefsGet().then((p) => {
-      setScale(p.scale);
-      if (typeof p.characterId === 'string') setCharacterId(p.characterId);
-    }).catch(() => undefined);
-    void window.directorBridge.characterList().then((list) => setCharacters(list as CharacterView[])).catch(() => undefined);
+    void window.directorBridge.prefsGet().then((p) => setScale(p.scale)).catch(() => undefined);
   }, []);
 
   const latestState = [...events].reverse().find((e) => e.type === 'state');
@@ -132,10 +128,8 @@ export function PetStagePanel({ events, running }: PetStagePanelProps): React.JS
               <button
                 key={c.id}
                 data-character={c.id}
-                onClick={() => void window.directorBridge.characterSelect(c.id).then((r) => {
-                  if (!r.ok) toast.error(r.error ?? '角色切换失败');
-                  else setCharacterId(c.id);
-                })}
+                aria-pressed={characterId === c.id}
+                onClick={() => onSelectCharacter(c.id)}
                 className={`pill${characterId === c.id ? ' pill-blue' : ''}`}
                 style={{ fontSize: 10, cursor: 'pointer' }}
                 title={`${c.displayName} · 音色 ${c.voiceId}${c.licenseScope === 'DEV_ONLY_NON_COMMERCIAL' ? ' · 非商用素材' : ''}`}

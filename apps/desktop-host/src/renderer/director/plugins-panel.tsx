@@ -3,7 +3,7 @@
  * 插件模型对齐 plugin-kit（manifest/defineTool/事件总线），热插拔执行点由主进程承载（T-M6-01 收尾）。
  */
 import {
-  AudioLines, Blocks, Brain, Cpu, Fish, MessageSquare, MonitorPlay, Package, Sprout, Terminal,
+  AudioLines, Blocks, Brain, Cpu, Fish, Flame, MessageSquare, MonitorPlay, Package, Sprout, Swords, Terminal,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,6 +23,8 @@ export const PLUGIN_CATALOG: PluginCatalogItem[] = [
   { id: 'voice', name: '声音工坊与音色库', tag: '内置', group: '声形与舞台', icon: AudioLines, desc: '5×5 试听矩阵、TTS 调音台、RVC 实验室', permissions: 'audio/*' },
   { id: 'pet', name: '桌宠舞台与动作库', tag: '核心', group: '声形与舞台', icon: Fish, desc: '114 动作、双轨气泡、语音锁与饭碗挂件', permissions: 'fs/assets/*' },
   { id: 'stardew', name: '星露谷共玩', tag: 'dsh', group: '游戏与直播', icon: Sprout, desc: 'BWF MCP 自动驾驶、LLM 规划器与攻略注入', permissions: 'net/mcp/* · llm/*' },
+  { id: 'terraria', name: '泰拉瑞亚共玩', tag: 'M7', group: '游戏与直播', icon: Swords, desc: 'tModLoader 模组桥、寻路与生存反射', permissions: 'net/http/* · llm/*' },
+  { id: 'dst', name: '饥荒 DST 共玩', tag: 'M7', group: '游戏与直播', icon: Flame, desc: '本地专用服 + Lua 模组 + sidecar 桥', permissions: 'net/http/* · llm/*' },
   { id: 'mods', name: 'Mod 管理', tag: '内置', group: '游戏与直播', icon: Package, desc: 'SMAPI 目录扫描、启停与 ZIP 安装', permissions: 'fs/mods/*' },
   { id: 'obs', name: 'OBS 透明挂件', tag: 'dsh', group: '游戏与直播', icon: MonitorPlay, desc: '18765 透明源：双轨气泡/议会/歌词/饭碗', permissions: 'net/stage/*' },
   { id: 'harness', name: 'Harness · ACP', tag: 'dsh', group: '平台与底层', icon: Terminal, desc: 'ACP agents 握手、事件流与 Y/N/A 审批', permissions: 'shell/agent/*' },

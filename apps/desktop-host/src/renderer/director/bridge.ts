@@ -2,12 +2,61 @@
  * preload directorBridge 的 renderer 侧类型（T-dir-01）。
  * 明文 key 只上行；渲染进程永远只见掩码（运行期安全锁）。
  */
+export const GAME_OPTIONS = [
+  { id: 'stardew', label: '星露谷物语', shortLabel: '星露谷' },
+  { id: 'terraria', label: '泰拉瑞亚', shortLabel: '泰拉瑞亚' },
+  { id: 'dst', label: '饥荒 DST', shortLabel: '饥荒 DST' },
+] as const;
+
+export type GameId = (typeof GAME_OPTIONS)[number]['id'];
+
+/** 当前会话标识（T-M6-27）：主进程在每次重建 runner 时推进 generation 并签发 sessionId */
+export interface AutodriveSessionView {
+  sessionId?: string;
+  gameId?: GameId;
+  generation: number;
+}
+
+/**
+ * 事件是否属于「当前会话」（T-M6-27）。
+ * 规则（任一不满足即丢弃）：
+ *   ① 联机端点事件（带 agentId）不进单会话页；
+ *   ② generation 低于当前值 → 旧会话迟到事件；
+ *   ③ sessionId 已知且不一致 → 异会话；
+ *   ④ gameId 已知且与当前选中游戏不一致 → 切走后的残留。
+ */
+export function isCurrentSessionEvent(
+  event: AutodriveEventView,
+  current: AutodriveSessionView,
+  activeGame: GameId,
+): boolean {
+  if (event.agentId !== undefined) return false;
+  if (event.generation !== undefined && event.generation < current.generation) return false;
+  if (event.sessionId !== undefined && current.sessionId !== undefined && event.sessionId !== current.sessionId) return false;
+  if (event.gameId !== undefined && event.gameId !== activeGame) return false;
+  return true;
+}
+
+export interface CharacterSummary {
+  id: string;
+  displayName: string;
+  builtin: boolean;
+  licenseScope: string;
+  voiceId: string;
+}
+
 export interface ProviderVaultResponse {
   ok: boolean;
   error?: string;
   mask?: string;
   models?: string[];
+  /** Console（原 Zen）清单元数据：免费档 chat / 决策协议模型 */
+  freeModels?: string[];
+  decisionModels?: string[];
   latencyMs?: number;
+  /** check-balance：可读余额文案 + 原始响应前 300 字 */
+  text?: string;
+  raw?: string;
 }
 
 export interface ImportProviderPreview {
@@ -70,14 +119,17 @@ export interface HarnessEventMsg {
   message?: string; code?: number;
 }
 
-export interface DirectorBridge {
-  saveProviderKey(providerId: string, plainKey: string): Promise<ProviderVaultResponse>;
-  providerKeyMask(providerId: string): Promise<ProviderVaultResponse>;
-  discoverModels(args: { providerId: string; baseUrl: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
-  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
-  providerImportPickFile(): Promise<{ ok: boolean; path?: string; error?: string }>;
-  providerImportScan(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string }): Promise<ImportScanView>;
-  providerImportApply(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<ImportApplyView>;
+export interface GameHealthView {
+  gameId: GameId;
+  endpoint: string;
+  /** online=桥接在线且游戏侧就绪；reachable=能连上但未就绪；offline=连不上 */
+  status: 'online' | 'reachable' | 'offline';
+  ok: boolean;
+  latencyMs: number;
+  detail: string;
+  error?: string;
+  guidance: string[];
+  checkedAt: number;
 }
 
 export interface AutodriveEventView {
@@ -98,6 +150,11 @@ export interface AutodriveEventView {
   delayMs?: number;
   /** 主进程单调序号：刷新水合时去重（同一事件不插两次卡） */
   seq?: number;
+  /** T-M6-27 会话归属：单例 autodrive 事件带 sessionId/gameId/generation；联机端点事件带 agentId */
+  sessionId?: string;
+  gameId?: GameId;
+  generation?: number;
+  agentId?: string;
 }
 
 export interface ImportProviderPreview {
@@ -163,16 +220,23 @@ export interface HarnessEventMsg {
 export interface DirectorBridge {
   saveProviderKey(providerId: string, plainKey: string): Promise<ProviderVaultResponse>;
   providerKeyMask(providerId: string): Promise<ProviderVaultResponse>;
+  copyProviderKey(providerId: string): Promise<ProviderVaultResponse>;
+  checkProviderBalance(providerId: string): Promise<ProviderVaultResponse>;
+  openKeyConsole(url: string): Promise<{ ok: boolean; error?: string }>;
   discoverModels(args: { providerId: string; baseUrl: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
-  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic' }): Promise<ProviderVaultResponse>;
+  testProviderChat(args: { providerId: string; baseUrl: string; modelId: string; protocol?: 'openai' | 'anthropic'; decision?: boolean }): Promise<ProviderVaultResponse>;
   providerImportPickFile(): Promise<{ ok: boolean; path?: string; error?: string }>;
   providerImportScan(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string }): Promise<ImportScanView>;
   providerImportApply(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<ImportApplyView>;
-  autodriveStart(): Promise<{ ok: boolean; error?: string }>;
+  autodriveStart(gameId?: GameId): Promise<{ ok: boolean; error?: string }>;
   autodriveStop(): Promise<{ ok: boolean }>;
-  autodriveStatus(): Promise<{ running: boolean; events?: AutodriveEventView[] }>;
-  autodriveDirective(tool: string, args: Record<string, unknown>, intent: string): Promise<{ ok: boolean }>;
+  autodriveStatus(): Promise<{ running: boolean; gameId?: GameId; sessionId?: string; generation?: number; events?: AutodriveEventView[] }>;
+  autodriveDirective(tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }>;
   onAutodriveEvent(handler: (event: AutodriveEventView) => void): void;
+  // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100
+  gameHealth(gameId: GameId, endpoint?: string): Promise<GameHealthView>;
+  // DST 状态快照（T-M7-D5 面板补齐 /state 注入）
+  gameDstState(): Promise<{ ok: boolean; snapshot?: import('@workbench/shared-protocol').DstStateSnapshot; error?: string }>;
   harnessPresets(): Promise<HarnessPresetInfo[]>;
   harnessStart(presetId: string): Promise<{ ok: boolean; error?: string; authMethods?: string[] }>;
   harnessPrompt(presetId: string, text: string): Promise<{ ok: boolean; error?: string; sessionId?: string }>;
@@ -182,23 +246,16 @@ export interface DirectorBridge {
   onHarnessEvent(handler: (event: HarnessEventMsg) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
-  // T-M6-20 桌宠缩放 + T-M6-21 角色 + T-M6-22 联机端点
+  // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
   prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string }>;
   prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string }): Promise<unknown>;
-  characterList(): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string }>>;
+  // T-M6-21 多角色
+  characterList(): Promise<CharacterSummary[]>;
   characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;
+  // T-M6-22 多桌宠联机端点池
   coopEndpoints(): Promise<Array<{ id: string; displayName: string; gameId: string; endpoint: string; characterId: string; enabled: boolean; running: boolean; error: string | null }>>;
   coopStart(id: string): Promise<{ ok: boolean; error?: string }>;
   coopStop(id: string): Promise<{ ok: boolean }>;
-  // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
-  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string }>;
-  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string }): Promise<unknown>;
-  // T-M6-21 多角色注册表
-  characterList(): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string; anchorRatio?: number }>>;
-  characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;
-  // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
-  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity' }>;
-  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity' }): Promise<unknown>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
   riceStatus(): Promise<import('@workbench/shared-protocol').RiceBowlStatus>;
   brainApplyConfig(config: import('@workbench/shared-protocol').BrainRuntimeConfig): Promise<BrainApplyView>;
@@ -207,6 +264,8 @@ export interface DirectorBridge {
   chatSay(text: string): Promise<{ ok: boolean; error?: string; reply?: string; reflex?: boolean }>;
   guidesLoad(): Promise<{ ok: boolean; error?: string; topics?: string[] }>;
   voiceSpeak(text: string, scene: 'normal' | 'inner' | 'p0'): Promise<{ ok: boolean; error?: string }>;
+  /** T-M6-33 实际语音后端：mcode=角色音色链 / say=系统语音兜底 / unsupported=平台未适配 */
+  voiceBackend(): Promise<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string }>;
   voiceConfigGet(): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }>;
   voiceConfigSet(patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number; voiceId?: string }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number; voiceId: string }>;
   voiceCatalog(): Promise<{

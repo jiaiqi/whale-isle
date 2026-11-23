@@ -3,7 +3,7 @@
  *
  * 拖拽期：窗口跟随鼠标（主进程 setPosition，DIP 坐标，多屏异构 DPI 由 Electron 原生处理）。
  * 甩出期：重力 + 屏幕边界反弹（restitution）+ 水平摩擦，落定后返回冲击速度（驱动 Q 弹）。
- * 边界为多屏合并 workArea（主进程 screen.getAllDisplays 计算后经 preload 注入）。
+ * 甩抛边界为释放时所在屏幕的可达 workArea（主进程扣除窗口尺寸后经 preload 注入）。
  */
 
 export interface Vec2 {

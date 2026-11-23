@@ -8,11 +8,11 @@ import remarkGfm from 'remark-gfm';
 import { Toaster, toast } from 'sonner';
 import {
   Activity, Brain, ChevronRight, Monitor, Play, Radio, RotateCcw, Send, ShieldAlert,
-  Sprout, Square, Volume2, VolumeX, Wheat, Zap,
+  Square, Volume2, VolumeX, Wheat, Zap,
 } from 'lucide-react';
 import { ModelProviderConfigSchema, type DiningProfilePreset, type ModelProviderConfig, type WorkbenchRoleSlot } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
-import type { AutodriveEventView } from './bridge';
+import { GAME_OPTIONS, isCurrentSessionEvent, type AutodriveEventView, type CharacterSummary, type GameId } from './bridge';
 import { ProvidersPanel } from './providers-panel';
 import { HarnessPanel } from './harness-panel';
 import { PetsPanel } from './pets-panel';
@@ -26,6 +26,18 @@ import { PetStagePanel } from './pet-stage-panel';
 import { CoopPanel } from './coop-panel'; // T-M6-22 多桌宠联机端点
 import { TerrariaPanel } from './terraria-panel';
 import { DstPanel, type DstPanelEvent } from './dst-panel';
+import {
+  GAME_STATUS_COLOR,
+  GameConnectionBanner,
+  GameCurrentActionCard,
+  GameDiagnostics,
+  GameGoalChain,
+  GameMetricsCard,
+  GameQuickCommands,
+  GameReceiptTimeline,
+  useGameHealth,
+  type ReceiptFilter,
+} from './game-panel';
 import { NAV_GROUPS, Sidebar, type Tab } from './shell/sidebar';
 import { Topbar } from './shell/topbar';
 import { CommandPalette, type CommandAction } from './shell/command-palette';
@@ -64,13 +76,14 @@ function parseDirective(text: string): { tool: string; args: Record<string, unkn
   }
 }
 
-const STATUS_COLOR: Record<string, { bg: string; line: string; text: string }> = {
-  COMPLETED: { bg: 'var(--green-dim)', line: 'var(--green-line)', text: 'var(--green)' },
-  UNCERTAIN: { bg: 'var(--violet-dim)', line: 'var(--violet-line)', text: 'var(--violet)' },
-  TIMEOUT: { bg: 'var(--amber-dim)', line: 'var(--amber-line)', text: 'var(--amber)' },
-  FAILED: { bg: 'var(--red-dim)', line: 'var(--red-line)', text: 'var(--red)' },
-  ERROR: { bg: 'var(--red-dim)', line: 'var(--red-line)', text: 'var(--red)' },
-};
+/** 星露谷目标链与快捷指令（三游戏共玩页共用区块的数据源） */
+const STARDEW_GOALS = ['读信 / 浇水 / 播种', '11:00 海滩钓鱼', '17:30 镇上采集', '18:30 前回家', '睡觉防晕倒'] as const;
+const STARDEW_QUICK: ReadonlyArray<readonly [string, string]> = [
+  ['钓鱼', '/fish 5'],
+  ['去海滩', '/goto Beach'],
+  ['睡觉', '/sleep'],
+  ['汇报状态', '/state'],
+];
 
 interface AppProps {
   profiles: DiningProfilePreset[];
@@ -94,27 +107,61 @@ export function mergeHydrated(history: AutodriveEventView[], live: AutodriveEven
   return merged.slice(-500);
 }
 
+const DEFAULT_PLUGIN_IDS = [...new Set([
+  ...NAV_FLAT.map((item) => item.id),
+  ...GAME_OPTIONS.map((game) => game.id),
+  'mods',
+])];
+
 function readPlugins(): Set<string> {
   try {
     const raw = localStorage.getItem('wb-plugins-v4');
-    if (raw === null) return new Set(NAV_FLAT.map((n) => n.id));
+    if (raw === null) return new Set(DEFAULT_PLUGIN_IDS);
     const arr = JSON.parse(raw) as string[];
     return new Set(arr);
   } catch {
-    return new Set(NAV_FLAT.map((n) => n.id));
+    return new Set(DEFAULT_PLUGIN_IDS);
   }
+}
+
+function isGameId(value: string | null): value is GameId {
+  return value !== null && GAME_OPTIONS.some((game) => game.id === value);
+}
+
+function isTabEnabled(tab: Tab, enabledPlugins: Set<string>): boolean {
+  if (tab === 'stardew') return GAME_OPTIONS.some((game) => enabledPlugins.has(game.id)) || enabledPlugins.has('mods');
+  return enabledPlugins.has(tab);
+}
+
+function initialTab(): Tab {
+  const saved = localStorage.getItem('wb-tab');
+  if (saved === 'terraria' || saved === 'dst' || saved === 'mods') return 'stardew';
+  return saved !== null && NAV_FLAT.some((item) => item.id === saved) ? saved as Tab : 'chat';
 }
 
 export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {
   void storeKey;
-  const [tab, setTab] = useState<Tab>(() => {
-    const saved = localStorage.getItem('wb-tab') as Tab | null;
-    return saved !== null && NAV_FLAT.some((n) => n.id === saved) ? saved : 'chat';
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [activeGame, setActiveGame] = useState<GameId>(() => {
+    const savedGame = localStorage.getItem('wb-game');
+    if (isGameId(savedGame)) return savedGame;
+    const legacyTab = localStorage.getItem('wb-tab');
+    return legacyTab === 'terraria' || legacyTab === 'dst' ? legacyTab : 'stardew';
+  });
+  const [gameSubtab, setGameSubtab] = useState<'monitor' | 'mods'>(() => {
+    const savedSubtab = localStorage.getItem('wb-game-subtab');
+    if (savedSubtab === 'monitor' || savedSubtab === 'mods') return savedSubtab;
+    return localStorage.getItem('wb-tab') === 'mods' ? 'mods' : 'monitor';
   });
   const [events, setEvents] = useState<AutodriveEventView[]>([]);
   const [running, setRunning] = useState(false);
   const [brain, setBrain] = useState<{ mode: string; llmReady: boolean }>({ mode: 'rule', llmReady: false });
+  const [mainModelId, setMainModelId] = useState('');
+  const [characters, setCharacters] = useState<CharacterSummary[]>([]);
+  const [characterId, setCharacterId] = useState('blue-whale-maid');
   const [voiceOn, setVoiceOn] = useState(true);
+  // T-M6-33：实际语音后端（mcode / say / unsupported），顶栏如实展示，避免把 say 当角色 TTS
+  const [voiceBackend, setVoiceBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -124,26 +171,45 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [riceCap, setRiceCap] = useState(500_000);
   const [memoryStats, setMemoryStats] = useState<{ nodes: number; edges: number; lastDay: string | null } | null>(null);
   const [guides, setGuides] = useState<string[]>([]);
-  const [chatFilter, setChatFilter] = useState<'all' | 'COMPLETED' | 'FAILED'>('all');
+  const [chatFilter, setChatFilter] = useState<ReceiptFilter>('all');
   const [voiceTab, setVoiceTab] = useState<'library' | 'studio'>('library');
   const [petTab, setPetTab] = useState<'stage' | 'library'>('stage');
   // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
   const flowRef = useRef<HTMLDivElement | null>(null);
+  // T-M6-27 会话归属：只消费当前 autodrive 会话的事件。
+  //  - 联机端点事件（带 agentId）不进单机会话页
+  //  - 旧 generation / 异 sessionId / 异 gameId 的迟到事件一律丢弃
+  const sessionRef = useRef<{ sessionId?: string; gameId?: GameId; generation: number }>({ generation: -1 });
+  const activeGameRef = useRef<GameId>(activeGame);
+  useEffect(() => { activeGameRef.current = activeGame; }, [activeGame]);
+  const acceptEvent = (event: AutodriveEventView): boolean =>
+    isCurrentSessionEvent(event, sessionRef.current, activeGameRef.current);
+  // 三游戏桥接探活（T-M6-25）：星露谷页的连接引导条（只读探活，不触发任何游戏动作；页签不可见时停轮询）
+  const stardewHealth = useGameHealth('stardew', undefined, 15_000, tab === 'stardew' && activeGame === 'stardew');
 
   useEffect(() => {
     window.directorBridge.onAutodriveEvent((event) => {
+      if (!acceptEvent(event)) return;
       setEvents((prev) => (prev.length >= 500 ? [...prev.slice(-499), event] : [...prev, event]));
       // 事件即代表正在跑（外部启动/重启后 UI 不落后）
       if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt') setRunning(true);
     });
     void window.directorBridge.autodriveStatus().then((s) => {
+      // 先记录会话再水合：历史事件同样按当前会话过滤
+      sessionRef.current = { sessionId: s.sessionId, gameId: s.gameId, generation: s.generation ?? -1 };
       setRunning(s.running);
-      const history = s.events ?? [];
+      if (s.running && s.gameId !== undefined) setActiveGame(s.gameId);
+      const history = (s.events ?? []).filter(acceptEvent);
       if (history.length > 0) setEvents((prev) => mergeHydrated(history, prev));
     });
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
+    void window.directorBridge.characterList().then(setCharacters).catch(() => setCharacters([]));
+    void window.directorBridge.prefsGet().then((p) => {
+      if (typeof p.characterId === 'string') setCharacterId(p.characterId);
+    }).catch(() => undefined);
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
+    void window.directorBridge.voiceBackend().then(setVoiceBackend).catch(() => setVoiceBackend(null));
     void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
     // BWF HUD 偏好水合（T-M6-16）：主进程 mods:state 顺带触发一次自愈推送
     void window.directorBridge.modsState().then((s) => { if (s.bwfShowHud === true) setBwfHud(true); });
@@ -157,6 +223,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       const list = storedProfiles !== undefined && storedProfiles.length > 0 ? storedProfiles : profiles;
       const chosen = list.find((p) => p.profileId === activeId) ?? list[0];
       if (chosen === undefined) return;
+      setMainModelId(chosen.roleBindings.MAIN_PERSONA_BRAIN ?? '');
       const builtin = providers.map((provider) => {
         const o = overrides?.[provider.id];
         if (o === undefined) return provider;
@@ -174,6 +241,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           ...provider,
           variants,
           protocol: activeVariant?.protocol ?? provider.protocol,
+          // 冷启动也还原选中变体的 Region/Plan（否则同协议不同胶囊的供应商会退回默认项）
+          activeRegion: activeVariant?.region ?? provider.activeRegion,
+          activePlanType: activeVariant?.planType ?? provider.activePlanType,
           discoveredModels,
         });
         return parsed.success ? parsed.data : provider;
@@ -200,11 +270,28 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       );
       void window.directorBridge.brainApplyConfig({ profile: chosen, providerModels: {}, providers: merged }).then((r) => {
         setBrain({ mode: r.mode, llmReady: r.llmReady });
+        setMainModelId(chosen.roleBindings.MAIN_PERSONA_BRAIN ?? '');
       });
     });
     void window.directorBridge.memoryStats().then((m) => setMemoryStats(m));
     void window.directorBridge.guidesLoad().then((g) => { if (g.ok) setGuides(g.topics ?? []); });
   }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    const refreshStatus = (): void => {
+      void window.directorBridge.autodriveStatus().then((status) => {
+        setRunning(status.running);
+        if (status.sessionId !== undefined) {
+          sessionRef.current = { sessionId: status.sessionId, gameId: status.gameId, generation: status.generation ?? sessionRef.current.generation };
+        }
+        if (status.running && status.gameId !== undefined) setActiveGame(status.gameId);
+      }).catch(() => undefined);
+    };
+    refreshStatus();
+    const timer = setInterval(refreshStatus, 3000);
+    return () => clearInterval(timer);
+  }, [running]);
 
   useEffect(() => {
     const el = flowRef.current;
@@ -223,7 +310,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   useEffect(() => {
     localStorage.setItem('wb-tab', tab);
-  }, [tab]);
+    localStorage.setItem('wb-game', activeGame);
+    localStorage.setItem('wb-game-subtab', gameSubtab);
+  }, [tab, activeGame, gameSubtab]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -233,16 +322,26 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   useEffect(() => {
     localStorage.setItem('wb-plugins-v4', JSON.stringify([...plugins]));
-    if (!plugins.has(tab)) {
-      const first = NAV_FLAT.find((n) => plugins.has(n.id));
+    if (!isTabEnabled(tab, plugins)) {
+      const first = NAV_FLAT.find((item) => isTabEnabled(item.id, plugins));
       if (first !== undefined) setTab(first.id);
     }
-  }, [plugins, tab]);
+    if (tab === 'stardew') {
+      const firstEnabledGame = GAME_OPTIONS.find((game) => plugins.has(game.id));
+      if (gameSubtab === 'mods' && !plugins.has('mods')) setGameSubtab('monitor');
+      else if (gameSubtab === 'mods' && activeGame !== 'stardew') setActiveGame('stardew');
+      else if (gameSubtab === 'monitor' && firstEnabledGame === undefined && plugins.has('mods')) setGameSubtab('mods');
+      else if (gameSubtab === 'monitor' && firstEnabledGame !== undefined && !plugins.has(activeGame)) setActiveGame(firstEnabledGame.id);
+    }
+  }, [plugins, tab, activeGame, gameSubtab]);
 
   useEffect(() => {
     const onBrain = (e: Event): void => {
-      const detail = (e as CustomEvent<{ mode: string; llmReady: boolean }>).detail;
-      if (detail !== undefined) setBrain({ mode: detail.mode, llmReady: detail.llmReady });
+      const detail = (e as CustomEvent<{ mode: string; llmReady: boolean; mainModelId?: string }>).detail;
+      if (detail !== undefined) {
+        setBrain({ mode: detail.mode, llmReady: detail.llmReady });
+        if (typeof detail.mainModelId === 'string') setMainModelId(detail.mainModelId);
+      }
     };
     window.addEventListener('wb:brain', onBrain);
     return () => window.removeEventListener('wb:brain', onBrain);
@@ -261,10 +360,17 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   const start = async (): Promise<void> => {
     setDriveError(null);
-    const res = await window.directorBridge.autodriveStart();
+    const res = await window.directorBridge.autodriveStart(activeGame);
     if (res.ok) {
       setRunning(true);
-      toast.success('自动驾驶已启动：小鲸接管星露谷');
+      // T-M6-27：启动后立刻同步新会话标识，后续 P0 指令才带上正确的 expectedSessionId
+      void window.directorBridge.autodriveStatus().then((status) => {
+        if (status.sessionId !== undefined) {
+          sessionRef.current = { sessionId: status.sessionId, gameId: status.gameId ?? activeGame, generation: status.generation ?? -1 };
+        }
+      }).catch(() => undefined);
+      const gameName = GAME_OPTIONS.find((game) => game.id === activeGame)?.label ?? '当前游戏';
+      toast.success(`自动驾驶已启动：接管${gameName}`);
     } else {
       setDriveError(res.error ?? '启动失败');
       toast.error(res.error ?? '启动失败');
@@ -275,6 +381,27 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     await window.directorBridge.autodriveStop();
     setRunning(false);
     toast('自动驾驶已停止：控制权交还主人');
+  };
+
+  const selectGame = (gameId: GameId): void => {
+    if (running || !plugins.has(gameId)) return;
+    setActiveGame(gameId);
+    setGameSubtab('monitor');
+    setEvents([]);
+    // T-M6-27：游戏切换后旧会话的迟到事件不再进入本页（主进程 generation 也会随之推进）
+    sessionRef.current = { ...sessionRef.current, gameId };
+  };
+
+  const selectCharacter = async (id: string): Promise<void> => {
+    if (id === characterId) return;
+    const result = await window.directorBridge.characterSelect(id);
+    if (!result.ok) {
+      toast.error(result.error ?? '角色切换失败');
+      return;
+    }
+    setCharacterId(id);
+    const selected = characters.find((character) => character.id === id);
+    toast.success(`已切换陪伴角色：${selected?.displayName ?? id}`);
   };
 
   const switchBrain = async (): Promise<void> => {
@@ -321,7 +448,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     if (t === '') return;
     const directive = parseDirective(t);
     if (directive) {
-      void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent);
+      // T-M6-27：带上当前会话；若 UI 在等待期间被切走，主进程会拒绝而不是误发到新游戏
+      void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent, sessionRef.current.sessionId)
+        .then((res) => { if (!res.ok) toast.error(res.error ?? '插队失败'); });
       setEvents((prev) => [...prev, { type: 'decision', tool: directive.tool, intent: directive.intent, planner: 'remote' }]);
       toast(`已插队：${directive.tool}`);
       return;
@@ -344,13 +473,18 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const decisions = events.filter((e) => e.type === 'decision');
   const watchdog = events.filter((e) => e.type === 'watchdog');
   const lastDecision = decisions[decisions.length - 1];
-  const currentNav = NAV_FLAT.find((n) => n.id === tab);
-  const isPluginEnabled = (id: string | Tab): boolean => plugins.has(id);
+  const currentNav = NAV_FLAT.find((item) => item.id === tab);
+  const currentGame = GAME_OPTIONS.find((game) => game.id === activeGame) ?? GAME_OPTIONS[0]!;
+  const currentTitle = tab === 'stardew'
+    ? gameSubtab === 'mods' ? 'Mod 管理' : `${currentGame.shortLabel}共玩`
+    : currentNav?.label ?? '工作台';
+  const isPluginEnabled = (id: Tab): boolean => isTabEnabled(id, plugins);
+  const gameEnabled = Object.fromEntries(GAME_OPTIONS.map((game) => [game.id, plugins.has(game.id)])) as Record<GameId, boolean>;
 
   const paletteActions = useMemo<CommandAction[]>(() => {
     const pages: CommandAction[] = NAV_FLAT
-      .filter((n) => plugins.has(n.id))
-      .map((n) => ({ id: `page:${n.id}`, label: n.label, group: '页面', icon: n.icon, run: () => setTab(n.id) }));
+      .filter((item) => isTabEnabled(item.id, plugins))
+      .map((item) => ({ id: `page:${item.id}`, label: item.label, group: '页面', icon: item.icon, run: () => setTab(item.id) }));
     const actions: CommandAction[] = [
       { id: 'act:drive', label: running ? '停止自动驾驶' : '启动自动驾驶', group: '全局动作', icon: running ? Square : Play, hint: '当前游戏', run: () => void (running ? stop() : start()) },
       { id: 'act:brain', label: brain.mode === 'llm' ? '切换规则日程' : '切换 LLM 大脑', group: '全局动作', icon: Brain, hint: brain.mode, run: () => void switchBrain() },
@@ -378,19 +512,30 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         onFeed={() => void feedRice()}
         onOpenCommandPalette={() => setCmdkOpen(true)}
         isPluginEnabled={isPluginEnabled}
+        characters={characters}
+        characterId={characterId}
+        onSelectCharacter={(id) => void selectCharacter(id)}
         badges={{ memory: memoryStats !== null ? `${memoryStats.nodes} 节点` : undefined }}
       />
       <Topbar
         group={currentNav?.group ?? '工作台'}
-        title={currentNav?.label ?? '工作台'}
+        title={currentTitle}
         voiceOn={voiceOn}
+        voiceBackend={voiceBackend}
         brainMode={brain.mode}
         llmReady={brain.llmReady}
+        mainModelId={mainModelId}
+        gameId={activeGame}
+        gameEnabled={gameEnabled}
         running={running}
         theme={theme}
         onOpenCommandPalette={() => setCmdkOpen(true)}
         onToggleVoice={() => void toggleVoice()}
-        onSwitchBrain={() => void switchBrain()}
+        onSwitchBrain={() => {
+          if (brain.mode !== 'llm' && !brain.llmReady) setTab('providers');
+          else void switchBrain();
+        }}
+        onSelectGame={selectGame}
         onToggleDrive={() => void (running ? stop() : start())}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />
@@ -540,40 +685,85 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                 <button className={`seg-tab${petTab === 'library' ? ' on' : ''}`} onClick={() => setPetTab('library')}>动作库</button>
               </div>
             </header>
-            {petTab === 'stage' ? <PetStagePanel events={events} running={running} /> : <PetsPanel />}
+            {petTab === 'stage'
+              ? <PetStagePanel events={events} running={running} characters={characters} characterId={characterId} onSelectCharacter={(id) => void selectCharacter(id)} />
+              : <PetsPanel />}
             <div className="mt-4"><CoopPanel /></div>
           </div>
         )}
 
-        {tab === 'terraria' && (
-          <div className="mx-auto max-w-[1320px] px-6 py-5">
-            <TerrariaPanel events={events} running={running} />
-          </div>
-        )}
-
-        {tab === 'dst' && (
-          <div className="mx-auto max-w-[1320px] px-6 py-5">
-            <DstPanel
-              bridge={{
-                dstStart: () => window.directorBridge.autodriveStart('dst'),
-                dstStop: () => window.directorBridge.autodriveStop(),
-                dstDirective: (tool, args, intent) => window.directorBridge.autodriveDirective(tool, args, intent),
-                onDstEvent: (handler) => window.directorBridge.onAutodriveEvent((event) => {
-                  if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt' || event.type === 'watchdog') handler(event as DstPanelEvent);
-                }),
-              }}
-              endpoint="http://127.0.0.1:18100"
-            />
-          </div>
-        )}
-
         {tab === 'stardew' && (
-          <div className="mx-auto max-w-[1320px] px-6 py-5">
+          <section data-game-panel data-active-game={activeGame} data-active-subtab={gameSubtab} className="h-full overflow-y-auto">
+            <header className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-2 px-6 pb-2 pt-4">
+              <div className="seg-tabs" role="tablist" aria-label="选择共玩游戏">
+                {GAME_OPTIONS.map((game) => (
+                  <button
+                    key={game.id}
+                    type="button"
+                    role="tab"
+                    data-game-select={game.id}
+                    data-selected={activeGame === game.id ? 'true' : 'false'}
+                    aria-selected={activeGame === game.id}
+                    disabled={!gameEnabled[game.id]}
+                    title={gameEnabled[game.id] ? game.label : `请先在「插件与权限」启用${game.label}`}
+                    className={`seg-tab${activeGame === game.id ? ' on' : ''}`}
+                    onClick={() => selectGame(game.id)}
+                  >
+                    {game.shortLabel}
+                  </button>
+                ))}
+              </div>
+              {activeGame === 'stardew' && plugins.has('mods') && (
+                <div className="seg-tabs" role="tablist" aria-label="星露谷页面">
+                  <button
+                    type="button"
+                    role="tab"
+                    data-game-subtab="monitor"
+                    aria-selected={gameSubtab === 'monitor'}
+                    className={`seg-tab${gameSubtab === 'monitor' ? ' on' : ''}`}
+                    onClick={() => setGameSubtab('monitor')}
+                  >共玩监控</button>
+                  <button
+                    type="button"
+                    role="tab"
+                    data-game-subtab="mods"
+                    aria-selected={gameSubtab === 'mods'}
+                    className={`seg-tab${gameSubtab === 'mods' ? ' on' : ''}`}
+                    onClick={() => setGameSubtab('mods')}
+                  >Mod 管理</button>
+                </div>
+              )}
+            </header>
+            {gameSubtab === 'mods' && activeGame === 'stardew' && plugins.has('mods') && (
+              <div data-mods-page className="mx-auto max-w-[1320px] px-6 pb-6"><ModsPanel /></div>
+            )}
+            {gameSubtab === 'monitor' && activeGame === 'terraria' && plugins.has('terraria') && (
+              <div className="mx-auto max-w-[1320px] px-6 py-3"><TerrariaPanel events={events} running={running} /></div>
+            )}
+            {gameSubtab === 'monitor' && activeGame === 'dst' && plugins.has('dst') && (
+              <div className="mx-auto max-w-[1320px] px-6 py-3">
+                <DstPanel
+                  bridge={{
+                    dstState: () => window.directorBridge.gameDstState(),
+                    dstStart: () => window.directorBridge.autodriveStart('dst'),
+                    dstStop: () => window.directorBridge.autodriveStop(),
+                    dstDirective: (tool, args, intent) => window.directorBridge.autodriveDirective(tool, args, intent, sessionRef.current.sessionId),
+                    onDstEvent: (handler) => window.directorBridge.onAutodriveEvent((event) => {
+                      if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt' || event.type === 'watchdog') handler(event as DstPanelEvent);
+                    }),
+                  }}
+                  endpoint="http://127.0.0.1:18100"
+                />
+              </div>
+            )}
+            {gameSubtab === 'monitor' && activeGame === 'stardew' && plugins.has('stardew') && (
+              <div className="mx-auto max-w-[1320px] px-6 py-3">
+            <GameConnectionBanner gameId="stardew" report={stardewHealth.report} probing={stardewHealth.probing} onReprobe={stardewHealth.reprobe} />
             <div className="card mb-4 flex flex-wrap items-center gap-2 px-4 py-2.5">
-              <span className="pill pill-violet"><Brain size={11} />{brain.mode === 'llm' ? 'LlmPlanner' : 'RulePlanner'}</span>
-              <span className="pill">白名单 78 工具</span>
+              <span className="pill pill-violet"><Brain size={11} />{brain.mode === 'llm' ? '智能决策' : '本地规则兜底'}</span>
+              <span className="pill">78 个可用动作</span>
               <span className="pill pill-amber">30 粒米 / 回执</span>
-              <span className="pill pill-green">guide-forager {guides.length} 专题</span>
+              <span className="pill pill-green">攻略 {guides.length} 专题</span>
               <button
                 data-bwf-hud={bwfHud ? 'on' : 'off'}
                 onClick={() => void toggleBwfHud()}
@@ -586,93 +776,60 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
             </div>
 
-            <div className="grid grid-cols-[1.2fr_0.95fr_0.85fr] gap-4">
+            <div className="grid grid-cols-[1.18fr_0.98fr_0.84fr] gap-4">
               <section className="flex flex-col gap-3">
-                <div className="card px-4 py-3.5">
-                  <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
-                    <span>当前动作</span>
-                    <span className={`pill ${lastDecision?.planner === 'remote' ? 'pill-amber' : 'pill-blue'}`} style={{ fontSize: 9 }}>
-                      {lastDecision?.planner === 'remote' ? 'P0 插队' : lastDecision?.planner ?? 'planner'}
-                    </span>
-                  </div>
-                  <div className="mono text-base font-semibold" style={{ color: 'var(--blue)' }}>{lastDecision?.tool ?? 'idle'}</div>
-                  <p className="mt-1 text-[11px]" style={{ color: 'var(--text-2)' }}>{lastDecision?.intent ?? '等待自动驾驶启动…'}</p>
-                  <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-                    {[['时间', latestState?.clock ?? '—'], ['体力', latestState?.stamina != null ? `${latestState.stamina}/${latestState.staminaMax ?? '—'}` : '—'], ['金钱', latestState?.money != null ? `${latestState.money}g` : '—']].map(([k, v]) => (
-                      <div key={k} className="inset px-2 py-1.5">
-                        <div className="text-[9.5px]" style={{ color: 'var(--text-3)' }}>{k}</div>
-                        <div className="mono mt-0.5 text-[10.5px]" style={{ color: 'var(--text-1)' }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="card px-4 py-3.5">
-                  <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>今日目标链</div>
-                  {['读信 / 浇水 / 播种', '11:00 海滩钓鱼', '17:30 镇上采集', '18:30 前回家', '睡觉防晕倒'].map((g, i) => (
-                    <div key={g} className="mono flex items-center gap-2 py-1 text-[10.5px]" style={{ color: i === 0 ? 'var(--blue)' : 'var(--text-2)' }}>
-                      <span style={{ width: 5, height: 5, borderRadius: 99, background: i === 0 ? 'var(--blue)' : 'var(--text-3)' }} />
-                      {g}
-                    </div>
-                  ))}
-                </div>
+                <GameCurrentActionCard
+                  decision={lastDecision}
+                  metrics={[
+                    ['时间', latestState?.clock ?? '—'],
+                    ['体力', latestState?.stamina != null ? `${latestState.stamina}/${latestState.staminaMax ?? '—'}` : '—'],
+                    ['金钱', latestState?.money != null ? `${latestState.money}g` : '—'],
+                  ]}
+                  idleHint="等待自动驾驶启动…"
+                />
+                <GameGoalChain goals={STARDEW_GOALS} activeIndex={0} />
               </section>
 
-              <section className="card flex flex-col px-4 py-3.5">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[11px]" style={{ color: 'var(--text-2)' }}>回执时间线</span>
-                  <div className="seg-tabs" style={{ transform: 'scale(0.88)', transformOrigin: 'right' }}>
-                    {(['all', 'COMPLETED', 'FAILED'] as const).map((f) => (
-                      <button key={f} className={`seg-tab${chatFilter === f ? ' on' : ''}`} onClick={() => setChatFilter(f)}>{f === 'all' ? '全部' : f}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex max-h-[56vh] flex-col gap-1.5 overflow-y-auto">
-                  {receipts.filter((r) => chatFilter === 'all' || r.status === chatFilter).slice(-40).reverse().map((r, i) => {
-                    const c = STATUS_COLOR[r.status ?? 'ERROR'] ?? STATUS_COLOR.ERROR!;
-                    return (
-                      <div key={i} data-receipt={r.status} className="border-l-2 py-1 pl-2.5 text-[11px]" style={{ borderColor: c.line }}>
-                        <span className="mono font-semibold" style={{ color: c.text }}>{r.status}</span>
-                        <span className="ml-1.5" style={{ color: 'var(--text-1)' }}>{r.tool}</span>
-                        <div className="mt-0.5 line-clamp-2 text-[10px]" style={{ color: 'var(--text-3)' }}>{r.summary}</div>
-                      </div>
-                    );
-                  })}
-                  {receipts.length === 0 && <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>尚无回执——启动自动驾驶后这里出现真实执行记录。</span>}
-                </div>
-              </section>
+              <GameReceiptTimeline
+                receipts={receipts}
+                filter={chatFilter}
+                onFilter={(next) => setChatFilter(next)}
+                emptyHint="游戏连接后，这里会按时间线记录每一步动作与结果。"
+              />
 
               <section className="flex flex-col gap-3">
-                <div className="card px-4 py-3.5">
-                  <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>实时指标</div>
-                  {[['回执总数', receipts.length], ['决策次数', decisions.length], ['看门狗事件', watchdog.length], ['攻略专题', guides.length]].map(([k, v]) => (
-                    <div key={String(k)} className="flex justify-between py-1 text-[10.5px]">
-                      <span style={{ color: 'var(--text-3)' }}>{k}</span>
-                      <span className="mono" style={{ color: 'var(--text-1)' }}>{String(v)}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="card px-4 py-3.5">
-                  <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>CheatBridge 与审计</div>
-                  <p className="text-[10.5px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
-                    直写类工具默认关闭（运行期安全锁）。所有动作走 BWF MCP 回执，超时不重发、卡死由看门狗接管。
-                  </p>
-                  <span className="pill pill-amber mt-2" style={{ fontSize: 9 }}>审计 JSONL · 只读预览</span>
-                </div>
-                <div className="card px-4 py-3.5">
-                  <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>快捷指令</div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {([['钓鱼', '/fish 5'], ['去海滩', '/goto Beach'], ['睡觉', '/sleep'], ['停下', '/stop']] as const).map(([l, c]) => (
-                      <button key={c} className="pill justify-center" style={{ fontSize: 10 }} onClick={() => sendText(c)}>{l}</button>
-                    ))}
-                  </div>
-                </div>
+                <GameMetricsCard
+                  rows={[
+                    ['回执总数', receipts.length],
+                    ['决策次数', decisions.length],
+                    ['看门狗事件', watchdog.length],
+                    ['攻略专题', guides.length],
+                  ]}
+                />
+                <GameQuickCommands
+                  commands={STARDEW_QUICK}
+                  onCommand={(key) => sendText(key)}
+                  stopKey="/stop"
+                />
+                <GameDiagnostics
+                  title="高级诊断"
+                  rows={[
+                    ['桥接方式', 'BWF Mod 本机服务 (:18080)'],
+                    ['可用动作', '78 个白名单动作'],
+                    ['卡死策略', '大脑救援问询 + 离线阶梯兜底'],
+                    ['直写工具', '默认关闭（运行期安全锁）'],
+                  ]}
+                  notes={[
+                    '所有动作走 BWF MCP 回执，超时不重发、卡死由看门狗接管；审计写 JSONL。',
+                    '结论与许可证见 docs/REFERENCE-dsh-stardew-blind-whale-farmer.md。',
+                  ]}
+                />
               </section>
             </div>
-          </div>
+              </div>
+            )}
+          </section>
         )}
-
-        {tab === 'mods' && <div className="h-full overflow-y-auto"><ModsPanel /></div>}
         {tab === 'obs' && <div className="h-full overflow-y-auto"><ObsPanel rice={rice} riceCap={riceCap} events={events} /></div>}
         {tab === 'harness' && <div className="h-full overflow-y-auto"><HarnessPanel /></div>}
         {tab === 'providers' && (
@@ -816,7 +973,7 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
         </div>
       );
     }
-    const c = STATUS_COLOR[event.status ?? 'ERROR'] ?? STATUS_COLOR.ERROR!;
+    const c = GAME_STATUS_COLOR[event.status ?? 'ERROR'] ?? GAME_STATUS_COLOR.ERROR!;
     return (
       <div data-event="receipt" className="mb-3 rounded-2xl p-3" style={{ border: `1px solid ${c.line}`, background: c.bg }}>
         <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: c.text }}>
