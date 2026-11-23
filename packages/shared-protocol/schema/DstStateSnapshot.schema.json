@@ -30,10 +30,10 @@
               ]
             },
             "phaseProgress": {
+              "default": 0,
               "type": "number",
               "minimum": 0,
-              "maximum": 1,
-              "default": 0
+              "maximum": 1
             },
             "season": {
               "type": "string",
@@ -45,8 +45,8 @@
               ]
             },
             "isRaining": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             }
           },
           "required": [
@@ -114,10 +114,10 @@
               "type": "number"
             },
             "moisture": {
+              "default": 0,
               "type": "number",
               "minimum": 0,
-              "maximum": 100,
-              "default": 0
+              "maximum": 100
             },
             "position": {
               "type": "object",
@@ -136,6 +136,7 @@
               "additionalProperties": false
             },
             "inventory": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -148,8 +149,8 @@
                     "minimum": 0
                   },
                   "equipped": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -157,8 +158,7 @@
                   "count"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -175,6 +175,7 @@
           "type": "object",
           "properties": {
             "entities": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -183,8 +184,8 @@
                     "type": "string"
                   },
                   "displayName": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "position": {
                     "type": "object",
@@ -207,12 +208,12 @@
                     "minimum": 0
                   },
                   "isHostile": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   },
                   "isResource": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -221,10 +222,10 @@
                   "distance"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "campfires": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -256,13 +257,13 @@
                   "fuelPercent"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             }
           },
           "additionalProperties": false
         },
         "threats": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -271,21 +272,20 @@
                 "type": "string"
               },
               "count": {
+                "default": 1,
                 "type": "integer",
-                "minimum": 1,
-                "default": 1
+                "minimum": 1
               },
               "directionText": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               }
             },
             "required": [
               "kind"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         },
         "control": {
           "type": "object",

@@ -67,7 +67,9 @@ async function waitForWindow(
 describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
   it('窗口属性 + alpha 阈值状态机 + 拖拽边界夹紧', { timeout: 90_000 }, async () => {
     let app = await electron.launch({
-      args: [mainEntry],
+      // Electron 45 新二进制会让 macOS 弹「Safe Storage」钥匙串授权框并阻塞启动；
+      // 测试用 mock keychain 隔离（CI 同理）。
+      args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
       env: { ...process.env, PET_STAGE_E2E: '1' },
     });
@@ -138,7 +140,9 @@ describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
       });
       await app.close();
       app = await electron.launch({
-        args: [mainEntry],
+        // Electron 45 新二进制会让 macOS 弹「Safe Storage」钥匙串授权框并阻塞启动；
+      // 测试用 mock keychain 隔离（CI 同理）。
+      args: ['--use-mock-keychain', mainEntry],
         executablePath: electronBinary,
         env: { ...process.env, PET_STAGE_E2E: '1' },
       });

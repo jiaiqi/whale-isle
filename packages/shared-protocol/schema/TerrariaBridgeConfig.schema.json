@@ -8,22 +8,22 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "endpoint": {
+          "default": "http://127.0.0.1:18090",
           "type": "string",
-          "format": "uri",
-          "default": "http://127.0.0.1:18090"
+          "format": "uri"
         },
         "freezeWhileThinking": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         },
         "takeoverReacquireMs": {
+          "default": 8000,
           "type": "integer",
-          "minimum": 1000,
-          "default": 8000
+          "minimum": 1000
         }
       },
       "additionalProperties": false

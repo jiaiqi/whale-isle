@@ -16,25 +16,25 @@
           "minLength": 1
         },
         "gameId": {
+          "default": "stardew",
           "type": "string",
           "enum": [
             "stardew",
             "terraria",
             "dst"
-          ],
-          "default": "stardew"
+          ]
         },
         "endpoint": {
           "type": "string",
           "format": "uri"
         },
         "characterId": {
-          "type": "string",
-          "default": "blue-whale-maid"
+          "default": "blue-whale-maid",
+          "type": "string"
         },
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [

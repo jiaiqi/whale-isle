@@ -8,12 +8,12 @@
       "type": "object",
       "properties": {
         "modsDir": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "bwfShowHud": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         }
       },
       "additionalProperties": false

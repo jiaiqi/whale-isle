@@ -26,28 +26,29 @@
           ]
         },
         "attribution": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "width": {
+          "default": 640,
           "type": "integer",
           "minimum": 16,
-          "maximum": 4096,
-          "default": 640
+          "maximum": 4096
         },
         "height": {
+          "default": 360,
           "type": "integer",
           "minimum": 16,
-          "maximum": 4096,
-          "default": 360
+          "maximum": 4096
         },
         "footlineRatio": {
+          "default": 0.92,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0.92
+          "maximum": 1
         },
         "defaultAction": {
+          "default": "idle",
           "type": "string",
           "enum": [
             "idle",
@@ -61,18 +62,32 @@
             "sing_stage",
             "hungry_lazy",
             "sleep_mute"
-          ],
-          "default": "idle"
+          ]
         },
         "actions": {
+          "minItems": 1,
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
               "actionState": {
-                "$ref": "#/$defs/PetAvatarManifest/properties/defaultAction"
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "walk",
+                  "eat_rice",
+                  "happy_maid",
+                  "thinking_tail_wag",
+                  "rage_spray",
+                  "clumsy_panic",
+                  "game_focus",
+                  "sing_stage",
+                  "hungry_lazy",
+                  "sleep_mute"
+                ]
               },
               "clips": {
+                "minItems": 1,
                 "type": "array",
                 "items": {
                   "type": "object",
@@ -85,26 +100,26 @@
                       "minLength": 1
                     },
                     "loop": {
-                      "type": "boolean",
-                      "default": true
+                      "default": true,
+                      "type": "boolean"
                     },
                     "playbackRate": {
+                      "default": 1,
                       "type": "number",
                       "minimum": 0.1,
-                      "maximum": 4,
-                      "default": 1
+                      "maximum": 4
                     },
                     "fps": {
+                      "default": 30,
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 120,
-                      "default": 30
+                      "maximum": 120
                     },
                     "weight": {
+                      "default": 1,
                       "type": "number",
                       "minimum": 0,
-                      "maximum": 1,
-                      "default": 1
+                      "maximum": 1
                     }
                   },
                   "required": [
@@ -112,8 +127,7 @@
                     "webmPath"
                   ],
                   "additionalProperties": false
-                },
-                "minItems": 1
+                }
               }
             },
             "required": [
@@ -121,10 +135,10 @@
               "clips"
             ],
             "additionalProperties": false
-          },
-          "minItems": 1
+          }
         },
         "ambientPool": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -137,14 +151,14 @@
                 "minLength": 1
               },
               "category": {
-                "type": "string",
-                "default": "小动作"
+                "default": "小动作",
+                "type": "string"
               },
               "weight": {
+                "default": 10,
                 "type": "number",
                 "minimum": 0,
-                "maximum": 100,
-                "default": 10
+                "maximum": 100
               }
             },
             "required": [
@@ -152,8 +166,7 @@
               "webmPath"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         }
       },
       "required": [

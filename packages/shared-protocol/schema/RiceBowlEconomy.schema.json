@@ -8,20 +8,20 @@
       "type": "object",
       "properties": {
         "dailyRiceGrainBudget": {
+          "default": 500000,
           "type": "integer",
-          "exclusiveMinimum": 0,
-          "default": 500000
+          "exclusiveMinimum": 0
         },
         "consumedRiceGrainsToday": {
+          "default": 0,
           "type": "integer",
-          "minimum": 0,
-          "default": 0
+          "minimum": 0
         },
         "lowRiceWarningRatio": {
+          "default": 0.15,
           "type": "number",
           "minimum": 0.05,
-          "maximum": 0.5,
-          "default": 0.15
+          "maximum": 0.5
         },
         "activeSideDishes": {
           "type": "array",

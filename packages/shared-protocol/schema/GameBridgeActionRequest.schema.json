@@ -16,9 +16,12 @@
           "minLength": 1
         },
         "args": {
+          "default": {},
           "type": "object",
-          "additionalProperties": {},
-          "default": {}
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "required": [

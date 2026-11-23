@@ -17,6 +17,7 @@
     "py:test": "uv run --quiet --with pytest --with pydantic --with fastapi --with httpx --with websockets pytest services/audio-ai-worker -q",
     "py:check": "pnpm py:type && pnpm py:test",
     "verify:gate": "node tools/scripts/verify-gate.mjs",
+    "audit:high": "pnpm audit --audit-level high",
     "soak:autodrive": "node tools/scripts/soak-autodrive.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "gen:pet-manifest": "tsx tools/scripts/gen-pet-manifest.mjs",

@@ -8,42 +8,42 @@
       "type": "object",
       "properties": {
         "rvcModelPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "indexPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "pitchShiftSemitones": {
+          "default": 0,
           "type": "integer",
           "minimum": -12,
-          "maximum": 12,
-          "default": 0
+          "maximum": 12
         },
         "indexRate": {
+          "default": 0.75,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0.75
+          "maximum": 1
         },
         "protectVoiceless": {
+          "default": 0.33,
           "type": "number",
           "minimum": 0,
-          "maximum": 0.5,
-          "default": 0.33
+          "maximum": 0.5
         },
         "vocalGainDb": {
+          "default": 0,
           "type": "number",
           "minimum": -12,
-          "maximum": 12,
-          "default": 0
+          "maximum": 12
         },
         "accompanimentGainDb": {
+          "default": -3,
           "type": "number",
           "minimum": -24,
-          "maximum": 6,
-          "default": -3
+          "maximum": 6
         }
       },
       "additionalProperties": false

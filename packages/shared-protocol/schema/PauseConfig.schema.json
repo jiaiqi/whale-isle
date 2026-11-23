@@ -8,22 +8,22 @@
       "type": "object",
       "properties": {
         "periodMs": {
+          "default": 340,
           "type": "integer",
           "minimum": 50,
-          "maximum": 2000,
-          "default": 340
+          "maximum": 2000
         },
         "commaMs": {
+          "default": 150,
           "type": "integer",
           "minimum": 20,
-          "maximum": 2000,
-          "default": 150
+          "maximum": 2000
         },
         "ellipsisMs": {
+          "default": 460,
           "type": "integer",
           "minimum": 50,
-          "maximum": 3000,
-          "default": 460
+          "maximum": 3000
         }
       },
       "additionalProperties": false

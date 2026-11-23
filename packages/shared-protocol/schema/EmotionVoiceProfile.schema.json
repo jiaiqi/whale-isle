@@ -26,10 +26,10 @@
           "minLength": 1
         },
         "refDurationMs": {
+          "default": 5000,
           "type": "integer",
           "minimum": 500,
-          "maximum": 60000,
-          "default": 5000
+          "maximum": 60000
         },
         "actionState": {
           "type": "string",

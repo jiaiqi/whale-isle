@@ -70,6 +70,20 @@ class DefaultAction(StrEnum):
     sleep_mute = 'sleep_mute'
 
 
+class ActionState(StrEnum):
+    idle = 'idle'
+    walk = 'walk'
+    eat_rice = 'eat_rice'
+    happy_maid = 'happy_maid'
+    thinking_tail_wag = 'thinking_tail_wag'
+    rage_spray = 'rage_spray'
+    clumsy_panic = 'clumsy_panic'
+    game_focus = 'game_focus'
+    sing_stage = 'sing_stage'
+    hungry_lazy = 'hungry_lazy'
+    sleep_mute = 'sleep_mute'
+
+
 class Clip(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -82,6 +96,14 @@ class Clip(BaseModel):
     weight: Annotated[float | None, Field(ge=0.0, le=1.0)] = 1
 
 
+class Action(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionState: ActionState
+    clips: Annotated[list[Clip], Field(min_length=1)]
+
+
 class AmbientPoolItem(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -90,6 +112,24 @@ class AmbientPoolItem(BaseModel):
     webmPath: Annotated[str, Field(min_length=1)]
     category: str | None = '小动作'
     weight: Annotated[float | None, Field(ge=0.0, le=100.0)] = 10
+
+
+class PetAvatarManifest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    petId: str
+    renderer: Renderer
+    licenseScope: LicenseScope
+    attribution: str | None = ''
+    width: Annotated[int | None, Field(ge=16, le=4096)] = 640
+    height: Annotated[int | None, Field(ge=16, le=4096)] = 360
+    footlineRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.92
+    defaultAction: DefaultAction | None = 'idle'
+    actions: Annotated[list[Action], Field(min_length=1)]
+    ambientPool: Annotated[
+        list[AmbientPoolItem] | None, Field(validate_default=True)
+    ] = []
 
 
 class SourceModule(StrEnum):
@@ -111,20 +151,6 @@ class EmotionTag(StrEnum):
     rage_spray = 'rage_spray'
     lazy_yawn = 'lazy_yawn'
     happy_rice = 'happy_rice'
-
-
-class ActionState(StrEnum):
-    idle = 'idle'
-    walk = 'walk'
-    eat_rice = 'eat_rice'
-    happy_maid = 'happy_maid'
-    thinking_tail_wag = 'thinking_tail_wag'
-    rage_spray = 'rage_spray'
-    clumsy_panic = 'clumsy_panic'
-    game_focus = 'game_focus'
-    sing_stage = 'sing_stage'
-    hungry_lazy = 'hungry_lazy'
-    sleep_mute = 'sleep_mute'
 
 
 class AudioPlaybackLease(BaseModel):
@@ -368,6 +394,25 @@ class LazyDefault(BaseModel):
     minStaminaThreshold: Annotated[float, Field(ge=0.05, le=0.9)]
 
 
+class SeriousForOwner(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    farmingProfit: Annotated[float, Field(ge=0.0, le=1.0)]
+    npcGossipAndTrashCan: Annotated[float, Field(ge=0.0, le=1.0)]
+    miningCombat: Annotated[float, Field(ge=0.0, le=1.0)]
+    slackingAndScenery: Annotated[float, Field(ge=0.0, le=1.0)]
+    minStaminaThreshold: Annotated[float, Field(ge=0.05, le=0.9)]
+
+
+class StardewWeights(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    lazyDefault: LazyDefault
+    seriousForOwner: SeriousForOwner
+
+
 class VoiceProfile(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -376,6 +421,25 @@ class VoiceProfile(BaseModel):
     rvcModelPath: str
     rvcIndexRate: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.75
     pitchShiftSemitones: Annotated[int | None, Field(ge=-12, le=12)] = 0
+
+
+class PetPersonaConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: str
+    name: str
+    title: str
+    ownerTitles: list[str] | None = ['鱼片', '主人']
+    licenseScope: LicenseScope
+    avatarManifestPath: str
+    tailMoodIndicatorEnabled: bool | None = True
+    systemPromptTemplate: str
+    innerVoiceConfig: InnerVoiceConfig
+    reflexRules: list[ReflexRule1]
+    riceBowl: RiceBowl
+    stardewWeights: StardewWeights
+    voiceProfile: VoiceProfile
 
 
 class Region(StrEnum):
@@ -1591,59 +1655,6 @@ class RiceBowlStatus(BaseModel):
     budget: Annotated[int, Field(gt=0)]
     consumedToday: Annotated[int, Field(ge=0)]
     level: Level
-
-
-class Action(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    actionState: DefaultAction
-    clips: Annotated[list[Clip], Field(min_length=1)]
-
-
-class PetAvatarManifest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    petId: str
-    renderer: Renderer
-    licenseScope: LicenseScope
-    attribution: str | None = ''
-    width: Annotated[int | None, Field(ge=16, le=4096)] = 640
-    height: Annotated[int | None, Field(ge=16, le=4096)] = 360
-    footlineRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.92
-    defaultAction: DefaultAction | None = 'idle'
-    actions: Annotated[list[Action], Field(min_length=1)]
-    ambientPool: Annotated[
-        list[AmbientPoolItem] | None, Field(validate_default=True)
-    ] = []
-
-
-class StardewWeights(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    lazyDefault: LazyDefault
-    seriousForOwner: LazyDefault
-
-
-class PetPersonaConfig(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str
-    name: str
-    title: str
-    ownerTitles: list[str] | None = ['鱼片', '主人']
-    licenseScope: LicenseScope
-    avatarManifestPath: str
-    tailMoodIndicatorEnabled: bool | None = True
-    systemPromptTemplate: str
-    innerVoiceConfig: InnerVoiceConfig
-    reflexRules: list[ReflexRule1]
-    riceBowl: RiceBowl
-    stardewWeights: StardewWeights
-    voiceProfile: VoiceProfile
 
 
 class AIWorkbenchContracts(BaseModel):

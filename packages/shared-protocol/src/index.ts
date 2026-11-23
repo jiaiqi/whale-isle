@@ -252,7 +252,8 @@ export type StickyRoutingGroup = z.infer<typeof StickyRoutingGroupSchema>;
 export const DiningProfilePresetSchema = z.object({
   profileId: z.enum(['BUDGET_SLACKING', 'DELUXE_LIVESTREAM', 'OFFLINE_SURVIVAL']),
   displayName: z.string(), // "🍚 省饭摸鱼档" | "🍱 豪华直播档" | "🛡️ 断网求生档"
-  roleBindings: z.record(WorkbenchRoleSlotSchema, z.string()), // value 为 "providerId/modelId" 或 "group/groupId"
+  // Zod 4 的 z.record(enumKey, …) 运行期强制全部枚举键齐全；partialRecord 保持 Zod 3 的「子集合法」语义
+  roleBindings: z.partialRecord(WorkbenchRoleSlotSchema, z.string()), // value 为 "providerId/modelId" 或 "group/groupId"
   secretMaskingEnabled: z.boolean().default(true),
 });
 export type DiningProfilePreset = z.infer<typeof DiningProfilePresetSchema>;
@@ -584,7 +585,8 @@ export const TtsEmotionTuningParamsSchema = z.object({
   temperature: z.number().min(0.1).max(1.0).default(1.0),
   topP: z.number().min(0.1).max(1.0).default(1.0),
   topK: z.number().int().min(1).max(50).default(15),
-  pauseConfig: PauseConfigSchema.default({}),
+  // Zod 4 的 .default() 要求默认值等于 output 类型；prefault 保留 Zod 3「先填默认值再解析」语义（{} 再落三档默认）
+  pauseConfig: PauseConfigSchema.prefault({}),
   /** 前置微音效（如"咕噜"气泡声）路径 */
   prependSfxPath: z.string().default(''),
   sfxVolume: z.number().min(0).max(1).default(0),

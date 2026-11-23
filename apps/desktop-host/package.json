@@ -14,21 +14,46 @@
   "build": {
     "appId": "com.whaleisle.desktop",
     "productName": "鲸屿 Whale Isle",
-    "directories": { "output": "../../release" },
-    "files": ["dist/**/*", "package.json"],
+    "directories": {
+      "output": "../../release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
     "extraResources": [
-      { "from": "../../guide-forager", "to": "guide-forager" },
-      { "from": "../../packages/shared-protocol/fixtures/blue-whale-maid.json", "to": "persona/blue-whale-maid.json" }
+      {
+        "from": "../../guide-forager",
+        "to": "guide-forager"
+      },
+      {
+        "from": "../../packages/shared-protocol/fixtures/blue-whale-maid.json",
+        "to": "persona/blue-whale-maid.json"
+      }
     ],
     "asar": true,
     "npmRebuild": false,
     "mac": {
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "icon": "assets/brand/icon.icns",
       "category": "public.app-category.productivity"
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/brand/icon.ico"
     }
   },
@@ -39,29 +64,29 @@
     "@workbench/local-store": "workspace:*",
     "@workbench/memory-graph": "workspace:*",
     "@workbench/model-gateway": "workspace:*",
+    "@workbench/persona-brain": "workspace:*",
     "@workbench/pet-renderer": "workspace:*",
     "@workbench/plugin-kit": "workspace:*",
     "@workbench/shared-protocol": "workspace:*",
     "@workbench/stardew-mods": "workspace:*",
     "ws": "^8.18.0",
-    "zod": "^4.6.7",
-    "@workbench/persona-brain": "workspace:*"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.13",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "cmdk": "^1.1.1",
+    "electron": "^45.4.1",
+    "esbuild": "^0.25.0",
     "lucide-react": "^1.77.0",
+    "playwright-core": "^1.56.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-force-graph-2d": "^1.29.2",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.8",
-    "electron": "^38.2.0",
-    "esbuild": "^0.25.0",
-    "playwright-core": "^1.56.0",
     "tailwindcss": "^4.1.13"
   }
 }

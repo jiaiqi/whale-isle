@@ -8,21 +8,21 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "endpoint": {
+          "default": "http://127.0.0.1:18100",
           "type": "string",
-          "format": "uri",
-          "default": "http://127.0.0.1:18100"
+          "format": "uri"
         },
         "clusterDir": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "pairToken": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         }
       },
       "additionalProperties": false

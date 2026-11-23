@@ -14,4 +14,6 @@ allowBuilds:
   '@parcel/watcher': true
   better-sqlite3: true
   electron: true
+  # Windows 打包辅助工具；本仓用 nsis，不需要它的构建脚本
+  electron-winstaller: false
   esbuild: true

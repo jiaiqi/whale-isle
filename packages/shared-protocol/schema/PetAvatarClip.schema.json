@@ -15,26 +15,26 @@
           "minLength": 1
         },
         "loop": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         },
         "playbackRate": {
+          "default": 1,
           "type": "number",
           "minimum": 0.1,
-          "maximum": 4,
-          "default": 1
+          "maximum": 4
         },
         "fps": {
+          "default": 30,
           "type": "integer",
           "minimum": 1,
-          "maximum": 120,
-          "default": 30
+          "maximum": 120
         },
         "weight": {
+          "default": 1,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 1
+          "maximum": 1
         }
       },
       "required": [

@@ -15,12 +15,12 @@
           "minLength": 1
         },
         "bridgeVersion": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "gameVersion": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "control": {
           "type": "string",

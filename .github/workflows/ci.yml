@@ -44,9 +44,8 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        # ubuntu 不跑 Electron E2E：跳过 Electron 二进制下载，节省时间与磁盘。
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        # ubuntu 不跑 Electron E2E，也不 require('electron')；Electron 45 的二进制是懒下载，
+        # 本 job 不会触发（旧的 ELECTRON_SKIP_BINARY_DOWNLOAD 对其已无意义）。
         run: pnpm install --frozen-lockfile
 
       - name: Gate 1a · TypeScript 类型编译
@@ -78,9 +77,9 @@ jobs:
           sudo apt-get install -y -qq lua5.4
           find mods/dst-bridge -name '*.lua' -print0 | xargs -0 -n1 luac5.4 -p
 
-      - name: Gate 2b · 依赖漏洞（仅阻断 critical）
-        # 当前存在 high 级 Electron/Zod 告警，另有 T-M6-30 跟进；先阻断 critical 防止继续恶化。
-        run: pnpm audit --audit-level critical
+      - name: Gate 2b · 依赖漏洞（阻断 high/critical）
+        # T-M6-30：Electron 45 + Zod 4 后 high/critical 清零；继续阻断防止回退。
+        run: pnpm audit --audit-level high
 
   macos:
     name: macOS · 完整 verify:gate + Electron E2E
@@ -103,6 +102,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Warm Electron binary（Electron 45 懒下载）
+        # Electron 45 取消 postinstall，首次 require('electron') 才下载二进制；显式预热便于
+        # 把下载失败与 E2E 失败区分开。
+        run: pnpm --filter @workbench/desktop-host exec node -e "console.log(require('electron'))"
 
       - name: Build desktop-host（Electron E2E 前置）
         run: pnpm --filter @workbench/desktop-host build

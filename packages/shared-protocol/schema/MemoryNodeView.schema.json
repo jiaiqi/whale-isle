@@ -34,13 +34,13 @@
           "type": "number"
         },
         "day": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "instanceCount": {
+          "default": 1,
           "type": "integer",
-          "minimum": 1,
-          "default": 1
+          "minimum": 1
         }
       },
       "required": [

@@ -17,14 +17,14 @@
           "type": "string"
         },
         "ownerTitles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
           "default": [
             "鱼片",
             "主人"
-          ]
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "licenseScope": {
           "type": "string",
@@ -37,8 +37,8 @@
           "type": "string"
         },
         "tailMoodIndicatorEnabled": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         },
         "systemPromptTemplate": {
           "type": "string"
@@ -47,18 +47,18 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "default": true
+              "default": true,
+              "type": "boolean"
             },
             "thinkTagName": {
-              "type": "string",
-              "default": "think"
+              "default": "think",
+              "type": "string"
             },
             "derailmentProbability": {
+              "default": 0.35,
               "type": "number",
               "minimum": 0,
-              "maximum": 1,
-              "default": 0.35
+              "maximum": 1
             },
             "derailmentPrompts": {
               "type": "array",
@@ -84,8 +84,8 @@
                 "type": "string"
               },
               "cooldownMs": {
-                "type": "integer",
-                "default": 8000
+                "default": 8000,
+                "type": "integer"
               },
               "priority": {
                 "type": "string",
@@ -118,11 +118,11 @@
                 "type": "string"
               },
               "presetResponses": {
+                "minItems": 1,
                 "type": "array",
                 "items": {
                   "type": "string"
-                },
-                "minItems": 1
+                }
               }
             },
             "required": [
@@ -141,20 +141,20 @@
           "type": "object",
           "properties": {
             "dailyRiceGrainBudget": {
+              "default": 500000,
               "type": "integer",
-              "exclusiveMinimum": 0,
-              "default": 500000
+              "exclusiveMinimum": 0
             },
             "consumedRiceGrainsToday": {
+              "default": 0,
               "type": "integer",
-              "minimum": 0,
-              "default": 0
+              "minimum": 0
             },
             "lowRiceWarningRatio": {
+              "default": 0.15,
               "type": "number",
               "minimum": 0.05,
-              "maximum": 0.5,
-              "default": 0.15
+              "maximum": 0.5
             },
             "activeSideDishes": {
               "type": "array",
@@ -237,7 +237,42 @@
               "additionalProperties": false
             },
             "seriousForOwner": {
-              "$ref": "#/$defs/PetPersonaConfig/properties/stardewWeights/properties/lazyDefault"
+              "type": "object",
+              "properties": {
+                "farmingProfit": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "npcGossipAndTrashCan": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "miningCombat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "slackingAndScenery": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minStaminaThreshold": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 0.9
+                }
+              },
+              "required": [
+                "farmingProfit",
+                "npcGossipAndTrashCan",
+                "miningCombat",
+                "slackingAndScenery",
+                "minStaminaThreshold"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -256,16 +291,16 @@
               "type": "string"
             },
             "rvcIndexRate": {
+              "default": 0.75,
               "type": "number",
               "minimum": 0,
-              "maximum": 1,
-              "default": 0.75
+              "maximum": 1
             },
             "pitchShiftSemitones": {
+              "default": 0,
               "type": "integer",
               "minimum": -12,
-              "maximum": 12,
-              "default": 0
+              "maximum": 12
             }
           },
           "required": [

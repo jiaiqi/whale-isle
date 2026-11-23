@@ -24,26 +24,26 @@
           "minLength": 1
         },
         "voiceId": {
-          "type": "string",
-          "default": "qiaopi_mengmei"
+          "default": "qiaopi_mengmei",
+          "type": "string"
         },
         "anchorRatio": {
+          "default": 0.5,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0.5
+          "maximum": 1
         },
         "licenseScope": {
+          "default": "DEV_ONLY_NON_COMMERCIAL",
           "type": "string",
           "enum": [
             "DEV_ONLY_NON_COMMERCIAL",
             "COMMERCIAL_READY"
-          ],
-          "default": "DEV_ONLY_NON_COMMERCIAL"
+          ]
         },
         "builtin": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [

@@ -16,32 +16,32 @@
           ]
         },
         "petId": {
-          "type": "string",
-          "default": "blue-whale-maid"
+          "default": "blue-whale-maid",
+          "type": "string"
         },
         "prompt": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "previewText": {
-          "type": "string",
-          "default": "哼，本鱼才没有偷懒呢！主人快夸夸我嘛～"
+          "default": "哼，本鱼才没有偷懒呢！主人快夸夸我嘛～",
+          "type": "string"
         },
         "emotionTag": {
-          "type": "string",
-          "default": "sweet_normal"
+          "default": "sweet_normal",
+          "type": "string"
         },
         "weightPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "licenseScope": {
+          "default": "DEV_ONLY_NON_COMMERCIAL",
           "type": "string",
           "enum": [
             "DEV_ONLY_NON_COMMERCIAL",
             "COMMERCIAL_READY"
-          ],
-          "default": "DEV_ONLY_NON_COMMERCIAL"
+          ]
         }
       },
       "required": [

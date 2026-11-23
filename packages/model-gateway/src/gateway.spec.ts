@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { DiningProfilePreset, ModelProviderConfig, StickyRoutingGroup } from '@workbench/shared-protocol';
+import type { z } from 'zod';
+import {
+  ModelProviderConfigSchema,
+  type DiningProfilePreset,
+  type ModelProviderConfig,
+  type StickyRoutingGroup,
+} from '@workbench/shared-protocol';
 import { ModelGateway, GatewayError, type FetchLike, type UsageRecord } from './gateway';
 import { BUILTIN_PROVIDER_PRESETS } from './presets';
 import { MASK } from './sanitizer';
@@ -33,7 +39,7 @@ const PROVIDERS = [
     apiKeyMaskedOrRef: '',
     discoveredModels: [],
   },
-];
+] satisfies z.input<typeof ModelProviderConfigSchema>[];
 
 const GROUP: StickyRoutingGroup = {
   groupId: 'brain-pool',

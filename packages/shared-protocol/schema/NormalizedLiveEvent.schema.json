@@ -40,15 +40,15 @@
               "type": "string"
             },
             "intimacyScore": {
-              "type": "number",
-              "default": 0
+              "default": 0,
+              "type": "number"
             },
             "grudgeTags": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -67,8 +67,8 @@
               "type": "string"
             },
             "mergedCount": {
-              "type": "integer",
-              "default": 1
+              "default": 1,
+              "type": "integer"
             },
             "giftName": {
               "type": "string"

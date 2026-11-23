@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from 'zod';
+import type { ZodType } from 'zod';
 import {
   PauseConfigSchema,
   TtsEmotionTuningParamsSchema,
@@ -64,7 +64,7 @@ import {
  */
 export const CONTRACT_VERSION = '1.0.0';
 
-export const CONTRACT_SCHEMAS: Record<string, ZodTypeAny> = {
+export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
   PetRendererType: PetRendererTypeSchema,
   PetActionState: PetActionStateSchema,
   PetAvatarClip: PetAvatarClipSchema,

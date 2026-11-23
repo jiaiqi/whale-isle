@@ -37,8 +37,8 @@
               "type": "string"
             },
             "hardMode": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             }
           },
           "required": [
@@ -92,6 +92,7 @@
               ]
             },
             "buffs": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -109,10 +110,10 @@
                   "timeSeconds"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "inventory": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -135,13 +136,12 @@
                   "stack"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "selectedSlot": {
+              "default": 0,
               "type": "integer",
-              "minimum": 0,
-              "default": 0
+              "minimum": 0
             }
           },
           "required": [
@@ -161,18 +161,18 @@
               "type": "string"
             },
             "events": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "default": []
+              }
             },
             "downedBosses": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -202,6 +202,9 @@
                 },
                 "legend": {
                   "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
                   "additionalProperties": {
                     "type": "string"
                   }
@@ -224,6 +227,7 @@
               "additionalProperties": false
             },
             "npcs": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -257,8 +261,8 @@
                     "type": "boolean"
                   },
                   "isBoss": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -269,10 +273,10 @@
                   "isHostile"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "items": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -307,8 +311,7 @@
                   "position"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -320,21 +323,21 @@
           "type": "object",
           "properties": {
             "lavaNearby": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             },
             "fallingDanger": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             },
             "threatLevel": {
+              "default": "safe",
               "type": "string",
               "enum": [
                 "safe",
                 "caution",
                 "critical"
-              ],
-              "default": "safe"
+              ]
             }
           },
           "additionalProperties": false

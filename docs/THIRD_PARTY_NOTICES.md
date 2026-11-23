@@ -9,7 +9,6 @@
 | 组件 | 版本 | 许可证 | 使用方式 | 用途 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | zod | ^3.25 | MIT | 依赖 | `packages/shared-protocol` 契约校验 | ✅ 已登记 |
-| zod-to-json-schema | ^3.25 | MIT | devDependencies（shared-protocol） | Zod → JSON Schema 导出 | ✅ 已登记 |
 | typescript | ^5.9 | Apache-2.0 | devDependencies | 全仓类型编译 | ✅ 已登记 |
 | @types/node | ^22 | MIT | devDependencies | Node 类型 | ✅ 已登记 |
 | vitest | ^5 | MIT | devDependencies | Gate 3 单测运行器 | ✅ 已登记 |

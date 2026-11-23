@@ -8,6 +8,11 @@
       "type": "object",
       "properties": {
         "position": {
+          "default": {
+            "x": 80,
+            "y": 80,
+            "displayId": ""
+          },
           "type": "object",
           "properties": {
             "x": {
@@ -17,43 +22,38 @@
               "type": "number"
             },
             "displayId": {
-              "type": "string",
-              "default": ""
+              "default": "",
+              "type": "string"
             }
           },
           "required": [
             "x",
             "y"
           ],
-          "additionalProperties": false,
-          "default": {
-            "x": 80,
-            "y": 80,
-            "displayId": ""
-          }
+          "additionalProperties": false
         },
         "scale": {
+          "default": 1,
           "type": "number",
           "minimum": 0.6,
-          "maximum": 2,
-          "default": 1
+          "maximum": 2
         },
         "dragBehavior": {
+          "default": "stick",
           "type": "string",
           "enum": [
             "stick",
             "glide",
             "gravity"
-          ],
-          "default": "stick"
+          ]
         },
         "characterId": {
-          "type": "string",
-          "default": "blue-whale-maid"
+          "default": "blue-whale-maid",
+          "type": "string"
         },
         "mcpEndpointId": {
-          "type": "string",
-          "default": "default"
+          "default": "default",
+          "type": "string"
         }
       },
       "additionalProperties": false

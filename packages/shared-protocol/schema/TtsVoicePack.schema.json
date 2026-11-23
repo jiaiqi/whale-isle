@@ -22,6 +22,7 @@
           ]
         },
         "profiles": {
+          "minItems": 1,
           "type": "array",
           "items": {
             "type": "object",
@@ -45,10 +46,10 @@
                 "minLength": 1
               },
               "refDurationMs": {
+                "default": 5000,
                 "type": "integer",
                 "minimum": 500,
-                "maximum": 60000,
-                "default": 5000
+                "maximum": 60000
               },
               "actionState": {
                 "type": "string",
@@ -74,16 +75,15 @@
               "actionState"
             ],
             "additionalProperties": false
-          },
-          "minItems": 1
+          }
         },
         "licenseScope": {
+          "default": "DEV_ONLY_NON_COMMERCIAL",
           "type": "string",
           "enum": [
             "DEV_ONLY_NON_COMMERCIAL",
             "COMMERCIAL_READY"
-          ],
-          "default": "DEV_ONLY_NON_COMMERCIAL"
+          ]
         }
       },
       "required": [

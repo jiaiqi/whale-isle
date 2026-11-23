@@ -23,10 +23,8 @@
             },
             "roleBindings": {
               "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              },
               "propertyNames": {
+                "type": "string",
                 "enum": [
                   "MAIN_PERSONA_BRAIN",
                   "STARDEW_GAME_PLANNER",
@@ -37,11 +35,14 @@
                   "VOICE_TTS_SPEECH",
                   "VOICE_SVC_SINGING"
                 ]
+              },
+              "additionalProperties": {
+                "type": "string"
               }
             },
             "secretMaskingEnabled": {
-              "type": "boolean",
-              "default": true
+              "default": true,
+              "type": "boolean"
             }
           },
           "required": [
@@ -52,13 +53,17 @@
           "additionalProperties": false
         },
         "providerModels": {
+          "default": {},
           "type": "object",
-          "additionalProperties": {
+          "propertyNames": {
             "type": "string"
           },
-          "default": {}
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "providers": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -80,23 +85,23 @@
                 ]
               },
               "activeRegion": {
+                "default": "CN",
                 "type": "string",
                 "enum": [
                   "CN",
                   "GLOBAL",
                   "LOCAL"
-                ],
-                "default": "CN"
+                ]
               },
               "activePlanType": {
+                "default": "PAY_AS_YOU_GO",
                 "type": "string",
                 "enum": [
                   "PAY_AS_YOU_GO",
                   "CODING_PLAN",
                   "FREE_TIER",
                   "LOCAL_GPU"
-                ],
-                "default": "PAY_AS_YOU_GO"
+                ]
               },
               "variants": {
                 "type": "array",
@@ -125,16 +130,16 @@
                       "format": "uri"
                     },
                     "isFullUrl": {
-                      "type": "boolean",
-                      "default": false
+                      "default": false,
+                      "type": "boolean"
                     },
                     "protocol": {
+                      "default": "openai",
                       "type": "string",
                       "enum": [
                         "openai",
                         "anthropic"
-                      ],
-                      "default": "openai"
+                      ]
                     }
                   },
                   "required": [
@@ -149,19 +154,22 @@
                 "type": "string"
               },
               "activeModelId": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "protocol": {
+                "default": "openai",
                 "type": "string",
                 "enum": [
                   "openai",
                   "anthropic"
-                ],
-                "default": "openai"
+                ]
               },
               "customParams": {
                 "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
                 "additionalProperties": {}
               },
               "discoveredModels": {
@@ -173,26 +181,26 @@
                       "type": "string"
                     },
                     "supportsReasoningThink": {
-                      "type": "boolean",
-                      "default": false
+                      "default": false,
+                      "type": "boolean"
                     },
                     "supportsVision": {
-                      "type": "boolean",
-                      "default": false
+                      "default": false,
+                      "type": "boolean"
                     },
                     "supportsToolCalling": {
-                      "type": "boolean",
-                      "default": true
+                      "default": true,
+                      "type": "boolean"
                     },
                     "inputCostPer1M": {
+                      "default": 0,
                       "type": "number",
-                      "minimum": 0,
-                      "default": 0
+                      "minimum": 0
                     },
                     "outputCostPer1M": {
+                      "default": 0,
                       "type": "number",
-                      "minimum": 0,
-                      "default": 0
+                      "minimum": 0
                     }
                   },
                   "required": [
@@ -211,8 +219,7 @@
               "discoveredModels"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         }
       },
       "required": [

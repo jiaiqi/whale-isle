@@ -14,8 +14,8 @@
           "type": "string"
         },
         "cooldownMs": {
-          "type": "integer",
-          "default": 8000
+          "default": 8000,
+          "type": "integer"
         },
         "priority": {
           "type": "string",
@@ -48,11 +48,11 @@
           "type": "string"
         },
         "presetResponses": {
+          "minItems": 1,
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "minItems": 1
+          }
         }
       },
       "required": [

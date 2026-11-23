@@ -24,6 +24,7 @@
               "type": "boolean"
             },
             "mods": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -33,39 +34,39 @@
                     "minLength": 1
                   },
                   "uniqueId": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "name": {
                     "type": "string",
                     "minLength": 1
                   },
                   "author": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "version": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "description": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "enabled": {
                     "type": "boolean"
                   },
                   "contentType": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "minimumApiVersion": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "parseError": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -74,12 +75,11 @@
                   "enabled"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "smapiVersion": {
-              "type": "string",
-              "default": ""
+              "default": "",
+              "type": "string"
             },
             "scannedAt": {
               "type": "number"

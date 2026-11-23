@@ -256,26 +256,26 @@
           "minLength": 1
         },
         "loop": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         },
         "playbackRate": {
+          "default": 1,
           "type": "number",
           "minimum": 0.1,
-          "maximum": 4,
-          "default": 1
+          "maximum": 4
         },
         "fps": {
+          "default": 30,
           "type": "integer",
           "minimum": 1,
-          "maximum": 120,
-          "default": 30
+          "maximum": 120
         },
         "weight": {
+          "default": 1,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 1
+          "maximum": 1
         }
       },
       "required": [
@@ -306,28 +306,29 @@
           ]
         },
         "attribution": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "width": {
+          "default": 640,
           "type": "integer",
           "minimum": 16,
-          "maximum": 4096,
-          "default": 640
+          "maximum": 4096
         },
         "height": {
+          "default": 360,
           "type": "integer",
           "minimum": 16,
-          "maximum": 4096,
-          "default": 360
+          "maximum": 4096
         },
         "footlineRatio": {
+          "default": 0.92,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0.92
+          "maximum": 1
         },
         "defaultAction": {
+          "default": "idle",
           "type": "string",
           "enum": [
             "idle",
@@ -341,18 +342,32 @@
             "sing_stage",
             "hungry_lazy",
             "sleep_mute"
-          ],
-          "default": "idle"
+          ]
         },
         "actions": {
+          "minItems": 1,
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
               "actionState": {
-                "$ref": "#/$defs/PetAvatarManifest/properties/defaultAction"
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "walk",
+                  "eat_rice",
+                  "happy_maid",
+                  "thinking_tail_wag",
+                  "rage_spray",
+                  "clumsy_panic",
+                  "game_focus",
+                  "sing_stage",
+                  "hungry_lazy",
+                  "sleep_mute"
+                ]
               },
               "clips": {
+                "minItems": 1,
                 "type": "array",
                 "items": {
                   "type": "object",
@@ -365,26 +380,26 @@
                       "minLength": 1
                     },
                     "loop": {
-                      "type": "boolean",
-                      "default": true
+                      "default": true,
+                      "type": "boolean"
                     },
                     "playbackRate": {
+                      "default": 1,
                       "type": "number",
                       "minimum": 0.1,
-                      "maximum": 4,
-                      "default": 1
+                      "maximum": 4
                     },
                     "fps": {
+                      "default": 30,
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 120,
-                      "default": 30
+                      "maximum": 120
                     },
                     "weight": {
+                      "default": 1,
                       "type": "number",
                       "minimum": 0,
-                      "maximum": 1,
-                      "default": 1
+                      "maximum": 1
                     }
                   },
                   "required": [
@@ -392,8 +407,7 @@
                     "webmPath"
                   ],
                   "additionalProperties": false
-                },
-                "minItems": 1
+                }
               }
             },
             "required": [
@@ -401,10 +415,10 @@
               "clips"
             ],
             "additionalProperties": false
-          },
-          "minItems": 1
+          }
         },
         "ambientPool": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -417,14 +431,14 @@
                 "minLength": 1
               },
               "category": {
-                "type": "string",
-                "default": "小动作"
+                "default": "小动作",
+                "type": "string"
               },
               "weight": {
+                "default": 10,
                 "type": "number",
                 "minimum": 0,
-                "maximum": 100,
-                "default": 10
+                "maximum": 100
               }
             },
             "required": [
@@ -432,8 +446,7 @@
               "webmPath"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         }
       },
       "required": [
@@ -590,10 +603,10 @@
                 "minimum": 0
               },
               "amplitude": {
+                "default": 0.6,
                 "type": "number",
                 "minimum": 0,
-                "maximum": 1,
-                "default": 0.6
+                "maximum": 1
               }
             },
             "required": [
@@ -637,10 +650,10 @@
           "minLength": 1
         },
         "refDurationMs": {
+          "default": 5000,
           "type": "integer",
           "minimum": 500,
-          "maximum": 60000,
-          "default": 5000
+          "maximum": 60000
         },
         "actionState": {
           "type": "string",
@@ -685,6 +698,7 @@
           ]
         },
         "profiles": {
+          "minItems": 1,
           "type": "array",
           "items": {
             "type": "object",
@@ -708,10 +722,10 @@
                 "minLength": 1
               },
               "refDurationMs": {
+                "default": 5000,
                 "type": "integer",
                 "minimum": 500,
-                "maximum": 60000,
-                "default": 5000
+                "maximum": 60000
               },
               "actionState": {
                 "type": "string",
@@ -737,16 +751,15 @@
               "actionState"
             ],
             "additionalProperties": false
-          },
-          "minItems": 1
+          }
         },
         "licenseScope": {
+          "default": "DEV_ONLY_NON_COMMERCIAL",
           "type": "string",
           "enum": [
             "DEV_ONLY_NON_COMMERCIAL",
             "COMMERCIAL_READY"
-          ],
-          "default": "DEV_ONLY_NON_COMMERCIAL"
+          ]
         }
       },
       "required": [
@@ -782,8 +795,8 @@
           "minLength": 1
         },
         "degraded": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "format": {
           "type": "string",
@@ -828,10 +841,10 @@
                     "minimum": 0
                   },
                   "amplitude": {
+                    "default": 0.6,
                     "type": "number",
                     "minimum": 0,
-                    "maximum": 1,
-                    "default": 0.6
+                    "maximum": 1
                   }
                 },
                 "required": [
@@ -876,8 +889,8 @@
           "type": "string"
         },
         "cooldownMs": {
-          "type": "integer",
-          "default": 8000
+          "default": 8000,
+          "type": "integer"
         },
         "priority": {
           "type": "string",
@@ -910,11 +923,11 @@
           "type": "string"
         },
         "presetResponses": {
+          "minItems": 1,
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "minItems": 1
+          }
         }
       },
       "required": [
@@ -970,20 +983,20 @@
       "type": "object",
       "properties": {
         "dailyRiceGrainBudget": {
+          "default": 500000,
           "type": "integer",
-          "exclusiveMinimum": 0,
-          "default": 500000
+          "exclusiveMinimum": 0
         },
         "consumedRiceGrainsToday": {
+          "default": 0,
           "type": "integer",
-          "minimum": 0,
-          "default": 0
+          "minimum": 0
         },
         "lowRiceWarningRatio": {
+          "default": 0.15,
           "type": "number",
           "minimum": 0.05,
-          "maximum": 0.5,
-          "default": 0.15
+          "maximum": 0.5
         },
         "activeSideDishes": {
           "type": "array",
@@ -1037,14 +1050,14 @@
           "type": "string"
         },
         "ownerTitles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
           "default": [
             "鱼片",
             "主人"
-          ]
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "licenseScope": {
           "type": "string",
@@ -1057,8 +1070,8 @@
           "type": "string"
         },
         "tailMoodIndicatorEnabled": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         },
         "systemPromptTemplate": {
           "type": "string"
@@ -1067,18 +1080,18 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "default": true
+              "default": true,
+              "type": "boolean"
             },
             "thinkTagName": {
-              "type": "string",
-              "default": "think"
+              "default": "think",
+              "type": "string"
             },
             "derailmentProbability": {
+              "default": 0.35,
               "type": "number",
               "minimum": 0,
-              "maximum": 1,
-              "default": 0.35
+              "maximum": 1
             },
             "derailmentPrompts": {
               "type": "array",
@@ -1104,8 +1117,8 @@
                 "type": "string"
               },
               "cooldownMs": {
-                "type": "integer",
-                "default": 8000
+                "default": 8000,
+                "type": "integer"
               },
               "priority": {
                 "type": "string",
@@ -1138,11 +1151,11 @@
                 "type": "string"
               },
               "presetResponses": {
+                "minItems": 1,
                 "type": "array",
                 "items": {
                   "type": "string"
-                },
-                "minItems": 1
+                }
               }
             },
             "required": [
@@ -1161,20 +1174,20 @@
           "type": "object",
           "properties": {
             "dailyRiceGrainBudget": {
+              "default": 500000,
               "type": "integer",
-              "exclusiveMinimum": 0,
-              "default": 500000
+              "exclusiveMinimum": 0
             },
             "consumedRiceGrainsToday": {
+              "default": 0,
               "type": "integer",
-              "minimum": 0,
-              "default": 0
+              "minimum": 0
             },
             "lowRiceWarningRatio": {
+              "default": 0.15,
               "type": "number",
               "minimum": 0.05,
-              "maximum": 0.5,
-              "default": 0.15
+              "maximum": 0.5
             },
             "activeSideDishes": {
               "type": "array",
@@ -1257,7 +1270,42 @@
               "additionalProperties": false
             },
             "seriousForOwner": {
-              "$ref": "#/$defs/PetPersonaConfig/properties/stardewWeights/properties/lazyDefault"
+              "type": "object",
+              "properties": {
+                "farmingProfit": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "npcGossipAndTrashCan": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "miningCombat": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "slackingAndScenery": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "minStaminaThreshold": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 0.9
+                }
+              },
+              "required": [
+                "farmingProfit",
+                "npcGossipAndTrashCan",
+                "miningCombat",
+                "slackingAndScenery",
+                "minStaminaThreshold"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -1276,16 +1324,16 @@
               "type": "string"
             },
             "rvcIndexRate": {
+              "default": 0.75,
               "type": "number",
               "minimum": 0,
-              "maximum": 1,
-              "default": 0.75
+              "maximum": 1
             },
             "pitchShiftSemitones": {
+              "default": 0,
               "type": "integer",
               "minimum": -12,
-              "maximum": 12,
-              "default": 0
+              "maximum": 12
             }
           },
           "required": [
@@ -1335,16 +1383,16 @@
           "format": "uri"
         },
         "isFullUrl": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "protocol": {
+          "default": "openai",
           "type": "string",
           "enum": [
             "openai",
             "anthropic"
-          ],
-          "default": "openai"
+          ]
         }
       },
       "required": [
@@ -1374,23 +1422,23 @@
           ]
         },
         "activeRegion": {
+          "default": "CN",
           "type": "string",
           "enum": [
             "CN",
             "GLOBAL",
             "LOCAL"
-          ],
-          "default": "CN"
+          ]
         },
         "activePlanType": {
+          "default": "PAY_AS_YOU_GO",
           "type": "string",
           "enum": [
             "PAY_AS_YOU_GO",
             "CODING_PLAN",
             "FREE_TIER",
             "LOCAL_GPU"
-          ],
-          "default": "PAY_AS_YOU_GO"
+          ]
         },
         "variants": {
           "type": "array",
@@ -1419,16 +1467,16 @@
                 "format": "uri"
               },
               "isFullUrl": {
-                "type": "boolean",
-                "default": false
+                "default": false,
+                "type": "boolean"
               },
               "protocol": {
+                "default": "openai",
                 "type": "string",
                 "enum": [
                   "openai",
                   "anthropic"
-                ],
-                "default": "openai"
+                ]
               }
             },
             "required": [
@@ -1443,19 +1491,22 @@
           "type": "string"
         },
         "activeModelId": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "protocol": {
+          "default": "openai",
           "type": "string",
           "enum": [
             "openai",
             "anthropic"
-          ],
-          "default": "openai"
+          ]
         },
         "customParams": {
           "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
           "additionalProperties": {}
         },
         "discoveredModels": {
@@ -1467,26 +1518,26 @@
                 "type": "string"
               },
               "supportsReasoningThink": {
-                "type": "boolean",
-                "default": false
+                "default": false,
+                "type": "boolean"
               },
               "supportsVision": {
-                "type": "boolean",
-                "default": false
+                "default": false,
+                "type": "boolean"
               },
               "supportsToolCalling": {
-                "type": "boolean",
-                "default": true
+                "default": true,
+                "type": "boolean"
               },
               "inputCostPer1M": {
+                "default": 0,
                 "type": "number",
-                "minimum": 0,
-                "default": 0
+                "minimum": 0
               },
               "outputCostPer1M": {
+                "default": 0,
                 "type": "number",
-                "minimum": 0,
-                "default": 0
+                "minimum": 0
               }
             },
             "required": [
@@ -1545,10 +1596,10 @@
                 "type": "string"
               },
               "weight": {
+                "default": 100,
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 100,
-                "default": 100
+                "maximum": 100
               }
             },
             "required": [
@@ -1582,10 +1633,8 @@
         },
         "roleBindings": {
           "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
           "propertyNames": {
+            "type": "string",
             "enum": [
               "MAIN_PERSONA_BRAIN",
               "STARDEW_GAME_PLANNER",
@@ -1596,11 +1645,14 @@
               "VOICE_TTS_SPEECH",
               "VOICE_SVC_SINGING"
             ]
+          },
+          "additionalProperties": {
+            "type": "string"
           }
         },
         "secretMaskingEnabled": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [
@@ -1729,9 +1781,12 @@
           "minLength": 1
         },
         "args": {
+          "default": {},
           "type": "object",
-          "additionalProperties": {},
-          "default": {}
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -1865,12 +1920,12 @@
           "minLength": 1
         },
         "bridgeVersion": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "gameVersion": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "control": {
           "type": "string",
@@ -1921,8 +1976,8 @@
               "type": "string"
             },
             "hardMode": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             }
           },
           "required": [
@@ -1976,6 +2031,7 @@
               ]
             },
             "buffs": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -1993,10 +2049,10 @@
                   "timeSeconds"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "inventory": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -2019,13 +2075,12 @@
                   "stack"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "selectedSlot": {
+              "default": 0,
               "type": "integer",
-              "minimum": 0,
-              "default": 0
+              "minimum": 0
             }
           },
           "required": [
@@ -2045,18 +2100,18 @@
               "type": "string"
             },
             "events": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "default": []
+              }
             },
             "downedBosses": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -2086,6 +2141,9 @@
                 },
                 "legend": {
                   "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
                   "additionalProperties": {
                     "type": "string"
                   }
@@ -2108,6 +2166,7 @@
               "additionalProperties": false
             },
             "npcs": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -2141,8 +2200,8 @@
                     "type": "boolean"
                   },
                   "isBoss": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -2153,10 +2212,10 @@
                   "isHostile"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "items": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -2191,8 +2250,7 @@
                   "position"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -2204,21 +2262,21 @@
           "type": "object",
           "properties": {
             "lavaNearby": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             },
             "fallingDanger": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             },
             "threatLevel": {
+              "default": "safe",
               "type": "string",
               "enum": [
                 "safe",
                 "caution",
                 "critical"
-              ],
-              "default": "safe"
+              ]
             }
           },
           "additionalProperties": false
@@ -2323,8 +2381,8 @@
                   "type": "string"
                 },
                 "hardMode": {
-                  "type": "boolean",
-                  "default": false
+                  "default": false,
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -2378,6 +2436,7 @@
                   ]
                 },
                 "buffs": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -2395,10 +2454,10 @@
                       "timeSeconds"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 },
                 "inventory": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -2421,13 +2480,12 @@
                       "stack"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 },
                 "selectedSlot": {
+                  "default": 0,
                   "type": "integer",
-                  "minimum": 0,
-                  "default": 0
+                  "minimum": 0
                 }
               },
               "required": [
@@ -2447,18 +2505,18 @@
                   "type": "string"
                 },
                 "events": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "string"
-                  },
-                  "default": []
+                  }
                 },
                 "downedBosses": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "string"
-                  },
-                  "default": []
+                  }
                 }
               },
               "required": [
@@ -2488,6 +2546,9 @@
                     },
                     "legend": {
                       "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
                       "additionalProperties": {
                         "type": "string"
                       }
@@ -2510,6 +2571,7 @@
                   "additionalProperties": false
                 },
                 "npcs": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -2543,8 +2605,8 @@
                         "type": "boolean"
                       },
                       "isBoss": {
-                        "type": "boolean",
-                        "default": false
+                        "default": false,
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -2555,10 +2617,10 @@
                       "isHostile"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 },
                 "items": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -2593,8 +2655,7 @@
                       "position"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 }
               },
               "required": [
@@ -2606,21 +2667,21 @@
               "type": "object",
               "properties": {
                 "lavaNearby": {
-                  "type": "boolean",
-                  "default": false
+                  "default": false,
+                  "type": "boolean"
                 },
                 "fallingDanger": {
-                  "type": "boolean",
-                  "default": false
+                  "default": false,
+                  "type": "boolean"
                 },
                 "threatLevel": {
+                  "default": "safe",
                   "type": "string",
                   "enum": [
                     "safe",
                     "caution",
                     "critical"
-                  ],
-                  "default": "safe"
+                  ]
                 }
               },
               "additionalProperties": false
@@ -2674,22 +2735,22 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "endpoint": {
+          "default": "http://127.0.0.1:18090",
           "type": "string",
-          "format": "uri",
-          "default": "http://127.0.0.1:18090"
+          "format": "uri"
         },
         "freezeWhileThinking": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         },
         "takeoverReacquireMs": {
+          "default": 8000,
           "type": "integer",
-          "minimum": 1000,
-          "default": 8000
+          "minimum": 1000
         }
       },
       "additionalProperties": false
@@ -2720,10 +2781,10 @@
               ]
             },
             "phaseProgress": {
+              "default": 0,
               "type": "number",
               "minimum": 0,
-              "maximum": 1,
-              "default": 0
+              "maximum": 1
             },
             "season": {
               "type": "string",
@@ -2735,8 +2796,8 @@
               ]
             },
             "isRaining": {
-              "type": "boolean",
-              "default": false
+              "default": false,
+              "type": "boolean"
             }
           },
           "required": [
@@ -2804,10 +2865,10 @@
               "type": "number"
             },
             "moisture": {
+              "default": 0,
               "type": "number",
               "minimum": 0,
-              "maximum": 100,
-              "default": 0
+              "maximum": 100
             },
             "position": {
               "type": "object",
@@ -2826,6 +2887,7 @@
               "additionalProperties": false
             },
             "inventory": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -2838,8 +2900,8 @@
                     "minimum": 0
                   },
                   "equipped": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -2847,8 +2909,7 @@
                   "count"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -2865,6 +2926,7 @@
           "type": "object",
           "properties": {
             "entities": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -2873,8 +2935,8 @@
                     "type": "string"
                   },
                   "displayName": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "position": {
                     "type": "object",
@@ -2897,12 +2959,12 @@
                     "minimum": 0
                   },
                   "isHostile": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   },
                   "isResource": {
-                    "type": "boolean",
-                    "default": false
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -2911,10 +2973,10 @@
                   "distance"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "campfires": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -2946,13 +3008,13 @@
                   "fuelPercent"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             }
           },
           "additionalProperties": false
         },
         "threats": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -2961,21 +3023,20 @@
                 "type": "string"
               },
               "count": {
+                "default": 1,
                 "type": "integer",
-                "minimum": 1,
-                "default": 1
+                "minimum": 1
               },
               "directionText": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               }
             },
             "required": [
               "kind"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         },
         "control": {
           "type": "object",
@@ -3068,10 +3129,10 @@
                   ]
                 },
                 "phaseProgress": {
+                  "default": 0,
                   "type": "number",
                   "minimum": 0,
-                  "maximum": 1,
-                  "default": 0
+                  "maximum": 1
                 },
                 "season": {
                   "type": "string",
@@ -3083,8 +3144,8 @@
                   ]
                 },
                 "isRaining": {
-                  "type": "boolean",
-                  "default": false
+                  "default": false,
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -3152,10 +3213,10 @@
                   "type": "number"
                 },
                 "moisture": {
+                  "default": 0,
                   "type": "number",
                   "minimum": 0,
-                  "maximum": 100,
-                  "default": 0
+                  "maximum": 100
                 },
                 "position": {
                   "type": "object",
@@ -3174,6 +3235,7 @@
                   "additionalProperties": false
                 },
                 "inventory": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -3186,8 +3248,8 @@
                         "minimum": 0
                       },
                       "equipped": {
-                        "type": "boolean",
-                        "default": false
+                        "default": false,
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -3195,8 +3257,7 @@
                       "count"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 }
               },
               "required": [
@@ -3213,6 +3274,7 @@
               "type": "object",
               "properties": {
                 "entities": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -3221,8 +3283,8 @@
                         "type": "string"
                       },
                       "displayName": {
-                        "type": "string",
-                        "default": ""
+                        "default": "",
+                        "type": "string"
                       },
                       "position": {
                         "type": "object",
@@ -3245,12 +3307,12 @@
                         "minimum": 0
                       },
                       "isHostile": {
-                        "type": "boolean",
-                        "default": false
+                        "default": false,
+                        "type": "boolean"
                       },
                       "isResource": {
-                        "type": "boolean",
-                        "default": false
+                        "default": false,
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -3259,10 +3321,10 @@
                       "distance"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 },
                 "campfires": {
+                  "default": [],
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -3294,13 +3356,13 @@
                       "fuelPercent"
                     ],
                     "additionalProperties": false
-                  },
-                  "default": []
+                  }
                 }
               },
               "additionalProperties": false
             },
             "threats": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -3309,21 +3371,20 @@
                     "type": "string"
                   },
                   "count": {
+                    "default": 1,
                     "type": "integer",
-                    "minimum": 1,
-                    "default": 1
+                    "minimum": 1
                   },
                   "directionText": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "kind"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "control": {
               "type": "object",
@@ -3372,21 +3433,21 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         },
         "endpoint": {
+          "default": "http://127.0.0.1:18100",
           "type": "string",
-          "format": "uri",
-          "default": "http://127.0.0.1:18100"
+          "format": "uri"
         },
         "clusterDir": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "pairToken": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -3436,15 +3497,15 @@
               "type": "string"
             },
             "intimacyScore": {
-              "type": "number",
-              "default": 0
+              "default": 0,
+              "type": "number"
             },
             "grudgeTags": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "string"
-              },
-              "default": []
+              }
             }
           },
           "required": [
@@ -3463,8 +3524,8 @@
               "type": "string"
             },
             "mergedCount": {
-              "type": "integer",
-              "default": 1
+              "default": 1,
+              "type": "integer"
             },
             "giftName": {
               "type": "string"
@@ -3506,22 +3567,22 @@
       "type": "object",
       "properties": {
         "periodMs": {
+          "default": 340,
           "type": "integer",
           "minimum": 50,
-          "maximum": 2000,
-          "default": 340
+          "maximum": 2000
         },
         "commaMs": {
+          "default": 150,
           "type": "integer",
           "minimum": 20,
-          "maximum": 2000,
-          "default": 150
+          "maximum": 2000
         },
         "ellipsisMs": {
+          "default": 460,
           "type": "integer",
           "minimum": 50,
-          "maximum": 3000,
-          "default": 460
+          "maximum": 3000
         }
       },
       "additionalProperties": false
@@ -3540,71 +3601,71 @@
           ]
         },
         "refAudioPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "refText": {
           "type": "string",
           "minLength": 1
         },
         "speed": {
+          "default": 1,
           "type": "number",
           "minimum": 0.7,
-          "maximum": 1.4,
-          "default": 1
+          "maximum": 1.4
         },
         "temperature": {
+          "default": 1,
           "type": "number",
           "minimum": 0.1,
-          "maximum": 1,
-          "default": 1
+          "maximum": 1
         },
         "topP": {
+          "default": 1,
           "type": "number",
           "minimum": 0.1,
-          "maximum": 1,
-          "default": 1
+          "maximum": 1
         },
         "topK": {
+          "default": 15,
           "type": "integer",
           "minimum": 1,
-          "maximum": 50,
-          "default": 15
+          "maximum": 50
         },
         "pauseConfig": {
+          "default": {},
           "type": "object",
           "properties": {
             "periodMs": {
+              "default": 340,
               "type": "integer",
               "minimum": 50,
-              "maximum": 2000,
-              "default": 340
+              "maximum": 2000
             },
             "commaMs": {
+              "default": 150,
               "type": "integer",
               "minimum": 20,
-              "maximum": 2000,
-              "default": 150
+              "maximum": 2000
             },
             "ellipsisMs": {
+              "default": 460,
               "type": "integer",
               "minimum": 50,
-              "maximum": 3000,
-              "default": 460
+              "maximum": 3000
             }
           },
-          "additionalProperties": false,
-          "default": {}
+          "additionalProperties": false
         },
         "prependSfxPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "sfxVolume": {
+          "default": 0,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0
+          "maximum": 1
         }
       },
       "required": [
@@ -3617,42 +3678,42 @@
       "type": "object",
       "properties": {
         "rvcModelPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "indexPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "pitchShiftSemitones": {
+          "default": 0,
           "type": "integer",
           "minimum": -12,
-          "maximum": 12,
-          "default": 0
+          "maximum": 12
         },
         "indexRate": {
+          "default": 0.75,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0.75
+          "maximum": 1
         },
         "protectVoiceless": {
+          "default": 0.33,
           "type": "number",
           "minimum": 0,
-          "maximum": 0.5,
-          "default": 0.33
+          "maximum": 0.5
         },
         "vocalGainDb": {
+          "default": 0,
           "type": "number",
           "minimum": -12,
-          "maximum": 12,
-          "default": 0
+          "maximum": 12
         },
         "accompanimentGainDb": {
+          "default": -3,
           "type": "number",
           "minimum": -24,
-          "maximum": 6,
-          "default": -3
+          "maximum": 6
         }
       },
       "additionalProperties": false
@@ -3669,32 +3730,32 @@
           ]
         },
         "petId": {
-          "type": "string",
-          "default": "blue-whale-maid"
+          "default": "blue-whale-maid",
+          "type": "string"
         },
         "prompt": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "previewText": {
-          "type": "string",
-          "default": "哼，本鱼才没有偷懒呢！主人快夸夸我嘛～"
+          "default": "哼，本鱼才没有偷懒呢！主人快夸夸我嘛～",
+          "type": "string"
         },
         "emotionTag": {
-          "type": "string",
-          "default": "sweet_normal"
+          "default": "sweet_normal",
+          "type": "string"
         },
         "weightPath": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "licenseScope": {
+          "default": "DEV_ONLY_NON_COMMERCIAL",
           "type": "string",
           "enum": [
             "DEV_ONLY_NON_COMMERCIAL",
             "COMMERCIAL_READY"
-          ],
-          "default": "DEV_ONLY_NON_COMMERCIAL"
+          ]
         }
       },
       "required": [
@@ -3710,39 +3771,39 @@
           "minLength": 1
         },
         "uniqueId": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "name": {
           "type": "string",
           "minLength": 1
         },
         "author": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "version": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "description": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "enabled": {
           "type": "boolean"
         },
         "contentType": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "minimumApiVersion": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "parseError": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         }
       },
       "required": [
@@ -3763,6 +3824,7 @@
           "type": "boolean"
         },
         "mods": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -3772,39 +3834,39 @@
                 "minLength": 1
               },
               "uniqueId": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "name": {
                 "type": "string",
                 "minLength": 1
               },
               "author": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "version": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "description": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "enabled": {
                 "type": "boolean"
               },
               "contentType": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "minimumApiVersion": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "parseError": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               }
             },
             "required": [
@@ -3813,12 +3875,11 @@
               "enabled"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         },
         "smapiVersion": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "scannedAt": {
           "type": "number"
@@ -3868,6 +3929,7 @@
               "type": "boolean"
             },
             "mods": {
+              "default": [],
               "type": "array",
               "items": {
                 "type": "object",
@@ -3877,39 +3939,39 @@
                     "minLength": 1
                   },
                   "uniqueId": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "name": {
                     "type": "string",
                     "minLength": 1
                   },
                   "author": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "version": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "description": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "enabled": {
                     "type": "boolean"
                   },
                   "contentType": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "minimumApiVersion": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   },
                   "parseError": {
-                    "type": "string",
-                    "default": ""
+                    "default": "",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -3918,12 +3980,11 @@
                   "enabled"
                 ],
                 "additionalProperties": false
-              },
-              "default": []
+              }
             },
             "smapiVersion": {
-              "type": "string",
-              "default": ""
+              "default": "",
+              "type": "string"
             },
             "scannedAt": {
               "type": "number"
@@ -3946,12 +4007,12 @@
       "type": "object",
       "properties": {
         "modsDir": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "bwfShowHud": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -3960,6 +4021,11 @@
       "type": "object",
       "properties": {
         "position": {
+          "default": {
+            "x": 80,
+            "y": 80,
+            "displayId": ""
+          },
           "type": "object",
           "properties": {
             "x": {
@@ -3969,43 +4035,38 @@
               "type": "number"
             },
             "displayId": {
-              "type": "string",
-              "default": ""
+              "default": "",
+              "type": "string"
             }
           },
           "required": [
             "x",
             "y"
           ],
-          "additionalProperties": false,
-          "default": {
-            "x": 80,
-            "y": 80,
-            "displayId": ""
-          }
+          "additionalProperties": false
         },
         "scale": {
+          "default": 1,
           "type": "number",
           "minimum": 0.6,
-          "maximum": 2,
-          "default": 1
+          "maximum": 2
         },
         "dragBehavior": {
+          "default": "stick",
           "type": "string",
           "enum": [
             "stick",
             "glide",
             "gravity"
-          ],
-          "default": "stick"
+          ]
         },
         "characterId": {
-          "type": "string",
-          "default": "blue-whale-maid"
+          "default": "blue-whale-maid",
+          "type": "string"
         },
         "mcpEndpointId": {
-          "type": "string",
-          "default": "default"
+          "default": "default",
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -4030,26 +4091,26 @@
           "minLength": 1
         },
         "voiceId": {
-          "type": "string",
-          "default": "qiaopi_mengmei"
+          "default": "qiaopi_mengmei",
+          "type": "string"
         },
         "anchorRatio": {
+          "default": 0.5,
           "type": "number",
           "minimum": 0,
-          "maximum": 1,
-          "default": 0.5
+          "maximum": 1
         },
         "licenseScope": {
+          "default": "DEV_ONLY_NON_COMMERCIAL",
           "type": "string",
           "enum": [
             "DEV_ONLY_NON_COMMERCIAL",
             "COMMERCIAL_READY"
-          ],
-          "default": "DEV_ONLY_NON_COMMERCIAL"
+          ]
         },
         "builtin": {
-          "type": "boolean",
-          "default": false
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [
@@ -4072,25 +4133,25 @@
           "minLength": 1
         },
         "gameId": {
+          "default": "stardew",
           "type": "string",
           "enum": [
             "stardew",
             "terraria",
             "dst"
-          ],
-          "default": "stardew"
+          ]
         },
         "endpoint": {
           "type": "string",
           "format": "uri"
         },
         "characterId": {
-          "type": "string",
-          "default": "blue-whale-maid"
+          "default": "blue-whale-maid",
+          "type": "string"
         },
         "enabled": {
-          "type": "boolean",
-          "default": true
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [
@@ -4130,13 +4191,13 @@
           "type": "number"
         },
         "day": {
-          "type": "string",
-          "default": ""
+          "default": "",
+          "type": "string"
         },
         "instanceCount": {
+          "default": 1,
           "type": "integer",
-          "minimum": 1,
-          "default": 1
+          "minimum": 1
         }
       },
       "required": [
@@ -4217,13 +4278,13 @@
                 "type": "number"
               },
               "day": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "instanceCount": {
+                "default": 1,
                 "type": "integer",
-                "minimum": 1,
-                "default": 1
+                "minimum": 1
               }
             },
             "required": [
@@ -4332,10 +4393,8 @@
             },
             "roleBindings": {
               "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              },
               "propertyNames": {
+                "type": "string",
                 "enum": [
                   "MAIN_PERSONA_BRAIN",
                   "STARDEW_GAME_PLANNER",
@@ -4346,11 +4405,14 @@
                   "VOICE_TTS_SPEECH",
                   "VOICE_SVC_SINGING"
                 ]
+              },
+              "additionalProperties": {
+                "type": "string"
               }
             },
             "secretMaskingEnabled": {
-              "type": "boolean",
-              "default": true
+              "default": true,
+              "type": "boolean"
             }
           },
           "required": [
@@ -4361,13 +4423,17 @@
           "additionalProperties": false
         },
         "providerModels": {
+          "default": {},
           "type": "object",
-          "additionalProperties": {
+          "propertyNames": {
             "type": "string"
           },
-          "default": {}
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "providers": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
@@ -4389,23 +4455,23 @@
                 ]
               },
               "activeRegion": {
+                "default": "CN",
                 "type": "string",
                 "enum": [
                   "CN",
                   "GLOBAL",
                   "LOCAL"
-                ],
-                "default": "CN"
+                ]
               },
               "activePlanType": {
+                "default": "PAY_AS_YOU_GO",
                 "type": "string",
                 "enum": [
                   "PAY_AS_YOU_GO",
                   "CODING_PLAN",
                   "FREE_TIER",
                   "LOCAL_GPU"
-                ],
-                "default": "PAY_AS_YOU_GO"
+                ]
               },
               "variants": {
                 "type": "array",
@@ -4434,16 +4500,16 @@
                       "format": "uri"
                     },
                     "isFullUrl": {
-                      "type": "boolean",
-                      "default": false
+                      "default": false,
+                      "type": "boolean"
                     },
                     "protocol": {
+                      "default": "openai",
                       "type": "string",
                       "enum": [
                         "openai",
                         "anthropic"
-                      ],
-                      "default": "openai"
+                      ]
                     }
                   },
                   "required": [
@@ -4458,19 +4524,22 @@
                 "type": "string"
               },
               "activeModelId": {
-                "type": "string",
-                "default": ""
+                "default": "",
+                "type": "string"
               },
               "protocol": {
+                "default": "openai",
                 "type": "string",
                 "enum": [
                   "openai",
                   "anthropic"
-                ],
-                "default": "openai"
+                ]
               },
               "customParams": {
                 "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
                 "additionalProperties": {}
               },
               "discoveredModels": {
@@ -4482,26 +4551,26 @@
                       "type": "string"
                     },
                     "supportsReasoningThink": {
-                      "type": "boolean",
-                      "default": false
+                      "default": false,
+                      "type": "boolean"
                     },
                     "supportsVision": {
-                      "type": "boolean",
-                      "default": false
+                      "default": false,
+                      "type": "boolean"
                     },
                     "supportsToolCalling": {
-                      "type": "boolean",
-                      "default": true
+                      "default": true,
+                      "type": "boolean"
                     },
                     "inputCostPer1M": {
+                      "default": 0,
                       "type": "number",
-                      "minimum": 0,
-                      "default": 0
+                      "minimum": 0
                     },
                     "outputCostPer1M": {
+                      "default": 0,
                       "type": "number",
-                      "minimum": 0,
-                      "default": 0
+                      "minimum": 0
                     }
                   },
                   "required": [
@@ -4520,8 +4589,7 @@
               "discoveredModels"
             ],
             "additionalProperties": false
-          },
-          "default": []
+          }
         }
       },
       "required": [

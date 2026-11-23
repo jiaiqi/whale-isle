@@ -72,7 +72,9 @@ async function waitFor(win: import('playwright-core').Page, fn: () => Promise<bo
 describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
   it('双轨气泡不重叠（截图留证）+ 套餐胶囊切换 Dexie 同步与刷新恢复', { timeout: 120_000 }, async () => {
     const app = await electron.launch({
-      args: [mainEntry],
+      // Electron 45 新二进制会让 macOS 弹「Safe Storage」钥匙串授权框并阻塞启动；
+      // 测试用 mock keychain 隔离（CI 同理）。
+      args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
       env: { ...process.env, PET_STAGE_E2E: '1' },
     });
@@ -300,7 +302,9 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
    */
   it('三游戏连接引导 + 重新探测 + 折叠诊断', { timeout: 120_000 }, async () => {
     const app = await electron.launch({
-      args: [mainEntry],
+      // Electron 45 新二进制会让 macOS 弹「Safe Storage」钥匙串授权框并阻塞启动；
+      // 测试用 mock keychain 隔离（CI 同理）。
+      args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
       env: { ...process.env, PET_STAGE_E2E: '1' },
     });
@@ -393,7 +397,9 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
    */
   it('会话归属：状态带会话标识 + 过期指令被拒绝', { timeout: 90_000 }, async () => {
     const app = await electron.launch({
-      args: [mainEntry],
+      // Electron 45 新二进制会让 macOS 弹「Safe Storage」钥匙串授权框并阻塞启动；
+      // 测试用 mock keychain 隔离（CI 同理）。
+      args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
       env: { ...process.env, PET_STAGE_E2E: '1' },
     });
