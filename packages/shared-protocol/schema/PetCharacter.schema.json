@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PetCharacter",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/PetCharacter",
+  "$defs": {
+    "PetCharacter": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "personaPrompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "voiceId": {
+          "type": "string",
+          "default": "qiaopi_mengmei"
+        },
+        "anchorRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        },
+        "licenseScope": {
+          "type": "string",
+          "enum": [
+            "DEV_ONLY_NON_COMMERCIAL",
+            "COMMERCIAL_READY"
+          ],
+          "default": "DEV_ONLY_NON_COMMERCIAL"
+        },
+        "builtin": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "manifestPath",
+        "personaPrompt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

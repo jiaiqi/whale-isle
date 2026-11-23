@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GameBridgeActionStatus",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/GameBridgeActionStatus",
+  "$defs": {
+    "GameBridgeActionStatus": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "receipt": {
+          "type": "object",
+          "properties": {
+            "actionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "COMPLETED",
+                "FAILED",
+                "UNCERTAIN",
+                "ABORTED_BY_HUMAN_TAKEOVER"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "number"
+            },
+            "completedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "actionId",
+            "tool",
+            "status",
+            "startedAt",
+            "completedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "running"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

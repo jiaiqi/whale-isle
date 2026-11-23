@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GameBridgeActionRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/GameBridgeActionRequest",
+  "$defs": {
+    "GameBridgeActionRequest": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": {},
+          "default": {}
+        }
+      },
+      "required": [
+        "actionId",
+        "tool"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

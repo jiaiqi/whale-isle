@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GameBridgeHealth",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/GameBridgeHealth",
+  "$defs": {
+    "GameBridgeHealth": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "gameId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bridgeVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "gameVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "control": {
+          "type": "string",
+          "enum": [
+            "AI_AUTOPILOT",
+            "HUMAN_TAKEOVER_ACTIVE",
+            "PAUSED_BY_PROGRAM"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "gameId",
+        "control"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

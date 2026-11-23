@@ -225,6 +225,8 @@ export type ModelProviderConfig = z.infer<typeof ModelProviderConfigSchema>;
 export const WorkbenchRoleSlotSchema = z.enum([
   'MAIN_PERSONA_BRAIN',   // 主脑与 <think> 内心戏 (如 deepseek-reasoner)
   'STARDEW_GAME_PLANNER', // 星露谷战术与 MCP 动作规划 (如 deepseek-chat / claude-sonnet)
+  'TERRARIA_GAME_PLANNER', // 泰拉瑞亚战术与桥接动作规划 (M7 多游戏扩展)
+  'DST_GAME_PLANNER',      // 饥荒联机版 DST 战术与桥接动作规划 (M7 多游戏扩展)
   'DANMAKU_FAST_ROUTER',  // 弹幕清洗、敏感词拦截与价值打分 (如 Qwen-Turbo / 本地小模型)
   'VISION_STORYBOARD',    // 翻车复盘与高光切片理解 (如 Qwen-VL / Gemini Flash)
   'VOICE_TTS_SPEECH',     // 日常傲娇语音合成 (本地 GPT-SoVITS MPS/CUDA 或 SiliconFlow)
@@ -291,6 +293,240 @@ export const StardewMcpActionReceiptSchema = z.object({
     isPlayerMovingPhysically: z.boolean(), // 实时硬件输入检测标志
   }),
 });
+
+// ───────────────────────── 多游戏桥接契约（M7：泰拉瑞亚 / 饥荒 DST，2026-11-22 立项） ─────────────────────────
+// 统一桥接协议：每游戏一个「模组内 HTTP 服务端」——泰拉瑞亚为 tModLoader 模组（18090）、
+// 饥荒 DST 由 Lua 模组 + Node sidecar 代理（18100，官方 653007 localhost QueryServer 通道）；
+// 接口面：GET /state · POST /act · GET /action_status · POST /cancel · GET /health。
+// 星露谷 BWF 保持外部 HTTP MCP(18080) 原样不动，包装为 StardewAdapter（18760 中心 WS 网关设计稿搁置）。
+
+/** 桥接动作回执四态（铁律同 StardewMcpActionReceipt：以模组真实执行结果为准，严禁 LLM 台词替代） */
+export const GameBridgeReceiptStatusSchema = z.enum([
+  'COMPLETED',
+  'FAILED',
+  'UNCERTAIN',
+  'ABORTED_BY_HUMAN_TAKEOVER',
+]);
+export type GameBridgeReceiptStatus = z.infer<typeof GameBridgeReceiptStatusSchema>;
+
+/** 桥接动作请求（工作台 → 游戏桥） */
+export const GameBridgeActionRequestSchema = z.object({
+  actionId: z.string().uuid(),
+  tool: z.string().min(1),
+  args: z.record(z.string(), z.unknown()).default({}),
+});
+export type GameBridgeActionRequest = z.infer<typeof GameBridgeActionRequestSchema>;
+
+/** POST /act 受理回执（accepted=false 即互斥拒绝等原因，附 reason） */
+export const GameBridgeActionAcceptedSchema = z.object({
+  accepted: z.boolean(),
+  actionId: z.string().uuid().optional(),
+  reason: z.string().optional(), // 如 "ACTION_IN_FLIGHT"
+});
+export type GameBridgeActionAccepted = z.infer<typeof GameBridgeActionAcceptedSchema>;
+
+/** 桥接动作回执通用形状（泰拉瑞亚/DST 子类型以 gameId 字面量区分并附各自快照） */
+export const GameBridgeReceiptSchema = z.object({
+  actionId: z.string().uuid(),
+  tool: z.string().min(1),
+  status: GameBridgeReceiptStatusSchema,
+  reason: z.string().optional(), // 如 "LAVA_ESCAPE_TRIGGERED", "PATH_BLOCKED_PERSISTENT"
+  startedAt: z.number(),
+  completedAt: z.number(),
+});
+export type GameBridgeReceipt = z.infer<typeof GameBridgeReceiptSchema>;
+
+/** GET /action_status 轮询响应（长动作：running=true 期间严禁重发） */
+export const GameBridgeActionStatusSchema = z.object({
+  actionId: z.string().uuid(),
+  running: z.boolean(),
+  receipt: GameBridgeReceiptSchema.optional(),
+});
+export type GameBridgeActionStatus = z.infer<typeof GameBridgeActionStatusSchema>;
+
+/** GET /health 探活（工作台 start() 前先 ping，不通即如实报错） */
+export const GameBridgeHealthSchema = z.object({
+  ok: z.boolean(),
+  gameId: z.string().min(1),
+  bridgeVersion: z.string().default(''),
+  gameVersion: z.string().default(''),
+  control: GameControlAuthoritySchema,
+});
+export type GameBridgeHealth = z.infer<typeof GameBridgeHealthSchema>;
+
+/** 泰拉瑞亚结构化状态快照（模组 StateExporter 出站必须过本契约） */
+export const TerrariaStateSnapshotSchema = z.object({
+  schemaVersion: z.literal(1),
+  capturedAt: z.number(),
+  clock: z.object({
+    dayCount: z.number().int().min(0),
+    isDay: z.boolean(),
+    dayPhase: z.enum(['dawn', 'day', 'dusk', 'night']),
+    timeText: z.string(), // 如 "07:30 AM"
+    hardMode: z.boolean().default(false),
+  }),
+  player: z.object({
+    hp: z.number().int().min(0),
+    hpMax: z.number().int().min(1),
+    mana: z.number().int().min(0),
+    manaMax: z.number().int().min(1),
+    position: z.object({ x: z.number(), y: z.number() }), // 瓦片坐标
+    facing: z.enum(['left', 'right']),
+    buffs: z.array(z.object({ name: z.string(), timeSeconds: z.number().int().min(0) })).default([]),
+    inventory: z
+      .array(z.object({ slot: z.number().int().min(0), itemName: z.string(), stack: z.number().int().min(0) }))
+      .default([]),
+    selectedSlot: z.number().int().min(0).default(0),
+  }),
+  world: z.object({
+    biome: z.string(), // 如 "Forest", "Underground"
+    events: z.array(z.string()).default([]), // 如 "BloodMoon", "Rain"
+    downedBosses: z.array(z.string()).default([]), // NPC.downedBossX 旗标摘要
+  }),
+  nearby: z.object({
+    /** 以玩家为中心的瓦片网格（ASCII 行 + 图例），LLM 感知与寻路共用（TerraBlind /terrain 思想） */
+    tiles: z.object({
+      originX: z.number().int(),
+      originY: z.number().int(),
+      width: z.number().int().min(1),
+      height: z.number().int().min(1),
+      legend: z.record(z.string(), z.string()), // 单字符 → 语义，如 "#": "solid"
+      rows: z.array(z.string()),
+    }),
+    npcs: z
+      .array(
+        z.object({
+          name: z.string(),
+          hp: z.number(),
+          hpMax: z.number(),
+          position: z.object({ x: z.number(), y: z.number() }),
+          isHostile: z.boolean(),
+          isBoss: z.boolean().default(false),
+        }),
+      )
+      .default([]),
+    items: z
+      .array(
+        z.object({
+          name: z.string(),
+          stack: z.number().int().min(1),
+          position: z.object({ x: z.number(), y: z.number() }),
+        }),
+      )
+      .default([]),
+  }),
+  danger: z.object({
+    lavaNearby: z.boolean().default(false),
+    fallingDanger: z.boolean().default(false),
+    threatLevel: z.enum(['safe', 'caution', 'critical']).default('safe'),
+  }),
+  control: z.object({
+    authority: GameControlAuthoritySchema,
+    isPlayerMovingPhysically: z.boolean(), // 真实键鼠检测（F8 接管语义，静默 reacquire 后回托管）
+  }),
+});
+export type TerrariaStateSnapshot = z.infer<typeof TerrariaStateSnapshotSchema>;
+
+export const TerrariaActionReceiptSchema = GameBridgeReceiptSchema.extend({
+  gameId: z.literal('terraria'),
+  snapshot: TerrariaStateSnapshotSchema.optional(),
+});
+export type TerrariaActionReceipt = z.infer<typeof TerrariaActionReceiptSchema>;
+
+/** 泰拉瑞亚桥接配置（userData 持久化；端点默认 tModLoader 模组 18090） */
+export const TerrariaBridgeConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  endpoint: z.string().url().default('http://127.0.0.1:18090'),
+  /** AI 思考期冻结世界（单人可行，对齐 BWF「思考时冻结游戏时钟」） */
+  freezeWhileThinking: z.boolean().default(true),
+  /** F8 接管后静默多少毫秒回托管 */
+  takeoverReacquireMs: z.number().int().min(1000).default(8000),
+});
+export type TerrariaBridgeConfig = z.infer<typeof TerrariaBridgeConfigSchema>;
+
+/** 饥荒 DST 结构化状态快照（服务器侧 Lua 模组导出，经 sidecar 转发） */
+export const DstStateSnapshotSchema = z.object({
+  schemaVersion: z.literal(1),
+  capturedAt: z.number(),
+  clock: z.object({
+    cycle: z.number().int().min(0), // 第几个昼夜循环
+    phase: z.enum(['day', 'dusk', 'night']),
+    phaseProgress: z.number().min(0).max(1).default(0),
+    season: z.enum(['spring', 'summer', 'autumn', 'winter']),
+    isRaining: z.boolean().default(false),
+  }),
+  player: z.object({
+    character: z.string(), // 如 "wilson"
+    health: z.object({ current: z.number(), max: z.number() }),
+    hunger: z.object({ current: z.number(), max: z.number() }),
+    sanity: z.object({ current: z.number(), max: z.number() }),
+    temperature: z.number(),
+    moisture: z.number().min(0).max(100).default(0),
+    position: z.object({ x: z.number(), z: z.number() }),
+    inventory: z
+      .array(
+        z.object({
+          itemName: z.string(),
+          count: z.number().int().min(0),
+          equipped: z.boolean().default(false),
+        }),
+      )
+      .default([]),
+  }),
+  nearby: z.object({
+    entities: z
+      .array(
+        z.object({
+          prefab: z.string(),
+          displayName: z.string().default(''),
+          position: z.object({ x: z.number(), z: z.number() }),
+          distance: z.number().min(0),
+          isHostile: z.boolean().default(false),
+          isResource: z.boolean().default(false), // 树/石/浆果丛等可采集
+        }),
+      )
+      .default([]),
+    campfires: z
+      .array(
+        z.object({
+          position: z.object({ x: z.number(), z: z.number() }),
+          fuelPercent: z.number().min(0).max(1),
+        }),
+      )
+      .default([]),
+  }),
+  threats: z
+    .array(
+      z.object({
+        kind: z.string(), // 如 "hound", "spider"
+        count: z.number().int().min(1).default(1),
+        directionText: z.string().default(''),
+      }),
+    )
+    .default([]),
+  control: z.object({
+    authority: GameControlAuthoritySchema,
+    isPlayerMovingPhysically: z.boolean(),
+  }),
+});
+export type DstStateSnapshot = z.infer<typeof DstStateSnapshotSchema>;
+
+export const DstActionReceiptSchema = GameBridgeReceiptSchema.extend({
+  gameId: z.literal('dst'),
+  snapshot: DstStateSnapshotSchema.optional(),
+});
+export type DstActionReceipt = z.infer<typeof DstActionReceiptSchema>;
+
+/** 饥荒 DST 桥接配置（sidecar 宿主面 18100 + 本地集群托管） */
+export const DstBridgeConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  endpoint: z.string().url().default('http://127.0.0.1:18100'),
+  /** 本地集群目录（cluster_token.txt 所在；sidecar 自起专用服） */
+  clusterDir: z.string().default(''),
+  /** mod → sidecar /v1/tick 鉴权 token（fruitstarzero 配对模式） */
+  pairToken: z.string().default(''),
+});
+export type DstBridgeConfig = z.infer<typeof DstBridgeConfigSchema>;
 
 // ============================================================================
 // 5. 直播事件总线、注意力队列与节目状态机 (源自 dsh-livestream & dsh-live-studio)
@@ -553,3 +789,58 @@ export const RiceBowlStatusSchema = z.object({
   level: z.enum(['starving', 'hungry', 'ok', 'full', 'fed_buff']),
 });
 export type RiceBowlStatus = z.infer<typeof RiceBowlStatusSchema>;
+
+// ───────────────────────── 桌宠桌面偏好（T-M6-19 用户指令：放哪停哪 + 缩放 + 多角色/联机底座） ─────────────────────────
+/**
+ * 桌宠桌面偏好单点事实源：位置/缩放/拖拽手感/角色/联机端点。
+ * 落 userData/pet-desktop-prefs.json（主进程文件 KV，坏文件回落默认值）；渲染层经 preload 读写，
+ * 后续缩放 UI、角色切换、多 MCP 端点都复用这一份契约（跨语言生成 TS/JSON Schema/Pydantic）。
+ */
+export const PetDesktopPrefsSchema = z.object({
+  /** 窗口左上角 DIP 坐标；displayId 为空表示主屏/未知 */
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+    displayId: z.string().default(''),
+  }).default({ x: 80, y: 80, displayId: '' }),
+  /** 桌宠缩放倍率（相对角色基准尺寸），T-M6-20 接入滚轮/滑块/右键菜单 */
+  scale: z.number().min(0.6).max(2).default(1),
+  /** 松手行为：stick=放哪停哪（默认）；glide=无重力轻惯性；gravity=旧重力甩抛 */
+  dragBehavior: z.enum(['stick', 'glide', 'gravity']).default('stick'),
+  /** 当前角色包 id（T-M6-21 多角色） */
+  characterId: z.string().default('blue-whale-maid'),
+  /** 当前联机端点 id（T-M6-22 多桌宠联机；default=单机 18080） */
+  mcpEndpointId: z.string().default('default'),
+});
+export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
+
+// ───────────────────────── 桌宠角色注册表（T-M6-21：多角色底座） ─────────────────────────
+/** 角色包元数据（不含密钥/大资产；资产由 manifest 的 webmPath 指向） */
+export const PetCharacterSchema = z.object({
+  id: z.string().min(1),
+  displayName: z.string().min(1),
+  /** manifest JSON 相对 dist/renderer/pet-stage 的路径（内置角色）或 userData 绝对路径（自定义） */
+  manifestPath: z.string().min(1),
+  /** 该角色的聊天人设 system（与 persona-brain 的 PetPersonaConfig 分工：这里管口吻，那里管反射规则） */
+  personaPrompt: z.string().min(1),
+  /** 默认音色（voice-host 的 voiceId） */
+  voiceId: z.string().default('qiaopi_mengmei'),
+  /** 角色主体水平锚点比例（饭碗居中用；实测由截图/渲染分析得出） */
+  anchorRatio: z.number().min(0).max(1).default(0.5),
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']).default('DEV_ONLY_NON_COMMERCIAL'),
+  builtin: z.boolean().default(false),
+});
+export type PetCharacter = z.infer<typeof PetCharacterSchema>;
+
+// ───────────────────────── 联机端点注册表（T-M6-22：多桌宠各控一个游戏实例） ─────────────────────────
+/** 一个 MCP 端点 = 一个游戏实例 = 一个桌宠角色（单机多开/多人联机） */
+export const McpEndpointSchema = z.object({
+  id: z.string().min(1),
+  displayName: z.string().min(1),
+  gameId: z.enum(['stardew', 'terraria', 'dst']).default('stardew'),
+  /** MCP Streamable HTTP 根（默认 127.0.0.1:18080/mcp；多开时各实例不同端口） */
+  endpoint: z.string().url(),
+  characterId: z.string().default('blue-whale-maid'),
+  enabled: z.boolean().default(true),
+});
+export type McpEndpoint = z.infer<typeof McpEndpointSchema>;

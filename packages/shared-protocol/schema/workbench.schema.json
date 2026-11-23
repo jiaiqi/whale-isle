@@ -26,6 +26,18 @@
     "DiningProfilePreset",
     "GameControlAuthority",
     "StardewMcpActionReceipt",
+    "GameBridgeReceiptStatus",
+    "GameBridgeActionRequest",
+    "GameBridgeActionAccepted",
+    "GameBridgeReceipt",
+    "GameBridgeActionStatus",
+    "GameBridgeHealth",
+    "TerrariaStateSnapshot",
+    "TerrariaActionReceipt",
+    "TerrariaBridgeConfig",
+    "DstStateSnapshot",
+    "DstActionReceipt",
+    "DstBridgeConfig",
     "LiveProgramState",
     "NormalizedLiveEvent",
     "PauseConfig",
@@ -37,6 +49,9 @@
     "StardewModToggleRequest",
     "StardewModsOpResult",
     "StardewModsConfig",
+    "PetDesktopPrefs",
+    "PetCharacter",
+    "McpEndpoint",
     "MemoryNodeView",
     "MemoryEdgeView",
     "MemoryGraphView",
@@ -110,6 +125,42 @@
     "StardewMcpActionReceipt": {
       "$ref": "#/$defs/StardewMcpActionReceipt"
     },
+    "GameBridgeReceiptStatus": {
+      "$ref": "#/$defs/GameBridgeReceiptStatus"
+    },
+    "GameBridgeActionRequest": {
+      "$ref": "#/$defs/GameBridgeActionRequest"
+    },
+    "GameBridgeActionAccepted": {
+      "$ref": "#/$defs/GameBridgeActionAccepted"
+    },
+    "GameBridgeReceipt": {
+      "$ref": "#/$defs/GameBridgeReceipt"
+    },
+    "GameBridgeActionStatus": {
+      "$ref": "#/$defs/GameBridgeActionStatus"
+    },
+    "GameBridgeHealth": {
+      "$ref": "#/$defs/GameBridgeHealth"
+    },
+    "TerrariaStateSnapshot": {
+      "$ref": "#/$defs/TerrariaStateSnapshot"
+    },
+    "TerrariaActionReceipt": {
+      "$ref": "#/$defs/TerrariaActionReceipt"
+    },
+    "TerrariaBridgeConfig": {
+      "$ref": "#/$defs/TerrariaBridgeConfig"
+    },
+    "DstStateSnapshot": {
+      "$ref": "#/$defs/DstStateSnapshot"
+    },
+    "DstActionReceipt": {
+      "$ref": "#/$defs/DstActionReceipt"
+    },
+    "DstBridgeConfig": {
+      "$ref": "#/$defs/DstBridgeConfig"
+    },
     "LiveProgramState": {
       "$ref": "#/$defs/LiveProgramState"
     },
@@ -142,6 +193,15 @@
     },
     "StardewModsConfig": {
       "$ref": "#/$defs/StardewModsConfig"
+    },
+    "PetDesktopPrefs": {
+      "$ref": "#/$defs/PetDesktopPrefs"
+    },
+    "PetCharacter": {
+      "$ref": "#/$defs/PetCharacter"
+    },
+    "McpEndpoint": {
+      "$ref": "#/$defs/McpEndpoint"
     },
     "MemoryNodeView": {
       "$ref": "#/$defs/MemoryNodeView"
@@ -1451,6 +1511,8 @@
       "enum": [
         "MAIN_PERSONA_BRAIN",
         "STARDEW_GAME_PLANNER",
+        "TERRARIA_GAME_PLANNER",
+        "DST_GAME_PLANNER",
         "DANMAKU_FAST_ROUTER",
         "VISION_STORYBOARD",
         "VOICE_TTS_SPEECH",
@@ -1527,6 +1589,8 @@
             "enum": [
               "MAIN_PERSONA_BRAIN",
               "STARDEW_GAME_PLANNER",
+              "TERRARIA_GAME_PLANNER",
+              "DST_GAME_PLANNER",
               "DANMAKU_FAST_ROUTER",
               "VISION_STORYBOARD",
               "VOICE_TTS_SPEECH",
@@ -1642,6 +1706,1689 @@
         "status",
         "gameStateSnapshot"
       ],
+      "additionalProperties": false
+    },
+    "GameBridgeReceiptStatus": {
+      "type": "string",
+      "enum": [
+        "COMPLETED",
+        "FAILED",
+        "UNCERTAIN",
+        "ABORTED_BY_HUMAN_TAKEOVER"
+      ]
+    },
+    "GameBridgeActionRequest": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": {},
+          "default": {}
+        }
+      },
+      "required": [
+        "actionId",
+        "tool"
+      ],
+      "additionalProperties": false
+    },
+    "GameBridgeActionAccepted": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accepted"
+      ],
+      "additionalProperties": false
+    },
+    "GameBridgeReceipt": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN",
+            "ABORTED_BY_HUMAN_TAKEOVER"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "completedAt": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "actionId",
+        "tool",
+        "status",
+        "startedAt",
+        "completedAt"
+      ],
+      "additionalProperties": false
+    },
+    "GameBridgeActionStatus": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "receipt": {
+          "type": "object",
+          "properties": {
+            "actionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "COMPLETED",
+                "FAILED",
+                "UNCERTAIN",
+                "ABORTED_BY_HUMAN_TAKEOVER"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            },
+            "startedAt": {
+              "type": "number"
+            },
+            "completedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "actionId",
+            "tool",
+            "status",
+            "startedAt",
+            "completedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "running"
+      ],
+      "additionalProperties": false
+    },
+    "GameBridgeHealth": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "gameId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bridgeVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "gameVersion": {
+          "type": "string",
+          "default": ""
+        },
+        "control": {
+          "type": "string",
+          "enum": [
+            "AI_AUTOPILOT",
+            "HUMAN_TAKEOVER_ACTIVE",
+            "PAUSED_BY_PROGRAM"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "gameId",
+        "control"
+      ],
+      "additionalProperties": false
+    },
+    "TerrariaStateSnapshot": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "capturedAt": {
+          "type": "number"
+        },
+        "clock": {
+          "type": "object",
+          "properties": {
+            "dayCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "isDay": {
+              "type": "boolean"
+            },
+            "dayPhase": {
+              "type": "string",
+              "enum": [
+                "dawn",
+                "day",
+                "dusk",
+                "night"
+              ]
+            },
+            "timeText": {
+              "type": "string"
+            },
+            "hardMode": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "dayCount",
+            "isDay",
+            "dayPhase",
+            "timeText"
+          ],
+          "additionalProperties": false
+        },
+        "player": {
+          "type": "object",
+          "properties": {
+            "hp": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "hpMax": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mana": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "manaMax": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "facing": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right"
+              ]
+            },
+            "buffs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "timeSeconds": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "name",
+                  "timeSeconds"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "inventory": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "itemName": {
+                    "type": "string"
+                  },
+                  "stack": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "slot",
+                  "itemName",
+                  "stack"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "selectedSlot": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          "required": [
+            "hp",
+            "hpMax",
+            "mana",
+            "manaMax",
+            "position",
+            "facing"
+          ],
+          "additionalProperties": false
+        },
+        "world": {
+          "type": "object",
+          "properties": {
+            "biome": {
+              "type": "string"
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "downedBosses": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "biome"
+          ],
+          "additionalProperties": false
+        },
+        "nearby": {
+          "type": "object",
+          "properties": {
+            "tiles": {
+              "type": "object",
+              "properties": {
+                "originX": {
+                  "type": "integer"
+                },
+                "originY": {
+                  "type": "integer"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "legend": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "originX",
+                "originY",
+                "width",
+                "height",
+                "legend",
+                "rows"
+              ],
+              "additionalProperties": false
+            },
+            "npcs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "hp": {
+                    "type": "number"
+                  },
+                  "hpMax": {
+                    "type": "number"
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "isHostile": {
+                    "type": "boolean"
+                  },
+                  "isBoss": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "hp",
+                  "hpMax",
+                  "position",
+                  "isHostile"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "stack": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "name",
+                  "stack",
+                  "position"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "tiles"
+          ],
+          "additionalProperties": false
+        },
+        "danger": {
+          "type": "object",
+          "properties": {
+            "lavaNearby": {
+              "type": "boolean",
+              "default": false
+            },
+            "fallingDanger": {
+              "type": "boolean",
+              "default": false
+            },
+            "threatLevel": {
+              "type": "string",
+              "enum": [
+                "safe",
+                "caution",
+                "critical"
+              ],
+              "default": "safe"
+            }
+          },
+          "additionalProperties": false
+        },
+        "control": {
+          "type": "object",
+          "properties": {
+            "authority": {
+              "type": "string",
+              "enum": [
+                "AI_AUTOPILOT",
+                "HUMAN_TAKEOVER_ACTIVE",
+                "PAUSED_BY_PROGRAM"
+              ]
+            },
+            "isPlayerMovingPhysically": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "authority",
+            "isPlayerMovingPhysically"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "capturedAt",
+        "clock",
+        "player",
+        "world",
+        "nearby",
+        "danger",
+        "control"
+      ],
+      "additionalProperties": false
+    },
+    "TerrariaActionReceipt": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN",
+            "ABORTED_BY_HUMAN_TAKEOVER"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "completedAt": {
+          "type": "number"
+        },
+        "gameId": {
+          "type": "string",
+          "const": "terraria"
+        },
+        "snapshot": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "capturedAt": {
+              "type": "number"
+            },
+            "clock": {
+              "type": "object",
+              "properties": {
+                "dayCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "isDay": {
+                  "type": "boolean"
+                },
+                "dayPhase": {
+                  "type": "string",
+                  "enum": [
+                    "dawn",
+                    "day",
+                    "dusk",
+                    "night"
+                  ]
+                },
+                "timeText": {
+                  "type": "string"
+                },
+                "hardMode": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "dayCount",
+                "isDay",
+                "dayPhase",
+                "timeText"
+              ],
+              "additionalProperties": false
+            },
+            "player": {
+              "type": "object",
+              "properties": {
+                "hp": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hpMax": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "mana": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "manaMax": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "facing": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "right"
+                  ]
+                },
+                "buffs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "timeSeconds": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "timeSeconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                },
+                "inventory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "slot": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "itemName": {
+                        "type": "string"
+                      },
+                      "stack": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "slot",
+                      "itemName",
+                      "stack"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                },
+                "selectedSlot": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "default": 0
+                }
+              },
+              "required": [
+                "hp",
+                "hpMax",
+                "mana",
+                "manaMax",
+                "position",
+                "facing"
+              ],
+              "additionalProperties": false
+            },
+            "world": {
+              "type": "object",
+              "properties": {
+                "biome": {
+                  "type": "string"
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "downedBosses": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "biome"
+              ],
+              "additionalProperties": false
+            },
+            "nearby": {
+              "type": "object",
+              "properties": {
+                "tiles": {
+                  "type": "object",
+                  "properties": {
+                    "originX": {
+                      "type": "integer"
+                    },
+                    "originY": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "legend": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "originX",
+                    "originY",
+                    "width",
+                    "height",
+                    "legend",
+                    "rows"
+                  ],
+                  "additionalProperties": false
+                },
+                "npcs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "hp": {
+                        "type": "number"
+                      },
+                      "hpMax": {
+                        "type": "number"
+                      },
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "isHostile": {
+                        "type": "boolean"
+                      },
+                      "isBoss": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "hp",
+                      "hpMax",
+                      "position",
+                      "isHostile"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "stack": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "stack",
+                      "position"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "tiles"
+              ],
+              "additionalProperties": false
+            },
+            "danger": {
+              "type": "object",
+              "properties": {
+                "lavaNearby": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "fallingDanger": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "threatLevel": {
+                  "type": "string",
+                  "enum": [
+                    "safe",
+                    "caution",
+                    "critical"
+                  ],
+                  "default": "safe"
+                }
+              },
+              "additionalProperties": false
+            },
+            "control": {
+              "type": "object",
+              "properties": {
+                "authority": {
+                  "type": "string",
+                  "enum": [
+                    "AI_AUTOPILOT",
+                    "HUMAN_TAKEOVER_ACTIVE",
+                    "PAUSED_BY_PROGRAM"
+                  ]
+                },
+                "isPlayerMovingPhysically": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "authority",
+                "isPlayerMovingPhysically"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "capturedAt",
+            "clock",
+            "player",
+            "world",
+            "nearby",
+            "danger",
+            "control"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "tool",
+        "status",
+        "startedAt",
+        "completedAt",
+        "gameId"
+      ],
+      "additionalProperties": false
+    },
+    "TerrariaBridgeConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://127.0.0.1:18090"
+        },
+        "freezeWhileThinking": {
+          "type": "boolean",
+          "default": true
+        },
+        "takeoverReacquireMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "default": 8000
+        }
+      },
+      "additionalProperties": false
+    },
+    "DstStateSnapshot": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "capturedAt": {
+          "type": "number"
+        },
+        "clock": {
+          "type": "object",
+          "properties": {
+            "cycle": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "phase": {
+              "type": "string",
+              "enum": [
+                "day",
+                "dusk",
+                "night"
+              ]
+            },
+            "phaseProgress": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0
+            },
+            "season": {
+              "type": "string",
+              "enum": [
+                "spring",
+                "summer",
+                "autumn",
+                "winter"
+              ]
+            },
+            "isRaining": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "cycle",
+            "phase",
+            "season"
+          ],
+          "additionalProperties": false
+        },
+        "player": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "health": {
+              "type": "object",
+              "properties": {
+                "current": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "current",
+                "max"
+              ],
+              "additionalProperties": false
+            },
+            "hunger": {
+              "type": "object",
+              "properties": {
+                "current": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "current",
+                "max"
+              ],
+              "additionalProperties": false
+            },
+            "sanity": {
+              "type": "object",
+              "properties": {
+                "current": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "current",
+                "max"
+              ],
+              "additionalProperties": false
+            },
+            "temperature": {
+              "type": "number"
+            },
+            "moisture": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 0
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "z"
+              ],
+              "additionalProperties": false
+            },
+            "inventory": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "itemName": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "equipped": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "itemName",
+                  "count"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "character",
+            "health",
+            "hunger",
+            "sanity",
+            "temperature",
+            "position"
+          ],
+          "additionalProperties": false
+        },
+        "nearby": {
+          "type": "object",
+          "properties": {
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "prefab": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "default": ""
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "z": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "z"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "distance": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "isHostile": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "isResource": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "prefab",
+                  "position",
+                  "distance"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "campfires": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "z": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "z"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "fuelPercent": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "position",
+                  "fuelPercent"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "threats": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 1
+              },
+              "directionText": {
+                "type": "string",
+                "default": ""
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "control": {
+          "type": "object",
+          "properties": {
+            "authority": {
+              "type": "string",
+              "enum": [
+                "AI_AUTOPILOT",
+                "HUMAN_TAKEOVER_ACTIVE",
+                "PAUSED_BY_PROGRAM"
+              ]
+            },
+            "isPlayerMovingPhysically": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "authority",
+            "isPlayerMovingPhysically"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "capturedAt",
+        "clock",
+        "player",
+        "nearby",
+        "control"
+      ],
+      "additionalProperties": false
+    },
+    "DstActionReceipt": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN",
+            "ABORTED_BY_HUMAN_TAKEOVER"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "completedAt": {
+          "type": "number"
+        },
+        "gameId": {
+          "type": "string",
+          "const": "dst"
+        },
+        "snapshot": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "capturedAt": {
+              "type": "number"
+            },
+            "clock": {
+              "type": "object",
+              "properties": {
+                "cycle": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "phase": {
+                  "type": "string",
+                  "enum": [
+                    "day",
+                    "dusk",
+                    "night"
+                  ]
+                },
+                "phaseProgress": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0
+                },
+                "season": {
+                  "type": "string",
+                  "enum": [
+                    "spring",
+                    "summer",
+                    "autumn",
+                    "winter"
+                  ]
+                },
+                "isRaining": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "cycle",
+                "phase",
+                "season"
+              ],
+              "additionalProperties": false
+            },
+            "player": {
+              "type": "object",
+              "properties": {
+                "character": {
+                  "type": "string"
+                },
+                "health": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                },
+                "hunger": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                },
+                "sanity": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                },
+                "temperature": {
+                  "type": "number"
+                },
+                "moisture": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "default": 0
+                },
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "z"
+                  ],
+                  "additionalProperties": false
+                },
+                "inventory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "itemName": {
+                        "type": "string"
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "equipped": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "itemName",
+                      "count"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "character",
+                "health",
+                "hunger",
+                "sanity",
+                "temperature",
+                "position"
+              ],
+              "additionalProperties": false
+            },
+            "nearby": {
+              "type": "object",
+              "properties": {
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prefab": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "default": ""
+                      },
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "z": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "z"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "distance": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "isHostile": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "isResource": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "prefab",
+                      "position",
+                      "distance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                },
+                "campfires": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "z": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "z"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "fuelPercent": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    },
+                    "required": [
+                      "position",
+                      "fuelPercent"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                }
+              },
+              "additionalProperties": false
+            },
+            "threats": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1
+                  },
+                  "directionText": {
+                    "type": "string",
+                    "default": ""
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "control": {
+              "type": "object",
+              "properties": {
+                "authority": {
+                  "type": "string",
+                  "enum": [
+                    "AI_AUTOPILOT",
+                    "HUMAN_TAKEOVER_ACTIVE",
+                    "PAUSED_BY_PROGRAM"
+                  ]
+                },
+                "isPlayerMovingPhysically": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "authority",
+                "isPlayerMovingPhysically"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "capturedAt",
+            "clock",
+            "player",
+            "nearby",
+            "control"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "tool",
+        "status",
+        "startedAt",
+        "completedAt",
+        "gameId"
+      ],
+      "additionalProperties": false
+    },
+    "DstBridgeConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://127.0.0.1:18100"
+        },
+        "clusterDir": {
+          "type": "string",
+          "default": ""
+        },
+        "pairToken": {
+          "type": "string",
+          "default": ""
+        }
+      },
       "additionalProperties": false
     },
     "LiveProgramState": {
@@ -2209,6 +3956,150 @@
       },
       "additionalProperties": false
     },
+    "PetDesktopPrefs": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "displayId": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "default": {
+            "x": 80,
+            "y": 80,
+            "displayId": ""
+          }
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.6,
+          "maximum": 2,
+          "default": 1
+        },
+        "dragBehavior": {
+          "type": "string",
+          "enum": [
+            "stick",
+            "glide",
+            "gravity"
+          ],
+          "default": "stick"
+        },
+        "characterId": {
+          "type": "string",
+          "default": "blue-whale-maid"
+        },
+        "mcpEndpointId": {
+          "type": "string",
+          "default": "default"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PetCharacter": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "personaPrompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "voiceId": {
+          "type": "string",
+          "default": "qiaopi_mengmei"
+        },
+        "anchorRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        },
+        "licenseScope": {
+          "type": "string",
+          "enum": [
+            "DEV_ONLY_NON_COMMERCIAL",
+            "COMMERCIAL_READY"
+          ],
+          "default": "DEV_ONLY_NON_COMMERCIAL"
+        },
+        "builtin": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "manifestPath",
+        "personaPrompt"
+      ],
+      "additionalProperties": false
+    },
+    "McpEndpoint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gameId": {
+          "type": "string",
+          "enum": [
+            "stardew",
+            "terraria",
+            "dst"
+          ],
+          "default": "stardew"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri"
+        },
+        "characterId": {
+          "type": "string",
+          "default": "blue-whale-maid"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "endpoint"
+      ],
+      "additionalProperties": false
+    },
     "MemoryNodeView": {
       "type": "object",
       "properties": {
@@ -2448,6 +4339,8 @@
                 "enum": [
                   "MAIN_PERSONA_BRAIN",
                   "STARDEW_GAME_PLANNER",
+                  "TERRARIA_GAME_PLANNER",
+                  "DST_GAME_PLANNER",
                   "DANMAKU_FAST_ROUTER",
                   "VISION_STORYBOARD",
                   "VOICE_TTS_SPEECH",

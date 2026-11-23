@@ -1,0 +1,367 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DstActionReceipt",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/DstActionReceipt",
+  "$defs": {
+    "DstActionReceipt": {
+      "type": "object",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN",
+            "ABORTED_BY_HUMAN_TAKEOVER"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "number"
+        },
+        "completedAt": {
+          "type": "number"
+        },
+        "gameId": {
+          "type": "string",
+          "const": "dst"
+        },
+        "snapshot": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "number",
+              "const": 1
+            },
+            "capturedAt": {
+              "type": "number"
+            },
+            "clock": {
+              "type": "object",
+              "properties": {
+                "cycle": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "phase": {
+                  "type": "string",
+                  "enum": [
+                    "day",
+                    "dusk",
+                    "night"
+                  ]
+                },
+                "phaseProgress": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0
+                },
+                "season": {
+                  "type": "string",
+                  "enum": [
+                    "spring",
+                    "summer",
+                    "autumn",
+                    "winter"
+                  ]
+                },
+                "isRaining": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "cycle",
+                "phase",
+                "season"
+              ],
+              "additionalProperties": false
+            },
+            "player": {
+              "type": "object",
+              "properties": {
+                "character": {
+                  "type": "string"
+                },
+                "health": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                },
+                "hunger": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                },
+                "sanity": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "number"
+                    },
+                    "max": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                },
+                "temperature": {
+                  "type": "number"
+                },
+                "moisture": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "default": 0
+                },
+                "position": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "z": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "z"
+                  ],
+                  "additionalProperties": false
+                },
+                "inventory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "itemName": {
+                        "type": "string"
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "equipped": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "itemName",
+                      "count"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "character",
+                "health",
+                "hunger",
+                "sanity",
+                "temperature",
+                "position"
+              ],
+              "additionalProperties": false
+            },
+            "nearby": {
+              "type": "object",
+              "properties": {
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prefab": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "default": ""
+                      },
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "z": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "z"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "distance": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "isHostile": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "isResource": {
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "prefab",
+                      "position",
+                      "distance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                },
+                "campfires": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "position": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number"
+                          },
+                          "z": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "z"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "fuelPercent": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    },
+                    "required": [
+                      "position",
+                      "fuelPercent"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": []
+                }
+              },
+              "additionalProperties": false
+            },
+            "threats": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1
+                  },
+                  "directionText": {
+                    "type": "string",
+                    "default": ""
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              "default": []
+            },
+            "control": {
+              "type": "object",
+              "properties": {
+                "authority": {
+                  "type": "string",
+                  "enum": [
+                    "AI_AUTOPILOT",
+                    "HUMAN_TAKEOVER_ACTIVE",
+                    "PAUSED_BY_PROGRAM"
+                  ]
+                },
+                "isPlayerMovingPhysically": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "authority",
+                "isPlayerMovingPhysically"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "capturedAt",
+            "clock",
+            "player",
+            "nearby",
+            "control"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "actionId",
+        "tool",
+        "status",
+        "startedAt",
+        "completedAt",
+        "gameId"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

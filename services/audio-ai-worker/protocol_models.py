@@ -471,6 +471,8 @@ class ModelProviderConfig(BaseModel):
 class WorkbenchRoleSlot(StrEnum):
     MAIN_PERSONA_BRAIN = 'MAIN_PERSONA_BRAIN'
     STARDEW_GAME_PLANNER = 'STARDEW_GAME_PLANNER'
+    TERRARIA_GAME_PLANNER = 'TERRARIA_GAME_PLANNER'
+    DST_GAME_PLANNER = 'DST_GAME_PLANNER'
     DANMAKU_FAST_ROUTER = 'DANMAKU_FAST_ROUTER'
     VISION_STORYBOARD = 'VISION_STORYBOARD'
     VOICE_TTS_SPEECH = 'VOICE_TTS_SPEECH'
@@ -517,6 +519,8 @@ class DiningProfilePreset(BaseModel):
         Literal[
             'MAIN_PERSONA_BRAIN',
             'STARDEW_GAME_PLANNER',
+            'TERRARIA_GAME_PLANNER',
+            'DST_GAME_PLANNER',
             'DANMAKU_FAST_ROUTER',
             'VISION_STORYBOARD',
             'VOICE_TTS_SPEECH',
@@ -581,6 +585,584 @@ class StardewMcpActionReceipt(BaseModel):
     status: Status1
     failureOrUncertainReason: str | None = None
     gameStateSnapshot: GameStateSnapshot
+
+
+class GameBridgeReceiptStatus(StrEnum):
+    COMPLETED = 'COMPLETED'
+    FAILED = 'FAILED'
+    UNCERTAIN = 'UNCERTAIN'
+    ABORTED_BY_HUMAN_TAKEOVER = 'ABORTED_BY_HUMAN_TAKEOVER'
+
+
+class GameBridgeActionRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionId: UUID
+    tool: Annotated[str, Field(min_length=1)]
+    args: dict[str, Any] | None = {}
+
+
+class GameBridgeActionAccepted(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    accepted: bool
+    actionId: UUID | None = None
+    reason: str | None = None
+
+
+class GameBridgeReceipt(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionId: UUID
+    tool: Annotated[str, Field(min_length=1)]
+    status: Status1
+    reason: str | None = None
+    startedAt: float
+    completedAt: float
+
+
+class Receipt(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionId: UUID
+    tool: Annotated[str, Field(min_length=1)]
+    status: Status1
+    reason: str | None = None
+    startedAt: float
+    completedAt: float
+
+
+class GameBridgeActionStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionId: UUID
+    running: bool
+    receipt: Receipt | None = None
+
+
+class Control(StrEnum):
+    AI_AUTOPILOT = 'AI_AUTOPILOT'
+    HUMAN_TAKEOVER_ACTIVE = 'HUMAN_TAKEOVER_ACTIVE'
+    PAUSED_BY_PROGRAM = 'PAUSED_BY_PROGRAM'
+
+
+class GameBridgeHealth(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ok: bool
+    gameId: Annotated[str, Field(min_length=1)]
+    bridgeVersion: str | None = ''
+    gameVersion: str | None = ''
+    control: Control
+
+
+class DayPhase(StrEnum):
+    dawn = 'dawn'
+    day = 'day'
+    dusk = 'dusk'
+    night = 'night'
+
+
+class Clock(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    dayCount: Annotated[int, Field(ge=0)]
+    isDay: bool
+    dayPhase: DayPhase
+    timeText: str
+    hardMode: bool | None = False
+
+
+class Position(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    x: float
+    y: float
+
+
+class Facing(StrEnum):
+    left = 'left'
+    right = 'right'
+
+
+class Buff(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: str
+    timeSeconds: Annotated[int, Field(ge=0)]
+
+
+class InventoryItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    slot: Annotated[int, Field(ge=0)]
+    itemName: str
+    stack: Annotated[int, Field(ge=0)]
+
+
+class Player(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    hp: Annotated[int, Field(ge=0)]
+    hpMax: Annotated[int, Field(ge=1)]
+    mana: Annotated[int, Field(ge=0)]
+    manaMax: Annotated[int, Field(ge=1)]
+    position: Position
+    facing: Facing
+    buffs: Annotated[list[Buff] | None, Field(validate_default=True)] = []
+    inventory: Annotated[list[InventoryItem] | None, Field(validate_default=True)] = []
+    selectedSlot: Annotated[int | None, Field(ge=0)] = 0
+
+
+class World(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    biome: str
+    events: list[str] | None = []
+    downedBosses: list[str] | None = []
+
+
+class Tiles(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    originX: int
+    originY: int
+    width: Annotated[int, Field(ge=1)]
+    height: Annotated[int, Field(ge=1)]
+    legend: dict[str, str]
+    rows: list[str]
+
+
+class Npc(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: str
+    hp: float
+    hpMax: float
+    position: Position
+    isHostile: bool
+    isBoss: bool | None = False
+
+
+class Item(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: str
+    stack: Annotated[int, Field(ge=1)]
+    position: Position
+
+
+class Nearby(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    tiles: Tiles
+    npcs: Annotated[list[Npc] | None, Field(validate_default=True)] = []
+    items: Annotated[list[Item] | None, Field(validate_default=True)] = []
+
+
+class ThreatLevel(StrEnum):
+    safe = 'safe'
+    caution = 'caution'
+    critical = 'critical'
+
+
+class Danger(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    lavaNearby: bool | None = False
+    fallingDanger: bool | None = False
+    threatLevel: ThreatLevel | None = 'safe'
+
+
+class Authority(StrEnum):
+    AI_AUTOPILOT = 'AI_AUTOPILOT'
+    HUMAN_TAKEOVER_ACTIVE = 'HUMAN_TAKEOVER_ACTIVE'
+    PAUSED_BY_PROGRAM = 'PAUSED_BY_PROGRAM'
+
+
+class Control1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    authority: Authority
+    isPlayerMovingPhysically: bool
+
+
+class TerrariaStateSnapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    schemaVersion: Literal[1]
+    capturedAt: float
+    clock: Clock
+    player: Player
+    world: World
+    nearby: Nearby
+    danger: Danger
+    control: Control1
+
+
+class Clock1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    dayCount: Annotated[int, Field(ge=0)]
+    isDay: bool
+    dayPhase: DayPhase
+    timeText: str
+    hardMode: bool | None = False
+
+
+class Player1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    hp: Annotated[int, Field(ge=0)]
+    hpMax: Annotated[int, Field(ge=1)]
+    mana: Annotated[int, Field(ge=0)]
+    manaMax: Annotated[int, Field(ge=1)]
+    position: Position
+    facing: Facing
+    buffs: Annotated[list[Buff] | None, Field(validate_default=True)] = []
+    inventory: Annotated[list[InventoryItem] | None, Field(validate_default=True)] = []
+    selectedSlot: Annotated[int | None, Field(ge=0)] = 0
+
+
+class Npc1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: str
+    hp: float
+    hpMax: float
+    position: Position
+    isHostile: bool
+    isBoss: bool | None = False
+
+
+class Item1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: str
+    stack: Annotated[int, Field(ge=1)]
+    position: Position
+
+
+class Nearby1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    tiles: Tiles
+    npcs: Annotated[list[Npc1] | None, Field(validate_default=True)] = []
+    items: Annotated[list[Item1] | None, Field(validate_default=True)] = []
+
+
+class Danger1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    lavaNearby: bool | None = False
+    fallingDanger: bool | None = False
+    threatLevel: ThreatLevel | None = 'safe'
+
+
+class Control2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    authority: Authority
+    isPlayerMovingPhysically: bool
+
+
+class Snapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    schemaVersion: Literal[1]
+    capturedAt: float
+    clock: Clock1
+    player: Player1
+    world: World
+    nearby: Nearby1
+    danger: Danger1
+    control: Control2
+
+
+class TerrariaActionReceipt(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionId: UUID
+    tool: Annotated[str, Field(min_length=1)]
+    status: Status1
+    reason: str | None = None
+    startedAt: float
+    completedAt: float
+    gameId: Literal['terraria']
+    snapshot: Snapshot | None = None
+
+
+class TerrariaBridgeConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    enabled: bool | None = False
+    endpoint: AnyUrl | None = 'http://127.0.0.1:18090'
+    freezeWhileThinking: bool | None = True
+    takeoverReacquireMs: Annotated[int | None, Field(ge=1000)] = 8000
+
+
+class Phase(StrEnum):
+    day = 'day'
+    dusk = 'dusk'
+    night = 'night'
+
+
+class Season1(StrEnum):
+    spring = 'spring'
+    summer = 'summer'
+    autumn = 'autumn'
+    winter = 'winter'
+
+
+class Clock2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    cycle: Annotated[int, Field(ge=0)]
+    phase: Phase
+    phaseProgress: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0
+    season: Season1
+    isRaining: bool | None = False
+
+
+class Health(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    current: float
+    max: float
+
+
+class Hunger(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    current: float
+    max: float
+
+
+class Sanity(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    current: float
+    max: float
+
+
+class Position6(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    x: float
+    z: float
+
+
+class InventoryItem2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    itemName: str
+    count: Annotated[int, Field(ge=0)]
+    equipped: bool | None = False
+
+
+class Player2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    character: str
+    health: Health
+    hunger: Hunger
+    sanity: Sanity
+    temperature: float
+    moisture: Annotated[float | None, Field(ge=0.0, le=100.0)] = 0
+    position: Position6
+    inventory: Annotated[list[InventoryItem2] | None, Field(validate_default=True)] = []
+
+
+class Entity(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    prefab: str
+    displayName: str | None = ''
+    position: Position6
+    distance: Annotated[float, Field(ge=0.0)]
+    isHostile: bool | None = False
+    isResource: bool | None = False
+
+
+class Campfire(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    position: Position6
+    fuelPercent: Annotated[float, Field(ge=0.0, le=1.0)]
+
+
+class Nearby2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    entities: Annotated[list[Entity] | None, Field(validate_default=True)] = []
+    campfires: Annotated[list[Campfire] | None, Field(validate_default=True)] = []
+
+
+class Threat(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: str
+    count: Annotated[int | None, Field(ge=1)] = 1
+    directionText: str | None = ''
+
+
+class Control3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    authority: Authority
+    isPlayerMovingPhysically: bool
+
+
+class DstStateSnapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    schemaVersion: Literal[1]
+    capturedAt: float
+    clock: Clock2
+    player: Player2
+    nearby: Nearby2
+    threats: Annotated[list[Threat] | None, Field(validate_default=True)] = []
+    control: Control3
+
+
+class Clock3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    cycle: Annotated[int, Field(ge=0)]
+    phase: Phase
+    phaseProgress: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0
+    season: Season1
+    isRaining: bool | None = False
+
+
+class Player3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    character: str
+    health: Health
+    hunger: Hunger
+    sanity: Sanity
+    temperature: float
+    moisture: Annotated[float | None, Field(ge=0.0, le=100.0)] = 0
+    position: Position6
+    inventory: Annotated[list[InventoryItem2] | None, Field(validate_default=True)] = []
+
+
+class Entity1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    prefab: str
+    displayName: str | None = ''
+    position: Position6
+    distance: Annotated[float, Field(ge=0.0)]
+    isHostile: bool | None = False
+    isResource: bool | None = False
+
+
+class Campfire1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    position: Position6
+    fuelPercent: Annotated[float, Field(ge=0.0, le=1.0)]
+
+
+class Nearby3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    entities: Annotated[list[Entity1] | None, Field(validate_default=True)] = []
+    campfires: Annotated[list[Campfire1] | None, Field(validate_default=True)] = []
+
+
+class Control4(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    authority: Authority
+    isPlayerMovingPhysically: bool
+
+
+class Snapshot1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    schemaVersion: Literal[1]
+    capturedAt: float
+    clock: Clock3
+    player: Player3
+    nearby: Nearby3
+    threats: Annotated[list[Threat] | None, Field(validate_default=True)] = []
+    control: Control4
+
+
+class DstActionReceipt(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionId: UUID
+    tool: Annotated[str, Field(min_length=1)]
+    status: Status1
+    reason: str | None = None
+    startedAt: float
+    completedAt: float
+    gameId: Literal['dst']
+    snapshot: Snapshot1 | None = None
+
+
+class DstBridgeConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    enabled: bool | None = False
+    endpoint: AnyUrl | None = 'http://127.0.0.1:18100'
+    clusterDir: str | None = ''
+    pairToken: str | None = ''
 
 
 class LiveProgramState(StrEnum):
@@ -764,7 +1346,7 @@ class StardewModToggleRequest(BaseModel):
     enabled: bool
 
 
-class Snapshot(BaseModel):
+class Snapshot2(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -781,7 +1363,7 @@ class StardewModsOpResult(BaseModel):
     )
     ok: bool
     error: str | None = None
-    snapshot: Snapshot | None = None
+    snapshot: Snapshot2 | None = None
 
 
 class StardewModsConfig(BaseModel):
@@ -790,6 +1372,66 @@ class StardewModsConfig(BaseModel):
     )
     modsDir: str | None = ''
     bwfShowHud: bool | None = False
+
+
+class Position12(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    x: float
+    y: float
+    displayId: str | None = ''
+
+
+class DragBehavior(StrEnum):
+    stick = 'stick'
+    glide = 'glide'
+    gravity = 'gravity'
+
+
+class PetDesktopPrefs(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    position: Annotated[Position12 | None, Field(validate_default=True)] = cast(
+        'Position12 | None', {'x': 80, 'y': 80, 'displayId': ''}
+    )
+    scale: Annotated[float | None, Field(ge=0.6, le=2.0)] = 1
+    dragBehavior: DragBehavior | None = 'stick'
+    characterId: str | None = 'blue-whale-maid'
+    mcpEndpointId: str | None = 'default'
+
+
+class PetCharacter(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    displayName: Annotated[str, Field(min_length=1)]
+    manifestPath: Annotated[str, Field(min_length=1)]
+    personaPrompt: Annotated[str, Field(min_length=1)]
+    voiceId: str | None = 'qiaopi_mengmei'
+    anchorRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.5
+    licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
+    builtin: bool | None = False
+
+
+class GameId(StrEnum):
+    stardew = 'stardew'
+    terraria = 'terraria'
+    dst = 'dst'
+
+
+class McpEndpoint(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    displayName: Annotated[str, Field(min_length=1)]
+    gameId: GameId | None = 'stardew'
+    endpoint: AnyUrl
+    characterId: str | None = 'blue-whale-maid'
+    enabled: bool | None = True
 
 
 class NodeType(StrEnum):
@@ -884,6 +1526,8 @@ class Profile1(BaseModel):
         Literal[
             'MAIN_PERSONA_BRAIN',
             'STARDEW_GAME_PLANNER',
+            'TERRARIA_GAME_PLANNER',
+            'DST_GAME_PLANNER',
             'DANMAKU_FAST_ROUTER',
             'VISION_STORYBOARD',
             'VOICE_TTS_SPEECH',
@@ -1050,6 +1694,32 @@ class AIWorkbenchContracts(BaseModel):
     StardewMcpActionReceipt_1: Annotated[
         StardewMcpActionReceipt, Field(alias='StardewMcpActionReceipt')
     ]
+    GameBridgeReceiptStatus_1: Annotated[
+        GameBridgeReceiptStatus, Field(alias='GameBridgeReceiptStatus')
+    ]
+    GameBridgeActionRequest_1: Annotated[
+        GameBridgeActionRequest, Field(alias='GameBridgeActionRequest')
+    ]
+    GameBridgeActionAccepted_1: Annotated[
+        GameBridgeActionAccepted, Field(alias='GameBridgeActionAccepted')
+    ]
+    GameBridgeReceipt_1: Annotated[GameBridgeReceipt, Field(alias='GameBridgeReceipt')]
+    GameBridgeActionStatus_1: Annotated[
+        GameBridgeActionStatus, Field(alias='GameBridgeActionStatus')
+    ]
+    GameBridgeHealth_1: Annotated[GameBridgeHealth, Field(alias='GameBridgeHealth')]
+    TerrariaStateSnapshot_1: Annotated[
+        TerrariaStateSnapshot, Field(alias='TerrariaStateSnapshot')
+    ]
+    TerrariaActionReceipt_1: Annotated[
+        TerrariaActionReceipt, Field(alias='TerrariaActionReceipt')
+    ]
+    TerrariaBridgeConfig_1: Annotated[
+        TerrariaBridgeConfig, Field(alias='TerrariaBridgeConfig')
+    ]
+    DstStateSnapshot_1: Annotated[DstStateSnapshot, Field(alias='DstStateSnapshot')]
+    DstActionReceipt_1: Annotated[DstActionReceipt, Field(alias='DstActionReceipt')]
+    DstBridgeConfig_1: Annotated[DstBridgeConfig, Field(alias='DstBridgeConfig')]
     LiveProgramState_1: Annotated[LiveProgramState, Field(alias='LiveProgramState')]
     NormalizedLiveEvent_1: Annotated[
         NormalizedLiveEvent, Field(alias='NormalizedLiveEvent')
@@ -1075,6 +1745,9 @@ class AIWorkbenchContracts(BaseModel):
         StardewModsOpResult, Field(alias='StardewModsOpResult')
     ]
     StardewModsConfig_1: Annotated[StardewModsConfig, Field(alias='StardewModsConfig')]
+    PetDesktopPrefs_1: Annotated[PetDesktopPrefs, Field(alias='PetDesktopPrefs')]
+    PetCharacter_1: Annotated[PetCharacter, Field(alias='PetCharacter')]
+    McpEndpoint_1: Annotated[McpEndpoint, Field(alias='McpEndpoint')]
     MemoryNodeView_1: Annotated[MemoryNodeView, Field(alias='MemoryNodeView')]
     MemoryEdgeView_1: Annotated[MemoryEdgeView, Field(alias='MemoryEdgeView')]
     MemoryGraphView_1: Annotated[MemoryGraphView, Field(alias='MemoryGraphView')]

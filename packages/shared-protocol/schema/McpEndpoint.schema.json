@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "McpEndpoint",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/McpEndpoint",
+  "$defs": {
+    "McpEndpoint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gameId": {
+          "type": "string",
+          "enum": [
+            "stardew",
+            "terraria",
+            "dst"
+          ],
+          "default": "stardew"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri"
+        },
+        "characterId": {
+          "type": "string",
+          "default": "blue-whale-maid"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "endpoint"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

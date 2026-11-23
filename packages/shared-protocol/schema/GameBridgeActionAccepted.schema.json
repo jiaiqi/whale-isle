@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GameBridgeActionAccepted",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/GameBridgeActionAccepted",
+  "$defs": {
+    "GameBridgeActionAccepted": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "actionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accepted"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

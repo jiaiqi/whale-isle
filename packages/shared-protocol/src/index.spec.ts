@@ -8,6 +8,12 @@ import {
   PetPersonaConfigSchema,
   ReflexRuleSchema,
   StardewMcpActionReceiptSchema,
+  GameBridgeActionAcceptedSchema,
+  GameBridgeActionRequestSchema,
+  GameBridgeHealthSchema,
+  TerrariaActionReceiptSchema,
+  DstActionReceiptSchema,
+  WorkbenchRoleSlotSchema,
 } from './index';
 import { CONTRACT_SCHEMAS, CONTRACT_VERSION } from './registry';
 
@@ -117,6 +123,163 @@ describe('StardewMcpActionReceipt（真实执行回执）', () => {
         gameStateSnapshot: {},
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('多游戏桥接契约（M7：泰拉瑞亚 / 饥荒 DST）', () => {
+  const ACTION_ID = 'ccccccc1-2222-4333-8444-555555555555';
+
+  const TERRARIA_SNAPSHOT = {
+    schemaVersion: 1,
+    capturedAt: 1_700_000_000_000,
+    clock: { dayCount: 3, isDay: true, dayPhase: 'day', timeText: '09:20 AM', hardMode: false },
+    player: {
+      hp: 120,
+      hpMax: 140,
+      mana: 40,
+      manaMax: 60,
+      position: { x: 1042, y: 386 },
+      facing: 'right',
+      buffs: [{ name: 'Well Fed', timeSeconds: 300 }],
+      inventory: [{ slot: 0, itemName: 'Copper Pickaxe', stack: 1 }],
+      selectedSlot: 0,
+    },
+    world: { biome: 'Forest', events: [], downedBosses: ['Eye of Cthulhu'] },
+    nearby: {
+      tiles: {
+        originX: 1022,
+        originY: 366,
+        width: 41,
+        height: 41,
+        legend: { '.': 'air', '#': 'solid', '-': 'platform', '~': 'lava', T: 'tree' },
+        rows: ['.'.repeat(41), '#'.repeat(41)],
+      },
+      npcs: [{ name: 'Green Slime', hp: 14, hpMax: 14, position: { x: 1048, y: 386 }, isHostile: true }],
+      items: [],
+    },
+    danger: { lavaNearby: false, fallingDanger: false, threatLevel: 'caution' },
+    control: { authority: 'AI_AUTOPILOT', isPlayerMovingPhysically: false },
+  };
+
+  const DST_SNAPSHOT = {
+    schemaVersion: 1,
+    capturedAt: 1_700_000_000_000,
+    clock: { cycle: 5, phase: 'dusk', phaseProgress: 0.4, season: 'autumn', isRaining: false },
+    player: {
+      character: 'wilson',
+      health: { current: 120, max: 150 },
+      hunger: { current: 90, max: 150 },
+      sanity: { current: 130, max: 200 },
+      temperature: 15,
+      moisture: 0,
+      position: { x: 0, z: 0 },
+      inventory: [
+        { itemName: 'twigs', count: 6, equipped: false },
+        { itemName: 'axe', count: 1, equipped: true },
+      ],
+    },
+    nearby: {
+      entities: [
+        { prefab: 'evergreen', displayName: '树', position: { x: 4, z: -2 }, distance: 4.5, isResource: true },
+      ],
+      campfires: [{ position: { x: 0, z: 0 }, fuelPercent: 0.35 }],
+    },
+    threats: [{ kind: 'hound', count: 2, directionText: '东北' }],
+    control: { authority: 'AI_AUTOPILOT', isPlayerMovingPhysically: false },
+  };
+
+  it('Terraria UNCERTAIN 回执可携带快照，gameId 锁定 terraria', () => {
+    const receipt = TerrariaActionReceiptSchema.parse({
+      actionId: ACTION_ID,
+      tool: 'move_to',
+      status: 'UNCERTAIN',
+      reason: 'PATH_BLOCKED_PERSISTENT',
+      startedAt: 1,
+      completedAt: 2,
+      gameId: 'terraria',
+      snapshot: TERRARIA_SNAPSHOT,
+    });
+    expect(receipt.snapshot?.danger.threatLevel).toBe('caution');
+    // gameId 字面量互斥：terraria 回执不接受 dst
+    expect(
+      TerrariaActionReceiptSchema.safeParse({ ...receipt, gameId: 'dst' }).success,
+    ).toBe(false);
+  });
+
+  it('Terraria 快照缺 tiles / 非法 dayPhase 拒绝', () => {
+    const noTiles = JSON.parse(JSON.stringify(TERRARIA_SNAPSHOT)) as Record<string, unknown>;
+    delete (noTiles.nearby as Record<string, unknown>).tiles;
+    expect(
+      TerrariaActionReceiptSchema.safeParse({
+        actionId: ACTION_ID,
+        tool: 'mine',
+        status: 'FAILED',
+        startedAt: 1,
+        completedAt: 2,
+        gameId: 'terraria',
+        snapshot: noTiles,
+      }).success,
+    ).toBe(false);
+    expect(
+      TerrariaActionReceiptSchema.safeParse({
+        actionId: ACTION_ID,
+        tool: 'mine',
+        status: 'FAILED',
+        startedAt: 1,
+        completedAt: 2,
+        gameId: 'terraria',
+        snapshot: { ...TERRARIA_SNAPSHOT, clock: { ...TERRARIA_SNAPSHOT.clock, dayPhase: 'eclipse' } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('DST COMPLETED 回执默认无快照；非法 season / status 拒绝', () => {
+    const receipt = DstActionReceiptSchema.parse({
+      actionId: ACTION_ID,
+      tool: 'chop_tree',
+      status: 'COMPLETED',
+      startedAt: 1,
+      completedAt: 2,
+      gameId: 'dst',
+    });
+    expect(receipt.snapshot).toBeUndefined();
+    expect(
+      DstActionReceiptSchema.safeParse({
+        actionId: ACTION_ID,
+        tool: 'chop_tree',
+        status: 'COMPLETED',
+        startedAt: 1,
+        completedAt: 2,
+        gameId: 'dst',
+        snapshot: { ...DST_SNAPSHOT, clock: { ...DST_SNAPSHOT.clock, season: 'fall' } },
+      }).success,
+    ).toBe(false);
+    // TIMEOUT 不是回执态（超时是工作台侧分类，不是模组回执）
+    expect(
+      DstActionReceiptSchema.safeParse({
+        actionId: ACTION_ID,
+        tool: 'chop_tree',
+        status: 'TIMEOUT',
+        startedAt: 1,
+        completedAt: 2,
+        gameId: 'dst',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('GameBridgeActionRequest args 默认空对象；互斥拒绝形状过契约', () => {
+    const req = GameBridgeActionRequestSchema.parse({ actionId: ACTION_ID, tool: 'mine' });
+    expect(req.args).toEqual({});
+    expect(GameBridgeActionRequestSchema.safeParse({ tool: 'mine' }).success).toBe(false);
+    const reject = GameBridgeActionAcceptedSchema.parse({ accepted: false, reason: 'ACTION_IN_FLIGHT' });
+    expect(reject.accepted).toBe(false);
+  });
+
+  it('GameBridgeHealth 携带控制权状态；角色槽位新增两个游戏规划器', () => {
+    const health = GameBridgeHealthSchema.parse({ ok: true, gameId: 'terraria', control: 'AI_AUTOPILOT' });
+    expect(health.bridgeVersion).toBe('');
+    expect(WorkbenchRoleSlotSchema.options).toContain('TERRARIA_GAME_PLANNER');
+    expect(WorkbenchRoleSlotSchema.options).toContain('DST_GAME_PLANNER');
   });
 });
 
