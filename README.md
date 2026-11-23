@@ -2,7 +2,7 @@
 
 > 一座住在桌面上的鲸屿。以傲娇蓝鲸女仆「**小鲸（大肥鱼）**」为起点（支持多角色切换与多桌宠联机）：桌面透明桌宠 × 多游戏自主共玩（《星露谷物语》/《泰拉瑞亚》/《饥荒：联机版》）× 声音工坊 × 记忆图谱 × ACP Coding Agents × 直播中控，**本地数据优先、密钥不出本机**。
 > 支持 macOS（Apple Silicon / `mps`）与 Windows（x64 / `cuda`）。
-> 仓库代号：`ai-vtuber-workbench`。
+> GitHub 仓库：`whale-isle`（https://github.com/jiaiqi/whale-isle）。
 
 ## 当前能力边界（2026-11-23 审计后如实口径）
 

@@ -12,7 +12,7 @@ description = [[
 仅用于本地工作台 AI 共玩；需要人类在 Klei 官方页面配置 cluster_token.txt。
 ]]
 
-author = "ai-vtuber-workbench"
+author = "Whale Isle"
 
 api_version = 10
 

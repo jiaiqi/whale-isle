@@ -6,7 +6,7 @@
 export const APP_NAME = '鲸屿';
 export const APP_NAME_EN = 'Whale Isle';
 export const APP_TAGLINE = '一座住在桌面上的鲸屿';
-export const APP_ID = 'com.whaleisle.workbench';
+export const APP_ID = 'com.whaleisle.desktop';
 
 /** userData 目录名：新增英文名避免中文路径工具兼容问题；旧 Electron 数据首次启动自动合并迁移 */
 export const APP_DATA_DIR = 'Whale Isle';

@@ -1,5 +1,5 @@
 displayName = Terraria Bridge (M7 AI Autodrive)
-author = ai-vtuber-workbench
+author = Whale Isle
 version = 0.1.0
 side = Both
 homepage = https://github.com/Reisenbug/TerraBlind

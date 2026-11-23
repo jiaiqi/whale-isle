@@ -22,7 +22,11 @@ export class DirectorDexie extends Dexie {
   directorConfigs!: Table<DirectorConfigRow, string>;
   uiStates!: Table<UiStateRow, string>;
 
-  constructor(databaseName = 'ai-vtuber-director') {
+  constructor(
+    // 历史 IndexedDB 库名（含旧英文代号）：改名为 whale-isle-director 会让既有用户配置失联，
+    // 故作为冻结存储键保留；展示层产品名统一为 Whale Isle。
+    databaseName = 'ai-vtuber-director',
+  ) {
     super(databaseName);
     this.version(1).stores({
       directorConfigs: 'key',

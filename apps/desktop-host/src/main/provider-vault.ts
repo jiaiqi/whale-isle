@@ -213,7 +213,7 @@ function extraHeaders(providerId: string, baseUrl: string, apiKey: string): Reco
   return {
     Authorization: `Bearer ${apiKey}`,
     'x-opencode-session': `ses_${randomUUID().replace(/-/g, '')}`,
-    'User-Agent': 'xiaojing-workbench/1.0',
+    'User-Agent': 'Whale-Isle/1.0',
   };
 }
 

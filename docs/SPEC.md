@@ -1,4 +1,4 @@
-# SPEC — 《AI 桌宠与虚拟主播工作台（AI VTuber Workbench）产品需求与技术架构总纲》
+# SPEC — 《鲸屿 Whale Isle 产品需求与技术架构总纲》
 
 > 状态：**核心产品定位、人设机制、技术选型与开源复评原则已完全闭环冻结。**
 > 分工：本文件管「做什么 / 为什么」；[AGENTS.md](../AGENTS.md)（AI 自治开发最高宪章）管「AI 怎么改代码」；[ROADMAP.md](./ROADMAP.md) 是冻结的工单清单。
@@ -19,7 +19,7 @@
 AI 自动开发最容易出现「跨模块乱引代码、把逻辑写进 UI 组件」的腐化问题，必须通过物理目录强制隔离职责：
 
 ```text
-ai-vtuber-workbench/
+whale-isle/
 ├── AGENTS.md                        # AI 自治开发最高宪章（质量门禁、复评纪律、禁止事项）
 ├── docs/
 │   ├── SPEC.md                      # 产品需求与架构规范（本文档）

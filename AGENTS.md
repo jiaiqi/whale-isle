@@ -1,6 +1,6 @@
 # AGENTS.md — AI 自治开发最高宪章与质量门禁规范
 
-> 本文件是驱动 AI 编程代理（Claude Code / Cursor / Codex / 自定义 Agent）开发 `ai-vtuber-workbench` 的最高工程准则。
+> 本文件是驱动 AI 编程代理（Claude Code / Cursor / Codex / 自定义 Agent）开发 Whale Isle（仓库 `whale-isle`）的最高工程准则。
 > 任何自动化会话在开始修改代码前，必须完整读取并严格遵守本规范。
 
 ---
