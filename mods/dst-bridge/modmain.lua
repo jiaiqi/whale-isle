@@ -10,6 +10,10 @@ local endpoint = GetModConfigData("bridge_endpoint") or "http://127.0.0.1:18100"
 local token = GetModConfigData("pair_token") or ""
 local tickInterval = tonumber(GetModConfigData("tick_interval")) or 2
 local aiUserid = GetModConfigData("ai_player_userid") or ""
+local aiUserids = {}
+for id in string.gmatch(aiUserid, "[^,%s]+") do
+    aiUserids[id] = true
+end
 if tickInterval < 1 then tickInterval = 2 end
 
 Ipc.Init({ endpoint = endpoint, token = token })
@@ -18,9 +22,9 @@ local claimed = false
 
 AddPlayerPostInit(function(inst)
     if inst == nil or not inst:HasTag("player") then return end
-    -- 多玩家服必须显式配置受控 UserID；留空时只接管第一个上线的玩家（专用服典型形态）。
+    -- 多玩家服可配置逗号分隔的多个受控 UserID；留空时只接管第一个上线的玩家（专用服典型形态）。
     if aiUserid ~= "" then
-        if inst.userid ~= aiUserid then return end
+        if inst.userid == nil or aiUserids[inst.userid] ~= true then return end
     else
         if claimed then return end
         claimed = true
@@ -33,7 +37,7 @@ AddPlayerPostInit(function(inst)
         if inst.components ~= nil and inst.components.health ~= nil and inst.components.health:IsDead() then
             return -- 死亡期间不做动作（回执铁律：不能以台词替代真实状态）
         end
-        Ipc.Tick(inst)
+        Ipc.Tick(inst, inst.userid or "default")
     end)
     inst._wb_bridge_task = task
     inst:ListenForEvent("onremove", function()

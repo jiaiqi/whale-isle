@@ -170,6 +170,53 @@ describe('DstBridgeTransport（统一桥接协议映射）', () => {
     } finally { stuck.close(); }
   });
 
+  it('T-M6-40 agentId：/state?agentId、/act body、/cancel?agentId 都带逻辑玩家路由', async () => {
+    const seen: Array<{ path: string; agentId: string | null }> = [];
+    const server: Server = createServer((req, res) => {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        let bodyAgent: string | null = null;
+        if (chunks.length > 0) {
+          try { bodyAgent = String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { agentId?: unknown }).agentId ?? '') || null; } catch { bodyAgent = null; }
+        }
+        seen.push({ path: url.pathname, agentId: url.searchParams.get('agentId') ?? bodyAgent });
+        const reply = (status: number, body: unknown): void => {
+          res.writeHead(status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(body));
+        };
+        if (url.pathname === '/state') return reply(200, snapshot());
+        if (url.pathname === '/act') return reply(200, { accepted: true, actionId: '66666666-6666-4666-8666-666666666666' });
+        if (url.pathname === '/action_status') {
+          return reply(200, {
+            running: false,
+            receipt: { actionId: url.searchParams.get('id'), tool: 'gather', gameId: 'dst', status: 'COMPLETED', reason: 'OK', startedAt: 1, completedAt: 2 },
+          });
+        }
+        if (url.pathname === '/cancel') return reply(200, { cancelled: true });
+        return reply(404, {});
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const addr = server.address();
+    if (addr === null || typeof addr !== 'object') throw new Error('no address');
+    try {
+      const transport = new DstBridgeTransport(`http://127.0.0.1:${addr.port}`, fetch, 5, 'alice');
+      await transport.callTool('get_state');
+      await transport.callTool('gather', {}, { timeoutMs: 200 });
+      await transport.callTool('cancel_action');
+      expect(seen).toEqual([
+        { path: '/state', agentId: 'alice' },
+        { path: '/act', agentId: 'alice' },
+        { path: '/action_status', agentId: null },
+        { path: '/cancel', agentId: 'alice' },
+      ]);
+    } finally {
+      server.close();
+    }
+  });
+
   it('ping 只接受 ok=true 且 gameId=dst 的健康响应', async () => {
     const fake = await startFake({ health: { ok: false } as never });
     try {

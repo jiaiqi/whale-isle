@@ -19,7 +19,7 @@ local MAX_FAILURES_BEFORE_FALLBACK = 3
 local endpoint = "http://127.0.0.1:18100"
 local token = ""
 local mode = "none" -- "http" | "file" | "none"
-local tickBusy = false
+local tickBusy = {}
 local failures = 0
 local lastPlanId = nil
 
@@ -158,27 +158,29 @@ function Ipc.SetTakeover(active)
 end
 
 --- 一个上报周期：读控制台接管哨兵 → 导出快照 → 按能力发送并应用计划。
-function Ipc.Tick(inst)
-    if tickBusy or mode == "none" then return end
-    tickBusy = true
+function Ipc.Tick(inst, agentId)
+    agentId = agentId or "default"
+    if tickBusy[agentId] or mode == "none" then return end
+    tickBusy[agentId] = true
     readControl()
     local ok, snapshot = pcall(StateExport.Build, inst)
     if not ok or type(snapshot) ~= "table" then
-        tickBusy = false
+        tickBusy[agentId] = nil
         onFailure("SNAPSHOT_BUILD_FAILED")
         return
     end
 
     if mode == "file" then
         local okTick, err = pcall(fileTick, inst, snapshot)
-        tickBusy = false
+        tickBusy[agentId] = nil
         if not okTick then onFailure("FILE_TICK_ERROR: " .. tostring(err)) end
         return
     end
 
-    local body = json.encode({ token = token, snapshot = snapshot })
+    -- agentId 让同一 sidecar / 专用服能区分多个逻辑玩家；单玩家时向后兼容 default。
+    local body = json.encode({ token = token, agentId = agentId, snapshot = snapshot })
     local okQuery, err = pcall(TheSim.QueryServer, TheSim, endpoint .. "/v1/tick", function(result, isok)
-        tickBusy = false
+        tickBusy[agentId] = nil
         if not isok or type(result) ~= "string" then
             onFailure("QUERYSERVER_ERROR")
             return
@@ -191,7 +193,7 @@ function Ipc.Tick(inst)
         if applyPlan(inst, plan) then onSuccess() else onFailure("PLAN_REJECTED") end
     end, "POST", body)
     if not okQuery then
-        tickBusy = false
+        tickBusy[agentId] = nil
         onFailure("QUERYSERVER_EXCEPTION: " .. tostring(err))
     end
 end

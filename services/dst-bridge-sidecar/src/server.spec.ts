@@ -120,6 +120,38 @@ describe('/v1/tick 游戏面', () => {
     expect(status).toMatchObject({ running: true });
     expect(status.receipt).toBeUndefined();
   });
+
+  it('T-M6-40 多 Agent：同 sidecar 快照/动作/cancel 按 agentId 隔离', async () => {
+    const { sidecar, base } = await start();
+    const snapA = snapshot({ clock: { ...snapshot().clock, cycle: 7 } });
+    const snapB = snapshot({ clock: { ...snapshot().clock, cycle: 9 }, player: { ...snapshot().player, character: 'wendy' } });
+    expect(sidecar.applyTick({ token: TOKEN, agentId: 'alice', snapshot: snapA }).ok).toBe(true);
+    expect(sidecar.applyTick({ token: TOKEN, agentId: 'bob', snapshot: snapB }).ok).toBe(true);
+    expect((await fetch(`${base}/state`)).status).toBe(400);
+    expect((await (await fetch(`${base}/state?agentId=alice`)).json() as { clock: { cycle: number } }).clock.cycle).toBe(7);
+    expect((await (await fetch(`${base}/state?agentId=bob`)).json() as { clock: { cycle: number } }).clock.cycle).toBe(9);
+
+    const actionA = '44444444-4444-4444-8444-444444444444';
+    const actionB = '55555555-5555-4555-8555-555555555555';
+    await fetch(`${base}/act`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actionId: actionA, agentId: 'alice', tool: 'gather', args: {} }),
+    });
+    const acceptedB = await (await fetch(`${base}/act`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actionId: actionB, agentId: 'bob', tool: 'eat', args: {} }),
+    })).json() as { accepted: boolean };
+    expect(acceptedB.accepted).toBe(true);
+
+    const tickA = sidecar.applyTick({ token: TOKEN, agentId: 'alice', snapshot: snapA });
+    const tickB = sidecar.applyTick({ token: TOKEN, agentId: 'bob', snapshot: snapB });
+    expect(tickA.plan?.actions.map((action) => action.actionId)).toEqual([actionA]);
+    expect(tickB.plan?.actions.map((action) => action.actionId)).toEqual([actionB]);
+    await fetch(`${base}/cancel?agentId=alice`, { method: 'POST' });
+    expect(sidecar.applyTick({ token: TOKEN, agentId: 'bob', snapshot: snapB }).plan?.actions[0]?.actionId).toBe(actionB);
+    expect(sidecar.applyTick({ token: TOKEN, agentId: 'alice', snapshot: snapA }).plan?.actions[0]?.tool).toBe('cancel_action');
+    expect(sidecar.applyTick({ token: TOKEN, agentId: '../escape', snapshot: snapA })).toMatchObject({ status: 400, error: 'INVALID_AGENT_ID' });
+  });
 });
 
 describe('unsafedata/*.json 文件降级', () => {

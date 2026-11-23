@@ -50,7 +50,7 @@ configuration_options = {
     },
     {
         name = "ai_player_userid",
-        label = "受控角色 Klei UserID（多玩家服必填；留空=首个上线的玩家）",
+        label = "受控角色 Klei UserID（多个用逗号分隔；留空=首个上线的玩家）",
         options = {
             { description = "留空", data = "" },
         },

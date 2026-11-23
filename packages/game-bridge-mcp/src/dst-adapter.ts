@@ -45,7 +45,14 @@ export class DstBridgeTransport implements GameBridgeTransport {
     private readonly endpoint: string = DEFAULT_DST_ENDPOINT,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly pollIntervalMs = 100,
+    private readonly agentId?: string,
   ) {}
+
+  private withAgent(path: string): string {
+    if (this.agentId === undefined || this.agentId === '') return `${this.endpoint}${path}`;
+    const separator = path.includes('?') ? '&' : '?';
+    return `${this.endpoint}${path}${separator}agentId=${encodeURIComponent(this.agentId)}`;
+  }
 
   async callTool(tool: string, args: Record<string, unknown> = {}, opts: McpCallOptions = {}): Promise<McpCallResult> {
     const timeoutMs = opts.timeoutMs ?? 30_000;
@@ -54,7 +61,7 @@ export class DstBridgeTransport implements GameBridgeTransport {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       if (tool === 'get_state') {
-        const res = await this.fetchImpl(`${this.endpoint}/state`, { signal: controller.signal });
+        const res = await this.fetchImpl(this.withAgent('/state'), { signal: controller.signal });
         if (!res.ok) return { kind: 'error', message: `GET /state HTTP ${res.status}` };
         const raw = await res.text();
         let parsed: unknown;
@@ -65,7 +72,7 @@ export class DstBridgeTransport implements GameBridgeTransport {
       }
 
       if (tool === 'cancel_action') {
-        const res = await this.fetchImpl(`${this.endpoint}/cancel`, { method: 'POST', signal: controller.signal });
+        const res = await this.fetchImpl(this.withAgent('/cancel'), { method: 'POST', signal: controller.signal });
         if (!res.ok) return { kind: 'error', message: `POST /cancel HTTP ${res.status}` };
         const body = await res.json() as { cancelled?: boolean };
         return { kind: 'ok', text: JSON.stringify(body), isError: false };
@@ -75,7 +82,7 @@ export class DstBridgeTransport implements GameBridgeTransport {
       const res = await this.fetchImpl(`${this.endpoint}/act`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actionId, tool, args }),
+        body: JSON.stringify({ actionId, tool, args, ...(this.agentId === undefined || this.agentId === '' ? {} : { agentId: this.agentId }) }),
         signal: controller.signal,
       });
       if (!res.ok) return { kind: 'error', message: `POST /act HTTP ${res.status}` };
@@ -292,13 +299,16 @@ export class DstAdapter implements GameAdapter {
   readonly rulePlanner = new DstRulePlanner();
   readonly toolWhitelist: readonly string[] = DST_TOOL_WHITELIST;
   readonly guideTopics: readonly string[] = [];
+  readonly keepaliveAction = { tool: 'wait', args: { seconds: 10 } };
+  readonly staleRecoveryAction = { tool: 'wait', args: { seconds: 6 } };
 
   constructor(
     private readonly endpoint: string = DEFAULT_DST_ENDPOINT,
     fetchImpl: typeof fetch = fetch,
     pollIntervalMs = 100,
+    agentId?: string,
   ) {
-    this.transport = new DstBridgeTransport(endpoint, fetchImpl, pollIntervalMs);
+    this.transport = new DstBridgeTransport(endpoint, fetchImpl, pollIntervalMs, agentId);
   }
 
   get unreachableMessage(): string {
@@ -333,4 +343,4 @@ export class DstAdapter implements GameAdapter {
 }
 
 /** 模块加载即注册（同 terraria 泳道约定）；AutodriveRunner 通过 gameAdapters.create('dst') 取用。 */
-gameAdapters.register('dst', ({ endpoint, fetchImpl }) => new DstAdapter(endpoint, fetchImpl));
+gameAdapters.register('dst', ({ endpoint, fetchImpl, agentId }) => new DstAdapter(endpoint, fetchImpl, 100, agentId));

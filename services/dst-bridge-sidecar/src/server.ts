@@ -109,10 +109,11 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
   const controlFile = options.controlFile ?? 'unsafedata/dst_bridge_control.json';
 
   let server: Server | null = null;
-  let lastSnapshot: DstStateSnapshot | null = null;
+  /** T-M6-40：同一 sidecar / 专用服下按 agentId 保存每个逻辑玩家的快照与动作槽。 */
+  const snapshots = new Map<string, DstStateSnapshot>();
+  const pendingByAgent = new Map<string, PendingAction>();
+  const cancelRequested = new Set<string>();
   let lastTickAt: number | null = null;
-  let pending: PendingAction | null = null;
-  let cancelRequested = false;
   let fileTimer: ReturnType<typeof setInterval> | null = null;
   let fallback: Required<FileFallbackOptions> | null = null;
   let lastFrame = '';
@@ -122,11 +123,33 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
     lastTickAt: null, hasSnapshot: false, mode: 'http',
   };
 
+  function normalizeAgent(value: unknown): string | null {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (raw === '') return 'default';
+    return /^[A-Za-z0-9._-]{1,64}$/.test(raw) ? raw : null;
+  }
+
+  function latestSnapshot(): DstStateSnapshot | null {
+    let latest: DstStateSnapshot | null = null;
+    for (const snapshot of snapshots.values()) {
+      if (latest === null || snapshot.capturedAt > latest.capturedAt) latest = snapshot;
+    }
+    return latest;
+  }
+
+  function snapshotFor(agentId: string | null): DstStateSnapshot | null {
+    if (agentId !== null) return snapshots.get(agentId) ?? null;
+    if (snapshots.size === 1) return [...snapshots.values()][0] ?? null;
+    return latestSnapshot();
+  }
+
   function applyTick(body: unknown): TickResult {
     if (!isRecord(body)) return { ok: false, status: 400, error: 'INVALID_BODY' };
     if (!safeTokenEqual(String(body.token ?? ''), options.pairToken)) {
       return { ok: false, status: 401, error: 'INVALID_PAIR_TOKEN' };
     }
+    const agentId = normalizeAgent(body.agentId);
+    if (agentId === null) return { ok: false, status: 400, error: 'INVALID_AGENT_ID' };
     const rawSnapshot = body.snapshot;
     if (!isRecord(rawSnapshot)) return { ok: false, status: 400, error: 'MISSING_SNAPSHOT' };
 
@@ -136,7 +159,7 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
     if (!parsedSnapshot.success) {
       return { ok: false, status: 400, error: `SNAPSHOT_CONTRACT_VIOLATION: ${parsedSnapshot.error.message.slice(0, 200)}` };
     }
-    lastSnapshot = parsedSnapshot.data;
+    snapshots.set(agentId, parsedSnapshot.data);
     lastTickAt = Date.now();
     statsInternal.lastTickAt = lastTickAt;
     statsInternal.hasSnapshot = true;
@@ -147,9 +170,12 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
       if (parsedReceipt.success) {
         receipts.set(parsedReceipt.data.actionId, parsedReceipt.data);
         statsInternal.receipts++;
-        if (pending?.actionId === parsedReceipt.data.actionId) {
-          pending = null;
-          cancelRequested = false;
+        for (const [owner, action] of pendingByAgent) {
+          if (action.actionId === parsedReceipt.data.actionId) {
+            pendingByAgent.delete(owner);
+            cancelRequested.delete(owner);
+            break;
+          }
         }
       } else {
         log(`回执契约违规：${parsedReceipt.error.message.slice(0, 200)}`);
@@ -157,12 +183,13 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
     }
 
     const actions: PlanAction[] = [];
-    if (pending) {
-      actions.push(cancelRequested
+    const pending = pendingByAgent.get(agentId);
+    if (pending !== undefined) {
+      actions.push(cancelRequested.has(agentId)
         ? { actionId: randomUUID(), tool: 'cancel_action', args: {} }
         : { actionId: pending.actionId, tool: pending.tool, args: pending.args });
     }
-    cancelRequested = false;
+    cancelRequested.delete(agentId);
     const plan: TickPlan = { planId: randomUUID(), expiresAt: Date.now() + PLAN_TTL_MS, actions };
     statsInternal.plans++;
     return { ok: true, status: 200, plan };
@@ -209,20 +236,32 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
       }
       // ── 宿主面 ──
       if (req.method === 'GET' && url.pathname === '/state') {
-        if (lastSnapshot === null) {
+        const requested = url.searchParams.get('agentId');
+        const agentId = requested === null ? null : normalizeAgent(requested);
+        if (requested !== null && agentId === null) {
+          sendJson(res, 400, { error: 'INVALID_AGENT_ID' });
+          return;
+        }
+        if (requested === null && snapshots.size > 1) {
+          sendJson(res, 400, { error: 'AGENT_ID_REQUIRED', agents: [...snapshots.keys()] });
+          return;
+        }
+        const snapshot = snapshotFor(agentId);
+        if (snapshot === null) {
           sendJson(res, 503, { error: 'NO_SNAPSHOT_YET', hint: '等待 mod 首次 /v1/tick 上报快照' });
           return;
         }
-        sendJson(res, 200, DstStateSnapshotSchema.parse(lastSnapshot));
+        sendJson(res, 200, DstStateSnapshotSchema.parse(snapshot));
         return;
       }
       if (req.method === 'GET' && url.pathname === '/health') {
+        const snapshot = latestSnapshot();
         sendJson(res, 200, GameBridgeHealthSchema.parse({
           ok: true,
           gameId: 'dst',
           bridgeVersion: options.bridgeVersion ?? 'dst-sidecar-1.0',
-          gameVersion: lastSnapshot === null ? 'UNKNOWN' : 'DST',
-          control: lastSnapshot?.control.authority ?? 'AI_AUTOPILOT',
+          gameVersion: snapshot === null ? 'UNKNOWN' : 'DST',
+          control: snapshot?.control.authority ?? 'AI_AUTOPILOT',
         }));
         return;
       }
@@ -233,12 +272,17 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
           return;
         }
         const { actionId, tool, args } = parsed.data;
-        if (pending) {
+        const agentId = normalizeAgent(parsed.data.agentId);
+        if (agentId === null) {
+          sendJson(res, 400, { error: 'INVALID_AGENT_ID' });
+          return;
+        }
+        if (pendingByAgent.has(agentId)) {
           sendJson(res, 200, GameBridgeActionAcceptedSchema.parse({ accepted: false, actionId, reason: 'ACTION_IN_FLIGHT' }));
           return;
         }
-        pending = { actionId, tool, args, startedAt: Date.now() };
-        cancelRequested = false;
+        pendingByAgent.set(agentId, { actionId, tool, args, startedAt: Date.now() });
+        cancelRequested.delete(agentId);
         statsInternal.actionsAccepted++;
         sendJson(res, 200, GameBridgeActionAcceptedSchema.parse({ accepted: true, actionId }));
         return;
@@ -246,7 +290,7 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
       if (req.method === 'GET' && url.pathname === '/action_status') {
         const actionId = url.searchParams.get('id') ?? '';
         const receipt = receipts.get(actionId);
-        const running = pending?.actionId === actionId;
+        const running = [...pendingByAgent.values()].some((action) => action.actionId === actionId);
         sendJson(res, 200, {
           actionId,
           running,
@@ -255,8 +299,13 @@ export function createDstSidecar(options: SidecarOptions): DstSidecar {
         return;
       }
       if (req.method === 'POST' && url.pathname === '/cancel') {
-        const wasActive = pending !== null;
-        if (wasActive) cancelRequested = true; // 下一次 tick 下发 cancel_action mod 原生中止，不伪造接管
+        const agentId = normalizeAgent(url.searchParams.get('agentId'));
+        if (agentId === null) {
+          sendJson(res, 400, { error: 'INVALID_AGENT_ID' });
+          return;
+        }
+        const wasActive = pendingByAgent.has(agentId);
+        if (wasActive) cancelRequested.add(agentId); // 下一次 tick 下发 cancel_action mod 原生中止，不伪造接管
         sendJson(res, 200, { cancelled: wasActive });
         return;
       }
