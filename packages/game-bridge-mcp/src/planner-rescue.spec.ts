@@ -4,7 +4,7 @@
  * 旧逻辑反复 tidy_backpack FAILED（时间冻结、动作空转）。
  */
 import { describe, expect, it } from 'vitest';
-import { parseGameState, RulePlanner } from './planner';
+import { findNearestTree, hasChestItem, parseGameState, RulePlanner } from './planner';
 
 const FULL_RESERVED = `## 基本状态
 时间：第1年春21日 08:30（Sun），天气：晴，明天天气：晴
@@ -34,6 +34,43 @@ const FULL_UPGRADE = FULL_RESERVED.replace('## 附近物体', `${UPGRADE_LINE}\n
 const FULL_UPGRADE_SHOP = FULL_UPGRADE
   .replace('地点：Farm（泡泡湾农场），室外', '地点：SeedShop（皮埃尔的杂货店），室内')
   .replace('- 出货箱：(3,4)', '- 可交互地图格[BuyBackpack] [interact]：(7,18)');
+
+describe('findNearestTree（文字地图定向砍树）', () => {
+  it('按左上角坐标换算并返回最近的树', () => {
+    const raw = `## 文字地图（以你为中心，左上角坐标=(-2,0)，每个字符一格）
+   0  ##T##
+   1  #.@.T
+`;
+    expect(findNearestTree(raw, 0, 1)).toEqual({ x: 0, y: 0 });
+  });
+
+  it('没有地图/没有树返回 null', () => {
+    expect(findNearestTree('## 位置\n地点：Farm', 0, 0)).toBeNull();
+    expect(findNearestTree('## 文字地图\n左上角坐标=(0,0)\n0  ....', 0, 0)).toBeNull();
+    // 地图段存在但缺左上角坐标 / 行内容不是地图字符 → 不猜
+    expect(findNearestTree('## 文字地图\n0  T', 0, 0)).toBeNull();
+    expect(findNearestTree('## 文字地图\n左上角坐标=(0,0)\n附近没有树', 0, 0)).toBeNull();
+  });
+
+  it('多棵树按玩家坐标取最近（负坐标也正确换算）', () => {
+    const raw = `## 文字地图（以你为中心，左上角坐标=(-3,-2)，每个字符一格）
+  -2  T....T
+  -1  ..@...
+   0  ...t..`;
+    // 世界坐标：树 (-3,-2) 与 (2,-2)；玩家 (-2,-1)
+    expect(findNearestTree(raw, -2, -1)).toEqual({ x: -3, y: -2 });
+    const nearRight = `## 文字地图（以你为中心，左上角坐标=(10,5)，每个字符一格）
+   5  T....T
+   6  ..@...`;
+    expect(findNearestTree(nearRight, 12, 6)).toEqual({ x: 10, y: 5 });
+  });
+
+  it('hasChestItem 识别中文「宝箱」（真机背包名，非「箱子」）', () => {
+    expect(hasChestItem('18: 宝箱')).toBe(true);
+    expect(hasChestItem('18: 宝箱【留着】')).toBe(false);
+    expect(hasChestItem('18: 普通箱子')).toBe(false);
+  });
+});
 
 describe('RulePlanner 满包救援阶梯（真机回归 T-M6-10）', () => {
   it('满包全是【留着】：先 donate_bundles，不再直接 tidy', async () => {

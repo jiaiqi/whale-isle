@@ -17,6 +17,7 @@ import {
   RulePlanner,
   cleanItemName,
   countWood,
+  findNearestTree,
   findFreeTile,
   hasChestItem,
   inventoryTexts,
@@ -115,6 +116,39 @@ const RESCUE_SYSTEM = `你是「小鲸」，正在替主人自动游玩《星露
 只输出一行 JSON：{"tool":"...","args":{...},"intent":"一句话（小鲸口吻）"}。一次只做一个动作；绝不原样重复刚失败的动作。`;
 
 /** 从 LLM 输出中宽松提取首个 JSON 对象（容忍 markdown 围栏/前后缀文本） */
+/** 把 LLM 常见的「数组/对象包一层」参数压成 BWF 期望的标量（真机 2026-11-23：item 传成 ["湿透的报纸"]） */
+export function normalizeToolArg(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const first = value.find((item) => typeof item === 'string' || typeof item === 'number') ?? value[0];
+    return normalizeToolArg(first);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    // LLM 偶尔把数组序列化成字符串：'["湿透的报纸"]'
+    if (/^\[.*\]$/.test(trimmed)) {
+      try {
+        return normalizeToolArg(JSON.parse(trimmed) as unknown);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
+    for (const key of ['name', 'itemName', 'item', 'id']) {
+      if (typeof record[key] === 'string') return record[key];
+    }
+  }
+  return value;
+}
+
+export function normalizeToolArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) out[key] = normalizeToolArg(value);
+  return out;
+}
+
 export function extractDecisionJson(content: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
   const start = content.indexOf('{');
   if (start < 0) return null;
@@ -140,7 +174,7 @@ export function extractDecisionJson(content: string): { tool: string; args: Reco
           if (typeof obj.tool !== 'string' || obj.tool.length === 0) return null;
           return {
             tool: obj.tool,
-            args: (typeof obj.args === 'object' && obj.args !== null ? obj.args : {}) as Record<string, unknown>,
+            args: normalizeToolArgs((typeof obj.args === 'object' && obj.args !== null ? obj.args : {}) as Record<string, unknown>),
             intent: typeof obj.intent === 'string' ? obj.intent : '小鲸的下一步',
           };
         } catch {
@@ -265,6 +299,10 @@ export class LlmPlanner implements Planner {
   private chestPlaced = false;
   /** 造箱攒木材中（2026-11-22 真机现场：木材 x22<50 且满包全预留——先腾格再 clear_area 砍树攒到 50） */
   private chestGathering = false;
+  /** 农场无树时是否已尝试去森林砍树（每天一次） */
+  private forestGatherTried = false;
+  /** 农场 clear_area 回执「没有可以清理」→ 农场已空，改道森林（跨日不清零，避免每天空砍） */
+  private farmClearEmpty = false;
   /** T-M6-12 单日防抖状态（跨日清零）：失败预算 / 已冷却工具 / 当天只查一次的信息工具 */
   private planDay = '';
   private readonly dayFails = new Map<string, number>();
@@ -431,7 +469,7 @@ export class LlmPlanner implements Planner {
       return menuDecision;
     }
     // 放置箱子成功 → 记住（本进程内不再重复 craft）
-    if (recent.some((r) => /^OK\s+place_item|^COMPLETED\s+place_item/i.test(r) && /箱子|Chest/i.test(r))) this.chestPlaced = true;
+    if (recent.some((r) => /^OK\s+place_item|^COMPLETED\s+place_item/i.test(r) && /宝箱|箱子|Chest/i.test(r))) this.chestPlaced = true;
     // 确定性护栏（真机 2026-11-22：小模型看得到「背包空位：0」却仍连续选 fish）：
     //   ① 背包满 → 整理；若整理本身也连续失败 → 升级为出货卖钱腾位置
     //   ② 同一工具连续两次失败 → 换规则日程，绝不死磕同一动作
@@ -491,27 +529,61 @@ export class LlmPlanner implements Planner {
       return { kind: 'act', tool: 'festival', args: { action: 'enter' }, intent: '今天有节日！按提示的窗口去凑热闹，打招呼攒好感～' };
     }
 
+    // clear_area「区域内没有可以清理的东西」仍是 COMPLETED：不能当成功继续攒木，否则会无限重试；
+    // 真机 2026-11-23 春23 现场连续 33 次空 clear_area，攒木计划永不结束。
+    if (this.chestGathering && /COMPLETED clear_area.*没有可以清理/.test(recent.slice(-2).join(' '))) {
+      // 农场清无可清不代表没树可砍：记下农场已空，改道森林再试一次；森林也空才放弃今天造箱
+      if (state.location === 'Farm') {
+        this.farmClearEmpty = true;
+      } else {
+        this.chestGathering = false;
+        this.craftTried = true;
+      }
+    }
     // 攒木造箱接管（2026-11-22 真机现场：木材 x22<50 + 满包全【留着】预留——牺牲格腾出空位后
-    // 救援阶梯归零会走正常决策，攒木意图靠这个分支接住直到凑够 50）
-    if (this.chestGathering && !this.chestPlaced && !this.craftTried) {
+    // 救援阶梯归零会走正常决策，攒木意图靠这个分支接住直到凑够 50）。
+    // 背包里已经有箱子时不再攒木：直接交给下方摆箱分支（2026-11-23 真机春23 现场：包里有宝箱还去砍树）
+    if (this.chestGathering && !this.chestPlaced && !this.craftTried && !hasChestItem(state.raw)) {
       const woodNow = countWood(state.raw);
       if (woodNow >= 50) {
         this.chestGathering = false;
         return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材攒够了，造箱子长期解决背包满' };
       }
-      // clear_area 单日失败预算耗尽（农场没树/周围清无可清）→ 放弃今天造箱，回落常规救援
-      if (this.cooledTools.has('clear_area')) {
-        this.chestGathering = false;
-        this.craftTried = true;
-      } else if (effectiveSlots > 0) {
-        if (state.location !== 'Farm') {
+      // clear_area 单日失败预算耗尽（农场/森林都没树）→ 放弃今天造箱，回落常规救援
+      if (effectiveSlots > 0) {
+        // 优先按文字地图找最近的树定向砍（clear_area 默认不砍大树，真机 2026-11-23 空砍 33 次）
+        const tree = findNearestTree(state.raw, state.posX, state.posY);
+        if (tree !== null) {
+          return {
+            kind: 'act',
+            tool: 'use_tool',
+            args: { tool: 'axe', x: tree.x, y: tree.y, times: 10 },
+            intent: `砍最近的树 (${tree.x},${tree.y}) 攒木材，凑够 50 造箱子`,
+          };
+        }
+        // 农场有地可清就先清农场（含树）；清无可清的回执会把农场记为已空并改道森林
+        if (state.location === 'Farm' && !this.farmClearEmpty) {
+          return { kind: 'act', tool: 'clear_area', args: { include_trees: true }, intent: '清场砍树攒木材——凑够 50 就造箱子，长期解决背包满' };
+        }
+        if (state.location === 'Forest' && !this.forestGatherTried) {
+          this.forestGatherTried = true;
+          return { kind: 'act', tool: 'clear_area', args: { include_trees: true }, intent: '在森林清场砍树攒木材——凑够 50 就造箱子' };
+        }
+        if (state.location !== 'Farm' && state.location !== 'Forest' && !this.farmClearEmpty) {
           return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场砍树攒木材（凑 50 造箱子）' };
         }
-        return { kind: 'act', tool: 'clear_area', args: { include_trees: true }, intent: '清场砍树攒木材——凑够 50 就造箱子，长期解决背包满' };
+        if (state.location !== 'Forest' && !this.forestGatherTried) {
+          this.forestGatherTried = true;
+          return { kind: 'act', tool: 'travel_to', args: { location: 'Forest' }, intent: '农场没有树了，去森林砍树攒木材造箱子' };
+        }
+        // 地图无树、农场/森林都清无可清：别空转，回落常规决策
+        this.chestGathering = false;
+        this.craftTried = true;
       }
     }
-    // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）
-    if (!this.chestPlaced && effectiveSlots > 0) {
+    // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）。
+    // 包里有箱子时允许 0 空位也摆：摆下去本身就能腾出一格（2026-11-23 真机 tidy 验证）
+    if (!this.chestPlaced && (effectiveSlots > 0 || hasChestItem(state.raw))) {
       if (hasChestItem(state.raw)) {
         if (!this.cooledTools.has('place_item') && state.location === 'Farm' && state.posX >= 0) {
           const free = findFreeTile(state.raw, state.posX, state.posY);
@@ -523,15 +595,28 @@ export class LlmPlanner implements Planner {
             intent: '把箱子摆到农场，之后背包满就有地方存了',
           };
         }
+        // 箱在包里但不在农场：先回家摆箱，别揣着箱子去砍树
+        if (!this.cooledTools.has('place_item') && state.location !== 'Farm') {
+          return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把包里的箱子摆下，之后 tidy 才有地方存' };
+        }
       } else if (!this.craftTried && countWood(state.raw) >= 50) {
         // BWF craft 无地点要求（GameActions.cs）：满包救援牺牲格腾出空位后，无论在哪都立刻造箱，
         // 链条不因玩家位置断掉；摆箱才需要回农场（case 8 / 上方 place 分支会 travel_to）
         return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，先造一个箱子备用' };
       }
     }
-    const inventoryFull =
-      effectiveSlots <= 0 ||
-      /背包满|背包.{0,6}满|空位：?0|空位 0|装不下/.test(recent.slice(-2).join(' '));
+    // 满包判定：状态优先，但 BWF 会省略未变化的背包段、且动作回执可能先于下一次 get_state 暴露满包；
+    // 因此回执里的「背包满了 / 拿不下 / 没有箱子先 craft Chest」同样视为满包（真机 2026-11-23 钓鱼收尾现场）。
+    // 状态里明确报了空位时以状态为准；只有 BWF 省略背包段（rawHasSlots=false）才用回执兜底，
+    // 否则旧的满包回执会在腾出空位后继续误判（真机 2026-11-23）。
+    const receiptFull = /背包满|背包.{0,8}满|背包塞得满满|空位[：:]?\s*0|装不下|拿不下|没有箱子。先 craft Chest|农场上没有箱子/.test(recent.slice(-3).join(' '));
+    const inventoryFull = effectiveSlots <= 0 || (!rawHasSlots && receiptFull);
+    // 用户明确要求（2026-11-23 真机）：「背包满了就去整理，没有箱子就造」。
+    // 满包且无箱子时提前激活攒木计划：救援腾出一格后，上方 chestGathering 分支会去农场 clear_area
+    // 砍树凑 50 木材 → craft Chest → place，长期解决背包满；不再只靠反复 ship 续命。
+    if (inventoryFull && !this.chestPlaced && !this.craftTried && !hasChestItem(state.raw) && countWood(state.raw) < 50) {
+      this.chestGathering = true;
+    }
     // 腾出空位 = 本次背包危机结束，救援阶段归零
     if (effectiveSlots > 0) {
       this.rescueStage = 0;
@@ -567,7 +652,18 @@ export class LlmPlanner implements Planner {
           // BWF 会拒绝扔贵重物（「普通窗户一个能卖 300g，没有扔」）→ 记住换下一个
           this.rejectedTrash.add(failedItem);
         } else if (lastFail === 'craft') {
-          this.craftTried = true;
+          // 真机 2026-11-23：craft 失败分两类——「背包满放不下」腾一格就能重试，
+          // 「材料不够」则转砍树攒木；只有未知失败才当天放弃，避免造箱链被一次失败掐死。
+          const craftReceipt = recent.at(-1) ?? '';
+          if (/背包满|放不下|空出一格/.test(craftReceipt)) {
+            this.craftTried = false;
+            this.chestGathering = true;
+          } else if (/材料不够|材料不足/.test(craftReceipt)) {
+            this.craftTried = false;
+            this.chestGathering = true;
+          } else {
+            this.craftTried = true;
+          }
         } else if (RESCUE_TOOLS.has(lastFail)) {
           // 策略级失败：跃迁到「该工具之后」的阶梯（ship 失败 → eat；eat 失败 → trash…）
           this.rescueStage = Math.min(
@@ -624,6 +720,20 @@ export class LlmPlanner implements Planner {
               content: `${decision.tool} 今天已经失败到冷却了，别再试它。换一个不同的做法，只输出一行 JSON。`,
             });
             continue;
+          }
+          // 只剩 1 格时禁止再选「吃背包空间」的动作（BWF：再钓拿不下会掉地上）；
+          // 先走救援阶梯腾格，不打断读信/睡觉等正常动作。
+          const LOW_SPACE_BLOCKED = new Set(['fish', 'harvest_crops', 'forage']);
+          // 只有「最近回执已明确因空间不足失败/掉地上」时才拦截，避免 1 格空闲的正常日程被打断
+          if (effectiveSlots <= 1 && receiptFull && LOW_SPACE_BLOCKED.has(decision.tool)) {
+            for (let step = this.rescueStage; step <= 12; step++) {
+              const rescue = this.rescueAction(step, state);
+              if (rescue !== null) {
+                this.rescueStage = this.nextRescueStage ?? step;
+                this.nextRescueStage = null;
+                return rescue;
+              }
+            }
           }
           return { kind: 'act', tool: decision.tool, args: decision.args, intent: decision.intent };
         }

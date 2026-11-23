@@ -231,6 +231,35 @@ export function findBuyBackpackSpot(raw: string): { x: number; y: number } | nul
   return { x: Number(m[1]), y: Number(m[2]) };
 }
 
+/** 从 BWF 文字地图找最近的树/树桩/大树（T/t/R），返回世界坐标；找不到返回 null */
+export function findNearestTree(raw: string, px: number, py: number): { x: number; y: number } | null {
+  const section = /## 文字地图([\s\S]*?)(?=\n## |$)/.exec(raw)?.[1];
+  if (section === undefined) return null;
+  const origin = /左上角坐标=\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/.exec(section);
+  if (origin?.[1] === undefined || origin[2] === undefined) return null;
+  const x0 = Number(origin[1]);
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Infinity;
+  for (const line of section.split('\n')) {
+    const rowMatch = /^\s*(-?\d+)\s+(.*)$/.exec(line);
+    if (rowMatch?.[1] === undefined || rowMatch[2] === undefined) continue;
+    // 行首数字就是绝对 y（真机表头 origin=(55,6) 时首行标 6），不能再加 y0
+    const y = Number(rowMatch[1]);
+    const map = rowMatch[2];
+    for (let i = 0; i < map.length; i += 1) {
+      const ch = map[i];
+      if (ch !== 'T' && ch !== 't' && ch !== 'R') continue;
+      const x = x0 + i;
+      const distance = Math.abs(x - px) + Math.abs(y - py);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { x, y };
+      }
+    }
+  }
+  return best;
+}
+
 /** 背包里木材数量（Chest 配方需要 50） */
 export function countWood(raw: string): number {
   for (const text of inventoryTexts(raw)) {
@@ -316,7 +345,8 @@ export function findFreeTile(raw: string, posX: number, posY: number): { x: numb
 export function hasChestItem(raw: string): boolean {
   for (const text of inventoryTexts(raw)) {
     if (KEEP_TAG_RE.test(text)) continue;
-    if (/^(?:箱子|木箱|Chest)/i.test(cleanItemName(text))) return true;
+    // 中文物品名是「宝箱」不是「箱子」（真机 2026-11-23 春23：bag 里有宝箱却去砍树）
+    if (/^(?:宝箱|箱子|木箱|Chest)/i.test(cleanItemName(text))) return true;
   }
   return false;
 }

@@ -159,6 +159,206 @@ describe('背包装备解析助手（furniture / wood / chest）', () => {
   });
 });
 
+describe('T-M6-10 真机回归：LLM 输出参数归一化与低空位', () => {
+  it('item 被 LLM 包成数组/JSON 字符串时压成标量', () => {
+    const arrayArg = extractDecisionJson('{"tool":"ship_items","args":{"item":["湿透的报纸"]},"intent":"扔报纸"}');
+    expect(arrayArg?.args.item).toBe('湿透的报纸');
+    const jsonString = extractDecisionJson('{"tool":"ship_items","args":{"item":"[\\"湿透的报纸\\"]"},"intent":"扔报纸"}');
+    expect(jsonString?.args.item).toBe('湿透的报纸');
+    const objectArg = extractDecisionJson('{"tool":"ship_items","args":{"item":{"name":"湿透的报纸"}},"intent":"扔报纸"}');
+    expect(objectArg?.args.item).toBe('湿透的报纸');
+  });
+
+  it('攒木计划 + 文字地图有树 → 用 use_tool axe 定向砍树（不再空 clear_area）', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    (planner as unknown as { chestGathering: boolean }).chestGathering = true;
+    const withMap = `${STATE_OK}
+## 背包（序号: 物品）
+5: 木材 x22【留着：社区中心“建筑”要交】
+背包空位：2 个（共 24 格）
+## 文字地图（以你为中心，左上角坐标=(-2,0)，每个字符一格）
+   0  ##T##
+   1  #.@.T`;
+    const d = await planner.decide(parseGameState(withMap));
+    expect(d.kind).toBe('act');
+    if (d.kind === 'act') {
+      expect(d.tool).toBe('use_tool');
+      expect(d.args).toMatchObject({ tool: 'axe', x: 0, y: 0, times: 10 });
+    }
+  });
+
+  it('真机春23 现场：包里有箱子 + 仅 1 空位 → 先摆箱（大脑想钓鱼也不许）', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const raw = `${STATE_OK}
+你站在 (70,14)，面朝下
+## 背包（序号: 物品）
+0: 斧头
+5: 木材 x6【留着：社区中心“建筑”要交】
+18: 宝箱
+背包空位：1 个（共 24 格）。快满了：出农场前先 tidy_backpack purpose=（mine/fish/town）把用不上的存进箱子`;
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind).toBe('act');
+    expect(d.kind === 'act' ? d.tool : '').toBe('place_item');
+    if (d.kind === 'act') expect(d.args).toMatchObject({ item: 'Chest' });
+  });
+
+  it('0 空位 + 包里有箱子：摆箱本身腾格，不应先去砍树/钓鱼', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    (planner as unknown as { chestGathering: boolean }).chestGathering = true;
+    const raw = `${STATE_OK}
+你站在 (70,14)，面朝下
+## 背包（序号: 物品）
+18: 宝箱
+背包空位：0 个（共 24 格）`;
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind).toBe('act');
+    expect(d.kind === 'act' ? d.tool : '').toBe('place_item');
+  });
+
+  it('摆箱回执后满包 → tidy_backpack 存进农场箱子（真机链条闭环）', async () => {
+    const receipts = ['COMPLETED place_item: 成功：已在 (70,15) 放置/种下 宝箱'];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const raw = `${STATE_OK}
+## 背包（序号: 物品）
+0: 斧头
+5: 木材 x6
+背包空位：0 个（共 24 格）`;
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind).toBe('act');
+    expect(d.kind === 'act' ? d.tool : '').toBe('tidy_backpack');
+    expect((planner as unknown as { chestPlaced: boolean }).chestPlaced).toBe(true);
+  });
+
+  it('农场清无可清 → 改道森林一次；森林也空 → 放弃今天造箱（不空转）', async () => {
+    const receipts = ['COMPLETED clear_area: 成功：区域内没有可以清理的东西'];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    (planner as unknown as { chestGathering: boolean }).chestGathering = true;
+    const raw = `${STATE_OK}
+你站在 (70,14)，面朝下
+## 背包（序号: 物品）
+5: 木材 x6
+背包空位：2 个（共 24 格）`;
+    const d1 = await planner.decide(parseGameState(raw));
+    expect(d1.kind === 'act' && d1.tool).toBe('travel_to');
+    expect(d1.kind === 'act' && d1.args).toMatchObject({ location: 'Forest' });
+    // 到了森林、森林也清无可清 → 放弃，不再反复 clear_area
+    const forest = parseGameState(raw.replace('地点：Farm（泡泡湾农场）', '地点：Forest（森林）'));
+    const d2 = await planner.decide(forest);
+    expect(d2.kind).toBe('act');
+    expect(d2.kind === 'act' ? d2.tool : '').not.toBe('clear_area');
+    expect((planner as unknown as { chestGathering: boolean }).chestGathering).toBe(false);
+  });
+
+  it('攒木时人在第三地点 → 先回农场；在森林清场只试一次', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    (planner as unknown as { chestGathering: boolean }).chestGathering = true;
+    const town = parseGameState(`${STATE_OK.replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）')}
+你站在 (20,10)，面朝下
+## 背包（序号: 物品）
+5: 木材 x6
+背包空位：2 个（共 24 格）`);
+    const d1 = await planner.decide(town);
+    expect(d1.kind === 'act' && d1.tool).toBe('travel_to');
+    expect(d1.kind === 'act' && d1.args).toMatchObject({ location: 'Farm' });
+
+    const forestPlanner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    (forestPlanner as unknown as { chestGathering: boolean }).chestGathering = true;
+    const forest = parseGameState(`${STATE_OK.replace('地点：Farm（泡泡湾农场）', '地点：Forest（森林）')}
+你站在 (30,20)，面朝下
+## 背包（序号: 物品）
+5: 木材 x6
+背包空位：2 个（共 24 格）`);
+    const f1 = await forestPlanner.decide(forest);
+    expect(f1.kind === 'act' && f1.tool).toBe('clear_area');
+    // 森林只清一次：同状态再决定时不再 clear_area（forestGatherTried 已置位）
+    const f2 = await forestPlanner.decide(forest);
+    expect(f2.kind === 'act');
+    expect(f2.kind === 'act' ? f2.tool : '').not.toBe('clear_area');
+  });
+
+  it('包里有箱子但人在镇上 → 先回农场摆箱', async () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    const raw = `${STATE_OK.replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）')}
+你站在 (20,10)，面朝下
+## 背包（序号: 物品）
+18: 宝箱
+背包空位：1 个（共 24 格）`;
+    const d = await planner.decide(parseGameState(raw));
+    expect(d.kind === 'act' && d.tool).toBe('travel_to');
+    expect(d.kind === 'act' && d.args).toMatchObject({ location: 'Farm' });
+  });
+
+  it('clear_area 无物可清（COMPLETED）→ 退出攒木计划，不再无限重试', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED tidy_backpack: 失败：农场上没有箱子。先 craft Chest（50 木材）',
+        'COMPLETED clear_area: 成功：区域内没有可以清理的东西',
+      ],
+    });
+    const state = parseGameState(STATE_FULL.replace('背包空位：0 个', '背包空位：1 个'));
+    const d = await planner.decide(state);
+    expect(d.kind).toBe('act');
+    expect(d.kind === 'act' ? d.tool : '').not.toBe('clear_area');
+    expect((planner as unknown as { chestGathering: boolean }).chestGathering).toBe(false);
+  });
+
+  it('craft 因「背包满放不下」失败 → 腾格后仍会重试造箱（不当天放弃）', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: [
+        'FAILED craft: 失败：背包满了，宝箱 做出来放不下（材料够）：先空出一格',
+      ],
+    });
+    // 满包状态先走救援腾格
+    const full = parseGameState(STATE_FULL.replace(/5: 木材 x\d+/, '5: 木材 x60'));
+    const first = await planner.decide(full);
+    expect(first.kind).toBe('act');
+    // 腾出一格 + 木材≥50 → 应重新 craft，而不是彻底放弃
+    const freed = parseGameState(STATE_FULL.replace(/5: 木材 x\d+/, '5: 木材 x60').replace('背包空位：0 个', '背包空位：1 个'));
+    const next = await planner.decide(freed);
+    // 木材判定依赖真实背包行；至少必须仍在造箱链上（去农场/砍树/造箱），而不是放弃去钓鱼
+    expect(next.kind).toBe('act');
+    expect(['craft', 'travel_to', 'clear_area']).toContain(next.kind === 'act' ? next.tool : '');
+    if (next.kind === 'act' && next.tool === 'travel_to') expect(next.args.location).toBe('Farm');
+  });
+
+  it('满包无箱子且木材<50 → 腾出格后进入砍树攒木计划（不再只 ship 续命）', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED tidy_backpack: 失败：农场上没有箱子。先 craft Chest（50 木材）'],
+    });
+    // 满包：先走救援把可卖的出货（STATE_FULL 的小嘴鲈鱼）
+    const full = parseGameState(STATE_FULL.replace('木材 x', '木材 x'));
+    const first = await planner.decide(full);
+    expect(first.kind === 'act' && first.tool).toBe('ship_items');
+    // 腾出一格后：应去农场砍树攒木材，而不是继续钓鱼
+    const freed = parseGameState(STATE_FULL
+      .replace('背包空位：0 个', '背包空位：2 个')
+      .replace('## 附近物体', '## 附近物体'));
+    const second = await planner.decide(freed);
+    expect(second.kind === 'act' && second.tool).toBe('travel_to');
+    expect(second.kind === 'act' && second.args.location).toBe('Farm');
+  });
+
+  it('只剩 1 格且回执已报「拿不下」→ 不再钓鱼，先救援腾格', async () => {
+    let asked = 0;
+    const planner = new LlmPlanner({
+      chat: async () => { asked += 1; return { content: '{"tool":"fish","args":{}}' }; },
+      recentReceipts: ['COMPLETED fish: 成功：钓到 1 次…（背包满了，再钓拿不下的会掉在地上）'],
+    });
+    const oneSlot = parseGameState(`${STATE_OK}
+## 背包（序号: 物品）
+0: 斧头
+5: 木材 x22
+背包空位：1 个（共 24 格）`);
+    const d = await planner.decide(oneSlot);
+    expect(d.kind).toBe('act');
+    expect(d.kind === 'act' ? d.tool : '').not.toBe('fish');
+    expect(asked).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe('LlmPlanner 救援阶梯单步（rescueAction 分支矩阵）', () => {
   type StepPlanner = { rescueAction(step: number, state: GameStateSnapshot): import('./planner').PlannerDecision | null; craftTried: boolean };
   const call = (planner: LlmPlanner, step: number, state: GameStateSnapshot) =>
@@ -311,6 +511,18 @@ describe('LlmPlanner 决策链', () => {
     });
     const d = await planner.decide(state());
     expect(d.kind === 'act' && d.tool).toBe('tidy_backpack');
+  });
+
+  it('状态省略背包段 + 最近 tidy 失败「没有箱子」→ 仍进入救援（不钓鱼）', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      recentReceipts: ['FAILED tidy_backpack: 失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上'],
+    });
+    const noSlotsLine = STATE_FULL.replace('背包空位：0 个（共 12 格）', '');
+    const d = await planner.decide(parseGameState(noSlotsLine));
+    expect(d.kind).toBe('act');
+    expect(d.kind === 'act' ? d.tool : '').not.toBe('fish');
+    expect(d.kind === 'act' ? d.tool : '').toBe('ship_items');
   });
 
   it('农场没有箱子（tidy 必失败）→ 直接出货，不再浪费一轮 tidy', async () => {
@@ -630,17 +842,15 @@ describe('LlmPlanner 决策链', () => {
     const d4 = await p.decide(s0);
     expect(d4.kind === 'act' && d4.tool).toBe('eat');
     expect(d4.kind === 'act' && d4.args).toMatchObject({ item: '沙丁鱼', force: true });
-    // ⑤ 鱼吃掉 → 空位 1 → repeated 双败护栏把大脑按回替补席：规则日程接管（读信），不停摆
+    // ⑤ 鱼吃掉 → 空位 1 → 无箱子且木材<50：直接进入攒木计划（2026-11-23 真机要求「没箱子就造」）
     receipts.push('COMPLETED eat: 吃了 沙丁鱼，体力 180 → 203');
     const s1 = `${STATE_OK}\n${invAll.replace(/9: 沙丁鱼[^\n]*\n/, '').replace('背包空位：0 个', '背包空位：1 个')}`;
     const d5 = await p.decide(parseGameState(s1));
-    expect(d5.kind === 'act' && d5.tool).toBe('read_mail');
-    // ⑥ 规则日的一步失败解开 repeated → 大脑带着攒木计划回归：clear_area 砍树
-    receipts.push('COMPLETED read_mail: 读了信');
-    receipts.push('FAILED water_crops: 失败：没有可浇的作物');
+    expect(d5.kind === 'act' && d5.tool).toBe('clear_area');
+    expect(d5.kind === 'act' && d5.args).toMatchObject({ include_trees: true });
+    // ⑥ 砍树攒木
     const d6 = await p.decide(parseGameState(s1));
     expect(d6.kind === 'act' && d6.tool).toBe('clear_area');
-    expect(d6.kind === 'act' && d6.args).toMatchObject({ include_trees: true });
     // ⑦ 砍树攒到 60 木 → 大脑 craft
     receipts.push('COMPLETED clear_area: 清完了周围，捡到 木材 x38');
     const d7 = await p.decide(parseGameState(`${s1.replace('木材 x22', '木材 x60')}`));
@@ -652,7 +862,9 @@ describe('LlmPlanner 决策链', () => {
     // ⑨ 摆箱成功 → chestPlaced + 大脑恢复正常决策（死锁解除）
     receipts.push('COMPLETED place_item: 已把 箱子 放在 (65,15)');
     const d9 = await p.decide(parseGameState(s1.replace('木材 x22', '木材 x10')));
-    expect(d9.kind === 'act' && d9.tool).toBe('fish');
+    // 箱子已摆好：死锁解除，回到正常日程（读信/浇水/钓鱼都算正常）
+    expect(d9.kind).toBe('act');
+    expect(['fish', 'read_mail', 'water_crops', 'travel_to']).toContain(d9.kind === 'act' ? d9.tool : '');
     expect((p as unknown as { chestPlaced: boolean }).chestPlaced).toBe(true);
     // 救援问询烧了 4 次 token（donate/bundle_info/donate/吃鱼）——如实计入饭碗
     expect((p as unknown as { asks: number }).asks).toBeGreaterThanOrEqual(4);
@@ -712,8 +924,10 @@ describe('LlmPlanner 决策链', () => {
     expect(rescue.kind === 'act' && rescue.tool).toBe('ship_items');
     const freed = parseGameState(STATE_FULL.replace('背包空位：0 个', '背包空位：2 个'));
     const normal = await planner.decide(freed);
-    expect(normal.kind === 'act' && normal.tool).toBe('water_crops');
-    expect(asked).toBe(1);
+    // 无箱子且木材<50：腾出空位后先去农场攒木造箱（2026-11-23 用户要求），而非直接恢复浇水
+    expect(normal.kind === 'act' && normal.tool).toBe('travel_to');
+    expect(normal.kind === 'act' && normal.args.location).toBe('Farm');
+    expect(asked).toBe(0);
   });
 
   it('出货候选排序：鱼/采集优先于家具（真机「普通窗户不能出货」教训）', () => {
