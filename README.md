@@ -56,7 +56,7 @@ pnpm soak:autodrive 1                           # [SIMULATION] 仿真器长时�
 pnpm --filter @workbench/desktop-host package   # 打出独立安装包（macOS arm64 .dmg / Win x64 .exe）
 ```
 
-> CI：`.github/workflows/ci.yml` —— ubuntu 跑类型/边界/单测/Python；macOS 跑完整 `verify:gate` + Electron E2E（`[E2E-HOST]`）。
+> CI：`.github/workflows/ci.yml` —— ubuntu 跑类型/边界/单测/Python/luac/audit；macOS 跑完整 `verify:gate` + Electron E2E（`[E2E-HOST]`）。远程首跑已双绿（run 45123414392）。
 > 注意 Gate 4 是**测试内组合的回环**，不等于 Electron/Python/真实发声/磁盘账本的端到端；准确口径见 [docs/VERIFY.md](./docs/VERIFY.md) 顶部「验证口径修订」。
 
 > 本地无 Developer ID 签名的 macOS `.dmg` 拖入 `/Applications` 后，如遇系统隔离拦截请执行：`xattr -dr com.apple.quarantine "/Applications/鲸屿 Whale Isle.app"`。
