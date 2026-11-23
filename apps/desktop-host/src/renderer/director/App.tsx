@@ -33,6 +33,7 @@ import {
   GameDiagnostics,
   GameGoalChain,
   GameMetricsCard,
+  GameQualityCard,
   GameQuickCommands,
   GameReceiptTimeline,
   useGameHealth,
@@ -806,6 +807,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                     ['攻略专题', guides.length],
                   ]}
                 />
+                <GameQualityCard events={events} />
                 <GameQuickCommands
                   commands={STARDEW_QUICK}
                   onCommand={(key) => sendText(key)}

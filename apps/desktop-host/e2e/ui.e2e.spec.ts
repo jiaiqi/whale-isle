@@ -341,6 +341,8 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       // 共用区块：当前动作 / 回执时间线 / 快捷指令
       expect(await page.locator('[data-game-quick="/fish 5"]').count()).toBe(1);
       expect(await page.locator('text=执行记录与回执').count()).toBe(1);
+      // T-M6-35：自治质量卡由真实回执派生（空集显示 —，不伪造 0%/100%）
+      expect(await page.locator('text=自治质量（本会话）').count()).toBeGreaterThan(0);
 
       // ② 高级诊断默认折叠，点击后展开
       const diag = page.locator('[data-game-diagnostics]');

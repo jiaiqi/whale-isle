@@ -12,6 +12,7 @@ import {
   GameDiagnostics,
   GameGoalChain,
   GameMetricsCard,
+  GameQualityCard,
   GameQuickCommands,
   GameReceiptTimeline,
   useGameEventView,
@@ -89,6 +90,7 @@ export function TerrariaPanel({ events, running }: TerrariaPanelProps): React.JS
               ['错误回执', receipts.filter((r) => r.status === 'ERROR' || r.status === 'FAILED').length],
             ]}
           />
+          <GameQualityCard events={events} />
           <GameQuickCommands
             commands={QUICK_COMMANDS}
             onCommand={(tool, args) => send(tool, args, `主人快捷指令：${tool}`)}

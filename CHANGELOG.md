@@ -5,6 +5,7 @@
 
 ### Added
 
+- **自治质量指标（T-M6-35，审计 Phase 2 切片）**：`packages/game-bridge-mcp/metrics.ts` 从真实事件流派生有效回执率、失败/错误率、重复动作率、动作覆盖面与最长同工具连击；口径明确（TIMEOUT 不计成功也不计失败、`think` 不算动作、编排器汇总回执排除、空集显示「—」不伪造 0%/100%）。星露谷与泰拉瑞亚面板新增「自治质量（本会话）」卡；渲染层通过 `@workbench/game-bridge-mcp/metrics` 子路径导入，避免把适配器副作用打进前端包。验证：metrics 8/8（分支 100%）、Electron UI E2E 4/4。
 - **OBS 只读透明挂件 `/obs`（T-M6-34，T-M6-31 首个最小真实链路）**：内嵌 WebUI 新增 `GET /obs`——透明底、`STAGE_PROTOCOL=1`、token 鉴权、`obs-readonly` 声明；页面通过 `/ws` 订阅动作/回执并回放最近 20 条，只读、无任何指令/审批入口。中控台 OBS 页改为「复制 OBS 源地址」（含本机 token，提示勿外传），文案从「18765 接线中」改为真实的 18780 `/obs`。验证：webui-server 23/23、Electron UI E2E 4/4（真实内嵌服务 401/200 与协议标记）。投票/歌词/点歌层仍未接线，OBS 叠加观感待真机。
 - **语音后端如实展示（T-M6-33，审计发现）**：新增 `voice:backend` 只读探测与顶栏标识——`mcode` 角色音色链不额外标注，`say` 兜底显示「· say」，非 macOS 显示「· 未适配」，title 展示具体链路说明。此前界面只有「语音开/关」，容易让用户误以为始终在用角色 TTS。验证：探测单测 4/4、Electron UI E2E 断言 `data-voice-backend` 三态；真实听感与 Windows 适配仍待真机。
 - **CI 与仿真长时浸泡（T-M6-29 部分）**：新增 `.github/workflows/ci.yml`（ubuntu：typecheck / depcruise / 单测排除 Electron E2E / ruff+mypy+pytest；macOS：完整 `pnpm verify:gate` + Electron `desktop.e2e`/`ui.e2e`，不注入 secrets、不跑真实游戏）；新增 `pnpm soak:autodrive [分钟]`（`tools/scripts/soak-autodrive.mjs`），在本地星露谷仿真器上按 autodrive 节奏长跑，统计 get_state 失败率、异常回执率与 RSS/heap 趋势，12 秒冒烟实测 445 轮 / 1335 事件 / 0 失败 / 0 异常回执。Gate 4 更名为「回环契约 E2E」并在脚本与 VERIFY 顶部写明它是测试内手工组合（假语音适配器 + `:memory:` SQLite），**不是**生产端到端。CI 尚未在远端实际跑过，如实记录。

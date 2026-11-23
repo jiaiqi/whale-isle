@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, PlugZap, RefreshCw, Square } from 'lucide-react';
+import { summarizeAutodriveQuality, formatRate } from '@workbench/game-bridge-mcp/metrics';
 import type { AutodriveEventView, GameHealthView, GameId } from './bridge';
 
 /** 回执状态色（语义色 token，深浅主题通用） */
@@ -240,10 +241,10 @@ export function GameReceiptTimeline({
 }
 
 /** 实时指标（真实计数，不造假） */
-export function GameMetricsCard({ rows }: { rows: Array<readonly [string, string | number]> }): React.JSX.Element {
+export function GameMetricsCard({ rows, title = '实时指标' }: { rows: Array<readonly [string, string | number]>; title?: string }): React.JSX.Element {
   return (
     <div className="card px-4 py-3.5">
-      <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>实时指标</div>
+      <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>{title}</div>
       {rows.map(([k, v]) => (
         <div key={String(k)} className="flex justify-between py-1 text-[10.5px]">
           <span style={{ color: 'var(--text-3)' }}>{k}</span>
@@ -251,6 +252,25 @@ export function GameMetricsCard({ rows }: { rows: Array<readonly [string, string
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * 自治质量（T-M6-35）：本会话真实回执派生，不估算。
+ * 空集会显示「—」，避免把「还没有数据」显示成 0% 或 100%。
+ */
+export function GameQualityCard({ events }: { events: AutodriveEventView[] }): React.JSX.Element {
+  const q = summarizeAutodriveQuality(events);
+  return (
+    <GameMetricsCard
+      title="自治质量（本会话）"
+      rows={[
+        ['有效回执率', formatRate(q.successRate)],
+        ['失败 / 错误率', formatRate(q.failureRate)],
+        ['重复动作率', formatRate(q.repeatRate)],
+        ['动作覆盖面', `${q.distinctTools} 种（最长连击 ${q.longestToolStreak}）`],
+      ]}
+    />
   );
 }
 
