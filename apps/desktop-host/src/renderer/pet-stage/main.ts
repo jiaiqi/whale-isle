@@ -18,7 +18,7 @@ interface PetStageBridge {
   setPassthrough(state: 'passthrough' | 'interactive'): Promise<boolean>;
   forceInteractive(on: boolean): Promise<boolean>;
   getState(): Promise<'passthrough' | 'interactive'>;
-  screenBounds(): Promise<Bounds & { windowBounds: Bounds }>;
+  screenBounds(): Promise<Bounds & { windowBounds: Bounds; displayId: string }>;
   mousePoint(): Promise<{ x: number; y: number }>;
   winPosition(): Promise<[number, number] | null>;
   dragTo(x: number, y: number): Promise<[number, number] | null>;
@@ -204,9 +204,19 @@ if (petStageBridge?.onPetPreview) {
 type AutodriveEventLite = {
   type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user';
   tool?: string; status?: string; summary?: string; intent?: string; clock?: string;
+  /** T-M6-27 会话归属：联机端点事件（agentId）与旧 generation 事件不驱动主桌宠 */
+  agentId?: string; generation?: number;
 };
 if (window.directorBridge?.onAutodriveEvent) {
+  let latestGeneration = -1;
   window.directorBridge.onAutodriveEvent((event: AutodriveEventLite) => {
+    // 联机端点事件由各自 agent 负责，不混入主桌宠动作/气泡
+    if (event.agentId !== undefined) return;
+    // 旧会话的迟到事件（切游戏/重启后）不得再驱动动画与内心戏
+    if (typeof event.generation === 'number') {
+      if (event.generation < latestGeneration) return;
+      latestGeneration = event.generation;
+    }
     lastEventAt = Date.now();
     // 双轨气泡（设计稿 §L1/L2）：decision 意图 → 紫云朵内心戏；回话/反射 → 正式对话泡
     if (event.type === 'decision' && typeof event.intent === 'string' && event.intent.length > 0) {
@@ -359,7 +369,7 @@ window.addEventListener('mouseup', () => {
           settle(impact);
           // 持久化落定后的真实位置（不是拖拽起点）——否则重启后桌宠会回到松手前的位置
           const rest = throwSim?.position() ?? start;
-          void bridge.prefsSet({ position: { x: Math.round(rest.x), y: Math.round(rest.y), displayId: prefs.position.displayId } });
+          void bridge.prefsSet({ position: { x: Math.round(rest.x), y: Math.round(rest.y), displayId: bounds.displayId || prefs.position.displayId } });
           return;
         }
         const dt = ts - lastTs;
@@ -373,7 +383,7 @@ window.addEventListener('mouseup', () => {
       settle(Math.hypot(velocity.vx, velocity.vy) * 0.4);
       // 拖拽期间窗口已跟手移动 → 用最终真实位置持久化（windowBounds 由主进程 dragTo 夹紧）
       const final = await bridge.winPosition();
-      if (final !== null) void bridge.prefsSet({ position: { x: final[0], y: final[1], displayId: prefs.position.displayId } });
+      if (final !== null) void bridge.prefsSet({ position: { x: final[0], y: final[1], displayId: bounds.displayId || prefs.position.displayId } });
     }
   })();
 });

@@ -10,6 +10,7 @@ import { registerStageIpc } from './passthrough';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
+import { clampWindowPosition, windowPlacementRegions } from './display-region';
 import { createCharacterRegistry } from './character-registry';
 import { setCurrentPersonaPrompt } from './character-persona';
 import { createCoopHost } from './coop-host';
@@ -19,6 +20,8 @@ import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
+import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
+import type { GameId } from '@workbench/game-bridge-mcp';
 import {
   APP_DATA_DIR,
   APP_ID,
@@ -155,15 +158,46 @@ function createStageWindow(): BrowserWindow {
       if (target && !target.isDestroyed()) target.webContents.send('pet:scale-changed', next.scale);
     }
   })).get();
-  const { x, y } = prefs.position;
-  const onScreen = screen.getAllDisplays().some((d) => {
-    const a = d.workArea;
-    return x >= a.x - 40 && y >= a.y - 40 && x <= a.x + a.width && y <= a.y + a.height;
-  });
   const scale = prefs.scale;
-  const bx = onScreen ? Math.round(x) : 120;
-  const by = onScreen ? Math.round(y) : 120;
-  win.setBounds({ x: bx, y: by, width: Math.round(400 * scale), height: Math.round(284 * scale) });
+  const width = Math.round(400 * scale);
+  const height = Math.round(284 * scale);
+  const primary = screen.getPrimaryDisplay();
+  const displays = screen.getAllDisplays();
+  const sources = displays.length > 0 ? displays : [primary];
+  const areas = sources.map((display) => ({
+    displayId: String(display.id),
+    x: display.workArea.x,
+    y: display.workArea.y,
+    width: display.workArea.width,
+    height: display.workArea.height,
+  }));
+  const regions = windowPlacementRegions(areas, width, height);
+  // Prefer the saved screen. If it was unplugged, choose the nearest remaining work area.
+  const restored = clampWindowPosition(
+    regions,
+    prefs.position.x,
+    prefs.position.y,
+    prefs.position.displayId || undefined,
+  );
+  const fallback = clampWindowPosition(
+    windowPlacementRegions([{
+      displayId: String(primary.id),
+      x: primary.workArea.x,
+      y: primary.workArea.y,
+      width: primary.workArea.width,
+      height: primary.workArea.height,
+    }], width, height),
+    prefs.position.x,
+    prefs.position.y,
+    String(primary.id),
+  );
+  const position = restored.displayId === null ? fallback : restored;
+  win.setBounds({
+    x: position.displayId === null ? primary.workArea.x : position.x,
+    y: position.displayId === null ? primary.workArea.y : position.y,
+    width,
+    height,
+  });
   win.loadFile(join(here, '../renderer/pet-stage/index.html'));
   win.once('ready-to-show', () => win.showInactive());
   return win;
@@ -244,6 +278,25 @@ app.whenReady().then(() => {
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
   const autodrive = createAutodriveHost('http://127.0.0.1:18080/mcp', join(app.getPath('userData'), 'provider-vault.json'), voice, memory);
   const harness = createHarnessHost();
+  // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100，结果如实回报（不伪造「已连接」）
+  ipcMain.handle('game:health', async (_event, gameId: GameId, endpoint?: string) => {
+    try {
+      return await probeGameHealth(gameId, { ...(endpoint === undefined ? {} : { endpoint }) });
+    } catch (error) {
+      return {
+        gameId,
+        endpoint: endpoint ?? '',
+        status: 'offline' as const,
+        ok: false,
+        latencyMs: 0,
+        detail: '探活异常',
+        error: error instanceof Error ? error.message : String(error),
+        guidance: GAME_CONNECT_GUIDANCE[gameId],
+        checkedAt: Date.now(),
+      };
+    }
+  });
+  ipcMain.handle('game:dst-state', async () => fetchDstSnapshot());
   // WebUI 形态（T-M6-04）：本机浏览器复核口（HTTP/WS + 远程审批）。
   // 包裹 try/catch：WebUI 起不来只告警，绝不拖垮 Electron 主进程。
   try {

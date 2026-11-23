@@ -513,6 +513,44 @@ describe('最后分支：wait/stop/ERROR 路径', () => {
     expect(stop).toBeDefined();
   });
 
+  it('stopAndWait 等待在途动作回执闭合后退出循环', async () => {
+    const events: AutodriveEvent[] = [];
+    let notifyActionStarted!: () => void;
+    const actionStarted = new Promise<void>((resolve) => { notifyActionStarted = resolve; });
+    let releaseAction!: () => void;
+    const actionGate = new Promise<void>((resolve) => { releaseAction = resolve; });
+    const impl = async (_url: unknown, init?: { body?: string }): Promise<Response> => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      if (tool === 'play_for') {
+        notifyActionStarted();
+        await actionGate;
+      }
+      const text = tool === 'get_state' ? STATE_OK : `${tool} 成功`;
+      return {
+        text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError: false } }),
+      } as unknown as Response;
+    };
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      endpoint: 'http://mock/mcp',
+      sleep: async () => undefined,
+    });
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.submitDirective('play_for', { minutes: 30 }, '热切换停机测试');
+    await runner.start();
+    await actionStarted;
+
+    let stopped = false;
+    const stopTask = runner.stopAndWait().then(() => { stopped = true; });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    releaseAction();
+    await stopTask;
+
+    expect(stopped).toBe(true);
+    expect(runner.isRunning()).toBe(false);
+    expect(events.some((event) => event.type === 'receipt' && event.tool === 'play_for' && event.status === 'COMPLETED')).toBe(true);
+  });
+
   it('ActionLock.execute 超时/error 计入 stats；cancel 在途成功', async () => {
     // 超时
     const slow = new BwfMcpClient('http://mock/mcp', ((_i: unknown, init?: { signal?: AbortSignal }) =>
@@ -546,11 +584,17 @@ describe('最后分支：wait/stop/ERROR 路径', () => {
 
   it('loop catch：decide 抛错 → ERROR 回执 + 错误延迟重试', async () => {
     const events: AutodriveEvent[] = [];
+    // 固定 60ms 曾在负载下跑不完 6 个循环 → 事件驱动等待 stop 回执（带超时兜底防挂）
+    let notifyStopped!: () => void;
+    const stopped = new Promise<void>((resolve) => { notifyStopped = resolve; });
     const impl = async (): Promise<Response> => {
       const text = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读') }] } });
       return { text: async () => text } as unknown as Response;
     };
-    const runner = new AutodriveRunner((e) => events.push(e), { sleep: async (ms) => { await new Promise((r) => setTimeout(r, Math.min(ms, 2))); }, endpoint: 'http://mock/mcp', maxCycles: 6 });
+    const runner = new AutodriveRunner((e) => {
+      events.push(e);
+      if (e.type === 'receipt' && e.summary.includes('恢复后停止')) notifyStopped();
+    }, { sleep: async (ms) => { await new Promise((r) => setTimeout(r, Math.min(ms, 2))); }, endpoint: 'http://mock/mcp', maxCycles: 6 });
     (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
     let throws = 0;
     runner.setPlanner({
@@ -562,7 +606,7 @@ describe('最后分支：wait/stop/ERROR 路径', () => {
       },
     });
     await runner.start();
-    await new Promise((r) => setTimeout(r, 60));
+    await Promise.race([stopped, new Promise((r) => setTimeout(r, 2_000))]);
     expect(runner.isRunning()).toBe(false);
     const errors = events.filter((e): e is Extract<AutodriveEvent, { type: 'receipt' }> => e.type === 'receipt' && e.status === 'ERROR');
     expect(errors.length).toBeGreaterThanOrEqual(2);
@@ -746,5 +790,40 @@ describe('autodrive 默认 sleep / UNCERTAIN-Failed 双分支', () => {
     const lock2 = new ActionLock(uncertain);
     const r2 = await lock2.execute('move_to');
     expect(r2.kind === 'ok' && r2.text).toContain('不确定');
+  });
+});
+
+describe('T-M6-27 会话归属', () => {
+  it('每次创建的 runner 拥有独立且非空的 sessionId', () => {
+    const a = new AutodriveRunner(() => undefined);
+    const b = new AutodriveRunner(() => undefined);
+    expect(a.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(b.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(a.sessionId).not.toBe(b.sessionId);
+  });
+
+  it('sessionId 在 start/stop 之间保持稳定（同一会话内事件可归属）', async () => {
+    let calls = 0;
+    const transport = {
+      callTool: async () => {
+        calls++;
+        return { kind: 'ok' as const, text: STATE_OK, isError: false };
+      },
+    };
+    const runner = new AutodriveRunner(() => undefined, { sleep: async () => { runner.stop(); } }, {
+      gameId: 'stardew',
+      displayName: 'test',
+      transport,
+      ping: async () => true,
+      unreachableMessage: 'unreachable',
+      extractClock: () => null,
+      isLongAction: () => false,
+      classifyReceipt: () => ({ status: 'COMPLETED', summary: 'ok' }),
+    } as unknown as import('./adapter').GameAdapter);
+    const before = runner.sessionId;
+    await runner.start();
+    await runner.stopAndWait();
+    expect(calls).toBeGreaterThan(0);
+    expect(runner.sessionId).toBe(before);
   });
 });

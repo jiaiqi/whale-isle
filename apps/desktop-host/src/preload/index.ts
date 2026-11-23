@@ -32,14 +32,20 @@ contextBridge.exposeInMainWorld('directorBridge', {
   providerImportApply: (args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<unknown> =>
     ipcRenderer.invoke('providers:import-apply', args),
   // autodrive（T-M5-02）：启停/插队/事件订阅（事件经桥中继为 CustomEvent）
-  autodriveStart: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('autodrive:start'),
+  autodriveStart: (gameId?: 'stardew' | 'terraria' | 'dst'): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('autodrive:start', gameId),
   autodriveStop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('autodrive:stop'),
-  autodriveStatus: (): Promise<{ running: boolean }> => ipcRenderer.invoke('autodrive:status'),
-  autodriveDirective: (tool: string, args: Record<string, unknown>, intent: string): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke('autodrive:directive', tool, args, intent),
+  autodriveStatus: (): Promise<{ running: boolean; gameId?: 'stardew' | 'terraria' | 'dst'; sessionId?: string; generation?: number; events?: unknown[] }> => ipcRenderer.invoke('autodrive:status'),
+  // T-M6-27：expectedSessionId 用于拒绝来自已切换会话的迟到指令（可选，省略保持兼容）
+  autodriveDirective: (tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('autodrive:directive', tool, args, intent, expectedSessionId),
   onAutodriveEvent: (handler: (event: unknown) => void) => {
     ipcRenderer.on('autodrive:event', (_e, event) => handler(event));
   },
+  // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100，返回 online/reachable/offline 三态
+  gameHealth: (gameId: 'stardew' | 'terraria' | 'dst', endpoint?: string): Promise<unknown> =>
+    ipcRenderer.invoke('game:health', gameId, endpoint),
+  // DST 状态快照（补齐 T-M7-D5 面板缺失的 /state 注入）
+  gameDstState: (): Promise<unknown> => ipcRenderer.invoke('game:dst-state'),
   // harness（T-M6-02）：ACP agents 统管
   harnessPresets: (): Promise<Array<{ id: string; label: string; command: string | null; authHint: string }>> =>
     ipcRenderer.invoke('harness:presets'),
@@ -61,21 +67,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> => ipcRenderer.invoke('rice:status'),
-  // T-M6-21 多角色注册表 + T-M6-22 联机端点
-  characterList: (): Promise<unknown> => ipcRenderer.invoke('pet:character-list'),
+  // T-M6-21 多角色注册表（切换由主进程写 prefs + 广播桌宠窗重载）
+  characterList: (): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string }>> => ipcRenderer.invoke('pet:character-list'),
   characterSelect: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('pet:character-select', id),
+  // T-M6-22 多桌宠联机 agent 池
   coopEndpoints: (): Promise<unknown> => ipcRenderer.invoke('coop:endpoints'),
   coopStart: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('coop:start', id),
   coopStop: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('coop:stop', id),
-  // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
-  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
-  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
-  // T-M6-21 多角色注册表（切换由主进程写 prefs + 广播桌宠窗重载）
-  characterList: (): Promise<unknown> => ipcRenderer.invoke('pet:character-list'),
-  characterSelect: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('pet:character-select', id),
-  // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
-  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
-  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
   // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
   prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
   prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
@@ -89,6 +87,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 语音（D11 第一版：macOS say 引擎）
   voiceSpeak: (text: string, scene: 'normal' | 'inner' | 'p0'): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('voice:speak', { text, scene }),
+  // T-M6-33：实际语音后端（mcode / say / unsupported），界面如实展示
+  voiceBackend: (): Promise<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string }> =>
+    ipcRenderer.invoke('voice:backend'),
   voiceConfigGet: (): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number }> =>
     ipcRenderer.invoke('voice:config:get'),
   voiceConfigSet: (patch: { enabled?: boolean; innerVoice?: boolean; volume?: number; ratePercent?: number; voice?: string; pitchMul?: number; voiceId?: string }): Promise<{ enabled: boolean; innerVoice: boolean; volume: number; ratePercent: number; voice: string; pitchMul: number; voiceId: string }> =>
@@ -131,24 +132,15 @@ contextBridge.exposeInMainWorld('directorBridge', {
 contextBridge.exposeInMainWorld('petStage', {
   ready: true,
   setPassthrough: (state: 'passthrough' | 'interactive') => ipcRenderer.invoke('passthrough:set', state),
+  forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
   getState: (): Promise<'passthrough' | 'interactive'> => ipcRenderer.invoke('passthrough:get'),
-  forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
-  // 右键菜单期间强制交互，防 alpha 探针把窗口切穿透导致菜单点不到（T-M6-20）
-  forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
-  // 右键菜单期间强制交互，防 alpha 探针把窗口切穿透导致菜单点不到（T-M6-20）
-  forceInteractive: (on: boolean): Promise<boolean> => ipcRenderer.invoke('passthrough:force', on),
   screenBounds: () => ipcRenderer.invoke('screen:bounds'),
   mousePoint: () => ipcRenderer.invoke('cursor:point'),
   winPosition: (): Promise<[number, number] | null> => ipcRenderer.invoke('win:get-position'),
   dragTo: (x: number, y: number): Promise<[number, number] | null> => ipcRenderer.invoke('win:drag-to', x, y),
-  onScaleChanged: (handler: (scale: number) => void): void => {
-    ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
-  },
-  characterManifest: (id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }> =>
-    ipcRenderer.invoke('pet:character-manifest', id),
-  onCharacterChanged: (handler: (character: { id: string; anchorRatio: number }) => void): void => {
-    ipcRenderer.on('pet:character-changed', (_e, c: { id: string; anchorRatio: number }) => handler(c));
-  },
+  // T-M6-19：桌宠桌面偏好（位置/缩放/拖拽手感/角色/联机端点）文件 KV
+  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
+  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
   onScaleChanged: (handler: (scale: number) => void): void => {
     ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
   },
@@ -158,12 +150,6 @@ contextBridge.exposeInMainWorld('petStage', {
   onCharacterChanged: (handler: (character: { id: string; anchorRatio: number }) => void): void => {
     ipcRenderer.on('pet:character-changed', (_e, c: { id: string; anchorRatio: number }) => handler(c));
   },
-  onScaleChanged: (handler: (scale: number) => void): void => {
-    ipcRenderer.on('pet:scale-changed', (_e, scale: number) => handler(scale));
-  },
-  // T-M6-19：桌宠桌面偏好（位置/缩放/拖拽手感/角色/联机端点）文件 KV
-  prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
-  prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
   // T-M1-05 改版：桌宠窗自拉饭碗余额（默认隐藏 / hover 显示 / 饿态亮灯）
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> =>
     ipcRenderer.invoke('rice:status'),

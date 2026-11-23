@@ -82,6 +82,45 @@ export interface VoiceHost {
   setConfig(patch: Partial<VoiceConfig>): VoiceConfig;
 }
 
+/** 实际语音后端（T-M6-33）：界面如实展示「现在到底用哪条链路发声」，不再让用户以为一定是角色 TTS。 */
+export type VoiceBackend = 'mcode' | 'say' | 'unsupported';
+
+export interface VoiceBackendInfo {
+  backend: VoiceBackend;
+  /** 人类可读的后端说明（用于顶栏/设置页 title） */
+  detail: string;
+}
+
+/**
+ * 探测实际语音后端（只读：查一次 PATH，不发声）。
+ * - 非 darwin → unsupported（Windows/Linux 语音适配尚未完成，如实报）
+ * - darwin 且有 mcode-tools → mcode（首选角色音色链）
+ * - darwin 否则 → say（系统语音兜底；不是角色 TTS）
+ */
+export function detectVoiceBackend(
+  platform: string = process.platform,
+  hasCommand: (command: string) => boolean = defaultHasCommand,
+): VoiceBackendInfo {
+  let info: VoiceBackendInfo;
+  if (platform !== 'darwin') {
+    info = { backend: 'unsupported', detail: `平台 ${platform} 语音引擎待适配（当前仅 macOS）` };
+  } else if (hasCommand('mcode-tools')) {
+    info = { backend: 'mcode', detail: 'mcode-tools「俏皮萌妹」→ 失败时回落 macOS say' };
+  } else {
+    info = { backend: 'say', detail: 'macOS 系统语音 say（未检测到 mcode-tools，非角色 TTS）' };
+  }
+  return info;
+}
+
+function defaultHasCommand(command: string): boolean {
+  try {
+    execFileSync('which', [command], { stdio: 'ignore', timeout: 3_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** mcode-tools 合成链：connector batch_text_to_audio → get_asset_url → afplay（用户定稿音色管线） */
 function speakViaMcode(text: string, mode: string, voiceId: string): Promise<void> {
   const m = MCODE_MODES[mode] ?? MCODE_MODES.daily!;
@@ -151,6 +190,8 @@ function spawnSynthesize(config: VoiceConfig, rate: number, text: string): Child
 
 export function registerVoiceHostIpc(host: VoiceHost): void {
   ipcMain.handle('voice:speak', (_e, voice: VoiceScene) => host.speak(voice));
+  // T-M6-33：实际后端探测（界面如实展示 mcode / say / 未适配）
+  ipcMain.handle('voice:backend', () => detectVoiceBackend());
   // 音色试听（音色页）：任意 voiceId × 任意档位直合成，不改全局配置
   ipcMain.handle('voice:audition', async (_e, voiceId: string, mode: string, text?: string) => {
     const probe = text ?? '哼，本鱼才没有偷懒呢！主人快夸夸我嘛～';

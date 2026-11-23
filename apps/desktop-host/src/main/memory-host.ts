@@ -15,20 +15,25 @@ export interface MemoryHost {
   onReceipt(input: { summary: string; tool: string; status: string; gameClock: string }): void;
   /** 聊天检索：返回格式化记忆上下文（无命中返回空串） */
   contextFor(query: string): string;
+  /** 多游戏热切换时同步切换游戏日键解析器 */
+  setDayKeyExtractor(extractor: DayKeyExtractor): void;
 }
 
-/** 从「第1年春16日」格式提取游戏日键 */
+/** 从「第1年春16日」格式提取游戏日键（星露谷默认；M7 新游戏由 adapter 注入自己的提取器） */
 export function dayKeyOf(gameClock: string): string {
   const m = /第\d+年\s*([春夏秋冬]\d+日)/.exec(gameClock);
   return m?.[1] ?? gameClock.slice(0, 12);
 }
 
-export function createMemoryHost(userDataDir: string): MemoryHost {
+export type DayKeyExtractor = (gameClock: string) => string;
+
+export function createMemoryHost(userDataDir: string, initialDayKeyExtractor: DayKeyExtractor = dayKeyOf): MemoryHost {
   const store = new MemoryStore({ dir: join(userDataDir, 'memory') });
+  let extractDayKey = initialDayKeyExtractor;
   let lastDay: string | null = null;
 
   const onReceipt = (input: { summary: string; tool: string; status: string; gameClock: string }): void => {
-    const day = dayKeyOf(input.gameClock);
+    const day = extractDayKey(input.gameClock);
     // 换日：上一日先写日记（幂等——同一天只写一次）
     if (lastDay !== null && lastDay !== day) {
       store.writeDiary(lastDay);
@@ -98,5 +103,12 @@ export function createMemoryHost(userDataDir: string): MemoryHost {
     return { ok: true };
   });
 
-  return { store, onReceipt, contextFor };
+  return {
+    store,
+    onReceipt,
+    contextFor,
+    setDayKeyExtractor(extractor) {
+      extractDayKey = extractor;
+    },
+  };
 }

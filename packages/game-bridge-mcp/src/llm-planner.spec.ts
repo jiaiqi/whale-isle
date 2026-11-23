@@ -29,6 +29,8 @@ describe('extractDecisionJson', () => {
     expect(extractDecisionJson('{"tool":"read_mail","args":{},"intent":"读信"}')).toMatchObject({ tool: 'read_mail' });
     expect(extractDecisionJson('```json\n{"tool":"fish","args":{"casts":5},"intent":"钓鱼"}\n```')).toMatchObject({ tool: 'fish', args: { casts: 5 } });
     expect(extractDecisionJson('小鲸想了一下：{"tool":"sleep","args":{}} 就这么办！')).toMatchObject({ tool: 'sleep' });
+    expect(extractDecisionJson('{"tool":"say","args":{"text":"quote: \\"hi\\""},"intent":"escaped"}'))
+      .toMatchObject({ tool: 'say', args: { text: 'quote: "hi"' } });
   });
 
   it('坏输出返回 null：无 JSON / 缺 tool / 截断', () => {
@@ -53,6 +55,72 @@ describe('白名单与攻略检索', () => {
     expect(ctx.length).toBeLessThanOrEqual(1200 + 60);
     const noHint = pickGuideContext(state(), guides);
     expect(noHint).toBe('');
+  });
+});
+
+describe('LLM Planner adapter seam', () => {
+  it('uses the adapter game slot, tool whitelist, system prompt, and rule fallback', async () => {
+    const calls: Array<{ slot: string; system: string }> = [];
+    const fallback = {
+      name: 'terraria-rule',
+      decide: async () => ({ kind: 'act' as const, tool: 'mine', args: { target: 'tree' }, intent: '规则兜底' }),
+    };
+    const planner = new LlmPlanner({
+      slot: 'TERRARIA_GAME_PLANNER',
+      systemPrompt: '泰拉瑞亚专属提示',
+      toolWhitelist: ['mine'],
+      fallbackPlanner: fallback,
+      chat: async (slot, messages) => {
+        calls.push({ slot, system: messages[0]?.content ?? '' });
+        return { content: '{"tool":"mine","args":{"target":"tree"},"intent":"砍树"}' };
+      },
+    });
+    expect(await planner.decide(state())).toMatchObject({ kind: 'act', tool: 'mine', intent: '砍树' });
+    expect(calls).toEqual([{ slot: 'TERRARIA_GAME_PLANNER', system: '泰拉瑞亚专属提示' }]);
+
+    let retries = 0;
+    const invalid = new LlmPlanner({
+      slot: 'DST_GAME_PLANNER',
+      systemPrompt: 'DST 专属提示',
+      toolWhitelist: ['gather'],
+      fallbackPlanner: { name: 'dst-rule', decide: async () => ({ kind: 'act', tool: 'gather', args: {}, intent: 'DST 兜底' }) },
+      chat: async () => { retries++; return { content: '{"tool":"fish","args":{}}' }; },
+    });
+    expect(await invalid.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: 'DST 兜底' });
+    expect(retries).toBe(2);
+    expect(invalid.asks).toBe(1);
+  });
+
+  it('retries adapter gateway errors and then falls back to its rule planner', async () => {
+    const slots: string[] = [];
+    const planner = new LlmPlanner({
+      systemPrompt: 'DST 专属提示',
+      toolWhitelist: ['gather'],
+      fallbackPlanner: { name: 'dst-offline', decide: async () => ({ kind: 'act', tool: 'gather', args: {}, intent: '离线规则' }) },
+      chat: async (slot) => {
+        slots.push(slot);
+        throw new Error('gateway offline');
+      },
+    });
+    expect(await planner.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: '离线规则' });
+    expect(slots).toEqual(['STARDEW_GAME_PLANNER', 'STARDEW_GAME_PLANNER']);
+  });
+
+  it('public setters update the active slot, guides, and recent receipt snapshot', async () => {
+    let captured: { slot: string; system: string; user: string } | undefined;
+    const planner = new LlmPlanner({
+      chat: async (slot, messages) => {
+        captured = { slot, system: messages[0]?.content ?? '', user: messages[1]?.content ?? '' };
+        return { content: '{"tool":"fish","args":{},"intent":"试一次"}' };
+      },
+    });
+    planner.setSlot('STARDEW_GAME_PLANNER');
+    planner.setGuides({ 钓鱼: '攻略注入测试' });
+    planner.setRecentReceipts(['OK fish: 上一轮回执']);
+    await planner.decide({ ...state(), raw: `${state().raw}\n钓鱼 fish` });
+    expect(captured?.slot).toBe('STARDEW_GAME_PLANNER');
+    expect(captured?.system).toContain('攻略注入测试');
+    expect(captured?.user).toContain('OK fish: 上一轮回执');
   });
 });
 
@@ -112,15 +180,51 @@ ${lines}
     expect(farm?.kind === 'act' && farm.tool).toBe('place_item');
   });
 
-  it('stage7 造箱：满格/已有箱/木材不足→null；木材够→craft；已试过→null', () => {
+  it('stage7 造箱：满格纯木材→null（无牺牲格）；满格有石料→force 扔腾位；已有箱→null；有空位→craft', () => {
     const p = planner();
+    // 真机卡死现场修复（2026-11-22 用户指令）：满包 + 无箱 + 木材够 + 只有木材可牺牲 → 无解保留 wait 求助
     expect(call(p, 7, withInv('4: 木材 x60', { freeSlots: 0 }))).toBeNull();
     expect(call(p, 7, withInv('4: 木材 x60\n5: 箱子'))).toBeNull();
-    expect(call(p, 7, withInv('4: 木材 x10'))).toBeNull();
+    // 满包但有石料（BWF 官方建议的低价值材料）→ force 扔整格腾位给 craft
+    const sacrifice = call(p, 7, withInv('4: 木材 x60\n5: 石头 x37', { freeSlots: 0 }));
+    expect(sacrifice?.kind === 'act' && sacrifice.tool).toBe('trash_item');
+    expect(sacrifice?.kind === 'act' && sacrifice.args).toMatchObject({ item: '石头', force: true });
+    // 木材本身绝不作为牺牲格（未预留的【留着】黄水仙也不在可再生名单 → null）
+    expect(call(p, 7, withInv('4: 木材 x60\n5: 黄水仙【留着：社区中心“春季采集”要交】', { freeSlots: 0 }))).toBeNull();
+    // 有空位 → 直接 craft（原行为保留）
     const craft = call(p, 7, withInv('4: 木材 x60'));
     expect(craft?.kind === 'act' && craft.tool).toBe('craft');
     (p as unknown as StepPlanner).craftTried = true;
     expect(call(p, 7, withInv('4: 木材 x60'))).toBeNull();
+  });
+
+  it('stage7/12 真机现场二（木材 x22<50 + 满包全【留着】预留）：7 只进攒木不牺牲；12 才 force 吃预留鱼', () => {
+    const inv = [
+      '0: 斧头',
+      '5: 木材 x22【留着：社区中心“建筑”要交】',
+      '6: 牡蛎【留着：社区中心“蟹笼”要交】',
+      '7: 石头 x14【留着：社区中心“建筑”要交】',
+      '9: 沙丁鱼 金星 [可食用 +23体力]【留着：社区中心“海鱼”要交】',
+      '11: 蚌【留着：社区中心“蟹笼”要交】',
+    ].join('\n');
+    // 满包全预留：case 7 不再牺牲（可再生牺牲排在捐赠之后的 case 12），只置攒木模式
+    const p7 = planner();
+    expect(call(p7, 7, withInv(inv, { freeSlots: 0 }))).toBeNull();
+    expect((p7 as unknown as { chestGathering: boolean }).chestGathering).toBe(true);
+    // case 12：可食用预留鱼优先 force 吃（攒箱本钱木材/石头不动）
+    const p12 = planner();
+    const eatFish = call(p12, 12, withInv(inv, { freeSlots: 0 }));
+    expect(eatFish?.kind === 'act' && eatFish.tool).toBe('eat');
+    expect(eatFish?.kind === 'act' && eatFish.args).toMatchObject({ item: '沙丁鱼', force: true });
+    // 可食用预留吃光后 → 海边采集（首个命中牡蛎）走 trash force
+    const invNoFish = inv.replace(/9: 沙丁鱼[^\n]*\n/, '');
+    const trashShell = call(p12, 12, withInv(invNoFish, { freeSlots: 0 }));
+    expect(trashShell?.kind === 'act' && trashShell.tool).toBe('trash_item');
+    expect(trashShell?.kind === 'act' && trashShell.args).toMatchObject({ item: '牡蛎', force: true });
+    // 木材不足 + 有空位 → case 7 进攒木模式（交给主流程 chestGathering 分支去砍树）
+    const gathering = planner();
+    expect(call(gathering, 7, withInv(inv, { freeSlots: 1 }))).toBeNull();
+    expect((gathering as unknown as { chestGathering: boolean }).chestGathering).toBe(true);
   });
 
   it('stage8 摆箱：无箱→null；不在农场→travel；农场→place_item', () => {
@@ -298,7 +402,7 @@ describe('LlmPlanner 决策链', () => {
 你站在 (10,10)，面朝右
 背包空位：0 个（共 12 格）`;
     const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const s0 = parseGameState(raw);
     expect(s0.posX).toBe(10);
     const d1 = await planner.decide(s0); // 无箱子 → ship 无候选 → store
@@ -338,7 +442,7 @@ describe('LlmPlanner 决策链', () => {
 
   it('只有家具时不在农场 → 先 travel_to Farm', async () => {
     const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const full = parseGameState(`${STATE_OK}
 ## 背包（序号: 物品）
 0: 斧头
@@ -369,7 +473,7 @@ describe('LlmPlanner 决策链', () => {
 6: 普通窗户
 背包空位：0 个（共 12 格）`;
     const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const s0 = parseGameState(raw);
     const d1 = await planner.decide(s0); // store
     expect(d1.kind === 'act' && d1.tool).toBe('store_items');
@@ -394,14 +498,14 @@ describe('LlmPlanner 决策链', () => {
 背包空位：0 个（共 12 格）`);
 
     const suggested = new LlmPlanner({
-      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      chat: async () => { throw new Error('brain offline'); },
       recentReceipts: ['FAILED place_item: 摆放位置不合适，最好的坐标 (30,40)'],
     });
     await suggested.decide(fullFurniture);
     expect((suggested as unknown as Internals).placeTarget).toEqual({ x: 30, y: 40 });
 
     const repeated = new LlmPlanner({
-      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      chat: async () => { throw new Error('brain offline'); },
       recentReceipts: Array.from({ length: 6 }, () => 'FAILED place_item: 失败：(64,16) 被挡着'),
     });
     (repeated as unknown as Internals).pendingPlaceItem = '普通窗户';
@@ -409,7 +513,7 @@ describe('LlmPlanner 决策链', () => {
     expect((repeated as unknown as Internals).rejectedPlace.has('普通窗户')).toBe(true);
 
     const craftFail = new LlmPlanner({
-      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      chat: async () => { throw new Error('brain offline'); },
       recentReceipts: ['FAILED craft: 失败：缺少木材'],
     });
     const wood = parseGameState(`${STATE_OK}
@@ -421,7 +525,7 @@ describe('LlmPlanner 决策链', () => {
     expect((craftFail as unknown as { craftTried: boolean }).craftTried).toBe(true);
 
     const dead = new LlmPlanner({
-      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      chat: async () => { throw new Error('brain offline'); },
       recentReceipts: [
         'FAILED tidy_backpack: 失败：农场上没有箱子',
         'FAILED trash_item: 失败：背包里没有不值钱的东西可扔',
@@ -438,6 +542,122 @@ describe('LlmPlanner 决策链', () => {
     expect(waited.kind === 'wait' && waited.reason).toContain('背包卡死');
   });
 
+  it('满包造箱自救全链（2026-11-22 用户指令；真机 06:10 死循环回归）：卖石腾格保木材 → craft → 摆箱 → 恢复正常日程', async () => {
+    const raw0 = `${STATE_OK}
+## 背包（序号: 物品）
+0: 斧头
+4: 木材 x60
+5: 石头 x37
+## 位置
+你站在 (64,15)，面朝右
+背包空位：0 个（共 12 格）`;
+    const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    // ① 满包 + 造箱计划（木材 ≥50 无箱）→ 出货跳过木材、卖石头腾格（还赚一笔）
+    const d1 = await planner.decide(parseGameState(raw0));
+    expect(d1.kind === 'act' && d1.tool).toBe('ship_items');
+    expect(d1.kind === 'act' && d1.args).toMatchObject({ item: '石头' });
+    // ② 石头卖掉 → 空位 1 → craft Chest（BWF 满包拒绝语义：腾格后才放行；无地点要求）
+    receipts.push('COMPLETED ship_items: 出货 石头 x37');
+    const raw1 = raw0.replace('5: 石头 x37\n', '').replace('背包空位：0 个', '背包空位：1 个');
+    const d2 = await planner.decide(parseGameState(raw1));
+    expect(d2.kind === 'act' && d2.tool).toBe('craft');
+    // ③ craft 成功 → 箱子入包 → 在农场直接摆箱
+    receipts.push('COMPLETED craft: 制作了 1 个 箱子');
+    const raw2 = raw1.replace('## 位置', '5: 箱子\n## 位置');
+    const d3 = await planner.decide(parseGameState(raw2));
+    expect(d3.kind === 'act' && d3.tool).toBe('place_item');
+    // ④ 摆箱成功 → chestPlaced 置位、救援归零 → 恢复 LLM 正常决策（死锁解除）
+    receipts.push('COMPLETED place_item: 已把 箱子 放在 (65,15)');
+    const raw3 = raw2.replace('5: 箱子\n', '').replace('背包空位：0 个', '背包空位：1 个');
+    const d4 = await planner.decide(parseGameState(raw3));
+    expect(d4.kind === 'act' && d4.tool).toBe('fish');
+    expect((planner as unknown as { chestPlaced: boolean }).chestPlaced).toBe(true);
+  });
+
+  it('真机现场二全链（大脑驱动版，2026-11-22 用户指令「卡死让 AI 判断」）：结构双败→救援问询→大脑自选捐赠→吃预留鱼→砍树→craft→place', async () => {
+    const invAll = `## 背包（序号: 物品）
+0: 斧头
+1: 锄头
+2: 喷壶（水 24/40）
+3: 十字镐
+4: 镰刀
+5: 木材 x22【留着：社区中心“建筑”要交】
+6: 牡蛎【留着：社区中心“蟹笼”要交】
+7: 石头 x14【留着：社区中心“建筑”要交】
+8: 竹鱼竿（手持）
+9: 沙丁鱼 金星 [可食用 +23体力]【留着：社区中心“海鱼”要交】
+10: 太阳鱼 金星 [可食用 +23体力]【留着：社区中心“河鱼”要交】
+11: 蚌【留着：社区中心“蟹笼”要交】
+## 位置
+你站在 (64,15)，面朝右
+背包空位：0 个（共 12 格）`;
+    const receipts: string[] = [
+      'FAILED tidy_backpack: 失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上',
+      'FAILED store_items: 失败：这里没有箱子',
+    ];
+    // 大脑脚本（救援问询与正常流程共用同一个 chat）：无损捐赠先试 → 查缺料 → 再捐 →
+    // 可再生牺牲（吃预留鱼）→ 砍树攒木 → craft —— 全部由大脑自选，护栏只做白名单/冷却/重复防护
+    // 注意：craft 一步由 421 确定性分支直接下发（wood≥50+有空位不烧 token），不走 chat 脚本
+    const brainScript = [
+      '{"tool":"donate_bundles","args":{},"intent":"先试试无损的：把预留材料捐了"}',
+      '{"tool":"bundle_info","args":{},"intent":"捐失败了，查查缺什么"}',
+      '{"tool":"donate_bundles","args":{},"intent":"再试一次捐"}',
+      '{"tool":"eat","args":{"item":"沙丁鱼","force":true},"intent":"捐赠无门，吃条预留鱼腾格（回头再钓）"}',
+      '{"tool":"clear_area","args":{"include_trees":true},"intent":"去农场砍树攒木材，凑 50 造箱"}',
+      '{"tool":"fish","args":{},"intent":"箱子摆好了，继续钓鱼"}',
+    ];
+    let call = 0;
+    const p = new LlmPlanner({
+      chat: async () => {
+        const next = brainScript[Math.min(call++, brainScript.length - 1)] ?? '';
+        return { content: next };
+      },
+      recentReceipts: receipts,
+    });
+    const s0 = parseGameState(`${STATE_OK}\n${invAll}`);
+    // ①②③ 救援问询：大脑自选 donate → bundle_info → donate（每次结构双败先问大脑）
+    const d1 = await p.decide(s0);
+    expect(d1.kind === 'act' && d1.tool).toBe('donate_bundles');
+    receipts.push('FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料（用 bundle_info 看看缺什么）');
+    const d2 = await p.decide(s0);
+    expect(d2.kind === 'act' && d2.tool).toBe('bundle_info');
+    receipts.push('COMPLETED bundle_info: 【工艺室(Crafts Room)】 海鱼：已交 0/5 河鱼：已交 0/5 蟹笼：已交 0/3 建筑：已交 0/3');
+    const d3 = await p.decide(s0);
+    expect(d3.kind === 'act' && d3.tool).toBe('donate_bundles');
+    // ④ 捐赠二次失败 → 单日预算冷却；问询继续：大脑自选可再生牺牲（吃预留鱼 force）
+    receipts.push('FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料');
+    const d4 = await p.decide(s0);
+    expect(d4.kind === 'act' && d4.tool).toBe('eat');
+    expect(d4.kind === 'act' && d4.args).toMatchObject({ item: '沙丁鱼', force: true });
+    // ⑤ 鱼吃掉 → 空位 1 → repeated 双败护栏把大脑按回替补席：规则日程接管（读信），不停摆
+    receipts.push('COMPLETED eat: 吃了 沙丁鱼，体力 180 → 203');
+    const s1 = `${STATE_OK}\n${invAll.replace(/9: 沙丁鱼[^\n]*\n/, '').replace('背包空位：0 个', '背包空位：1 个')}`;
+    const d5 = await p.decide(parseGameState(s1));
+    expect(d5.kind === 'act' && d5.tool).toBe('read_mail');
+    // ⑥ 规则日的一步失败解开 repeated → 大脑带着攒木计划回归：clear_area 砍树
+    receipts.push('COMPLETED read_mail: 读了信');
+    receipts.push('FAILED water_crops: 失败：没有可浇的作物');
+    const d6 = await p.decide(parseGameState(s1));
+    expect(d6.kind === 'act' && d6.tool).toBe('clear_area');
+    expect(d6.kind === 'act' && d6.args).toMatchObject({ include_trees: true });
+    // ⑦ 砍树攒到 60 木 → 大脑 craft
+    receipts.push('COMPLETED clear_area: 清完了周围，捡到 木材 x38');
+    const d7 = await p.decide(parseGameState(`${s1.replace('木材 x22', '木材 x60')}`));
+    expect(d7.kind === 'act' && d7.tool).toBe('craft');
+    // ⑧ craft 成功 → 箱子入包满格 → 确定性 case 8 摆箱（机械步骤不烧 token）
+    receipts.push('COMPLETED craft: 制作了 1 个 箱子');
+    const d8 = await p.decide(parseGameState(`${s1.replace('木材 x22', '木材 x10').replace('11: 蚌【留着：社区中心“蟹笼”要交】', '11: 箱子')}`));
+    expect(d8.kind === 'act' && d8.tool).toBe('place_item');
+    // ⑨ 摆箱成功 → chestPlaced + 大脑恢复正常决策（死锁解除）
+    receipts.push('COMPLETED place_item: 已把 箱子 放在 (65,15)');
+    const d9 = await p.decide(parseGameState(s1.replace('木材 x22', '木材 x10')));
+    expect(d9.kind === 'act' && d9.tool).toBe('fish');
+    expect((p as unknown as { chestPlaced: boolean }).chestPlaced).toBe(true);
+    // 救援问询烧了 4 次 token（donate/bundle_info/donate/吃鱼）——如实计入饭碗
+    expect((p as unknown as { asks: number }).asks).toBeGreaterThanOrEqual(4);
+  });
+
   it('只剩【留着】收集包材料 → donate_bundles（任务物品的正确出路）', async () => {
     const raw = `${STATE_OK}
 ## 背包（序号: 物品）
@@ -449,7 +669,7 @@ describe('LlmPlanner 决策链', () => {
 你站在 (64,15)，面朝右
 背包空位：0 个（共 12 格）`;
     const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const s0 = parseGameState(raw);
     const d1 = await planner.decide(s0); // 无箱子 → store
     expect(d1.kind === 'act' && d1.tool).toBe('store_items');
@@ -559,6 +779,76 @@ describe('LlmPlanner 决策链', () => {
   });
 });
 
+describe('救援问询护栏（2026-11-22 用户指令「卡死让 AI 判断」：判断归大脑，机制归护栏）', () => {
+  const stuckRaw = () => parseGameState(`${STATE_OK}
+## 背包（序号: 物品）
+0: 斧头
+5: 木材 x22【留着：社区中心“建筑”要交】
+9: 沙丁鱼 金星 [可食用 +23体力]【留着：社区中心“海鱼”要交】
+背包空位：0 个（共 12 格）`);
+  const stuckReceipts = (): string[] => [
+    'FAILED tidy_backpack: 失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上',
+    'FAILED store_items: 失败：这里没有箱子',
+  ];
+
+  it('大脑选了今天已冷却的动作 → 拒绝并带原因重问，换合法动作后放行', async () => {
+    const script = [
+      '{"tool":"water_crops","args":{},"intent":"热身（让换日重置先发生）"}',
+      '{"tool":"tidy_backpack","args":{},"intent":"再整理一次"}',
+      '{"tool":"ship_items","args":{"item":"沙丁鱼"},"intent":"冷却了就换出货"}',
+    ];
+    let call = 0;
+    const receipts = stuckReceipts();
+    const p = new LlmPlanner({
+      chat: async () => {
+        const next = script[Math.min(call++, script.length - 1)] ?? '';
+        return { content: next };
+      },
+      recentReceipts: receipts,
+    });
+    // 先热身一跳（非满包正常决策）让换日重置发生——否则 decide 开头会清掉注入的冷却标记
+    await p.decide(parseGameState(`${STATE_OK}\n## 背包（序号: 物品）\n0: 斧头\n背包空位：2 个（共 12 格）`));
+    (p as unknown as { cooledTools: Set<string> }).cooledTools.add('tidy_backpack');
+    const d = await p.decide(stuckRaw());
+    expect(d.kind === 'act' && d.tool).toBe('ship_items');
+    expect(call).toBe(3); // 热身 1 + 冷却拒绝 1 + 重问放行 1
+  });
+
+  it('大脑原样重复刚失败的动作（同工具同物品）→ 拒绝重问；同工具换物品放行', async () => {
+    const receipts = [
+      ...stuckReceipts(),
+      'FAILED trash_item: 失败：6:普通窗户x1 一个能卖 300g，没有扔',
+    ];
+    const script = [
+      '{"tool":"trash_item","args":{"item":"普通窗户","force":true},"intent":"再扔一次窗户"}',
+      '{"tool":"trash_item","args":{"item":"石头","force":true},"intent":"换扔不值钱的石头"}',
+    ];
+    let call = 0;
+    const p = new LlmPlanner({
+      chat: async () => {
+        const next = script[Math.min(call++, script.length - 1)] ?? '';
+        return { content: next };
+      },
+      recentReceipts: receipts,
+    });
+    const d = await p.decide(stuckRaw());
+    expect(d.kind === 'act' && d.tool).toBe('trash_item');
+    expect(d.kind === 'act' && d.args).toMatchObject({ item: '石头' });
+    expect(call).toBe(2);
+  });
+
+  it('大脑两次坏输出（非白名单工具 + 无法解析）→ 回落确定性阶梯', async () => {
+    const receipts = stuckReceipts();
+    const p = new LlmPlanner({
+      chat: async () => ({ content: '{"tool":"rm_rf","args":{}}' }),
+      recentReceipts: receipts,
+    });
+    const d = await p.decide(stuckRaw());
+    // 白名单拒绝重问仍是坏输出 → consult 放弃 → 确定性阶梯接管：无损优先先 donate（case 10）
+    expect(d.kind === 'act' && d.tool).toBe('donate_bundles');
+  });
+});
+
 describe('T-M6-12 决策循环防抖（真机死循环回归）', () => {
   /** 玛妮送宠剧情现场：界面文本从头到尾只有 2 种，真机被 dialogue「推进成功」×191 */
   const EVENT_MENU = '正在播放剧情/节日事件（可以用 skip_event 跳过）。剧情中出现对话时用 dialogue 推进。 对话框（玛妮）：你看见这只猫了吗？ （用 dialogue 不带参数继续/关闭对话）';
@@ -573,7 +863,7 @@ describe('T-M6-12 决策循环防抖（真机死循环回归）', () => {
 
   it('place_item 六个相邻格轮换不复读同一坐标；预算耗尽 → 单日冷却 → force 丢弃兜底（96 次同坐标复读回归）', async () => {
     const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const s = fullFurnitureFarm();
     await planner.decide(s); // store_items
     receipts.push('FAILED store_items: 失败：这里没有箱子');
@@ -658,7 +948,7 @@ describe('T-M6-12 决策循环防抖（真机死循环回归）', () => {
 你站在 (64,15)，面朝右
 背包空位：0 个（共 12 格）`;
     const receipts: string[] = ['FAILED tidy_backpack: 失败：农场上没有箱子'];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const s = parseGameState(raw);
     await planner.decide(s); // store_items
     receipts.push('FAILED store_items: 失败：这里没有箱子');
@@ -891,7 +1181,7 @@ describe('T-M6-15 死锁自主解（为未解锁收集包过早预留）', () =>
       BUNDLE_SNAPSHOT,
       'FAILED donate_bundles: 失败：背包里没有能交给已解锁收集包的材料',
     ];
-    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }), recentReceipts: receipts });
+    const planner = new LlmPlanner({ chat: async () => { throw new Error('brain offline'); }, recentReceipts: receipts });
     const s = parseGameState(LOCKED_BAG);
     const internals = planner as unknown as Internals;
     // 前置：查过缺料、donate 已冷却、阶梯停在 10 档之后

@@ -55,9 +55,10 @@ export function createCoopHost(options: {
   const agents = new Map<string, Agent>();
   for (const ep of endpoints) agents.set(ep.id, { endpoint: ep, runner: null, error: null });
 
-  const broadcast = (agentId: string, event: AutodriveEvent): void => {
+  const broadcast = (agentId: string, sessionId: string, event: AutodriveEvent): void => {
+    // T-M6-27：联机事件带 agentId + sessionId，单会话 UI（中控台/主桌宠）据此过滤，绝不混入单机页
     for (const wc of options.windows()) {
-      if (!wc.isDestroyed()) wc.send('autodrive:event', { ...event, agentId });
+      if (!wc.isDestroyed()) wc.send('autodrive:event', { ...event, agentId, sessionId });
     }
   };
 
@@ -68,11 +69,14 @@ export function createCoopHost(options: {
     if (agent.runner?.isRunning()) return { ok: true, already: true };
     try {
       const adapter = gameAdapters.create(agent.endpoint.gameId, { endpoint: agent.endpoint.endpoint });
+      // T-M6-27：每个联机 agent 独立 sessionId；事件带 agentId + sessionId 供单会话 UI 过滤
+      let sessionId = '';
       const runner = new AutodriveRunner(
-        (event) => broadcast(agent.endpoint.id, event),
+        (event) => broadcast(agent.endpoint.id, sessionId, event),
         { endpoint: agent.endpoint.endpoint },
         adapter,
       );
+      sessionId = runner.sessionId;
       await runner.start(); // 探活失败会抛，如实上报
       agent.runner = runner;
       agent.error = null;

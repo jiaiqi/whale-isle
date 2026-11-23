@@ -2,7 +2,14 @@
  * 对话→游戏指令解析单测（T-M6-17）：关键词直译 / 疑问防误触发 / LLM 输出三态（接单/闲聊/越权拒收）。
  */
 import { describe, expect, it } from 'vitest';
-import { buildDirectiveUserPrompt, parseDirectiveResponse, resolveKeywordDirective } from './chat-directive';
+import {
+  buildDirectiveSystemPrompt,
+  buildDirectiveUserPrompt,
+  parseDirectiveResponse,
+  resolveKeywordDirective,
+  STARDEW_DIRECTIVE_PROFILE,
+  type DirectiveProfile,
+} from './chat-directive';
 
 describe('resolveKeywordDirective（确定性直译）', () => {
   it('高频指令全命中且带正确参数', () => {
@@ -50,5 +57,31 @@ describe('parseDirectiveResponse（LLM 输出三态）', () => {
     const prompt = buildDirectiveUserPrompt('把斧子还给罗宾', { raw: '## 背包\n0: 丢失的斧子\n## 人物\n罗宾' });
     expect(prompt).toContain('把斧子还给罗宾');
     expect(prompt).toContain('## 背包');
+  });
+});
+
+describe('DirectiveProfile（M7 多游戏指令档案）', () => {
+  const fakeProfile: DirectiveProfile = {
+    gameName: '泰拉瑞亚',
+    keywords: [
+      { directive: { tool: 'mine', args: { target: 'copper' }, intent: '挖矿', source: 'keyword' }, re: /挖矿|挖铜/ },
+    ],
+    toolDoc: '挖掘：mine {"target":"copper|stone"}',
+    whitelist: new Set(['mine', 'get_state']),
+  };
+
+  it('默认档案保持星露谷行为；新档案使用自己的关键词表与游戏名', () => {
+    expect(STARDEW_DIRECTIVE_PROFILE.gameName).toBe('星露谷物语');
+    expect(resolveKeywordDirective('去海滩')).toMatchObject({ tool: 'travel_to' });
+    expect(resolveKeywordDirective('挖铜矿', fakeProfile)).toMatchObject({ tool: 'mine', args: { target: 'copper' } });
+    expect(resolveKeywordDirective('去海滩', fakeProfile)).toBeNull();
+  });
+
+  it('system prompt 注入档案的游戏名与工具文档；越权工具按档案白名单拒收', () => {
+    expect(buildDirectiveSystemPrompt(fakeProfile)).toContain('《泰拉瑞亚》');
+    expect(buildDirectiveSystemPrompt(fakeProfile)).toContain('mine {"target":"copper|stone"}');
+    expect(buildDirectiveSystemPrompt()).toContain('《星露谷物语》');
+    expect(parseDirectiveResponse('{"tool":"mine","args":{"target":"copper"},"intent":"挖"}', fakeProfile)?.tool).toBe('mine');
+    expect(parseDirectiveResponse('{"tool":"fish","args":{},"intent":"钓鱼"}', fakeProfile)).toBeNull();
   });
 });

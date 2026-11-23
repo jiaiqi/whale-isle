@@ -2,9 +2,15 @@
  * autodrive 编排器（T-M5-02）：桌宠全自动自主玩游戏的主循环。
  * 流程：get_state → 卡死哨兵 → Planner 决策 → ActionLock 执行 → 回执事件 → 间步延迟。
  * 事件回调由宿主注入（总线广播 → Shell 聊天流/桌宠气泡/监控面板/OBS 同源多播，ADR）。
+ *
+ * T-M6-27（多游戏/多端点隔离）：Runner 持有单调递增的 sessionId；宿主在事件出站与
+ * P0 指令入站时强制打上/校验 sessionId —— 渲染层只消费当前会话，迟到与异会话事件被忽略。
+ * 指令在「在飞动作尚未结束时」到达属正常流程：cancel 是发向游戏侧的尽力中止请求，
+ * execute 的 finally 清锁是兜底；指令绝不因锁忙而被丢弃。
  */
+import { randomUUID } from 'node:crypto';
 import { ActionLock, StuckSentinel } from './action-lock';
-import { BwfMcpClient } from './mcp-client';
+import { StardewAdapter, type GameAdapter, type GameBridgeTransport } from './adapter';
 import { parseGameState, RulePlanner, type Planner, type PlannerDecision } from './planner';
 
 export type AutodriveEvent =
@@ -32,34 +38,36 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 从回执文本判定状态（BWF 文本语义：成功/失败/失败原因/「还在执行」） */
-function classifyReceipt(text: string, kind: 'timeout' | 'error' | 'ok', isError: boolean, tool: string, errorMessage?: string):
-  { status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR'; summary: string } {
-  if (kind === 'timeout') return { status: 'TIMEOUT', summary: `超时（${tool} 仍在游戏侧执行的风险——下次 get_state 复核，不重发）` };
-  if (kind === 'error') return { status: 'ERROR', summary: (errorMessage ?? '') + (text.slice(0, 200) || '客户端错误') };
-  if (isError) {
-    const status = /UNCERTAIN|不确定|可能|unknown/i.test(text) ? 'UNCERTAIN' : 'FAILED';
-    return { status, summary: text.slice(0, 300) };
-  }
-  return { status: 'COMPLETED', summary: text.slice(0, 300) };
-}
-
 export class AutodriveRunner {
+  /** 会话标识：宿主事件出站与 P0 指令入站都以它为归属键（T-M6-27） */
+  readonly sessionId: string = randomUUID();
   private running = false;
   private cycle = 0;
-  readonly client: BwfMcpClient;
+  private loopTask: Promise<void> | null = null;
+  readonly client: GameBridgeTransport;
   readonly lock: ActionLock;
   readonly sentinel: StuckSentinel;
+  readonly adapter: GameAdapter;
   private planner: Planner;
   private pendingDirective: { tool: string; args: Record<string, unknown>; intent: string } | null = null;
 
   constructor(
     private readonly onEvent: (event: AutodriveEvent) => void,
     private readonly options: AutodriveOptions = {},
+    /** 多游戏注入点：默认星露谷原样包装；泰拉瑞亚/DST 泳道传入自己的 GameAdapter */
+    adapter?: GameAdapter,
   ) {
-    this.client = new BwfMcpClient(options.endpoint);
-    this.lock = new ActionLock(this.client);
-    this.sentinel = new StuckSentinel(4 * 60_000, options.now ?? Date.now);
+    this.adapter = adapter ?? new StardewAdapter(options.endpoint);
+    this.client = this.adapter.transport;
+    this.lock = new ActionLock(
+      this.client,
+      (tool) => this.adapter.isLongAction(tool) ? 10 * 60_000 : 30_000,
+    );
+    this.sentinel = new StuckSentinel(
+      4 * 60_000,
+      options.now ?? Date.now,
+      (text) => this.adapter.extractClock(text),
+    );
     this.planner = new RulePlanner();
   }
 
@@ -78,14 +86,25 @@ export class AutodriveRunner {
 
   async start(): Promise<void> {
     if (this.running) return;
-    const alive = await this.client.ping();
-    if (!alive) throw new Error('BWF MCP 不可达（18080）——确认游戏已启动且 Mod MCP 服务器就绪');
+    const alive = await this.adapter.ping();
+    if (!alive) throw new Error(this.adapter.unreachableMessage);
     this.running = true;
-    void this.loop();
+    const task = this.loop();
+    this.loopTask = task;
+    void task.then(
+      () => { if (this.loopTask === task) this.loopTask = null; },
+      () => { if (this.loopTask === task) this.loopTask = null; },
+    );
   }
 
   stop(): void {
     this.running = false;
+  }
+
+  /** 平滑停机：让当前动作回执闭合后退出循环，供游戏热切换串行化 */
+  async stopAndWait(): Promise<void> {
+    this.stop();
+    await this.loopTask;
   }
 
   private async loop(): Promise<void> {
@@ -109,7 +128,7 @@ export class AutodriveRunner {
           await sleep(errorDelay);
           continue;
         }
-        const state = parseGameState(stateRes.text);
+        const state = this.adapter.parseState ? this.adapter.parseState(stateRes.text) : parseGameState(stateRes.text);
         if (state.gameClock === '未知') {
           // 状态文本不可解析（游戏未就绪/Mod 异常/版本漂移）——按 watchdog 处理而非盲跑
           this.onEvent({ type: 'watchdog', kind: 'heartbeat', detail: 'get_state 文本不可解析——游戏未就绪或 Mod 异常，稍后重查' });
@@ -155,7 +174,13 @@ export class AutodriveRunner {
 
         this.onEvent({ type: 'decision', planner: fromDirective ? 'remote' : this.planner.name, tool: decision.tool, args: decision.args, intent: decision.intent });
         const result = await this.lock.execute(decision.tool, decision.args);
-        const receipt = classifyReceipt(result.kind === 'ok' ? result.text : '', result.kind, result.kind === 'ok' && result.isError, decision.tool, result.kind === 'error' ? result.message : undefined);
+        const receipt = this.adapter.classifyReceipt({
+          text: result.kind === 'ok' ? result.text : '',
+          kind: result.kind,
+          isError: result.kind === 'ok' && result.isError,
+          tool: decision.tool,
+          errorMessage: result.kind === 'error' ? result.message : undefined,
+        });
         this.onEvent({ type: 'receipt', tool: decision.tool, status: receipt.status, summary: receipt.summary });
 
         // 5. 间步延迟（长动作回执后稍等游戏结算）

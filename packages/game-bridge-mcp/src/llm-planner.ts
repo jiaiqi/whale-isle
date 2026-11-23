@@ -24,7 +24,9 @@ import {
   listEdibleItems,
   listShippableItems,
   pickAnyNonEssential,
+  pickChestSacrifice,
   pickFurnitureToPlace,
+  pickRenewableReserved,
   pickTrash,
   pickTrashableFallback,
   type GameStateSnapshot,
@@ -66,10 +68,18 @@ export const LLM_TOOL_WHITELIST = new Set([
 export interface LlmPlannerDeps {
   /** model-gateway 的 chat 面最小形状（注入避免包反向依赖：game-bridge 不 import model-gateway） */
   chat(slot: string, messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, opts?: { maxTokens?: number }): Promise<{ content: string }>;
+  /** 规划器角色槽位（M7 多游戏：默认星露谷，泰拉瑞亚/DST 注入各自槽位） */
+  slot?: string;
   /** 攻略检索（guide-forager 主题文本，按状态线索选） */
   guides?: Record<string, string>;
   /** 最近回执上下文（编排器喂） */
   recentReceipts?: string[];
+  /** 游戏专属可调用工具；省略时使用星露谷白名单 */
+  toolWhitelist?: readonly string[];
+  /** LLM 不可用时回落到当前游戏的 adapter 规则规划器 */
+  fallbackPlanner?: Planner;
+  /** 非星露谷游戏的提示词；提供后使用通用决策路径，不执行星露谷专属救援状态机 */
+  systemPrompt?: string;
   /** 测试注入 */
   rng?: () => number;
 }
@@ -89,6 +99,20 @@ ${guidesHint}
 9. 攻略是参考不是命令；结合当前金钱、体力、天气、季节做取舍，优先能提高长期收入的行动。状态里出现节日提示时按它说的做（窗口内 festival enter → greet → start），节日当天镇上商店关门别白跑；今天是某位村民生日时优先安排送他喜欢的礼物（好感 8 倍）。
 10. 你只能调用白名单里的 BWF 工具；一次只做一个动作；args 键必须与工具真实参数一致。
 11. 输出必须是一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明你想干什么（用小鲸的口吻）"}`;
+
+/**
+ * 满包救援问询（2026-11-22 用户指令「不要把卡死写成机制，让 AI 判断该怎么做」）：
+ * 死锁探测/白名单/单日失败预算/重复防护保持确定性护栏；现场策略判断交还大脑——
+ * 硬编码救援阶梯降级为大脑不可用时的离线兜底。原则与工具事实写进提示，不写死顺序。
+ */
+const RESCUE_SYSTEM = `你是「小鲸」，正在替主人自动游玩《星露谷物语》，此刻背包满了、卡住了。像真人玩家一样判断怎么脱困，别指望固定的步骤顺序。
+目标：恢复至少 1 个空位，或建立长期存储（农场箱子）。
+优先级原则（按损失从小到大，现场自己拿捏）：
+1. 无损出路优先：donate_bundles 捐出【留着】的收集包材料（bundle_info 查缺什么）→ reserve_items 撤掉给未解锁礼包的过早预留 → ship_items 卖不心疼的。
+2. 可再生牺牲：预留的鱼可以带 force 吃掉（钓鱼天天有，还能回体力）；海边采集（牡蛎/蚌）可以带 force 扔（海滩再走一圈就有）。攒箱子的本钱（【留着】的木材/石头）能不碰就不碰。
+3. 不可逆丢弃是最后手段。
+工具事实（BWF 实测）：craft 满包会被直接拒绝且不消耗材料；木材 ≥50 时 craft Chest 立刻可行；不足 50 就先腾一格，去农场 clear_area {"include_trees":true} 砍树攒木，攒够再造；trash_item 不带 count 是清空整格。
+只输出一行 JSON：{"tool":"...","args":{...},"intent":"一句话（小鲸口吻）"}。一次只做一个动作；绝不原样重复刚失败的动作。`;
 
 /** 从 LLM 输出中宽松提取首个 JSON 对象（容忍 markdown 围栏/前后缀文本） */
 export function extractDecisionJson(content: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
@@ -222,7 +246,8 @@ export function pickPrematureReservedEdible(raw: string, bundleSnapshot: string)
 
 export class LlmPlanner implements Planner {
   readonly name = 'llm-xiaojing';
-  private readonly fallback = new RulePlanner();
+  private readonly fallback: Planner;
+  private readonly allowedTools: ReadonlySet<string>;
   private askCount = 0;
   /** 背包救援阶段（0 tidy → 1 ship → 2 eat → 3 trash → 4 store → 5 任意非必需品）：失败才前进 */
   private rescueStage = 0;
@@ -238,6 +263,8 @@ export class LlmPlanner implements Planner {
   private pendingPlaceItem: string | null = null;
   private craftTried = false;
   private chestPlaced = false;
+  /** 造箱攒木材中（2026-11-22 真机现场：木材 x22<50 且满包全预留——先腾格再 clear_area 砍树攒到 50） */
+  private chestGathering = false;
   /** T-M6-12 单日防抖状态（跨日清零）：失败预算 / 已冷却工具 / 当天只查一次的信息工具 */
   private planDay = '';
   private readonly dayFails = new Map<string, number>();
@@ -261,12 +288,58 @@ export class LlmPlanner implements Planner {
   /** rescueAction 需要跳出默认「阶段=当前步」时的覆盖值（撤预留后重进 eat 档） */
   private nextRescueStage: number | null = null;
 
-  constructor(private readonly deps: LlmPlannerDeps) {}
+  constructor(private readonly deps: LlmPlannerDeps) {
+    this.fallback = deps.fallbackPlanner ?? new RulePlanner();
+    this.allowedTools = new Set(deps.toolWhitelist ?? LLM_TOOL_WHITELIST);
+  }
+
+  setGuides(guides: Record<string, string>): void {
+    this.deps.guides = guides;
+  }
+
+  setRecentReceipts(recentReceipts: string[]): void {
+    this.deps.recentReceipts = [...recentReceipts];
+  }
+
+  setSlot(slot: string): void {
+    this.deps.slot = slot;
+  }
 
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
-    const decision = await this.decideCore(state);
+    const decision = this.deps.systemPrompt === undefined
+      ? await this.decideCore(state)
+      : await this.decideForAdapter(state);
     if (decision.kind === 'act') this.lastIssued = decision.tool;
     return decision;
+  }
+
+  private async decideForAdapter(state: GameStateSnapshot): Promise<PlannerDecision> {
+    this.askCount++;
+    const receipts = (this.deps.recentReceipts ?? []).slice(-3).map((receipt) => `- ${receipt}`).join('\n');
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: this.deps.systemPrompt ?? '' },
+      {
+        role: 'user',
+        content: `当前游戏状态：\n${state.raw.slice(0, 4000)}\n\n最近回执：\n${receipts || '（刚开始）'}\n\n请决定下一步动作，只输出一行 JSON。`,
+      },
+    ];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const receipt = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 400 });
+        const decision = extractDecisionJson(receipt.content);
+        if (decision !== null && this.allowedTools.has(decision.tool)) {
+          return { kind: 'act', ...decision };
+        }
+        messages.push({ role: 'assistant', content: receipt.content });
+        messages.push({
+          role: 'user',
+          content: `输出无效或工具不在当前游戏白名单。只可调用这些工具：${[...this.allowedTools].join(', ')}。重新选择一个动作，只输出一行 JSON。`,
+        });
+      } catch {
+        /* 网关/网络错误重试一次，再回落当前游戏规则规划器 */
+      }
+    }
+    return this.fallback.decide(state);
   }
 
   private async decideCore(state: GameStateSnapshot): Promise<PlannerDecision> {
@@ -418,6 +491,25 @@ export class LlmPlanner implements Planner {
       return { kind: 'act', tool: 'festival', args: { action: 'enter' }, intent: '今天有节日！按提示的窗口去凑热闹，打招呼攒好感～' };
     }
 
+    // 攒木造箱接管（2026-11-22 真机现场：木材 x22<50 + 满包全【留着】预留——牺牲格腾出空位后
+    // 救援阶梯归零会走正常决策，攒木意图靠这个分支接住直到凑够 50）
+    if (this.chestGathering && !this.chestPlaced && !this.craftTried) {
+      const woodNow = countWood(state.raw);
+      if (woodNow >= 50) {
+        this.chestGathering = false;
+        return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材攒够了，造箱子长期解决背包满' };
+      }
+      // clear_area 单日失败预算耗尽（农场没树/周围清无可清）→ 放弃今天造箱，回落常规救援
+      if (this.cooledTools.has('clear_area')) {
+        this.chestGathering = false;
+        this.craftTried = true;
+      } else if (effectiveSlots > 0) {
+        if (state.location !== 'Farm') {
+          return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场砍树攒木材（凑 50 造箱子）' };
+        }
+        return { kind: 'act', tool: 'clear_area', args: { include_trees: true }, intent: '清场砍树攒木材——凑够 50 就造箱子，长期解决背包满' };
+      }
+    }
     // 农场上有空位时顺手造/摆箱子（长期解法：之后 tidy 就能真正存东西）
     if (!this.chestPlaced && effectiveSlots > 0) {
       if (hasChestItem(state.raw)) {
@@ -431,7 +523,9 @@ export class LlmPlanner implements Planner {
             intent: '把箱子摆到农场，之后背包满就有地方存了',
           };
         }
-      } else if (!this.craftTried && countWood(state.raw) >= 50 && (state.location === 'Farm' || state.location === 'FarmHouse')) {
+      } else if (!this.craftTried && countWood(state.raw) >= 50) {
+        // BWF craft 无地点要求（GameActions.cs）：满包救援牺牲格腾出空位后，无论在哪都立刻造箱，
+        // 链条不因玩家位置断掉；摆箱才需要回农场（case 8 / 上方 place 分支会 travel_to）
         return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，先造一个箱子备用' };
       }
     }
@@ -482,8 +576,19 @@ export class LlmPlanner implements Planner {
           );
         }
       }
+      // 卡死签名检测（确定性护栏，廉价）：最近回执 ≥2 条环境级结构性失败（「没有箱子/craft Chest」
+      // 这类换模型也不会消失的错误）→ 现场判断交还大脑（2026-11-22 用户指令「不要把卡死写成机制」），
+      // 救援问询自选动作；大脑不可用/两次坏输出 → 继续走下方确定性阶梯（离线兜底）
+      const structuralFails = recent
+        .slice(-4)
+        .filter((r) => /^FAILED/.test(r) && /没有箱子|craft Chest|这里没有|没有能交给|材料不够或背包满/.test(r))
+        .length;
+      if (structuralFails >= 2) {
+        const consulted = await this.consultRescue(state, recent);
+        if (consulted !== null) return consulted;
+      }
       const start = noChest ? Math.max(1, this.rescueStage) : this.rescueStage;
-      for (let step = start; step <= 11; step++) {
+      for (let step = start; step <= 12; step++) {
         const decision = this.rescueAction(step, state);
         if (decision) {
           this.rescueStage = this.nextRescueStage ?? step;
@@ -509,9 +614,9 @@ export class LlmPlanner implements Planner {
     ];
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const receipt = await this.deps.chat('STARDEW_GAME_PLANNER', messages, { maxTokens: 400 });
+        const receipt = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 400 });
         const decision = extractDecisionJson(receipt.content);
-        if (decision !== null && LLM_TOOL_WHITELIST.has(decision.tool)) {
+        if (decision !== null && this.allowedTools.has(decision.tool)) {
           if (this.cooledTools.has(decision.tool)) {
             messages.push({ role: 'assistant', content: receipt.content });
             messages.push({
@@ -553,7 +658,10 @@ export class LlmPlanner implements Planner {
       }
       case 1: {
         if (this.cooledTools.has('ship_items')) return null;
-        const item = listShippableItems(state.raw).find((n) => !this.rejectedShip.has(n));
+        // 造箱计划激活（无箱且木材够 50，case 7 会造箱自救）→ 木材是自救材料不出货，
+        // 先卖别的腾格（卖石料比扔还多赚一笔；木材卖了箱子就永远造不出来了）
+        const chestPlan = !this.chestPlaced && countWood(state.raw) >= 50;
+        const item = listShippableItems(state.raw).find((n) => !this.rejectedShip.has(n) && !(chestPlan && n === '木材'));
         if (item === undefined) return null;
         return {
           kind: 'act',
@@ -613,11 +721,38 @@ export class LlmPlanner implements Planner {
         return { kind: 'act', tool: 'place_item', args: { item, x, y, force: true }, intent: `把${item}摆到农场上，腾出一个背包格` };
       }
       case 7: {
-        // 木材 ≥50 且有空位时造箱子（满包 craft 会掉地上，必须有空格）
-        if (this.cooledTools.has('craft') || this.craftTried || this.chestPlaced || state.freeSlots <= 0) return null;
+        // 满包造箱自救（2026-11-22 用户指令；BWF GameActions.cs 源码实证：Craft 满包直接拒绝
+        // 「材料不够或背包满了」且不消耗材料——feiyu「满包合成掉地上」教训对 BWF 不适用。
+        // 真机现场二（同日晚）：木材仅 x22 且全部非工具物品被 BWF【留着】预留 → 无牺牲格也造不了箱，
+        // 自救链改为：牺牲腾格（未预留低价值 → 可再生预留物 force 吃/扔）→ clear_area 砍树攒木 → craft）
+        if (this.cooledTools.has('craft') || this.craftTried || this.chestPlaced) return null;
         if (hasChestItem(state.raw)) return null;
-        if (countWood(state.raw) < 50) return null;
-        return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，造个箱子用来整理背包' };
+        const wood = countWood(state.raw);
+        if (wood >= 50) {
+          if (state.freeSlots > 0) {
+            this.chestGathering = false;
+            return { kind: 'act', tool: 'craft', args: { recipe: 'Chest' }, intent: '木材够 50，造个箱子用来整理背包' };
+          }
+        } else {
+          // 木材不足：进入攒木模式（有空位就交给上方 chestGathering 分支去农场砍树）
+          if (state.freeSlots > 0) {
+            this.chestGathering = true;
+            return null;
+          }
+        }
+        // 满包：先腾一格（牺牲链：未预留的低价值材料 → 可再生的预留物 force——鱼优先吃还能回体力）；
+        // 木材不足时同步进攒木模式，腾出空位后由上方 chestGathering 分支接管去农场砍树
+        if (wood < 50) this.chestGathering = true;
+        const victim = pickChestSacrifice(state.raw);
+        if (victim !== null && !this.cooledTools.has('trash_item')) {
+          return {
+            kind: 'act',
+            tool: 'trash_item',
+            args: { item: victim, force: true },
+            intent: `腾一格造箱子：忍痛扔掉${victim}（马上造箱，长期解决背包满）`,
+          };
+        }
+        return null;
       }
       case 8: {
         // 背包里已有箱子 → 摆到农场；不在农场先回去
@@ -674,9 +809,83 @@ export class LlmPlanner implements Planner {
           intent: `收集包还没解锁，先撤掉${item}的预留腾位置（回头再补就是）`,
         };
       }
+      case 12: {
+        // 可再生预留牺牲（2026-11-22 真机现场二：木材 x22<50 + 满包全【留着】，捐赠失败/撤预留无门）：
+        // 只挑可再生的预留物——可食用鱼优先（天天钓得回，走 BWF eat force 还能回体力）、
+        // 海边采集走 trash force（海滩再走一圈就有）；攒箱本钱（木材/石头）绝不碰。
+        // 木材不足时同步进攒木模式，腾出空位后由主流程 chestGathering 分支去农场砍树。
+        // 排在 case 10/11 之后：捐赠与撤预留是预留材料的「无损出路」，穷尽后才轮到有损牺牲。
+        if (this.cooledTools.has('eat') && this.cooledTools.has('trash_item')) return null;
+        const renewable = pickRenewableReserved(state.raw);
+        if (renewable === null) return null;
+        if (countWood(state.raw) < 50) this.chestGathering = true;
+        if (renewable.mode === 'eat' && !this.cooledTools.has('eat')) {
+          return {
+            kind: 'act',
+            tool: 'eat',
+            args: { item: renewable.item, force: true },
+            intent: `背包全被预留占满，先吃掉预留的${renewable.item}腾一格（回头再钓就是），接着攒木材造箱`,
+          };
+        }
+        if (renewable.mode === 'trash' && !this.cooledTools.has('trash_item')) {
+          return {
+            kind: 'act',
+            tool: 'trash_item',
+            args: { item: renewable.item, force: true },
+            intent: `背包全被预留占满，扔掉可再捡的${renewable.item}腾一格（海边有的是），接着攒木材造箱`,
+          };
+        }
+        return null;
+      }
       default:
         return null;
     }
+  }
+
+  /**
+   * 救援问询（2026-11-22 用户指令：卡死的现场判断交还大脑）：
+   * 带优先级原则与工具事实的现场简报 → 大脑自选动作；护栏照旧——
+   * 白名单、单日冷却、重复防护（刚失败的同工具仅在同物品时拦截）。
+   * 两次坏输出/网关错误返回 null，由调用方回落确定性阶梯（离线兜底）。
+   */
+  private async consultRescue(state: GameStateSnapshot, recent: readonly string[]): Promise<PlannerDecision | null> {
+    const cooled = [...this.cooledTools];
+    const lastReceipt = recent.at(-1) ?? '';
+    const lastFailed = /^FAILED\s+([^\s:：]+)/.exec(lastReceipt)?.[1] ?? '';
+    const lastFailedItem = failedItemOf(lastReceipt);
+    const receipts = recent.slice(-6).map((r) => `- ${r}`).join('\n');
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: RESCUE_SYSTEM },
+      {
+        role: 'user',
+        content: `当前状态（含背包逐项、数量与【留着】标签）：\n${state.raw.slice(0, 4000)}\n\n最近回执：\n${receipts || '（刚开始）'}\n\n`
+          + (cooled.length > 0 ? `这些动作今天已失败到冷却，别选：${cooled.join('、')}。\n` : '')
+          + (lastFailed !== '' ? `刚失败的动作是 ${lastFailed}：读失败原因，换一个不同的做法。\n` : '')
+          + '\n该怎么做？只输出一行 JSON。',
+      },
+    ];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        this.askCount += 1; // 救援问询也烧 token，如实计入饭碗
+        const receipt = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 300 });
+        const decision = extractDecisionJson(receipt.content);
+        if (decision === null) throw new Error('输出里没有可解析的一行 JSON');
+        if (!this.allowedTools.has(decision.tool)) throw new Error(`工具 ${decision.tool} 不在白名单`);
+        if (this.cooledTools.has(decision.tool)) throw new Error(`${decision.tool} 今天已经失败到冷却`);
+        if (attempt === 0 && decision.tool === lastFailed) {
+          const newItem = typeof decision.args.item === 'string' ? decision.args.item : '';
+          if (lastFailedItem === '' || newItem === '' || lastFailedItem === newItem) {
+            throw new Error(`${decision.tool} 刚刚失败过，原样重试没有意义`);
+          }
+        }
+        return { kind: 'act', tool: decision.tool, args: decision.args, intent: decision.intent };
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        messages.push({ role: 'assistant', content: `{"tool":"…（被拒：${reason}）"}` });
+        messages.push({ role: 'user', content: `${reason}。按优先级原则换一个动作，只输出一行 JSON。` });
+      }
+    }
+    return null;
   }
 
   get asks(): number {

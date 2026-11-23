@@ -60,24 +60,42 @@ const KEYWORD_PATTERNS: Array<{ directive: ChatDirective; re: RegExp }> = [
   { directive: KEYWORD_DIRECTIVES[14] as ChatDirective, re: /(睡觉|睡吧|去睡|休息一下)/ },
 ];
 
+/** 一款游戏的「聊天→动作」指令档案（M7 多游戏：新游戏提供自己的表，默认星露谷行为不变） */
+export interface DirectiveProfile {
+  gameName: string;
+  keywords: ReadonlyArray<{ directive: ChatDirective; re: RegExp }>;
+  /** 工具与参数说明原文（进 system prompt；严禁臆造参数） */
+  toolDoc: string;
+  /** 运行时安全锁：白名单外工具一律拒收 */
+  whitelist: ReadonlySet<string>;
+}
+
+/** 星露谷默认档案（原有 15 条关键词 + BWF 工具说明，真机行为零变化） */
+export const STARDEW_DIRECTIVE_PROFILE: DirectiveProfile = {
+  gameName: '星露谷物语',
+  keywords: KEYWORD_PATTERNS,
+  toolDoc: `移动：travel_to {"location":"Beach|Town|Farm|FarmHouse|Mine|CommunityCenter|Mountain|Saloon|FishShop|Forest|Desert"}
+农活：water_crops / harvest_crops / forage / clear_area {x1,y1,x2,y2|radius} / till_area / plant_seeds {"seed"}
+钓鱼：fish {"casts":1-20}；背包：tidy_backpack {"purpose":"mine|fish|farm|town"} / ship_items {"item"} / store_items / take_items {"items"} / trash_item {"item",count?,force?}
+交互：interact {"npc"|"x","y"}；送礼：give_gift {"npc","item"}（先用状态里的名字，别猜）；读信 read_mail；任务 quest_board {"accept":true}；睡觉 sleep；吃饭 eat {"item"}；制作 craft {"recipe"}；摆放 place_item {"item"}；购买 open_shop/buy {"item","count"}；出售 sell {"item"}；社区中心 bundle_info / donate_bundles；矿洞 explore_mine {"levels"}；战斗 fight。`,
+  whitelist: LLM_TOOL_WHITELIST,
+};
+
 /** 确定性直译：命中返回指令；「疑问/回忆」文本返回 null（交给 LLM 层复核，绝不误接单） */
-export function resolveKeywordDirective(text: string): ChatDirective | null {
+export function resolveKeywordDirective(text: string, profile: DirectiveProfile = STARDEW_DIRECTIVE_PROFILE): ChatDirective | null {
   if (NOT_AN_ORDER_RE.test(text)) return null;
-  const hit = KEYWORD_PATTERNS.find((k) => k.re.test(text));
+  const hit = profile.keywords.find((k) => k.re.test(text));
   return hit === undefined ? null : { ...hit.directive, intent: `主人指令：${hit.directive.intent}` };
 }
 
 /** LLM 指令解析 system：与游戏规划器同一套白名单语义 + 状态填参提示 + 「闲聊输出空 tool」约定 */
-export function buildDirectiveSystemPrompt(): string {
-  return `你是「小鲸」的指令解析器：判断主人刚说的话是不是要小鲸在《星露谷物语》里执行的动作。
-- 是动作指令 → 只输出一行 JSON：{"tool":"BWF 工具名","args":{参数},"intent":"一句话说明"}；
+export function buildDirectiveSystemPrompt(profile: DirectiveProfile = STARDEW_DIRECTIVE_PROFILE): string {
+  return `你是「小鲸」的指令解析器：判断主人刚说的话是不是要小鲸在《${profile.gameName}》里执行的动作。
+- 是动作指令 → 只输出一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明"}；
 - 不是动作（闲聊/提问/感想/角色扮演）→ 只输出 {"tool":"","args":{},"intent":""}。
-可用的 BWF 工具与参数（严禁臆造）：
-移动：travel_to {"location":"Beach|Town|Farm|FarmHouse|Mine|CommunityCenter|Mountain|Saloon|FishShop|Forest|Desert"}
-农活：water_crops / harvest_crops / forage / clear_area {x1,y1,x2,y2|radius} / till_area / plant_seeds {"seed"}
-钓鱼：fish {"casts":1-20}；背包：tidy_backpack {"purpose":"mine|fish|farm|town"} / ship_items {"item"} / store_items / take_items {"items"} / trash_item {"item",count?,force?}
-交互：interact {"npc"|"x","y"}；送礼：give_gift {"npc","item"}（先用状态里的名字，别猜）；读信 read_mail；任务 quest_board {"accept":true}；睡觉 sleep；吃饭 eat {"item"}；制作 craft {"recipe"}；摆放 place_item {"item"}；购买 open_shop/buy {"item","count"}；出售 sell {"item"}；社区中心 bundle_info / donate_bundles；矿洞 explore_mine {"levels"}；战斗 fight。
-args 里的物品/人名一律照抄「当前游戏状态」里的原文（含【留着】外的品质后缀可省）。宁可解析不成也不要猜参数。`;
+可用的工具与参数（严禁臆造）：
+${profile.toolDoc}
+args 里的物品/人名一律照抄「当前游戏状态」里的原文。宁可解析不成也不要猜参数。`;
 }
 
 /** LLM 指令解析 user：原话 + 当前游戏状态节选（有状态才能填对参数） */
@@ -91,8 +109,8 @@ ${state.raw.slice(0, 3500)}
 }
 
 /** 解析 LLM 输出：空 tool = 不是动作（null）；白名单外工具一律拒收（运行期安全锁） */
-export function parseDirectiveResponse(content: string): ChatDirective | null {
+export function parseDirectiveResponse(content: string, profile: DirectiveProfile = STARDEW_DIRECTIVE_PROFILE): ChatDirective | null {
   const d = extractDecisionJson(content);
-  if (d === null || d.tool === '' || !LLM_TOOL_WHITELIST.has(d.tool)) return null;
+  if (d === null || d.tool === '' || !profile.whitelist.has(d.tool)) return null;
   return { tool: d.tool, args: d.args, intent: d.intent, source: 'llm' };
 }
