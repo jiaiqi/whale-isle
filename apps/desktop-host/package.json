@@ -1,7 +1,7 @@
 {
   "name": "@workbench/desktop-host",
   "productName": "鲸屿",
-  "version": "0.1.0",
+  "version": "0.2.0-dev.1",
   "private": true,
   "description": "鲸屿 Whale Isle · Electron 跨平台宿主（透明桌宠 / AI 自治 / 直播中控台 / WebUI）",
   "type": "module",

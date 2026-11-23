@@ -3,6 +3,10 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0-dev.1] — 2026-11-23
+
+首个可复现开发基线：Electron 45.4.1 + Zod 4.6.7（audit 0 high/0 critical）、契约原生 JSON Schema 生成、三游戏代码闭环（泰拉瑞亚/DST 真机待验收）、OBS `/obs` 只读挂件、自治质量指标、CI + soak + 7 项本地门禁、服务商面板拆分、全项目审计收口（见 ROADMAP T-M6-27~35）。
+
 ### Added
 
 - **自治质量指标（T-M6-35，审计 Phase 2 切片）**：`packages/game-bridge-mcp/metrics.ts` 从真实事件流派生有效回执率、失败/错误率、重复动作率、动作覆盖面与最长同工具连击；口径明确（TIMEOUT 不计成功也不计失败、`think` 不算动作、编排器汇总回执排除、空集显示「—」不伪造 0%/100%）。星露谷与泰拉瑞亚面板新增「自治质量（本会话）」卡；渲染层通过 `@workbench/game-bridge-mcp/metrics` 子路径导入，避免把适配器副作用打进前端包。验证：metrics 8/8（分支 100%）、Electron UI E2E 4/4。
