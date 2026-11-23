@@ -36,6 +36,56 @@ const GAME_STATUS_LABEL: Record<string, string> = {
   TIMEOUT: '超时',
 };
 
+/** 工具名中文化（英文留在括号，方便对照日志；未知工具原样显示，绝不臆造） */
+const TOOL_LABEL: Record<string, string> = {
+  travel_to: '前往（travel_to）',
+  fish: '钓鱼（fish）',
+  water_crops: '浇水（water_crops）',
+  harvest_crops: '收获（harvest_crops）',
+  till_area: '耕地（till_area）',
+  plant_seeds: '播种（plant_seeds）',
+  clear_area: '清理（clear_area）',
+  forage: '采集（forage）',
+  tidy_backpack: '整理背包（tidy_backpack）',
+  ship_items: '出货（ship_items）',
+  store_items: '存入箱子（store_items）',
+  take_items: '取回物品（take_items）',
+  trash_item: '扔掉（trash_item）',
+  eat: '吃东西（eat）',
+  read_mail: '读信（read_mail）',
+  quest_board: '任务板（quest_board）',
+  donate_bundles: '捐赠收集包（donate_bundles）',
+  bundle_info: '查看收集包（bundle_info）',
+  sleep: '睡觉（sleep）',
+  craft: '制作（craft）',
+  place_item: '摆放物品（place_item）',
+  open_shop: '打开商店（open_shop）',
+  buy: '购买（buy）',
+  sell: '出售（sell）',
+  interact: '交互（interact）',
+  use_tool: '使用工具（use_tool）',
+  explore_mine: '探索矿洞（explore_mine）',
+  fight: '战斗（fight）',
+  dialogue: '对话（dialogue）',
+  close_menu: '关闭界面（close_menu）',
+  skip_event: '跳过剧情（skip_event）',
+  set_name: '起名（set_name）',
+  festival: '节日（festival）',
+  update_notes: '记笔记（update_notes）',
+  reserve_items: '预留物品（reserve_items）',
+};
+
+export function toolLabel(tool: string | undefined): string {
+  if (tool === undefined || tool === '') return 'idle';
+  return TOOL_LABEL[tool] ?? tool;
+}
+
+/** 回执状态中文（未知状态原样显示） */
+export function statusLabel(status: string | undefined): string {
+  if (status === undefined || status === '') return '—';
+  return GAME_STATUS_LABEL[status] ?? status;
+}
+
 export type ReceiptFilter = 'all' | 'COMPLETED' | 'UNCERTAIN' | 'FAILED';
 
 /** 只读探活轮询（主进程 game:health；不触发任何游戏动作）。面板不可见时可关停轮询。 */
@@ -156,7 +206,7 @@ export function GameCurrentActionCard({
           {isRemote ? 'P0 插队' : decision?.planner ?? '待命'}
         </span>
       </div>
-      <div className="mono text-base font-semibold" style={{ color: 'var(--blue)' }}>{decision?.tool ?? 'idle'}</div>
+      <div className="mono text-base font-semibold" style={{ color: 'var(--blue)' }}>{toolLabel(decision?.tool)}</div>
       <p className="mt-1 text-[11px]" style={{ color: 'var(--text-2)' }}>{decision?.intent ?? idleHint}</p>
       <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
         {metrics.map(([k, v]) => (
@@ -228,8 +278,8 @@ export function GameReceiptTimeline({
           const c = GAME_STATUS_COLOR[r.status ?? 'ERROR'] ?? GAME_STATUS_COLOR.ERROR!;
           return (
             <div key={i} data-receipt={r.status} className="border-l-2 py-1 pl-2.5 text-[11px]" style={{ borderColor: c.line }}>
-              <span className="mono font-semibold" style={{ color: c.text }}>{r.status}</span>
-              <span className="ml-1.5" style={{ color: 'var(--text-1)' }}>{r.tool}</span>
+              <span className="mono font-semibold" style={{ color: c.text }}>{GAME_STATUS_LABEL[r.status ?? 'ERROR'] ?? r.status}</span>
+              <span className="ml-1.5" style={{ color: 'var(--text-1)' }}>{toolLabel(r.tool)}</span>
               <div className="mt-0.5 line-clamp-2 text-[10px]" style={{ color: 'var(--text-3)' }}>{r.summary}</div>
             </div>
           );

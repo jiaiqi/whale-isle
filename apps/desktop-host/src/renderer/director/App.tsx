@@ -36,6 +36,8 @@ import {
   GameQualityCard,
   GameQuickCommands,
   GameReceiptTimeline,
+  statusLabel,
+  toolLabel,
   useGameHealth,
   type ReceiptFilter,
 } from './game-panel';
@@ -453,7 +455,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent, sessionRef.current.sessionId)
         .then((res) => { if (!res.ok) toast.error(res.error ?? '插队失败'); });
       setEvents((prev) => [...prev, { type: 'decision', tool: directive.tool, intent: directive.intent, planner: 'remote' }]);
-      toast(`已插队：${directive.tool}`);
+      toast(`已插队：${toolLabel(directive.tool)}`);
       return;
     }
     setEvents((prev) => [...prev, { type: 'user', summary: t }]);
@@ -570,7 +572,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
               {decisions.slice(-5).reverse().map((d, i) => (
                 <div key={i} className="mono rounded px-1.5 py-1 text-[10px]" style={{ background: 'var(--inset)', color: 'var(--text-2)' }}>
-                  <span style={{ color: d.planner === 'remote' ? 'var(--amber)' : 'var(--blue)' }}>{d.tool}</span>
+                  <span style={{ color: d.planner === 'remote' ? 'var(--amber)' : 'var(--blue)' }}>{toolLabel(d.tool)}</span>
                   <span className="ml-1" style={{ color: 'var(--text-3)' }}>{(d.intent ?? '').slice(0, 26)}</span>
                 </div>
               ))}
@@ -917,7 +919,7 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
         <div className="mono text-[10px]" style={{ color: 'var(--blue)' }}>
           {event.planner === 'remote' ? 'P0 插队' : `决策 · ${event.planner ?? 'planner'}`}
         </div>
-        <div className="mono mt-1 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{event.tool}</div>
+        <div className="mono mt-1 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{toolLabel(event.tool)}</div>
         <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{event.intent}</div>
       </div>
     );
@@ -969,7 +971,7 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
         <div data-event="chat-order" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)' }}>
           <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--amber)' }}>
             <Zap size={12} />接单——马上就去做
-            <span style={{ color: 'var(--text-3)' }}>{tool}</span>
+            <span style={{ color: 'var(--text-3)' }}>{toolLabel(tool)}</span>
           </div>
           <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{rest.join('｜') || event.summary}</div>
         </div>
@@ -979,8 +981,8 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
     return (
       <div data-event="receipt" className="mb-3 rounded-2xl p-3" style={{ border: `1px solid ${c.line}`, background: c.bg }}>
         <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: c.text }}>
-          <span>{event.status}</span>
-          <span style={{ color: 'var(--text-3)' }}>{event.tool}</span>
+          <span>{statusLabel(event.status)}</span>
+          <span style={{ color: 'var(--text-3)' }}>{toolLabel(event.tool)}</span>
         </div>
         <div className="mt-1 line-clamp-3 text-xs" style={{ color: 'var(--text-2)' }}>{event.summary}</div>
       </div>
