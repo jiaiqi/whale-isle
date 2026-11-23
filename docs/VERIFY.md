@@ -107,10 +107,19 @@
 | T-M6-25 | `[SIMULATION]` + `[E2E-HOST]`（未启动真实游戏） | `game-health.spec.ts` **11/11 通过**（fetch 全注入零网络）：stardew MCP `tools/call get_state` 正常 → online、JSON/SSE 双形态、MCP error → reachable、连接被拒 → offline；terraria/dst `/health` 契约通过 → online、`ok=false`/gameId 串台/HTTP 500/非 JSON/契约违规 → reachable、连接被拒 → offline；`probeAllGames` 三游戏互不阻塞；`fetchDstSnapshot` 过 `DstStateSnapshotSchema` 才返回、违规如实报错。UI E2E（`ui.e2e.spec.ts` 新增用例）**1/1 通过**：三游戏各有连接引导条、`data-game-conn` 三态合法、未连通时列出启动指引、「重新探测」真实往返主进程 IPC、高级诊断默认折叠（点击展开）、共用回执时间线与快捷指令区块、DST 状态 IPC 未开 sidecar 时如实失败。**附带修正打包缺陷**：`game-bridge-mcp` 的 `sideEffects: false` 曾让 esbuild tree-shaking 掉两游戏适配器自注册（真机表现为「未注册的游戏适配器」），已改 `sideEffects: true` 并验证适配器进包。未启动星露谷/泰拉瑞亚/DST 真实游戏——这些证据不代表真实游戏连接验收。 | 2026-11-23 |
 | T-M7-03（补充：宿主热切换与打包） | `[SIMULATION]` + `[E2E-HOST]` | 宿主/adapter/runner 单测覆盖角色提示、雷区反射接线、`<think>` 可见文本、三游戏日键、adapter LLM 白名单与规则回退、`stopAndWait()`；macOS arm64 electron-builder 包含 7 篇攻略与 persona fixture。DMG：303,129,628 → 297,394,499 bytes（−5,735,129，约 −1.89%）；无 Developer ID，构建跳过签名。`pnpm verify:gate`：5 过 / 0 跳过 / 0 待接线，Gate 3 分支覆盖率 90.14%。这些证据不代表真实游戏热切换。 | 2026-11-22 |
 
+| T-M6-38 | `[SIMULATION]` + `[E2E-HOST]` | `pet-window-manager.spec.ts` **5/5**（多 agentId 独立窗与 +220 错位、缩放/锁定隔离与落盘、关闭后原位恢复、非法 id、装载失败回滚）；`voice-host.spec.ts` **5/5**（原后端探测 4 + 多角色全局串行、speaker speaking/idle 与 voiceId 解析）；Electron UI E2E **7/7** 新增「协作大厅可渲染 + agentId 第二桌宠 open/close」；desktop-host build 通过。真实多窗拖拽、缩放和不同角色音色听感待人类。 | 2026-11-23 |
+| T-M6-39 | `[SIMULATION]` + `[E2E-HOST]` | `team-blackboard.spec.ts` **7/7**（软锁抢占/续租/过期、版本/订阅、≤300 字摘要与 @ 过滤、局部更新/溢出）；`huddle-orchestrator.spec.ts` **10/10**（Round2 收敛即落、≤3 轮、冷却、预算降级、并发拒绝、dispatch/语音异常）；`coop-host.spec.ts` **11/11**（@单人→directive、@全队→计划+objective、闲聊不派活、求助交接、DST routingId、自动求助、真实金币/木材进度）；llm-planner 团队注入 2 项；Electron 协作页真实渲染并显示 human + 默认 AI 端点。真实多 AI 同世界联机、真实协商听感与长时间预算消耗待人类。 | 2026-11-23 |
+| T-M6-40 | `[SIMULATION]` | `GameBridgeActionRequestSchema.agentId` 可选契约；dst-adapter **12/12** 新增 `/state?agentId` / `/act` body / `/cancel?agentId` 断言；sidecar **10/10** 新增双 Agent 快照、动作槽与 cancel 隔离；Mod 支持逗号分隔受控 UserID、每玩家 tick 上报 agentId，`luac -p`/真实 DST 多玩家待人类。单 Agent 与 `default` 旧行为兼容。 | 2026-11-23 |
+| T-M6-10（春24 冻结死锁） | `[REAL-DEVICE]` 根因 + `[SIMULATION]` 修复 | 真机日志实锤 BWF「MCP 客户端 120 秒没有动作，已暂停游戏」；`get_state` 连续多分钟 `第1年春24日 06:00 FarmHouse` 且菜单可自由行动。手动调用有效 `wait {minutes:1}` 后恢复推进（06:00 → 06:10），确认不是寻路/背包死锁。代码根因：`ActionLock.cancel` 无在途动作时不发 RPC，watchdog 仍每 2 秒声称 cancel。修复：真实 cancel + 90s keepalive + 冻结恢复动作；新增 autodrive 3 项回归，全量单测与 E2E 通过。**当前运行实例仍是旧主进程，重启后生效；LLM Key 因 `--use-mock-keychain` 重启丢失风险未擅自重启。** | 2026-11-23 |
+
+| T-M6-41 | `[SIMULATION]` + `[E2E-HOST]` | CoopHost **11/11**：DST routingId 优先/空值回退、DST 无 Klei UserID 拒绝接管、低体力持续 30s 自动求助并交接、短时抖动不求助、`parseChestWood` 排除背包木材、goal-set 拉取箱内木材并由状态事件更新团队金币；Electron UI E2E 7/7 新增 `coopGoalSet` 后标题与 `0 / 4,000g` 进度即时渲染。旧 `prefsSet` 位置写入已同步至多窗偏好，desktop E2E 恢复 1/1。真实 DST UserID、真实双 AI 目标进度待人类。 | 2026-11-24 |
+
 ## 待人类宿主真机验收项
 
 | 里程碑 | 验收内容 | 状态 | 验收日期 |
 | --- | --- | --- | --- |
+| T-M6-38/39 多桌宠协作 | 真实同时打开 2–3 只桌宠窗（拖拽/缩放/穿透互不影响）；启动两个真实游戏实例/端点，确认发言串行不叠音、音色按角色区分、黑板上每人任务/区域与真实游戏位置一致；真实跑一轮 @点名、@全队协商、求助接力并核对游戏回执。 | ⏳ | — |
+| T-M6-40 DST 多 Agent | 配多个受控 UserID 的 DST 专用服 + sidecar，确认每个 Agent 的 `/state`、动作、cancel 只作用于自己的角色；单玩家旧配置不回归。 | ⏳ | — |
 | T-M6-23 桌宠多显示器 | 使用两块以上、不同布局/缩放的真实显示器验证拖拽与甩抛不会落进屏幕间隙；断开已保存屏幕后重启，确认落到最近可用屏；检查异构 DPI、任务栏与缩放组合 | ⏳ | — |
 | T-M6-24 全局壳层 | 普通开发实例人工确认三游戏插件启用状态与旧路由迁移、角色快切、实际绑定主脑短名；连接真实星露谷/BWF 后启动并停止自驾，确认顶栏展示与游戏实际状态一致。本票的隔离 Electron E2E 未连接真实游戏。 | ⏳ | — |
 | T-M6-25 三游戏连接引导 | ① 真实启动星露谷（BWF 18080 已起、已载入存档）→ 游戏共玩页引导条应转为「已连接」并显示真实版本/控制权，点「重新探测」即时刷新；② 游戏未启动时应显示琥珀色引导条与 4 步指引，**不得**显示「已连接」；③ 装了 tModLoader + terraria-bridge 后切到泰拉瑞亚确认 18090 在线；④ 起 DST sidecar 后确认 18100 在线且生存状态卡显示真实快照；⑤ 断开任一桥接后确认回落到 offline 并给对应指引。**2026-11-23 真机：星露谷 18080 已通过（online + 真实文案），泰拉瑞亚/DST 仍未验** | 🟡 部分 | 2026-11-23 |

@@ -3,6 +3,25 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] — 2026-11-23
+
+### Added
+
+- **联机协作大厅（T-M6-39）**：新增 TeamGoal / TeamAssignment / TeamBlackboardSnapshot / TeamCommsMessage 四契约（`pnpm gen:contracts` 61 契约）；`TeamBlackboard` 提供区域软锁（TTL/续租/过期）、版本化快照与 ≤300 字 Prompt 摘要；`HuddleOrchestrator` 严格 2–3 轮、自动协商 5 分钟冷却、单场 12,000 token 预算，超预算或 LLM 异常降级为本地规则分工；CoopHost 为每个 AI 独立绑定 persona/voice/planner（复用主 Gateway 与饭碗），新增端点可视化增删改、`@单人` P0 定向、`@全队` 重议、求助区域交接与三栏大厅（目标 / 群聊 / 黑板）。验证：TeamBlackboard 7、Huddle 10、CoopHost IPC 5、团队上下文注入 2、Electron UI E2E 7/7；真实双 AI 联机与听感待真机。
+- **多桌宠同屏多开 + 全局抢麦（T-M6-38）**：`PetWindowManager` 按 `agentId` 管理透明窗，独立坐标/缩放/锁定持久化到 `pet-window-prefs.json`，新窗 +220px 错位，默认 `default` 保持旧单窗兼容；桌宠 hash URL 携带 agentId/characterId，动作/气泡/状态事件按 agentId 过滤；语音输出租约上提主进程，按角色注册表解析 voiceId，`coop:speaker` 广播 speaking/idle 驱动发言/倾听动作。验证：窗口管理 5、语音串行 5、Electron E2E 多窗开关 7/7。
+- **DST 同 sidecar 多 Agent 路由（T-M6-40）**：`agentId` 贯穿通用动作请求、DST `/state`、`/act`、`/cancel`、sidecar 每玩家快照/pending/cancel 槽与 Mod 多受控 UserID tick；单玩家/`default` 向后兼容。验证：dst-adapter 12/12、sidecar 10/10（快照/动作/cancel 隔离）；真实 DST 多玩家待人类。
+
+### Added（协作可用性收口，T-M6-41）
+
+- **DST 逻辑玩家 ID 可视化**：`McpEndpoint.routingId` 贯穿契约/CoopHost/DST adapter；UI 可填 Klei UserID，DST 空值直接拒绝接管，避免同 sidecar 读错角色。
+- **自动求助**：真实状态事件补充 health/freeSlots；体力 <15%、生命 <30% 或背包满持续 30 秒自动发 `need_help` 并尝试交接给空闲队友，3 分钟抑制抖动；成员卡新增人工求助按钮。
+- **真实目标进度**：`TeamGoalMetric.source` 支持 `team_money` / `shared_wood`；金币来自 Stardew 共享钱包，公共木材用 `list_chests item=木材` 仅统计箱子并排除背包；目标编辑支持金币/木材 target。
+- **E2E 兼容修复**：旧 `prefsSet` 位置写入手动同步到 `PetWindowManager` 的 default 窗口偏好，修复重启恢复 E2E；按窗口实际状态比对，不再依赖全局值是否变化。
+
+### Fixed
+
+- **星露谷真机卡死（BWF 120s 自暂停 → 时钟冻结死锁）**：日志实锤 BWF 因「MCP 客户端 120 秒没有动作」暂停游戏；旧 watchdog 在当前无在途动作时 `cancel()` 直接返回、根本没发 `cancel_action`，却每 2 秒重复声称已兜底，形成永不进入 planner 的死循环。修复：无在途也真实发送 cancel；90 秒无变更动作自动发游戏原生 keepalive（星露谷 `wait minutes=1`）阻止自暂停；4 分钟冻结时 cancel + 最小恢复动作，恢复失败才交还 planner，并重置 stale 计时避免刷屏。补 3 项回归测试；`ActionLock.cancel` 仍以「是否有在途动作被取消」为返回值，保持旧语义。**当前运行实例仍是旧主进程，需重启 Electron 后生效。**
+
 ## [0.2.0-dev.1] — 2026-11-23
 
 首个可复现开发基线：Electron 45.4.1 + Zod 4.6.7（audit 0 high/0 critical）、契约原生 JSON Schema 生成、三游戏代码闭环（泰拉瑞亚/DST 真机待验收）、OBS `/obs` 只读挂件、自治质量指标、CI + soak + 7 项本地门禁、服务商面板拆分、全项目审计收口（见 ROADMAP T-M6-27~35）。
