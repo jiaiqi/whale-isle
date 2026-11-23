@@ -50,7 +50,7 @@ design/     v4「曜石」10 页可交互高保真原型
 ```bash
 pnpm install
 pnpm typecheck                                  # Gate 1：类型编译与架构边界校验
-pnpm verify:gate                                # 5 道自动化门禁一键校验（744 tests，分支覆盖 90.09%）
+pnpm verify:gate                                # 4 道门禁 / 7 项检查（744 tests，分支覆盖 90.12%）
 pnpm --filter @workbench/desktop-host start     # 构建并启动桌面端（中控台 + 桌宠窗 + WebUI :18780）
 pnpm soak:autodrive 1                           # [SIMULATION] 仿真器长时浸泡 1 分钟（错误率/内存趋势）
 pnpm --filter @workbench/desktop-host package   # 打出独立安装包（macOS arm64 .dmg / Win x64 .exe）

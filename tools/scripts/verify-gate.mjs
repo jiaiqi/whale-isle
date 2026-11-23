@@ -4,7 +4,8 @@
  *
  * 当前进度（与 docs/ROADMAP.md 同步，随工单推进接线）：
  *   Gate 1 类型与边界    ✅ tsc -b + dependency-cruiser（T-M0-01）+ Python ruff/mypy（T-M0-02）
- *   Gate 2 许可证与密钥  ✅ 台账校验 + 密钥泄漏/禁源痕迹扫描（T-M0-04 将升级为独立扫描器）
+ *   Gate 2 许可证与密钥  ✅ 台账校验 + 密钥泄漏/禁源痕迹扫描；T-M6-29 增补依赖漏洞
+ *                        （pnpm audit high，离线/超时 SKIP）与 DST Lua 语法（luac -p，缺 luac SKIP）
  *   Gate 3 确定性单测    ✅ vitest（TS 契约单测）+ pytest（Python 夹具回放）（T-M0-02 接线；
  *                        覆盖率 ≥90% 门槛自 T-M0-03 随包接入）
  *   Gate 4 回环契约 E2E  ✅ apps/desktop-host/e2e/gate4-loopback.spec.ts（[SIMULATION] 测试内手工组合：
@@ -135,6 +136,55 @@ if (existsSync(scannerPath)) {
   gate('Gate 2 许可证与密钥', scan.status === 0 ? 'PASS' : 'FAIL', detail);
 } else {
   gate('Gate 2 许可证与密钥', 'FAIL', 'license-scanner.mjs 缺失（T-M0-04 产物被误删）');
+}
+
+// ---- Gate 2 补充：依赖漏洞（high/critical；离线/超时 SKIP，避免把网络问题伪装成代码问题） ----
+{
+  const audit = spawnSync('pnpm', ['audit', '--audit-level', 'high'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+  const out = `${audit.stdout ?? ''}\n${audit.stderr ?? ''}`;
+  const offline = /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ERR_PNPM_META_FETCH|network|getaddrinfo/i.test(out);
+  if (audit.error && audit.error.code === 'ETIMEDOUT') {
+    gate('Gate 2 依赖漏洞', 'SKIP', 'pnpm audit 超时（离线或 registry 不可达），跳过；CI 会强制执行');
+  } else if (offline) {
+    gate('Gate 2 依赖漏洞', 'SKIP', 'pnpm audit 无法访问 registry（离线），跳过；CI 会强制执行');
+  } else if (audit.status === 0) {
+    gate('Gate 2 依赖漏洞', 'PASS', 'pnpm audit --audit-level high：0 high / 0 critical');
+  } else {
+    gate('Gate 2 依赖漏洞', 'FAIL', truncate(out));
+  }
+}
+
+// ---- Gate 2 补充：DST Lua 语法（luac -p；未安装 luac 时 SKIP 并明示） ----
+{
+  const luacProbe = spawnSync('luac', ['-v'], { encoding: 'utf8' });
+  if (luacProbe.error || luacProbe.status !== 0) {
+    gate('Gate 2 DST Lua 语法', 'SKIP', '未安装 luac（Lua 编译器），跳过；CI ubuntu 会安装 lua5.4 强制执行');
+  } else {
+    const luaRoot = join(ROOT, 'mods', 'dst-bridge');
+    const luaFiles = [];
+    const collectLua = (dir) => {
+      if (!existsSync(dir)) return;
+      for (const entry of readdirSync(dir)) {
+        const abs = join(dir, entry);
+        const st = statSync(abs);
+        if (st.isDirectory()) collectLua(abs);
+        else if (extname(entry).toLowerCase() === '.lua') luaFiles.push(abs);
+      }
+    };
+    collectLua(luaRoot);
+    const failures = [];
+    for (const file of luaFiles) {
+      const check = spawnSync('luac', ['-p', file], { encoding: 'utf8' });
+      if (check.status !== 0) failures.push(`${file}\n${truncate(`${check.stdout}\n${check.stderr}`, 4)}`);
+    }
+    if (luaFiles.length === 0) gate('Gate 2 DST Lua 语法', 'FAIL', 'mods/dst-bridge 下未找到 .lua 文件');
+    else if (failures.length > 0) gate('Gate 2 DST Lua 语法', 'FAIL', failures.join('\n'));
+    else gate('Gate 2 DST Lua 语法', 'PASS', `luac -p：${luaFiles.length} 个 Lua 文件语法通过（编译期证据，不等于游戏内加载）`);
+  }
 }
 
 // ---- Gate 3：确定性单测（TS vitest + Python pytest；覆盖率门槛随 T-M0-03 起逐包生效） ----
