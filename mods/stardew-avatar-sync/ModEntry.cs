@@ -112,13 +112,22 @@ public sealed class ModEntry : StardewModdingAPI.Mod
         Reload();
     }
 
+    /// <summary>主进程写的是 camelCase JSON；System.Text.Json 默认大小写敏感，必须显式 camelCase + 忽略大小写。</summary>
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
     private void Reload()
     {
         try
         {
             var path = Path.Combine(Helper.DirectoryPath, ConfigFileName);
             if (!File.Exists(path)) { _sprite = null; return; }
-            var config = JsonSerializer.Deserialize<AvatarConfig>(File.ReadAllText(path));
+            var config = JsonSerializer.Deserialize<AvatarConfig>(File.ReadAllText(path), JsonOptions);
             if (config == null || config.Version != 1)
             {
                 Monitor.Log("active-avatar.json 版本不符，忽略本次热切换", LogLevel.Warn);

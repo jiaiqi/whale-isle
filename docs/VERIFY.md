@@ -167,6 +167,9 @@
 | T-M6-61 真实 Codex 出图 | 本机已 `codex login`：创作中心选「本机 Codex CLI（免 API Key）」批量出图应真实走订阅额度；无参考图 generate / 有参考图 edit；失败显示脱敏原文；未安装 codex-imagegen 时提示可复制安装命令且不静默安装。 | ⏳ |
 | T-M6-62 游戏内热变身 | 游戏共玩页开「同步桌宠形象进游戏」→ 安装 Mod → 重启星露谷：切桌宠角色，游戏内玩家外观 200ms 内热切换（原版预设）；生成像素表后「一键应用到星露谷」，玩家变成 64×128 像素角色并按朝向/行走帧播放；坏图自动回落预设；联机局每个 AI 队友显示各自形象。 | ⏳ |
 | T-M6-61 真机（computer-use 驱动） | 创作中心真实显示「本机 Codex CLI（免 API Key）· 慢速兜底」与可复制安装提示（未静默安装）；点生成后 ps 实证 spawn `/Users/jiaqi/.local/bin/codex exec`（参数数组含完整提示词与临时输出路径）；90s 超时主进程日志实证「Codex CLI 超时（90s 未返回）」、UI toast 如实报错且按钮恢复；延长到 180s 复现仍无产出文件 → **官方 codex exec 兜底在本机不可用**（该环境无内置生图工具），快速路径需用户自装 codex-imagegen-cli 后复验。 | 🟡 部分（兜底如实失败） | 2026-11-24 |
+| T-M6-61 真机二轮（codex-imagegen 快速路径） | 用户授权后 `uv tool install git+jdmnk/codex-imagegen-cli`（Apache-2.0，装到 ~/.local/bin，非静默——本轮明确授权）；创作中心无需重启即自动切换「快速模式（codex-imagegen）」；点生成后 ps 实证 `codex-imagegen generate --prompt … --size 1024x1024 --background opaque --out …`（与后端参数数组逐字一致）；约 40s 真实产出，`stardew-avatars/blue-whale-maid/stardew-sprite.png` 落盘为 **64×128 PNG / 15,701B**；UI 四方向动画预览 + 完整像素表预览真实渲染。 | ✅ 通过 | 2026-11-24 |
+| T-M6-62 真机二轮（游戏内目验） | 重启星露谷（SMAPI 4.5.2 + 4 mods，含 Whale Isle Avatar Sync）；BWF `load_save` 进泡泡湾；**修复真机 bug**：System.Text.Json 大小写敏感导致 `version` 反序列化为 0 报「版本不符」，已加 camelCase+CaseInsensitive 并重编部署；目验：grok 预设=黑发深衣 → 中控台切小芽 → 游戏内 200ms 热变蓝发（截图实证）；「一键应用到星露谷」后 active-avatar.json 带 `spriteSheetPath`、像素表复制进 Mod 目录，游戏内热重载绘制 64×128 像素农夫（蓝衣像素小人+阴影，随 move_to 行走移动）。 | ✅ 通过 | 2026-11-24 |
+
 | T-M6-62 真机（computer-use 驱动） | 游戏共玩页点「安装 Mod」→ toast 成功且真实落盘 `Mods/WhaleIsleAvatar/{manifest.json, WhaleIsleAvatar.dll}`（file 实证 PE32 .NET 程序集 23,040B）；开「同步桌宠形象进游戏」→ `active-avatar.json` 原子写入 aboutme-gemini 预设、settings 持久化 enabled:true；切角色到小魔女 → 文件 200ms 内热更新为 aboutme-grok 预设（hair 1 / #1f2430）。游戏内 FileSystemWatcher 热变身与 Harmony 绘制待用户重启星露谷目验。 | 🟡 部分（游戏内目验待用户） | 2026-11-24 |
 
 
