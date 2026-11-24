@@ -167,3 +167,45 @@ export function createThrow(options: ThrowOptions): ThrowSim {
     },
   };
 }
+
+export interface SlingshotOptions {
+  start: Vec2;
+  bounds: Bounds;
+  /** 弹射方向：-1 左 / 1 右 */
+  direction: -1 | 1;
+  amplitudePx?: number;
+  /** 阻尼时间常数（ms），越短回弹越快 */
+  dampingMs?: number;
+  /** 一次完整摆动周期（ms） */
+  periodMs?: number;
+  maxDurationMs?: number;
+}
+
+/**
+ * 双击弹弓：在 drag-throw 同一窗口坐标模型上做带阻尼的弹簧位移。
+ * t=0 在原位，半个周期到达最大位移，之后衰减回原点；绝不产生永久位移。
+ */
+export function createSlingshot(options: SlingshotOptions): ThrowSim {
+  const amplitude = Math.max(8, options.amplitudePx ?? 90);
+  const dampingMs = Math.max(80, options.dampingMs ?? 260);
+  const periodMs = Math.max(160, options.periodMs ?? 520);
+  const maxDurationMs = Math.max(periodMs, options.maxDurationMs ?? 1_600);
+  let t = 0;
+  let x = options.start.x;
+  let y = options.start.y;
+  return {
+    step(dtMs: number): Vec2 {
+      if (this.done()) return { x: options.start.x, y: options.start.y };
+      t = Math.min(maxDurationMs, t + Math.max(0, dtMs));
+      const envelope = Math.exp(-t / dampingMs);
+      const offset = options.direction * amplitude * envelope * Math.sin((Math.PI * 2 * t) / periodMs);
+      x = Math.min(Math.max(options.start.x + offset, options.bounds.minX), options.bounds.maxX);
+      y = options.start.y;
+      if (this.done()) { x = options.start.x; y = options.start.y; }
+      return { x, y };
+    },
+    position() { return { x, y }; },
+    landingImpact() { return null; },
+    done() { return t >= maxDurationMs || (t > periodMs && amplitude * Math.exp(-t / dampingMs) < 0.5); },
+  };
+}

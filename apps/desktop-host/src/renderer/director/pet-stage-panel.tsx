@@ -2,14 +2,63 @@
  * 桌宠舞台（v4 设计稿 04 的「透明舞台」Tab）：真实 manifest 待机动画 + 双轨气泡 + 语音设置。
  * 视频直接用 dist 内 pet-stage 素材；气泡数据来自真实 autodrive 事件流。
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { SpritesheetRenderer, WebmVideoRenderer } from '@workbench/pet-renderer';
 import { toast } from 'sonner';
 import { Fish, Hand, Volume2 } from 'lucide-react';
 import type { AutodriveEventView, CharacterSummary } from './bridge';
+import { CharacterPackStore } from './character-pack-store';
 
-interface ManifestClip { webmPath: string }
+interface ManifestClip { clipId: string; webmPath: string; spriteSheetPath?: string; sprite?: { frameWidth: number; frameHeight: number; columns: number; frameCount: number; sampleFps: number }; audioPath?: string }
 interface ManifestAction { actionState: string; clips: ManifestClip[] }
-interface ManifestShape { actions?: ManifestAction[] }
+interface AmbientClip extends ManifestClip { category: string; weight: number }
+interface ManifestShape { renderer?: 'webm-alpha' | 'live2d' | 'sprite-sheet'; actions?: ManifestAction[]; ambientPool?: AmbientClip[] }
+
+function RendererPreview({ manifest, action }: { manifest: ManifestShape; action: string }): React.JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return undefined;
+    container.replaceChildren();
+    const normalized = {
+      ...manifest,
+      renderer: manifest.renderer ?? 'webm-alpha', licenseScope: 'DEV_ONLY_NON_COMMERCIAL', attribution: 'preview',
+      width: 640, height: 360, footlineRatio: 0.92, defaultAction: 'idle', petId: 'preview', ambientPool: manifest.ambientPool ?? [],
+      actions: (manifest.actions ?? []).map((entry) => ({ ...entry, clips: entry.clips.map((clip) => ({ ...clip, playbackRate: 1, loop: true, fps: clip.sprite?.sampleFps ?? 12, weight: 1, webmPath: clip.webmPath.startsWith('assets/') ? `../pet-stage/${clip.webmPath.replace(/^\.\//, '')}` : clip.webmPath })) })),
+    } as import('@workbench/shared-protocol').PetAvatarManifest;
+    const applySquash = (pose: { scaleX: number; scaleY: number }): void => { container.style.transform = `scale(${pose.scaleX}, ${pose.scaleY})`; };
+    const host = {
+      mountVideo(handle: { el?: unknown }) { const el = handle.el as HTMLElement | undefined; if (el) { el.style.width = '100%'; el.style.height = '100%'; el.style.objectFit = 'contain'; container.appendChild(el); } },
+      showVideo(handle: { el?: unknown }) { const el = handle.el as HTMLElement | undefined; if (el) el.style.opacity = '1'; },
+      hideVideo(handle: { el?: unknown }) { const el = handle.el as HTMLElement | undefined; if (el) el.style.opacity = '0'; },
+      detachVideo(handle: { el?: unknown }) { (handle.el as HTMLElement | undefined)?.remove(); },
+      setDevBadge: () => undefined, applyLayout: () => undefined, applySquash,
+    };
+    const audioEl = new Audio();
+    const audio = { async play(src: string, opts: { volume: number }) { audioEl.src = src; audioEl.volume = opts.volume; await audioEl.play(); }, stop() { audioEl.pause(); }, setVolume(volume: number) { audioEl.volume = volume; } };
+    const videoFactory = (src: string) => {
+      const el = document.createElement('video'); el.src = src; el.muted = true; el.playsInline = true; el.autoplay = true; el.loop = true;
+      return { src, el, play: async () => { await el.play(); }, pause: () => el.pause(), detach: () => el.remove() };
+    };
+    const surfaceFactory = (src: string, meta: { frameWidth: number; frameHeight: number; columns: number; frameCount: number; sampleFps: number }) => {
+      const canvas = document.createElement('canvas'); canvas.width = meta.frameWidth; canvas.height = meta.frameHeight;
+      let raf = 0; let image: HTMLImageElement | null = null;
+      return { src, el: canvas, play: async () => {
+        image = await new Promise<HTMLImageElement>((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('sprite load')); img.src = src; });
+        const start = performance.now();
+        const draw = (now: number): void => { if (image === null) return; const index = Math.floor(((now - start) / 1000) * meta.sampleFps) % meta.frameCount; const sx = (index % meta.columns) * meta.frameWidth; const sy = Math.floor(index / meta.columns) * meta.frameHeight; canvas.getContext('2d')?.drawImage(image, sx, sy, meta.frameWidth, meta.frameHeight, 0, 0, meta.frameWidth, meta.frameHeight); raf = requestAnimationFrame(draw); };
+        raf = requestAnimationFrame(draw);
+      }, pause: () => cancelAnimationFrame(raf), detach: () => { cancelAnimationFrame(raf); canvas.remove(); } };
+    };
+    const renderer = normalized.renderer === 'sprite-sheet'
+      ? new SpritesheetRenderer({ host, surfaceFactory, audio })
+      : new WebmVideoRenderer({ host, videoFactory });
+    let disposed = false;
+    void renderer.load(normalized).then(() => renderer.play(action as import('@workbench/shared-protocol').PetActionState)).catch(() => undefined);
+    return () => { disposed = true; void disposed; renderer.dispose(); container.replaceChildren(); };
+  }, [manifest, action]);
+  return <div ref={containerRef} data-stage-renderer={manifest.renderer} style={{ width: 360, height: 203, display: 'grid', placeItems: 'center', filter: 'drop-shadow(0 18px 30px rgba(0,0,0,0.45))' }} />;
+}
 
 export interface PetStagePanelProps {
   events: AutodriveEventView[];
@@ -28,20 +77,30 @@ function goalOf(clock: string): string[] {
 }
 
 export function PetStagePanel({ events, running, characters, characterId, onSelectCharacter }: PetStagePanelProps): React.JSX.Element {
-  const [clip, setClip] = useState<string>('../pet-stage/assets/blue-whale-maid/待机呼吸休闲.webm');
+  const [manifest, setManifest] = useState<ManifestShape | null>(null);
+  const [activeAction, setActiveAction] = useState('idle');
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
+  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7 });
 
   useEffect(() => {
     void window.directorBridge.petsManifest().then((res) => {
-      const manifest = res.manifest as ManifestShape | undefined;
-      const idle = manifest?.actions?.find((a) => a.actionState === 'idle')?.clips[0]?.webmPath;
-      if (idle !== undefined) setClip(`../pet-stage/${idle.replace(/^\.\//, '')}`);
-    });
+      setManifest((res.manifest as ManifestShape | undefined) ?? null);
+      setActiveAction('idle');
+    }).catch(() => setManifest(null));
     void window.directorBridge.voiceConfigGet().then((c) => setVoice({ enabled: c.enabled, innerVoice: c.innerVoice, volume: c.volume }));
-    void window.directorBridge.prefsGet().then((p) => setScale(p.scale)).catch(() => undefined);
-  }, []);
+    void window.directorBridge.prefsGet().then((p) => {
+      setScale(p.scale);
+      setDesk({
+        powerSaverEnabled: p.powerSaverEnabled ?? true,
+        shortcutHideEnabled: p.shortcutHideEnabled ?? true,
+        autoHideFullscreen: p.autoHideFullscreen ?? true,
+        sfxEnabled: p.sfxEnabled ?? true,
+        sfxVolume: p.sfxVolume ?? 0.7,
+      });
+    }).catch(() => undefined);
+  }, [characterId]);
 
   const latestState = [...events].reverse().find((e) => e.type === 'state');
   const latestThink = [...events].reverse().find((e) => e.type === 'decision');
@@ -64,6 +123,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
     <div className="grid grid-cols-[1fr_320px] gap-4">
       <section className="card relative overflow-hidden" style={{ height: 590, background: 'radial-gradient(120% 90% at 50% 105%, rgba(10,132,255,0.12), transparent 60%), var(--surface)' }}>
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)', backgroundSize: '18px 18px' }} />
+        <div className="absolute right-3 top-3 z-10"><CharacterPackStore /></div>
 
         {/* 内心戏紫云朵 */}
         {latestThink !== undefined && (
@@ -83,7 +143,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
 
         {/* 桌宠本体 */}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
-          <video key={clip} src={clip} autoPlay loop muted playsInline style={{ width: 360, height: 203, objectFit: 'contain', filter: 'drop-shadow(0 18px 30px rgba(0,0,0,0.45))' }} />
+          {manifest !== null ? <RendererPreview manifest={manifest} action={activeAction} /> : <div style={{ width: 360, height: 203, display: 'grid', placeItems: 'center', color: 'var(--text-3)', fontSize: 11 }}>角色素材未安装</div>}
           <button onClick={patHead} className="mx-auto mt-1 flex items-center gap-1.5 rounded-full px-3 py-1 text-[10.5px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke-2)', color: 'var(--text-2)' }}>
             <Hand size={11} /> 摸摸头
           </button>
@@ -142,6 +202,20 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
         </div>
 
         <div className="card px-4 py-3.5">
+          <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>动作槽位与氛围池</h3>
+          <div className="flex flex-wrap gap-1">
+            {(manifest?.actions ?? []).map((action) => (
+              <button key={action.actionState} className={`pill${activeAction === action.actionState ? ' pill-blue' : ''}`} style={{ fontSize: 9.5 }} onClick={() => { setActiveAction(action.actionState); void window.directorBridge.petsPreview(action.actionState, null); }}>
+                {action.actionState}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 text-[10px]" style={{ color: 'var(--text-3)' }}>
+            renderer {manifest?.renderer ?? '—'} · {manifest?.ambientPool?.length ?? 0} 条氛围动作
+          </div>
+        </div>
+
+        <div className="card px-4 py-3.5">
           <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>桌宠大小</h3>
           <label className="block text-[11px]" style={{ color: 'var(--text-2)' }}>
             当前 <span className="mono">{scale.toFixed(1)}×</span>（桌宠身上滚轮 / 右键菜单也可调）
@@ -177,6 +251,26 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
               onMouseUp={(e) => void patchVoice({ volume: Number((e.target as HTMLInputElement).value) })}
             />
           </label>
+        </div>
+
+        <div className="card px-4 py-3.5">
+          <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>桌面防打扰与省电</h3>
+          {([
+            ['闲置 30s 降低渲染帧率', 'powerSaverEnabled'],
+            ['Ctrl+Option+P 暂藏/唤回', 'shortcutHideEnabled'],
+            ['全屏应用时自动隐藏', 'autoHideFullscreen'],
+            ['播放动作原声', 'sfxEnabled'],
+          ] as const).map(([label, key]) => (
+            <div key={key} className="flex items-center justify-between py-1.5 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
+              <span>{label}</span>
+              <button aria-pressed={desk[key]} className={`sw${desk[key] ? ' on' : ''}`} onClick={() => { const next = { ...desk, [key]: !desk[key] }; setDesk(next); void window.directorBridge.prefsSet({ [key]: next[key] }); }} />
+            </div>
+          ))}
+          <label className="mt-2 block text-[11px]" style={{ color: 'var(--text-2)' }}>
+            动作原声音量 <span className="mono">{Math.round(desk.sfxVolume * 100)}%</span>
+            <input type="range" className="wb-range mt-1.5" min={0} max={1} step={0.05} value={desk.sfxVolume} onChange={(event) => setDesk({ ...desk, sfxVolume: Number(event.target.value) })} onMouseUp={(event) => void window.directorBridge.prefsSet({ sfxVolume: Number((event.target as HTMLInputElement).value) })} />
+          </label>
+          <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>贴边后 10s 缩回；Alt/Option 按住临时穿透；睡眠时屏蔽随机动作、余额与工作打扰。</p>
         </div>
 
         <div className="card px-4 py-3.5">

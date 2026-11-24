@@ -2,7 +2,8 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow, ipcMain, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, screen } from 'electron';
+import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,17 +13,23 @@ import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
 import { PetWindowManager, type ManagedPetWindow, type PetWindowCreateInput, type WindowBounds } from './pet-window-manager';
 import { createCharacterRegistry } from './character-registry';
-import { setCurrentPersonaPrompt } from './character-persona';
+import { characterPokeLine, setCurrentPersonaCharacter, setCurrentPersonaPrompt } from './character-persona';
 import { createCoopHost } from './coop-host';
 import { createProviderImportHost } from './provider-import-host';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
+import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
+import { detectLaunchStatus, prepareStardewProfile, spawnGameProcess } from './coop-launcher';
+import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
+import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
+import { guessModsDirs } from '@workbench/stardew-mods';
+import { homedir } from 'node:os';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
   APP_DATA_DIR,
@@ -161,6 +168,9 @@ function createManagedPetWindow(input: PetWindowCreateInput): ManagedPetWindow {
     isMinimized: () => win.isMinimized(),
     focus: () => win.focus(),
     showInactive: () => win.showInactive(),
+    hide: () => win.hide(),
+    setOpacity: (opacity: number) => win.setOpacity(opacity),
+    setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => win.setIgnoreMouseEvents(ignore, options),
     close: () => win.close(),
     setBounds: (bounds: WindowBounds) => win.setBounds(bounds),
     getBounds: () => win.getBounds(),
@@ -235,6 +245,10 @@ app.whenReady().then(async () => {
     const windowPrefs = petWindowManager?.prefs('default');
     if (windowPrefs === null || windowPrefs === undefined) return;
     if (windowPrefs.scale !== next.scale) petWindowManager?.patch('default', { scale: next.scale });
+    if (prev.shortcutHideEnabled !== next.shortcutHideEnabled) registerShortcut();
+    for (const target of petBrowserWindows.values()) {
+      if (!target.isDestroyed()) target.webContents.send('pet:global-prefs-changed', next);
+    }
     if (
       windowPrefs.position.x !== next.position.x
       || windowPrefs.position.y !== next.position.y
@@ -250,7 +264,7 @@ app.whenReady().then(async () => {
     setCharacter: (id) => {
       prefs.patch({ characterId: id });
       const next = characters.selected();
-      setCurrentPersonaPrompt(next.personaPrompt);
+      setCurrentPersonaCharacter(next.id, next.personaPrompt);
       // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
       petWindowManager?.patch('default', { characterId: next.id });
       petWindowManager?.send('pet:character-changed', 'default', next);
@@ -259,6 +273,36 @@ app.whenReady().then(async () => {
     builtinAssetsDir: join(here, '../renderer/pet-stage/assets'),
   });
   void characters;
+
+  let packImportBusy = false;
+  ipcMain.handle('pet:pack-catalog', () => readPackCatalog(app.getPath('userData')));
+  ipcMain.handle('pet:pack-import', async (_event, input?: { all?: boolean; packSlugs?: string[] }) => {
+    if (packImportBusy) return { ok: false, error: '已有角色包导入任务在运行' };
+    packImportBusy = true;
+    try {
+      const result = await importAboutmePets({
+        userDataDir: app.getPath('userData'),
+        all: input?.all === true,
+        ...(input?.packSlugs === undefined ? {} : { packSlugs: input.packSlugs }),
+        onProgress: (progress) => {
+          for (const target of [stageWindow, directorWindow]) {
+            if (target && !target.isDestroyed()) target.webContents.send('pet:pack-import-progress', progress);
+          }
+        },
+      });
+      return { ok: result.failed.length === 0, ...result, catalog: readPackCatalog(app.getPath('userData')) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      packImportBusy = false;
+    }
+  });
+
+  ipcMain.handle('pet:poke-line', (_event, agentId?: string) => {
+    const windowCharacterId = agentId === undefined ? null : petWindowManager?.prefs(agentId)?.characterId ?? null;
+    const character = (windowCharacterId === null ? null : characters.list().find((item) => item.id === windowCharacterId)) ?? characters.selected();
+    return { ok: true, characterId: character.id, line: characterPokeLine(character.id) };
+  });
 
   // T-M6-38：多桌宠窗口管理器。所有窗口创建/坐标/缩放/锁定/事件定向在这里收口。
   petWindowManager = new PetWindowManager({
@@ -287,6 +331,81 @@ app.whenReady().then(async () => {
   ipcMain.handle('pet:window-prefs-get', (_event, agentId: string) => petWindowManager!.prefs(agentId));
   ipcMain.handle('pet:window-prefs-set', (_event, agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }) =>
     petWindowManager!.patch(agentId, update ?? {}));
+  ipcMain.handle('pet:window-dock', (_event, agentId: string, edge: 'left' | 'right') => petWindowManager!.dock(agentId, edge));
+  const autoHiddenAgents = new Set<string>();
+  const applyFullscreenRect = (rect: RectLike | null): void => {
+    const manager = petWindowManager;
+    if (manager === null) return;
+    for (const view of manager.list()) {
+      const display = screen.getDisplayMatching(view.bounds);
+      const decision = rect === null ? { hidden: false } : detectFullscreenForDisplay(
+        { displayId: String(display.id), bounds: display.bounds },
+        [{ bounds: rect }],
+      );
+      if (decision.hidden) { manager.setHidden(view.agentId, true); autoHiddenAgents.add(view.agentId); }
+      else if (autoHiddenAgents.delete(view.agentId)) manager.setHidden(view.agentId, false);
+    }
+  };
+  const altMonitor = new GlobalAltMonitor();
+  altMonitor.start();
+  let altTestOverride: boolean | null = null;
+  setInterval(() => {
+    const point = screen.getCursorScreenPoint();
+    const windows = petWindowManager?.list().map((view) => ({ agentId: view.agentId, bounds: view.bounds })) ?? [];
+    petWindowManager?.applyPeekTargets(resolveAltPeekTargets(windows, point, altTestOverride ?? altMonitor.current()));
+  }, 50).unref();
+  if (TEST_MODE) {
+    ipcMain.handle('test:alt-peek', (_event, point: { x: number; y: number }, altDown: boolean) => {
+      altTestOverride = altDown;
+      const windows = petWindowManager?.list().map((view) => ({ agentId: view.agentId, bounds: view.bounds })) ?? [];
+      const targets = resolveAltPeekTargets(windows, point, altDown);
+      petWindowManager?.applyPeekTargets(targets);
+      return { ok: true, targets };
+    });
+    ipcMain.handle('test:fullscreen-apply', (_event, rect: RectLike | null) => {
+      applyFullscreenRect(rect);
+      return { ok: true, hidden: [...autoHiddenAgents] };
+    });
+  }
+  ipcMain.handle('pet:window-undock', (_event, agentId: string) => petWindowManager!.undock(agentId));
+  ipcMain.handle('pet:window-clear-dock', (_event, agentId: string) => ({ ok: petWindowManager!.clearDock(agentId) }));
+  ipcMain.handle('pet:peek', (event, active: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? stageWindow;
+    if (win === null || win.isDestroyed()) return { ok: false };
+    win.setOpacity(active ? 0.35 : 1);
+    win.setIgnoreMouseEvents(active, { forward: active });
+    return { ok: true };
+  });
+  const registerShortcut = (): void => {
+    globalShortcut.unregister('Control+Alt+P');
+    if (prefs.get().shortcutHideEnabled) {
+      globalShortcut.register('Control+Alt+P', () => {
+        if (petWindowManager?.anyHidden() === true) petWindowManager.showAll();
+        else petWindowManager?.hideAll();
+      });
+    }
+  };
+  registerShortcut();
+  const fullscreenScript = [
+    'tell application "System Events"',
+    'set p to first application process whose frontmost is true',
+    'if (value of attribute "AXFullScreen" of window 1 of p) is true then',
+    'set pos to position of window 1 of p',
+    'set sz to size of window 1 of p',
+    'return ((item 1 of pos) as string) & "," & ((item 2 of pos) as string) & "," & ((item 1 of sz) as string) & "," & ((item 2 of sz) as string)',
+    'end if',
+    'return ""',
+    'end tell',
+  ].join('\n');
+  setInterval(() => {
+    if (process.platform !== 'darwin' || !prefs.get().autoHideFullscreen) return;
+    execFile('osascript', ['-e', fullscreenScript], { timeout: 2_000 }, (error, stdout) => {
+      if (error) return;
+      applyFullscreenRect(parseFullscreenRect(String(stdout)));
+    });
+  }, 5_000).unref();
+  app.on('will-quit', () => { altMonitor.stop(); globalShortcut.unregisterAll(); });
+
   // T-M6-31：外部插件生产链路（发现/启停/工具注册/审批/崩溃隔离）
   const plugins = createPluginHost({
     userDataDir: app.getPath('userData'),
@@ -298,6 +417,10 @@ app.whenReady().then(async () => {
     onSpeakerChange: (event) => {
       petWindowManager?.send('coop:speaker', '*', event);
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('coop:speaker', event);
+    },
+    onSpeechResult: (event) => {
+      petWindowManager?.send('pet:speech-result', '*', event);
+      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:speech-result', event);
     },
   });
   registerVoiceHostIpc(voice);
@@ -316,7 +439,36 @@ app.whenReady().then(async () => {
     () => coopHost?.list().some((agent) => agent.running && agent.endpoint === MAIN_GAME_ENDPOINT)
       ? '该端点已被「联机协作」页接管；请先停止对应 AI 队友，避免两个 Runner 抢同一角色'
       : null,
+    characters,
   );
+  const stardewModsDir = (): string | null => guessModsDirs(process.platform, homedir()).find((dir) => existsSync(dir)) ?? null;
+  const profilesRoot = join(app.getPath('userData'), 'coop-profiles', 'stardew');
+  ipcMain.handle('coop:launch-status', async () => detectLaunchStatus(process.platform, homedir(), profilesRoot));
+  ipcMain.handle('coop:launch-human', async (_e, gameId: 'stardew' | 'terraria' | 'dst') => {
+    if (gameId !== 'stardew') return { ok: false, error: `${gameId} 一键启动需本机安装路径确认；当前仅完成星露谷参数数组启动` };
+    const status = (await detectLaunchStatus(process.platform, homedir(), profilesRoot)).find((item) => item.gameId === 'stardew');
+    if (status?.executable == null) return { ok: false, error: status?.detail ?? '未找到 StardewModdingAPI' };
+    const child = spawnGameProcess(status.executable, []);
+    child.unref();
+    return { ok: true, pid: child.pid };
+  });
+  ipcMain.handle('coop:launch-ai', async (_e, agentId: string) => {
+    const endpoint = coopHost?.list().find((item) => item.id === agentId);
+    if (endpoint === undefined) return { ok: false, error: '未知队友端点' };
+    if (endpoint.gameId !== 'stardew') return { ok: false, error: `${endpoint.gameId} AI 实例启动待本机路径确认` };
+    const modsDir = stardewModsDir();
+    if (modsDir === null) return { ok: false, error: '未找到星露谷 Mods 目录' };
+    const port = Number(new URL(endpoint.endpoint).port || '18080');
+    try {
+      const prepared = await prepareStardewProfile({ modsDir, profileDir: profilesRoot, agentId, port });
+      const status = (await detectLaunchStatus(process.platform, homedir(), profilesRoot)).find((item) => item.gameId === 'stardew');
+      if (status?.executable == null) return { ok: false, error: '未找到 StardewModdingAPI' };
+      const child = spawnGameProcess(status.executable, ['--mods-path', prepared.profileModsDir]);
+      child.unref();
+      return { ok: true, pid: child.pid, profileModsDir: prepared.profileModsDir, port };
+    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+  });
+
   // 多桌宠联机协作（T-M6-39）：复用 autodrive 的 Gateway/饭碗，但每 Agent 独立 planner/persona/voice。
   coopHost = createCoopHost({
     userDataDir: app.getPath('userData'),

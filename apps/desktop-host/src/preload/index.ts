@@ -106,6 +106,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('coop:chat-send', input),
   coopHuddleStart: (input?: { goalTitle?: string; reason?: string; note?: string }): Promise<{ ok: boolean; error?: string; fallback?: boolean; rounds?: number }> =>
     ipcRenderer.invoke('coop:huddle-start', input),
+  coopLaunchStatus: (): Promise<unknown> => ipcRenderer.invoke('coop:launch-status'),
+  coopLaunchHuman: (gameId: string): Promise<{ ok: boolean; error?: string; pid?: number }> => ipcRenderer.invoke('coop:launch-human', gameId),
+  coopLaunchAi: (agentId: string): Promise<{ ok: boolean; error?: string; pid?: number; profileModsDir?: string; port?: number }> => ipcRenderer.invoke('coop:launch-ai', agentId),
   coopHelpRequest: (input: { agentId: string; reason: string }): Promise<{ ok: boolean; error?: string; mode?: string; helperAgentId?: string; fallback?: boolean }> =>
     ipcRenderer.invoke('coop:help-request', input),
   onCoopBlackboardUpdate: (handler: (payload: unknown) => void): (() => void) => {
@@ -130,6 +133,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
     const listener = (_e: unknown, list: unknown): void => handler(list);
     ipcRenderer.on('pet:window-list-changed', listener);
     return () => ipcRenderer.removeListener('pet:window-list-changed', listener);
+  },
+  petPackCatalog: (): Promise<unknown> => ipcRenderer.invoke('pet:pack-catalog'),
+  petPackImport: (input?: { all?: boolean; packSlugs?: string[] }): Promise<unknown> => ipcRenderer.invoke('pet:pack-import', input),
+  onPetPackImportProgress: (handler: (progress: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, progress: unknown): void => handler(progress);
+    ipcRenderer.on('pet:pack-import-progress', listener);
+    return () => ipcRenderer.removeListener('pet:pack-import-progress', listener);
   },
   onCoopSpeaker: (handler: (event: unknown) => void): (() => void) => {
     const listener = (_e: unknown, event: unknown): void => handler(event);
@@ -207,11 +217,26 @@ contextBridge.exposeInMainWorld('petStage', {
   windowPrefsGet: (agentId: string): Promise<unknown> => ipcRenderer.invoke('pet:window-prefs-get', agentId),
   windowPrefsSet: (agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown> =>
     ipcRenderer.invoke('pet:window-prefs-set', agentId, update),
+  pokeLine: (agentId: string): Promise<{ ok: boolean; characterId?: string; line?: string }> => ipcRenderer.invoke('pet:poke-line', agentId),
+  dockWindow: (agentId: string, edge: 'left' | 'right' | null): Promise<unknown> =>
+    edge === null ? ipcRenderer.invoke('pet:window-undock', agentId) : ipcRenderer.invoke('pet:window-dock', agentId, edge),
+  clearDock: (agentId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:window-clear-dock', agentId),
+  setPeek: (active: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:peek', active),
+  onGlobalPrefsChanged: (handler: (prefs: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, prefs: unknown): void => handler(prefs);
+    ipcRenderer.on('pet:global-prefs-changed', listener);
+    return () => ipcRenderer.removeListener('pet:global-prefs-changed', listener);
+  },
   onWindowPrefsChanged: (handler: (prefs: { scale: number; locked: boolean; characterId: string }) => void): void => {
     ipcRenderer.on('pet:window-prefs-changed', (_e, prefs) => handler(prefs));
   },
   onCoopSpeaker: (handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void => {
     ipcRenderer.on('coop:speaker', (_e, event) => handler(event));
+  },
+  onSpeechResult: (handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }) => void): () => void => {
+    const listener = (_e: unknown, event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }): void => handler(event);
+    ipcRenderer.on('pet:speech-result', listener);
+    return () => ipcRenderer.removeListener('pet:speech-result', listener);
   },
   onPetAction: (handler: (event: { agentId: string; action: string }) => void): void => {
     ipcRenderer.on('pet:action', (_e, event) => handler(event));
@@ -245,6 +270,8 @@ contextBridge.exposeInMainWorld('petStage', {
   ...(TEST_MODE
     ? {
         forceAlpha: (alpha: number) => ipcRenderer.invoke('test:force-alpha', alpha),
+        testGlobalAltPeek: (point: { x: number; y: number }, altDown: boolean) => ipcRenderer.invoke('test:alt-peek', point, altDown),
+        testFullscreenApply: (rect: { x: number; y: number; width: number; height: number } | null) => ipcRenderer.invoke('test:fullscreen-apply', rect),
         // main 中继 test:force-alpha → 转发为 renderer 可见的 CustomEvent
         onTestAlpha: (handler: (alpha: number) => void) => {
           ipcRenderer.on('pet-stage:test-alpha', (_event, alpha: number) => handler(alpha));

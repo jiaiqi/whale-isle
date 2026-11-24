@@ -10,6 +10,7 @@ import { RulePlanner, type AutodriveEvent, type GameAdapter } from '@workbench/g
 import type { McpEndpoint, PetCharacter } from '@workbench/shared-protocol';
 
 const { handlers } = vi.hoisted(() => ({ handlers: new Map<string, (...args: unknown[]) => unknown>() }));
+vi.mock('./character-persona', () => ({ characterReflex: () => null }));
 vi.mock('electron', () => ({
   ipcMain: {
     handle: (channel: string, handler: (...args: unknown[]) => unknown) => handlers.set(channel, handler),

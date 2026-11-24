@@ -630,9 +630,26 @@ export type VoiceDesignRequest = z.infer<typeof VoiceDesignRequestSchema>;
 // ============================================================================
 
 /** 单段动作视频片段（VP9-Alpha .webm） */
+export const PetSpriteMetaSchema = z.object({
+  frameWidth: z.number().int().positive(),
+  frameHeight: z.number().int().positive(),
+  columns: z.number().int().positive(),
+  frameCount: z.number().int().positive(),
+  sampleFps: z.number().positive().max(120).default(12),
+});
+export type PetSpriteMeta = z.infer<typeof PetSpriteMetaSchema>;
+
 export const PetAvatarClipSchema = z.object({
   clipId: z.string(),
   webmPath: z.string().min(1),
+  /** sprite-sheet：透明 WebP 整图；与 webmPath 二选一使用（导入器两者都会填同一路径） */
+  spriteSheetPath: z.string().optional(),
+  /** sprite-sheet 帧元数据 JSON（aboutme-pets 导入器落盘生成） */
+  spriteMetaPath: z.string().optional(),
+  /** 内嵌帧元数据（meta JSON 不可读时回退，保证离线可用） */
+  sprite: PetSpriteMetaSchema.optional(),
+  /** 动作原声音轨（m4a/webp 对应音频）；有 TTS 发言时由渲染器 duck */
+  audioPath: z.string().optional(),
   loop: z.boolean().default(true),
   playbackRate: z.number().min(0.1).max(4).default(1),
   /** 帧率（供口型包络/时序对齐，见 SPEC §3.4 情绪 TTS） */
@@ -670,6 +687,10 @@ export const PetAvatarManifestSchema = z.object({
       z.object({
         clipId: z.string(),
         webmPath: z.string().min(1),
+        spriteSheetPath: z.string().optional(),
+        spriteMetaPath: z.string().optional(),
+        sprite: PetSpriteMetaSchema.optional(),
+        audioPath: z.string().optional(),
         category: z.string().default('小动作'),
         weight: z.number().min(0).max(100).default(10),
       }),
@@ -815,6 +836,15 @@ export const PetDesktopPrefsSchema = z.object({
   characterId: z.string().default('blue-whale-maid'),
   /** 当前联机端点 id（T-M6-22 多桌宠联机；default=单机 18080） */
   mcpEndpointId: z.string().default('default'),
+  /** 闲置 30s 进入省电（停氛围/特效帧） */
+  powerSaverEnabled: z.boolean().default(true),
+  /** 全局快捷键 Ctrl+Option+P 暂藏/唤回 */
+  shortcutHideEnabled: z.boolean().default(true),
+  /** 全屏应用自动隐藏 */
+  autoHideFullscreen: z.boolean().default(true),
+  /** 精灵图动作原声音效开关/音量（T-M6-44） */
+  sfxEnabled: z.boolean().default(true),
+  sfxVolume: z.number().min(0).max(1).default(0.7),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 
@@ -877,6 +907,14 @@ export const PetCharacterSchema = z.object({
   personaPrompt: z.string().min(1),
   /** 默认音色（voice-host 的 voiceId） */
   voiceId: z.string().default('qiaopi_mengmei'),
+  /** 角色级默认语速/音调微调（T-M6-41；100=基准，1=原音高） */
+  voiceRatePercent: z.number().min(50).max(200).default(100),
+  voicePitchMul: z.number().min(1).max(1.6).default(1),
+  /** 角色包来源 id（aboutme-pets 等；内置为空） */
+  packId: z.string().default(''),
+  /** 动作与原声音轨数量（角色包商店展示） */
+  actionCount: z.number().int().nonnegative().default(0),
+  audioClipCount: z.number().int().nonnegative().default(0),
   /** 角色主体水平锚点比例（饭碗居中用；实测由截图/渲染分析得出） */
   anchorRatio: z.number().min(0).max(1).default(0.5),
   licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']).default('DEV_ONLY_NON_COMMERCIAL'),

@@ -17,6 +17,11 @@
         height: 260px;
       }
       #stage video { width: 400px; height: 260px; }
+      /* T-M6-44 省电：暂停非必要毛玻璃/阴影；WebM 源素材 24fps，精灵 canvas 在 JS 侧限 30fps */
+      html[data-power-saver="true"] .pet-bubble {
+        backdrop-filter: none !important;
+        box-shadow: none !important;
+      }
       #dev-badge {
         position: fixed;
         left: 4px;

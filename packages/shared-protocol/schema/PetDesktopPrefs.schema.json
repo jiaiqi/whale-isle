@@ -54,6 +54,28 @@
         "mcpEndpointId": {
           "default": "default",
           "type": "string"
+        },
+        "powerSaverEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "shortcutHideEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "autoHideFullscreen": {
+          "default": true,
+          "type": "boolean"
+        },
+        "sfxEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "sfxVolume": {
+          "default": 0.7,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "additionalProperties": false

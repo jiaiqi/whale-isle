@@ -72,7 +72,7 @@ const DEFAULT_SVC: SvcParams = {
 
 type CreateMode = 'cloud_voice_design' | 'local_audio_slice' | 'local_weight_import';
 
-export function VoiceStudioPanel({ bare = false }: { bare?: boolean } = {}): React.JSX.Element {
+export function VoiceStudioPanel({ bare = false, characterId = 'blue-whale-maid', characterName = '小鲸' }: { bare?: boolean; characterId?: string; characterName?: string } = {}): React.JSX.Element {
   const [emotions, setEmotions] = useState<Record<EmotionTag, EmotionParams>>({ ...DEFAULT_PARAMS });
   const [svc, setSvc] = useState<SvcParams>({ ...DEFAULT_SVC });
   const [activeTag, setActiveTag] = useState<EmotionTag>('sweet_normal');
@@ -85,6 +85,31 @@ export function VoiceStudioPanel({ bare = false }: { bare?: boolean } = {}): Rea
   const [busy, setBusy] = useState<string | null>(null);
   const [testText, setTestText] = useState<string>(EMOTIONS[0]!.sample);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setEmotions({ ...DEFAULT_PARAMS });
+    setSvc({ ...DEFAULT_SVC });
+    setSaved(false);
+    void (async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:18790/api/voice-studio/load-pack?petId=${encodeURIComponent(characterId)}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json() as {
+          matrix?: { tts?: { profiles?: EmotionParams[] }; svc?: Partial<SvcParams> };
+        };
+        if (cancelled) return;
+        const loaded: Record<EmotionTag, EmotionParams> = { ...DEFAULT_PARAMS };
+        for (const profile of data.matrix?.tts?.profiles ?? []) {
+          if (profile.emotionTag in loaded) loaded[profile.emotionTag] = profile;
+        }
+        setEmotions(loaded);
+        setSvc({ ...DEFAULT_SVC, ...(data.matrix?.svc ?? {}) });
+        setSaved(true);
+      } catch { /* worker 未启动时保留默认参数 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [characterId]);
 
   useEffect(() => {
     if (notice) {
@@ -159,8 +184,8 @@ export function VoiceStudioPanel({ bare = false }: { bare?: boolean } = {}): Rea
 
   const savePack = async (): Promise<void> => {
     const r = await callWorker('/api/voice-studio/save-pack', {
-      petId: 'blue-whale-maid',
-      voicePackId: 'blue-whale-maid-v2',
+      petId: characterId,
+      voicePackId: `${characterId}-v2`,
       emotionParams: EMOTIONS.map((e) => emotions[e.tag]),
       svcParams: svc,
     });
@@ -181,6 +206,12 @@ export function VoiceStudioPanel({ bare = false }: { bare?: boolean } = {}): Rea
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-5">
+      {bare && (
+        <div className="mb-3 flex items-center gap-2">
+          <span data-voice-studio-character={characterId} className="pill pill-violet"><Mic2 size={11} className="inline" /> {characterName}</span>
+          <span className="pill pill-amber">DEV_ONLY_NON_COMMERCIAL</span>
+        </div>
+      )}
       {/* 顶部：音色库 + 新建向导 */}
       {!bare && (<header className="mb-4 flex items-end justify-between">
         <div>
@@ -190,7 +221,7 @@ export function VoiceStudioPanel({ bare = false }: { bare?: boolean } = {}): Rea
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="pill pill-violet"><Mic2 size={11} className="inline" /> blue-whale-maid</span>
+          <span data-voice-studio-character={characterId} className="pill pill-violet"><Mic2 size={11} className="inline" /> {characterName}</span>
           <span className="pill pill-amber">DEV_ONLY_NON_COMMERCIAL</span>
           <span className="pill pill-green"><Disc3 size={11} className="inline" /> MPS</span>
           <button

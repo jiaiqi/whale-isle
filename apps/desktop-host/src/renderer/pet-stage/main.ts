@@ -2,11 +2,13 @@
  * pet-stage 渲染层装配（T-M1-02）：WebmVideoRenderer + alpha 穿透探针 + 拖拽甩抛。
  * 注意：webm 资产不入库（DEV_ONLY_NON_COMMERCIAL），未放置资产时舞台为透明空窗——属预期。
  */
-import { WebmVideoRenderer, pickAmbient, type RendererHost, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
+import { SpritesheetRenderer, WebmVideoRenderer, pickAmbient, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
-import { createGlide, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
+import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
+import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, shouldBlockWhileAsleep, shouldEnterPowerSaver } from './interaction';
+import { createGlide, createSlingshot, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
 import type { PetDesktopPrefs } from '@workbench/shared-protocol';
 import { AudioLeaseManager } from './audio-lease';
 import { mountBubbleWidgets } from './widgets/bubbles';
@@ -27,7 +29,13 @@ interface PetStageBridge {
   windowPrefsGet(agentId: string): Promise<{ scale: number; locked: boolean; characterId: string } | null>;
   windowPrefsSet(agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown>;
   onWindowPrefsChanged?(handler: (prefs: { scale: number; locked: boolean; characterId: string }) => void): void;
+  dockWindow?(agentId: string, edge: 'left' | 'right' | null): Promise<unknown>;
+  clearDock?(agentId: string): Promise<{ ok: boolean }>;
+  pokeLine?(agentId: string): Promise<{ ok: boolean; characterId?: string; line?: string }>;
+  setPeek?(active: boolean): Promise<{ ok: boolean }>;
+  onGlobalPrefsChanged?(handler: (prefs: PetDesktopPrefs) => void): () => void;
   onCoopSpeaker?(handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void;
+  onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }) => void): () => void;
   onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
   onPetBubble?(handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void;
   onPetState?(handler: (event: { agentId: string; state?: unknown }) => void): void;
@@ -62,6 +70,18 @@ function readPetStageContext(): { agentId: string; characterId?: string } {
   return decode(new URLSearchParams(location.search));
 }
 const petContext = readPetStageContext();
+const interaction = createInteractionState();
+let dockedEdge: 'left' | 'right' | null = null;
+let dockHomeEdge: 'left' | 'right' | null = null;
+const dockedAgentId = petContext.agentId;
+let pointerOnStage = false;
+let lastActivityAt = Date.now();
+let powerSaver = false;
+let bubbleState: BubbleLifecycleState = createBubbleLifecycle();
+let bubbleVoiceEnabled = true;
+let clickTimer: ReturnType<typeof setTimeout> | null = null;
+let lastDizzyVisual = 0;
+let slingshotRaf = 0;
 const isEventForThisPet = (agentId: string | undefined): boolean =>
   agentId === undefined ? petContext.agentId === 'default' : agentId === '*' || agentId === petContext.agentId;
 const stage = document.getElementById('stage') as HTMLDivElement;
@@ -131,10 +151,83 @@ const videoFactory: VideoFactory = (src): VideoHandle => {
   };
 };
 
-const renderer = new WebmVideoRenderer({ host, videoFactory });
+const webmRenderer = new WebmVideoRenderer({ host, videoFactory });
+let renderer: WebmVideoRenderer | SpritesheetRenderer = webmRenderer;
+
+class CanvasSpriteSurface implements VideoHandle {
+  readonly src: string;
+  readonly el: HTMLCanvasElement;
+  private image: HTMLImageElement | null = null;
+  private raf = 0;
+  private paused = false;
+  private lastDrawAt = 0;
+  constructor(src: string, private readonly meta: SpriteMeta, private readonly rate: number) {
+    this.src = src;
+    this.el = document.createElement('canvas');
+    this.el.width = meta.frameWidth;
+    this.el.height = meta.frameHeight;
+    this.el.style.position = 'absolute';
+    this.el.style.width = `${BASE_STAGE.width}px`;
+    this.el.style.height = `${BASE_STAGE.height}px`;
+  }
+  async play(loop: boolean): Promise<void> {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`精灵图加载失败：${this.src}`));
+      img.src = this.src;
+    });
+    this.image = image;
+    const start = performance.now();
+    const draw = (now: number): void => {
+      if (this.paused) return;
+      if (powerSaver && now - this.lastDrawAt < 1000 / 30) { this.raf = requestAnimationFrame(draw); return; }
+      this.lastDrawAt = now;
+      const ctx = this.el.getContext('2d');
+      if (ctx !== null && this.image !== null) {
+        const index = spriteFrameIndex(this.meta, (now - start) * this.rate, loop);
+        const rect = spriteFrameRect(this.meta, index);
+        ctx.clearRect(0, 0, this.meta.frameWidth, this.meta.frameHeight);
+        ctx.drawImage(this.image, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, this.meta.frameWidth, this.meta.frameHeight);
+      }
+      if (!loop && spriteFrameIndex(this.meta, (now - start) * this.rate, false) >= this.meta.frameCount - 1) return;
+      this.raf = requestAnimationFrame(draw);
+    };
+    const ctx = this.el.getContext('2d');
+    if (ctx !== null) {
+      const rect = spriteFrameRect(this.meta, 0);
+      ctx.clearRect(0, 0, this.meta.frameWidth, this.meta.frameHeight);
+      ctx.drawImage(image, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, this.meta.frameWidth, this.meta.frameHeight);
+    }
+    this.raf = requestAnimationFrame(draw);
+  }
+  pause(): void { this.paused = true; cancelAnimationFrame(this.raf); }
+  detach(): void { this.pause(); this.el.remove(); }
+}
+
+let activeSpriteAudio: HTMLAudioElement | null = null;
+let sfxVolume = 0.7;
+let speakerDucking = false;
+const spriteAudio: SpriteAudioController = {
+  async play(src, opts) {
+    activeSpriteAudio?.pause();
+    const audio = new Audio(src);
+    activeSpriteAudio = audio;
+    audio.volume = opts.volume;
+    await audio.play();
+  },
+  stop() { activeSpriteAudio?.pause(); activeSpriteAudio = null; },
+  setVolume(volume) {
+    sfxVolume = volume;
+    if (activeSpriteAudio !== null) activeSpriteAudio.volume = speakerDucking ? volume * 0.15 : volume;
+  },
+};
+const surfaceFactory = (src: string, meta: SpriteMeta, rate: number): VideoHandle => new CanvasSpriteSurface(src, meta, rate);
+
 
 // 装载当前角色真形象清单（T-M6-21：manifest 经主进程契约校验后由 IPC 下发，不再写死 blue-whale-maid）
 type PetAvatarManifest = import('@workbench/shared-protocol').PetAvatarManifest;
+type SpriteMeta = import('@workbench/shared-protocol').PetSpriteMeta;
 async function loadCharacterManifest(id: string): Promise<void> {
   const res = await bridge.characterManifest(id);
   if (!res.ok || res.manifest === undefined) throw new Error(res.error ?? 'manifest 不可用');
@@ -144,6 +237,19 @@ async function loadCharacterManifest(id: string): Promise<void> {
     for (const clip of action.clips) {
       if (clip.webmPath.startsWith('assets/')) clip.webmPath = `./${clip.webmPath}`;
     }
+  }
+  if (rawManifest.renderer === 'sprite-sheet') {
+    renderer.dispose();
+    renderer = new SpritesheetRenderer({
+      host,
+      surfaceFactory,
+      audio: spriteAudio,
+      sfxVolume,
+      spriteMetaLoader: async (src) => (await fetch(src)).json() as Promise<unknown>,
+    });
+  } else if (!(renderer instanceof WebmVideoRenderer)) {
+    renderer.dispose();
+    renderer = webmRenderer;
   }
   await renderer.load(rawManifest);
   await renderer.play('idle');
@@ -196,6 +302,7 @@ function refreshRiceWidget(ratio?: number): void {
 }
 if (petStageBridge?.onPetRice) {
   petStageBridge.onPetRice((detail) => {
+    if (shouldBlockWhileAsleep(interaction, 'rice')) return;
     const action = RICE_LEVEL_ACTION_MAP[detail.level as keyof typeof RICE_LEVEL_ACTION_MAP];
     if (action) void renderer.play(action).catch(() => undefined);
     lastEventAt = Date.now(); // 档位事件抑制 ambient 链
@@ -216,7 +323,7 @@ if (petStageBridge?.onPetPreview) {
       if (slotAction && slotClip) {
         void renderer.play(slotAction).catch(() => undefined);
       } else if (ambientEntry) {
-        void renderer.playClip({ clipId: ambientEntry.clipId, webmPath: ambientEntry.webmPath, loop: false, playbackRate: 1, fps: 24, weight: ambientEntry.weight }).catch(() => undefined);
+        void renderer.playClip({ ...ambientEntry, loop: false, playbackRate: 1, fps: 24, weight: ambientEntry.weight }).catch(() => undefined);
       } else {
         void renderer.play(detail.action as PetActionState).catch(() => undefined);
       }
@@ -244,6 +351,14 @@ if (window.directorBridge?.onAutodriveEvent) {
     // T-M6-38：只消费本窗 agent 的事件；无 agentId 的旧单机事件只归 default，
     // 避免单机自驾回执把其他联机桌宠也带着播动作/气泡。
     if (!isEventForThisPet(event.agentId)) return;
+    if (shouldBlockWhileAsleep(interaction, event.type === 'receipt' ? 'work' : 'thought')) return;
+    lastActivityAt = Date.now();
+    if (dockedEdge !== null) {
+      const edge = dockedEdge;
+      dockedEdge = null;
+      void bridge.dockWindow?.(dockedAgentId, null);
+      if (edge !== null) scheduleDockBack(edge);
+    }
     // 旧会话的迟到事件（切游戏/重启后）不得再驱动动画与内心戏
     if (typeof event.generation === 'number') {
       if (event.generation < latestGeneration) return;
@@ -257,9 +372,12 @@ if (window.directorBridge?.onAutodriveEvent) {
       thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
     }
     if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray') && event.summary) {
+      const voiceBridge = (window as unknown as { directorBridge?: { voiceConfigGet?: () => Promise<{ enabled: boolean }> } }).directorBridge;
+      void voiceBridge?.voiceConfigGet?.().then((config) => { bubbleVoiceEnabled = config.enabled; }).catch(() => undefined);
+      const effect = showBubble(bubbleState, event.summary, Date.now(), bubbleVoiceEnabled);
+      bubbleState = effect.state;
       widgets.showDialog(event.summary);
-      clearTimeout(dialogTimer);
-      dialogTimer = setTimeout(() => widgets.hideDialog(), 10_000);
+      widgets.setDialogMuted(effect.muted);
     }
     if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
       const kind = classifyAutodriveReceipt(event.status, event.tool ?? '', event.summary ?? '');
@@ -277,8 +395,11 @@ if (window.directorBridge?.onAutodriveEvent) {
 // 同一时刻最多一只 speaking；非发言桌宠切倾听微动作，idle 后回无事态。
 let listeningToTeammate = false;
 bridge.onCoopSpeaker?.((event) => {
+  speakerDucking = event.state === 'speaking';
+  if (renderer instanceof SpritesheetRenderer) renderer.setSpeakerActive(speakerDucking);
   if (event.state === 'speaking') {
     if (event.activeAgentId === petContext.agentId) {
+      bubbleState = speechStarted(bubbleState).state;
       listeningToTeammate = false;
       lastEventAt = Date.now();
       // 现有角色动作库没有独立 talk 槽位：用「认真状态」承载开口播报，避免假装有口型资产
@@ -287,10 +408,22 @@ bridge.onCoopSpeaker?.((event) => {
       listeningToTeammate = true;
       void renderer.play('thinking_tail_wag').catch(() => undefined);
     }
-  } else if (listeningToTeammate) {
-    listeningToTeammate = false;
-    void renderer.play('idle').catch(() => undefined);
+  } else {
+    const effect = speakerIdle(bubbleState);
+    bubbleState = effect.state;
+    if (effect.hide) widgets.hideDialog();
+    if (listeningToTeammate) {
+      listeningToTeammate = false;
+      void renderer.play('idle').catch(() => undefined);
+    }
   }
+});
+bridge.onSpeechResult?.((event) => {
+  if (!isEventForThisPet(event.agentId)) return;
+  const effect = speechResult(bubbleState, event.status);
+  bubbleState = effect.state;
+  if (effect.hide) widgets.hideDialog();
+  widgets.setDialogMuted(effect.muted);
 });
 bridge.onPetAction?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
@@ -342,19 +475,34 @@ function applyStageScale(): void {
     video.style.width = `${BASE_STAGE.width * petScale}px`;
     video.style.height = `${BASE_STAGE.height * petScale}px`;
   }
+  for (const canvas of stage.querySelectorAll('canvas')) {
+    canvas.style.width = `${BASE_STAGE.width * petScale}px`;
+    canvas.style.height = `${BASE_STAGE.height * petScale}px`;
+  }
 }
 
 async function sampleAlpha(): Promise<number> {
   const video = stage.querySelector('video');
-  if (!video || video.readyState < 2 || !probeCtx) return 0; // 无画面 → 透明（穿透），E2E 走 forceAlpha
+  const sprite = stage.querySelector('canvas');
+  if ((!video || video.readyState < 2) && sprite === null) return 0;
   const point = await bridge.mousePoint();
   const winPos = await bridge.winPosition();
   if (!winPos) return 0;
-  // 窗口 DIP → 舞台基准坐标（除缩放）→ 视频原始像素（drawImage 用 intrinsic 坐标）
   const vx = (point.x - winPos[0]) / petScale - stageOffset.x;
   const vy = (point.y - winPos[1]) / petScale - stageOffset.y;
-  ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
-  return probeCtx.getImageData(0, 0, 1, 1).data[3] ?? 0;
+  if (video !== null && video.readyState >= 2) {
+    ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
+    return probeCtx?.getImageData(0, 0, 1, 1).data[3] ?? 0;
+  }
+  if (sprite !== null) {
+    const ctx = sprite.getContext('2d');
+    if (ctx === null) return 0;
+    const px = Math.round(vx * sprite.width / BASE_STAGE.width);
+    const py = Math.round(vy * sprite.height / BASE_STAGE.height);
+    if (px < 0 || py < 0 || px >= sprite.width || py >= sprite.height) return 0;
+    return ctx.getImageData(px, py, 1, 1).data[3] ?? 0;
+  }
+  return 0;
 }
 
 function ctxDraw(video: HTMLVideoElement, sx: number, sy: number): void {
@@ -367,12 +515,121 @@ const probe = createAlphaProbe({
   intervalMs: 50,
 });
 probe.start();
+
+// ---- T-M6-43 交互、防打扰与省电 ----
+let altPeeking = false;
+let powerSaverEnabled = true;
+const setPeek = (active: boolean): void => {
+  if (altPeeking === active) return;
+  altPeeking = active;
+  if (active) probe.stop(); else probe.start();
+  void bridge.setPeek?.(active);
+};
+const wakeUp = (): void => {
+  if (!interaction.asleep) return;
+  setAsleep(interaction, false);
+  void renderer.play('idle').catch(() => undefined);
+  lastEventAt = Date.now();
+};
+const toggleSleep = (): void => {
+  if (interaction.asleep) { wakeUp(); return; }
+  setAsleep(interaction, true);
+  headPat(interaction);
+  void renderer.play('sleep_mute').catch(() => undefined);
+};
+const patHeadOnce = (): void => {
+  wakeUp();
+  headPat(interaction);
+  lastDizzyVisual = 0;
+  lastActivityAt = Date.now();
+  void renderer.play('happy_maid').catch(() => undefined);
+};
+window.addEventListener('keydown', (event) => {
+  if ((event.key === 's' || event.key === 'S') && !(event.target instanceof HTMLInputElement)) {
+    if (!event.repeat) toggleSleep();
+  }
+});
+stage.addEventListener('mouseenter', () => {
+  pointerOnStage = true;
+  lastActivityAt = Date.now();
+  if (dockedEdge !== null) {
+    const edge = dockHomeEdge;
+    dockedEdge = null;
+    void bridge.dockWindow?.(dockedAgentId, null);
+    if (edge !== null) scheduleDockBack(edge);
+  }
+});
+stage.addEventListener('mouseleave', () => { pointerOnStage = false; setPeek(false); });
+stage.addEventListener('click', () => {
+  if (dragMoved) return;
+  if (interaction.asleep) { wakeUp(); return; }
+  if (clickTimer !== null) clearTimeout(clickTimer);
+  clickTimer = setTimeout(() => { clickTimer = null; patHeadOnce(); }, 240);
+});
+stage.addEventListener('dblclick', (event) => {
+  if (clickTimer !== null) { clearTimeout(clickTimer); clickTimer = null; }
+  cancelAnimationFrame(slingshotRaf);
+  void (async () => {
+    const screen = await bridge.screenBounds();
+    const position = await bridge.winPosition();
+    if (position === null) return;
+    const wb = screen.windowBounds ?? screen;
+    const start = { x: position[0], y: position[1] };
+    const sim = createSlingshot({
+      start,
+      bounds: { minX: wb.minX, minY: wb.minY, maxX: wb.maxX, maxY: wb.maxY },
+      direction: event.clientX < window.innerWidth / 2 ? -1 : 1,
+      amplitudePx: 96,
+    });
+    const started = performance.now();
+    const step = (now: number): void => {
+      const pos = sim.step(16);
+      void bridge.dragTo(pos.x, pos.y);
+      host.applySquash(renderer.squashPoseAt(now - started, 1.2));
+      if (!sim.done()) slingshotRaf = requestAnimationFrame(step);
+      else {
+        void bridge.dragTo(start.x, start.y);
+        host.applySquash({ scaleX: 1, scaleY: 1 });
+        lastActivityAt = Date.now();
+      }
+    };
+    slingshotRaf = requestAnimationFrame(step);
+  })();
+});
+setInterval(() => {
+  const bubbleEffect = bubbleTick(bubbleState, Date.now());
+  bubbleState = bubbleEffect.state;
+  if (bubbleEffect.hide) widgets.hideDialog();
+  const idle = Date.now() - lastActivityAt;
+  const next = shouldEnterPowerSaver(lastActivityAt, Date.now(), powerSaverEnabled, 30_000);
+  if (next !== powerSaver) {
+    powerSaver = next;
+    document.documentElement.dataset.powerSaver = String(next);
+  }
+  if (interaction.asleep && idle > 90_000 && Math.random() < 0.05) {
+    widgets.showDialog('唔……梦里也有好多米饭……');
+    setTimeout(() => widgets.hideDialog(), 6_000);
+  }
+}, 5_000);
+const applyGlobalPrefs = (p: PetDesktopPrefs): void => {
+  powerSaverEnabled = p.powerSaverEnabled;
+  sfxVolume = p.sfxVolume;
+  if (renderer instanceof SpritesheetRenderer) {
+    renderer.setSfxEnabled(p.sfxEnabled);
+    renderer.setSfxVolume(p.sfxVolume);
+  }
+};
+void bridge.prefsGet().then(applyGlobalPrefs).catch(() => undefined);
+bridge.onGlobalPrefsChanged?.(applyGlobalPrefs);
+
 // E2E 通道：main 中继的 alpha 注入（preload onTestAlpha 已按 PET_STAGE_E2E 门控）
 bridge.onTestAlpha?.((alpha) => void probe.force(alpha));
 
 // ---- 拖拽甩抛 ----
 let petLocked = false;
 let dragging = false;
+let dragMoved = false;
+let lastPointerX = 0;
 let samples: DragSample[] = [];
 let throwSim: ReturnType<typeof createThrow> | null = null;
 let raf = 0;
@@ -385,6 +642,9 @@ stage.addEventListener('mousedown', (event) => {
   dragging = true;
   throwSim = null;
   grabOffset = null;
+  dragMoved = false;
+  lastPointerX = event.screenX;
+  lastActivityAt = Date.now();
   samples = [{ t: performance.now(), x: event.screenX, y: event.screenY }];
   // 按下瞬间取窗口原点 → 锚点 = 指针屏幕坐标 − 窗口原点（异步取位，就绪前的 mousemove 先不挪窗）
   void bridge.winPosition().then((pos) => {
@@ -395,10 +655,41 @@ stage.addEventListener('mousedown', (event) => {
 
 window.addEventListener('mousemove', (event) => {
   if (!dragging) return;
+  const dx = event.screenX - lastPointerX;
+  lastPointerX = event.screenX;
+  if (Math.abs(dx) > 3) dragMoved = true;
+  const level = recordShake(interaction, dx, performance.now());
+  if (level !== lastDizzyVisual) {
+    lastDizzyVisual = level;
+    void renderer.play(DIZZY_ACTIONS[level]).catch(() => undefined);
+  }
   samples.push({ t: performance.now(), x: event.screenX, y: event.screenY });
   if (grabOffset === null) return; // 锚点未就绪：跳过本帧，避免按旧偏移跳位
   void bridge.dragTo(event.screenX - grabOffset.x, event.screenY - grabOffset.y);
 });
+
+async function applyDockEdge(position: [number, number]): Promise<void> {
+  const bounds = await bridge.screenBounds();
+  const wb = bounds.windowBounds ?? bounds;
+  const width = window.innerWidth;
+  const edge = dockEdgeFor({ x: position[0], width }, { x: wb.minX, width: wb.maxX - wb.minX + width });
+  if (edge !== dockedEdge) {
+    dockedEdge = edge;
+    dockHomeEdge = edge;
+    await bridge.dockWindow?.(dockedAgentId, edge);
+  }
+}
+
+function scheduleDockBack(edge: 'left' | 'right'): void {
+  setTimeout(() => {
+    if (!pointerOnStage && Date.now() - lastActivityAt >= 10_000) {
+      dockedEdge = edge;
+      void bridge.dockWindow?.(dockedAgentId, edge);
+    }
+  }, 10_000);
+}
+
+
 
 window.addEventListener('mouseup', () => {
   if (!dragging) return;
@@ -446,6 +737,7 @@ window.addEventListener('mouseup', () => {
           // 持久化落定后的真实位置（不是拖拽起点）——否则重启后桌宠会回到松手前的位置
           const rest = throwSim?.position() ?? start;
           void bridge.prefsSet({ position: { x: Math.round(rest.x), y: Math.round(rest.y), displayId: bounds.displayId || prefs.position.displayId } });
+          void applyDockEdge([Math.round(rest.x), Math.round(rest.y)]);
           return;
         }
         const dt = ts - lastTs;
@@ -459,7 +751,10 @@ window.addEventListener('mouseup', () => {
       settle(Math.hypot(velocity.vx, velocity.vy) * 0.4);
       // 拖拽期间窗口已跟手移动 → 用最终真实位置持久化（windowBounds 由主进程 dragTo 夹紧）
       const final = await bridge.winPosition();
-      if (final !== null) void bridge.prefsSet({ position: { x: final[0], y: final[1], displayId: bounds.displayId || prefs.position.displayId } });
+      if (final !== null) {
+        void bridge.prefsSet({ position: { x: final[0], y: final[1], displayId: bounds.displayId || prefs.position.displayId } });
+        await applyDockEdge(final);
+      }
     }
   })();
 });
@@ -568,12 +863,28 @@ const closeScaleMenu = (): void => {
 };
 stage.addEventListener('contextmenu', (event) => {
   event.preventDefault();
+  wakeUp();
+  void renderer.play('rage_spray').catch(() => undefined);
+  void bridge.pokeLine?.(dockedAgentId).then((result) => {
+    if (result.ok && result.line !== undefined) {
+      widgets.showDialog(result.line);
+      setTimeout(() => widgets.hideDialog(), 10_000);
+    }
+  }).catch(() => undefined);
   if (scaleMenu !== null) { closeScaleMenu(); return; }
   void bridge.forceInteractive(true);
   scaleMenu = document.createElement('div');
   scaleMenu.style.cssText = `position:absolute; left:${Math.round(BASE_STAGE.width * petScale / 2 - 60)}px; bottom:8px;
     display:flex; gap:4px; padding:6px; border-radius:12px; pointer-events:auto;
     background:rgba(12,20,32,0.92); border:1px solid rgba(120,180,255,0.35); z-index:20;`;
+  const makeTextButton = (label: string, onClick: () => void): HTMLButtonElement => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.style.cssText = 'font:11px monospace;color:#cdd8e8;background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;';
+    btn.addEventListener('click', onClick);
+    scaleMenu?.appendChild(btn);
+    return btn;
+  };
   for (const option of [0.6, 0.8, 1, 1.2, 1.5, 2]) {
     const btn = document.createElement('button');
     btn.textContent = `${option}×`;
@@ -582,6 +893,8 @@ stage.addEventListener('contextmenu', (event) => {
     btn.addEventListener('click', () => { setScale(option); closeScaleMenu(); });
     scaleMenu.appendChild(btn);
   }
+  makeTextButton('戳一下', () => { wakeUp(); void renderer.play('rage_spray').catch(() => undefined); closeScaleMenu(); });
+  makeTextButton(interaction.asleep ? '叫醒' : '睡觉', () => { toggleSleep(); closeScaleMenu(); });
   stage.appendChild(scaleMenu);
   window.addEventListener('mousedown', (e) => {
     if (scaleMenu !== null && !scaleMenu.contains(e.target as Node)) closeScaleMenu();
@@ -624,6 +937,7 @@ void bridge.appMeta().then((meta) => {
 
 // ambient 空闲随机链：30s 无事件 → pickAmbient 播 6s 回 idle（D16 素材全利用）
 const ambientLoop = setInterval(() => {
+  if (shouldBlockWhileAsleep(interaction, 'ambient') || powerSaver) return;
   if (Date.now() - lastEventAt < AMBIENT_IDLE_MS) return;
   if (previewTimer) return; // 预览播放中不抢
   const manifest = renderer.manifest;

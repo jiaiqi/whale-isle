@@ -91,8 +91,8 @@ export function resolveKeywordDirective(text: string, profile: DirectiveProfile 
 }
 
 /** LLM 指令解析 system：与游戏规划器同一套白名单语义 + 状态填参提示 + 「闲聊输出空 tool」约定 */
-export function buildDirectiveSystemPrompt(profile: DirectiveProfile = STARDEW_DIRECTIVE_PROFILE): string {
-  return `你是「小鲸」的指令解析器：判断主人刚说的话是不是要小鲸在《${profile.gameName}》里执行的动作。
+export function buildDirectiveSystemPrompt(profile: DirectiveProfile = STARDEW_DIRECTIVE_PROFILE, characterName = '小鲸'): string {
+  return `你是「${characterName}」的指令解析器：判断主人刚说的话是不是要${characterName}在《${profile.gameName}》里执行的动作。
 - 是动作指令 → 只输出一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明"}；
 - 不是动作（闲聊/提问/感想/角色扮演）→ 只输出 {"tool":"","args":{},"intent":""}。
 可用的工具与参数（严禁臆造）：

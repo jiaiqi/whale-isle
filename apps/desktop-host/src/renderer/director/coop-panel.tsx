@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Flag, LifeBuoy, LockKeyhole, MessageSquare, Monitor, Pencil, Play, Plus, Radio, RefreshCw,
+  CheckCircle2, ChevronDown, ChevronUp, Flag, LifeBuoy, LockKeyhole, MessageSquare, Monitor, Pencil, Play, Plus, Radio, RefreshCw, Rocket,
   Send, ShieldCheck, Square, Trash2, UserPlus, Users, X,
 } from 'lucide-react';
 import type {
@@ -19,11 +19,13 @@ import type {
   TeamCommsMessage,
   TeamGoal,
 } from '@workbench/shared-protocol';
+import { CharacterPackStore } from './character-pack-store';
 import {
   GAME_OPTIONS,
   type CharacterSummary,
   type CoopEndpointView,
   type GameId,
+  type LaunchStatusView,
 } from './bridge';
 
 const GAME_LABEL: Record<GameId, string> = {
@@ -109,6 +111,8 @@ export function CoopPanel(): React.JSX.Element {
   const [composing, setComposing] = useState(false);
   const [huddleBusy, setHuddleBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [launchStatus, setLaunchStatus] = useState<LaunchStatusView[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [goalEditing, setGoalEditing] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
@@ -131,6 +135,7 @@ export function CoopPanel(): React.JSX.Element {
     ]);
     setEndpoints(endpointResult);
     setWindows(windowResult);
+    setLaunchStatus(await window.directorBridge.coopLaunchStatus().catch(() => []));
     if (boardResult !== null) {
       setSnapshot(boardResult.snapshot);
       setMessages((previous) => mergeMessages(previous, boardResult.messages));
@@ -311,13 +316,42 @@ export function CoopPanel(): React.JSX.Element {
     await refresh();
   };
 
+  const nextEndpoint = (gameId: GameId): string => {
+    const base = gameId === 'stardew' ? 18080 : gameId === 'terraria' ? 18090 : 18100;
+    const used = endpoints.filter((endpoint) => endpoint.gameId === gameId)
+      .map((endpoint) => Number(new URL(endpoint.endpoint).port || base))
+      .filter((port) => Number.isFinite(port));
+    let port = base;
+    while (gameId === 'dst' ? false : used.includes(port)) port++;
+    if (gameId === 'dst') return DEFAULT_ENDPOINT.dst;
+    return gameId === 'stardew' ? `http://127.0.0.1:${port}/mcp` : `http://127.0.0.1:${port}`;
+  };
+
+  const launch = async (kind: 'human' | 'ai'): Promise<void> => {
+    setBusy(`launch:${kind}`);
+    try {
+      const game = goal.gameId;
+      if (kind === 'human') {
+        const result = await window.directorBridge.coopLaunchHuman(game);
+        if (!result.ok) toast.error(result.error ?? '启动失败'); else toast.success(`真人实例已启动（PID ${result.pid ?? '—'}）`);
+      } else {
+        const candidate = endpoints.find((endpoint) => endpoint.gameId === game && !endpoint.running) ?? endpoints.find((endpoint) => endpoint.gameId === game);
+        if (candidate === undefined) { toast.error('请先添加对应游戏的 AI 队友'); return; }
+        const result = await window.directorBridge.coopLaunchAi(candidate.id);
+        if (!result.ok) toast.error(result.error ?? 'AI 实例启动失败');
+        else toast.success(`AI 实例已启动（端口 ${result.port ?? '—'}，PID ${result.pid ?? '—'}）`);
+      }
+      await refresh();
+    } finally { setBusy(null); }
+  };
+
   const openAdd = (): void => {
     setEditingId(null);
     setAddForm((previous) => ({
       ...previous,
       displayName: '新队友',
       characterId: previous.characterId || characters[0]?.id || '',
-      endpoint: DEFAULT_ENDPOINT[previous.gameId],
+      endpoint: nextEndpoint(previous.gameId),
       routingId: '',
     }));
     setAddOpen(true);
@@ -489,12 +523,49 @@ export function CoopPanel(): React.JSX.Element {
               {huddleBusy || huddle.active ? <RefreshCw size={11} className="animate-spin" /> : <Radio size={11} />}
               {huddle.active ? `协商中 · 第 ${huddle.round || 1} 轮` : '发起开麦商量'}
             </button>
+            <CharacterPackStore onImported={() => { void window.directorBridge.characterList().then(setCharacters).catch(() => undefined); void refresh(); }} />
             <button type="button" className="btn-pill primary" onClick={openAdd}>
               <UserPlus size={11} />添加 AI 队友
             </button>
           </div>
         </div>
       </header>
+
+      <section className="shrink-0 px-5 py-2" style={{ borderBottom: '1px solid var(--stroke)' }}>
+        <button type="button" data-coop-launch-wizard className="flex w-full items-center gap-2 text-left text-[11.5px]" style={{ color: 'var(--text-2)' }} onClick={() => setGuideOpen(!guideOpen)} aria-expanded={guideOpen}>
+          <Rocket size={12} style={{ color: 'var(--blue)' }} />
+          <b style={{ color: 'var(--text-1)' }}>联机一键启动向导</b>
+          <span>{GAME_LABEL[goal.gameId]}</span>
+          <span className={`pill ${onlineCount > 0 ? 'pill-green' : ''}`} style={{ fontSize: 9.5 }}>{onlineCount} AI 在线</span>
+          <span className="ml-auto" style={{ color: 'var(--text-3)' }}>{guideOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}</span>
+        </button>
+        {guideOpen && (
+          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+            {(goal.gameId === 'stardew' ? [
+              { text: '启动真人主机（SMAPI）', action: () => void launch('human') },
+              { text: '为 AI 生成隔离 Mods 并拉起实例', action: () => void launch('ai') },
+              { text: '游戏内输入 127.0.0.1 加入联机', action: null },
+            ] : goal.gameId === 'terraria' ? [
+              { text: '启动 tModLoaderServer:7777（路径确认后启用）', action: null },
+              { text: '按队友分配 18090/18091 AI 端口', action: null },
+              { text: '进入服务器验证桥接在线', action: null },
+            ] : [
+              { text: '配置 cluster_token（Klei 账号生成）', action: null },
+              { text: '勾选托管角色 Klei UserID', action: null },
+              { text: '启动专用服与 sidecar :18100', action: null },
+            ]).map((step, index) => (
+              <div key={step.text} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" style={{ border: '1px solid var(--stroke)', background: 'var(--surface)' }}>
+                <span className="grid h-5 w-5 place-items-center rounded-full text-[10px]" style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}>{index + 1}</span>
+                <span className="flex-1" style={{ color: 'var(--text-2)' }}>{step.text}</span>
+                {step.action !== null ? <button type="button" className="btn-pill ghost" style={{ fontSize: 10 }} disabled={busy !== null} onClick={step.action}>启动</button> : <CheckCircle2 size={12} style={{ color: 'var(--text-3)' }} />}
+              </div>
+            ))}
+            <div className="md:col-span-3 text-[10px]" style={{ color: 'var(--text-3)' }}>
+              {launchStatus.find((item) => item.gameId === goal.gameId)?.detail ?? '正在探测本机路径…'}
+            </div>
+          </div>
+        )}
+      </section>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto xl:grid-cols-[270px_minmax(0,1fr)_292px] xl:overflow-hidden">
         {/* 小队成员 */}
@@ -790,7 +861,7 @@ export function CoopPanel(): React.JSX.Element {
                 value={addForm.gameId}
                 onChange={(event) => {
                   const gameId = event.target.value as GameId;
-                  setAddForm({ ...addForm, gameId, endpoint: DEFAULT_ENDPOINT[gameId] });
+                  setAddForm({ ...addForm, gameId, endpoint: nextEndpoint(gameId), routingId: '' });
                 }}
                 className="w-full px-3 py-2 text-[12.5px] outline-none"
                 style={{ borderRadius: 8, border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
@@ -810,7 +881,7 @@ export function CoopPanel(): React.JSX.Element {
             </label>
             <label className="mb-3 block text-[11.5px]" style={{ color: 'var(--text-2)' }}>
               <span className="mb-1 block font-semibold">桥接端口 / 端点</span>
-              <input value={addForm.endpoint} onChange={(event) => setAddForm({ ...addForm, endpoint: event.target.value })} className="w-full px-3 py-2 font-mono text-[12px] outline-none" style={{ borderRadius: 8, border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }} />
+              <input data-coop-endpoint-input value={addForm.endpoint} onChange={(event) => setAddForm({ ...addForm, endpoint: event.target.value })} className="w-full px-3 py-2 font-mono text-[12px] outline-none" style={{ borderRadius: 8, border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }} />
             </label>
             <p className="mb-4 text-[10.5px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
               保存只登记端点，不会伪造「已连接」。点击队友卡片「接管」时再探活；独立桌宠窗可单独开关，不影响自治。

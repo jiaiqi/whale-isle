@@ -81,8 +81,8 @@ export interface LlmPlannerDeps {
   fallbackPlanner?: Planner;
   /** 非星露谷游戏的提示词；提供后使用通用决策路径，不执行星露谷专属救援状态机 */
   systemPrompt?: string;
-  /** 多桌宠角色人设（星露谷核心提示词的角色段落；缺省用小鲸） */
-  personaPrompt?: string;
+  /** 多桌宠角色人设（星露谷核心提示词的角色段落；缺省用小鲸；可动态读取当前角色） */
+  personaPrompt?: string | (() => string);
   /** 每轮规划前动态读取团队黑板摘要（≤300 字符，作为只读事实追加到 user 消息） */
   contextProvider?: () => string;
   /** 测试注入 */
@@ -789,7 +789,7 @@ export class LlmPlanner implements Planner {
     // 真纠错重问（T-M6-12 修复：旧实现注释写着「带纠错提示重问」，实际只是原样重发，
     // 大概率得到同样的坏输出）：把上一条原始输出 + 具体错误原因追加进对话再问一次
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: SYSTEM_TEMPLATE(guidesHint, this.deps.personaPrompt) },
+      { role: 'system', content: SYSTEM_TEMPLATE(guidesHint, typeof this.deps.personaPrompt === 'function' ? this.deps.personaPrompt() : this.deps.personaPrompt) },
       { role: 'user', content: user },
     ];
     for (let attempt = 0; attempt < 2; attempt++) {

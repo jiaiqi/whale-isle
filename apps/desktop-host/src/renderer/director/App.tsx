@@ -209,7 +209,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       if (history.length > 0) setEvents((prev) => mergeHydrated(history, prev));
     });
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
-    void window.directorBridge.characterList().then(setCharacters).catch(() => setCharacters([]));
+    const refreshCharacters = (): void => { void window.directorBridge.characterList().then(setCharacters).catch(() => setCharacters([])); };
+    refreshCharacters();
+    window.addEventListener('pet:characters-changed', refreshCharacters);
     void window.directorBridge.prefsGet().then((p) => {
       if (typeof p.characterId === 'string') setCharacterId(p.characterId);
     }).catch(() => undefined);
@@ -674,7 +676,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                 <button className={`seg-tab${voiceTab === 'studio' ? ' on' : ''}`} onClick={() => setVoiceTab('studio')}>声音工坊</button>
               </div>
             </header>
-            {voiceTab === 'library' ? <VoicePanel bare /> : <VoiceStudioPanel bare />}
+            {voiceTab === 'library' ? <VoicePanel bare /> : <VoiceStudioPanel bare characterId={characterId} characterName={characters.find((c) => c.id === characterId)?.displayName ?? '小鲸'} />}
           </div>
         )}
 

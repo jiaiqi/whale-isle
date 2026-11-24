@@ -19,6 +19,7 @@ export interface BubbleWidgets {
   hideThought(): void;
   hideDialog(): void;
   rects(): { thought: BubbleRect; dialog: BubbleRect };
+  setDialogMuted(muted: boolean): void;
 }
 
 /** 舞台挂载双轨气泡（样式：云朵半透明 / 对话泡带尾巴；均不拦截穿透语义外的点击） */
@@ -64,7 +65,12 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     position:absolute; left:22px; bottom:-8px;
     border-left:8px solid transparent; border-right:8px solid transparent;
     border-top:9px solid rgba(10,132,255,0.55);`;
+  const mutedBadge = document.createElement('span');
+  mutedBadge.className = 'pet-bubble-muted';
+  mutedBadge.textContent = '静音';
+  mutedBadge.style.cssText = 'position:absolute;right:7px;bottom:5px;font:9px/1 monospace;color:#ffd48a;opacity:.9;display:none;';
   dialog.appendChild(tail);
+  dialog.appendChild(mutedBadge);
   stage.appendChild(dialog);
 
   const setBubbleText = (el: HTMLElement, text: string) => {
@@ -93,12 +99,17 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     },
     showDialog(text: string) {
       setBubbleText(dialog, text);
+      dialog.appendChild(mutedBadge);
     },
     hideThought() {
       thought.style.display = 'none';
     },
     hideDialog() {
       dialog.style.display = 'none';
+      mutedBadge.style.display = 'none';
+    },
+    setDialogMuted(muted: boolean) {
+      mutedBadge.style.display = muted ? 'block' : 'none';
     },
     rects() {
       return {

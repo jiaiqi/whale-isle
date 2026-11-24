@@ -24,6 +24,9 @@ interface PetStageWindow {
     dragTo(x: number, y: number): Promise<[number, number] | null>;
     winPosition(): Promise<[number, number] | null>;
     prefsSet(update: { position: { x: number; y: number; displayId: string } }): Promise<unknown>;
+    dockWindow?(agentId: string, edge: 'left' | 'right' | null): Promise<unknown>;
+    setPeek?(active: boolean): Promise<{ ok: boolean }>;
+    clearDock?(agentId: string): Promise<{ ok: boolean }>;
     screenBounds(): Promise<{
       displayId: string;
       minX: number;
@@ -33,6 +36,8 @@ interface PetStageWindow {
       windowBounds: { minX: number; minY: number; maxX: number; maxY: number };
     }>;
     forceAlpha?(alpha: number): Promise<boolean>;
+    testGlobalAltPeek?(point: { x: number; y: number }, altDown: boolean): Promise<{ ok: boolean; targets: string[] }>;
+    testFullscreenApply?(rect: { x: number; y: number; width: number; height: number } | null): Promise<{ ok: boolean; hidden: string[] }>;
     appMeta(): Promise<Record<string, unknown>>;
   };
   __petStageReady: boolean;
@@ -129,6 +134,33 @@ describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
       expect(moved).toEqual([targetX, targetY]);
       const restoredScreen = await win.evaluate(() => (window as unknown as PetStageWindow).petStage.screenBounds());
       expect(restoredScreen.displayId).toBe(bounds.displayId);
+
+      // T-M6-44：贴边 x 负值、探出恢复；Alt 临时穿透透明度；全局快捷键已注册
+      const beforeDock = await win.evaluate(() => (window as unknown as PetStageWindow).petStage.winPosition());
+      await win.evaluate(() => (window as unknown as PetStageWindow).petStage.dockWindow?.('default', 'left'));
+      const dockedBounds = await browserWindow.evaluate((w) => w.getBounds());
+      expect(dockedBounds.x).toBeLessThan(restoredScreen.windowBounds.minX);
+      await win.evaluate(() => (window as unknown as PetStageWindow).petStage.dockWindow?.('default', null));
+      expect(await win.evaluate(() => (window as unknown as PetStageWindow).petStage.winPosition())).toEqual(beforeDock);
+      const petBounds = await browserWindow.evaluate((w) => w.getBounds());
+      const altTargets = await win.evaluate((bounds) => (window as unknown as PetStageWindow).petStage.testGlobalAltPeek?.({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, true), petBounds);
+      expect(altTargets?.targets).toContain('default');
+      await expect.poll(() => browserWindow.evaluate((w) => w.getOpacity())).toBeCloseTo(0.35, 2);
+      await win.evaluate((bounds) => (window as unknown as PetStageWindow).petStage.testGlobalAltPeek?.({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, false), petBounds);
+      await expect.poll(() => browserWindow.evaluate((w) => w.getOpacity())).toBe(1);
+
+      // 拖离贴边：dock 后移动到中间再 clearDock，必须停留新位置而不是弹回旧位置。
+      await win.evaluate(() => (window as unknown as PetStageWindow).petStage.dockWindow?.('default', 'left'));
+      const dragged = await win.evaluate(() => (window as unknown as PetStageWindow).petStage.dragTo(500, 300));
+      await win.evaluate(() => (window as unknown as PetStageWindow).petStage.clearDock?.('default'));
+      expect(await win.evaluate(() => (window as unknown as PetStageWindow).petStage.winPosition())).toEqual(dragged);
+      expect(await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Control+Alt+P'))).toBe(true);
+      const displayBounds = await win.evaluate(() => ({ x: window.screen.availLeft ?? 0, y: window.screen.availTop ?? 0, width: window.screen.width, height: window.screen.height }));
+      const covered = await win.evaluate((rect) => (window as unknown as PetStageWindow).petStage.testFullscreenApply?.(rect), displayBounds);
+      expect(covered?.hidden.length).toBeGreaterThan(0);
+      await expect.poll(() => browserWindow.evaluate((w) => w.isVisible())).toBe(false);
+      await win.evaluate(() => (window as unknown as PetStageWindow).petStage.testFullscreenApply?.(null));
+      await expect.poll(() => browserWindow.evaluate((w) => w.isVisible())).toBe(true);
 
       // Persist a point beyond the work area, restart, and verify restoration clamps on that display.
       await win.evaluate(({ x, y, displayId }) =>

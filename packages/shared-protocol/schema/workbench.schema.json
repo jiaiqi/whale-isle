@@ -287,6 +287,49 @@
           "type": "string",
           "minLength": 1
         },
+        "spriteSheetPath": {
+          "type": "string"
+        },
+        "spriteMetaPath": {
+          "type": "string"
+        },
+        "sprite": {
+          "type": "object",
+          "properties": {
+            "frameWidth": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "frameHeight": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "columns": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "frameCount": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "sampleFps": {
+              "default": 12,
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 120
+            }
+          },
+          "required": [
+            "frameWidth",
+            "frameHeight",
+            "columns",
+            "frameCount"
+          ],
+          "additionalProperties": false
+        },
+        "audioPath": {
+          "type": "string"
+        },
         "loop": {
           "default": true,
           "type": "boolean"
@@ -411,6 +454,49 @@
                       "type": "string",
                       "minLength": 1
                     },
+                    "spriteSheetPath": {
+                      "type": "string"
+                    },
+                    "spriteMetaPath": {
+                      "type": "string"
+                    },
+                    "sprite": {
+                      "type": "object",
+                      "properties": {
+                        "frameWidth": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "frameHeight": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "columns": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "frameCount": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        },
+                        "sampleFps": {
+                          "default": 12,
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 120
+                        }
+                      },
+                      "required": [
+                        "frameWidth",
+                        "frameHeight",
+                        "columns",
+                        "frameCount"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "audioPath": {
+                      "type": "string"
+                    },
                     "loop": {
                       "default": true,
                       "type": "boolean"
@@ -461,6 +547,49 @@
               "webmPath": {
                 "type": "string",
                 "minLength": 1
+              },
+              "spriteSheetPath": {
+                "type": "string"
+              },
+              "spriteMetaPath": {
+                "type": "string"
+              },
+              "sprite": {
+                "type": "object",
+                "properties": {
+                  "frameWidth": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "frameHeight": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "columns": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "frameCount": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "sampleFps": {
+                    "default": 12,
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 120
+                  }
+                },
+                "required": [
+                  "frameWidth",
+                  "frameHeight",
+                  "columns",
+                  "frameCount"
+                ],
+                "additionalProperties": false
+              },
+              "audioPath": {
+                "type": "string"
               },
               "category": {
                 "default": "小动作",
@@ -4103,6 +4232,28 @@
         "mcpEndpointId": {
           "default": "default",
           "type": "string"
+        },
+        "powerSaverEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "shortcutHideEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "autoHideFullscreen": {
+          "default": true,
+          "type": "boolean"
+        },
+        "sfxEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "sfxVolume": {
+          "default": 0.7,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "additionalProperties": false
@@ -4129,6 +4280,32 @@
         "voiceId": {
           "default": "qiaopi_mengmei",
           "type": "string"
+        },
+        "voiceRatePercent": {
+          "default": 100,
+          "type": "number",
+          "minimum": 50,
+          "maximum": 200
+        },
+        "voicePitchMul": {
+          "default": 1,
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1.6
+        },
+        "packId": {
+          "default": "",
+          "type": "string"
+        },
+        "actionCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        },
+        "audioClipCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
         },
         "anchorRatio": {
           "default": 0.5,

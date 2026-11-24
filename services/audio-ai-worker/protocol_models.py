@@ -33,12 +33,27 @@ class PetActionState(StrEnum):
     sleep_mute = 'sleep_mute'
 
 
+class Sprite(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    frameWidth: Annotated[int, Field(gt=0)]
+    frameHeight: Annotated[int, Field(gt=0)]
+    columns: Annotated[int, Field(gt=0)]
+    frameCount: Annotated[int, Field(gt=0)]
+    sampleFps: Annotated[float | None, Field(gt=0.0, le=120.0)] = 12
+
+
 class PetAvatarClip(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
     clipId: str
     webmPath: Annotated[str, Field(min_length=1)]
+    spriteSheetPath: str | None = None
+    spriteMetaPath: str | None = None
+    sprite: Sprite | None = None
+    audioPath: str | None = None
     loop: bool | None = True
     playbackRate: Annotated[float | None, Field(ge=0.1, le=4.0)] = 1
     fps: Annotated[int | None, Field(ge=1, le=120)] = 30
@@ -90,6 +105,10 @@ class Clip(BaseModel):
     )
     clipId: str
     webmPath: Annotated[str, Field(min_length=1)]
+    spriteSheetPath: str | None = None
+    spriteMetaPath: str | None = None
+    sprite: Sprite | None = None
+    audioPath: str | None = None
     loop: bool | None = True
     playbackRate: Annotated[float | None, Field(ge=0.1, le=4.0)] = 1
     fps: Annotated[int | None, Field(ge=1, le=120)] = 30
@@ -110,6 +129,10 @@ class AmbientPoolItem(BaseModel):
     )
     clipId: str
     webmPath: Annotated[str, Field(min_length=1)]
+    spriteSheetPath: str | None = None
+    spriteMetaPath: str | None = None
+    sprite: Sprite | None = None
+    audioPath: str | None = None
     category: str | None = '小动作'
     weight: Annotated[float | None, Field(ge=0.0, le=100.0)] = 10
 
@@ -1465,6 +1488,11 @@ class PetDesktopPrefs(BaseModel):
     dragBehavior: DragBehavior | None = 'stick'
     characterId: str | None = 'blue-whale-maid'
     mcpEndpointId: str | None = 'default'
+    powerSaverEnabled: bool | None = True
+    shortcutHideEnabled: bool | None = True
+    autoHideFullscreen: bool | None = True
+    sfxEnabled: bool | None = True
+    sfxVolume: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.7
 
 
 class PetCharacter(BaseModel):
@@ -1476,6 +1504,11 @@ class PetCharacter(BaseModel):
     manifestPath: Annotated[str, Field(min_length=1)]
     personaPrompt: Annotated[str, Field(min_length=1)]
     voiceId: str | None = 'qiaopi_mengmei'
+    voiceRatePercent: Annotated[float | None, Field(ge=50.0, le=200.0)] = 100
+    voicePitchMul: Annotated[float | None, Field(ge=1.0, le=1.6)] = 1
+    packId: str | None = ''
+    actionCount: Annotated[int | None, Field(ge=0)] = 0
+    audioClipCount: Annotated[int | None, Field(ge=0)] = 0
     anchorRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.5
     licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
     builtin: bool | None = False

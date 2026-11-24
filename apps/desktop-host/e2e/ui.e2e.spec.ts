@@ -155,7 +155,9 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       expect(await director.locator('[data-mods-page]').count()).toBe(1);
       await director.click('[data-game-subtab="monitor"]');
 
-      // 品牌区角色选择与舞台页共用同一份活动状态。
+      // 品牌区角色选择与舞台页共用同一份活动状态。先归位默认角色，隔离上一用例 profile。
+      await director.evaluate(() => (window as unknown as { directorBridge: { characterSelect(id: string): Promise<unknown> } }).directorBridge.characterSelect('blue-whale-maid'));
+      await director.waitForTimeout(150);
       await director.click('[data-character-switch]');
       await director.waitForSelector('[data-character-option]', { timeout: 5_000 });
       const characterIds = await director.locator('[data-character-option]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-character-option') ?? ''));
@@ -588,6 +590,17 @@ export default {
       }));
       await page.waitForFunction(() => document.querySelector('[data-coop-page]')?.textContent?.includes('E2E 建鸡舍'), { timeout: 10_000 });
       expect((await page.locator('[data-coop-page]').innerText())).toContain('0 / 4,000g');
+      await page.click('[data-coop-launch-wizard]');
+      expect(await page.locator('[data-coop-page]').innerText()).toContain('联机一键启动向导');
+      await page.click('[data-pet-pack-store]');
+      await page.waitForSelector('[role="dialog"][aria-labelledby="pack-store-title"]', { timeout: 10_000 });
+      expect(await page.locator('[role="dialog"]').innerText()).toContain('aboutme-pets 角色包商店');
+      await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.textContent?.includes('蓝蓝（蓝毛小女仆）'), { timeout: 10_000 });
+      await page.getByRole('button', { name: '关闭角色包商店' }).click();
+      await page.getByRole('button', { name: '添加 AI 队友' }).click();
+      await page.locator('[role="dialog"] select').nth(1).selectOption('terraria');
+      expect(await page.locator('[data-coop-endpoint-input]').inputValue()).toBe('http://127.0.0.1:18090');
+      await page.getByRole('button', { name: '关闭添加队友' }).click();
 
       const opened = await page.evaluate(() => (window as unknown as {
         directorBridge: { petWindowOpen(agentId: string, characterId?: string): Promise<{ ok: boolean; error?: string }> };
@@ -611,6 +624,81 @@ export default {
       }, 10_000);
     } finally {
       await app.close();
+    }
+  }, 90_000);
+
+  /** [E2E-HOST] T-M6-44：aboutme 角色切换后 manifest/舞台/声音工坊按当前角色生效。 */
+  it('aboutme 角色切换：pets:manifest 与声音工坊徽章跟随角色', { timeout: 90_000 }, async () => {
+    const charRoot = joinPath(homedir(), 'Library', 'Application Support', 'Whale Isle', 'e2e-profile', 'pet-characters');
+    const manifestDir = joinPath(charRoot, 'e2e');
+    mkdirSync(manifestDir, { recursive: true });
+    writeFileSync(joinPath(manifestDir, 'manifest.json'), JSON.stringify({
+      petId: 'e2e-sprite', renderer: 'sprite-sheet', licenseScope: 'DEV_ONLY_NON_COMMERCIAL', attribution: 'e2e',
+      width: 640, height: 360, defaultAction: 'idle',
+      actions: [{ actionState: 'idle', clips: [{ clipId: 'idle', webmPath: 'file:///idle.webp', sprite: { frameWidth: 640, frameHeight: 360, columns: 8, frameCount: 15, sampleFps: 12 } }] }],
+      ambientPool: [],
+    }));
+    writeFileSync(joinPath(charRoot, 'aboutme-e2e.json'), JSON.stringify({
+      id: 'aboutme-e2e', displayName: 'E2E小星', manifestPath: joinPath(manifestDir, 'manifest.json'),
+      personaPrompt: '你是 E2E 小星。', voiceId: 'diadia_xuemei', voiceRatePercent: 95, voicePitchMul: 1.2,
+      packId: 'e2e', actionCount: 1, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: false,
+    }));
+    writeFileSync(joinPath(charRoot, 'aboutme-dsh.json'), JSON.stringify({
+      id: 'aboutme-dsh', displayName: '蓝蓝（E2E副窗）', manifestPath: joinPath(manifestDir, 'manifest.json'),
+      personaPrompt: '你是 E2E 蓝蓝。', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1.2,
+      packId: 'dsh-pet', actionCount: 1, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: false,
+    }));
+    const app = await electron.launch({ args: ['--use-mock-keychain', mainEntry], executablePath: electronBinary, env: { ...process.env, PET_STAGE_E2E: '1' } });
+    let page: import('playwright-core').Page | undefined;
+    try {
+      page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(() => Boolean((window as unknown as { directorBridge?: { characterSelect?: unknown } }).directorBridge?.characterSelect), { timeout: 30_000 });
+      const selected = await page.evaluate(() => (window as unknown as { directorBridge: { characterSelect(id: string): Promise<{ ok: boolean }> } }).directorBridge.characterSelect('aboutme-e2e'));
+      expect(selected.ok).toBe(true);
+      const manifest = await page.evaluate(() => (window as unknown as { directorBridge: { petsManifest(): Promise<{ ok: boolean; manifest?: { renderer?: string; petId?: string } }> } }).directorBridge.petsManifest());
+      expect(manifest.manifest).toMatchObject({ renderer: 'sprite-sheet', petId: 'e2e-sprite' });
+      await page.click('[data-tab="pet"]');
+      await page.waitForSelector('[data-stage-renderer="sprite-sheet"]', { timeout: 15_000 });
+      await page.evaluate(() => localStorage.setItem('wb-tab', 'voice'));
+      await page.reload();
+      await page.waitForFunction(() => Boolean((window as unknown as { directorBridge?: { characterList?: unknown } }).directorBridge?.characterList), { timeout: 30_000 });
+      await page.evaluate(() => (window as unknown as { directorBridge: { characterSelect(id: string): Promise<{ ok: boolean }> } }).directorBridge.characterSelect('aboutme-e2e'));
+      await page.getByRole('button', { name: '声音工坊', exact: true }).click();
+      await page.waitForSelector('[data-voice-studio-character]', { timeout: 15_000 });
+      expect(await page.locator('[data-voice-studio-character]').getAttribute('data-voice-studio-character')).toBe('aboutme-e2e');
+      expect(await page.locator('[data-voice-studio-character]').innerText()).toContain('E2E小星');
+
+      // 副桌宠窗口身份隔离：poke 使用本窗角色，dock/undock 只操作本窗且平滑回位。
+      const opened = await page.evaluate(() => (window as unknown as {
+        directorBridge: { petWindowOpen(agentId: string, characterId?: string): Promise<{ ok: boolean; error?: string }> };
+      }).directorBridge.petWindowOpen('agent-aboutme', 'aboutme-dsh'));
+      expect(opened, opened.error).toMatchObject({ ok: true });
+      const extra = await waitForWindow(app, 'agentId=agent-aboutme', 20_000);
+      await extra.waitForFunction(() => Boolean((window as unknown as { __petStageReady?: boolean }).__petStageReady), { timeout: 20_000 });
+      const poke = await extra.evaluate(() => (window as unknown as {
+        petStage: { pokeLine(agentId: string): Promise<{ ok: boolean; characterId?: string; line?: string }> };
+      }).petStage.pokeLine('agent-aboutme'));
+      expect(poke).toMatchObject({ ok: true, characterId: 'aboutme-dsh' });
+      expect(poke.line?.length).toBeGreaterThan(4);
+      const beforeDock = (await page.evaluate(() => (window as unknown as {
+        directorBridge: { petWindowList(): Promise<Array<{ agentId: string; bounds: { x: number } }>> };
+      }).directorBridge.petWindowList())).find((item) => item.agentId === 'agent-aboutme')!.bounds;
+      await extra.evaluate(() => (window as unknown as { petStage: { dockWindow(agentId: string, edge: 'left' | 'right' | null): Promise<unknown> } }).petStage.dockWindow('agent-aboutme', 'left'));
+      await waitFor(page, async () => {
+        const list = await page.evaluate(() => (window as unknown as { directorBridge: { petWindowList(): Promise<Array<{ agentId: string; bounds: { x: number } }>> } }).directorBridge.petWindowList());
+        return (list.find((item) => item.agentId === 'agent-aboutme')?.bounds.x ?? 0) < beforeDock.x;
+      }, 10_000);
+      await extra.evaluate(() => (window as unknown as { petStage: { dockWindow(agentId: string, edge: 'left' | 'right' | null): Promise<unknown> } }).petStage.dockWindow('agent-aboutme', null));
+      await waitFor(page, async () => {
+        const list = await page.evaluate(() => (window as unknown as { directorBridge: { petWindowList(): Promise<Array<{ agentId: string; bounds: { x: number } }>> } }).directorBridge.petWindowList());
+        return list.find((item) => item.agentId === 'agent-aboutme')?.bounds.x === beforeDock.x;
+      }, 10_000);
+    } finally {
+      await page?.evaluate(() => (window as unknown as { directorBridge: { characterSelect(id: string): Promise<{ ok: boolean }> } }).directorBridge.characterSelect('blue-whale-maid')).catch(() => undefined);
+      await app.close();
+      rmSync(joinPath(charRoot, 'aboutme-e2e.json'), { force: true });
+      rmSync(joinPath(charRoot, 'aboutme-dsh.json'), { force: true });
+      rmSync(manifestDir, { recursive: true, force: true });
     }
   }, 90_000);
 });

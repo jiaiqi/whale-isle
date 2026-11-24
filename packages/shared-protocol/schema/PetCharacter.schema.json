@@ -27,6 +27,32 @@
           "default": "qiaopi_mengmei",
           "type": "string"
         },
+        "voiceRatePercent": {
+          "default": 100,
+          "type": "number",
+          "minimum": 50,
+          "maximum": 200
+        },
+        "voicePitchMul": {
+          "default": 1,
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1.6
+        },
+        "packId": {
+          "default": "",
+          "type": "string"
+        },
+        "actionCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        },
+        "audioClipCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        },
         "anchorRatio": {
           "default": 0.5,
           "type": "number",

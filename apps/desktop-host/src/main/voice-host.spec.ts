@@ -66,4 +66,25 @@ describe('createVoiceHost（T-M6-38 全局串行抢麦）', () => {
     await vi.waitFor(() => expect(speakers.at(-1)).toEqual({ activeAgentId: null, state: 'idle' }));
     expect(host.speakerState()).toEqual({ activeAgentId: null, speakerName: '', state: 'idle' });
   });
+
+  it('TTS 失败/被 P0 抢占会广播语音终态供气泡静音角标使用', async () => {
+    const results: Array<{ status: string }> = [];
+    const gates: Array<ReturnType<typeof deferred>> = [];
+    const host = createVoiceHost('darwin', {
+      onSpeechResult: (event) => results.push({ status: event.status }),
+      play: () => {
+        const gate = deferred();
+        gates.push(gate);
+        return { done: gate.promise, abort: () => gate.resolve() };
+      },
+    });
+    host.setConfig({ enabled: false });
+    host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '静音测试' });
+    expect(results.at(-1)).toEqual({ status: 'failed' });
+    host.setConfig({ enabled: true });
+    host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '第一条' });
+    await vi.waitFor(() => expect(gates).toHaveLength(1));
+    host.speak({ agentId: 'agent-b', speakerName: '泡芙', text: 'P0 抢麦', scene: 'p0' });
+    await vi.waitFor(() => expect(results.some((item) => item.status === 'interrupted')).toBe(true));
+  });
 });

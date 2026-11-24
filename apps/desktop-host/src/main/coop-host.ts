@@ -41,6 +41,7 @@ import {
   type WorkbenchRoleSlot,
 } from '@workbench/shared-protocol';
 import type { CharacterRegistry } from './character-registry';
+import { characterReflex } from './character-persona';
 import type { PetWindowManager } from './pet-window-manager';
 import type { VoiceHost } from './voice-host';
 
@@ -507,6 +508,8 @@ export function createCoopHost(options: {
       agentId,
       characterId: agent.character.id,
       speakerName: speakerNameOf(agentId),
+      ratePercent: agent.character.voiceRatePercent,
+      pitchMul: agent.character.voicePitchMul,
     });
   };
 
@@ -517,7 +520,7 @@ export function createCoopHost(options: {
       displayName: displayNameForEndpoint(agent.endpoint),
       personaPrompt: agent.character.personaPrompt,
       stateText: agent.lastStateText || '暂无游戏状态',
-      priority: agent.character.id === 'blue-whale-maid' ? 2 : 1,
+      priority: 1,
     }));
 
   const refreshStates = async (): Promise<void> => {
@@ -624,6 +627,12 @@ export function createCoopHost(options: {
     const agent = agents.get(agentId);
     if (agent === undefined) return { ok: false, error: `未知队友：${agentId}` };
     if (agent.runner?.isRunning() !== true) return { ok: false, error: `${agent.endpoint.displayName} 尚未接管，指令未下发` };
+    const reflex = characterReflex(agent.character.id, text);
+    if (reflex !== null) {
+      publishMessage({ id: randomUUID(), ts: now(), fromAgentId: agentId, fromName: displayNameForEndpoint(agent.endpoint), fromRole: 'ai', mentions: ['human'], kind: 'chat', text: reflex });
+      sayAs(agentId, reflex);
+      return { ok: true };
+    }
     const adapter = createAdapter(agent.endpoint.gameId, { endpoint: agent.endpoint.endpoint, agentId: endpointRoutingId(agent.endpoint) });
     const whitelist = new Set(adapter.toolWhitelist ?? ['get_state']);
     let decision: { tool: string; args: Record<string, unknown>; intent: string } | null = null;

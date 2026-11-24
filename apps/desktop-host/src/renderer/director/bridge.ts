@@ -56,6 +56,32 @@ export interface CharacterSummary {
 }
 
 /** 联机端点视图（主进程 coop:endpoints） */
+/** aboutme-pets 角色包商店视图（主进程 pet:pack-catalog） */
+export interface LaunchStatusView {
+  gameId: GameId;
+  detected: boolean;
+  executable: string | null;
+  detail: string;
+  agents: Array<{ agentId: string; profileDir: string; ready: boolean }>;
+}
+export interface PetPackCatalogItem {
+  slug: string;
+  catalogId: string;
+  displayName: string;
+  personaPrompt: string;
+  voiceId: string;
+  installed: boolean;
+  actionCount: number;
+  audioClipCount: number;
+}
+export interface PetPackImportProgress {
+  phase: 'catalog' | 'manifest' | 'sprite' | 'audio' | 'character' | 'pack-done';
+  packId: string;
+  completed: number;
+  total: number;
+  message: string;
+}
+
 export interface CoopEndpointView {
   id: string;
   displayName: string;
@@ -287,11 +313,14 @@ export interface DirectorBridge {
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
-  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string }>;
-  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string }): Promise<unknown>;
+  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number }>;
+  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number }): Promise<unknown>;
   // T-M6-21 多角色
   characterList(): Promise<CharacterSummary[]>;
   characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;
+  petPackCatalog(): Promise<PetPackCatalogItem[]>;
+  petPackImport(input?: { all?: boolean; packSlugs?: string[] }): Promise<{ ok: boolean; error?: string; imported?: string[]; failed?: Array<{ slug: string; error: string }>; catalog?: PetPackCatalogItem[] }>;
+  onPetPackImportProgress(handler: (progress: PetPackImportProgress) => void): () => void;
   // T-M6-22 多桌宠联机端点池
   coopEndpoints(): Promise<CoopEndpointView[]>;
   coopStart(id: string): Promise<{ ok: boolean; error?: string }>;
@@ -301,6 +330,9 @@ export interface DirectorBridge {
   coopGoalSet(goal: TeamGoal): Promise<{ ok: boolean; error?: string; goal?: TeamGoal }>;
   coopChatSend(input: { text: string; mentions?: string[] }): Promise<{ ok: boolean; error?: string; route?: string; fallback?: boolean }>;
   coopHuddleStart(input?: { goalTitle?: string; reason?: string; note?: string }): Promise<{ ok: boolean; error?: string; fallback?: boolean; rounds?: number; plan?: TeamPlan }>;
+  coopLaunchStatus(): Promise<LaunchStatusView[]>;
+  coopLaunchHuman(gameId: GameId): Promise<{ ok: boolean; error?: string; pid?: number }>;
+  coopLaunchAi(agentId: string): Promise<{ ok: boolean; error?: string; pid?: number; profileModsDir?: string; port?: number }>;
   coopHelpRequest(input: { agentId: string; reason: string }): Promise<{ ok: boolean; error?: string; mode?: string; helperAgentId?: string; fallback?: boolean }>;
   onCoopBlackboardUpdate(handler: (payload: { snapshot: TeamBlackboardSnapshot; messages: TeamCommsMessage[] }) => void): () => void;
   onCoopCommsMessage(handler: (message: TeamCommsMessage) => void): () => void;

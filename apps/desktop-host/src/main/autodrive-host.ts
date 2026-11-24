@@ -38,7 +38,9 @@ import {
   type ChatDirective,
   type DirectiveProfile,
 } from './chat-directive';
-import type { VoiceHost } from './voice-host';
+import type { VoiceHost, VoiceScene } from './voice-host';
+import type { CharacterRegistry } from './character-registry';
+import type { PetCharacter, PetAvatarManifest } from '@workbench/shared-protocol';
 
 export interface AutodriveHost {
   readonly runner: AutodriveRunner;
@@ -111,6 +113,33 @@ function directiveProfileFor(gameId: GameId, adapter: GameAdapter): DirectivePro
   };
 }
 
+/** 角色短名：去掉括号后缀，供语音 speakerName 与提示词使用。 */
+export function characterShortName(character: PetCharacter | undefined): string {
+  return character?.displayName.split('（')[0] ?? '小鲸';
+}
+
+/** 9 角色平权 seam：当前注册表角色 → 其真实 manifest（IPC 与测试共用）。 */
+export function selectedCharacterManifest(registry: CharacterRegistry | undefined): { ok: true; manifest: PetAvatarManifest; character: PetCharacter } | { ok: false; error: string } {
+  if (registry === undefined) return { ok: false, error: '角色注册表未接线' };
+  const selected = registry.selected();
+  const found = registry.manifestOf(selected);
+  return found.ok ? { ok: true, manifest: found.manifest, character: selected } : { ok: false, error: found.error };
+}
+
+/** speak() 的角色声线透传：characterId / speakerName / voiceId / 语速音高一处构造。 */
+export function voiceSceneForCharacter(scene: { text: string; scene?: 'normal' | 'inner' | 'p0' }, character: PetCharacter | undefined): VoiceScene {
+  return {
+    ...scene,
+    ...(character === undefined ? {} : {
+      characterId: character.id,
+      speakerName: characterShortName(character),
+      voiceId: character.voiceId,
+      ratePercent: character.voiceRatePercent,
+      pitchMul: character.voicePitchMul,
+    }),
+  };
+}
+
 export function createAutodriveHost(
   endpoint: string | undefined = undefined,
   vaultPath?: string,
@@ -120,7 +149,27 @@ export function createAutodriveHost(
   initialDirectiveProfile?: DirectiveProfile,
   /** 与联机协作互斥：返回非空字符串表示本端被其他 Runner 占用，拒绝启动 */
   canStart?: () => string | null,
+  characterRegistry?: CharacterRegistry,
 ): AutodriveHost {
+  const shortNameOf = characterShortName;
+  const shortReplyPool: Record<string, { uncertain: string; fish: string }> = {
+    'blue-whale-maid': { uncertain: '都、都怪这块石头突然长出来的！', fish: '钓到啦！本鱼的手感是天赋！' },
+    'aboutme-dsh': { uncertain: '不是蓝蓝的错，是这块石头自己滚过来的。', fish: '鱼上钩啦，蓝蓝的手感也很好嘛！' },
+    'aboutme-dsh1': { uncertain: '失误！活力装只是需要热个身。', fish: '钓到啦！活力全开！' },
+    'aboutme-gpt': { uncertain: '这是环境变量异常，不是判断失误。', fish: '钓鱼成功，结果符合预期。' },
+    'aboutme-claude': { uncertain: '先别急着下结论，这块石头的位置确实不合理。', fish: '鱼钓到了，过程很顺利。' },
+    'aboutme-gemini': { uncertain: '哎呀，被石头抢先一步了。', fish: '钓到鱼啦，要不要看看它？' },
+    'aboutme-qwen': { uncertain: '按计划不该撞上的，下一步我重新规划。', fish: '钓鱼完成，收益已记录。' },
+    'aboutme-glm': { uncertain: '狐狸耳朵早听到石头在动了，只是没躲开。', fish: '鱼儿上钩，正事办成。' },
+    'aboutme-grok': { uncertain: '石头先动的手，这锅我不接。', fish: '钓到了，别问我为什么这么强。' },
+    'aboutme-kimi': { uncertain: '这次记录为环境干扰，不是操作失误。', fish: '钓到鱼了，我把过程记下来了。' },
+  };
+  const characterNow = (): PetCharacter | undefined => characterRegistry?.selected();
+  const shortReply = (kind: 'uncertain' | 'fish'): string => {
+    const character = characterNow();
+    return (shortReplyPool[character?.id ?? ''] ?? shortReplyPool['blue-whale-maid']!)[kind];
+  };
+
   const windows: WebContents[] = [];
   const initialGameId = gameId;
   let adapter = gameAdapters.create(gameId, endpoint === undefined ? {} : { endpoint });
@@ -244,9 +293,10 @@ export function createAutodriveHost(
       slot: PLANNER_SLOTS[gameId],
       fallbackPlanner: adapter.createRulePlanner?.() ?? new RulePlanner(),
       ...(adapter.toolWhitelist !== undefined ? { toolWhitelist: adapter.toolWhitelist } : {}),
+      personaPrompt: () => characterNow()?.personaPrompt ?? '',
       ...(gameId === 'stardew' ? {} : {
         systemPrompt: [
-          `你是小鲸，正在替主人游玩《${directiveProfile.gameName}》。`,
+          `你是${shortNameOf(characterNow())}，正在替主人游玩《${directiveProfile.gameName}》。`,
           directiveProfile.toolDoc,
           `只可调用当前游戏白名单工具：${(adapter.toolWhitelist ?? []).join(', ')}。`,
           '一次只执行一个动作。只输出一行 JSON：{"tool":"工具名","args":{参数},"intent":"一句话说明"}。',
@@ -310,7 +360,7 @@ export function createAutodriveHost(
           gameOffline = true;
         } else {
           const r = await gateway.chat(PLANNER_SLOTS[gameId], [
-            { role: 'system', content: buildDirectiveSystemPrompt(directiveProfile) },
+            { role: 'system', content: buildDirectiveSystemPrompt(directiveProfile, shortNameOf(characterNow())) },
             { role: 'user', content: buildDirectiveUserPrompt(text, { raw: stateRaw }) },
           ], { maxTokens: 200 });
           const parsed = parseDirectiveResponse(r.content, directiveProfile);
@@ -383,6 +433,9 @@ ${ackHint}`;
   // ---- T-M5-16（D16）pets 动作库：manifest 读取 + 预览转发 ----
   ipcMain.handle('pets:manifest', () => {
     try {
+      if (characterRegistry !== undefined) {
+        return selectedCharacterManifest(characterRegistry);
+      }
       const manifestPath = join(dirname(fileURLToPath(import.meta.url)), '../renderer/pet-stage/assets/blue-whale-maid/manifest.json');
       return { ok: true, manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) };
     } catch (error) {
@@ -451,7 +504,9 @@ ${ackHint}`;
       }
     }
   };
-  const speak = (v: { text: string; scene?: 'normal' | 'inner' | 'p0' }): void => { void voiceHost?.speak(v); };
+  const speak = (v: { text: string; scene?: 'normal' | 'inner' | 'p0' }): void => {
+    void voiceHost?.speak(voiceSceneForCharacter(v, characterNow()));
+  };
   /** 单会话事件处理：T-M6-27 起每个 runner 绑定自己的 sessionId/gameId/generation，
    *  旧会话的迟到事件在此丢弃（语音/记忆/前端都不再受影响）。 */
   const makeRunnerEventHandler = (getMeta: () => { sessionId: string; gameId: GameId; generation: number }) =>
@@ -460,9 +515,9 @@ ${ackHint}`;
       if (meta.generation !== generation) return; // 旧会话销毁后的迟到事件：直接丢弃
       if (event.type === 'receipt' && event.tool !== 'autodrive' && voiceHost?.config.enabled) {
         // 回执短评（D11 节流 8s 防刷）：翻车心虚 / 收获欢呼
-        if (event.status === 'UNCERTAIN') speak({ text: '都、都怪这块石头突然长出来的！', scene: 'normal' });
+        if (event.status === 'UNCERTAIN') speak({ text: shortReply('uncertain'), scene: 'normal' });
         else if (event.status === 'COMPLETED' && /fish|钓/.test(String(event.tool)) && /成功|完美/.test(String(event.summary))) {
-          speak({ text: '钓到啦！本鱼的手感是天赋！', scene: 'normal' });
+          speak({ text: shortReply('fish'), scene: 'normal' });
         }
       }
       if (event.type === 'state' && typeof event.clock === 'string') lastGameClock = event.clock;

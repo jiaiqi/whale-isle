@@ -177,3 +177,26 @@ describe('T-M6-19 三态拖拽：glide 无重力不落底', () => {
     expect(pos.y).toBeLessThanOrEqual(bounds.maxY);
   });
 });
+
+describe('createSlingshot 双击弹弓', () => {
+  it('先产生真实位移，再衰减回原点；y 不漂移', async () => {
+    const { createSlingshot } = await import('./drag-throw');
+    const sim = createSlingshot({ start: { x: 500, y: 300 }, bounds: { minX: 0, minY: 0, maxX: 1400, maxY: 800 }, direction: 1, amplitudePx: 100, periodMs: 400, dampingMs: 260 });
+    expect(sim.position()).toEqual({ x: 500, y: 300 });
+    sim.step(100);
+    expect(sim.position().x).toBeGreaterThan(500);
+    expect(sim.position().y).toBe(300);
+    for (let i = 0; i < 100; i++) sim.step(16);
+    expect(sim.done()).toBe(true);
+    sim.step(16);
+    expect(sim.position()).toEqual({ x: 500, y: 300 });
+  });
+  it('左右方向对称且被工作区边界夹紧', async () => {
+    const { createSlingshot } = await import('./drag-throw');
+    const left = createSlingshot({ start: { x: 100, y: 300 }, bounds: { minX: 100, minY: 0, maxX: 300, maxY: 800 }, direction: -1, amplitudePx: 100, periodMs: 400 });
+    const right = createSlingshot({ start: { x: 100, y: 300 }, bounds: { minX: 100, minY: 0, maxX: 120, maxY: 800 }, direction: 1, amplitudePx: 100, periodMs: 400 });
+    left.step(100); right.step(100);
+    expect(left.position().x).toBe(100);
+    expect(right.position().x).toBeLessThanOrEqual(120);
+  });
+});

@@ -13,6 +13,7 @@ class FakeWindow implements ManagedPetWindow {
   visible = true;
   destroyed = false;
   loadedHash = '';
+  boundsHistory: Array<{ x: number; y: number; width: number; height: number }> = [];
   sent: Array<{ channel: string; payload: unknown }> = [];
   private boundsListeners = new Set<(bounds: { x: number; y: number; width: number; height: number }) => void>();
   private closedListeners = new Set<() => void>();
@@ -26,6 +27,11 @@ class FakeWindow implements ManagedPetWindow {
   isMinimized = (): boolean => false;
   focus = (): void => undefined;
   showInactive = (): void => { this.visible = true; };
+  hide = (): void => { this.visible = false; };
+  opacity = 1;
+  ignoreMouse = false;
+  setOpacity = (opacity: number): void => { this.opacity = opacity; };
+  setIgnoreMouseEvents = (ignore: boolean): void => { this.ignoreMouse = ignore; };
   close = (): void => {
     this.destroyed = true;
     this.visible = false;
@@ -33,6 +39,7 @@ class FakeWindow implements ManagedPetWindow {
   };
   setBounds = (bounds: { x: number; y: number; width: number; height: number }): void => {
     this.bounds = { ...bounds };
+    this.boundsHistory.push({ ...bounds });
     for (const listener of this.boundsListeners) listener(this.bounds);
   };
   getBounds = (): { x: number; y: number; width: number; height: number } => ({ ...this.bounds });
@@ -61,6 +68,7 @@ function makeManager(): { manager: PetWindowManager; windows: Map<string, FakeWi
       return window;
     },
     workArea: () => ({ x: 0, y: 0, width: 1440, height: 900 }),
+    sleep: async () => undefined,
   });
   return { manager, windows, dir };
 }
@@ -116,6 +124,46 @@ describe('PetWindowManager', () => {
     await manager.open('agent-2', 'blue-whale-maid');
     expect(windows.get('agent-2')?.bounds).toEqual(original);
     expect(manager.list()).toHaveLength(2);
+  });
+
+
+  it('贴边探出逐帧 setBounds 并最终回到原位置', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    const window = windows.get('default')!;
+    const original = window.getBounds();
+    manager.dock('default', 'left');
+    const docked = window.getBounds();
+    expect(docked.x).toBeLessThan(original.x);
+    window.boundsHistory = [];
+    await manager.undock('default');
+    expect(window.boundsHistory.length).toBeGreaterThan(3);
+    expect(window.getBounds()).toEqual(original);
+    expect(window.boundsHistory[0]?.x).toBeGreaterThan(docked.x);
+  });
+
+  it('拖离边缘 clearDock 不弹回旧位置，且取消在途 undock', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    const window = windows.get('default')!;
+    manager.dock('default', 'left');
+    const draggedAway = { x: 600, y: 200, width: 400, height: 284 };
+    window.setBounds(draggedAway);
+    expect(manager.clearDock('default')).toBe(true);
+    await manager.undock('default');
+    expect(window.getBounds()).toEqual(draggedAway);
+    expect(manager.clearDock('default')).toBe(false);
+  });
+
+  it('全局 Alt peek 只对命中的窗口降透明和穿透', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    manager.applyPeekTargets(['default']);
+    expect(windows.get('default')?.opacity).toBe(0.35);
+    expect(windows.get('default')?.ignoreMouse).toBe(true);
+    manager.applyPeekTargets([]);
+    expect(windows.get('default')?.opacity).toBe(1);
+    expect(windows.get('default')?.ignoreMouse).toBe(false);
   });
 
   it('非法 agentId 与不存在端点不崩溃', async () => {

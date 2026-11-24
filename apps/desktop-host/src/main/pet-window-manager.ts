@@ -29,6 +29,9 @@ export interface ManagedPetWindow {
   isMinimized(): boolean;
   focus(): void;
   showInactive(): void;
+  hide(): void;
+  setOpacity(opacity: number): void;
+  setIgnoreMouseEvents(ignore: boolean, options?: { forward: boolean }): void;
   close(): void;
   setBounds(bounds: WindowBounds): void;
   getBounds(): WindowBounds;
@@ -54,6 +57,11 @@ export interface PetWindowManagerOptions {
   /** 首次无 pet-window-prefs.json 时，从旧 PetDesktopPrefs 继承 default 窗口位置/缩放 */
   legacyDefault?: () => { x: number; y: number; displayId: string; scale: number; characterId: string };
   onWindowsChanged?: (windows: PetWindowView[]) => void;
+  /** 测试注入：平滑探出帧间隔等待 */
+  sleep?: (ms: number) => Promise<void>;
+  /** 平滑探出总时长与帧间隔（默认 240ms / 16ms） */
+  undockDurationMs?: number;
+  undockFrameMs?: number;
 }
 
 export interface PetWindowOpenResult {
@@ -78,6 +86,9 @@ interface Entry {
 export class PetWindowManager {
   private readonly path: string;
   private entries = new Map<string, Entry>();
+  private undocked = new Map<string, WindowBounds>();
+  private undockSeq = new Map<string, number>();
+  private peeking = new Set<string>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: PetWindowManagerOptions) {
@@ -219,6 +230,87 @@ export class PetWindowManager {
     entry.window.send('pet:window-prefs-changed', this.prefs(agentId));
     return this.prefs(agentId);
   }
+
+  /** 贴边：只露 45%，保存原位置供探出恢复。 */
+  dock(agentId: string, edge: 'left' | 'right'): PetWindowView | null {
+    const entry = this.entries.get(agentId);
+    if (entry === undefined) return null;
+    const current = entry.window.getBounds();
+    if (!this.undocked.has(agentId)) this.undocked.set(agentId, current);
+    const work = this.options.workArea?.() ?? { x: current.x, y: current.y, width: current.width, height: current.height };
+    const visible = Math.round(current.width * 0.45);
+    entry.window.setBounds({
+      x: edge === 'left' ? work.x - current.width + visible : work.x + work.width - visible,
+      y: current.y,
+      width: current.width,
+      height: current.height,
+    });
+    return this.view(agentId);
+  }
+
+  /** 鼠标靠近/工作事件：从贴边探出到原位置。 */
+  async undock(agentId: string): Promise<PetWindowView | null> {
+    const entry = this.entries.get(agentId);
+    if (entry === undefined) return null;
+    const saved = this.undocked.get(agentId);
+    if (saved === undefined) return this.view(agentId);
+    const seq = (this.undockSeq.get(agentId) ?? 0) + 1;
+    this.undockSeq.set(agentId, seq);
+    const start = entry.window.getBounds();
+    const durationMs = Math.max(32, this.options.undockDurationMs ?? 240);
+    const frameMs = Math.max(1, this.options.undockFrameMs ?? 16);
+    const steps = Math.max(1, Math.round(durationMs / frameMs));
+    const sleep = this.options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+    for (let step = 1; step <= steps; step += 1) {
+      if (this.undockSeq.get(agentId) !== seq || entry.window.isDestroyed()) return this.view(agentId);
+      const t = step / steps;
+      const eased = t * t * (3 - 2 * t);
+      entry.window.setBounds({
+        x: Math.round(start.x + (saved.x - start.x) * eased),
+        y: Math.round(start.y + (saved.y - start.y) * eased),
+        width: saved.width,
+        height: saved.height,
+      });
+      if (step < steps) await sleep(frameMs);
+    }
+    if (this.undockSeq.get(agentId) === seq) {
+      this.undocked.delete(agentId);
+      this.undockSeq.delete(agentId);
+    }
+    return this.view(agentId);
+  }
+
+  /** 主进程全局 Alt：只对目标窗口降透明+穿透，其余恢复。 */
+  applyPeekTargets(agentIds: readonly string[]): void {
+    const desired = new Set(agentIds);
+    for (const [agentId, entry] of this.entries) {
+      if (desired.has(agentId)) {
+        entry.window.setOpacity(0.35);
+        entry.window.setIgnoreMouseEvents(true, { forward: true });
+        this.peeking.add(agentId);
+      } else if (this.peeking.delete(agentId)) {
+        entry.window.setOpacity(1);
+        entry.window.setIgnoreMouseEvents(false);
+      }
+    }
+  }
+
+  /** 拖离边缘：只清除贴边记忆，绝不把窗口弹回旧位置。 */
+  clearDock(agentId: string): boolean {
+    this.undockSeq.set(agentId, (this.undockSeq.get(agentId) ?? 0) + 1);
+    return this.undocked.delete(agentId);
+  }
+
+  setHidden(agentId: string, hidden: boolean): boolean {
+    const entry = this.entries.get(agentId);
+    if (entry === undefined) return false;
+    if (hidden) entry.window.hide(); else entry.window.showInactive();
+    return true;
+  }
+
+  hideAll(): void { for (const entry of this.entries.values()) entry.window.hide(); }
+  showAll(): void { for (const entry of this.entries.values()) entry.window.showInactive(); }
+  anyHidden(): boolean { return [...this.entries.values()].some((entry) => !entry.window.isVisible()); }
 
   /** 兼容旧 PetDesktopPrefs 位置写入：立即更新 default/指定窗口坐标并落盘。 */
   setPosition(agentId: string, position: { x: number; y: number; displayId?: string }): PetWindowPreferences | null {

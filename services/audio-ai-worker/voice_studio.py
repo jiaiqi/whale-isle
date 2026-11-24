@@ -436,6 +436,17 @@ def save_pack(req: SavePackRequest) -> Any:
     }
 
 
+@router.get("/load-pack")
+def load_pack(petId: str = "blue-whale-maid") -> Any:
+    out = _pet_voices_dir(petId).parent / "voice_matrix.json"
+    if not out.exists():
+        return JSONResponse(status_code=404, content={"error": "该角色尚未保存音色包"})
+    try:
+        return {"ok": True, "matrix": json.loads(out.read_text(encoding="utf-8"))}
+    except (OSError, ValueError):
+        return JSONResponse(status_code=500, content={"error": "音色包损坏"})
+
+
 # ---------------------------------------------------------------------------
 # 状态端点
 # ---------------------------------------------------------------------------

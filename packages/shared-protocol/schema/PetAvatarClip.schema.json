@@ -14,6 +14,49 @@
           "type": "string",
           "minLength": 1
         },
+        "spriteSheetPath": {
+          "type": "string"
+        },
+        "spriteMetaPath": {
+          "type": "string"
+        },
+        "sprite": {
+          "type": "object",
+          "properties": {
+            "frameWidth": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "frameHeight": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "columns": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "frameCount": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "sampleFps": {
+              "default": 12,
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 120
+            }
+          },
+          "required": [
+            "frameWidth",
+            "frameHeight",
+            "columns",
+            "frameCount"
+          ],
+          "additionalProperties": false
+        },
+        "audioPath": {
+          "type": "string"
+        },
         "loop": {
           "default": true,
           "type": "boolean"

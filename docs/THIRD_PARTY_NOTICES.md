@@ -38,6 +38,7 @@
 | 来源项目 | 许可证（核实结果） | 移植范围 | 本仓库落点 | 备注与约束 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | `PC2005-cloud/dsh-pet` | **代码 MIT** | 渲染物理（Q 弹/甩抛/DPI 边界）；多显示器矩形并集/最近屏/窗口区域夹紧（`src/shared/displays.ts` 移植子集）；睡觉安静模式、余额分档动画、绿幕转 WebM 资产链 | `packages/pet-renderer`、`apps/desktop-host/src/main/display-region.ts`、`services/audio-ai-worker/asset_pipeline` | 移植代码保留 MIT 版权/许可声明；全文归档 `docs/licenses/dsh-pet-2026.txt`；二创公开渠道须附原作者仓库地址（README 约定） | ✅ 已登记（代码） |
+| `hunmer/aboutme-pets` + `lokicorvus/crosspet` | **CC BY-NC-SA 4.0**（素材；运行时下载，不入库） | 9 套透明 WebP 精灵图 + 可选 m4a 动作音轨；仅解析公开 JSON 结构，运行期下载至 `userData/pet-characters` | `packages/pet-renderer/src/aboutme-pets.ts`、`SpritesheetRenderer`、角色包商店 | **禁止商用**；manifest/角色包固定 `DEV_ONLY_NON_COMMERCIAL`；必须署名两仓库；不进入 Git/DMG | ✅ 已登记（运行时素材） |
 | `PC2005-cloud/dsh-pet` + `luckui/dsh-livestream`（大肥鱼形象/动画素材） | **CC BY-NC-SA 4.0**（形象原型声明：溟月 @上善无形；女仆鲸鱼娘设计 @ZipZipPipe） | "蓝色大肥鱼" webm 动作资产包 | `assets/pets/blue-whale-maid/` | **`licenseScope: DEV_ONLY_NON_COMMERCIAL`，禁止商用**；必须提供一键替换自制素材包管线 | ⚠️ 仅限本地开发测试 |
 | `Darianliu23/dsh-stardew-blind-whale-farmer` | **MIT**（原"待核实"已解除） | Observer 状态树、A*/跨地图寻路、游戏原生执行、F7 接管、游玩预算、攻略分层；**本地补丁**：showHud 进 /settings 远程设置（`mods/bwf-patches/2026-11-22-showhud-settings.patch`，保留版权头，上游升级时需重放） | `mods/stardew-mcp-mod`、`packages/game-bridge-mcp`、`mods/bwf-patches/`（补丁与构建流程） | 传输改为本仓 WS+JSON-RPC 2.0；保留版权头；C# 改造（MIT 允许直接改造，非仅思想参考） | ✅ 已登记 |
 | `LockyBee/dsh-douyin-agent` | **MIT** | 收据基线/验证记录/额度账本的纪律参照；分镜拼图思路 | `packages/live-stream-hub`、`docs/VERIFY.md` | 不引入其浏览器自动化源码 | ✅ 已登记 |

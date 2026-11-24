@@ -29,6 +29,9 @@ export interface VoiceScene {
   characterId?: string;
   /** 显式音色覆盖（高于角色默认音色） */
   voiceId?: string;
+  /** 角色级语速/音高微调（T-M6-41） */
+  ratePercent?: number;
+  pitchMul?: number;
 }
 
 export interface VoiceConfig {
@@ -284,6 +287,12 @@ export function registerVoiceHostIpc(host: VoiceHost): void {
   ipcMain.handle('voice:config:set', (_e, patch: Partial<VoiceConfig>) => host.setConfig(patch));
 }
 
+export interface VoiceHostSpeechResult {
+  agentId: string;
+  speakerName: string;
+  status: 'completed' | 'failed' | 'timeout' | 'interrupted';
+}
+
 export interface VoiceHostPlaybackInput {
   text: string;
   voiceId: string;
@@ -295,6 +304,8 @@ export interface CreateVoiceHostOptions {
   resolveVoiceId?: (characterId: string) => string | null;
   /** 主进程广播 coop:speaker（所有桌宠窗 + 中控台） */
   onSpeakerChange?: (event: CoopSpeakerEvent) => void;
+  /** 播放租约终态：success/failed/TTL/interrupted → 气泡静音角标 */
+  onSpeechResult?: (event: VoiceHostSpeechResult) => void;
   /** 测试注入：替代真实 mcode/say 播放；返回可中断句柄 */
   play?: (input: VoiceHostPlaybackInput) => PlaybackControl;
 }
@@ -303,6 +314,13 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
   let config: VoiceConfig = { ...DEFAULT_CONFIG };
   const lastTextAt = new Map<string, number>();
   const leases = new GlobalAudioLeaseManager({
+    onReceipt: (receipt) => {
+      const status = receipt.status === 'COMPLETED'
+        ? 'completed'
+        : receipt.status === 'TTL_EXPIRED' ? 'timeout'
+          : receipt.status === 'INTERRUPTED_BY_P0' ? 'interrupted' : 'failed';
+      options.onSpeechResult?.({ agentId: receipt.agentId, speakerName: receipt.speakerName, status });
+    },
     onActiveChange: (event) => {
       const state = event.activeAgentId === null
         ? { activeAgentId: null, speakerName: '', state: 'idle' as const }
@@ -318,7 +336,10 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
 
   const speak = (voice: VoiceScene): { ok: boolean; error?: string; queued?: boolean; leaseId?: string } => {
     const scene = voice.scene ?? 'normal';
-    if (!config.enabled) return { ok: false, error: '语音总开关关闭' };
+    if (!config.enabled) {
+      options.onSpeechResult?.({ agentId: voice.agentId ?? 'default', speakerName: voice.speakerName ?? '小鲸', status: 'failed' });
+      return { ok: false, error: '语音总开关关闭' };
+    }
     if (scene === 'inner' && !config.innerVoice) return { ok: false, error: '内心戏发声关闭' };
     const text = voice.text.trim();
     if (text === '') return { ok: false, error: '空台词' };
@@ -336,11 +357,17 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
     if (lastTextAt.size > 200) lastTextAt.clear();
 
     if (platform !== 'darwin' && options.play === undefined) {
+      options.onSpeechResult?.({ agentId, speakerName: voice.speakerName ?? '小鲸', status: 'failed' });
       return { ok: false, error: `平台 ${platform} 语音引擎待适配（当前支持 darwin）` };
     }
 
     const spoken = scene === 'inner' ? `…${text}` : text;
     let playback: PlaybackControl | null = null;
+    const effectiveConfig: VoiceConfig = {
+      ...config,
+      ...(typeof voice.ratePercent === 'number' ? { ratePercent: Math.min(200, Math.max(50, voice.ratePercent)) } : {}),
+      ...(typeof voice.pitchMul === 'number' ? { pitchMul: Math.min(1.6, Math.max(1, voice.pitchMul)) } : {}),
+    };
     const result = leases.acquire({
       agentId,
       speakerName: voice.speakerName ?? '小鲸',
@@ -349,7 +376,7 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       ttlMs: 120_000,
       start: async () => {
         playback = options.play?.({ text, voiceId: resolvedVoiceId, scene })
-          ?? playVoice(config, scene, SCENE_MODE[scene] ?? 'daily', text, spoken, resolvedVoiceId);
+          ?? playVoice(effectiveConfig, scene, SCENE_MODE[scene] ?? 'daily', text, spoken, resolvedVoiceId);
         await playback.done;
       },
       abort: () => playback?.abort(),
