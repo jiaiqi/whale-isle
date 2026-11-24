@@ -75,6 +75,7 @@ function makeManager(): { manager: PetWindowManager; windows: Map<string, FakeWi
     },
     workArea: () => ({ x: 0, y: 0, width: 1440, height: 900 }),
     sleep: async () => undefined,
+    alwaysOnTopLevel: () => 'screen-saver',
   });
   return { manager, windows, dir };
 }
@@ -308,5 +309,69 @@ describe('PetWindowManager 定向投递（T-M6-51）', () => {
       { agentId: 'default', visible: true },
       { agentId: 'agent-2', visible: true },
     ]);
+  });
+});
+
+describe('PetWindowManager 显示层级与贴边自动收回（T-M6-63/64）', () => {
+  it('三档层级：always 全部置顶、normal 全部取消、follow-ai 由 aiActive 驱动；新窗继承当前层级', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    const win = windows.get('default')!;
+    expect(win.alwaysOnTop).toBe(true);
+    expect(win.alwaysOnTopLevel).toBe('screen-saver');
+
+    manager.applyWindowLayer('normal', false);
+    expect(win.alwaysOnTop).toBe(false);
+    manager.applyWindowLayer('follow-ai', false);
+    expect(win.alwaysOnTop).toBe(false);
+    manager.applyWindowLayer('follow-ai', true);
+    expect(win.alwaysOnTop).toBe(true);
+    expect(manager.currentWindowLayer()).toEqual({ layer: 'follow-ai', aiActive: true, floating: true });
+
+    // 新开窗口套用当前层级（follow-ai + aiActive=true）
+    await manager.open('agent-2', 'crosspet-claude');
+    expect(windows.get('agent-2')!.alwaysOnTop).toBe(true);
+
+    manager.applyWindowLayer('normal', false);
+    expect(win.alwaysOnTop).toBe(false);
+    expect(windows.get('agent-2')!.alwaysOnTop).toBe(false);
+  });
+
+  it('贴边 → 干活自动探出并记录原边缘 → 10s 后 redockAuto 收回；手动 clearDock 后不再收回', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    const win = windows.get('default')!;
+    win.bounds = { x: 0, y: 100, width: 400, height: 284 };
+    win.boundsHistory = [];
+    manager.dock('default', 'left');
+    expect(manager.isDocked('default')).toBe('left');
+    expect(win.bounds.x).toBeLessThan(0);
+
+    const undocked = await manager.requestAutoUndock('default');
+    expect(undocked).toBe(true);
+    expect(manager.isDocked('default')).toBeNull();
+    expect(manager.autoUndockedEdge('default')).toBe('left');
+    expect(win.bounds.x).toBe(0);
+
+    expect(manager.redockAuto('default')).toBe(true);
+    expect(manager.isDocked('default')).toBe('left');
+    expect(manager.autoUndockedEdge('default')).toBeNull();
+
+    // 再次自动探出后用户手动拖离：clearDock 清掉自动收回记忆
+    win.bounds = { x: 0, y: 100, width: 400, height: 284 };
+    manager.dock('default', 'left');
+    await manager.requestAutoUndock('default');
+    expect(manager.autoUndockedEdge('default')).toBe('left');
+    manager.clearDock('default');
+    expect(manager.autoUndockedEdge('default')).toBeNull();
+    expect(manager.redockAuto('default')).toBe(false);
+
+    // 未贴边时 requestAutoUndock 为 false；dock 相同边缘幂等
+    expect(await manager.requestAutoUndock('agent-missing')).toBe(false);
+    win.bounds = { x: 500, y: 100, width: 400, height: 284 };
+    manager.dock('default', 'right');
+    const once = { ...win.bounds };
+    manager.dock('default', 'right');
+    expect(win.bounds).toEqual(once);
   });
 });

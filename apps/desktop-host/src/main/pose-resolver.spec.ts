@@ -24,6 +24,12 @@ describe('resolvePose', () => {
   it('映射目标缺失时继续回退 idle（不返回不存在的姿态）', () => {
     expect(resolvePose('compact', ['idle', 'proud'])).toMatchObject({ pose: 'idle', fallback: true });
   });
+
+  it('busy/swamped 命中 CrossPet 左右变体，不误回退 idle', () => {
+    expect(resolvePose('busy', ['idle', 'busy_left', 'busy_right'])).toMatchObject({ pose: 'busy_left', fallback: true });
+    expect(resolvePose('swamped', ['idle', 'swamped_right'])).toMatchObject({ pose: 'swamped_right', fallback: true });
+    expect(resolvePose('busy', ['idle'])).toMatchObject({ pose: 'idle', fallback: true });
+  });
 });
 
 describe('poseForWorkEvent', () => {
@@ -34,5 +40,12 @@ describe('poseForWorkEvent', () => {
     expect(poseForWorkEvent({ kind: 'tool', toolName: 'AskUserQuestion' })).toBe('asking');
     expect(poseForWorkEvent({ kind: 'tool', toolName: 'Task: delegate' })).toBe('delegating');
     expect(poseForWorkEvent({ kind: 'tool', toolName: 'Read' })).toBe('writing');
+  });
+
+  it('结构化 asking/compact/error 优先于工具名推断', () => {
+    expect(poseForWorkEvent({ kind: 'asking' })).toBe('asking');
+    expect(poseForWorkEvent({ kind: 'compact' })).toBe('compact');
+    expect(poseForWorkEvent({ kind: 'error' })).toBe('oops');
+    expect(poseForWorkEvent({ kind: 'asking', toolName: 'Read' })).toBe('asking');
   });
 });

@@ -15,6 +15,8 @@ export interface VideoHandle {
   /** 播放；resolve 时机 = 画面可安全展示（真实实现监听 loadeddata），reject = 加载失败 */
   play(loop: boolean, playbackRate: number): Promise<void>;
   pause(): void;
+  /** T-M6-64：当前播放帧号（精灵图表面实现；巡逻用它判断 moving 区间） */
+  frameIndex?(): number;
   /** 从舞台上移除（宿主实现：removeChild） */
   detach(): void;
 }

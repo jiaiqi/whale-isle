@@ -16,7 +16,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const SOURCES = new Set(['acp', 'claude', 'codex', 'deepseek', 'gemini', 'cursor', 'qwen', 'kimi', 'grok']);
-const KINDS = new Set(['start', 'tool', 'stop']);
+const KINDS = new Set(['start', 'tool', 'stop', 'asking', 'compact', 'error']);
 
 /** 非交互 stdin 读取（CLI 钩子会写一行 JSON；TTY 手动执行时跳过，避免卡住）。 */
 function readStdinJson() {
@@ -33,13 +33,20 @@ function readStdinJson() {
 
 const stdin = readStdinJson();
 const hookEvent = String(stdin.hook_event_name ?? stdin.hookEventName ?? stdin.event ?? '').toLowerCase();
-const kindFromEvent = hookEvent.includes('pretool') || hookEvent.includes('beforetool') || hookEvent.includes('afterfileedit')
-  ? 'tool'
-  : hookEvent.includes('stop') || hookEvent.includes('afteragent')
-    ? 'stop'
-    : hookEvent.includes('prompt') || hookEvent.includes('beforeagent') || hookEvent.includes('start')
-      ? 'start'
-      : '';
+// T-M6-64：PreCompact → compact；Notification/PermissionRequest → asking（只取事件名，绝不读正文）
+const kindFromEvent = hookEvent.includes('precompact')
+  ? 'compact'
+  : hookEvent.includes('permission') || hookEvent.includes('notification')
+    ? 'asking'
+    : hookEvent.includes('pretool') || hookEvent.includes('beforetool') || hookEvent.includes('afterfileedit')
+      ? 'tool'
+      : hookEvent.includes('stop') || hookEvent.includes('afteragent')
+        ? 'stop'
+        : hookEvent.includes('error') || hookEvent.includes('failed')
+          ? 'error'
+          : hookEvent.includes('prompt') || hookEvent.includes('beforeagent') || hookEvent.includes('start')
+            ? 'start'
+            : '';
 
 const source = (process.env.WB_WORK_FOLLOW_SOURCE ?? '').trim();
 const kind = (process.env.WB_WORK_FOLLOW_KIND ?? kindFromEvent ?? 'tool').trim();

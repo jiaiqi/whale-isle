@@ -7,9 +7,11 @@ import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP 
 import type { PetActionState, PetAvatarClip } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
-import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, shouldBlockWhileAsleep, shouldEnterPowerSaver } from './interaction';
+import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, settleWorkGrudge, shouldBlockWhileAsleep, shouldEnterPowerSaver, type ShakeContext } from './interaction';
 import { createGlide, createSlingshot, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
 import { poseSamplePoint } from './pose-hit';
+import { resolveHitZone } from './hit-zones';
+import { createPatrolState, stepPatrol, type PatrolState } from './patrol-controller';
 import type { PetDesktopPrefs } from '@workbench/shared-protocol';
 import { AudioLeaseManager } from './audio-lease';
 import { mountBubbleWidgets } from './widgets/bubbles';
@@ -62,9 +64,11 @@ interface PetStageBridge {
   petOpenNotebook?(): Promise<{ ok: boolean }>;
   characterList?(): Promise<Array<{ id: string; displayName: string; packId?: string }>>;
   petSummon?(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
-  /** T-M6-53：工作跟随代理/验收台按姿态名直放 */
+  /** T-M6-63：工作跟随代理/验收台按姿态名直放 */
   onPetPose?(handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void;
-  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean; idleActions?: string[]; glyph?: { fill?: string; stroke?: string; text?: string }; apps?: string[] }>;
+  /** T-M6-64：工作跟随悬浮任务卡（≤4 张，仅标题/状态） */
+  onWorkCards?(handler: (payload: { cards: Array<{ sessionId: string; title: string; state: 'running' | 'asking' | 'done' | 'error' }> }) => void): void;
+  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean; idleActions?: string[]; glyph?: { fill?: string; stroke?: string; text?: string }; apps?: string[]; lines?: Record<string, string[]> }>;
   /** T-M6-55：时段/节日首见登场（主进程按角色+日期+键去重） */
   customGreeting?(characterId: string): Promise<{ ok: boolean; greeting?: { key: string; pose: string; line: string } | null }>;
   /** T-M6-55：验收台参考线与姿态轮播 */
@@ -122,6 +126,17 @@ let bubbleVoiceEnabled = true;
 /** T-M6-63：气泡字号独立缩放（null=跟随人物 scale）与窗口显示层级 */
 let bubbleFontScalePref: number | null = null;
 let currentWindowLayer: 'always' | 'follow-ai' | 'normal' = 'always';
+/** T-M6-64：自主巡逻 / 工作忙碌 / 任务卡 */
+let patrolEnabled = true;
+let patrolState: PatrolState = createPatrolState(Date.now());
+let patrolClipActive = false;
+let patrolFlipped = false;
+let workBusy = false;
+let workAsking = false;
+let workCardCount = 0;
+let wasWorkBusy = false;
+let lastWorkShakeLineAt = 0;
+let sleepTransitionTimer: ReturnType<typeof setTimeout> | null = null;
 let clickTimer: ReturnType<typeof setTimeout> | null = null;
 let lastDizzyVisual = 0;
 let slingshotRaf = 0;
@@ -266,6 +281,7 @@ class CanvasSpriteSurface implements VideoHandle {
   private raf = 0;
   private paused = false;
   private lastDrawAt = 0;
+  private lastFrameIndex = 0;
   constructor(src: string, private readonly meta: SpriteMeta, private readonly rate: number) {
     this.src = src;
     this.el = document.createElement('canvas');
@@ -291,6 +307,7 @@ class CanvasSpriteSurface implements VideoHandle {
       const ctx = this.el.getContext('2d');
       if (ctx !== null && this.image !== null) {
         const index = spriteFrameIndex(this.meta, (now - start) * this.rate, loop);
+        this.lastFrameIndex = index;
         const rect = spriteFrameRect(this.meta, index);
         ctx.clearRect(0, 0, this.meta.frameWidth, this.meta.frameHeight);
         ctx.drawImage(this.image, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, this.meta.frameWidth, this.meta.frameHeight);
@@ -308,6 +325,7 @@ class CanvasSpriteSurface implements VideoHandle {
   }
   pause(): void { this.paused = true; cancelAnimationFrame(this.raf); }
   detach(): void { this.pause(); this.el.remove(); }
+  frameIndex(): number { return this.lastFrameIndex; }
 }
 
 let activeSpriteAudio: HTMLAudioElement | null = null;
@@ -345,6 +363,7 @@ let poseConfig: {
   idleActions?: string[];
   glyph?: GlyphConfig;
   apps?: string[];
+  lines?: Record<string, string[]>;
 } | null = null;
 /** 当前实际播放的姿态名（参考线角标用；未知时回退动作槽位） */
 let lastPoseName = 'idle';
@@ -673,6 +692,75 @@ bridge.onPetCrown?.((payload) => {
   }
 });
 
+// ── T-M6-64：工作跟随悬浮任务卡（≥2 张或存在 asking 才显示；零 emoji，内联 SVG） ──
+const workCardsLayer = document.createElement('div');
+workCardsLayer.id = 'work-cards-layer';
+workCardsLayer.style.cssText = 'position:absolute;right:4px;top:8px;display:none;flex-direction:column;gap:4px;z-index:8;pointer-events:none;max-width:150px';
+stage.appendChild(workCardsLayer);
+const workCardKeyframes = document.createElement('style');
+workCardKeyframes.textContent = [
+  '@keyframes whaleWorkSpin{to{transform:rotate(360deg)}}',
+  '@keyframes whaleWorkPulse{0%,100%{opacity:.45}50%{opacity:1}}',
+].join('');
+document.head.appendChild(workCardKeyframes);
+const WORK_CARD_ICONS: Record<'running' | 'asking' | 'done' | 'error', string> = {
+  running: '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="#8cc8ff" stroke-width="1.6" style="animation:whaleWorkSpin 1.1s linear infinite"><path d="M8 1.8a6.2 6.2 0 1 0 6.2 6.2"/></svg>',
+  asking: '<svg viewBox="0 0 16 16" width="11" height="11" style="animation:whaleWorkPulse 1.2s ease-in-out infinite"><circle cx="8" cy="8" r="4" fill="#ffb454"/></svg>',
+  done: '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="#30d158" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 6.2 12 13 4.5"/></svg>',
+  error: '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="#ff6b6b" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+};
+function renderWorkCards(cards: Array<{ sessionId: string; title: string; state: 'running' | 'asking' | 'done' | 'error' }>): void {
+  const visible = cards.length >= 2 || cards.some((card) => card.state === 'asking');
+  workCardsLayer.style.display = visible ? 'flex' : 'none';
+  workCardsLayer.replaceChildren();
+  if (!visible) return;
+  for (const card of cards.slice(0, 4)) {
+    const row = document.createElement('div');
+    const color = card.state === 'done' ? 'rgba(48,209,88,.55)' : card.state === 'error' ? 'rgba(255,107,107,.6)' : card.state === 'asking' ? 'rgba(255,180,84,.6)' : 'rgba(10,132,255,.5)';
+    row.style.cssText = `display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:8px;background:rgba(12,20,32,.82);border:1px solid ${color};color:#dfe9f6;font:10px/1.3 "PingFang SC",system-ui,sans-serif;`;
+    row.innerHTML = WORK_CARD_ICONS[card.state];
+    const label = document.createElement('span');
+    label.textContent = card.title.trim() === '' ? '未命名任务' : card.title.slice(0, 26);
+    label.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:118px';
+    row.appendChild(label);
+    workCardsLayer.appendChild(row);
+  }
+}
+/** 工作结束秋后算账：按记仇值播生气姿态 + 说对应台词（没有台词就只演动作）。 */
+function settleAfterWork(): void {
+  const grudge = settleWorkGrudge(interaction);
+  if (grudge === null) return;
+  const pose = grudge === 'workRedhot' ? 'redhot' : grudge === 'workPuffed' ? 'puffed' : 'annoyed';
+  if (renderer instanceof PoseSkinRenderer && renderer.availablePoses().includes(pose)) {
+    void renderer.playPose(pose).catch(() => undefined);
+  } else {
+    void renderer.play(DIZZY_ACTIONS[interaction.level]).catch(() => undefined);
+  }
+  const line = poseConfig?.lines?.[grudge]?.[0];
+  if (line !== undefined) {
+    widgets.showDialog(line);
+    setTimeout(() => widgets.hideDialog(), 8_000);
+  }
+  lastEventAt = Date.now();
+}
+bridge.onWorkCards?.((payload) => {
+  const cards = Array.isArray(payload.cards) ? payload.cards.slice(0, 4) : [];
+  workCardCount = cards.length;
+  workAsking = cards.some((card) => card.state === 'asking');
+  workBusy = cards.some((card) => card.state === 'running' || card.state === 'asking');
+  renderWorkCards(cards);
+  if (workBusy) {
+    if (patrolState.status === 'walking') {
+      patrolState = { status: 'idle', nextAt: Date.now() + 30_000, endsAt: 0, direction: patrolState.direction };
+      stopPatrolClip();
+    }
+  } else if (wasWorkBusy) {
+    settleAfterWork();
+  }
+  wasWorkBusy = workBusy;
+  lastEventAt = Date.now();
+});
+
 // ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
 type AutodriveEventLite = {
   type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective';
@@ -925,11 +1013,38 @@ const setPeek = (active: boolean): void => {
   if (active) probe.stop(); else probe.start();
   void bridge.setPeek?.(active);
 };
+/** 当前角色全部动作片段（动作槽 + 氛围池），用于按关键词找素材。 */
+function allSpriteClips(): AmbientManifestClip[] {
+  const manifest = renderer.manifest;
+  if (manifest === null) return [];
+  return [...manifest.actions.flatMap((action) => action.clips), ...manifest.ambientPool] as AmbientManifestClip[];
+}
+
+function findSpecialClip(pattern: RegExp): AmbientManifestClip | null {
+  if (!(renderer instanceof SpritesheetRenderer)) return null;
+  return allSpriteClips().find((clip) => pattern.test(clip.clipId)) ?? null;
+}
+
+/** 睡眠/惊醒过渡：循环播一次过渡动作，最多 durationMs 后执行 after（不进入 ambient 计时）。 */
+function playSleepTransition(clip: AmbientManifestClip, durationMs: number, after: () => void): void {
+  if (sleepTransitionTimer !== null) clearTimeout(sleepTransitionTimer);
+  playAmbientClip(clip, true);
+  sleepTransitionTimer = setTimeout(() => {
+    sleepTransitionTimer = null;
+    after();
+  }, durationMs);
+}
+
 const wakeUp = (): void => {
   if (!interaction.asleep) return;
   setAsleep(interaction, false);
   bridge.sleepState?.(dockedAgentId, false);
-  void renderer.play('idle').catch(() => undefined);
+  const startled = findSpecialClip(/打瞌睡被惊醒/);
+  if (startled !== null) {
+    playSleepTransition(startled, 2_000, () => { void renderer.play('idle').catch(() => undefined); });
+  } else {
+    void renderer.play('idle').catch(() => undefined);
+  }
   lastEventAt = Date.now();
 };
 const toggleSleep = (): void => {
@@ -937,7 +1052,12 @@ const toggleSleep = (): void => {
   setAsleep(interaction, true);
   bridge.sleepState?.(dockedAgentId, true);
   headPat(interaction);
-  void renderer.play('sleep_mute').catch(() => undefined);
+  const transition = findSpecialClip(/原地小憩沉眠|哈欠连天/);
+  if (transition !== null) {
+    playSleepTransition(transition, 2_500, () => { void renderer.play('sleep_mute').catch(() => undefined); });
+  } else {
+    void renderer.play('sleep_mute').catch(() => undefined);
+  }
 };
 /** 右键「戳一下」：自定义角色优先用自己的 pokePose，缺图才回退内置 rage_spray。 */
 const playPokePose = (): void => {
@@ -948,9 +1068,19 @@ const playPokePose = (): void => {
   }
   void renderer.play('rage_spray').catch(() => undefined);
 };
+const showPokeLine = (): void => {
+  void bridge.pokeLine?.(dockedAgentId).then((result) => {
+    if (result.ok && result.line !== undefined) {
+      widgets.showDialog(result.line);
+      setTimeout(() => widgets.hideDialog(), 10_000);
+    }
+  }).catch(() => undefined);
+};
+/** 部位点击：头=摸头/两段哄好；脸=戳脸；身体=挠痒。 */
 const patHeadOnce = (): void => {
   wakeUp();
-  headPat(interaction);
+  const pat = headPat(interaction);
+  lastDizzyVisual = pat.level;
   void bridge.friendRecord?.(currentCharacterId, 'pat').catch(() => undefined);
   // 串门彩蛋：CrossPet egg-* 与 userData 里 egg:true 的自定义角色被点中都逃跑（关窗）
   if (poseConfig?.egg === true || currentCharacterId.startsWith('crosspet-egg-')) {
@@ -958,10 +1088,56 @@ const patHeadOnce = (): void => {
     setTimeout(() => { void bridge.petFlee?.(dockedAgentId).catch(() => undefined); }, 900);
     return;
   }
-  lastDizzyVisual = 0;
   lastActivityAt = Date.now();
+  if (pat.stage !== 'normal') {
+    if (renderer instanceof PoseSkinRenderer && renderer.availablePoses().includes(pat.stage)) {
+      void renderer.playPose(pat.stage).catch(() => undefined);
+    }
+    const line = poseConfig?.lines?.[pat.stage]?.[0];
+    if (line !== undefined) {
+      widgets.showDialog(line);
+      setTimeout(() => widgets.hideDialog(), 8_000);
+    }
+    return;
+  }
   void renderer.play('happy_maid').catch(() => undefined);
 };
+const pokeFaceOnce = (): void => {
+  wakeUp();
+  void bridge.friendRecord?.(currentCharacterId, 'poke').catch(() => undefined);
+  playPokePose();
+  showPokeLine();
+  lastActivityAt = Date.now();
+};
+const tickleBodyOnce = (): void => {
+  wakeUp();
+  void bridge.friendRecord?.(currentCharacterId, 'poke').catch(() => undefined);
+  if (renderer instanceof SpritesheetRenderer) {
+    const tickle = findSpecialClip(/点击回应-挠痒咯咯笑/);
+    if (tickle !== null) {
+      playAmbientClip(tickle, false);
+      lastActivityAt = Date.now();
+      return;
+    }
+  }
+  void renderer.play('happy_maid').catch(() => undefined);
+  lastActivityAt = Date.now();
+};
+/** 当前可见精灵的屏幕矩形（交叉淡入期间取透明度最高者）。 */
+function activeVisualRect(): { top: number; bottom: number } | null {
+  let best: HTMLElement | null = null;
+  let bestOpacity = 0.05;
+  for (const el of stage.querySelectorAll<HTMLElement>('video, canvas, img')) {
+    const opacity = Number(getComputedStyle(el).opacity);
+    if (opacity > bestOpacity) {
+      best = el;
+      bestOpacity = opacity;
+    }
+  }
+  if (best === null) return null;
+  const rect = best.getBoundingClientRect();
+  return { top: rect.top, bottom: rect.bottom };
+}
 window.addEventListener('keydown', (event) => {
   if ((event.key === 's' || event.key === 'S') && !(event.target instanceof HTMLInputElement)) {
     if (!event.repeat) toggleSleep();
@@ -978,11 +1154,20 @@ stage.addEventListener('mouseenter', () => {
   }
 });
 stage.addEventListener('mouseleave', () => { pointerOnStage = false; setPeek(false); });
-stage.addEventListener('click', () => {
+let pendingClickY = 0;
+stage.addEventListener('click', (event) => {
   if (dragMoved) return;
   if (interaction.asleep) { wakeUp(); return; }
+  pendingClickY = event.clientY;
   if (clickTimer !== null) clearTimeout(clickTimer);
-  clickTimer = setTimeout(() => { clickTimer = null; patHeadOnce(); }, 240);
+  clickTimer = setTimeout(() => {
+    clickTimer = null;
+    const rect = activeVisualRect();
+    const zone = rect === null ? 'body' : resolveHitZone(pendingClickY, rect.top, rect.bottom);
+    if (zone === 'head') patHeadOnce();
+    else if (zone === 'face') pokeFaceOnce();
+    else tickleBodyOnce();
+  }, 240);
 });
 stage.addEventListener('dblclick', (event) => {
   if (clickTimer !== null) { clearTimeout(clickTimer); clickTimer = null; }
@@ -1036,6 +1221,7 @@ const applyGlobalPrefs = (p: PetDesktopPrefs): void => {
   sfxVolume = p.sfxVolume;
   bubbleFontScalePref = p.bubbleFontScale ?? null;
   currentWindowLayer = p.windowLayer;
+  patrolEnabled = p.patrolEnabled;
   applyBubbleFontScale();
   if (renderer instanceof SpritesheetRenderer) {
     renderer.setSfxEnabled(p.sfxEnabled);
@@ -1082,6 +1268,10 @@ stage.addEventListener('mousedown', (event) => {
   dragging = true;
   // 手动拖离 = 放弃「干活自动探出」的自动收回记忆（T-M6-64）
   void bridge.clearDock?.(dockedAgentId).catch(() => undefined);
+  if (patrolState.status === 'walking') {
+    patrolState = { status: 'idle', nextAt: Date.now() + 30_000, endsAt: 0, direction: patrolState.direction };
+    stopPatrolClip();
+  }
   playDragSuspended();
   throwSim = null;
   grabOffset = null;
@@ -1101,10 +1291,22 @@ window.addEventListener('mousemove', (event) => {
   const dx = event.screenX - lastPointerX;
   lastPointerX = event.screenX;
   if (Math.abs(dx) > 3) dragMoved = true;
-  const level = recordShake(interaction, dx, performance.now());
-  if (level !== lastDizzyVisual) {
-    lastDizzyVisual = level;
-    void renderer.play(DIZZY_ACTIONS[level]).catch(() => undefined);
+  // T-M6-64：工作/等回答/多宠同忙时只记仇不打断，结束后秋后算账
+  const shakeContext: ShakeContext = workAsking ? 'ask' : workCardCount >= 2 ? 'multi' : workBusy ? 'work' : 'idle';
+  const shakeResult = recordShake(interaction, dx, performance.now(), shakeContext);
+  if (typeof shakeResult === 'string') {
+    const nowMs = Date.now();
+    if (nowMs - lastWorkShakeLineAt > 4_000) {
+      lastWorkShakeLineAt = nowMs;
+      const line = poseConfig?.lines?.[shakeResult]?.[0];
+      if (line !== undefined) {
+        widgets.showDialog(line);
+        setTimeout(() => widgets.hideDialog(), 5_000);
+      }
+    }
+  } else if (shakeResult !== lastDizzyVisual) {
+    lastDizzyVisual = shakeResult;
+    void renderer.play(DIZZY_ACTIONS[shakeResult]).catch(() => undefined);
   }
   samples.push({ t: performance.now(), x: event.screenX, y: event.screenY });
   if (grabOffset === null) return; // 锚点未就绪：跳过本帧，避免按旧偏移跳位
@@ -1202,6 +1404,73 @@ window.addEventListener('mouseup', () => {
     }
   })();
 });
+
+// ── T-M6-64：桌面自主巡逻（只在带 moving 的散步动作上按帧位移，气泡绝不翻转） ──
+function findPatrolClip(): AmbientManifestClip | null {
+  const withMoving = allSpriteClips().filter((clip) => Array.isArray(clip.moving) && clip.moving.length > 0);
+  return withMoving.find((clip) => clip.category === '移动' || /走|跑|巡|散步|踏步/.test(clip.clipId)) ?? withMoving[0] ?? null;
+}
+function applyPatrolFlip(flip: boolean): void {
+  if (patrolFlipped === flip) return;
+  patrolFlipped = flip;
+  // 只镜像精灵元素；#stage 与气泡文字绝不翻转
+  for (const el of stage.querySelectorAll<HTMLElement>('video, canvas, img')) {
+    el.style.transform = flip ? 'scaleX(-1)' : '';
+  }
+}
+function playPatrolClip(): void {
+  const clip = findPatrolClip();
+  if (clip === null) return;
+  patrolClipActive = true;
+  playAmbientClip(clip, true);
+}
+function stopPatrolClip(): void {
+  const active = patrolClipActive || patrolFlipped;
+  patrolClipActive = false;
+  applyPatrolFlip(false);
+  if (active) void renderer.play('idle').catch(() => undefined);
+}
+async function patrolTick(): Promise<void> {
+  const nowMs = Date.now();
+  if (patrolState.status === 'idle' && nowMs < patrolState.nextAt) return;
+  if (eventsPaused || !patrolEnabled || !(renderer instanceof SpritesheetRenderer)) {
+    if (patrolState.status === 'walking') {
+      patrolState = { status: 'idle', nextAt: nowMs + 30_000, endsAt: 0, direction: patrolState.direction };
+      stopPatrolClip();
+    }
+    return;
+  }
+  const position = await bridge.winPosition();
+  if (position === null) return;
+  const screen = await bridge.screenBounds();
+  const wb = screen.windowBounds ?? screen;
+  const clip = renderer.activeClip();
+  const patrolClip = findPatrolClip();
+  const result = stepPatrol(patrolState, {
+    bounds: { x: position[0], y: position[1], width: window.innerWidth, height: window.innerHeight },
+    workArea: { x: wb.minX, y: wb.minY, width: wb.maxX - wb.minX, height: wb.maxY - wb.minY },
+    facing: clip?.facing ?? null,
+    moving: clip?.moving ?? null,
+    frameIndex: renderer.currentFrameIndex(),
+    direction: patrolState.direction,
+    enabled: patrolEnabled && patrolClip !== null,
+    locked: petLocked,
+    docked: dockedEdge !== null,
+    dragging,
+    asleep: interaction.asleep,
+    busy: workBusy || workAsking,
+  }, nowMs);
+  patrolState = result.state;
+  if (result.started) playPatrolClip();
+  if (result.stopped) stopPatrolClip();
+  if (result.walking) {
+    applyPatrolFlip(result.flipX);
+    if (result.dx !== 0) void bridge.dragTo(position[0] + result.dx, position[1]);
+  } else if (patrolClipActive) {
+    stopPatrolClip();
+  }
+}
+setInterval(() => { void patrolTick(); }, 66);
 
 // ---- 情绪感知 TTS 编排（T-M2-02）：语音锁 + 口型驱动 + 动作切换 ----
 /** 语音播放适配器：真实实现走 WebAudio（onended 释放租约）；此处为编排骨架（音频由 Sidecar 提供） */

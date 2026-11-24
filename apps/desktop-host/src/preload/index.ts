@@ -248,6 +248,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   workFollowCliUninstall: (source: string): Promise<unknown> => ipcRenderer.invoke('work-follow:cli-uninstall', source),
   workFollowCliSnippet: (source: string): Promise<{ ok: boolean; snippet: string }> => ipcRenderer.invoke('work-follow:cli-snippet', source),
   workFollowSelfTest: (): Promise<{ ok: boolean; elapsedMs: number; error?: string }> => ipcRenderer.invoke('work-follow:self-test'),
+  workFollowPresencePolicy: (policy: 'idle-leave' | 'app-exit' | 'always-with-app'): Promise<unknown> => ipcRenderer.invoke('work-follow:presence-policy', policy),
+  workFollowLogWatch: (enabled: boolean): Promise<unknown> => ipcRenderer.invoke('work-follow:log-watch', enabled),
   onWorkFollowUpdate: (handler: (status: unknown) => void): () => void => {
     const listener = (_e: unknown, status: unknown): void => handler(status);
     ipcRenderer.on('work-follow:update', listener);
@@ -366,6 +368,10 @@ contextBridge.exposeInMainWorld('petStage', {
     ipcRenderer.invoke('custom:greeting', characterId),
   onPetPose: (handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void => {
     ipcRenderer.on('pet:pose', (_e, payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => handler(payload));
+  },
+  // T-M6-64：工作跟随任务卡（≤4 张，仅标题/状态）
+  onWorkCards: (handler: (payload: { cards: Array<{ sessionId: string; title: string; state: 'running' | 'asking' | 'done' | 'error' }> }) => void): void => {
+    ipcRenderer.on('pet:work-cards', (_e, payload: { cards: Array<{ sessionId: string; title: string; state: 'running' | 'asking' | 'done' | 'error' }> }) => handler(payload));
   },
   onBenchGuides: (handler: (payload: { on: boolean }) => void): void => {
     ipcRenderer.on('pet:guides', (_e, payload: { on: boolean }) => handler(payload));

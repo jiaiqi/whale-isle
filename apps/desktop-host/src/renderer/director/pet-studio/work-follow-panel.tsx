@@ -21,6 +21,19 @@ const SOURCE_LABEL: Record<string, string> = {
   grok: 'Grok CLI',
 };
 
+const ORIGIN_LABEL: Record<string, string> = {
+  hook: '钩子',
+  'log-watch': '日志监听',
+  acp: 'ACP',
+  manual: '手动',
+};
+
+const PRESENCE_LABEL: Record<string, string> = {
+  'idle-leave': '闲置 60s 退场',
+  'app-exit': '仅 stop / 应用退出',
+  'always-with-app': '检测到 AI 应用就召唤',
+};
+
 interface CliHookStatusView {
   source: string;
   label: string;
@@ -103,6 +116,18 @@ export function WorkFollowPanel({ characterName }: { characterId: string; charac
     toast.success(mode === 'multi' ? '多 AI 各来一只（按来源映射角色）' : '单宠模式：主桌宠随活跃 AI 自动换装');
   };
 
+  const setPresence = async (policy: 'idle-leave' | 'app-exit' | 'always-with-app'): Promise<void> => {
+    const next = await window.directorBridge.workFollowPresencePolicy(policy);
+    setStatus(next);
+    toast.success(`多宠在场策略：${PRESENCE_LABEL[policy] ?? policy}`);
+  };
+
+  const toggleLogWatch = async (): Promise<void> => {
+    const next = await window.directorBridge.workFollowLogWatch(!(status?.logWatchEnabled ?? true));
+    setStatus(next);
+    toast.success(next.logWatchEnabled ? '已开启免 Hook 只读会话日志探测' : '已关闭免 Hook 日志探测（仅接收钩子/ACP）');
+  };
+
   const simulate = async (): Promise<void> => {
     setBusy('sim');
     try {
@@ -162,17 +187,51 @@ export function WorkFollowPanel({ characterName }: { characterId: string; charac
             <button type="button" data-follow-mode="multi" className={`seg-tab${status?.mode === 'multi' ? ' on' : ''}`} onClick={() => void setMode('multi')}>多 AI 各一只</button>
           </div>
         </div>
-        <p className="mb-3 text-[11px]" style={{ color: 'var(--text-2)' }}>
+        <p className="mb-2 text-[11px]" style={{ color: 'var(--text-2)' }}>
           只读事件名/工具名/模型名，不碰对话正文与凭据；单会话工具调用 ≥ 8 次自动戴小皇冠。
           当前活跃会话 {active.length} 个。
         </p>
+        <div className="mb-2 rounded-xl px-2.5 py-2" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)' }} data-presence-policy>
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+            <span>多宠在场策略</span>
+            <button
+              type="button"
+              data-log-watch-toggle
+              aria-pressed={status?.logWatchEnabled ?? true}
+              className={`btn-pill ghost${(status?.logWatchEnabled ?? true) ? ' primary' : ''}`}
+              onClick={() => void toggleLogWatch()}
+            >
+              免 Hook 日志探测：{(status?.logWatchEnabled ?? true) ? '开' : '关'}
+            </button>
+          </div>
+          <div className="seg-tabs">
+            {(['idle-leave', 'app-exit', 'always-with-app'] as const).map((policy) => (
+              <button
+                key={policy}
+                type="button"
+                data-presence={policy}
+                className={`seg-tab${status?.presencePolicy === policy ? ' on' : ''}`}
+                onClick={() => void setPresence(policy)}
+              >
+                {PRESENCE_LABEL[policy]}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="space-y-2" data-follow-sessions>
-          {sessions.map((session) => (
+          {sessions.map((session) => {
+            const origin = status?.activeOrigins?.[`${session.source}:${session.sessionId}`] ?? '';
+            return (
             <div key={`${session.sessionId}:${session.source}`} className="rounded-xl px-3 py-2" style={{ border: `1px solid ${session.active ? 'var(--blue-line)' : 'var(--stroke)'}`, background: 'var(--surface-2)' }}>
               <div className="flex items-center gap-2 text-[12px] font-semibold">
                 <span className="grid h-5 w-5 place-items-center rounded-full text-[9px]" style={{ background: session.active ? 'var(--green-dim)' : 'var(--inset)', color: session.active ? 'var(--green)' : 'var(--text-3)' }}>{session.active ? '●' : '○'}</span>
                 {SOURCE_LABEL[session.source] ?? session.source}
+                {origin !== '' && (
+                  <span className="rounded px-1.5 py-px text-[9px]" style={{ background: origin === 'hook' ? 'var(--blue-dim)' : origin === 'log-watch' ? 'var(--violet-dim)' : 'var(--inset)', color: origin === 'hook' ? 'var(--blue)' : origin === 'log-watch' ? 'var(--violet)' : 'var(--text-3)' }} data-follow-origin={origin}>
+                    {ORIGIN_LABEL[origin] ?? origin}
+                  </span>
+                )}
                 {session.crowned && <Crown size={12} style={{ color: 'var(--amber)' }} />}
                 <span className="ml-auto mono text-[10px]" style={{ color: 'var(--text-3)' }}>{session.toolCalls} 次工具</span>
               </div>
@@ -180,7 +239,8 @@ export function WorkFollowPanel({ characterName }: { characterId: string; charac
                 {session.taskTitle || '(未提供任务名)'} · {session.modelName || '未知模型'} · 角色 {session.characterId || '不换装'}
               </div>
             </div>
-          ))}
+            );
+          })}
           {sessions.length === 0 && (
             <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
               还没有跟随事件：在本机 CLI 装钩子（tools/hooks/work-follow-hook.mjs）或在 ACP Harness 里开会话，或先点下方「注入演示会话」。

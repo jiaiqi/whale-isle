@@ -58,7 +58,7 @@ describe('work-follow', () => {
     host.ingest({ source: 'qwen', sessionId: 'q1', kind: 'start' });
     expect(switched).toEqual(['crosspet-qwen']);
     expect(summoned).toEqual([]); // single 不召唤新窗
-    expect(JSON.parse(readFileSync(join(dir, 'work-follow.json'), 'utf8'))).toEqual({ mode: 'single' });
+    expect(JSON.parse(readFileSync(join(dir, 'work-follow.json'), 'utf8'))).toEqual({ mode: 'single', presencePolicy: 'idle-leave', logWatchEnabled: true });
     const reloaded = createWorkFollowHost({ userDataDir: dir, pollMs: 0 });
     expect(reloaded.mode()).toBe('single');
   });
@@ -156,13 +156,83 @@ describe('reactTo 代演与姿态回调（T-M6-53）', () => {
     expect(host.status().sessions[0]?.characterId).toBe('custom-seal');
   });
 
-  it('start/tool/stop 分别回调 listening / compact / bye', () => {
+  it('start/tool/stop 分别回调 listening / compact / bye；asking/error 结构化信号直通', () => {
     const poses: string[] = [];
     const { host } = makeHost({ onAgentPose: (_session, pose) => poses.push(pose) });
     host.ingest({ source: 'claude', sessionId: 'p1', kind: 'start' });
     host.ingest({ source: 'claude', sessionId: 'p1', kind: 'tool', toolName: 'CompactContext' });
     host.ingest({ source: 'claude', sessionId: 'p1', kind: 'tool', toolName: 'Read' });
+    host.ingest({ source: 'claude', sessionId: 'p1', kind: 'asking' });
+    host.ingest({ source: 'claude', sessionId: 'p1', kind: 'compact' });
+    host.ingest({ source: 'claude', sessionId: 'p1', kind: 'error' });
     host.ingest({ source: 'claude', sessionId: 'p1', kind: 'stop' });
-    expect(poses).toEqual(['listening', 'compact', 'writing', 'bye']);
+    expect(poses).toEqual(['listening', 'compact', 'writing', 'asking', 'compact', 'oops', 'bye']);
+  });
+});
+
+describe('工作跟随进化（T-M6-64/65）', () => {
+  it('Hook 后 5s 内同会话 log-watch 事件被去重，不重复计工具数；6s 后恢复', () => {
+    let clock = 100_000;
+    const { host } = makeHost({ now: () => clock });
+    host.ingest({ source: 'claude', sessionId: 'd1', kind: 'start', origin: 'hook', ts: clock });
+    host.ingest({ source: 'claude', sessionId: 'd1', kind: 'tool', toolName: 'Read', origin: 'hook', ts: clock });
+    clock += 1_000;
+    host.ingest({ source: 'claude', sessionId: 'd1', kind: 'tool', toolName: 'Read', origin: 'log-watch', ts: clock });
+    expect(host.status().sessions[0]?.toolCalls).toBe(1);
+    clock += 6_000;
+    host.ingest({ source: 'claude', sessionId: 'd1', kind: 'tool', toolName: 'Bash', origin: 'log-watch', ts: clock });
+    expect(host.status().sessions[0]?.toolCalls).toBe(2);
+    expect(host.status().activeOrigins['claude:d1']).toBe('log-watch');
+  });
+
+  it('任务卡：同角色最多 4 张，running/asking/error/done 状态如实映射', () => {
+    const { host } = makeHost({ now: () => 50_000 });
+    host.ingest({ source: 'claude', sessionId: 'a', kind: 'start', taskTitle: '甲', ts: 10_000 });
+    host.ingest({ source: 'claude', sessionId: 'b', kind: 'tool', taskTitle: '乙', ts: 20_000 });
+    host.ingest({ source: 'claude', sessionId: 'c', kind: 'asking', taskTitle: '丙', ts: 30_000 });
+    host.ingest({ source: 'claude', sessionId: 'd', kind: 'error', taskTitle: '丁', ts: 40_000 });
+    host.ingest({ source: 'claude', sessionId: 'e', kind: 'start', taskTitle: '戊', ts: 45_000 });
+    const cards = host.cardsFor('crosspet-claude');
+    expect(cards).toHaveLength(4);
+    expect(cards.map((card) => card.state)).toEqual(['running', 'error', 'asking', 'running']);
+    host.ingest({ source: 'claude', sessionId: 'c', kind: 'stop', ts: 46_000 });
+    expect(host.cardsFor('crosspet-claude').find((card) => card.sessionId === 'c')?.state).toBe('done');
+    expect(host.cardsFor('crosspet-qwen')).toEqual([]);
+  });
+
+  it('presencePolicy 三态持久化；app-exit 下 60s 闲置不退场，idle-leave 才退', () => {
+    vi.useFakeTimers();
+    let clock = 1_000_000;
+    const idled: string[] = [];
+    const { host, dir } = makeHost({ now: () => clock, idleTimeoutMs: 60_000, onSessionIdle: (session) => idled.push(session.sessionId) });
+    expect(host.presencePolicy()).toBe('idle-leave');
+    host.setPresencePolicy('app-exit');
+    expect(JSON.parse(readFileSync(join(dir, 'work-follow.json'), 'utf8')).presencePolicy).toBe('app-exit');
+    host.ingest({ source: 'claude', sessionId: 'x1', kind: 'start' });
+    clock += 120_000;
+    vi.advanceTimersByTime(5_000);
+    expect(idled).toEqual([]);
+    expect(host.status().sessions[0]?.active).toBe(true);
+    host.setPresencePolicy('idle-leave');
+    vi.advanceTimersByTime(5_000);
+    expect(idled).toEqual(['x1']);
+    host.setLogWatchEnabled(false);
+    expect(host.logWatchEnabled()).toBe(false);
+    host.setLogWatchEnabled(true);
+    expect(host.status().logWatchEnabled).toBe(true);
+    expect(host.setPresencePolicy('always-with-app').presencePolicy).toBe('always-with-app');
+    host.dispose();
+    vi.useRealTimers();
+  });
+
+  it('onWorkActivity 按事件回调（start/tool/asking/error/stop）', () => {
+    const seen: string[] = [];
+    const { host } = makeHost({ onWorkActivity: (_session, kind) => seen.push(kind) });
+    host.ingest({ source: 'codex', sessionId: 'w', kind: 'start' });
+    host.ingest({ source: 'codex', sessionId: 'w', kind: 'tool' });
+    host.ingest({ source: 'codex', sessionId: 'w', kind: 'asking' });
+    host.ingest({ source: 'codex', sessionId: 'w', kind: 'error' });
+    host.ingest({ source: 'codex', sessionId: 'w', kind: 'stop' });
+    expect(seen).toEqual(['start', 'tool', 'asking', 'error', 'stop']);
   });
 });

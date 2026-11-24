@@ -331,8 +331,21 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   /**
    * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
    * 工作跟随「单宠换装」复用此函数，绝不关闭 default（T-M6-51 P0）。
+   * T-M6-64：若副宠窗口正好占着目标角色（含夜间睡衣变体），先与旧主宠角色对调，绝不重影。
    */
   function switchDefaultCharacter(id: string): void {
+    const previous = prefs.get().characterId;
+    const manager = petWindowManager;
+    if (manager !== null && previous !== '' && previous !== id) {
+      const pajamaOf = (value: string): string => value.replace(/^crosspet-(deepseek|claude|gemini|gpt)$/, 'crosspet-$1-pajamas');
+      const targetVariants = new Set([id, pajamaOf(id)]);
+      const twin = manager.list().find((view) => view.agentId !== 'default' && targetVariants.has(view.characterId));
+      if (twin !== undefined) {
+        const replacement = characters.list().find((character) => character.id === previous);
+        manager.patch(twin.agentId, { characterId: previous });
+        manager.sendAgent(twin.agentId, 'pet:character-changed', replacement ?? { id: previous, anchorRatio: 0.5 });
+      }
+    }
     prefs.patch({ characterId: id });
     const next = characters.selected();
     setCurrentPersonaCharacter(next.id, next.personaPrompt);
@@ -447,8 +460,9 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const summonPet = petControl.summonPet;
 
   // T-M6-55：前台应用自动切角（macOS 3s 低频只读轮询；偏好关闭时立即停止并保持手选角色）
+  // T-M6-64：always-with-app 策略下，即使不切角也会在检测到对应 AI App 时自动召唤桌宠
   const frontAppWatcher = createFrontAppWatcher({
-    enabled: () => prefs.get().followFrontApp,
+    enabled: () => prefs.get().followFrontApp || workFollowRef?.presencePolicy() === 'always-with-app',
     onBundle: (bundleId) => {
       const match = matchCharacterForApp({
         userDataDir: app.getPath('userData'),
@@ -456,6 +470,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         packsRoot: petPacksRoot,
       });
       if (match === null) return;
+      if (workFollowRef?.presencePolicy() === 'always-with-app') {
+        void summonPet(petControl.nightOutfit(match.characterId));
+      }
+      if (!prefs.get().followFrontApp) return;
       if (prefs.get().characterId === match.characterId) return;
       console.log(`[pet] 前台应用 ${bundleId} → 自动切换到 ${match.name}（${match.characterId}）`);
       switchDefaultCharacter(petControl.nightOutfit(match.characterId));
@@ -522,6 +540,15 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
 
   // 跨 AI 工作跟随（T-M6-49）：只读事件 + 自动召唤/换装/戴皇冠
   let workFollowRef: import('./work-follow-host').WorkFollowHost | null = null;
+  /** T-M6-64：活干完后 10s 自动收回贴边的定时器（characterId → timer） */
+  const dockBackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const cancelDockBack = (characterId: string): void => {
+    const timer = dockBackTimers.get(characterId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      dockBackTimers.delete(characterId);
+    }
+  };
   const workFollow = createWorkFollowHost({
     userDataDir: app.getPath('userData'),
     summon: (characterId) => {
@@ -546,6 +573,34 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       setTimeout(() => petControl.closeAgent(view.agentId), 2_500);
     },
     resolveCharacter: (event) => resolveProxyCharacter(app.getPath('userData'), event.source, event.modelName)?.character.id ?? null,
+    // T-M6-64：干活时若贴边自动探出；全部会话结束满 10s 且用户未手动拖离 → 自动收回
+    onWorkActivity: (session, kind) => {
+      const manager = petWindowManager;
+      if (manager === null) return;
+      const view = matchPetViewForCharacter(manager.list(), session.characterId, (id) => petControl.nightOutfit(id));
+      if (view === undefined) return;
+      if (kind !== 'stop') {
+        cancelDockBack(session.characterId);
+        if (manager.isDocked(view.agentId) !== null) void manager.requestAutoUndock(view.agentId);
+        return;
+      }
+      const stillActive = workFollowRef?.status().sessions.some((item) => item.active && item.characterId === session.characterId) ?? false;
+      if (stillActive) return;
+      cancelDockBack(session.characterId);
+      const timer = setTimeout(() => {
+        dockBackTimers.delete(session.characterId);
+        if (manager.autoUndockedEdge(view.agentId) === null) return;
+        const activeNow = workFollowRef?.status().sessions.some((item) => item.active && item.characterId === session.characterId) ?? false;
+        if (!activeNow) manager.redockAuto(view.agentId);
+      }, 10_000);
+      timer.unref?.();
+      dockBackTimers.set(session.characterId, timer);
+    },
+    // T-M6-64：桌宠侧悬浮任务卡（只发标题/状态，最多 4 张）
+    onCards: (characterId, cards) => {
+      const view = matchPetViewForCharacter(petWindowManager?.list() ?? [], characterId, (id) => petControl.nightOutfit(id));
+      if (view !== undefined) petWindowManager?.sendAgent(view.agentId, 'pet:work-cards', { cards });
+    },
     onAgentPose: (session, pose) => {
       const view = matchPetViewForCharacter(petWindowManager?.list() ?? [], session.characterId, (id) => petControl.nightOutfit(id));
       if (view === undefined) return;
@@ -555,7 +610,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       const available = manifestResult.ok
         ? [...manifestResult.manifest.actions.flatMap((action) => action.clips.map((clip) => clip.clipId)), ...manifestResult.manifest.ambientPool.map((clip) => clip.clipId)]
         : [];
-      const resolved = resolvePose(pose, available);
+      // T-M6-64：同角色并发 2 路 → busy，≥3 路 → swamped（渲染色按 busy_left/right 变体解析）
+      const activeCount = workFollowRef?.status().sessions.filter((item) => item.active && item.characterId === session.characterId).length ?? 1;
+      const effectivePose = activeCount >= 3 ? 'swamped' : activeCount === 2 ? 'busy' : pose;
+      const resolved = resolvePose(effectivePose, available);
       let line: string | undefined;
       if (session.characterId.startsWith('custom-')) {
         const entry = readCustomCharacters(app.getPath('userData')).entries.find((item) => item.character.id === session.characterId);

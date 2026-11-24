@@ -28,6 +28,11 @@ export function resolvePose(requested: string, available: Iterable<string>): Pos
   if (set.has(requested)) return { requested, pose: requested, fallback: false, reason: '命中原始姿态' };
   const mapped = POSE_FALLBACKS[requested];
   if (mapped !== undefined && set.has(mapped)) return { requested, pose: mapped, fallback: true, reason: `${requested} 缺图 → 回退 ${mapped}` };
+  // 并发忙碌姿势在 CrossPet 拆成 busy_left/busy_right、swamped_left/swamped_right
+  if (requested === 'busy' || requested === 'swamped') {
+    const variant = [...set].find((pose) => pose.startsWith(`${requested}_`));
+    if (variant !== undefined) return { requested, pose: variant, fallback: true, reason: `${requested} → 命中 ${variant}` };
+  }
   if (set.has('idle')) return { requested, pose: 'idle', fallback: true, reason: `${requested} 缺图 → 回退 idle` };
   const first = set.values().next().value as string;
   return { requested, pose: first, fallback: true, reason: `${requested} 缺图且无 idle → 回退 ${first}` };

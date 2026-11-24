@@ -68,6 +68,7 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
   private readonly metas = new Map<string, PetSpriteMeta>();
   private active: VideoHandle | null = null;
   private activeAction: PetActionState | null = null;
+  private activeClipState: PetAvatarClip | null = null;
   private switching = false;
   private devWatermarkState = false;
   private sfxEnabled: boolean;
@@ -83,6 +84,12 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
   get manifest(): PetAvatarManifest | null { return this.manifestState; }
   get devWatermark(): boolean { return this.devWatermarkState; }
   currentAction(): PetActionState | null { return this.activeAction; }
+  /** T-M6-64：当前播放片段（含 facing/moving/category），供巡逻/镜像读取。 */
+  activeClip(): PetAvatarClip | null { return this.activeClipState; }
+  /** T-M6-64：当前帧号；surface 未提供时回退 0。 */
+  currentFrameIndex(): number {
+    return this.active?.frameIndex?.() ?? 0;
+  }
 
   async load(manifest: PetAvatarManifest, opts?: { rng?: () => number }): Promise<void> {
     const validated = PetAvatarManifestSchema.parse(manifest);
@@ -153,6 +160,7 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
     }
     this.active = null;
     this.activeAction = null;
+    this.activeClipState = null;
     this.manifestState = null;
     this.metas.clear();
     this.options.audio?.stop();
@@ -176,6 +184,7 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
       }
       this.active = standby;
       this.activeAction = action;
+      this.activeClipState = clip;
       if (clip.audioPath !== undefined && this.options.audio !== undefined && this.sfxEnabled) {
         this.options.audio.stop();
         void this.options.audio.play(clip.audioPath, { loop: false, volume: this.effectiveVolume() }).catch(() => undefined);

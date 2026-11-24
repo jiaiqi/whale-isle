@@ -325,6 +325,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
             ['全屏应用时自动隐藏', 'autoHideFullscreen'],
             ['播放动作原声', 'sfxEnabled'],
             ['跟随前台 AI 应用自动切角', 'followFrontApp'],
+            ['空闲自主巡逻（25–45s 随机散步）', 'patrolEnabled'],
           ] as const).map(([label, key]) => (
             <div key={key} className="flex items-center justify-between py-1.5 text-[11.5px]" style={{ color: 'var(--text-2)' }} data-desk-pref={key}>
               <span>{label}</span>
