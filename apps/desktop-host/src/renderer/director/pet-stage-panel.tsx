@@ -84,7 +84,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
-  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false });
+  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false, windowLayer: 'always' as 'always' | 'follow-ai' | 'normal', bubbleFontScale: null as number | null, patrolEnabled: true, randomEggEnabled: true });
 
   useEffect(() => {
     void window.directorBridge.petsManifest().then((res) => {
@@ -101,6 +101,10 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
         sfxEnabled: p.sfxEnabled ?? true,
         sfxVolume: p.sfxVolume ?? 0.7,
         followFrontApp: p.followFrontApp ?? false,
+        windowLayer: p.windowLayer ?? 'always',
+        bubbleFontScale: p.bubbleFontScale ?? null,
+        patrolEnabled: p.patrolEnabled ?? true,
+        randomEggEnabled: p.randomEggEnabled ?? true,
       });
     }).catch(() => undefined);
   }, [characterId]);
@@ -237,6 +241,58 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
               }}
             />
           </label>
+        </div>
+
+        <div className="card px-4 py-3.5">
+          <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>显示层级与气泡字号</h3>
+          <div className="seg-tabs mb-2" data-window-layer-group>
+            {([
+              ['always', '始终置顶'],
+              ['follow-ai', 'AI 干活时'],
+              ['normal', '普通层级'],
+            ] as const).map(([layer, label]) => (
+              <button
+                key={layer}
+                type="button"
+                data-window-layer={layer}
+                className={`seg-tab${desk.windowLayer === layer ? ' on' : ''}`}
+                onClick={() => {
+                  const next = { ...desk, windowLayer: layer };
+                  setDesk(next);
+                  void window.directorBridge.prefsSet({ windowLayer: layer });
+                  toast(layer === 'always' ? '桌宠始终置顶' : layer === 'follow-ai' ? 'AI 干活时自动置顶，空闲降回普通层级' : '桌宠使用普通窗口层级');
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="block text-[11px]" style={{ color: 'var(--text-2)' }}>
+            气泡字号 <span className="mono">{(desk.bubbleFontScale ?? scale).toFixed(1)}×</span>
+            {desk.bubbleFontScale === null && <span className="ml-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>跟随人物大小</span>}
+            <input
+              type="range" className="wb-range mt-1.5" min={0.7} max={1.6} step={0.05}
+              data-bubble-font-scale
+              value={desk.bubbleFontScale ?? scale}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                setDesk((prev) => ({ ...prev, bubbleFontScale: value }));
+                void window.directorBridge.prefsSet({ bubbleFontScale: value });
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-pill ghost mt-2"
+            data-bubble-font-follow
+            onClick={() => {
+              setDesk((prev) => ({ ...prev, bubbleFontScale: null }));
+              void window.directorBridge.prefsSet({ bubbleFontScale: null });
+              toast('气泡字号已跟随人物大小');
+            }}
+          >
+            跟随人物大小
+          </button>
         </div>
 
         <div className="card px-4 py-3.5">

@@ -231,6 +231,127 @@ export function buildPoseSkinManifest(input: {
 }
 
 /**
+ * CrossPet 随包角色的完整扩展档案（T-M6-63）。
+ *
+ * 只返回 character.json 里**真实存在**的可选字段：缺省一律 undefined，绝不拿 Zod 默认值
+ * 冒充「该角色有这张姿态/有这个特效」。姿态文件名排除立绘 portrait/portrait-card/avatar。
+ */
+export interface CrossPetPoseProfile {
+  characterId: string;
+  name: string;
+  poses: string[];
+  greeting: string;
+  lines: Record<string, string[]>;
+  correctedPose?: string;
+  longThink?: { after: number; pose: string };
+  pokePose?: string;
+  fx?: Record<string, string>;
+  egg?: boolean;
+  idleActions?: string[];
+  glyph?: { fill?: string; stroke?: string; text?: string };
+  apps?: string[];
+  host?: string;
+  hostSkin?: string;
+  aura?: string;
+  accent?: string;
+  outfit?: string;
+}
+
+const CROSSPET_NON_POSE = new Set(['portrait.webp', 'portrait-card.webp', 'avatar.webp']);
+
+function stringOf(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function stringArrayOf(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((item): item is string => typeof item === 'string' && item !== '');
+  return out.length > 0 ? out : undefined;
+}
+
+/** 读一个随包 CrossPet 角色的完整档案；非 crosspet- 前缀、缺目录或坏 JSON 返回 null。 */
+export function readCrossPetPoseProfile(packsRoot: string, characterId: string): CrossPetPoseProfile | null {
+  if (!characterId.startsWith('crosspet-')) return null;
+  const dirName = characterId.slice('crosspet-'.length);
+  // 目录名只允许安全字符，杜绝跨目录读取
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(dirName)) return null;
+  const dir = join(packsRoot, 'crosspet', 'characters', dirName);
+  const characterPath = join(dir, 'character.json');
+  if (!existsSync(characterPath)) return null;
+  let raw: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(readFileSync(characterPath, 'utf8')) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    raw = parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const name = stringOf(raw.name) ?? dirName;
+  const poses = readdirSync(dir)
+    .filter((file) => file.endsWith('.webp') && !CROSSPET_NON_POSE.has(file))
+    .map((file) => file.replace(/\.webp$/, ''));
+  if (poses.length === 0) return null;
+  const lines: Record<string, string[]> = {};
+  if (typeof raw.lines === 'object' && raw.lines !== null && !Array.isArray(raw.lines)) {
+    for (const [key, value] of Object.entries(raw.lines as Record<string, unknown>)) {
+      const pool = stringArrayOf(value);
+      if (pool !== undefined) lines[key] = pool;
+    }
+  }
+  const profile: CrossPetPoseProfile = {
+    characterId,
+    name,
+    poses,
+    greeting: stringOf(raw.greeting) ?? '',
+    lines,
+  };
+  const correctedPose = stringOf(raw.correctedPose);
+  if (correctedPose !== undefined) profile.correctedPose = correctedPose;
+  if (typeof raw.longThink === 'object' && raw.longThink !== null) {
+    const after = Number((raw.longThink as { after?: unknown }).after);
+    const pose = stringOf((raw.longThink as { pose?: unknown }).pose);
+    if (Number.isFinite(after) && after > 0 && pose !== undefined) profile.longThink = { after, pose };
+  }
+  const pokePose = stringOf(raw.pokePose);
+  if (pokePose !== undefined) profile.pokePose = pokePose;
+  if (typeof raw.fx === 'object' && raw.fx !== null && !Array.isArray(raw.fx)) {
+    const fx: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw.fx as Record<string, unknown>)) {
+      const kind = stringOf(value);
+      if (kind !== undefined) fx[key] = kind;
+    }
+    if (Object.keys(fx).length > 0) profile.fx = fx;
+  }
+  if (typeof raw.egg === 'boolean') profile.egg = raw.egg;
+  const idleActions = stringArrayOf(raw.idleActions);
+  if (idleActions !== undefined) profile.idleActions = idleActions;
+  if (typeof raw.glyph === 'object' && raw.glyph !== null) {
+    const glyphRaw = raw.glyph as Record<string, unknown>;
+    const glyph: { fill?: string; stroke?: string; text?: string } = {};
+    const fill = stringOf(glyphRaw.fill);
+    const stroke = stringOf(glyphRaw.stroke);
+    const text = stringOf(glyphRaw.text);
+    if (fill !== undefined) glyph.fill = fill;
+    if (stroke !== undefined) glyph.stroke = stroke;
+    if (text !== undefined) glyph.text = text;
+    if (Object.keys(glyph).length > 0) profile.glyph = glyph;
+  }
+  const apps = stringArrayOf(raw.apps);
+  if (apps !== undefined) profile.apps = apps;
+  const host = stringOf(raw.host);
+  if (host !== undefined) profile.host = host;
+  const hostSkin = stringOf(raw.hostSkin);
+  if (hostSkin !== undefined) profile.hostSkin = hostSkin;
+  const aura = stringOf(raw.aura);
+  if (aura !== undefined) profile.aura = aura;
+  const accent = stringOf(raw.accent);
+  if (accent !== undefined) profile.accent = accent;
+  const outfit = stringOf(raw.outfit);
+  if (outfit !== undefined) profile.outfit = outfit;
+  return profile;
+}
+
+/**
  * CrossPet 30 个角色目录（8 基础 + 7 皮肤 + 15 彩蛋）→ pose-skin 角色与 manifest。
  * 只在工作跟随/换装/彩蛋里使用，不混入「9 角色」主条（UI 侧按 packId 过滤）。
  */

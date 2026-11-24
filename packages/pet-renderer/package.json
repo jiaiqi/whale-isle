@@ -18,6 +18,14 @@
     "./aboutme-pets": {
       "types": "./dist/aboutme-pets.d.ts",
       "default": "./dist/aboutme-pets.js"
+    },
+    "./festivals": {
+      "types": "./dist/festivals.d.ts",
+      "default": "./dist/festivals.js"
+    },
+    "./notebook-fonts": {
+      "types": "./dist/notebook-fonts.d.ts",
+      "default": "./dist/notebook-fonts.js"
     }
   },
   "scripts": {

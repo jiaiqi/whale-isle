@@ -32,6 +32,8 @@ export interface ManagedPetWindow {
   hide(): void;
   setOpacity(opacity: number): void;
   setIgnoreMouseEvents(ignore: boolean, options?: { forward: boolean }): void;
+  /** T-M6-63：显示层级切换（level 由宿主按 macOS/Windows 平台注入） */
+  setAlwaysOnTop(flag: boolean, level?: string): void;
   close(): void;
   setBounds(bounds: WindowBounds): void;
   getBounds(): WindowBounds;
@@ -64,6 +66,8 @@ export interface PetWindowManagerOptions {
   /** 平滑探出总时长与帧间隔（默认 240ms / 16ms） */
   undockDurationMs?: number;
   undockFrameMs?: number;
+  /** T-M6-63：置顶层级名（macOS 'screen-saver' / Windows 11 'floating'），由宿主注入平台判断 */
+  alwaysOnTopLevel?: () => string | undefined;
 }
 
 export interface PetWindowOpenResult {
@@ -92,6 +96,12 @@ export class PetWindowManager {
   private undockSeq = new Map<string, number>();
   private peeking = new Set<string>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** T-M6-63：全局显示层级 + AI 活跃态（follow-ai 时据此决定置顶） */
+  private windowLayer: 'always' | 'follow-ai' | 'normal' = 'always';
+  private aiActive = false;
+  /** T-M6-64：贴边记忆（agent → 边缘）与「因干活自动探出」的原边缘 */
+  private dockedEdges = new Map<string, 'left' | 'right'>();
+  private autoUndockedFrom = new Map<string, 'left' | 'right'>();
   /** 互撞去抖：`a|b` → 上次播报时间 */
   private readonly lastCollisionAt = new Map<string, number>();
 
@@ -130,6 +140,7 @@ export class PetWindowManager {
     }
 
     const entry: Entry = { preference: { ...preference, position: { x: bounds.x, y: bounds.y, displayId: preference.position.displayId }, visible: true }, window, unsubscribe: [] };
+    window.setAlwaysOnTop(this.shouldFloat(), this.options.alwaysOnTopLevel?.());
     this.entries.set(agentId, entry);
     entry.unsubscribe.push(window.onBoundsChanged((next) => {
       const current = this.entries.get(agentId);
@@ -148,6 +159,10 @@ export class PetWindowManager {
       if (current?.window !== window) return;
       this.entries.delete(agentId);
       current.preference.visible = false;
+      this.undocked.delete(agentId);
+      this.dockedEdges.delete(agentId);
+      this.autoUndockedFrom.delete(agentId);
+      this.undockSeq.delete(agentId);
       for (const off of current.unsubscribe) off();
       this.scheduleSave();
       this.notify();
@@ -308,6 +323,7 @@ export class PetWindowManager {
   dock(agentId: string, edge: 'left' | 'right'): PetWindowView | null {
     const entry = this.entries.get(agentId);
     if (entry === undefined) return null;
+    if (this.dockedEdges.get(agentId) === edge) return this.view(agentId);
     const current = entry.window.getBounds();
     if (!this.undocked.has(agentId)) this.undocked.set(agentId, current);
     const work = this.options.workArea?.() ?? { x: current.x, y: current.y, width: current.width, height: current.height };
@@ -318,7 +334,40 @@ export class PetWindowManager {
       width: current.width,
       height: current.height,
     });
+    this.dockedEdges.set(agentId, edge);
     return this.view(agentId);
+  }
+
+  /** 当前是否贴边（T-M6-64：工作事件自动探出/收回用）。 */
+  isDocked(agentId: string): 'left' | 'right' | null {
+    return this.dockedEdges.get(agentId) ?? null;
+  }
+
+  /**
+   * 干活自动探出（T-M6-64）：仅当确实贴边时记录原边缘并平滑探出。
+   * 用户手动拖离后 `clearDock` 会清掉这条记忆，不会再被自动收回。
+   */
+  async requestAutoUndock(agentId: string): Promise<boolean> {
+    const edge = this.dockedEdges.get(agentId);
+    if (edge === undefined) return false;
+    if (!this.autoUndockedFrom.has(agentId)) this.autoUndockedFrom.set(agentId, edge);
+    await this.undock(agentId);
+    this.dockedEdges.delete(agentId);
+    return true;
+  }
+
+  /** 该 agent 是否因干活被自动探出（且用户未手动拖离）。 */
+  autoUndockedEdge(agentId: string): 'left' | 'right' | null {
+    return this.autoUndockedFrom.get(agentId) ?? null;
+  }
+
+  /** 活干完收回：恢复自动探出前的边缘；已销毁或用户拖离则不做事。 */
+  redockAuto(agentId: string): boolean {
+    const edge = this.autoUndockedFrom.get(agentId);
+    if (edge === undefined) return false;
+    this.autoUndockedFrom.delete(agentId);
+    if (this.entries.get(agentId) === undefined) return false;
+    return this.dock(agentId, edge) !== null;
   }
 
   /** 鼠标靠近/工作事件：从贴边探出到原位置。 */
@@ -349,8 +398,32 @@ export class PetWindowManager {
     if (this.undockSeq.get(agentId) === seq) {
       this.undocked.delete(agentId);
       this.undockSeq.delete(agentId);
+      this.dockedEdges.delete(agentId);
     }
     return this.view(agentId);
+  }
+
+  /**
+   * 三档显示层级（T-M6-63）：always 全部置顶；normal 全部取消；follow-ai 仅在 AI 活跃时置顶。
+   * 新开窗口也会在 open() 里套用当前层级。
+   */
+  applyWindowLayer(layer: 'always' | 'follow-ai' | 'normal', aiActive: boolean): void {
+    this.windowLayer = layer;
+    this.aiActive = aiActive;
+    const float = this.shouldFloat();
+    const level = this.options.alwaysOnTopLevel?.();
+    for (const entry of this.entries.values()) {
+      if (!entry.window.isDestroyed()) entry.window.setAlwaysOnTop(float, level);
+    }
+  }
+
+  /** 当前应有的置顶状态（follow-ai 由 aiActive 驱动）。 */
+  currentWindowLayer(): { layer: 'always' | 'follow-ai' | 'normal'; aiActive: boolean; floating: boolean } {
+    return { layer: this.windowLayer, aiActive: this.aiActive, floating: this.shouldFloat() };
+  }
+
+  private shouldFloat(): boolean {
+    return this.windowLayer === 'always' || (this.windowLayer === 'follow-ai' && this.aiActive);
   }
 
   /** 主进程全局 Alt：只对目标窗口降透明+穿透，其余恢复。 */
@@ -368,9 +441,11 @@ export class PetWindowManager {
     }
   }
 
-  /** 拖离边缘：只清除贴边记忆，绝不把窗口弹回旧位置。 */
+  /** 拖离边缘：只清除贴边/自动收回记忆，绝不把窗口弹回旧位置。 */
   clearDock(agentId: string): boolean {
     this.undockSeq.set(agentId, (this.undockSeq.get(agentId) ?? 0) + 1);
+    this.dockedEdges.delete(agentId);
+    this.autoUndockedFrom.delete(agentId);
     return this.undocked.delete(agentId);
   }
 

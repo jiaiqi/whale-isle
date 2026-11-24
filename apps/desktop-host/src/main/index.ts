@@ -154,6 +154,8 @@ let petPrefsStore: ReturnType<typeof createPetPrefsStore> | null = null;
 let coopHost: ReturnType<typeof createCoopHost> | null = null;
 /** 任一桌宠处于安静睡眠时，久坐/喝水提醒免打扰（T-M6-48）。 */
 const asleepAgents = new Set<string>();
+/** T-M6-63：显示层级实时应用（workFollow 初始化后赋值，prefs 回调只负责触发）。 */
+let applyWindowLayerNow: () => void = () => undefined;
 
 /**
  * Electron 适配层：PetWindowManager 只依赖最小窗口接口，真实 BrowserWindow 在此创建。
@@ -197,6 +199,9 @@ function createManagedPetWindow(input: PetWindowCreateInput): ManagedPetWindow {
     hide: () => win.hide(),
     setOpacity: (opacity: number) => win.setOpacity(opacity),
     setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => win.setIgnoreMouseEvents(ignore, options),
+    setAlwaysOnTop: (flag: boolean, level?: string) => {
+      win.setAlwaysOnTop(flag, level as Parameters<BrowserWindow['setAlwaysOnTop']>[1]);
+    },
     close: () => win.close(),
     setBounds: (bounds: WindowBounds) => win.setBounds(bounds),
     getBounds: () => win.getBounds(),
@@ -305,14 +310,16 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   void modsHost;
   // 桌宠角色注册表（T-M6-21）：内置 + userData 自定义角色，切换落 PetDesktopPrefs（单点事实源）
   const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'), (prev, next) => {
+    if (prev.shortcutHideEnabled !== next.shortcutHideEnabled) registerShortcut();
+    // T-M6-63：气泡字号/显示层级等全局字段必须广播给所有桌宠窗（不依赖 default 窗口是否已创建）
+    for (const target of petBrowserWindows.values()) {
+      if (!target.isDestroyed()) target.webContents.send('pet:global-prefs-changed', next);
+    }
+    if (prev.windowLayer !== next.windowLayer) applyWindowLayerNow();
     // 旧全局 API 仅作用于 default 窗口；新协作大厅走 pet:window-prefs-set 按 agent 隔离。
     const windowPrefs = petWindowManager?.prefs('default');
     if (windowPrefs === null || windowPrefs === undefined) return;
     if (windowPrefs.scale !== next.scale) petWindowManager?.patch('default', { scale: next.scale });
-    if (prev.shortcutHideEnabled !== next.shortcutHideEnabled) registerShortcut();
-    for (const target of petBrowserWindows.values()) {
-      if (!target.isDestroyed()) target.webContents.send('pet:global-prefs-changed', next);
-    }
     if (
       windowPrefs.position.x !== next.position.x
       || windowPrefs.position.y !== next.position.y
@@ -320,7 +327,6 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     ) {
       petWindowManager?.setPosition('default', next.position);
     }
-    void prev;
   }));
   /**
    * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
@@ -405,6 +411,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       scale: prefs.get().scale,
       characterId: prefs.get().characterId,
     }),
+    // T-M6-63：macOS 用 screen-saver 层级，Windows 11 用 floating；其他平台交给 Electron 默认
+    alwaysOnTopLevel: () => (process.platform === 'darwin' ? 'screen-saver' : process.platform === 'win32' ? 'floating' : undefined),
     onWindowsChanged: (list) => {
       sendToUiWindows('pet:window-list-changed', list);
     },
@@ -794,6 +802,29 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   });
   // 自驾事件进插件总线（插件只能经总线观察，不直接访问 autodrive）
   autodrive.subscribe((event) => plugins.emit('autodrive:event', event));
+
+  // ── T-M6-63：显示层级 follow-ai 的 AI 活跃判定 ──
+  // 活跃 = 工作跟随有活跃会话 | ACP 待审批 | 自驾回执后 15s 缓冲。
+  let lastAutodriveReceiptAt = 0;
+  let acpPendingUntil = 0;
+  autodrive.subscribe((event) => { if (event.type === 'receipt') lastAutodriveReceiptAt = Date.now(); });
+  let lastLayerKey = '';
+  applyWindowLayerNow = (): void => {
+    const manager = petWindowManager;
+    if (manager === null) return;
+    const workActive = workFollowRef?.status().sessions.some((session) => session.active) ?? false;
+    const aiActive = workActive || Date.now() < acpPendingUntil || Date.now() - lastAutodriveReceiptAt < 15_000;
+    const layer = prefs.get().windowLayer;
+    const key = `${layer}:${aiActive}`;
+    if (key === lastLayerKey) return;
+    lastLayerKey = key;
+    manager.applyWindowLayer(layer, aiActive);
+  };
+  const layerTimer = setInterval(applyWindowLayerNow, 1_000);
+  layerTimer.unref();
+  applyWindowLayerNow();
+  app.on('will-quit', () => clearInterval(layerTimer));
+
   // ACP 会话 id 缓存：session-started / permission / exit 必须落在同一个 sessionId 上，
   // 否则在工作跟随面板会分裂成“开始一个、工具记到另一个、退出又一个”的幽灵会话。
   const acpSessions = createAcpSessionCache();
@@ -804,8 +835,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         const sessionId = acpSessions.onStarted(presetId, event.sessionId);
         workFollow.ingest({ source: 'acp', sessionId, kind: 'start', modelName: presetId, taskTitle: presetId });
       } else if (event.type === 'permission') {
-        workFollow.ingest({ source: 'acp', sessionId: acpSessions.resolve(presetId), kind: 'tool', toolName: event.toolName });
+        // 待审批 = AI 在等用户，属于活跃；120s 内无后续也自然过期
+        acpPendingUntil = Date.now() + 120_000;
+        workFollow.ingest({ source: 'acp', sessionId: acpSessions.resolve(presetId), kind: 'asking', toolName: event.toolName });
       } else if (event.type === 'exit') {
+        acpPendingUntil = 0;
         workFollow.ingest({ source: 'acp', sessionId: acpSessions.onExit(presetId), kind: 'stop' });
       }
     },

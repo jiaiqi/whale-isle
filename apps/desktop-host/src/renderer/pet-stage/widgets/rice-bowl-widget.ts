@@ -11,6 +11,8 @@ export interface RiceBowlWidget {
   show(): void;
   hide(): void;
   visible(): boolean;
+  /** T-M6-63：点击饭碗挂件 → 播放当前余额档位动画 */
+  onClick(handler: () => void): void;
 }
 
 export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
@@ -23,9 +25,19 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
     position:absolute; left:var(--pet-anchor-ratio, 68.7%); transform:translateX(-50%); bottom:6px;
     display:none; align-items:center; gap:6px;
     background:rgba(15,43,76,0.55); border-radius:12px;
-    padding:3px 8px; pointer-events:none; font:11px/1.4 monospace; color:#ffe9b8;`;
-  const emoji = document.createElement('span');
-  emoji.textContent = '🍚';
+    padding:3px 8px; pointer-events:auto; cursor:pointer; font:11px/1.4 monospace; color:#ffe9b8;`;
+  root.setAttribute('role', 'button');
+  root.setAttribute('aria-label', '赛博饭碗：查看当前余额动画');
+  // 零 emoji：内联 SVG 饭碗图标（碗沿 + 米粒 + 底座）
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('width', '14');
+  icon.setAttribute('height', '14');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', '#ffe9b8');
+  icon.setAttribute('stroke-width', '1.7');
+  icon.setAttribute('stroke-linecap', 'round');
+  icon.innerHTML = '<path d="M3.5 11h17a8.5 8.5 0 0 1-17 0Z"/><path d="M7.5 11c0-2.2 1.8-3.6 4.5-3.6s4.5 1.4 4.5 3.6"/><path d="M5 20h14"/><circle cx="9" cy="8" r="0.6" fill="#ffe9b8"/><circle cx="13" cy="6.6" r="0.6" fill="#ffe9b8"/>';
   const bar = document.createElement('div');
   bar.style.cssText = `
     width:64px; height:8px; border-radius:4px; overflow:hidden;
@@ -35,11 +47,16 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
   bar.appendChild(fill);
   const label = document.createElement('span');
   label.textContent = '100%';
-  root.append(emoji, bar, label);
+  root.append(icon, bar, label);
   stage.appendChild(root);
 
   let current = 1;
   let shown = false;
+  let clickHandler: (() => void) | null = null;
+  root.addEventListener('click', (event) => {
+    event.stopPropagation();
+    clickHandler?.();
+  });
   const applyVisible = (next: boolean): void => {
     shown = next;
     root.style.display = next ? 'flex' : 'none';
@@ -53,7 +70,8 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
         ? 'linear-gradient(90deg,#b0b0b0,#8a8a8a)' // 饿瘪灰
         : 'linear-gradient(90deg,#ffd88a,#ffb347)';
       label.textContent = `${Math.round(clamped * 100)}%`;
-      emoji.textContent = clamped < LOW_RICE_WARNING_RATIO ? '🥣' : '🍚';
+      // 饿态图标降饱和；不切 emoji、不换文案
+      icon.setAttribute('stroke', clamped < LOW_RICE_WARNING_RATIO ? '#b9b9b9' : '#ffe9b8');
     },
     ratio() {
       return current;
@@ -66,6 +84,9 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
     },
     visible() {
       return shown;
+    },
+    onClick(handler: () => void) {
+      clickHandler = handler;
     },
   };
 }

@@ -4,7 +4,7 @@
  */
 import { mergePoseEffects, normalizePoseEffect, PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
-import type { PetActionState } from '@workbench/shared-protocol';
+import type { PetActionState, PetAvatarClip } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
 import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, shouldBlockWhileAsleep, shouldEnterPowerSaver } from './interaction';
@@ -16,6 +16,7 @@ import { mountBubbleWidgets } from './widgets/bubbles';
 import { mountRiceBowlWidget } from './widgets/rice-bowl-widget';
 import { buildPlaybackLease, sampleVisemeTimeline, type SpeakRequest } from './tts-router';
 import { pickIdleMix } from './idle-mix';
+import { filterAmbientClips, pickBalanceClipId } from './ambient-filter';
 import { glyphColors, glyphParticles, isReadingOrSearchingPose, type GlyphConfig } from './glyph-effects';
 
 interface PetStageBridge {
@@ -118,6 +119,9 @@ let lastActivityAt = Date.now();
 let powerSaver = false;
 let bubbleState: BubbleLifecycleState = createBubbleLifecycle();
 let bubbleVoiceEnabled = true;
+/** T-M6-63：气泡字号独立缩放（null=跟随人物 scale）与窗口显示层级 */
+let bubbleFontScalePref: number | null = null;
+let currentWindowLayer: 'always' | 'follow-ai' | 'normal' = 'always';
 let clickTimer: ReturnType<typeof setTimeout> | null = null;
 let lastDizzyVisual = 0;
 let slingshotRaf = 0;
@@ -462,6 +466,40 @@ const petStageBridge = (window as unknown as {
 // 2026-11-22 改版：饭碗默认隐藏（hover 桌宠显示 / 米量 <15% 强制亮灯），并随档位事件实时刷新真实米量
 let hoverOnPet = false;
 let lastRiceRatio = 1;
+let currentRiceLevel = 'ok';
+type AmbientManifestClip = import('@workbench/shared-protocol').PetAvatarManifest['ambientPool'][number];
+/** T-M6-63：关于素材库里的整段动画（ambientPool）→ 以真实 clip 元数据包装成可播放片段。 */
+function playAmbientClip(clip: AmbientManifestClip, loop = false): boolean {
+  if (!(renderer instanceof SpritesheetRenderer)) return false;
+  const full = {
+    ...clip,
+    loop,
+    playbackRate: 1,
+    fps: Math.round(clip.sprite?.sampleFps ?? 12),
+    weight: 1,
+  } as PetAvatarClip;
+  void renderer.playClip(full).catch(() => undefined);
+  if (!loop) {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      previewTimer = null;
+      void renderer.play('idle').catch(() => undefined);
+      lastPoseName = 'idle';
+    }, AMBIENT_PLAY_MS);
+  }
+  return true;
+}
+
+/** 饭碗档位变化/点击饭碗：优先播真实「余额-*」动画，没有则静默回退原动作映射。 */
+function playBalanceClip(level: string): void {
+  if (!(renderer instanceof SpritesheetRenderer)) return;
+  const manifest = renderer.manifest;
+  if (manifest === null) return;
+  const clipId = pickBalanceClipId(manifest.ambientPool, level, lastRiceRatio);
+  if (clipId === null) return;
+  const clip = manifest.ambientPool.find((entry) => entry.clipId === clipId);
+  if (clip !== undefined) playAmbientClip(clip, false);
+}
 /** 饭碗显隐统一入口：hover 或饿态（<15%）才显示，平时不占桌面视觉（widget 在下方挂载，回调晚于初始化） */
 function refreshRiceWidget(ratio?: number): void {
   if (ratio !== undefined) {
@@ -474,8 +512,11 @@ function refreshRiceWidget(ratio?: number): void {
 if (petStageBridge?.onPetRice) {
   petStageBridge.onPetRice((detail) => {
     if (shouldBlockWhileAsleep(interaction, 'rice')) return;
+    currentRiceLevel = detail.level;
+    // T-M6-63：先尝试播放素材包里的真实「余额-*」动画（6 档映射）
+    playBalanceClip(detail.level);
     const action = RICE_LEVEL_ACTION_MAP[detail.level as keyof typeof RICE_LEVEL_ACTION_MAP];
-    if (action) void renderer.play(action).catch(() => undefined);
+    if (action && !(renderer instanceof SpritesheetRenderer)) void renderer.play(action).catch(() => undefined);
     lastEventAt = Date.now(); // 档位事件抑制 ambient 链
     // 随档位事件刷新真实米量：budget 从 bridge 异步读取（widget 已在下方挂载，此处回调晚于初始化）
     void petStageBridge?.riceStatus?.().then((st) => {
@@ -798,6 +839,13 @@ function applyStageScale(): void {
     img.style.width = `${BASE_STAGE.width * petScale}px`;
     img.style.height = `${BASE_STAGE.height * petScale}px`;
   }
+  applyBubbleFontScale();
+}
+
+/** T-M6-63：气泡字号 = 独立倍率优先，否则跟随人物 scale（CSS 变量由气泡样式消费）。 */
+function applyBubbleFontScale(): void {
+  const scale = bubbleFontScalePref ?? petScale;
+  document.documentElement.style.setProperty('--pet-bubble-font-scale', String(Math.min(1.6, Math.max(0.7, scale))));
 }
 
 /** 当前可见的姿势图（交叉淡入期间取透明度最高的那张）。 */
@@ -986,6 +1034,9 @@ setInterval(() => {
 const applyGlobalPrefs = (p: PetDesktopPrefs): void => {
   powerSaverEnabled = p.powerSaverEnabled;
   sfxVolume = p.sfxVolume;
+  bubbleFontScalePref = p.bubbleFontScale ?? null;
+  currentWindowLayer = p.windowLayer;
+  applyBubbleFontScale();
   if (renderer instanceof SpritesheetRenderer) {
     renderer.setSfxEnabled(p.sfxEnabled);
     renderer.setSfxVolume(p.sfxVolume);
@@ -1008,10 +1059,30 @@ let raf = 0;
 /** 抓取锚点：按下瞬间指针相对窗口左上角的真实偏移（真机修复：旧版写死 20×20 近似，
  *  抓哪里都变成「拖窗口左上角」——必须按真实偏移拖拽，桌宠才不会在按下瞬间跳位） */
 let grabOffset: { x: number; y: number } | null = null;
+/** T-M6-63：拖拽悬空专属动画（素材库有「拖拽/悬空」动作时循环播放，松手落地回 idle）。 */
+let dragSuspended = false;
+function playDragSuspended(): void {
+  if (!(renderer instanceof SpritesheetRenderer)) return;
+  const manifest = renderer.manifest;
+  if (manifest === null) return;
+  const all = [...manifest.actions.flatMap((action) => action.clips), ...manifest.ambientPool];
+  const hit = all.find((clip) => clip.category === '拖拽' || /拖拽|悬空/.test(clip.clipId));
+  if (hit === undefined) return;
+  dragSuspended = true;
+  playAmbientClip(hit as AmbientManifestClip, true);
+}
+function restoreAfterDrag(): void {
+  if (!dragSuspended) return;
+  dragSuspended = false;
+  setTimeout(() => { void renderer.play('idle').catch(() => undefined); }, 120);
+}
 
 stage.addEventListener('mousedown', (event) => {
   if (event.button !== 0 || petLocked) return;
   dragging = true;
+  // 手动拖离 = 放弃「干活自动探出」的自动收回记忆（T-M6-64）
+  void bridge.clearDock?.(dockedAgentId).catch(() => undefined);
+  playDragSuspended();
   throwSim = null;
   grabOffset = null;
   dragMoved = false;
@@ -1066,6 +1137,7 @@ function scheduleDockBack(edge: 'left' | 'right'): void {
 window.addEventListener('mouseup', () => {
   if (!dragging) return;
   dragging = false;
+  restoreAfterDrag();
   void (async () => {
     const velocity = velocityFromSamples(samples);
     const bounds = await bridge.screenBounds();
@@ -1185,6 +1257,12 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
 // 舞台 CSS 实际 400×260（窗口 400×284 留脚线 21px 余量）；旧代码按 440×300 算气泡会贴出窗右缘
 const widgets = mountBubbleWidgets(stage, { width: 400, height: 260 });
 const riceBowlWidget = mountRiceBowlWidget(stage);
+// T-M6-63：点饭碗挂件 → 按当前档位播一次「余额-*」动画（没有对应素材则安静不播）
+riceBowlWidget.onClick(() => {
+  if (shouldBlockWhileAsleep(interaction, 'rice')) return;
+  playBalanceClip(currentRiceLevel);
+  lastEventAt = Date.now();
+});
 
 // ── T-M6-20 缩放：滚轮 / 右键菜单 / 主进程广播（中控台滑块）同步 ──
 const setScale = (next: number): void => {
@@ -1307,6 +1385,33 @@ stage.addEventListener('contextmenu', (event) => {
   });
   makeTextButton('集合！', () => { void bridge.petAssemble?.(); closeScaleMenu(); });
   makeTextButton('解散', () => { void bridge.petDismiss?.(); closeScaleMenu(); });
+  makeTextButton('显示层级 ▸', () => {
+    // 二级面板：三档层级（always/follow-ai/normal），保持交互态直到选择或超时
+    scaleMenu?.remove();
+    scaleMenu = null;
+    const panel = document.createElement('div');
+    panel.style.cssText = `position:absolute; left:50%; bottom:34px; transform:translateX(-50%); display:flex; gap:4px; padding:6px; border-radius:12px; pointer-events:auto; z-index:21;
+      background:rgba(12,20,32,0.94); border:1px solid rgba(120,180,255,0.35);`;
+    const options: Array<['always' | 'follow-ai' | 'normal', string]> = [
+      ['always', '始终置顶'],
+      ['follow-ai', 'AI 干活时置顶'],
+      ['normal', '普通层级'],
+    ];
+    for (const [layer, label] of options) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.style.cssText = `font:11px monospace;color:${currentWindowLayer === layer ? '#8cc8ff' : '#cdd8e8'};background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;`;
+      btn.addEventListener('click', () => {
+        currentWindowLayer = layer;
+        void bridge.prefsSet({ windowLayer: layer });
+        panel.remove();
+        void bridge.forceInteractive(false);
+      });
+      panel.appendChild(btn);
+    }
+    stage.appendChild(panel);
+    setTimeout(() => { panel.remove(); void bridge.forceInteractive(false); }, 8_000);
+  });
   makeTextButton('彩蛋', () => {
     void bridge.petEggSummon?.().then((result) => {
       if (result?.ok === false) {
@@ -1380,6 +1485,15 @@ const ambientLoop = setInterval(() => {
     });
     if (picked === null) return;
     void renderer.playPose(picked.id).then(() => { lastPoseName = picked.id; }).catch(() => { void renderer.play('idle').catch(() => undefined); });
+  } else if (renderer instanceof SpritesheetRenderer) {
+    // T-M6-63：三餐/节日/季节过滤 + 余额隔离；只从保留池按权重抽一条真实动画
+    const pool = filterAmbientClips(manifest.ambientPool, new Date());
+    if (pool.length === 0) return;
+    const total = pool.reduce((sum, entry) => sum + entry.weight, 0);
+    let roll = Math.random() * total;
+    const picked = pool.find((entry) => (roll -= entry.weight) <= 0) ?? pool[pool.length - 1]!;
+    playAmbientClip(picked.clip, false);
+    return;
   } else {
     const picked = pickAmbient(manifest);
     if (!picked.webmPath) return;

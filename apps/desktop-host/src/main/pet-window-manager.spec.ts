@@ -30,8 +30,14 @@ class FakeWindow implements ManagedPetWindow {
   hide = (): void => { this.visible = false; };
   opacity = 1;
   ignoreMouse = false;
+  alwaysOnTop = true;
+  alwaysOnTopLevel: string | undefined;
   setOpacity = (opacity: number): void => { this.opacity = opacity; };
   setIgnoreMouseEvents = (ignore: boolean): void => { this.ignoreMouse = ignore; };
+  setAlwaysOnTop = (flag: boolean, level?: string): void => {
+    this.alwaysOnTop = flag;
+    this.alwaysOnTopLevel = level;
+  };
   close = (): void => {
     this.destroyed = true;
     this.visible = false;

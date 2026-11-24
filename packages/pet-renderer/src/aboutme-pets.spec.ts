@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PetAvatarManifestSchema, PetCharacterSchema } from '@workbench/shared-protocol';
-import { importAboutmePets, readPackCatalog } from './aboutme-pets';
+import { ABOUTME_PACKS, buildAboutmePackArtifacts, importAboutmePets, readPackCatalog } from './aboutme-pets';
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -151,6 +151,61 @@ describe('aboutme-pets 默认字段', () => {
     const manifest = JSON.parse(readFileSync(join(dir, 'pet-characters', 'dsh', 'manifest.json'), 'utf8'));
     expect(manifest.ambientPool.length).toBeGreaterThan(0);
     expect(manifest.actions.every((a: { clips: unknown[] }) => a.clips.length > 0)).toBe(true);
+  });
+});
+
+describe('aboutme-pets 扩展元数据（T-M6-63）', () => {
+  const sprite = { frameWidth: 640, frameHeight: 360, columns: 8, frameCount: 16, fps: 12 };
+  const animation = (id: string, extra: Record<string, unknown>) => ({
+    id,
+    sources: { webp: `spritesheet/${id}.webp` },
+    spritesheet: sprite,
+    ...extra,
+  });
+  const build = (animations: unknown[]) => buildAboutmePackArtifacts({
+    pack: ABOUTME_PACKS[0]!,
+    sourceManifest: { canvasWidth: 640, canvasHeight: 360, idleAnimationId: '待机' },
+    animations: animations as never,
+    manifestPath: 'manifest.json',
+    urlFor: (rel) => `whale-pet://${rel}`,
+  });
+
+  it('保留 category/facing/moving，并写进动作片段与 ambientPool', () => {
+    const built = build([
+      animation('待机', { category: '待机', facing: 'left', moving: [[18, 56, 2.5]] }),
+      animation('螃蟹走路', { category: '移动', facing: 'right', moving: [[14, 96, 1.5], [100, 120, 0.5]] }),
+      // 填满 idle 槽（最多 6 条），让第 8 条真正落入 ambientPool
+      ...Array.from({ length: 6 }, (_, index) => animation(`待机${index + 1}`, { category: '待机' })),
+      animation('余额-钱袋满溢', { category: '余额', facing: 'left', moving: [[5, 9, 1]] }),
+    ]);
+    const all = [...built.manifest.actions.flatMap((action) => action.clips), ...built.manifest.ambientPool];
+    const idle = all.find((clip) => clip.clipId === '待机')!;
+    expect(idle.facing).toBe('left');
+    expect(idle.moving).toEqual([[18, 56, 2.5]]);
+    expect(idle.category).toBe('待机');
+    const walk = all.find((clip) => clip.clipId === '螃蟹走路');
+    expect(walk).toMatchObject({ facing: 'right', moving: [[14, 96, 1.5], [100, 120, 0.5]], category: '移动' });
+    const ambient = built.manifest.ambientPool.find((clip) => clip.clipId === '余额-钱袋满溢');
+    expect(ambient).toMatchObject({ facing: 'left', moving: [[5, 9, 1]], category: '余额' });
+  });
+
+  it('非法 facing/moving 不猜、不写入；空数组视为无 moving', () => {
+    const built = build([
+      animation('待机', {}),
+      animation('a', { facing: 'up', moving: [] }),
+      animation('b', { facing: 'left', moving: [[1, 2]] }),
+      animation('c', { moving: [[-1, 2, 1]] }),
+      animation('d', { moving: [[1, 2.5, 1]] }),
+      animation('e', { moving: [[1, 2, 0]] }),
+      animation('f', { moving: 'nope' }),
+    ]);
+    const all = [...built.manifest.actions.flatMap((action) => action.clips), ...built.manifest.ambientPool];
+    for (const id of ['待机', 'a', 'b', 'c', 'd', 'e', 'f']) {
+      const clip = all.find((entry) => entry.clipId === id);
+      expect(clip?.moving, id).toBeUndefined();
+    }
+    expect(all.find((entry) => entry.clipId === 'a')?.facing).toBeUndefined();
+    expect(all.find((entry) => entry.clipId === 'b')?.facing).toBe('left');
   });
 });
 

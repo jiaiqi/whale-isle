@@ -86,6 +86,9 @@ export interface AboutmeSourceAnimation {
   id?: unknown;
   name?: unknown;
   category?: unknown;
+  /** T-M6-63：素材朝向与可位移帧区间，随产物写入契约，供巡逻/镜像消费 */
+  facing?: unknown;
+  moving?: unknown;
   sources?: { webp?: unknown };
   audio?: unknown;
   spritesheet?: unknown;
@@ -251,9 +254,12 @@ export function buildAboutmePackArtifacts(input: {
     const audioRel = animation.audio === undefined ? undefined : safeRelative(String(animation.audio));
     if (audioRel !== undefined && !audioRel.startsWith('audio/')) throw new Error(`非 audio 路径：${audioRel}`);
     spriteMetas.push({ id, meta });
+    const category = String(animation.category ?? '小动作');
+    const facing = normalizeFacing(animation.facing);
+    const moving = normalizeMoving(animation.moving);
     clips.push({
       id,
-      category: String(animation.category ?? '小动作'),
+      category,
       clip: {
         clipId: id,
         webmPath: urlFor(rel),
@@ -265,6 +271,9 @@ export function buildAboutmePackArtifacts(input: {
         playbackRate: 1,
         fps: Math.round(meta.sampleFps),
         weight: 1,
+        category,
+        ...(facing === undefined ? {} : { facing }),
+        ...(moving === undefined ? {} : { moving }),
       },
     });
   }
@@ -293,6 +302,8 @@ export function buildAboutmePackArtifacts(input: {
     audioPath: item.clip.audioPath,
     category: item.category,
     weight: 10,
+    ...(item.clip.facing === undefined ? {} : { facing: item.clip.facing }),
+    ...(item.clip.moving === undefined ? {} : { moving: item.clip.moving }),
   }));
   const width = Number(source.canvasWidth ?? 640);
   const height = Number(source.canvasHeight ?? 360);
@@ -327,8 +338,29 @@ export function buildAboutmePackArtifacts(input: {
   return { manifest, character, spriteMetas, audioClipCount };
 }
 
-function normalizeMeta(raw: unknown): PetSpriteMeta {
-  if (typeof raw !== 'object' || raw === null) throw new Error('缺少 spritesheet 元数据');
+/** 上游 facing 只接受 left/right；其余值不猜，返回 undefined。 */
+function normalizeFacing(raw: unknown): 'left' | 'right' | undefined {
+  return raw === 'left' || raw === 'right' ? raw : undefined;
+}
+
+/** 上游 moving 形如 `[[start, end, speed], ...]`；逐项校验，坏条目整组丢弃。 */
+function normalizeMoving(raw: unknown): Array<[number, number, number]> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: Array<[number, number, number]> = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry) || entry.length !== 3) return undefined;
+    const [start, end, speed] = entry;
+    if (
+      !Number.isInteger(start) || start < 0
+      || !Number.isInteger(end) || end < 0
+      || typeof speed !== 'number' || !Number.isFinite(speed) || speed <= 0
+    ) return undefined;
+    out.push([start, end, speed]);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function normalizeMeta(raw: unknown): PetSpriteMeta {  if (typeof raw !== 'object' || raw === null) throw new Error('缺少 spritesheet 元数据');
   const record = raw as Record<string, unknown>;
   return PetSpriteMetaSchema.parse({
     frameWidth: record.frameWidth,

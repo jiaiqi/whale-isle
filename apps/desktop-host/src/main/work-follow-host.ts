@@ -285,6 +285,7 @@ export function createWorkFollowHost(options: {
             modelName: '',
             taskTitle: '鲸屿连通性自检',
             ts: now(),
+            origin: 'manual',
           };
           appendFileSync(inboxPath, `${JSON.stringify(event)}\n`, 'utf8');
         } catch (error) {

@@ -33,10 +33,14 @@ export function resolvePose(requested: string, available: Iterable<string>): Pos
   return { requested, pose: first, fallback: true, reason: `${requested} 缺图且无 idle → 回退 ${first}` };
 }
 
-/** 工作跟随工具事件 → 姿态（决定代理角色演什么）。 */
-export function poseForWorkEvent(input: { kind: 'start' | 'tool' | 'stop'; toolName?: string }): string {
+/** 工作跟随工具/信号事件 → 姿态（决定代理角色演什么）。 */
+export function poseForWorkEvent(input: { kind: 'start' | 'tool' | 'stop' | 'asking' | 'compact' | 'error'; toolName?: string }): string {
   if (input.kind === 'start') return 'listening';
   if (input.kind === 'stop') return 'bye';
+  // T-M6-64：结构化的 asking/compact/error 信号优先于工具名推断
+  if (input.kind === 'asking') return 'asking';
+  if (input.kind === 'compact') return 'compact';
+  if (input.kind === 'error') return 'oops';
   const tool = (input.toolName ?? '').toLowerCase();
   if (/compact|summar/.test(tool)) return 'compact';
   if (/delegate|subagent|task|agent/.test(tool)) return 'delegating';

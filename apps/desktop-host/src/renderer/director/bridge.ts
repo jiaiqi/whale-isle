@@ -6,6 +6,7 @@ import type {
   CoopSpeakerEvent,
   McpEndpoint,
   PetWindowView,
+  PetDesktopPrefs,
   TeamBlackboardSnapshot,
   TeamCommsMessage,
   TeamGoal,
@@ -342,8 +343,8 @@ export interface DirectorBridge {
   onOpenCreator(handler: () => void): void;
   onOpenBench(handler: () => void): void;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
-  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number; followFrontApp?: boolean }>;
-  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number; followFrontApp?: boolean }): Promise<unknown>;
+  prefsGet(): Promise<PetDesktopPrefs>;
+  prefsSet(update: Partial<PetDesktopPrefs>): Promise<unknown>;
   // T-M6-21 多角色
   characterList(): Promise<CharacterSummary[]>;
   characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;

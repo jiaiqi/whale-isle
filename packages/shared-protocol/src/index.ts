@@ -656,6 +656,16 @@ export const PetAvatarClipSchema = z.object({
   fps: z.number().int().min(1).max(120).default(30),
   /** 同一动作多片段的随机加权（dsh-pet：按权重首尾相接） */
   weight: z.number().min(0).max(1).default(1),
+  /** 素材朝向（T-M6-63：桌面自主巡逻据此镜像精灵；气泡文字绝不翻转） */
+  facing: z.enum(['left', 'right']).optional(),
+  /** 可位移帧区间 `[start, end, speed]`（帧号含端点，speed=像素/帧；T-M6-64 巡逻用） */
+  moving: z.array(z.tuple([
+    z.number().int().nonnegative(),
+    z.number().int().nonnegative(),
+    z.number().positive(),
+  ])).optional(),
+  /** 素材语义分类（拖拽/余额/吃什么/时节…，T-M6-63 场景化过滤用） */
+  category: z.string().optional(),
 });
 export type PetAvatarClip = z.infer<typeof PetAvatarClipSchema>;
 
@@ -693,6 +703,13 @@ export const PetAvatarManifestSchema = z.object({
         audioPath: z.string().optional(),
         category: z.string().default('小动作'),
         weight: z.number().min(0).max(100).default(10),
+        /** T-M6-63：氛围动作同样保留朝向与可位移帧区间（巡逻/镜像消费） */
+        facing: z.enum(['left', 'right']).optional(),
+        moving: z.array(z.tuple([
+          z.number().int().nonnegative(),
+          z.number().int().nonnegative(),
+          z.number().positive(),
+        ])).optional(),
       }),
     )
     .default([]),
@@ -847,6 +864,22 @@ export const PetDesktopPrefsSchema = z.object({
   sfxVolume: z.number().min(0).max(1).default(0.7),
   /** 前台应用自动切角（T-M6-55）：命中角色 character.json.apps 时切 default 主桌宠 */
   followFrontApp: z.boolean().default(false),
+  /** 窗口显示层级（T-M6-63）：always=始终置顶；follow-ai=仅 AI 干活时置顶；normal=普通层级 */
+  windowLayer: z.enum(['always', 'follow-ai', 'normal']).default('always'),
+  /** 气泡字号独立缩放（T-M6-63）：null=跟随人物 scale，非 null 时单独生效 */
+  bubbleFontScale: z.number().min(0.7).max(1.6).nullable().default(null),
+  /** 允许桌宠空闲自主巡逻（T-M6-64：25–45s 低概率短距离散步） */
+  patrolEnabled: z.boolean().default(true),
+  /** 小本子手写体（T-M6-65）：auto=按角色自动匹配，其余为具体字体 id */
+  notebookFontId: z.string().default('auto'),
+  /** 是否允许随机触发双宠彩蛋小剧场（T-M6-65） */
+  randomEggEnabled: z.boolean().default(true),
+  /** DeepSeek/GLM 峰谷自动换装开关（T-M6-65） */
+  peakOutfitEnabled: z.boolean().default(false),
+  /** 高峰时段皮肤（默认 DeepSeek 常态） */
+  peakOutfitDay: z.string().default('crosspet-deepseek'),
+  /** 优惠空闲时段皮肤（默认 DeepSeek 睡衣） */
+  peakOutfitOffPeak: z.string().default('crosspet-deepseek-pajamas'),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 
@@ -1340,17 +1373,23 @@ export const PetApiStateSchema = z.object({
 });
 export type PetApiState = z.infer<typeof PetApiStateSchema>;
 
-// ───────────────────────── 跨 AI 工作跟随（T-M6-49） ─────────────────────────
+// ───────────────────────── 跨 AI 工作跟随（T-M6-49 / T-M6-65） ─────────────────────────
+/** 事件来源通道（面板诚实标注来源 + Hook/日志去重，T-M6-65） */
+export const WorkFollowOriginSchema = z.enum(['hook', 'log-watch', 'acp', 'manual']);
+export type WorkFollowOrigin = z.infer<typeof WorkFollowOriginSchema>;
+
 export const WorkFollowEventSchema = z.object({
   /** ACP harness / 本机 CLI 钩子来源 */
   source: z.enum(['acp', 'claude', 'codex', 'deepseek', 'gemini', 'cursor', 'qwen', 'kimi', 'grok']),
   sessionId: z.string().min(1).max(128),
-  kind: z.enum(['start', 'tool', 'stop']),
+  kind: z.enum(['start', 'tool', 'stop', 'asking', 'compact', 'error']),
   /** 只读工具名/模型名；绝不接收对话正文与凭据 */
   toolName: z.string().max(120).default(''),
   modelName: z.string().max(120).default(''),
   taskTitle: z.string().max(120).default(''),
   ts: z.number().int().nonnegative().default(0),
+  /** 事件来自 Hook / 免 Hook 日志监听 / ACP / 手动注入（默认 hook 保持旧行为） */
+  origin: WorkFollowOriginSchema.default('hook'),
 });
 export type WorkFollowEvent = z.infer<typeof WorkFollowEventSchema>;
 
@@ -1368,6 +1407,14 @@ export const WorkFollowSessionSchema = z.object({
 });
 export type WorkFollowSession = z.infer<typeof WorkFollowSessionSchema>;
 
+/** 桌宠侧悬浮任务卡（T-M6-64：最多 4 张，仅标题与状态，绝无对话正文） */
+export const WorkFollowCardSchema = z.object({
+  sessionId: z.string().min(1),
+  title: z.string().max(120).default(''),
+  state: z.enum(['running', 'asking', 'done', 'error']),
+});
+export type WorkFollowCard = z.infer<typeof WorkFollowCardSchema>;
+
 export const WorkFollowStatusSchema = z.object({
   mode: z.enum(['single', 'multi']).default('multi'),
   sessions: z.array(WorkFollowSessionSchema).default([]),
@@ -1378,5 +1425,11 @@ export const WorkFollowStatusSchema = z.object({
     toolName: z.string().default(''),
     at: z.number().int().nonnegative().default(0),
   })).default([]),
+  /** 多宠在场策略（T-M6-64）：闲置退场 / 仅应用退出 / 始终随应用 */
+  presencePolicy: z.enum(['idle-leave', 'app-exit', 'always-with-app']).default('idle-leave'),
+  /** 免 Hook 只读日志监听开关（T-M6-65，默认开启） */
+  logWatchEnabled: z.boolean().default(true),
+  /** 活跃会话来源：`source:sessionId` → hook/log-watch/acp/manual（面板来源徽标 + 去重） */
+  activeOrigins: z.record(z.string(), WorkFollowOriginSchema).default({}),
 });
 export type WorkFollowStatus = z.infer<typeof WorkFollowStatusSchema>;
