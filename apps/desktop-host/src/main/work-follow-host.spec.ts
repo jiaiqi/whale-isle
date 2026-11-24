@@ -74,6 +74,25 @@ describe('work-follow', () => {
     expect(host.status().sessions[0]?.toolCalls).toBe(1);
     host.dispose();
   });
+
+  it('连通性自检：写入受控事件 → 文件轮询消费 → 状态更新 ≤1.5s', async () => {
+    const { host } = makeHost({ pollMs: 50 });
+    const result = await host.selfTest();
+    host.dispose();
+    expect(result.ok).toBe(true);
+    expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(result.elapsedMs).toBeLessThanOrEqual(1_500);
+    const selfTest = host.status().sessions.find((session) => session.sessionId.startsWith('self-test-'));
+    expect(selfTest?.taskTitle).toBe('鲸屿连通性自检');
+  });
+
+  it('轮询关闭时自检如实失败（绝不伪造通过）', async () => {
+    const { host } = makeHost({ pollMs: 0 });
+    const result = await host.selfTest();
+    host.dispose();
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('1.5s');
+  }, 5_000);
 });
 
 

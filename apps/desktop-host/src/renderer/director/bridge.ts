@@ -356,6 +356,12 @@ export interface DirectorBridge {
   workFollowStatus(): Promise<import('@workbench/shared-protocol').WorkFollowStatus>;
   workFollowIngest(event: unknown): Promise<{ ok: boolean; error?: string }>;
   workFollowMode(mode: 'single' | 'multi'): Promise<import('@workbench/shared-protocol').WorkFollowStatus>;
+  /** T-M6-58：本机 CLI 钩子安装与自检 */
+  workFollowCliStatus(): Promise<Array<{ source: string; label: string; detected: boolean; mode: 'json' | 'manual'; installed: boolean; configPath: string; snippet: string; error?: string }>>;
+  workFollowCliInstall(source: string): Promise<{ ok: boolean; mode: 'json' | 'manual'; installed?: boolean; snippet?: string; backupPath?: string; error?: string }>;
+  workFollowCliUninstall(source: string): Promise<{ ok: boolean; mode: 'json' | 'manual'; installed?: boolean; snippet?: string; backupPath?: string; error?: string }>;
+  workFollowCliSnippet(source: string): Promise<{ ok: boolean; snippet: string }>;
+  workFollowSelfTest(): Promise<{ ok: boolean; elapsedMs: number; error?: string }>;
   onWorkFollowUpdate(handler: (status: import('@workbench/shared-protocol').WorkFollowStatus) => void): () => void;
   onOpenPetNotebook(handler: () => void): void;
   /** T-M6-53 创作中心 / 验收台 */

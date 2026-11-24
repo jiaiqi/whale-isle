@@ -31,6 +31,7 @@ import { createAcceptanceHost } from './acceptance-host';
 import { customCharacterPairs, invalidateCustomCharacters, linesForPose, matchCharacterForApp, readCustomCharacters, resolveProxyCharacter } from './custom-character';
 import { resolvePose } from './pose-resolver';
 import { createWorkFollowHost } from './work-follow-host';
+import { createWorkFollowInstaller } from './work-follow-installer';
 import { createFrontAppWatcher } from './front-app-watcher';
 import { PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
@@ -529,6 +530,23 @@ app.whenReady().then(async () => {
     },
   });
   workFollowRef = workFollow;
+  // T-M6-58：8 家 CLI 钩子一键安装（只动已知标准 JSON 文件；手动模式只给可复制片段）
+  const hookSourceCandidates = app.isPackaged
+    ? [join(process.resourcesPath, 'hooks', 'work-follow-hook.mjs')]
+    : [
+      join(process.cwd(), 'tools/hooks/work-follow-hook.mjs'),
+      join(process.cwd(), '../../tools/hooks/work-follow-hook.mjs'),
+      join(here, '../../../tools/hooks/work-follow-hook.mjs'),
+    ];
+  const workFollowInstaller = createWorkFollowInstaller({
+    homeDir: homedir(),
+    userDataDir: app.getPath('userData'),
+    hookSource: hookSourceCandidates.find((candidate) => existsSync(candidate)) ?? hookSourceCandidates[0]!,
+  });
+  ipcMain.handle('work-follow:cli-status', () => workFollowInstaller.catalog());
+  ipcMain.handle('work-follow:cli-install', (_event, source: string) => workFollowInstaller.install(String(source)));
+  ipcMain.handle('work-follow:cli-uninstall', (_event, source: string) => workFollowInstaller.uninstall(String(source)));
+  ipcMain.handle('work-follow:cli-snippet', (_event, source: string) => ({ ok: true, snippet: workFollowInstaller.manualSnippet(String(source)) }));
   app.on('will-quit', () => workFollow.dispose());
   ipcMain.handle('pet:window-open', async (_event, agentId: string, characterId?: string) => {
     const known = characterId === undefined ? undefined : characters.list().find((character) => character.id === characterId);

@@ -33,6 +33,10 @@
       {
         "from": "../../assets/pet-packs",
         "to": "pet-packs"
+      },
+      {
+        "from": "../../tools/hooks",
+        "to": "hooks"
       }
     ],
     "asar": true,

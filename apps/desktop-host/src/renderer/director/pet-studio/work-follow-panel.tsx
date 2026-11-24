@@ -5,7 +5,7 @@
  * 右：对外本机驱动口示例 + 真实试调（经内嵌 WebUI 18780 + device token，不伪造 200）。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, Crown, Play, Terminal, Workflow } from 'lucide-react';
+import { Activity, ClipboardCopy, Copy, Crown, PlugZap, Play, Terminal, Trash2, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import type { WorkFollowStatus } from '@workbench/shared-protocol';
 
@@ -21,19 +21,81 @@ const SOURCE_LABEL: Record<string, string> = {
   grok: 'Grok CLI',
 };
 
+interface CliHookStatusView {
+  source: string;
+  label: string;
+  detected: boolean;
+  mode: 'json' | 'manual';
+  installed: boolean;
+  configPath: string;
+  snippet: string;
+  error?: string;
+}
+
 export function WorkFollowPanel({ characterName }: { characterId: string; characterName: string }): React.JSX.Element {
   const [status, setStatus] = useState<WorkFollowStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [cliStatus, setCliStatus] = useState<CliHookStatusView[]>([]);
+  const [cliBusy, setCliBusy] = useState<string | null>(null);
+  const [selfTest, setSelfTest] = useState<{ ok: boolean; elapsedMs: number; error?: string } | null>(null);
 
   const reload = useCallback((): void => {
     void window.directorBridge.workFollowStatus().then(setStatus).catch(() => setStatus(null));
   }, []);
 
+  const reloadCli = useCallback((): void => {
+    void window.directorBridge.workFollowCliStatus().then(setCliStatus).catch(() => setCliStatus([]));
+  }, []);
+
   useEffect(() => {
     reload();
+    reloadCli();
     // 切 Tab 会反复挂载：必须返回清理函数退订，否则监听器叠加
     return window.directorBridge.onWorkFollowUpdate((next) => setStatus(next));
-  }, [reload]);
+  }, [reload, reloadCli]);
+
+  const installCli = async (source: string): Promise<void> => {
+    setCliBusy(source);
+    try {
+      const result = await window.directorBridge.workFollowCliInstall(source);
+      if (!result.ok) { toast.error(result.error ?? '安装失败'); return; }
+      toast.success(`已接入 ${source} 钩子${result.backupPath === undefined ? '' : `（原文件备份 ${result.backupPath}）`}`);
+      reloadCli();
+    } finally { setCliBusy(null); }
+  };
+
+  const uninstallCli = async (source: string): Promise<void> => {
+    if (!window.confirm(`确定移除鲸屿写入的 ${source} 钩子条目？其他钩子会完整保留。`)) return;
+    setCliBusy(source);
+    try {
+      const result = await window.directorBridge.workFollowCliUninstall(source);
+      if (!result.ok) { toast.error(result.error ?? '卸载失败'); return; }
+      toast.success(`已移除 ${source} 的鲸屿钩子（其他配置保留）`);
+      reloadCli();
+    } finally { setCliBusy(null); }
+  };
+
+  const copySnippet = async (source: string): Promise<void> => {
+    const result = await window.directorBridge.workFollowCliSnippet(source);
+    if (!result.ok || result.snippet === '') { toast.error('没有可复制的手动配置'); return; }
+    try {
+      await navigator.clipboard.writeText(result.snippet);
+      toast.success(`已复制 ${source} 手动命令（start/tool/stop 三行）`);
+    } catch {
+      toast.error(`复制失败，请手动使用：${result.snippet.split('\n')[0] ?? ''}`);
+    }
+  };
+
+  const runSelfTest = async (): Promise<void> => {
+    setCliBusy('self-test');
+    try {
+      const result = await window.directorBridge.workFollowSelfTest();
+      setSelfTest(result);
+      if (result.ok) toast.success(`连通性自检通过：文件轮询 → 状态更新 ${result.elapsedMs}ms`);
+      else toast.error(result.error ?? '连通性自检失败');
+      reload();
+    } finally { setCliBusy(null); }
+  };
 
   const setMode = async (mode: 'single' | 'multi'): Promise<void> => {
     const next = await window.directorBridge.workFollowMode(mode);
@@ -88,6 +150,7 @@ export function WorkFollowPanel({ characterName }: { characterId: string; charac
   const active = sessions.filter((session) => session.active);
 
   return (
+    <div className="space-y-3" data-work-follow-root>
     <section className="grid gap-3 xl:grid-cols-2" data-work-follow-panel>
       <div className="card p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -166,5 +229,58 @@ POST /api/pet/:agentId/action  {"actionState":"happy_maid","durationMs":6000}`}<
         </p>
       </div>
     </section>
+
+    <section className="card p-4" data-cli-hooks>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <PlugZap size={15} style={{ color: 'var(--violet)' }} />本机 CLI 钩子状态
+        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn-pill ghost" data-cli-self-test disabled={cliBusy !== null} onClick={() => void runSelfTest()}>
+            <Activity size={12} />{cliBusy === 'self-test' ? '自检中…' : '连通性自检'}
+          </button>
+          <button type="button" className="btn-pill ghost" onClick={() => reloadCli()}>刷新</button>
+        </div>
+      </div>
+      <p className="mb-2 text-[11px]" style={{ color: 'var(--text-2)' }}>
+        只改 Claude Code / Gemini CLI / Cursor 的标准 JSON 钩子文件；修改前自动备份 <span className="mono">.whale-isle.bak</span>。
+        其余 CLI 无标准钩子文件时诚实标注「手动模式」，只给可复制命令。
+      </p>
+      {selfTest !== null && (
+        <div className="mb-2 rounded-lg px-3 py-2 text-[11px]" data-cli-self-test-result={selfTest.ok ? 'ok' : 'failed'}
+          style={{ border: `1px solid ${selfTest.ok ? 'var(--green-line)' : 'var(--red-line)'}`, background: selfTest.ok ? 'var(--green-dim)' : 'var(--red-dim)', color: selfTest.ok ? 'var(--green)' : 'var(--red)' }}>
+          {selfTest.ok ? `自检通过：events.jsonl → 轮询消费 → 状态更新 用时 ${selfTest.elapsedMs}ms` : `自检失败：${selfTest.error ?? '未知原因'}`}
+        </div>
+      )}
+      <div className="grid gap-2 md:grid-cols-2" data-cli-hook-list>
+        {cliStatus.map((entry) => (
+          <div key={entry.source} className="rounded-xl px-3 py-2" data-cli-hook={entry.source} style={{ border: '1px solid var(--stroke)', background: 'var(--surface-2)' }}>
+            <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-semibold">
+              {entry.label}
+              <span className="rounded px-1.5 py-px text-[9.5px]" style={{ background: entry.detected ? 'var(--green-dim)' : 'var(--inset)', color: entry.detected ? 'var(--green)' : 'var(--text-3)' }}>
+                {entry.detected ? '已检测到' : '未安装'}
+              </span>
+              <span className="rounded px-1.5 py-px text-[9.5px]" style={{ background: entry.mode === 'manual' ? 'var(--amber-dim)' : entry.installed ? 'var(--blue-dim)' : 'var(--inset)', color: entry.mode === 'manual' ? 'var(--amber)' : entry.installed ? 'var(--blue)' : 'var(--text-3)' }}>
+                {entry.mode === 'manual' ? '手动模式' : entry.installed ? '已接入' : '未接入'}
+              </span>
+              {entry.configPath !== '' && <span className="mono ml-auto text-[9.5px]" style={{ color: 'var(--text-3)' }}>{entry.configPath}</span>}
+            </div>
+            {entry.error !== undefined && <div className="mt-1 text-[9.5px]" style={{ color: 'var(--red)' }}>{entry.error}</div>}
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {entry.mode === 'json' && (
+                entry.installed
+                  ? <button type="button" className="btn-pill ghost" data-cli-uninstall={entry.source} disabled={cliBusy !== null} onClick={() => void uninstallCli(entry.source)}><Trash2 size={10} />卸载</button>
+                  : <button type="button" className="btn-pill primary" data-cli-install={entry.source} disabled={cliBusy !== null} onClick={() => void installCli(entry.source)}><PlugZap size={10} />一键安装</button>
+              )}
+              <button type="button" className="btn-pill ghost" data-cli-snippet={entry.source} onClick={() => void copySnippet(entry.source)}>
+                <ClipboardCopy size={10} />复制手动配置
+              </button>
+            </div>
+          </div>
+        ))}
+        {cliStatus.length === 0 && <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>尚未读取到本机 CLI 配置目录。</div>}
+      </div>
+    </section>
+    </div>
   );
 }

@@ -14,7 +14,7 @@
  *   ② 本机 CLI 钩子把 JSONL 追加到 `userData/work-follow/events.jsonl`（tools/hooks/work-follow-hook.mjs），
  *      本宿主按文件偏移轮询消费，解析失败的行跳过，不阻塞。
  */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ipcMain } from 'electron';
 import { poseForWorkEvent } from './pose-resolver';
@@ -49,6 +49,8 @@ export interface WorkFollowHost {
   status(): WorkFollowStatus;
   setMode(mode: 'single' | 'multi'): WorkFollowStatus;
   mode(): 'single' | 'multi';
+  /** 连通性自检（T-M6-58）：写一条受控事件，验证文件轮询消费在 1.5s 内闭合 */
+  selfTest(): Promise<{ ok: boolean; elapsedMs: number; error?: string }>;
   /** 关闭文件轮询与闲置检查（测试/退出） */
   dispose(): void;
 }
@@ -94,6 +96,7 @@ export function createWorkFollowHost(options: {
   const inboxPath = join(inboxDir, 'events.jsonl');
   const sessions = new Map<string, WorkFollowSession>();
   const recent: WorkFollowStatus['recent'] = [];
+  const updateListeners = new Set<(status: WorkFollowStatus) => void>();
   let mode: 'single' | 'multi' = 'multi';
 
   try {
@@ -116,7 +119,17 @@ export function createWorkFollowHost(options: {
     recent,
   });
 
-  const emitUpdate = (): void => options.onUpdate?.(status());
+  const emitUpdate = (): void => {
+    const next = status();
+    options.onUpdate?.(next);
+    for (const listener of updateListeners) {
+      try {
+        listener(next);
+      } catch {
+        /* 单个订阅者异常不影响宿主 */
+      }
+    }
+  };
 
   const keyOf = (event: WorkFollowEvent): string => `${event.source}:${event.sessionId}`;
 
@@ -242,6 +255,43 @@ export function createWorkFollowHost(options: {
       return status();
     },
     mode: () => mode,
+    selfTest() {
+      const sessionId = `self-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const started = Date.now();
+      mkdirSync(inboxDir, { recursive: true });
+      return new Promise((resolve) => {
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const finish = (ok: boolean, error?: string): void => {
+          if (settled) return;
+          settled = true;
+          if (timer !== null) clearTimeout(timer);
+          updateListeners.delete(listener);
+          resolve({ ok, elapsedMs: Date.now() - started, ...(error === undefined ? {} : { error }) });
+        };
+        const listener = (next: WorkFollowStatus): void => {
+          if (next.sessions.some((session) => session.sessionId === sessionId)) finish(true);
+        };
+        updateListeners.add(listener);
+        timer = setTimeout(() => {
+          finish(false, '1.5s 内未消费到测试事件（文件轮询或主进程未就绪）');
+        }, 1_500);
+        try {
+          const event: WorkFollowEvent = {
+            source: 'acp',
+            sessionId,
+            kind: 'start',
+            toolName: 'self-test',
+            modelName: '',
+            taskTitle: '鲸屿连通性自检',
+            ts: now(),
+          };
+          appendFileSync(inboxPath, `${JSON.stringify(event)}\n`, 'utf8');
+        } catch (error) {
+          finish(false, `写入测试事件失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
+    },
     dispose() {
       if (timer !== null) clearInterval(timer);
       if (idleTimer !== null) clearInterval(idleTimer);
@@ -252,5 +302,6 @@ export function createWorkFollowHost(options: {
   ipcMain.handle('work-follow:status', () => host.status());
   ipcMain.handle('work-follow:ingest', (_event, raw: unknown) => host.ingest(raw));
   ipcMain.handle('work-follow:mode', (_event, next: 'single' | 'multi') => host.setMode(next));
+  ipcMain.handle('work-follow:self-test', () => host.selfTest());
   return host;
 }

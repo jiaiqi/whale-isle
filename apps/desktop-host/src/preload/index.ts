@@ -230,6 +230,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
   workFollowStatus: (): Promise<unknown> => ipcRenderer.invoke('work-follow:status'),
   workFollowIngest: (event: unknown): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('work-follow:ingest', event),
   workFollowMode: (mode: 'single' | 'multi'): Promise<unknown> => ipcRenderer.invoke('work-follow:mode', mode),
+  workFollowCliStatus: (): Promise<unknown> => ipcRenderer.invoke('work-follow:cli-status'),
+  workFollowCliInstall: (source: string): Promise<unknown> => ipcRenderer.invoke('work-follow:cli-install', source),
+  workFollowCliUninstall: (source: string): Promise<unknown> => ipcRenderer.invoke('work-follow:cli-uninstall', source),
+  workFollowCliSnippet: (source: string): Promise<{ ok: boolean; snippet: string }> => ipcRenderer.invoke('work-follow:cli-snippet', source),
+  workFollowSelfTest: (): Promise<{ ok: boolean; elapsedMs: number; error?: string }> => ipcRenderer.invoke('work-follow:self-test'),
   onWorkFollowUpdate: (handler: (status: unknown) => void): () => void => {
     const listener = (_e: unknown, status: unknown): void => handler(status);
     ipcRenderer.on('work-follow:update', listener);
