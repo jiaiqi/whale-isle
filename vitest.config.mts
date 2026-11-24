@@ -22,6 +22,7 @@ export default defineConfig({
         '**/persona-brain/src/index.ts', // 纯 re-export 桶与仅类型声明文件不计入
         '**/desktop-host/src/main/**',
         '**/desktop-host/src/renderer/director/**', // Shell UI 由 E2E 覆盖（bridge.ts 纯类型声明）
+        '**/desktop-host/src/renderer/tray-popover/**', // T-M6-60 快捷浮窗由 Electron E2E 真实渲染覆盖
         '**/game-bridge-mcp/src/index.ts', // 纯 re-export 桶
         '**/agent-harness/src/index.ts', // 纯 re-export 桶
         '**/memory-graph/src/index.ts', // 纯 re-export 桶

@@ -54,6 +54,16 @@ await build({
   outfile: join(appRoot, 'dist/renderer/director/main.js'),
 });
 
+// tray-popover（T-M6-60）：独立 360×500 快捷浮窗入口；CSS 内联在 index.html，不拖 Tailwind 构建
+await build({
+  ...common,
+  entryPoints: [join(appRoot, 'src/renderer/tray-popover/main.tsx')],
+  platform: 'browser',
+  format: 'iife',
+  jsx: 'automatic',
+  outfile: join(appRoot, 'dist/renderer/tray-popover/main.js'),
+});
+
 const { createRequire } = await import('node:module');
 const requireFromApp = createRequire(join(appRoot, 'package.json'));
 const tailwindCliPkgPath = requireFromApp.resolve('@tailwindcss/cli/package.json');
@@ -79,6 +89,9 @@ copyFileSync(
 const directorDir = join(appRoot, 'dist/renderer/director');
 mkdirSync(directorDir, { recursive: true });
 copyFileSync(join(appRoot, 'src/renderer/director/index.html'), join(directorDir, 'index.html'));
+const popoverDir = join(appRoot, 'dist/renderer/tray-popover');
+mkdirSync(popoverDir, { recursive: true });
+copyFileSync(join(appRoot, 'src/renderer/tray-popover/index.html'), join(popoverDir, 'index.html'));
 
 // 品牌资源（应用图标 / 侧栏 favicon / WebUI logo）：assets/brand → dist/renderer/brand
 cpSync(join(appRoot, 'assets/brand'), join(appRoot, 'dist/renderer/brand'), { recursive: true });
