@@ -82,7 +82,7 @@ interface StorePet {
   actions?: unknown;
 }
 
-interface SourceAnimation {
+export interface AboutmeSourceAnimation {
   id?: unknown;
   name?: unknown;
   category?: unknown;
@@ -91,13 +91,16 @@ interface SourceAnimation {
   spritesheet?: unknown;
 }
 
-interface SourceManifest {
+export interface AboutmeSourceManifest {
   id?: unknown;
   canvasWidth?: unknown;
   canvasHeight?: unknown;
   idleAnimationId?: unknown;
   animations?: unknown;
 }
+
+type SourceAnimation = AboutmeSourceAnimation;
+type SourceManifest = AboutmeSourceManifest;
 
 const SLOT_RULES: Array<[keyof typeof SLOTS, RegExp]> = [
   ['sleep_mute', /睡觉|睡眠|入睡|午睡/],
@@ -169,14 +172,19 @@ export async function importAboutmePets(options: ImportOptions): Promise<ImportR
       }, async (task) => {
         await downloadFile(fetchImpl, task.url, task.dest);
       });
-      const built = buildPackManifest(pack, sourceManifest, metas, packDir);
       const manifestPath = join(packDir, 'manifest.json');
+      const built = buildAboutmePackArtifacts({
+        pack,
+        sourceManifest,
+        animations,
+        manifestPath,
+        urlFor: (rel) => pathToFileURL(join(packDir, rel)).href,
+      });
       writeAtomic(manifestPath, JSON.stringify(built.manifest, null, 2));
       for (const [id, meta] of metas) {
         writeAtomic(join(sheetDir, `${id}.json`), JSON.stringify({ ...meta.sprite, sourceId: id, sampleFps: meta.sprite.sampleFps }, null, 2));
       }
-      const character = PetCharacterSchema.parse(built.character);
-      writeAtomic(join(options.userDataDir, 'pet-characters', `${pack.slug}.json`), JSON.stringify(character, null, 2));
+      writeAtomic(join(options.userDataDir, 'pet-characters', `${pack.slug}.json`), JSON.stringify(built.character, null, 2));
       options.onProgress?.({ phase: 'pack-done', packId: pack.slug, completed, total, message: `已安装 ${pack.displayName}` });
       result.imported.push(pack.slug);
       result.manifestCount += 1;
@@ -213,32 +221,53 @@ export function readPackCatalog(userDataDir: string): PackCatalogItem[] {
   });
 }
 
-function buildPackManifest(
-  pack: AboutmePackDefinition,
-  source: SourceManifest,
-  metas: Map<string, { sprite: PetSpriteMeta; audio: string | undefined; animation: SourceAnimation }>,
-  packDir: string,
-): { manifest: PetAvatarManifest; character: PetCharacter } {
-  const clips: Array<{ id: string; clip: PetAvatarClip; category: string }> = [...metas.entries()].map(([id, meta]) => {
-    const rel = safeRelative(String(meta.animation.sources?.webp ?? `spritesheet/${id}.webp`));
-    const sheetFile = join(packDir, rel);
-    return {
+/**
+ * 从 aboutme-pets 原始 manifest/actions 构建本工作台契约产物（T-M6-45 起同时服务
+ * userData 导入与仓库内置包直读，避免两套映射规则漂移）。
+ *
+ * @param urlFor 相对素材路径（spritesheet/…、audio/…）→ 实际可加载 URL：
+ *   userData 导入用 file://，随包素材用 whale-pet://。
+ */
+export function buildAboutmePackArtifacts(input: {
+  pack: AboutmePackDefinition;
+  sourceManifest: AboutmeSourceManifest;
+  animations: AboutmeSourceAnimation[];
+  manifestPath: string;
+  urlFor: (rel: string) => string;
+}): {
+  manifest: PetAvatarManifest;
+  character: PetCharacter;
+  spriteMetas: Array<{ id: string; meta: PetSpriteMeta }>;
+  audioClipCount: number;
+} {
+  const { pack, sourceManifest: source, animations, urlFor } = input;
+  const clips: Array<{ id: string; clip: PetAvatarClip; category: string }> = [];
+  const spriteMetas: Array<{ id: string; meta: PetSpriteMeta }> = [];
+  for (const [index, animation] of animations.entries()) {
+    const id = safeAssetId(String(animation.id ?? animation.name ?? `action-${index}`));
+    const rel = safeRelative(String(animation.sources?.webp ?? `spritesheet/${id}.webp`));
+    if (!rel.startsWith('spritesheet/')) throw new Error(`非 spritesheet 路径：${rel}`);
+    const meta = PetSpriteMetaSchema.parse(normalizeMeta(animation.spritesheet));
+    const audioRel = animation.audio === undefined ? undefined : safeRelative(String(animation.audio));
+    if (audioRel !== undefined && !audioRel.startsWith('audio/')) throw new Error(`非 audio 路径：${audioRel}`);
+    spriteMetas.push({ id, meta });
+    clips.push({
       id,
-      category: String(meta.animation.category ?? '小动作'),
+      category: String(animation.category ?? '小动作'),
       clip: {
         clipId: id,
-        webmPath: pathToFileURL(sheetFile).href,
-        spriteSheetPath: pathToFileURL(sheetFile).href,
-        spriteMetaPath: pathToFileURL(join(packDir, 'spritesheet', `${id}.json`)).href,
-        sprite: meta.sprite,
-        ...(meta.audio === undefined ? {} : { audioPath: pathToFileURL(meta.audio).href }),
+        webmPath: urlFor(rel),
+        spriteSheetPath: urlFor(rel),
+        spriteMetaPath: urlFor(`spritesheet/${id}.json`),
+        sprite: meta,
+        ...(audioRel === undefined ? {} : { audioPath: urlFor(audioRel) }),
         loop: !/睡觉|睡眠/.test(id),
         playbackRate: 1,
-        fps: Math.round(meta.sprite.sampleFps),
+        fps: Math.round(meta.sampleFps),
         weight: 1,
       },
-    };
-  });
+    });
+  }
   const idleName = String(source.idleAnimationId ?? '');
   const grouped = new Map<string, typeof clips>();
   for (const slot of Object.keys(SLOTS)) grouped.set(slot, []);
@@ -283,7 +312,7 @@ function buildPackManifest(
   const character = PetCharacterSchema.parse({
     id: `aboutme-${pack.slug}`,
     displayName: pack.displayName,
-    manifestPath: join(packDir, 'manifest.json'),
+    manifestPath: input.manifestPath,
     personaPrompt: pack.personaPrompt,
     voiceId: pack.voiceId,
     voiceRatePercent: pack.voiceRatePercent,
@@ -295,7 +324,7 @@ function buildPackManifest(
     licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
     builtin: false,
   });
-  return { manifest, character };
+  return { manifest, character, spriteMetas, audioClipCount };
 }
 
 function normalizeMeta(raw: unknown): PetSpriteMeta {
