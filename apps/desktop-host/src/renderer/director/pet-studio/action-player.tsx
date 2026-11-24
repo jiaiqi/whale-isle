@@ -12,7 +12,7 @@
  * 数据全部来自 `pet:studio-catalog`（主进程读随包素材，不伪造）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Clapperboard, Download, Pause, Play, Search, Send, SkipBack, SkipForward } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clapperboard, Download, Music2, Pause, Play, Search, Send, SkipBack, SkipForward } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PetStudioAction, PetStudioCatalog, PetStudioSkin, PetStudioSlot } from '@workbench/shared-protocol';
 
@@ -616,7 +616,7 @@ export function ActionPlayer(props: {
                             <span>{action.category}</span>
                             <span>· {action.frameCount} 帧</span>
                             <span>· {action.columns}×{action.rows}</span>
-                            {action.hasAudio && <span>· ♪</span>}
+                            {action.hasAudio && <Music2 size={9} />}
                           </div>
                         </button>
                       );

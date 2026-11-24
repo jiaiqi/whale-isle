@@ -146,9 +146,14 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
           {Array.from({ length: 10 }, (_, index) => {
             const fill = Math.max(0, Math.min(4, quarterHearts - index * 4));
             return (
-              <span key={index} className="mr-0.5 inline-block" style={{ color: fill > 0 ? 'var(--red)' : 'var(--text-3)' }} title={`${fill}/4`}>
-                {fill >= 4 ? '♥' : fill > 0 ? '♡' : '♡'}
-              </span>
+              <Heart
+                key={index}
+                size={12}
+                className="mr-0.5 inline-block"
+                style={{ color: fill > 0 ? 'var(--red)' : 'var(--text-3)' }}
+                fill={fill >= 4 ? 'var(--red)' : fill > 0 ? 'color-mix(in srgb, var(--red) 35%, transparent)' : 'none'}
+                aria-label={`第 ${index + 1} 颗心 ${fill}/4`}
+              />
             );
           })}
           <span className="ml-1 text-[10px]" style={{ color: 'var(--text-3)' }}>10 颗像素心 · 每颗 1/4 填充 · 每日上限 15 分</span>
@@ -165,7 +170,7 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
                 color: item.unlocked ? 'var(--green)' : 'var(--text-3)',
               }}
             >
-              {item.unlocked ? '✓ ' : '· '}{item.label}
+              {item.unlocked ? '' : '· '}{item.label}
             </span>
           ))}
         </div>
