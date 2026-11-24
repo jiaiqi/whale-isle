@@ -166,6 +166,9 @@
 | T-M6-59 真实 OBS 挂件 | OBS 添加浏览器源 `.../obs?token=…&layout=compact&theme=light`：画面只读透明、工具名显示中文（钓鱼/制作…）、状态显示已完成/失败、顶部显示当前桌宠角色名；切换 layout/theme 参数即时生效。 | ⏳ |
 | T-M6-61 真实 Codex 出图 | 本机已 `codex login`：创作中心选「本机 Codex CLI（免 API Key）」批量出图应真实走订阅额度；无参考图 generate / 有参考图 edit；失败显示脱敏原文；未安装 codex-imagegen 时提示可复制安装命令且不静默安装。 | ⏳ |
 | T-M6-62 游戏内热变身 | 游戏共玩页开「同步桌宠形象进游戏」→ 安装 Mod → 重启星露谷：切桌宠角色，游戏内玩家外观 200ms 内热切换（原版预设）；生成像素表后「一键应用到星露谷」，玩家变成 64×128 像素角色并按朝向/行走帧播放；坏图自动回落预设；联机局每个 AI 队友显示各自形象。 | ⏳ |
+| T-M6-61 真机（computer-use 驱动） | 创作中心真实显示「本机 Codex CLI（免 API Key）· 慢速兜底」与可复制安装提示（未静默安装）；点生成后 ps 实证 spawn `/Users/jiaqi/.local/bin/codex exec`（参数数组含完整提示词与临时输出路径）；90s 超时主进程日志实证「Codex CLI 超时（90s 未返回）」、UI toast 如实报错且按钮恢复；延长到 180s 复现仍无产出文件 → **官方 codex exec 兜底在本机不可用**（该环境无内置生图工具），快速路径需用户自装 codex-imagegen-cli 后复验。 | 🟡 部分（兜底如实失败） | 2026-11-24 |
+| T-M6-62 真机（computer-use 驱动） | 游戏共玩页点「安装 Mod」→ toast 成功且真实落盘 `Mods/WhaleIsleAvatar/{manifest.json, WhaleIsleAvatar.dll}`（file 实证 PE32 .NET 程序集 23,040B）；开「同步桌宠形象进游戏」→ `active-avatar.json` 原子写入 aboutme-gemini 预设、settings 持久化 enabled:true；切角色到小魔女 → 文件 200ms 内热更新为 aboutme-grok 预设（hair 1 / #1f2430）。游戏内 FileSystemWatcher 热变身与 Harmony 绘制待用户重启星露谷目验。 | 🟡 部分（游戏内目验待用户） | 2026-11-24 |
+
 
 | 语音中心 | 9 角色各绑定不同音色后，同屏多桌宠说话音色不同、严格串行；动作原声在 TTS 期间压低至 15% | ⏳ |
 | 联机向导 | 真实 Terraria：本地服 :7777 起服、客户端连入、18090/18091 桥接在线；真实 DST：Klei token 落盘、`modoverrides.lua` 生效、专用服 + sidecar :18100 在线、多 UserID 各控各的角色 | ⏳ |
