@@ -760,6 +760,10 @@ app.whenReady().then(async () => {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     repoRoot: join(here, '../../../..'),
+    // E2E 绝不能写到用户真实星露谷 Mods 目录：测试开关/切角只落在 e2e-profile 下的空 Mods 槽位
+    ...(process.env.PET_STAGE_E2E === '1'
+      ? { modsDirOverride: join(app.getPath('userData'), 'e2e-mods') }
+      : {}),
     // 任何写入/安装/开关变化都广播给渲染层，避免共玩页的「游戏内当前角色」显示过期状态
     onChange: () => {
       for (const win of BrowserWindow.getAllWindows()) {
