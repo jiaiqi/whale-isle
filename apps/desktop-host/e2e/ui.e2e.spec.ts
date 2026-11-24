@@ -166,10 +166,10 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       const nextCharacterId = characterIds.find((id) => id !== selectedCharacterId) ?? characterIds[0]!;
       const nextCharacterName = (await director.locator(`[data-character-option="${nextCharacterId}"] span`).first().innerText()).trim();
       await director.click(`[data-character-option="${nextCharacterId}"]`);
-      expect(await director.locator('[data-character-switch]').innerText()).toContain(nextCharacterName);
+      await waitFor(director, async () => (await director.locator('[data-character-switch]').innerText()).includes(nextCharacterName), 8_000);
       await director.click('[data-tab="pet"]');
       await director.waitForSelector(`[data-character="${nextCharacterId}"]`, { timeout: 5_000 });
-      expect(await director.locator(`[data-character="${nextCharacterId}"]`).getAttribute('aria-pressed')).toBe('true');
+      await waitFor(director, async () => (await director.locator(`[data-character="${nextCharacterId}"]`).getAttribute('aria-pressed')) === 'true', 8_000);
 
       // 主脑回落提示使用琥珀色语义状态，并将用户带到服务商页。
       await director.evaluate(() => window.dispatchEvent(new CustomEvent('wb:brain', {
@@ -627,8 +627,8 @@ export default {
     }
   }, 90_000);
 
-  /** [E2E-HOST] T-M6-44：aboutme 角色切换后 manifest/舞台/声音工坊按当前角色生效。 */
-  it('aboutme 角色切换：pets:manifest 与声音工坊徽章跟随角色', { timeout: 90_000 }, async () => {
+  /** [E2E-HOST] T-M6-44/46：aboutme 角色切换后 manifest/舞台/语音中心按当前角色生效。 */
+  it('aboutme 角色切换：pets:manifest 与语音中心徽章跟随角色', { timeout: 90_000 }, async () => {
     const charRoot = joinPath(homedir(), 'Library', 'Application Support', 'Whale Isle', 'e2e-profile', 'pet-characters');
     const manifestDir = joinPath(charRoot, 'e2e');
     mkdirSync(manifestDir, { recursive: true });
@@ -663,7 +663,7 @@ export default {
       await page.reload();
       await page.waitForFunction(() => Boolean((window as unknown as { directorBridge?: { characterList?: unknown } }).directorBridge?.characterList), { timeout: 30_000 });
       await page.evaluate(() => (window as unknown as { directorBridge: { characterSelect(id: string): Promise<{ ok: boolean }> } }).directorBridge.characterSelect('aboutme-e2e'));
-      await page.getByRole('button', { name: '声音工坊', exact: true }).click();
+      await page.click('[data-voice-tab-btn="studio"]');
       await page.waitForSelector('[data-voice-studio-character]', { timeout: 15_000 });
       expect(await page.locator('[data-voice-studio-character]').getAttribute('data-voice-studio-character')).toBe('aboutme-e2e');
       expect(await page.locator('[data-voice-studio-character]').innerText()).toContain('E2E小星');

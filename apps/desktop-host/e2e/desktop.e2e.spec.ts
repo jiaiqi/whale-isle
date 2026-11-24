@@ -143,9 +143,13 @@ describe('[E2E-HOST] desktop-host 透明穿透宿主', () => {
       await win.evaluate(() => (window as unknown as PetStageWindow).petStage.dockWindow?.('default', null));
       expect(await win.evaluate(() => (window as unknown as PetStageWindow).petStage.winPosition())).toEqual(beforeDock);
       const petBounds = await browserWindow.evaluate((w) => w.getBounds());
+      // 先清掉真实全屏探测可能造成的隐藏态：套件并行/连续启动时 osascript 可能把别的全屏窗口算进来，
+      // 窗口隐藏会跳过 peek 透明度应用，导致本断言偶发读回 1。
+      await win.evaluate(() => (window as unknown as PetStageWindow).petStage.testFullscreenApply?.(null));
+      await expect.poll(() => browserWindow.evaluate((w) => w.isVisible()), { timeout: 5_000 }).toBe(true);
       const altTargets = await win.evaluate((bounds) => (window as unknown as PetStageWindow).petStage.testGlobalAltPeek?.({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, true), petBounds);
       expect(altTargets?.targets).toContain('default');
-      await expect.poll(() => browserWindow.evaluate((w) => w.getOpacity())).toBeCloseTo(0.35, 2);
+      await expect.poll(() => browserWindow.evaluate((w) => w.getOpacity()), { timeout: 10_000 }).toBeCloseTo(0.35, 2);
       await win.evaluate((bounds) => (window as unknown as PetStageWindow).petStage.testGlobalAltPeek?.({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, false), petBounds);
       await expect.poll(() => browserWindow.evaluate((w) => w.getOpacity())).toBe(1);
 

@@ -13,6 +13,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['apps/*/e2e/**/*.spec.ts'],
+    // 每个 spec 都会启动真实 Electron 并争用 18780/18765 等回环端口；串行执行避免多实例互相干扰
+    // （曾出现透明穿透 Alt 态在并行跑时偶发读回 opacity=1）。
+    fileParallelism: false,
     // E2E 不计入覆盖率门槛（v8 也无法统计 Electron 渲染/主进程），覆盖率只看 Gate 3。
     coverage: { enabled: false },
   },
