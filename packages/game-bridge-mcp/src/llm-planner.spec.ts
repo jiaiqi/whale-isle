@@ -91,6 +91,23 @@ describe('LLM Planner adapter seam', () => {
     expect(invalid.asks).toBe(1);
   });
 
+  it('systemPrompt 支持惰性求值：角色热切换后下一次决策即使用新角色名', async () => {
+    let who = '蓝蓝';
+    const systems: string[] = [];
+    const planner = new LlmPlanner({
+      systemPrompt: () => `你是${who}，正在替主人游玩《泰拉瑞亚》。`,
+      toolWhitelist: ['mine'],
+      chat: async (_slot, messages) => {
+        systems.push(messages[0]?.content ?? '');
+        return { content: '{"tool":"mine","args":{},"intent":"挖矿"}' };
+      },
+    });
+    await planner.decide(state());
+    who = '小克';
+    await planner.decide(state());
+    expect(systems).toEqual(['你是蓝蓝，正在替主人游玩《泰拉瑞亚》。', '你是小克，正在替主人游玩《泰拉瑞亚》。']);
+  });
+
   it('retries adapter gateway errors and then falls back to its rule planner', async () => {
     const slots: string[] = [];
     const planner = new LlmPlanner({

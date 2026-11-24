@@ -80,7 +80,8 @@ export interface LlmPlannerDeps {
   /** LLM 不可用时回落到当前游戏的 adapter 规则规划器 */
   fallbackPlanner?: Planner;
   /** 非星露谷游戏的提示词；提供后使用通用决策路径，不执行星露谷专属救援状态机 */
-  systemPrompt?: string;
+  /** 固定提示词或惰性求值（角色热切换后不需重建 planner） */
+  systemPrompt?: string | (() => string);
   /** 多桌宠角色人设（星露谷核心提示词的角色段落；缺省用小鲸；可动态读取当前角色） */
   personaPrompt?: string | (() => string);
   /** 每轮规划前动态读取团队黑板摘要（≤300 字符，作为只读事实追加到 user 消息） */
@@ -427,8 +428,13 @@ export class LlmPlanner implements Planner {
     }
   }
 
+  /** 惰性提示词每次决策重新求值（角色热切换无需重建 planner）。 */
+  private adapterSystemPrompt(): string | undefined {
+    return typeof this.deps.systemPrompt === 'function' ? this.deps.systemPrompt() : this.deps.systemPrompt;
+  }
+
   async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
-    const decision = this.deps.systemPrompt === undefined
+    const decision = this.adapterSystemPrompt() === undefined
       ? await this.decideCore(state)
       : await this.decideForAdapter(state);
     if (decision.kind === 'act') this.lastIssued = decision.tool;
@@ -439,7 +445,7 @@ export class LlmPlanner implements Planner {
     this.askCount++;
     const receipts = (this.deps.recentReceipts ?? []).slice(-3).map((receipt) => `- ${receipt}`).join('\n');
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: this.deps.systemPrompt ?? '' },
+      { role: 'system', content: this.adapterSystemPrompt() ?? '' },
       {
         role: 'user',
         content: `当前游戏状态：\n${state.raw.slice(0, 4000)}\n\n最近回执：\n${receipts || '（刚开始）'}${this.teamContext()}\n\n请决定下一步动作，只输出一行 JSON。`,
