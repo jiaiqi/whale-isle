@@ -100,10 +100,10 @@ describe('PetWindowManager', () => {
     expect(windows.get('agent-2')?.getBounds().width).toBe(560);
     expect(windows.get('agent-2')?.sent.at(-1)?.channel).toBe('pet:window-prefs-changed');
 
-    manager.send('pet:action', 'agent-2', { agentId: 'agent-2', action: 'game_focus' });
+    manager.sendAgent('agent-2', 'pet:action', { action: 'game_focus' });
     expect(windows.get('default')?.sent.some((item) => item.channel === 'pet:action')).toBe(false);
     expect(windows.get('agent-2')?.sent.some((item) => item.channel === 'pet:action')).toBe(true);
-    manager.send('coop:speaker', '*', { activeAgentId: null, state: 'idle', speakerName: '' });
+    manager.broadcast('coop:speaker', { activeAgentId: null, state: 'idle', speakerName: '' });
     expect(windows.get('default')?.sent.some((item) => item.channel === 'coop:speaker')).toBe(true);
 
     manager.flush();
@@ -189,5 +189,84 @@ describe('PetWindowManager', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('load failed');
     expect(manager.list()).toEqual([]);
+  });
+});
+
+describe('PetWindowManager 多宠社交（T-M6-48）', () => {
+  it('窗口相撞触发 onCollision 且 2 秒内去抖；分开后不再触发', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pet-window-manager-'));
+    dirs.push(dir);
+    const windows = new Map<string, FakeWindow>();
+    const hits: string[] = [];
+    const manager = new PetWindowManager({
+      userDataDir: dir,
+      createWindow: (input) => { const window = new FakeWindow(input); windows.set(input.agentId, window); return window; },
+      workArea: () => ({ x: 0, y: 0, width: 1440, height: 900 }),
+      sleep: async () => undefined,
+      onCollision: ({ a, b }) => hits.push([a.agentId, b.agentId].sort().join('|')),
+    });
+    await manager.open('default', 'blue-whale-maid');
+    await manager.open('agent-2', 'aboutme-dsh');
+    const first = windows.get('default')!;
+    const second = windows.get('agent-2')!;
+    second.setBounds({ ...first.getBounds() });
+    expect(hits).toEqual(['agent-2|default']);
+    second.setBounds({ ...first.getBounds(), x: first.getBounds().x + 2 });
+    expect(hits).toHaveLength(1); // 去抖
+    second.setBounds({ x: 3000, y: 3000, width: 400, height: 284 });
+    expect(manager.collisions()).toEqual([]);
+  });
+
+  it('assemble 排排站不重叠；dismissAll 保留 default', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    await manager.open('agent-2', 'aboutme-dsh');
+    await manager.open('agent-3', 'aboutme-grok');
+    const placed = manager.assemble(['default', 'agent-2', 'agent-3'], { x: 0, y: 0, width: 1440, height: 900 });
+    expect(placed).toHaveLength(3);
+    const bounds = placed.map((view) => view.bounds ?? windows.get(view.agentId)!.getBounds());
+    for (let i = 1; i < bounds.length; i += 1) {
+      expect(bounds[i]!.x).toBeGreaterThanOrEqual(bounds[i - 1]!.x + bounds[i - 1]!.width);
+    }
+    const closed = manager.dismissAll('default');
+    expect(closed).toBe(2);
+    expect(manager.list().map((view) => view.agentId)).toEqual(['default']);
+  });
+});
+
+
+describe('PetWindowManager 定向投递（T-M6-51）', () => {
+  it('bump / crown / say / wake / preview 只发给目标 agent，payload 自动带 agentId', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    await manager.open('agent-ai', 'crosspet-claude');
+    const channels = [
+      ['pet:bump', { partner: 'crosspet-claude', partnerName: 'Claude' }],
+      ['pet:crown', { on: true }],
+      ['pet:say', { text: '巡检完成！' }],
+      ['pet:wake', {}],
+      ['pet:preview', { action: 'happy_maid', clipId: null }],
+    ] as const;
+    for (const [channel, payload] of channels) manager.sendAgent('agent-ai', channel, payload);
+    const target = windows.get('agent-ai')!;
+    const other = windows.get('default')!;
+    for (const [channel] of channels) {
+      const sent = target.sent.find((item) => item.channel === channel);
+      expect(sent, channel).toBeDefined();
+      expect(sent?.payload).toMatchObject({ agentId: 'agent-ai' });
+      expect(other.sent.some((item) => item.channel === channel), channel).toBe(false);
+    }
+    expect(target.sent.find((item) => item.channel === 'pet:say')?.payload).toMatchObject({ text: '巡检完成！' });
+    expect(target.sent.filter((item) => item.channel === 'pet:preview')).toHaveLength(1);
+  });
+
+  it('未知 agentId 静默丢弃；* 广播不破坏原有 payload', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    manager.sendAgent('ghost', 'pet:say', { text: 'x' });
+    expect(windows.get('default')?.sent.some((item) => item.channel === 'pet:say')).toBe(false);
+    manager.sendAgent('*', 'pet:bump', { partner: 'x' });
+    const payload = windows.get('default')?.sent.find((item) => item.channel === 'pet:bump')?.payload;
+    expect(payload).toMatchObject({ agentId: '*', partner: 'x' });
   });
 });

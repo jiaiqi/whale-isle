@@ -170,6 +170,8 @@ export function createCoopHost(options: {
   /** 测试注入：默认 gameAdapters.create；生产不传 */
   createAdapter?: (gameId: GameId, options: { endpoint: string; agentId: string }) => GameAdapter;
   createRunner?: (onEvent: (event: AutodriveEvent) => void, options: { endpoint: string }, adapter: GameAdapter) => CoopRunnerLike;
+  /** T-M6-48：联机协作涨好感（cowork / cofinish），由 main 侧落 SQLite */
+  onFriendshipEvent?: (kind: 'cowork' | 'cofinish', agentId: string) => void;
 }): CoopHost {
   const createAdapter = options.createAdapter ?? ((gameId, adapterOptions) => gameAdapters.create(gameId, adapterOptions));
   const createRunner = options.createRunner ?? ((onEvent, runnerOptions, adapter) => new AutodriveRunner(onEvent, runnerOptions, adapter));
@@ -210,6 +212,7 @@ export function createCoopHost(options: {
       anchorRatio: 0.5,
       licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
       builtin: true,
+      skins: [],
     };
 
   const endpoints = readEndpoints();
@@ -320,6 +323,17 @@ export function createCoopHost(options: {
     return planner ?? fallback;
   };
 
+  /** 目标全部指标达标 → 标完成并给在线队友记 cofinish（真实进度聚合，不伪造）。 */
+  function maybeCompleteGoal(): void {
+    const goal = blackboard.snapshot().goal;
+    if (goal.status !== 'active' || goal.metrics.length === 0) return;
+    if (!goal.metrics.every((metric) => metric.target > 0 && metric.current >= metric.target)) return;
+    blackboard.patchGoal({ status: 'completed' });
+    for (const agent of agents.values()) {
+      if (agent.runner?.isRunning() === true) options.onFriendshipEvent?.('cofinish', agent.endpoint.id);
+    }
+  }
+
   /** 只更新有真实来源的指标；current 不变时绝不 patch，避免黑板 version 每 tick 抖动。 */
   function refreshGoalFromAgentState(agent: CoopAgent, event: Extract<AutodriveEvent, { type: 'state' }>): void {
     agent.lastMoney = event.money;
@@ -332,7 +346,10 @@ export function createCoopHost(options: {
       changed = true;
       return { ...metric, current: event.money };
     });
-    if (changed) blackboard.patchGoal({ metrics });
+    if (changed) {
+      blackboard.patchGoal({ metrics });
+      maybeCompleteGoal();
+    }
   }
 
   async function refreshSharedWood(): Promise<void> {
@@ -354,7 +371,10 @@ export function createCoopHost(options: {
         changed = true;
         return { ...metric, current: wood };
       });
-      if (changed) blackboard.patchGoal({ metrics });
+      if (changed) {
+        blackboard.patchGoal({ metrics });
+        maybeCompleteGoal();
+      }
     } catch {
       /* 箱子查询失败保留旧进度，不伪造 0 */
     }
@@ -878,6 +898,9 @@ export function createCoopHost(options: {
       text: `我来接手：${input.reason.slice(0, 100)}`,
     });
     sayAs(helper.endpoint.id, '我这边有空，马上过去接手！');
+    // 求助接力：双方各记一次 cowork 好感（真实交接成功才算）
+    options.onFriendshipEvent?.('cowork', helper.endpoint.id);
+    options.onFriendshipEvent?.('cowork', input.agentId);
     return { ok: true, mode: 'handoff', helperAgentId: helper.endpoint.id };
   }
   ipcMain.handle('coop:help-request', async (_e, input: { agentId: string; reason: string }) => requestHelp(input));

@@ -164,10 +164,12 @@ export function createAutodriveHost(
     'aboutme-grok': { uncertain: '石头先动的手，这锅我不接。', fish: '钓到了，别问我为什么这么强。' },
     'aboutme-kimi': { uncertain: '这次记录为环境干扰，不是操作失误。', fish: '钓到鱼了，我把过程记下来了。' },
   };
+  /** 未登记角色的中性短评：不借用小鲸口吻，避免角色身份串味。 */
+  const GENERIC_SHORT_REPLY = { uncertain: '这次没成功，我换个办法再来。', fish: '成功啦，继续！' };
   const characterNow = (): PetCharacter | undefined => characterRegistry?.selected();
   const shortReply = (kind: 'uncertain' | 'fish'): string => {
     const character = characterNow();
-    return (shortReplyPool[character?.id ?? ''] ?? shortReplyPool['blue-whale-maid']!)[kind];
+    return (shortReplyPool[character?.id ?? ''] ?? GENERIC_SHORT_REPLY)[kind];
   };
 
   const windows: WebContents[] = [];
@@ -201,6 +203,8 @@ export function createAutodriveHost(
   let brainProviders: string[] = [];
   let brainMissingKeys: string[] = [];
   let recentReceipts: string[] = [];
+  /** 主人刚下的单（T-M6-53）：执行失败要把原因回灌到聊天/气泡，避免「只回复不办事」的感知 */
+  let pendingChatOrder: { tool: string; intent: string } | null = null;
   let lastGameClock = '';
   let eventSeq = 0;
   // T-M6-27（多游戏/多端点隔离）：会话代次——切换游戏或重建 runner 时递增；
@@ -295,7 +299,8 @@ export function createAutodriveHost(
       ...(adapter.toolWhitelist !== undefined ? { toolWhitelist: adapter.toolWhitelist } : {}),
       personaPrompt: () => characterNow()?.personaPrompt ?? '',
       ...(gameId === 'stardew' ? {} : {
-        systemPrompt: [
+        // 惰性求值：角色在运行中热切换时，下一次规划立刻使用新角色名（T-M6-51）
+        systemPrompt: () => [
           `你是${shortNameOf(characterNow())}，正在替主人游玩《${directiveProfile.gameName}》。`,
           directiveProfile.toolDoc,
           `只可调用当前游戏白名单工具：${(adapter.toolWhitelist ?? []).join(', ')}。`,
@@ -343,6 +348,7 @@ export function createAutodriveHost(
     // 旧实现 void tryChatDirective 并行互不知情：回话可能否认自己要做的动作；自驾没开时更是只回复不动手
     let order: ChatDirective | null = null;
     let gameOffline = false;
+    let directiveError: string | null = null;
     try {
       const keywordHit = resolveKeywordDirective(text, directiveProfile);
       if (keywordHit !== null) {
@@ -368,8 +374,10 @@ export function createAutodriveHost(
         }
       }
       if (order !== null) console.log('[chat-directive] 接单 →', order.tool, JSON.stringify(order.args), `(${order.source})`);
-    } catch {
-      /* 指令解析失败 → 纯聊天（不阻塞回话） */
+    } catch (error) {
+      // 解析失败不能静默（2026-11-24 用户反馈「只回复不办事」）：记录原因，回话时如实说明，事件流可见
+      directiveError = error instanceof Error ? error.message : String(error);
+      console.error('[chat-directive] 解析失败（未接单）：', directiveError);
     }
     try {
       // T-M5-04：记忆增强——「你昨天做了什么」类问句检索图谱注入 system
@@ -379,7 +387,9 @@ export function createAutodriveHost(
         ? `\n\n【你刚刚接下单子并马上要在游戏里执行：${order.tool}（${order.intent.replace('主人指令：', '')}）。回话要自然承认这件事、傲娇地领任务，绝不能只嘴上说说或否认。】`
         : gameOffline
           ? '\n\n【游戏现在没有开：如果主人的话是想让你在游戏里做事，如实撒娇说等开游戏再办，别假装去做。】'
-          : '';
+          : directiveError !== null
+            ? `\n\n【指令解析没成功（${directiveError}）：如果主人是在给你下单，如实说没听清或没连上，别假装接单；纯闲聊照常回。】`
+            : '';
       const base = memoryContext === '' ? personaSystemPrompt() : `${personaSystemPrompt()}
 
 ${memoryContext}
@@ -397,6 +407,7 @@ ${ackHint}`;
       // ── T-M6-17 接单下发：自驾没开就自动拉起，绝不「只回复不动手」──
       if (order !== null) {
         broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `${order.tool}｜${order.intent}` } as AutodriveEvent);
+        pendingChatOrder = { tool: order.tool, intent: order.intent };
         if (!runner.isRunning()) {
           try {
             await runner.start();
@@ -407,6 +418,8 @@ ${ackHint}`;
           }
         }
         runner.submitDirective(order.tool, order.args, order.intent);
+      } else if (directiveError !== null) {
+        broadcastCurrent({ type: 'watchdog', kind: 'heartbeat', detail: `指令解析失败（未接单）：${directiveError}` } as AutodriveEvent);
       }
       return { ok: true, reply: replyVisible };
     } catch (error) {
@@ -538,6 +551,18 @@ ${ackHint}`;
         llmPlanner?.setRecentReceipts(recentReceipts);
       }
       broadcast(event, meta);
+      // 主人下单的失败回灌（T-M6-53）：失败回执照旧进事件流，再补一条聊天可见的「没办成 + 原因」，
+      // 避免主人只看到一句「好嘞」却不知道游戏里为什么没动静。
+      if (event.type === 'receipt' && pendingChatOrder !== null && event.tool === pendingChatOrder.tool) {
+        const order = pendingChatOrder;
+        pendingChatOrder = null;
+        if (event.status !== 'COMPLETED') {
+          const what = order.intent.replace('主人指令：', '');
+          const detail = String(event.summary ?? '').slice(0, 120);
+          broadcast({ type: 'receipt', tool: 'chat_order', status: 'FAILED', summary: `「${what}」没办成：${detail}` } as AutodriveEvent, meta);
+          if (voiceHost?.config.enabled) speak({ text: `主人，${what}没办成……${detail.slice(0, 60)}`, scene: 'normal' });
+        }
+      }
     };
   const createRunner = (): AutodriveRunner => {
     // T-M6-27：每次重建 runner 都开启新会话代次；旧 runner 若仍有迟到事件，generation 不匹配会被丢弃
@@ -577,6 +602,7 @@ ${ackHint}`;
         memoryHost?.setDayKeyExtractor(dayKeyExtractorFor(gameId));
         recentReceipts = [];
         llmPlanner?.setRecentReceipts(recentReceipts);
+        pendingChatOrder = null;
         lastGameClock = '';
         const previousMode = brainMode;
         buildBrain();

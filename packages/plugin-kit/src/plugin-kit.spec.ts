@@ -591,3 +591,22 @@ describe('dsh 兼容适配器', () => {
     expect(host.tools.get('noop_tool')?.policy).toBe('allow');
   });
 });
+
+describe('PluginHost pet:control 注入（T-M6-49）', () => {
+  it('声明 pet:control/allow 才注入 petApi；未声明或 deny 为 undefined', () => {
+    const calls: string[] = [];
+    const petApi = {
+      state: async (agentId: string) => ({ agentId, sleeping: false }),
+      say: async (agentId: string, text: string) => { calls.push(`${agentId}:${text}`); return { ok: true }; },
+      action: async (agentId: string, actionState: string) => { calls.push(`${agentId}:${actionState}`); return { ok: true }; },
+    };
+    const host = new PluginHost({ petApiFor: (manifest) => (manifest.permissions.some((p) => p.resource === 'pet:control' && p.policy === 'allow') ? petApi : undefined) });
+    let granted: unknown;
+    let denied: unknown;
+    host.register({ ...manifestOf('pet-plugin'), permissions: [{ resource: 'pet:control', policy: 'allow' }] }, (ctx) => { granted = ctx.petApi; });
+    host.register({ ...manifestOf('plain-plugin'), permissions: [{ resource: 'pet:control', policy: 'deny' }] }, (ctx) => { denied = ctx.petApi; });
+    expect(granted).toBe(petApi);
+    expect(denied).toBeUndefined();
+    void (petApi.say('default', '巡检完成')).then(() => expect(calls).toContain('default:巡检完成'));
+  });
+});

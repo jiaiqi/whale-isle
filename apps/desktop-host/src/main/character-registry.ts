@@ -41,6 +41,11 @@ export function createCharacterRegistry(options: {
   setCharacter: (id: string) => void;
   /** 内置角色 manifest 根目录（dist/renderer/pet-stage） */
   builtinAssetsDir: string;
+  /**
+   * 随包角色（T-M6-45：assets/pet-packs/aboutme-pets 直读）。
+   * manifest 由提供方直接给出，不再从 userData 读盘；与同名 userData 导入包相比随包版本优先。
+   */
+  bundled?: () => Array<{ character: PetCharacter; manifest: PetAvatarManifest }>;
 }): CharacterRegistry {
   const customDir = join(options.userDataDir, 'pet-characters');
   const custom = (): PetCharacter[] => {
@@ -56,7 +61,18 @@ export function createCharacterRegistry(options: {
     }
     return out;
   };
-  const all = (): PetCharacter[] => [...BUILTIN_CHARACTERS, ...custom()];
+  const bundledPairs = (): Array<{ character: PetCharacter; manifest: PetAvatarManifest }> => {
+    try {
+      return options.bundled?.() ?? [];
+    } catch {
+      return []; // 素材包损坏只降级，不影响内置角色
+    }
+  };
+  const all = (): PetCharacter[] => {
+    const bundled = bundledPairs().map((pair) => pair.character);
+    const ids = new Set(bundled.map((character) => character.id));
+    return [...BUILTIN_CHARACTERS, ...bundled, ...custom().filter((character) => !ids.has(character.id))];
+  };
   const selected = (): PetCharacter =>
     all().find((c) => c.id === options.getPrefs().characterId) ?? (BUILTIN_CHARACTERS[0] as PetCharacter);
 
@@ -77,6 +93,8 @@ export function createCharacterRegistry(options: {
     selected,
     manifestOf(character) {
       try {
+        const bundled = bundledPairs().find((pair) => pair.character.id === character.id);
+        if (bundled !== undefined) return { ok: true, manifest: bundled.manifest };
         // 内置 manifestPath 可写渲染层相对 HTML 的 "./assets/..."；builtinAssetsDir 已指向 .../pet-stage/assets，
         // 需剥掉 assets/ 前缀，避免拼成双重 assets（真机 E2E 抓到）
         const rel = character.manifestPath.replace(/^\.\//, '').replace(/^assets\//, '');

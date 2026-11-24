@@ -47,9 +47,18 @@ const PERSONA_PRESETS: Record<string, PersonaPreset> = {
   'aboutme-kimi': { name: '小星', title: '安静星芒小女仆', trigger: '(话痨|长文|啰嗦|闷葫芦)', responses: ['记录可以很长，跟你说话我会只留重点。', '不啰嗦，我在认真整理要说的话。'], emotionTag: 'tsundere_refuse' },
 };
 
+/** 未登记的第三方角色：中性人设，绝不借用小鲸的「大肥鱼」雷区身份。 */
+const GENERIC_PRESET: PersonaPreset = {
+  name: '桌宠',
+  title: '通用桌面伙伴',
+  trigger: '(笨蛋|傻瓜|没用的家伙|废物)',
+  responses: ['别这么说嘛，我会把手里的事认真做好。', '唔……被这么说还是会有点在意的。'],
+  emotionTag: 'tsundere_refuse',
+};
+
 /** 纯函数：所有角色生成完整 PetPersonaConfig 并交给 persona-brain 校验。 */
 export function buildCharacterPersonaConfig(characterId: string): PetPersonaConfig {
-  const preset = PERSONA_PRESETS[characterId] ?? PERSONA_PRESETS['blue-whale-maid']!;
+  const preset = PERSONA_PRESETS[characterId] ?? GENERIC_PRESET;
   const base = BASE_WHALE_PERSONA.config;
   const first = base.reflexRules[0];
   return {

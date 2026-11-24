@@ -21,6 +21,15 @@ export interface PluginContext {
   readonly id: string;
   readonly manifest: PluginManifest;
   readonly parentId: string | undefined;
+  /**
+   * T-M6-49：桌宠本机驱动口。仅当清单声明 `{ resource: 'pet:control', policy: 'allow' }`
+   * 时由宿主注入，否则为 undefined（插件不得自行伪造）。
+   */
+  readonly petApi?: {
+    state(agentId: string): Promise<unknown>;
+    say(agentId: string, text: string, options?: { wake?: boolean; scene?: 'normal' | 'inner' | 'p0' }): Promise<{ ok: boolean; error?: string }>;
+    action(agentId: string, actionState: string, durationMs?: number): Promise<{ ok: boolean; error?: string }>;
+  };
   /** 定义并注册工具（随 disable 自动注销）；重名抛错 → setup 失败回滚 */
   defineTool<TSchema extends z.ZodTypeAny, TResult>(spec: ToolSpec<TSchema, TResult>): Tool<TSchema, TResult>;
   on<T = unknown>(event: string, handler: EventHandler<T>): Disposable;
@@ -79,7 +88,7 @@ export class PluginHost {
   private readonly eventBus: EventBus;
   private readonly errorLog: PluginError[] = [];
 
-  constructor() {
+  constructor(private readonly options: { petApiFor?: (manifest: PluginManifest) => PluginContext['petApi'] } = {}) {
     this.eventBus = new EventBus((ownerId, error) => {
       this.recordError(ownerId, error, 'event');
     });
@@ -244,10 +253,12 @@ export class PluginHost {
 
   private createContext(record: PluginRecord, runtime: PluginRuntime): PluginContext {
     const host = this;
+    const petApi = this.options.petApiFor?.(record.manifest);
     return {
       id: record.id,
       manifest: record.manifest,
       parentId: record.parentId,
+      ...(petApi === undefined ? {} : { petApi }),
       defineTool<TSchema extends z.ZodTypeAny, TResult>(spec: ToolSpec<TSchema, TResult>): Tool<TSchema, TResult> {
         const tool = defineTool<TSchema, TResult>({ ...spec, pluginId: record.id });
         host.toolRegistry.register(tool, record.id);

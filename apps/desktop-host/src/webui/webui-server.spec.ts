@@ -465,3 +465,67 @@ describe('[WebUI] 配置红线', () => {
     expect(response.status).toBe(200);
   });
 });
+
+describe('[WebUI] 对外本机驱动口 /api/pet/:agentId/*（T-M6-49）', () => {
+  const petState = {
+    agentId: 'default', characterId: 'blue-whale-maid', displayName: '小鲸', skinId: '',
+    sleeping: true, speaking: false, visible: true, bounds: { x: 10, y: 20, width: 400, height: 284 },
+  };
+
+  function petApiFixture() {
+    const calls: string[] = [];
+    return {
+      calls,
+      api: {
+        state: (agentId: string) => (agentId === 'default' ? petState : null),
+        say: (agentId: string, request: { text: string; wake: boolean }) => {
+          calls.push(`say:${agentId}:${request.text}:${request.wake}`);
+          if (agentId !== 'default') return { ok: false, error: '桌宠不存在' };
+          if (petState.sleeping && !request.wake) return { ok: false, error: '桌宠正在安静睡眠（wake=true 可叫醒）' };
+          return { ok: true };
+        },
+        action: (agentId: string, request: { actionState: string; durationMs: number }) => {
+          calls.push(`action:${agentId}:${request.actionState}:${request.durationMs}`);
+          return agentId === 'default' ? { ok: true } : { ok: false, error: '桌宠不存在' };
+        },
+      },
+    };
+  }
+
+  it('state：无 token 401、存在 200、未知 404', async () => {
+    const fixture = petApiFixture();
+    const server = await startWebUI({ petApi: fixture.api });
+    expect((await fetch(`${base(server)}/api/pet/default/state`)).status).toBe(401);
+    const ok = await fetch(`${base(server)}/api/pet/default/state?token=${TEST_TOKEN}`);
+    expect(ok.status).toBe(200);
+    expect((await ok.json() as { state: typeof petState }).state.characterId).toBe('blue-whale-maid');
+    expect((await fetch(`${base(server)}/api/pet/ghost/state?token=${TEST_TOKEN}`)).status).toBe(404);
+  });
+
+  it('say：睡觉态 409；wake=true 放行；非法 body 400；非 POST 405', async () => {
+    const fixture = petApiFixture();
+    const server = await startWebUI({ petApi: fixture.api });
+    expect((await postJson(server, '/api/pet/default/say', { text: '你好' })).status).toBe(409);
+    expect((await postJson(server, '/api/pet/default/say', { text: '你好', wake: true })).status).toBe(200);
+    expect(fixture.calls).toContain('say:default:你好:true');
+    expect((await postJson(server, '/api/pet/default/say', { text: '' })).status).toBe(400);
+    expect((await postJson(server, '/api/pet/default/say', { text: 'x'.repeat(600) })).status).toBe(400);
+    expect((await rawRequest(server, `/api/pet/default/say?token=${TEST_TOKEN}`, { method: 'GET' })).status).toBe(405);
+    expect((await postJson(server, '/api/pet/default/say', { text: '你好' }, 'wrong-token')).status).toBe(401);
+  });
+
+  it('action：合法动作 200 且透传 durationMs；非法动作 400；未知桌宠 409', async () => {
+    const fixture = petApiFixture();
+    const server = await startWebUI({ petApi: fixture.api });
+    expect((await postJson(server, '/api/pet/default/action', { actionState: 'happy_maid', durationMs: 6000 })).status).toBe(200);
+    expect(fixture.calls).toContain('action:default:happy_maid:6000');
+    expect((await postJson(server, '/api/pet/default/action', { actionState: 'dance' })).status).toBe(400);
+    expect((await postJson(server, '/api/pet/ghost/action', { actionState: 'idle' })).status).toBe(409);
+  });
+
+  it('未注入 petApi → 501；非法 agentId → 400', async () => {
+    const server = await startWebUI();
+    expect((await fetch(`${base(server)}/api/pet/default/state?token=${TEST_TOKEN}`)).status).toBe(501);
+    expect((await fetch(`${base(server)}/api/pet/${encodeURIComponent('../x')}/state?token=${TEST_TOKEN}`)).status).toBe(400);
+  });
+});

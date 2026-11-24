@@ -69,12 +69,34 @@ function isInside(root: string, candidate: string): boolean {
   return realCandidate.startsWith(realRoot + sep);
 }
 
-export function createPluginHost(options: { userDataDir: string; windows: () => WebContents[] }): PluginHostHandle {
+export function createPluginHost(options: {
+  userDataDir: string;
+  windows: () => WebContents[];
+  /** T-M6-49：声明 pet:control 权限的插件可拿到的桌宠驱动口 */
+  petApi?: {
+    state(agentId: string): unknown;
+    say(agentId: string, text: string, request: { scene: 'normal' | 'inner' | 'p0'; wake: boolean }): { ok: boolean; error?: string };
+    action(agentId: string, actionState: string, durationMs: number): { ok: boolean; error?: string };
+  };
+}): PluginHostHandle {
   const pluginsRoot = join(options.userDataDir, 'plugins');
   const settingsPath = join(options.userDataDir, SETTINGS_FILE);
   mkdirSync(pluginsRoot, { recursive: true });
 
-  const host = new PluginHost();
+  const host = new PluginHost({
+    // 只有清单显式声明 { resource: 'pet:control', policy: 'allow' } 才注入；其余 undefined
+    petApiFor: (manifest) => {
+      if (options.petApi === undefined) return undefined;
+      const granted = manifest.permissions.some((permission) => permission.resource === 'pet:control' && permission.policy === 'allow');
+      if (!granted) return undefined;
+      const api = options.petApi;
+      return {
+        state: async (agentId) => api.state(agentId),
+        say: async (agentId, text, request) => api.say(agentId, text, { scene: request?.scene ?? 'normal', wake: request?.wake === true }),
+        action: async (agentId, actionState, durationMs) => api.action(agentId, actionState, durationMs ?? 6000),
+      };
+    },
+  });
   const windows: WebContents[] = [];
   const approvedTools = new Set<string>();
   const failures = new Map<string, string>();

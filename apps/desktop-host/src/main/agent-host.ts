@@ -10,9 +10,13 @@ export interface HarnessHost {
   setTargets(targets: WebContents[]): void;
 }
 
-export function createHarnessHost(): HarnessHost {
+export function createHarnessHost(options: {
+  /** T-M6-49：只读事件镜像（presetId/type/toolName；绝不透出对话正文） */
+  onEvent?: (presetId: string, event: AcpAgentEvent) => void;
+} = {}): HarnessHost {
   const windows: WebContents[] = [];
   const manager = new HarnessManager((presetId, event: AcpAgentEvent) => {
+    options.onEvent?.(presetId, event);
     for (const wc of windows) {
       if (!wc.isDestroyed()) wc.send('harness:event', { presetId, ...event });
     }

@@ -57,6 +57,8 @@ export interface PetWindowManagerOptions {
   /** 首次无 pet-window-prefs.json 时，从旧 PetDesktopPrefs 继承 default 窗口位置/缩放 */
   legacyDefault?: () => { x: number; y: number; displayId: string; scale: number; characterId: string };
   onWindowsChanged?: (windows: PetWindowView[]) => void;
+  /** T-M6-48：两只桌宠窗口相撞（去抖后） */
+  onCollision?: (hit: { a: PetWindowView; b: PetWindowView; ratio: number }) => void;
   /** 测试注入：平滑探出帧间隔等待 */
   sleep?: (ms: number) => Promise<void>;
   /** 平滑探出总时长与帧间隔（默认 240ms / 16ms） */
@@ -90,6 +92,8 @@ export class PetWindowManager {
   private undockSeq = new Map<string, number>();
   private peeking = new Set<string>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 互撞去抖：`a|b` → 上次播报时间 */
+  private readonly lastCollisionAt = new Map<string, number>();
 
   constructor(private readonly options: PetWindowManagerOptions) {
     this.path = join(options.userDataDir, PREFS_FILE);
@@ -137,6 +141,7 @@ export class PetWindowManager {
       };
       this.scheduleSave();
       this.notify();
+      this.checkCollision(agentId);
     }));
     entry.unsubscribe.push(window.onClosed(() => {
       const current = this.entries.get(agentId);
@@ -188,6 +193,74 @@ export class PetWindowManager {
     return [...this.entries.keys()]
       .map((agentId) => this.view(agentId))
       .filter((view): view is PetWindowView => view !== null);
+  }
+
+  /** 两两相交的可见窗口对（T-M6-48 互撞）：重叠面积 > 较小窗口面积 12% 才算撞上。 */
+  collisions(): Array<{ a: PetWindowView; b: PetWindowView; ratio: number }> {
+    const views = this.list().filter((view) => view.visible);
+    const hits: Array<{ a: PetWindowView; b: PetWindowView; ratio: number }> = [];
+    for (let i = 0; i < views.length; i += 1) {
+      for (let j = i + 1; j < views.length; j += 1) {
+        const a = views[i]!;
+        const b = views[j]!;
+        const width = Math.max(0, Math.min(a.bounds.x + a.bounds.width, b.bounds.x + b.bounds.width) - Math.max(a.bounds.x, b.bounds.x));
+        const height = Math.max(0, Math.min(a.bounds.y + a.bounds.height, b.bounds.y + b.bounds.height) - Math.max(a.bounds.y, b.bounds.y));
+        const area = Math.max(1, Math.min(a.bounds.width * a.bounds.height, b.bounds.width * b.bounds.height));
+        const ratio = (width * height) / area;
+        if (ratio > 0.12) hits.push({ a, b, ratio });
+      }
+    }
+    return hits;
+  }
+
+  /** 集合：按给定顺序在屏幕底部排排站（宽度按各自 scale，间隔 12px）。 */
+  assemble(agentIds: string[], screenBounds?: WindowBounds): PetWindowView[] {
+    const entries = agentIds
+      .map((agentId) => ({ agentId, entry: this.entries.get(agentId) }))
+      .filter((pair): pair is { agentId: string; entry: Entry } => pair.entry !== undefined);
+    if (entries.length === 0) return [];
+    const workArea = screenBounds ?? this.options.workArea?.() ?? { x: 0, y: 0, width: 1440, height: 900 };
+    const gap = 12;
+    const totalWidth = entries.reduce((sum, pair) => sum + pair.entry.preference.scale * BASE_WIDTH, 0) + gap * (entries.length - 1);
+    let cursor = workArea.x + Math.max(0, Math.round((workArea.width - totalWidth) / 2));
+    const placed: PetWindowView[] = [];
+    for (const { agentId, entry } of entries) {
+      const width = entry.preference.scale * BASE_WIDTH;
+      const x = Math.round(cursor);
+      const y = Math.round(workArea.y + workArea.height - entry.preference.scale * BASE_HEIGHT - 8);
+      entry.window.setBounds({ x, y, width: Math.round(width), height: Math.round(entry.preference.scale * BASE_HEIGHT) });
+      entry.preference.position = { x, y, displayId: entry.preference.position.displayId };
+      cursor += width + gap;
+      const view = this.view(agentId);
+      if (view !== null) placed.push(view);
+    }
+    this.scheduleSave();
+    this.notify();
+    return placed;
+  }
+
+  /** 解散：关掉除 keep 之外的所有桌宠窗。 */
+  dismissAll(keep: string | null = 'default'): number {
+    let closed = 0;
+    for (const agentId of [...this.entries.keys()]) {
+      if (agentId === keep) continue;
+      if (this.close(agentId)) closed += 1;
+    }
+    return closed;
+  }
+
+  /** 窗口移动后检查是否撞到别的桌宠；同一对 2 秒内只报一次。 */
+  private checkCollision(agentId: string): void {
+    const callback = this.options.onCollision;
+    if (callback === undefined) return;
+    for (const hit of this.collisions()) {
+      if (hit.a.agentId !== agentId && hit.b.agentId !== agentId) continue;
+      const key = [hit.a.agentId, hit.b.agentId].sort().join('|');
+      const last = this.lastCollisionAt.get(key) ?? 0;
+      if (Date.now() - last < 2_000) continue;
+      this.lastCollisionAt.set(key, Date.now());
+      callback(hit);
+    }
   }
 
   get(agentId: string): PetWindowView | null {
@@ -327,20 +400,26 @@ export class PetWindowManager {
     return this.prefs(agentId);
   }
 
-  /** 事件定向：'*' 广播，其余只发给目标 agentId；未知目标静默丢弃。 */
-  send(channel: string, agentId: string, payload: unknown): void {
+  /**
+   * 事件定向投递（唯一公开入口）：agentId 在前、channel 在后，payload 自动携带 agentId。
+   * 刻意不提供 `send(channel, agentId, payload)` 重载——两个 string 参数无法靠类型区分，
+   * 之前 6 处调用就是把二者写反后事件被静默丢弃（T-M6-51）。
+   */
+  sendAgent(agentId: string, channel: string, payload: Record<string, unknown> = {}): void {
+    const body = { agentId, ...payload };
     if (agentId === '*') {
-      for (const entry of this.entries.values()) {
-        if (!entry.window.isDestroyed()) entry.window.send(channel, payload);
-      }
+      this.broadcast(channel, body);
       return;
     }
     const entry = this.entries.get(agentId);
-    if (entry !== undefined && !entry.window.isDestroyed()) entry.window.send(channel, payload);
+    if (entry !== undefined && !entry.window.isDestroyed()) entry.window.send(channel, body);
   }
 
-  sendAgent(agentId: string, channel: string, payload: Record<string, unknown> = {}): void {
-    this.send(channel, agentId, { agentId, ...payload });
+  /** 全窗广播（只给确实需要所有桌宠都收到的系统级事件用）。 */
+  broadcast(channel: string, payload: Record<string, unknown> = {}): void {
+    for (const entry of this.entries.values()) {
+      if (!entry.window.isDestroyed()) entry.window.send(channel, payload);
+    }
   }
 
   flush(): void {

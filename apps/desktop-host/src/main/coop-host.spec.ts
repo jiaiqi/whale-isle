@@ -27,8 +27,8 @@ function endpoint(id: string, name: string): McpEndpoint {
 
 function chars(): PetCharacter[] {
   return [
-    { id: 'char-a', displayName: '小鲸（蓝鲸女仆）', manifestPath: '', personaPrompt: '傲娇小鲸', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1, packId: '', actionCount: 0, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: true },
-    { id: 'char-b', displayName: '泡芙（柴犬）', manifestPath: '', personaPrompt: '软萌泡芙', voiceId: 'diadia_xuemei', voiceRatePercent: 100, voicePitchMul: 1, packId: '', actionCount: 0, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: true },
+    { id: 'char-a', displayName: '小鲸（蓝鲸女仆）', manifestPath: '', personaPrompt: '傲娇小鲸', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1, packId: '', actionCount: 0, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: true, skins: [] },
+    { id: 'char-b', displayName: '泡芙（柴犬）', manifestPath: '', personaPrompt: '软萌泡芙', voiceId: 'diadia_xuemei', voiceRatePercent: 100, voicePitchMul: 1, packId: '', actionCount: 0, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: true, skins: [] },
   ];
 }
 

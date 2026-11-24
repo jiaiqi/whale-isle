@@ -22,6 +22,13 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { WebSocket as WsSocket, WebSocketServer as WsServer } from 'ws';
 import {
+  PetApiActionRequestSchema,
+  PetApiSayRequestSchema,
+  type PetApiActionRequest,
+  type PetApiSayRequest,
+  type PetApiState,
+} from '@workbench/shared-protocol';
+import {
   authorize,
   escapeHtml,
   isPathSafe,
@@ -103,6 +110,15 @@ export interface WebUIServerOptions {
   rendererRoot?: string;
   /** 事件环形缓冲上限，默认 100 */
   eventBufferSize?: number;
+  /**
+   * T-M6-49 对外本机驱动口：`/api/pet/:agentId/{state,say,action}`。
+   * 入参必须先过 shared-protocol 的 Zod Schema；缺省时三个端点返回 501「待接线」。
+   */
+  petApi?: {
+    state(agentId: string): PetApiState | null;
+    say(agentId: string, request: PetApiSayRequest): { ok: boolean; error?: string };
+    action(agentId: string, request: PetApiActionRequest): { ok: boolean; error?: string };
+  };
 }
 
 export interface WebUIServerHandle {
@@ -808,6 +824,48 @@ export function createWebUIServer(options: WebUIServerOptions = {}): WebUIServer
 
     if (pathname === '/ws') {
       jsonResponse(res, 400, { ok: false, error: 'WebSocket 端点需通过 upgrade 连接' });
+      return;
+    }
+
+    // T-M6-49：对外本机驱动口（token 已在上方校验；入参一律过 Zod）
+    const petRoute = /^\/api\/pet\/([^/]+)\/(state|say|action)$/.exec(pathname);
+    if (petRoute !== null) {
+      const agentId = decodeURIComponent(petRoute[1] ?? '');
+      const action = petRoute[2];
+      if (agentId === '' || !/^[A-Za-z0-9._-]{1,64}$/.test(agentId)) {
+        jsonResponse(res, 400, { ok: false, error: 'agentId 非法' });
+        return;
+      }
+      if (options.petApi === undefined) {
+        jsonResponse(res, 501, { ok: false, error: '本机驱动口待接线' });
+        return;
+      }
+      if (action === 'state') {
+        if (method !== 'GET') { methodNotAllowed(res, ['GET']); return; }
+        const state = options.petApi.state(agentId);
+        if (state === null) { jsonResponse(res, 404, { ok: false, error: `桌宠不存在：${agentId}` }); return; }
+        jsonResponse(res, 200, { ok: true, state });
+        return;
+      }
+      if (method !== 'POST') { methodNotAllowed(res, ['POST']); return; }
+      let body: unknown;
+      try {
+        body = await readJsonBody(req);
+      } catch (error) {
+        jsonResponse(res, 400, { ok: false, error: error instanceof Error ? error.message : '请求体读取失败' });
+        return;
+      }
+      if (action === 'say') {
+        const parsed = PetApiSayRequestSchema.safeParse(body);
+        if (!parsed.success) { jsonResponse(res, 400, { ok: false, error: parsed.error.issues[0]?.message ?? '非法请求' }); return; }
+        const result = options.petApi.say(agentId, parsed.data);
+        jsonResponse(res, result.ok ? 200 : 409, result);
+        return;
+      }
+      const parsed = PetApiActionRequestSchema.safeParse(body);
+      if (!parsed.success) { jsonResponse(res, 400, { ok: false, error: parsed.error.issues[0]?.message ?? '非法请求' }); return; }
+      const result = options.petApi.action(agentId, parsed.data);
+      jsonResponse(res, result.ok ? 200 : 409, result);
       return;
     }
 

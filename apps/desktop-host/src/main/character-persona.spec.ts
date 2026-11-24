@@ -45,6 +45,13 @@ describe('九角色 PetPersonaConfig 平权', () => {
 
   it('未命中雷区返回 null，不误打断聊天', () => {
     expect(characterReflex('aboutme-kimi', '今天天气不错')).toBeNull();
-    expect(characterReflex('unknown-character', '大肥鱼')).toBeTruthy();
+  });
+
+  it('未登记角色回落到中性人设，不继承小鲸的「大肥鱼」雷区', () => {
+    expect(characterReflex('unknown-character', '大肥鱼')).toBeNull();
+    const config = buildCharacterPersonaConfig('custom-abc');
+    expect(config.id).toBe('custom-abc');
+    expect(config.reflexRules[0]?.triggerRegex).not.toContain('大肥鱼');
+    expect(characterPokeLine('custom-abc')).toBeTruthy();
   });
 });
