@@ -5,6 +5,15 @@
 
 ## [Unreleased] — 2026-11-24
 
+### Added（T-M6-61 / T-M6-62：本机 Codex CLI 生图 + 星露谷像素角色同步）
+
+- **T-M6-61 免 API Key 生图后端**：新增 `codex-image-backend.ts`，优先探测 `codex-imagegen`（uv 安装，Apache-2.0）、缺失时回退官方 `codex exec`；只检查 `~/.codex/auth.json` 是否存在，绝不读取/回传 token；`execFile` 参数数组、90s 超时、输出脱敏与 PNG/WebP/JPEG 魔数校验；`image-gen-client` 新增 `codex-cli` 协议；创作中心供应商列表自动出现「本机 Codex CLI（免 API Key）」并标注快速/慢速后端。
+- **T-M6-62 星露谷外观同步 Mod**：`mods/stardew-avatar-sync`（SMAPI 4.x / Stardew 1.6，C#/Harmony）读取主进程原子写入的 `active-avatar.json`，FileSystemWatcher 200ms 去抖后主线程重载；Harmony 挂 `FarmerRenderer.draw` **12 参主实现**（9 参重载会被 JIT 内联，拦不到），复用原版 position/origin/layerDepth/逐帧偏移，只替换 base 身体帧；`FacingDirection` 0上/1右/2下/3左 映射像素表行，walk/run 用原版动画索引驱动 4 相位步态；工具/鱼竿/手持物/表情仍由原版独立绘制；洗澡/坐下/骑马/木筏/游泳/睡觉/弹弓回落原版，坏图自动回落预设。`stardew-avatar-host` 提供 9 角色预设、一键安装/卸载、开关持久化、联机隔离 profile 写入；贴图按**内容哈希**命名（`stardew-sprite-<hash>.png`）绕开 SMAPI 的 ModContent 贴图缓存，运行中应用新图可真正热切换并清理旧版本。
+- **像素表流水线升级 96×128 / 4×6**：行=下/右/上/左，列=待机/左脚在前/右脚在前/过渡/动作/表情；切格改为「行投影定位 4 条角色带 + 逐行列投影聚类 6 个角色」，不再按画布/内容包围盒硬切（修复 AI 出图列距 235px 时第一列被切半只）；整表共用同一缩放系数并脚底对齐（修复逐帧独立缩放导致走路时头忽大忽小/上下跳）；新增轮廓外白晕清理与 median-cut 24 色收敛（保留蓝发/肤色，避免抗锯齿近似色挤占色板）；仍为最近邻采样，输出颜色是输入颜色子集。
+- **动作帧空手规则（真机修复）**：AI 会把「鱼竿/法杖」直接画进动作帧，游戏里原版又单独绘制鱼竿/工具，出现两根竿错位、手与竿割裂。提示词改为**所有帧必须空手**（待机/行走/动作/表情都禁止画鱼竿、斧头、法杖、木棍等），动作列只画向前伸出的手臂，工具与手持物统一由游戏引擎绘制；重新出图后真机验证持竿手部与鱼竿贴合。
+- **创作中心「星露谷像素表」页签**：6 列提示词（逐列描述步态与动作）、目标角色选择、供应商/模型选择、96×128 单帧与整表 pixelated 预览、一键应用；游戏共玩页新增「同步桌宠形象进游戏」开关与「安装 Mod」。
+- **回归证据**：`codex-image-backend` 12、`image-gen-client` 新增 2、`pixel-sprite-pipeline` **13/13**、`stardew-avatar-host` **11/11**、契约 1；`dotnet build` 0 警告；macOS 真机经创作中心真实出图（1536×1024，codex-imagegen），并在星露谷内 computer-use 验证四朝向、向右行走、钓鱼抛竿/鱼线/浮漂与 IPC 应用后的热切换。
+
 ### Added（T-M6-60：macOS + Windows 11 双端托盘常驻与 Magpie 风格快捷浮窗）
 
 - **托盘宿主 `tray-host.ts`**：macOS 18×18 `trayTemplate.png` + 36×36 `@2x`（`setTemplateImage(true)` 自动适配深浅菜单栏）；Windows 11 32×32 `tray-win-dark/light.png`，按 `nativeTheme.shouldUseDarkColors` 选取并监听 `updated` 实时切换。图标由 `scripts/generate-tray-icons.ts` 直接读取 `shared/brand.ts` 的鲸鱼路径生成（4×4 超采样 + 内置 PNG 编码，零外部图像库）；构建随 `assets/brand → dist/renderer/brand` 进入 asar。
