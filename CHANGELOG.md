@@ -5,6 +5,14 @@
 
 ## [Unreleased] — 2026-11-24
 
+### Fixed（T-M6-54：逐行审计 P0/P1 真实缺陷，2026-11-24）
+
+- **创作中心白底抠像（P0）**：`keyWhiteBackground` 先检测四角透明（已是透明图直接跳过，保留 alpha），再用**从四边出发的连通洪水填充**删除背景，只删与边缘连通的白，绝不全局删白——白色衣服、眼白、白龙等封闭区域完整保留；`creator-host` 抠像后改为 `fromRaw(raw).resize(...)`，去底结果真正进入输出的 90% 脚底对齐 WebP（旧实现直接缩放原图，抠像结果被丢弃）。
+- **夜间睡衣工作跟随（P0）**：`onSessionIdle` / `onAgentPose` / `onCrown` 统一走 `matchPetViewForCharacter`，同时匹配 `session.characterId` 与 `nightOutfit(characterId)`（22:00–07:00 只开睡衣变体也能命中）。
+- **星露谷多步目标生命周期（P0）**：`resetDailyStateIfNeeded` 跨日清空 `objective`（首次决策初始化不算跨日）；`MAX_OBJECTIVE_ROUNDS=15` 上限；决策 JSON 支持 `objectiveDone:true` 主动完成；`AutodriveRunner.clearObjective()` + `autodrive-host` 在**新单步原子指令**或用户说「算了/取消目标/不用了」时清空旧目标并广播回执，避免旧目标跨日/被替换后继续驱动；删除未使用的 `stuckConsulted/failStreak/avoidTools` 死字段。
+- **自定义角色交互（P0/P1）**：`custom:pose-config` 下发 `fx`/`egg`；pet-stage 右键/「戳一下」优先 `pokePose`（pose-skin `playPose`，缺图回退 `rage_spray`），`fx` 经 `normalizePoseEffect`/`mergePoseEffects` 并入 PoseSkinRenderer（新增 bubbles/celebrate/victory/priceDown/priceUp SVG 动效），`egg:true` 的自定义角色被点中同样逃跑；`summonEgg` 把 userData `egg:true` 自定义角色与 CrossPet `egg-*` 合并随机挑选。
+- **回归证据**：`pose-effects` 4/4（含别名/脏值/默认映射保留）、`pet-control-host` 6/6（睡衣命中 + 自定义彩蛋）、`custom-character` 7/7（egg 标记）、`image-pipeline` 10/10（透明跳过/封闭白保留/浅色衣服保留）、planner 目标生命周期 4 例、autodrive `clearObjective`、chat-directive 取消语 12 例；全仓 **1020 tests / 分支 90.12%**，`pnpm verify:gate` **7 过 / 0 跳过**，Electron E2E **11/11**。
+
 ### Added（全量素材随包 + 桌宠工坊 / 语音中心重构）
 
 - **`assets/pet-packs/` 全量素材直入（T-M6-45）**：新增 `pnpm sync:pet-packs`（GitHub tree 枚举 + 8 并发 + 按字节数断点续传 + 失败重试 + `SYNC-MANIFEST.json`）。实拉 aboutme-pets 2,624 文件 / 1,894 MiB（9 包 · 1,050 精灵图 · 480 条 `.m4a`）、crosspet 946 文件 / 87 MiB（8 基础 + 7 皮肤 + 15 彩蛋 + 8 套手写字体）、上首软糖体.ttf；二次运行 0 下载 / 3,571 跳过。`apps/desktop-host/package.json` 增 `extraResources: assets/pet-packs → Resources/pet-packs`（不进 asar/dist）。
@@ -28,7 +36,11 @@
 - **连败退回规则日程不再复读同一动作**：`LlmPlanner` 检测到同一工具连续两次失败时，旧实现直接 `fallback.decide()`，但 `RulePlanner` 不知道失败原因（`observeReceipt` 未转发），按日程在 07:10 继续 `fish` → 事件流无限刷屏、游戏时间冻结（真机截图：`第1年夏2日 07:10 · Beach` 循环数十条「钓鱼赚米！」）。现在：
   - `LlmPlanner.observeReceipt` 把回执转发给规则兜底；
   - `RulePlanner` 记录**所有工具**的失败（环境级失败「没有鱼竿/没有工具/材料不够」一次即避开，普通失败连续两次避开，成功解除），钓鱼阶段绕开 `fish` 转采集，采集/清地也失败则 `wait` 明确求助；
-  - 连败时先带「必须换做法」约束问大脑一次（新增 `STUCK_SYSTEM`，单日每工具一次，护栏拒绝重复工具），大脑不可用才回落规则日程。
+  - 连败触发 `cooledTools` 后**仍由 LLM 决策**：每轮 user prompt 注入「今天已冷却的动作 + 最近失败原因 + 换方案提示（`list_chests`/`take_items`/FishShop 买鱼竿/采集/农活/下矿）」，不再用 `if (repeated) return fallback` 硬切绕过大脑；
+  - 所有 `fallback.decide` 出口统一走 `fallbackDecision`：兜底动作若已在冷却中 → 改 `wait` 求助，真实兜底在 intent 标注「规则兜底」，事件流可区分大脑与离线兜底。
+- **规则侧鱼竿前置检查**：`hasFishingRod()` 认「鱼竿/钓竿/Rod」；背包段明确没有鱼竿（或 fish 已连败冷却）时，`RulePlanner` 的 fishing 阶段直接转采集，不盲目调用 fish；`observeReceipt` 扩展为**所有非生存类工具**连败 ≥2 当日跳过（`SURVIVAL_TOOLS` 的吃饭/睡觉/赶路/界面仍可重试）。
+- **编排器全局防刷屏熔断**：相同 `(tool + FAILED summary)` 连续 ≥3 次且 `gameClock` 未推进 → 发 watchdog 并暂停 30s，任何规划器/兜底都失效时的最后一道网。
+- **聊天多步目标落地**：`chat-directive` 解析协议扩展为两种形态——单步原子动作（`tool/args`）与多步目标（`tool:"" + objective + firstTool/firstArgs`），toolDoc 补 `list_chests`；`chat:say` 接到 objective 时注入 ack、自动拉起自驾、`submitObjective` 持续驱动 LlmPlanner，有首步则同时 `submitDirective` 立即执行，并广播 `chat_order` 让中控台可见；`teamContext()` 修复单机 objective 被空黑板短路的问题（「主人当前目标」每轮独立注入）。
 - **指令解析失败不再静默**：`chat:say` 的指令解析异常此前被空 `catch` 吞掉，用户只收到回话、游戏里毫无动静。现在记录原因、事件流广播「指令解析失败（未接单）」，并在回话 system 里要求如实说明，不假装接单。
 - **下单失败回灌**：主人刚下的单执行失败时，除原回执外补一条 `chat_order FAILED` 事件与气泡语音（「主人，X 没办成……原因」），不再只看到一句「好嘞」。
 

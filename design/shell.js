@@ -92,11 +92,10 @@
       ],
     },
     {
-      label: '声形与舞台',
+      label: '桌宠与声音',
       items: [
-        { id: 'voice', href: 'voice-studio.html', icon: 'audio-lines', label: '声音工坊与音色库' },
-        { id: 'pet', href: 'pet-stage.html', icon: 'fish', label: '桌宠舞台与动作库' },
-        { id: 'preview', href: 'pet-preview.html', icon: 'clapperboard', label: '素材预览工坊', badge: '1040' },
+        { id: 'pet', href: 'pet-stage.html', icon: 'fish', label: '桌宠工坊', badge: '9 角色' },
+        { id: 'voice', href: 'voice-studio.html', icon: 'audio-lines', label: '语音中心' },
       ],
     },
     {
@@ -104,14 +103,14 @@
       items: [
         { id: 'stardew', href: 'stardew.html', icon: 'gamepad-2', label: '游戏共玩', liveKey: 'autodrive' },
         { id: 'coop', href: 'coop.html', icon: 'users', label: '联机协作', badge: '3 人' },
-        { id: 'obs', href: 'obs-overlay.html', icon: 'monitor-play', label: 'OBS 透明挂件' },
+        { id: 'obs', href: 'obs-overlay.html', icon: 'monitor-play', label: 'OBS 挂件' },
       ],
     },
     {
       label: '平台与底层',
       items: [
-        { id: 'harness', href: 'harness.html', icon: 'terminal', label: 'Harness · Agents' },
-        { id: 'providers', href: 'providers.html', icon: 'cpu', label: '模型与服务商' },
+        { id: 'harness', href: 'harness.html', icon: 'terminal', label: 'Harness' },
+        { id: 'providers', href: 'providers.html', icon: 'cpu', label: '模型服务商' },
         { id: 'plugins', href: 'plugins.html', icon: 'puzzle', label: '扩展与权限' },
       ],
     },

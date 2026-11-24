@@ -2,407 +2,315 @@
 <html lang="zh-CN" class="dark">
 <head>
 <meta charset="UTF-8">
-<title>声音工坊与音色库 — 大肥鱼工作台 v4</title>
+<title>语音中心 — 鲸屿 Whale Isle</title>
 <link rel="stylesheet" href="tokens.css">
 <script src="vendor/lucide.min.js"></script>
 <script src="shell.js"></script>
 <style>
-  .page { max-width: 1180px; margin: 0 auto; padding: 20px 26px 80px; }
-  .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
-  .head-row h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+  .page { max-width: 1200px; margin: 0 auto; padding: 18px 26px 80px; }
+  .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .head-row h1 { font-size: 20px; font-weight: 700; }
   .head-row p { font-size: 12px; color: var(--text-2); margin-top: 4px; }
-  .badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* 9 角色声线绑定条 */
+  .char-voice-bar {
+    padding: 11px 14px; border-radius: var(--r-lg); border: 1px solid var(--stroke);
+    background: var(--surface); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .cv-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 980px;
+    border: 1px solid var(--stroke); background: var(--inset); color: var(--text-2);
+    font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all var(--dur-hover) var(--ease);
+  }
+  .cv-chip:hover { border-color: var(--blue-line); color: var(--text-1); }
+  .cv-chip.on { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); }
+  .cv-chip .vtag { font-size: 10px; opacity: .75; font-weight: 500; }
+
+  /* 顶部后端状态 + 多宠混音护栏 */
+  .mix-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .mix-card { padding: 12px 14px; border-radius: var(--r-lg); display: flex; flex-direction: column; gap: 6px; }
+  .mix-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 650; }
+  .mix-sub { font-size: 11px; color: var(--text-2); line-height: 1.55; }
 
   /* 音色库 5x5 */
-  .voice-list { display: flex; flex-direction: column; gap: 12px; }
-  .v-card { padding: 16px 18px; border-radius: var(--r-xl); transition: all var(--dur-hover) var(--ease); }
+  .voice-list { display: flex; flex-direction: column; gap: 11px; }
+  .v-card { padding: 15px 17px; border-radius: var(--r-xl); transition: all var(--dur-hover) var(--ease); }
   .v-card.selected { border-color: var(--blue-line); box-shadow: var(--glow-blue), inset 0 1px 0 var(--hi); }
   .v-top { display: flex; align-items: center; gap: 12px; }
-  .v-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); flex-shrink: 0; }
+  .v-ic { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); flex-shrink: 0; }
   .v-card.selected .v-ic { background: var(--blue-dim); border-color: var(--blue-line); color: var(--blue); }
-  .v-name { font-size: 14px; font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .v-desc { font-size: 12px; color: var(--text-2); margin-top: 3px; }
-  .mode-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .v-name { font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .v-desc { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+  .mode-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
   .mode-btn {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6.5px 12px;
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px;
     border-radius: var(--r-md); border: 1px solid var(--stroke); background: var(--inset);
-    color: var(--text-2); font-size: 11.5px; transition: all var(--dur-hover) var(--ease);
+    color: var(--text-2); font-size: 11.5px; cursor: pointer; transition: all var(--dur-hover) var(--ease);
   }
   .mode-btn:hover { border-color: var(--blue-line); color: var(--text-1); background: var(--blue-dim); }
   .mode-btn.playing { border-color: var(--green-line); background: var(--green-dim); color: var(--green); }
   .mode-btn .meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
-  .mode-btn.playing .meta { color: var(--green); }
 
-  /* 声音工坊双栏 */
-  .studio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-  .panel { padding: 18px 20px; border-radius: var(--r-xl); }
-  .panel h3 { font-size: 14px; font-weight: 650; display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
-  .emo-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  /* 高阶精调双栏 */
+  .studio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: start; }
+  .panel { padding: 17px 19px; border-radius: var(--r-xl); }
+  .panel h3 { font-size: 14px; font-weight: 650; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .emo-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
   .emo-btn {
-    padding: 5.5px 12px; border-radius: 980px; font-size: 11.5px; font-weight: 550;
+    padding: 5px 11px; border-radius: 980px; font-size: 11.5px; font-weight: 550; cursor: pointer;
     border: 1px solid var(--stroke); background: var(--surface-2); color: var(--text-2);
-    transition: all var(--dur-hover) var(--ease);
   }
   .emo-btn.on { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); }
-
   .field-lbl { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-2); margin-bottom: 5px; }
   .txt-inp {
-    width: 100%; padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--stroke);
-    background: var(--inset); color: var(--text-1); font-size: 12px; font-family: var(--font-ui); outline: none;
-    margin-bottom: 12px; transition: border-color var(--dur-hover) var(--ease);
+    width: 100%; padding: 8px 11px; border-radius: var(--r-md); border: 1px solid var(--stroke);
+    background: var(--inset); color: var(--text-1); font-size: 12px; outline: none; margin-bottom: 11px;
   }
-  .txt-inp:focus { border-color: var(--blue-line); }
-  .txt-inp.err { border-color: var(--red-line); background: var(--red-dim); }
-
-  .slider-row { margin-bottom: 11px; }
-  .pause-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-  .pause-grid input { width: 100%; padding: 6px 9px; border-radius: var(--r-sm); border: 1px solid var(--stroke); background: var(--inset); color: var(--text-1); font-family: var(--font-mono); font-size: 11.5px; outline: none; }
-  .quick-lines { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-  .ql { font-size: 10.5px; padding: 3px 10px; border-radius: 980px; border: 1px solid var(--stroke); background: var(--surface-2); color: var(--text-2); }
-  .ql:hover { border-color: var(--blue-line); color: var(--blue); }
-
-  /* 新建向导弹窗 */
-  .wizard { padding: 16px 18px; border-radius: var(--r-xl); margin-bottom: 16px; border-color: var(--violet-line); display: none; }
-  .wizard.open { display: block; }
-  .wizard-modes { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 12px; }
-
-  /* 吸底保存栏 */
+  .slider-row { margin-bottom: 10px; }
+  .pause-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 11px; }
+  .pause-grid input { width: 100%; padding: 6px 9px; border-radius: var(--r-sm); border: 1px solid var(--stroke); background: var(--inset); color: var(--text-1); font-family: var(--font-mono); font-size: 11.5px; }
   .sticky-bar {
-    position: sticky; bottom: 12px; margin-top: 16px; padding: 11px 16px;
-    border-radius: var(--r-xl); border: 1px solid var(--stroke-2);
-    background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+    position: sticky; bottom: 12px; margin-top: 16px; padding: 11px 16px; border-radius: var(--r-xl);
+    border: 1px solid var(--stroke-2); background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
     backdrop-filter: blur(26px); box-shadow: var(--shadow-2);
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
   }
-
   .tab-pane { display: none; }
   .tab-pane.on { display: block; }
-  @media (max-width: 980px) { .studio-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 980px) { .mix-grid, .studio-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
-<body data-wb-page="voice" data-wb-group="声形与舞台" data-wb-title="声音工坊与音色库">
+<body data-wb-page="voice" data-wb-group="桌宠与声音" data-wb-title="语音中心">
   <main class="wb-main">
     <div class="page">
       <div class="head-row">
         <div>
-          <h1>声音工坊与音色库</h1>
-          <p>整合 D11 快捷音色库（5 候选音色 × 5 情感试听）与 T-M5-17 声音工坊（五情绪调音台 + RVC 实验室 + 三模式捏声）</p>
+          <h1>语音中心</h1>
+          <p>按角色独立分配声线（9 角色全平权）、多宠串行抢麦与动作原声 ducking 控制，以及五档情感与 RVC 高阶精调</p>
         </div>
-        <div class="seg-tabs" role="tablist">
-          <button class="seg-tab on" data-tab-btn="catalog" onclick="switchTab('catalog')"><i data-lucide="audio-lines" class="xs"></i>快捷音色库 (5×5)</button>
-          <button class="seg-tab" data-tab-btn="studio" onclick="switchTab('studio')"><i data-lucide="sliders" class="xs"></i>声音工坊 &amp; RVC</button>
+        <div class="seg-tabs">
+          <button class="seg-tab on" data-vtab="catalog" onclick="switchVTab('catalog')"><i data-lucide="audio-lines" class="xs"></i>角色声线与音色</button>
+          <button class="seg-tab" data-vtab="studio" onclick="switchVTab('studio')"><i data-lucide="sliders" class="xs"></i>高阶精调与 RVC</button>
         </div>
       </div>
 
-      <!-- TAB 1: 快捷音色库 (对齐 voice-panel.tsx) -->
-      <section class="tab-pane on" id="pane-catalog">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <span class="k" style="font-size:12px">点击任一情感档位实时试听；点击「使用此音色」写 voiceId，聊天 / 游戏播报 / 内心戏全场景即时生效。</span>
-          <span class="pill pill-violet">5 个候选音色 · 25 情感试听档</span>
+      <!-- 9 角色声线切换条 -->
+      <div class="char-voice-bar">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600">正在配置角色声线：</span>
+        <div id="cv-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- 真实语音后端 + 多宠混音策略 -->
+      <div class="mix-grid">
+        <div class="card mix-card">
+          <div class="mix-top">
+            <span style="display:flex;align-items:center;gap:6px"><i data-lucide="radio" class="xs" style="color:var(--green)"></i>当前语音后端（如实探测）</span>
+            <span class="pill pill-green" style="font-size:10px">mcode 角色链</span>
+          </div>
+          <div class="mix-sub">首选 <span class="mono">mcode-tools</span> 五档情感合成，失败自动降级 macOS <span class="mono">say</span> 变调链；气泡严格等播完再收。</div>
         </div>
-        <div class="voice-list stagger" id="voice-list"></div>
-        <p style="margin-top:14px;font-size:11px;color:var(--text-3);line-height:1.75">
-          D11 场景映射：正式台词 → 软萌日常 (daily) ｜ 内心戏心声 → 慵懒气声 (sleepy, 193Hz / vol 0.45) ｜ P0 雷区反射 → 傲娇炸毛 (tsundere, 480Hz / ×1.6)。合成失败自动回落本地 macOS say 变调链三层保底。
-        </p>
+        <div class="card mix-card">
+          <div class="mix-top">
+            <span style="display:flex;align-items:center;gap:6px"><i data-lucide="volume-2" class="xs" style="color:var(--violet)"></i>动作原声音效（.m4a ducking）</span>
+            <div class="sw on" onclick="this.classList.toggle('on');wbToast('已切换动作原声音效自动 ducking')"></div>
+          </div>
+          <div class="mix-sub">任一桌宠 TTS 说话时，480 条动作原声音效自动压低至 15%，播完恢复，绝不叠音。</div>
+        </div>
+        <div class="card mix-card">
+          <div class="mix-top">
+            <span style="display:flex;align-items:center;gap:6px"><i data-lucide="lock" class="xs" style="color:var(--blue)"></i>多宠全局抢麦锁</span>
+            <span class="pill pill-blue" style="font-size:10px">active ≤ 1 串行</span>
+          </div>
+          <div class="mix-sub">多桌宠同屏聊天或联机开麦时严格串行发声，其余桌宠自动切换倾听微动作。</div>
+        </div>
+      </div>
+
+      <!-- TAB 1: 角色声线与快捷音色 (5×5) -->
+      <section class="tab-pane on" id="vpane-catalog">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <span class="k" style="font-size:12px" id="cat-hint">当前正在为「小鲸」挑选音色：点击任一情感档试听，点「绑定给此角色」立即生效。</span>
+          <span class="pill pill-violet">5 候选音色 × 5 情感试听档</span>
+        </div>
+        <div class="voice-list" id="voice-list"></div>
       </section>
 
-      <!-- TAB 2: 声音工坊 T-M5-17 (对齐 voice-studio-panel.tsx) -->
-      <section class="tab-pane" id="pane-studio">
-        <div class="badges" style="margin-bottom:14px">
-          <span class="pill pill-violet"><i data-lucide="mic-2" class="xs"></i>blue-whale-maid-v2</span>
-          <span class="pill pill-amber">DEV_ONLY_NON_COMMERCIAL</span>
-          <span class="pill pill-green"><i data-lucide="disc-3" class="xs"></i>MPS 本地推理就绪</span>
-          <span class="pill">audio-ai-worker :18790</span>
-          <button class="btn-pill primary" style="margin-left:auto" onclick="toggleWizard()"><i data-lucide="plus" class="xs"></i>生成 / 提取新音色</button>
-        </div>
-
-        <!-- 三模式新建向导弹窗 -->
-        <div class="card wizard rise" id="wizard">
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <h4 style="font-size:13.5px;display:flex;align-items:center;gap:7px"><i data-lucide="sparkles" class="sm" style="color:var(--violet)"></i>新建音色 · 三种路径</h4>
-            <button class="icon-btn" onclick="toggleWizard()"><i data-lucide="x" class="sm"></i></button>
-          </div>
-          <div class="wizard-modes">
-            <button class="emo-btn on" data-wmode="cloud" onclick="setWMode('cloud')"><i data-lucide="cloud" class="xs" style="vertical-align:-2px;margin-right:4px"></i>AI 描述捏声线</button>
-            <button class="emo-btn" data-wmode="slice" onclick="setWMode('slice')"><i data-lucide="upload" class="xs" style="vertical-align:-2px;margin-right:4px"></i>上传干声自动切片</button>
-            <button class="emo-btn" data-wmode="weight" onclick="setWMode('weight')"><i data-lucide="file-music" class="xs" style="vertical-align:-2px;margin-right:4px"></i>导入本地权重</button>
-          </div>
-          <div id="w-body-cloud">
-            <textarea class="txt-inp" rows="3" style="resize:vertical">12到14岁的二次元蓝鲸女仆美少女音色，清亮甜美中带着一丝傲娇与懒散的反差感，句尾轻微上扬……</textarea>
-          </div>
-          <div id="w-body-slice" style="display:none">
-            <input class="txt-inp mono" value="/Users/jiaqi/Audio/whale_raw_01.wav" placeholder="/path/to/长音频.wav（Demucs 去伴奏 + 3-8s VAD 切片 + ASR 草稿）">
-            <div style="font-size:11px;color:var(--text-3);margin:-6px 0 10px">内存 &lt;4GB 自动返回 422 降级提示；切片结果确定性输出并生成 refText 草稿。</div>
-          </div>
-          <div id="w-body-weight" style="display:none">
-            <input class="txt-inp mono" value="/Users/jiaqi/Models/rvc/blue_whale_v2.pth" placeholder="/path/to/rvc_model.pth">
-            <div style="font-size:11px;color:var(--amber);margin:-6px 0 10px">导入本地权重将强制打标 licenseScope = DEV_ONLY_NON_COMMERCIAL（受 Gate 2 许可证护栏校验）。</div>
-          </div>
-          <div style="display:flex;justify-content:flex-end;gap:8px">
-            <button class="btn-pill ghost" onclick="toggleWizard()">取消</button>
-            <button class="btn-pill primary" onclick="submitWizard()">开始生成 / 导入</button>
-          </div>
+      <!-- TAB 2: 高阶精调与 RVC（随所选角色动态切换，告别 blue-whale-maid 硬编码） -->
+      <section class="tab-pane" id="vpane-studio">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:13px">
+          <span class="pill pill-violet" id="studio-char-pill"><i data-lucide="mic-2" class="xs"></i>blue-whale-maid</span>
+          <span class="pill pill-amber">audio-ai-worker 本地推理（可选接线）</span>
+          <span class="pill">DEV_ONLY_NON_COMMERCIAL</span>
         </div>
 
         <div class="studio-grid">
-          <!-- 左侧：说话情感调音台 -->
           <section class="card panel">
-            <h3><i data-lucide="audio-lines" class="sm" style="color:var(--blue)"></i>说话情感调音台（5 情绪锚点）</h3>
+            <h3><i data-lucide="audio-lines" class="sm" style="color:var(--blue)"></i>五档情感精调（<span id="st-char-nm">小鲸</span>）</h3>
             <div class="emo-tabs" id="emo-tabs"></div>
-
-            <div class="field-lbl">
-              <span>参考文本（refText · 必填，防内部 ASR 40s 卡顿）</span>
-              <span class="mono" style="color:var(--blue)" id="vs-ref-path">ref/sweet_normal.wav</span>
-            </div>
-            <input class="txt-inp" id="vs-reftext" oninput="markDirty()">
-
+            <div class="field-lbl"><span>参考文本（refText 必填）</span><span class="mono" style="color:var(--blue)" id="vs-ref-path">ref/sweet_normal.wav</span></div>
+            <input class="txt-inp" id="vs-reftext" value="主人好～今天的米饭已经备好了哦！">
             <div class="slider-row">
-              <div class="field-lbl"><span>语速 (Speed)</span><span class="mono" style="color:var(--blue)" id="val-speed">1.00</span></div>
-              <input class="wb-range" type="range" min="0.7" max="1.4" step="0.05" value="1.0" id="sl-speed" oninput="onTtsSlider('speed',this.value)">
+              <div class="field-lbl"><span>角色基准语速</span><span class="mono" id="val-speed">1.00</span></div>
+              <input class="wb-range" type="range" min="0.7" max="1.4" step="0.05" value="1.0" oninput="document.getElementById('val-speed').textContent=Number(this.value).toFixed(2)">
             </div>
             <div class="slider-row">
-              <div class="field-lbl"><span>表现力 (Temperature)</span><span class="mono" style="color:var(--blue)" id="val-temp">0.80</span></div>
-              <input class="wb-range" type="range" min="0.1" max="1.0" step="0.05" value="0.8" id="sl-temp" oninput="onTtsSlider('temp',this.value)">
+              <div class="field-lbl"><span>音高微调（半音）</span><span class="mono" id="val-pitch-t">0</span></div>
+              <input class="wb-range" type="range" min="-6" max="6" step="1" value="0" oninput="document.getElementById('val-pitch-t').textContent=(this.value>0?'+':'')+this.value">
             </div>
-
-            <div class="field-lbl"><span>dsh-gpt-sovits 三档气口停顿 (ms)</span></div>
+            <div class="field-lbl"><span>三档气口停顿 (ms)</span></div>
             <div class="pause-grid">
-              <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">句号停顿</div><input type="number" id="p-period" value="340" oninput="markDirty()"></div>
-              <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">逗号停顿</div><input type="number" id="p-comma" value="150" oninput="markDirty()"></div>
-              <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">省略号停顿</div><input type="number" id="p-ellipsis" value="460" oninput="markDirty()"></div>
+              <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">句号</div><input type="number" value="340"></div>
+              <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">逗号</div><input type="number" value="150"></div>
+              <div><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">省略号</div><input type="number" value="460"></div>
             </div>
-
-            <div class="field-lbl"><span>快捷试听台词</span></div>
-            <div class="quick-lines" id="quick-lines"></div>
-            <input class="txt-inp" id="vs-testtext" value="主人好～今天的米饭已经备好了哦！">
-
-            <button class="btn-pill green" style="width:100%;padding:9px" onclick="auditionTts()">
-              <i data-lucide="play" class="xs"></i>试听当前参数（skipCache · 单端语音锁）
+            <button class="btn-pill green" style="width:100%;padding:9px" onclick="wbToast('正在以当前角色参数试听（经单端语音锁）')">
+              <i data-lucide="play" class="xs"></i>试听当前角色精调参数
             </button>
           </section>
 
-          <!-- 右侧：RVC 实验室 -->
           <section class="card panel">
-            <h3><i data-lucide="mic-2" class="sm" style="color:var(--violet)"></i>唱歌音色精调 · RVC 实验室</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-              <div>
-                <div class="field-lbl"><span>RVC 模型路径</span></div>
-                <input class="txt-inp mono" value="models/blue_whale_v2.pth" oninput="markDirty()">
-              </div>
-              <div>
-                <div class="field-lbl"><span>Index 特征路径</span></div>
-                <input class="txt-inp mono" value="models/added_IVF256.index" oninput="markDirty()">
-              </div>
-            </div>
-
+            <h3><i data-lucide="music" class="sm" style="color:var(--violet)"></i>RVC 唱歌音色实验室（按角色独立）</h3>
+            <div class="field-lbl"><span>RVC 权重路径</span></div>
+            <input class="txt-inp mono" id="rvc-path" value="models/blue-whale-maid_v2.pth">
             <div class="slider-row">
-              <div class="field-lbl"><span>升降调 (半音)</span><span class="mono" style="color:var(--violet)" id="val-pitch">0</span></div>
-              <input class="wb-range violet" type="range" min="-12" max="12" step="1" value="0" id="sl-pitch" oninput="onSvcSlider('pitch',this.value)">
+              <div class="field-lbl"><span>升降调 (半音)</span><span class="mono" id="val-rpitch">0</span></div>
+              <input class="wb-range violet" type="range" min="-12" max="12" step="1" value="0" oninput="document.getElementById('val-rpitch').textContent=(this.value>0?'+':'')+this.value">
             </div>
             <div class="slider-row">
-              <div class="field-lbl"><span>音色还原度 (Index Rate)</span><span class="mono" style="color:var(--violet)" id="val-idx">0.75</span></div>
-              <input class="wb-range violet" type="range" min="0" max="1" step="0.05" value="0.75" id="sl-idx" oninput="onSvcSlider('idx',this.value)">
+              <div class="field-lbl"><span>音色还原度 (Index Rate)</span><span class="mono" id="val-ridx">0.75</span></div>
+              <input class="wb-range violet" type="range" min="0" max="1" step="0.05" value="0.75" oninput="document.getElementById('val-ridx').textContent=Number(this.value).toFixed(2)">
             </div>
             <div class="slider-row">
-              <div class="field-lbl"><span>气声保护 (Protect Voiceless)</span><span class="mono" style="color:var(--violet)" id="val-prot">0.33</span></div>
-              <input class="wb-range violet" type="range" min="0" max="0.5" step="0.01" value="0.33" id="sl-prot" oninput="onSvcSlider('prot',this.value)">
+              <div class="field-lbl"><span>气声保护 (Protect)</span><span class="mono" id="val-rprot">0.33</span></div>
+              <input class="wb-range violet" type="range" min="0" max="0.5" step="0.01" value="0.33" oninput="document.getElementById('val-rprot').textContent=Number(this.value).toFixed(2)">
             </div>
-            <div class="slider-row">
-              <div class="field-lbl"><span>人声电平 (dB)</span><span class="mono" style="color:var(--violet)" id="val-vocal">0.0</span></div>
-              <input class="wb-range violet" type="range" min="-12" max="12" step="0.5" value="0" id="sl-vocal" oninput="onSvcSlider('vocal',this.value)">
-            </div>
-            <div class="slider-row">
-              <div class="field-lbl"><span>伴奏电平 (dB)</span><span class="mono" style="color:var(--violet)" id="val-acc">-3.0</span></div>
-              <input class="wb-range violet" type="range" min="-24" max="6" step="0.5" value="-3" id="sl-acc" oninput="onSvcSlider('acc',this.value)">
-            </div>
-
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px">
-              <button class="pill pill-violet clickable" onclick="setPitch(2)">女声微调 +2</button>
-              <button class="pill pill-violet clickable" onclick="setPitch(12)">男转女 +12</button>
-              <button class="pill clickable" onclick="setPitch(0)">原调 0</button>
-            </div>
-
-            <button class="btn-pill violet" style="width:100%;padding:9px" onclick="auditionSvc()">
-              <i data-lucide="music" class="xs"></i>副歌 15 秒变声试听（ResourceMutex）
+            <button class="btn-pill violet" style="width:100%;padding:9px;margin-top:8px" onclick="wbToast('ResourceMutex：挂起 TTS → 试听 15s RVC 副歌 → 恢复 TTS')">
+              <i data-lucide="disc-3" class="xs"></i>副歌 15 秒变声试听（ResourceMutex）
             </button>
-            <p style="margin-top:9px;font-size:10.5px;color:var(--text-3);line-height:1.7">
-              互斥护栏：试听 RVC 前自动挂起 TTS 引擎释放显存，完成后自动恢复（mutexTrace 可审计）；可用内存 &lt;4GB 返回 422 降级。
-            </p>
           </section>
         </div>
 
         <div class="sticky-bar">
-          <span id="save-status" style="font-size:12px;color:var(--green);display:flex;align-items:center;gap:6px">
-            <i data-lucide="check-circle-2" class="sm"></i>当前参数已同步至 voice_matrix.json（热重载就绪）
+          <span style="font-size:12px;color:var(--green);display:flex;align-items:center;gap:6px">
+            <i data-lucide="check-circle-2" class="sm"></i><span id="save-lbl">已绑定至「小鲸」独立语音配置（热重载生效）</span>
           </span>
-          <div style="display:flex;gap:8px">
-            <button class="btn-pill ghost" onclick="revertPack()"><i data-lucide="rotate-ccw" class="xs"></i>还原修改</button>
-            <button class="btn-pill primary" onclick="savePack()"><i data-lucide="save" class="xs"></i>保存到当前桌宠人设</button>
-          </div>
+          <button class="btn-pill primary" onclick="wbToast('已保存「' + activeChar.name + '」的独立语音与情感参数')">
+            <i data-lucide="save" class="xs"></i>保存到当前角色
+          </button>
         </div>
       </section>
     </div>
   </main>
 
 <script>
+  const CHARS = [
+    { id: 'blue-whale-maid', name: '小鲸', voiceId: 'qiaopi_mengmei' },
+    { id: 'aboutme-grok', name: '星璃', voiceId: 'Arrogant_Miss' },
+    { id: 'aboutme-gemini', name: '泡芙', voiceId: 'diadia_xuemei' },
+    { id: 'aboutme-kimi', name: '星芒', voiceId: 'Chinese (Mandarin)_Crisp_Girl' },
+    { id: 'aboutme-glm', name: '青岚', voiceId: 'Chinese (Mandarin)_Crisp_Girl' },
+    { id: 'aboutme-qwen', name: '千羽', voiceId: 'Chinese (Mandarin)_Stubborn_Friend' },
+    { id: 'aboutme-claude', name: '克洛伊', voiceId: 'Chinese (Mandarin)_Crisp_Girl' },
+    { id: 'aboutme-gpt', name: '小智', voiceId: 'Chinese (Mandarin)_Stubborn_Friend' },
+    { id: 'aboutme-dsh1', name: '小鲸·新动作', voiceId: 'qiaopi_mengmei' },
+  ];
   const VOICES = [
-    { id: 'qiaopi_mengmei', label: '俏皮萌妹', desc: 'D11 定稿主音色 · 软萌小女仆基调，句尾自然上扬，傲娇反差感最佳' },
-    { id: 'diadia_xuemei', label: '嗲嗲学妹', desc: '偏软糯撒娇声线 · 适合闲聊陪玩与下饭菜投喂答谢' },
-    { id: 'qingcui_shaonv', label: '清脆少女', desc: '明亮干脆吐字清晰 · 适合星露谷战术播报与弹幕快反' },
-    { id: 'aojiao_daxiaojie', label: '傲娇大小姐', desc: '中高音带锐度 · 适合「大肥鱼」雷区炸毛与毒舌反驳' },
-    { id: 'jueqiang_pengyou', label: '倔强朋友', desc: '中性少年少女感 · 适合翻车心虚甩锅与碎碎念' },
+    { id: 'qiaopi_mengmei', label: '俏皮萌妹', desc: '13-16 岁二次元少女，清亮甜美带傲娇反差' },
+    { id: 'diadia_xuemei', label: '嗲嗲学妹', desc: '软糯撒娇学妹音，尾音轻甜' },
+    { id: 'Chinese (Mandarin)_Crisp_Girl', label: '清脆少女', desc: '清亮干脆咬字清晰，适合条理控与战术播报' },
+    { id: 'Arrogant_Miss', label: '傲娇大小姐', desc: '中高音带锐度，适合毒舌军师与雷区炸毛' },
+    { id: 'Chinese (Mandarin)_Stubborn_Friend', label: '倔强朋友', desc: '带点倔强的同级生口吻，适合实干与吐槽' },
   ];
   const MODES = [
-    { id: 'daily', label: '软萌日常', pitch: 2.6, speed: 1.0, sample: '哼，本鱼才没有偷懒呢！主人快夸夸我嘛～' },
-    { id: 'bright', label: '俏皮元气', pitch: 4.0, speed: 1.12, sample: '主人主人！本鱼今天钓到了一条超级大的鳀鱼哦！' },
-    { id: 'tsundere', label: '傲娇炸毛', pitch: 6.5, speed: 1.6, sample: '谁、谁是鱼啊！本鱼是鲸！喷水抗议！' },
-    { id: 'sleepy', label: '慵懒气声', pitch: -2.0, speed: 0.85, sample: '唔……其实有一点点想主人夸我……才怪……' },
-    { id: 'surprised', label: '惊喜元气', pitch: 4.5, speed: 1.18, sample: '诶诶诶！主人居然给本鱼准备了礼物？！' },
+    { id: 'daily', label: '日常', meta: '0 / ×0.95' },
+    { id: 'bright', label: '俏皮', meta: '+4 / ×1.05' },
+    { id: 'tsundere', label: '炸毛', meta: '+12 / ×1.6' },
+    { id: 'sleepy', label: '气声', meta: '-4 / ×0.75' },
+    { id: 'surprised', label: '惊喜', meta: '+6 / ×1.1' },
   ];
   const EMOTIONS = [
-    { tag: 'sweet_normal', label: '嘴甜常态', sample: '主人好～今天的米饭已经备好了哦！' },
-    { tag: 'tsundere_refuse', label: '傲娇反驳', sample: '哼、哼！才不是因为担心主人呢！' },
-    { tag: 'rage_spray', label: '大肥鱼破防', sample: '谁、谁是鱼啊！本鱼是鲸！喷水抗议！' },
-    { tag: 'lazy_yawn', label: '困倦摸鱼', sample: '唔……好困……让本鱼再睡五分钟嘛……' },
-    { tag: 'clumsy_panic', label: '翻车心虚', sample: '都、都怪这块石头突然长出来的！' },
+    { tag: 'sweet_normal', label: '嘴甜常态' },
+    { tag: 'tsundere_refuse', label: '傲娇反驳' },
+    { tag: 'rage_spray', label: '雷区破防' },
+    { tag: 'lazy_yawn', label: '困倦摸鱼' },
+    { tag: 'clumsy_panic', label: '翻车心虚' },
   ];
 
-  let selectedVoiceId = 'qiaopi_mengmei';
-  let playingKey = null;
+  let activeChar = CHARS[0];
   let activeEmo = 'sweet_normal';
-  const emoState = Object.fromEntries(EMOTIONS.map((e) => [e.tag, { refText: e.sample, speed: 1.0, temp: 0.8, period: 340, comma: 150, ellipsis: 460 }]));
+  let playingKey = null;
+
+  function voiceLabelOf(vid) { return VOICES.find((v) => v.id === vid)?.label || vid; }
+
+  function renderCharBar() {
+    document.getElementById('cv-chips').innerHTML = CHARS.map((c) => `
+      <button class="cv-chip${c.id === activeChar.id ? ' on' : ''}" onclick="selectChar('${c.id}')">
+        <span>${c.name}</span><span class="vtag">· ${voiceLabelOf(c.voiceId)}</span>
+      </button>`).join('');
+    document.getElementById('cat-hint').textContent = `当前正在为「${activeChar.name}」挑选音色：点击任一情感档试听，点「绑定给 ${activeChar.name}」立即生效。`;
+    document.getElementById('studio-char-pill').innerHTML = `<i data-lucide="mic-2" class="xs"></i>${activeChar.id}`;
+    document.getElementById('st-char-nm').textContent = activeChar.name;
+    document.getElementById('rvc-path').value = `models/${activeChar.id}_v2.pth`;
+    document.getElementById('save-lbl').textContent = `已绑定至「${activeChar.name}」独立语音配置（热重载生效）`;
+    renderCatalog();
+    lucide.createIcons();
+  }
+
+  function selectChar(id) {
+    activeChar = CHARS.find((c) => c.id === id) || CHARS[0];
+    renderCharBar();
+  }
 
   function renderCatalog() {
-    const box = document.getElementById('voice-list');
-    box.innerHTML = VOICES.map((v) => {
-      const sel = v.id === selectedVoiceId;
+    document.getElementById('voice-list').innerHTML = VOICES.map((v) => {
+      const sel = v.id === activeChar.voiceId;
       const btns = MODES.map((m) => {
         const k = `${v.id}:${m.id}`;
         const pl = playingKey === k;
-        return `<button class="mode-btn${pl ? ' playing' : ''}" onclick="playCatalog('${v.id}','${m.id}')">
+        return `<button class="mode-btn${pl ? ' playing' : ''}" onclick="audition('${v.id}','${m.id}')">
           ${pl ? '<span class="pulse-dot"></span>' : '<i data-lucide="play" class="xs"></i>'}
-          <span>${m.label}</span>
-          <span class="meta">${m.pitch >= 0 ? '+' + m.pitch : m.pitch} / ×${m.speed}</span>
+          <span>${m.label}</span><span class="meta">${m.meta}</span>
         </button>`;
       }).join('');
-      return `<section class="card card-hover v-card${sel ? ' selected' : ''}">
+      return `<section class="card v-card${sel ? ' selected' : ''}">
         <div class="v-top">
           <div class="v-ic"><i data-lucide="audio-lines" class="sm"></i></div>
-          <div style="min-width:0;flex:1">
-            <div class="v-name">${v.label}<span class="mono k">${v.id}</span>${sel ? '<span class="pill pill-blue">当前使用</span>' : ''}</div>
+          <div style="flex:1;min-width:0">
+            <div class="v-name">${v.label}<span class="mono k" style="font-size:11px">${v.id}</span>${sel ? `<span class="pill pill-blue">${activeChar.name} 当前绑定</span>` : ''}</div>
             <div class="v-desc">${v.desc}</div>
           </div>
-          <button class="btn-pill ${sel ? 'green' : 'primary'}" onclick="pickVoice('${v.id}','${v.label}')" ${sel ? 'disabled' : ''}>
-            <i data-lucide="${sel ? 'check' : 'star'}" class="xs"></i>${sel ? '已选中' : '使用此音色'}
+          <button class="btn-pill ${sel ? 'green' : 'primary'}" onclick="bindVoice('${v.id}','${v.label}')" ${sel ? 'disabled' : ''}>
+            <i data-lucide="${sel ? 'check' : 'star'}" class="xs"></i>${sel ? '已绑定' : '绑定给 ' + activeChar.name}
           </button>
         </div>
         <div class="mode-row">${btns}</div>
       </section>`;
     }).join('');
-    if (window.lucide) lucide.createIcons();
+    lucide.createIcons();
   }
 
-  function playCatalog(vid, mid) {
+  function audition(vid, mid) {
     playingKey = `${vid}:${mid}`;
     renderCatalog();
-    const m = MODES.find((x) => x.id === mid);
-    const v = VOICES.find((x) => x.id === vid);
-    wbToast(`正在试听 [${v.label} · ${m.label}]：${m.sample}`);
-    setTimeout(() => { playingKey = null; renderCatalog(); }, 2200);
+    wbToast(`试听 [${voiceLabelOf(vid)} · ${mid}]（应用到 ${activeChar.name}）`);
+    setTimeout(() => { playingKey = null; renderCatalog(); }, 1800);
   }
-  function pickVoice(vid, label) {
-    selectedVoiceId = vid;
-    window.wbState?.patch({ activeVoice: label });
-    renderCatalog();
-    wbToast(`已切换音色为「${label}」（聊天 / 播报 / 内心戏全场景生效）`);
+  function bindVoice(vid, lbl) {
+    activeChar.voiceId = vid;
+    renderCharBar();
+    wbToast(`已将「${activeChar.name}」的默认声线绑定为「${lbl}」`);
   }
-
-  function switchTab(id) {
-    document.querySelectorAll('[data-tab-btn]').forEach((b) => b.classList.toggle('on', b.dataset.tabBtn === id));
-    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.toggle('on', p.id === 'pane-' + id));
+  function switchVTab(t) {
+    document.querySelectorAll('[data-vtab]').forEach((b) => b.classList.toggle('on', b.dataset.vtab === t));
+    ['catalog', 'studio'].forEach((id) => document.getElementById('vpane-' + id).classList.toggle('on', id === t));
   }
 
-  function renderEmotions() {
+  document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('emo-tabs').innerHTML = EMOTIONS.map((e) =>
-      `<button class="emo-btn${e.tag === activeEmo ? ' on' : ''}" onclick="selectEmo('${e.tag}')">${e.label}</button>`
+      `<button class="emo-btn${e.tag === activeEmo ? ' on' : ''}" onclick="activeEmo='${e.tag}';document.getElementById('vs-ref-path').textContent='ref/${e.tag}.wav'">${e.label}</button>`
     ).join('');
-    document.getElementById('quick-lines').innerHTML = EMOTIONS.map((e) =>
-      `<button class="ql" onclick="document.getElementById('vs-testtext').value='${e.sample}'">${e.label}</button>`
-    ).join('');
-    const cur = emoState[activeEmo];
-    document.getElementById('vs-ref-path').textContent = `ref/${activeEmo}.wav`;
-    document.getElementById('vs-reftext').value = cur.refText;
-    document.getElementById('vs-reftext').classList.remove('err');
-    document.getElementById('sl-speed').value = cur.speed;
-    document.getElementById('val-speed').textContent = cur.speed.toFixed(2);
-    document.getElementById('sl-temp').value = cur.temp;
-    document.getElementById('val-temp').textContent = cur.temp.toFixed(2);
-    document.getElementById('p-period').value = cur.period;
-    document.getElementById('p-comma').value = cur.comma;
-    document.getElementById('p-ellipsis').value = cur.ellipsis;
-  }
-  function selectEmo(tag) {
-    activeEmo = tag;
-    document.getElementById('vs-testtext').value = EMOTIONS.find((e) => e.tag === tag).sample;
-    renderEmotions();
-  }
-  function onTtsSlider(k, v) {
-    emoState[activeEmo][k] = Number(v);
-    document.getElementById('val-' + k).textContent = Number(v).toFixed(2);
-    markDirty();
-  }
-  function onSvcSlider(k, v) {
-    const n = Number(v);
-    document.getElementById('val-' + k).textContent = k === 'pitch' ? (n > 0 ? '+' + n : String(n)) : n.toFixed(k === 'vocal' || k === 'acc' ? 1 : 2);
-    markDirty();
-  }
-  function setPitch(v) {
-    document.getElementById('sl-pitch').value = v;
-    onSvcSlider('pitch', v);
-  }
-  function markDirty() {
-    emoState[activeEmo].refText = document.getElementById('vs-reftext').value;
-    const st = document.getElementById('save-status');
-    st.style.color = 'var(--amber)';
-    st.innerHTML = '<i data-lucide="circle-dot" class="sm"></i>参数已修改，点击右侧「保存到当前桌宠人设」生效';
-    lucide.createIcons();
-  }
-  function auditionTts() {
-    const rt = document.getElementById('vs-reftext');
-    if (!rt.value.trim()) {
-      rt.classList.add('err');
-      wbToast('400 拦截：refText 不可为空（防止内部 ASR 40s 卡顿），已建议草稿');
-      return;
-    }
-    rt.classList.remove('err');
-    wbToast(`TTS 实时试听中（${activeEmo} · speed ${emoState[activeEmo].speed.toFixed(2)}）`);
-  }
-  function auditionSvc() {
-    wbToast('ResourceMutex：已挂起 TTS → RVC 副歌 15s 渲染完成 → TTS 已恢复');
-  }
-  function savePack() {
-    const st = document.getElementById('save-status');
-    st.style.color = 'var(--green)';
-    st.innerHTML = '<i data-lucide="check-circle-2" class="sm"></i>已原子写入 voice_matrix.json 并热重载到桌宠人设';
-    lucide.createIcons();
-    wbToast('音色包保存成功，热重载生效');
-  }
-  function revertPack() {
-    renderEmotions();
-    setPitch(0);
-    wbToast('已还原至上次保存的参数');
-  }
-  function toggleWizard() { document.getElementById('wizard').classList.toggle('open'); }
-  function setWMode(m) {
-    document.querySelectorAll('[data-wmode]').forEach((b) => b.classList.toggle('on', b.dataset.wmode === m));
-    ['cloud', 'slice', 'weight'].forEach((k) => { document.getElementById('w-body-' + k).style.display = k === m ? 'block' : 'none'; });
-  }
-  function submitWizard() {
-    toggleWizard();
-    wbToast('新音色任务已完成并写入参考干声，可在左侧调音台微调');
-  }
-
-  document.addEventListener('DOMContentLoaded', () => { renderCatalog(); renderEmotions(); });
+    renderCharBar();
+  });
 </script>
 </body>
 </html>
