@@ -22,7 +22,7 @@ import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createVoiceBindingStore, registerVoiceBindingIpc } from './voice-bindings';
 import { createFriendshipHost, registerFriendshipIpc } from './friendship-host';
-import { createPetControlHost } from './pet-control-host';
+import { createPetControlHost, matchPetViewForCharacter } from './pet-control-host';
 import { createCoopLaunchHost } from './coop-launch-host';
 import { createAcpSessionCache } from './acp-session-cache';
 import { createCustomCharacterHost } from './custom-character-host';
@@ -391,6 +391,7 @@ app.whenReady().then(async () => {
     manager: () => petWindowManager,
     characters: () => characters,
     crossPetCharacters: () => readCrossPetCharacters(petPacksRoot).characters,
+    customEggs: () => readCustomCharacters(app.getPath('userData')).entries.filter((entry) => entry.data.egg).map((entry) => entry.character),
     getPrefs: () => prefs.get(),
     switchDefaultCharacter,
     voice: () => voice,
@@ -475,7 +476,7 @@ app.whenReady().then(async () => {
       // multi 模式闲置退场：同一角色还有活跃会话时保留窗口
       const stillActive = workFollowRef?.status().sessions.some((item) => item.active && item.characterId === session.characterId) ?? false;
       if (stillActive) return;
-      const view = petWindowManager?.list().find((item) => item.characterId === session.characterId);
+      const view = matchPetViewForCharacter(petWindowManager?.list() ?? [], session.characterId, (id) => petControl.nightOutfit(id));
       if (view === undefined) return;
       // 先告别再退场：气泡保留 2.5s 后关窗，避免“突然消失”
       petWindowManager?.sendAgent(view.agentId, 'pet:say', { text: '这边忙完啦，我先撤～下次再一起干活！' });
@@ -483,7 +484,7 @@ app.whenReady().then(async () => {
     },
     resolveCharacter: (event) => resolveProxyCharacter(app.getPath('userData'), event.source, event.modelName)?.character.id ?? null,
     onAgentPose: (session, pose) => {
-      const view = petWindowManager?.list().find((item) => item.characterId === session.characterId);
+      const view = matchPetViewForCharacter(petWindowManager?.list() ?? [], session.characterId, (id) => petControl.nightOutfit(id));
       if (view === undefined) return;
       const character = characters.list().find((item) => item.id === session.characterId);
       if (character === undefined) return;
@@ -500,7 +501,7 @@ app.whenReady().then(async () => {
       petControl.pose(view.agentId, resolved.pose, line, 'work-follow');
     },
     onCrown: (session) => {
-      const view = petWindowManager?.list().find((item) => item.characterId === session.characterId);
+      const view = matchPetViewForCharacter(petWindowManager?.list() ?? [], session.characterId, (id) => petControl.nightOutfit(id));
       if (view !== undefined) petWindowManager?.sendAgent(view.agentId, 'pet:crown', { on: true });
     },
     onUpdate: (status) => {

@@ -13,6 +13,19 @@ import type { VoiceHost } from './voice-host';
 import type { VoiceBindingStore } from './voice-bindings';
 import { readCrossPetCharacters } from './pet-packs';
 
+/**
+ * 按角色找桌宠窗：夜间工作跟随会 summon `*-pajamas` 皮肤角色，
+ * session.characterId 仍是基础角色，必须同时匹配睡衣变体（T-M6-54）。
+ */
+export function matchPetViewForCharacter<T extends { characterId: string }>(
+  views: readonly T[],
+  characterId: string,
+  nightOutfit: (id: string) => string,
+): T | undefined {
+  return views.find((view) => view.characterId === characterId)
+    ?? views.find((view) => view.characterId === nightOutfit(characterId));
+}
+
 export interface PetControlHost {
   /** 召唤（含夜间睡衣解析）；已存在则聚焦并返回原 agentId。 */
   summonPet(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
@@ -38,6 +51,8 @@ export function createPetControlHost(options: {
   characters: () => CharacterRegistry;
   /** 随包 CrossPet 角色（夜间睡衣/彩蛋选择用；注入便于测试） */
   crossPetCharacters: () => PetCharacter[];
+  /** userData 自定义角色里 egg:true 的彩蛋（与 CrossPet egg-* 一起随机串门） */
+  customEggs?: () => PetCharacter[];
   getPrefs: () => PetDesktopPrefs;
   switchDefaultCharacter: (id: string) => void;
   voice: () => VoiceHost | null;
@@ -73,8 +88,11 @@ export function createPetControlHost(options: {
   };
 
   const summonEgg = async (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => {
-    const eggs = options.crossPetCharacters().filter((character) => character.displayName.includes('串门彩蛋'));
-    if (eggs.length === 0) return { ok: false, error: '未找到 egg-* 彩蛋素材（先跑 pnpm sync:pet-packs）' };
+    const eggs = [
+      ...options.crossPetCharacters().filter((character) => character.displayName.includes('串门彩蛋')),
+      ...(options.customEggs?.() ?? []),
+    ];
+    if (eggs.length === 0) return { ok: false, error: '未找到彩蛋素材（CrossPet 串门彩蛋或 userData 里 egg:true 的自定义角色）' };
     const egg = eggs[Math.floor(Math.random() * eggs.length)]!;
     const result = await summonPet(egg.id);
     return result.ok ? { ok: true, agentId: result.agentId, characterId: egg.id, name: egg.displayName } : result;

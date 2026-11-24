@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }));
 
-import { createPetControlHost } from './pet-control-host';
+import { createPetControlHost, matchPetViewForCharacter } from './pet-control-host';
 
 interface Sent { agentId: string; channel: string; payload: Record<string, unknown> }
 
-function makeHost() {
+function makeHost(customEggs: Array<{ id: string; displayName: string }> = []) {
   const sent: Sent[] = [];
   const closed: string[] = [];
   const opened: Array<{ agentId: string; characterId: string }> = [];
@@ -36,6 +36,7 @@ function makeHost() {
     manager: () => manager as never,
     characters: () => ({ list: () => characters, selected: () => characters[0], manifestOf: () => ({ ok: false, error: 'x' }) }) as never,
     crossPetCharacters: () => characters as never,
+    customEggs: () => customEggs as never,
     getPrefs: () => ({ characterId: 'crosspet-claude' }) as never,
     switchDefaultCharacter: () => undefined,
     voice: () => ({ speak: (voice: { text: string; characterId?: string; voiceId?: string }) => { voices.push(voice); return { ok: true }; } }) as never,
@@ -94,5 +95,29 @@ describe('pet-control-host', () => {
     expect(host.petControlApi.state('ghost')).toBeNull();
     expect(host.petControlApi.say('ghost', 'x', { scene: 'normal', wake: true })).toMatchObject({ ok: false });
     expect(host.petControlApi.action('ghost', 'idle', 1000)).toMatchObject({ ok: false });
+  });
+});
+
+
+describe('matchPetViewForCharacter（T-M6-54 夜间睡衣）', () => {
+  it('基础角色在场直接命中；只开了睡衣变体时也能命中', () => {
+    const views = [
+      { agentId: 'a', characterId: 'crosspet-claude' },
+      { agentId: 'b', characterId: 'crosspet-deepseek-pajamas' },
+    ];
+    const night = (id: string): string => (id === 'crosspet-deepseek' ? 'crosspet-deepseek-pajamas' : id);
+    expect(matchPetViewForCharacter(views, 'crosspet-claude', night)?.agentId).toBe('a');
+    expect(matchPetViewForCharacter(views, 'crosspet-deepseek', night)?.agentId).toBe('b');
+    expect(matchPetViewForCharacter(views, 'custom-seal', night)).toBeUndefined();
+  });
+});
+
+
+describe('summonEgg 自定义彩蛋（T-M6-54）', () => {
+  it('CrossPet 无串门彩蛋时，userData 里 egg:true 的自定义角色也能被召唤', async () => {
+    const { host, opened } = makeHost([{ id: 'custom-little-egg', displayName: '小鲸蛋' }]);
+    const result = await host.summonEgg();
+    expect(result).toMatchObject({ ok: true, characterId: 'custom-little-egg', name: '小鲸蛋' });
+    expect(opened[0]?.characterId).toBe('custom-little-egg');
   });
 });

@@ -7,4 +7,4 @@ export * from './squash';
 export { WebmVideoRenderer, computeFootlineLayout, pickAmbient, type WebmRendererOptions } from './webm-renderer';
 export { SpritesheetRenderer, spriteFrameIndex, spriteFrameRect, type SpriteAudioController, type SpriteMetaLoader, type SpriteSurfaceFactory, type SpritesheetRendererOptions } from './spritesheet-renderer';
 export { PoseSkinRenderer, type PoseImageFactory, type PoseImageHandle, type PoseSkinRendererOptions } from './pose-skin';
-export { poseEffectOffsets, poseEffectSvg, type PoseEffectKind } from './pose-effects';
+export { mergePoseEffects, normalizePoseEffect, poseEffectOffsets, poseEffectSvg, type PoseEffectKind } from './pose-effects';

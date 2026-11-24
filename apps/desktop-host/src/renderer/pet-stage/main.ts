@@ -2,7 +2,7 @@
  * pet-stage 渲染层装配（T-M1-02）：WebmVideoRenderer + alpha 穿透探针 + 拖拽甩抛。
  * 注意：webm 资产不入库（DEV_ONLY_NON_COMMERCIAL），未放置资产时舞台为透明空窗——属预期。
  */
-import { PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
+import { mergePoseEffects, normalizePoseEffect, PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
@@ -61,7 +61,7 @@ interface PetStageBridge {
   petSummon?(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
   /** T-M6-53：工作跟随代理/验收台按姿态名直放 */
   onPetPose?(handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void;
-  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string }>;
+  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean }>;
   /** 自定义角色热重载：重新读取注册表与 manifest（零重启） */
   reloadCharacters?(): Promise<{ ok: boolean; count?: number }>;
   /** T-M6-53：验收台暂停/睡眠演练与创作中心/验收台入口 */
@@ -228,13 +228,15 @@ poseEffectLayer.id = 'pose-effect-layer';
 poseEffectLayer.style.cssText = 'position:absolute;left:50%;top:0;transform:translateX(-50%);pointer-events:none;z-index:6;display:flex;gap:2px';
 stage.appendChild(poseEffectLayer);
 let lastEffect = '';
-function renderPoseEffect(kind: string | null): void {
+function renderPoseEffect(raw: string | null): void {
+  // 自定义 fx 先用别名归一（celebrate/priceDown…），未识别不画空壳
+  const kind = raw === null ? null : normalizePoseEffect(raw);
   if (kind === lastEffect) return;
   lastEffect = kind ?? '';
   poseEffectLayer.innerHTML = '';
   if (kind === null) return;
-  const svg = poseEffectSvg(kind as import('@workbench/pet-renderer').PoseEffectKind);
-  for (const offset of poseEffectOffsets(kind as import('@workbench/pet-renderer').PoseEffectKind)) {
+  const svg = poseEffectSvg(kind);
+  for (const offset of poseEffectOffsets(kind)) {
     const holder = document.createElement('span');
     holder.style.cssText = `position:absolute;transform:translate(${offset.dx}px,${offset.dy}px);animation:poseFloat 1.6s ease-in-out ${offset.delayMs}ms infinite`;
     holder.innerHTML = svg;
@@ -323,7 +325,7 @@ type SpriteMeta = import('@workbench/shared-protocol').PetSpriteMeta;
 /** 当前窗口正显示的角色（友谊记分 / pose 台词用）。 */
 let currentCharacterId = petContext.characterId ?? 'blue-whale-maid';
 /** 自定义角色的纠正/长思考姿态（T-M6-53） */
-let poseConfig: { correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string } | null = null;
+let poseConfig: { correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean } | null = null;
 let lastFailureAt = 0;
 let longThinkTimer: ReturnType<typeof setTimeout> | null = null;
 async function loadCharacterManifest(id: string): Promise<void> {
@@ -337,6 +339,10 @@ async function loadCharacterManifest(id: string): Promise<void> {
       if (clip.webmPath.startsWith('assets/')) clip.webmPath = `./${clip.webmPath}`;
     }
   }
+  // 自定义角色配置必须先取：fx 要并入 PoseSkinRenderer，pokePose/egg 后续交互直接消费
+  const config = bridge.customPoseConfig === undefined
+    ? null
+    : await bridge.customPoseConfig(id).catch(() => null);
   if (rawManifest.renderer === 'sprite-sheet') {
     renderer.dispose();
     renderer = new SpritesheetRenderer({
@@ -349,18 +355,19 @@ async function loadCharacterManifest(id: string): Promise<void> {
   } else if (rawManifest.renderer === 'pose-skin') {
     const lines = await bridge.crossPetLines(id).catch(() => ({}));
     renderer.dispose();
-    renderer = new PoseSkinRenderer({ host, imageFactory: poseImageFactory, lines, effects: POSE_EFFECTS });
+    renderer = new PoseSkinRenderer({
+      host,
+      imageFactory: poseImageFactory,
+      lines,
+      effects: mergePoseEffects(POSE_EFFECTS, config?.ok === true ? config.fx : undefined),
+    });
   } else if (!(renderer instanceof WebmVideoRenderer)) {
     renderer.dispose();
     renderer = webmRenderer;
   }
   await renderer.load(rawManifest);
   await renderer.play('idle');
-  poseConfig = null;
-  if (bridge.customPoseConfig !== undefined) {
-    const config = await bridge.customPoseConfig(id).catch(() => null);
-    if (config?.ok === true) poseConfig = config;
-  }
+  poseConfig = config?.ok === true ? config : null;
   lastFailureAt = 0;
   if (longThinkTimer !== null) { clearTimeout(longThinkTimer); longThinkTimer = null; }
 }
@@ -765,12 +772,21 @@ const toggleSleep = (): void => {
   headPat(interaction);
   void renderer.play('sleep_mute').catch(() => undefined);
 };
+/** 右键「戳一下」：自定义角色优先用自己的 pokePose，缺图才回退内置 rage_spray。 */
+const playPokePose = (): void => {
+  const custom = poseConfig?.pokePose;
+  if (custom !== undefined && custom !== '' && renderer instanceof PoseSkinRenderer && renderer.availablePoses().includes(custom)) {
+    void renderer.playPose(custom).catch(() => { void renderer.play('rage_spray').catch(() => undefined); });
+    return;
+  }
+  void renderer.play('rage_spray').catch(() => undefined);
+};
 const patHeadOnce = (): void => {
   wakeUp();
   headPat(interaction);
   void bridge.friendRecord?.(currentCharacterId, 'pat').catch(() => undefined);
-  // 串门彩蛋：被点中就逃跑（关窗），不留假状态
-  if (currentCharacterId.startsWith('crosspet-egg-')) {
+  // 串门彩蛋：CrossPet egg-* 与 userData 里 egg:true 的自定义角色被点中都逃跑（关窗）
+  if (poseConfig?.egg === true || currentCharacterId.startsWith('crosspet-egg-')) {
     widgets.showDialog('被抓住了！下次再来串门～');
     setTimeout(() => { void bridge.petFlee?.(dockedAgentId).catch(() => undefined); }, 900);
     return;
@@ -1105,7 +1121,7 @@ stage.addEventListener('contextmenu', (event) => {
   }
   wakeUp();
   void bridge.friendRecord?.(currentCharacterId, 'poke').catch(() => undefined);
-  void renderer.play('rage_spray').catch(() => undefined);
+  playPokePose();
   void bridge.pokeLine?.(dockedAgentId).then((result) => {
     if (result.ok && result.line !== undefined) {
       widgets.showDialog(result.line);
@@ -1134,7 +1150,7 @@ stage.addEventListener('contextmenu', (event) => {
     btn.addEventListener('click', () => { setScale(option); closeScaleMenu(); });
     scaleMenu.appendChild(btn);
   }
-  makeTextButton('戳一下', () => { wakeUp(); void renderer.play('rage_spray').catch(() => undefined); closeScaleMenu(); });
+  makeTextButton('戳一下', () => { wakeUp(); playPokePose(); closeScaleMenu(); });
   makeTextButton(interaction.asleep ? '叫醒' : '睡觉', () => { toggleSleep(); closeScaleMenu(); });
   makeTextButton('叫她出来 ▸', () => {
     // 只移除一级菜单 DOM，保持交互态；二级面板关闭/超时后再恢复穿透

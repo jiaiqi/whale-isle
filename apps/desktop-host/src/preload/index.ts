@@ -323,7 +323,7 @@ contextBridge.exposeInMainWorld('petStage', {
   petDismiss: (): Promise<{ ok: boolean; closed: number }> => ipcRenderer.invoke('pet:dismiss'),
   petEggSummon: (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => ipcRenderer.invoke('pet:egg-summon'),
   petOpenNotebook: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:open-notebook'),
-  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string }> =>
+  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean }> =>
     ipcRenderer.invoke('custom:pose-config', characterId),
   onPetPose: (handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void => {
     ipcRenderer.on('pet:pose', (_e, payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => handler(payload));

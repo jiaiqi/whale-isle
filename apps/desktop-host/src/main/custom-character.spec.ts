@@ -91,6 +91,17 @@ describe('自定义角色加载', () => {
   });
 });
 
+describe('自定义彩蛋', () => {
+  it('egg:true 的自定义角色被保留标记（供 summonEgg 与逃跑逻辑消费）', () => {
+    const root = makeUserData();
+    writeCharacter(root, 'little-egg', { ...CHARACTER, name: '小鲸蛋', egg: true });
+    const entry = readCustomCharacters(root).entries[0]!;
+    expect(entry.data.egg).toBe(true);
+    expect(entry.character.id).toBe('custom-little-egg');
+    expect(entry.poses).toContain('idle');
+  });
+});
+
 describe('CrossPet character.json 兼容', () => {
   it('真实 CrossPet 字段（lines 内含 greet_*/fest_*、fx 映射、glyph、aura/host/skin）经 Schema 校验并保留', async () => {
     const { PetCustomCharacterSchema } = await import('@workbench/shared-protocol');

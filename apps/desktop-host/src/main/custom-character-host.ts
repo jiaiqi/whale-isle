@@ -86,7 +86,7 @@ export function createCustomCharacterHost(options: {
       const dirId = id.startsWith('custom-') ? id.slice('custom-'.length) : id;
       const entry = readCustomCharacters(options.userDataDir).entries.find((item) => item.id === dirId || item.character.id === id);
       if (entry === undefined) return { ok: false };
-      return { ok: true, correctedPose: entry.data.correctedPose, longThink: entry.data.longThink, pokePose: entry.data.pokePose };
+      return { ok: true, correctedPose: entry.data.correctedPose, longThink: entry.data.longThink, pokePose: entry.data.pokePose, fx: entry.data.fx, egg: entry.data.egg };
     });
     ipcMain.handle('custom:reload', () => {
       invalidateCustomCharacters();
