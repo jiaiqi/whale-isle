@@ -15,6 +15,7 @@
  */
 import { DstStateSnapshotSchema, GameBridgeHealthSchema, type DstStateSnapshot } from '@workbench/shared-protocol';
 import { gameAdapters, type GameId } from '@workbench/game-bridge-mcp';
+import { bwfMcpEndpoint } from './bwf-settings';
 
 export type GameHealthStatus = 'online' | 'reachable' | 'offline';
 
@@ -34,7 +35,7 @@ export interface GameHealthReport {
 }
 
 export const DEFAULT_GAME_ENDPOINTS: Record<GameId, string> = {
-  stardew: 'http://127.0.0.1:18080/mcp',
+  stardew: bwfMcpEndpoint(),
   terraria: 'http://127.0.0.1:18090',
   dst: 'http://127.0.0.1:18100',
 };
@@ -43,8 +44,8 @@ export const DEFAULT_GAME_ENDPOINTS: Record<GameId, string> = {
 export const GAME_CONNECT_GUIDANCE: Record<GameId, string[]> = {
   stardew: [
     '启动《星露谷物语》并载入存档（未进存档时 Mod 不会应答）',
-    '确认 SMAPI 控制台出现 BWF Mod 载入日志（MCP 端口 18080）',
-    '在「游戏共玩 → Mod 管理」确认 BWF 处于启用状态',
+    '确认 SMAPI 控制台出现 BWF Mod 载入日志，且监听端口与当前配置一致（默认 18088）',
+    '在「游戏共玩 → Mod 管理」确认 BWF 处于启用状态；刚改过端口需重启一次游戏',
     '回到本页点击「重新探测」',
   ],
   terraria: [

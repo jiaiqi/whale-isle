@@ -195,6 +195,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   modsSetBwfHud: (value: boolean): Promise<{
     ok: boolean; showHud?: boolean; applied?: boolean; needsGameRestart?: boolean; gameOffline?: boolean; error?: string;
   }> => ipcRenderer.invoke('mods:set-bwf-hud', value),
+  modsSetBwfPort: (port: number): Promise<{
+    ok: boolean; port?: number; configSynced?: boolean; configUpdated?: boolean; configPath?: string; warning?: string; needsGameRestart?: boolean; error?: string;
+  }> => ipcRenderer.invoke('mods:set-bwf-port', port),
   modsSetDir: (dir: string): Promise<unknown> => ipcRenderer.invoke('mods:set-dir', dir),
   modsScan: (): Promise<unknown> => ipcRenderer.invoke('mods:scan'),
   modsToggle: (folderName: string, enabled: boolean): Promise<unknown> => ipcRenderer.invoke('mods:toggle', folderName, enabled),

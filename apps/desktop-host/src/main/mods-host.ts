@@ -3,6 +3,7 @@
  *   - 配置落 userData/stardew-mods.json（StardewModsConfig 契约校验后才消费）
  *   - 扫描/启停/安装委托 @workbench/stardew-mods（纯逻辑、可单测）
  *   - 安装 ZIP：系统解压到临时目录 → installModFromDirectory → 清理临时目录
+ *   - BWF 端口单点管理：默认 18088（避开 18080 冲突），自动同步写入 Mods/BlindWhaleFarmer/config.json
  * 铁律：只操作玩家自己的 Mods 目录；不改游戏本体；路径一律来自玩家配置或平台默认候选。
  */
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
@@ -20,7 +21,7 @@ import {
   scanModsDir,
   setModEnabled,
 } from '@workbench/stardew-mods';
-import { pushBwfShowHud } from './bwf-settings';
+import { bwfBaseUrl, pushBwfShowHud, syncBwfConfigPort } from './bwf-settings';
 
 const run = promisify(execFile);
 
@@ -29,6 +30,10 @@ export interface ModsHost {
   readonly modsDir: string;
   /** 配置是否来自玩家手动指定 */
   readonly configured: boolean;
+  /** 当前生效的 BWF MCP 端口（默认 18088） */
+  readonly bwfMcpPort: number;
+  /** 订阅 BWF 端口变更（用于实时更新主进程 autodrive 端点） */
+  onBwfPortChange(listener: (port: number) => void): () => void;
 }
 
 function readConfig(configPath: string): StardewModsConfig {
@@ -63,6 +68,7 @@ async function extractZip(zipPath: string, destDir: string): Promise<void> {
 export function createModsHost(userDataDir: string): ModsHost {
   const configPath = join(userDataDir, 'stardew-mods.json');
   let config = readConfig(configPath);
+  const portListeners = new Set<(port: number) => void>();
   const candidates = () => guessModsDirs(process.platform, homedir());
 
   /** 配置优先；未配置时取第一个真实存在的平台候选 */
@@ -72,16 +78,22 @@ export function createModsHost(userDataDir: string): ModsHost {
     return { dir: found ?? candidates()[0] ?? '', configured: false };
   };
 
+  // 启动即把本地 BWF 端口偏好自愈同步到星露谷 Mods/BlindWhaleFarmer/config.json（例如从旧 18080 迁到 18088）
+  const initialDir = resolveDir().dir;
+  if (initialDir !== '') syncBwfConfigPort(initialDir, config.bwfMcpPort);
+
   ipcMain.handle('mods:state', async () => {
     const { dir, configured } = resolveDir();
+    if (dir !== '') syncBwfConfigPort(dir, config.bwfMcpPort);
     const snapshot = dir === '' ? null : await scanModsDir(dir);
     // 自愈同步（T-M6-16）：打开星露谷/Mod 页时把本地偏好推给 BWF（Mod 升级重置 config.json 后自动纠正）；
     // 游戏没开就静默跳过，开关切换与下次打开页面时再推
-    void pushBwfShowHud(config.bwfShowHud).catch(() => undefined);
+    void pushBwfShowHud(config.bwfShowHud, bwfBaseUrl(config.bwfMcpPort)).catch(() => undefined);
     return {
       ok: true,
       configured,
       bwfShowHud: config.bwfShowHud,
+      bwfMcpPort: config.bwfMcpPort,
       candidates: candidates().map((path) => ({ path, exists: existsSync(path) })),
       snapshot,
     };
@@ -92,7 +104,7 @@ export function createModsHost(userDataDir: string): ModsHost {
     if (typeof value !== 'boolean') return { ok: false, error: 'value 必须是布尔值' };
     config = { ...config, bwfShowHud: value };
     writeConfig(configPath, config);
-    const push = await pushBwfShowHud(value);
+    const push = await pushBwfShowHud(value, bwfBaseUrl(config.bwfMcpPort));
     return {
       ok: true,
       showHud: value,
@@ -103,11 +115,39 @@ export function createModsHost(userDataDir: string): ModsHost {
     };
   });
 
+  // BWF MCP 端口配置：持久化到 stardew-mods.json + 同步写入星露谷 Mods/BlindWhaleFarmer/config.json
+  ipcMain.handle('mods:set-bwf-port', async (_e, rawPort: unknown) => {
+    const parsed = StardewModsConfigSchema.shape.bwfMcpPort.safeParse(Number(rawPort));
+    if (!parsed.success) {
+      return { ok: false, error: '端口必须是 1024–65535 之间的整数' };
+    }
+    const nextPort = parsed.data;
+    config = { ...config, bwfMcpPort: nextPort };
+    writeConfig(configPath, config);
+    const { dir } = resolveDir();
+    const synced = dir === ''
+      ? { ok: false, updated: false, error: '未找到星露谷 Mods 目录，已保存工作台端口；请手动核对 BWF config.json' }
+      : syncBwfConfigPort(dir, nextPort);
+    for (const listener of portListeners) {
+      try { listener(nextPort); } catch { /* 隔离单个监听异常 */ }
+    }
+    return {
+      ok: true,
+      port: nextPort,
+      configSynced: synced.ok,
+      configUpdated: synced.updated,
+      ...(synced.configPath === undefined ? {} : { configPath: synced.configPath }),
+      ...(synced.error === undefined ? {} : { warning: synced.error }),
+      needsGameRestart: true,
+    };
+  });
+
   ipcMain.handle('mods:set-dir', async (_e, dir: string) => {
     if (typeof dir !== 'string' || dir.trim() === '') return { ok: false, error: '目录不能为空' };
     if (!existsSync(dir)) return { ok: false, error: `目录不存在：${dir}` };
     config = { ...config, modsDir: dir.trim() };
     writeConfig(configPath, config);
+    syncBwfConfigPort(config.modsDir, config.bwfMcpPort);
     return { ok: true, snapshot: await scanModsDir(config.modsDir) };
   });
 
@@ -163,6 +203,13 @@ export function createModsHost(userDataDir: string): ModsHost {
     },
     get configured() {
       return config.modsDir.trim() !== '';
+    },
+    get bwfMcpPort() {
+      return config.bwfMcpPort;
+    },
+    onBwfPortChange(listener) {
+      portListeners.add(listener);
+      return () => { portListeners.delete(listener); };
     },
   };
 }

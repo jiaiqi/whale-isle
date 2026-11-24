@@ -185,6 +185,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   // 桌宠工坊 / 语音中心的分页签状态由各自面板内聚（T-M6-46）
   // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
+  // BWF MCP 端口（默认 18088，避开 Amazon Quick 等工具写死的 18080；同步写 Mods/BlindWhaleFarmer/config.json）
+  const [bwfPort, setBwfPort] = useState(18088);
+  const [editingBwfPort, setEditingBwfPort] = useState(false);
+  const [bwfPortDraft, setBwfPortDraft] = useState('18088');
   // T-M6-62：桌宠形象同步进星露谷（开关 + 灵动动画 + Mod 安装/版本状态 + 游戏内当前同步角色与清晰度，全部真实 IPC）
   const [avatarSync, setAvatarSync] = useState<{
     enabled: boolean;
@@ -298,8 +302,14 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
     void window.directorBridge.voiceBackend().then(setVoiceBackend).catch(() => setVoiceBackend(null));
     void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
-    // BWF HUD 偏好水合（T-M6-16）：主进程 mods:state 顺带触发一次自愈推送
-    void window.directorBridge.modsState().then((s) => { if (s.bwfShowHud === true) setBwfHud(true); });
+    // BWF HUD 与端口偏好水合：主进程 mods:state 顺带触发一次自愈同步
+    void window.directorBridge.modsState().then((s) => {
+      if (s.bwfShowHud === true) setBwfHud(true);
+      if (typeof s.bwfMcpPort === 'number') {
+        setBwfPort(s.bwfMcpPort);
+        setBwfPortDraft(String(s.bwfMcpPort));
+      }
+    });
     // 启动即把 Dexie 里的单一配置 + 服务商清单/模型启停同步给主进程
     void Promise.all([
       store.getConfig<DiningProfilePreset[]>('diningProfiles'),
@@ -528,6 +538,27 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     if (res.gameOffline === true) toast(`已保存：HUD ${next ? '显示' : '关闭'}（游戏没在跑，开游戏后自动生效）`);
     else if (res.needsGameRestart === true) toast.warning('已保存，但游戏内还是旧版 Mod——重启一次游戏后生效');
     else toast.success(`游戏内 MCP 提示已${next ? '打开' : '关闭'}（即时生效）`);
+  };
+
+  const saveBwfPort = async (): Promise<void> => {
+    const nextPort = Number(bwfPortDraft.trim());
+    if (!Number.isInteger(nextPort) || nextPort < 1024 || nextPort > 65535) {
+      toast.error('端口必须是 1024–65535 之间的整数');
+      return;
+    }
+    const res = await window.directorBridge.modsSetBwfPort(nextPort);
+    if (!res.ok) {
+      toast.error(res.error ?? '端口保存失败');
+      return;
+    }
+    setBwfPort(nextPort);
+    setEditingBwfPort(false);
+    stardewHealth.reprobe();
+    if (res.configSynced === true) {
+      toast.success(`已将工作台与 BWF Mod 端口改为 :${nextPort}（重启星露谷后生效）`);
+    } else {
+      toast.warning(`已保存工作台端口 :${nextPort}（${res.warning ?? '请手动核对 BWF config.json'}）`);
+    }
   };
 
   const feedRice = async (): Promise<void> => {
@@ -881,6 +912,37 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               >
                 <Monitor size={11} />游戏内提示 {bwfHud ? '开' : '关'}
               </button>
+              {editingBwfPort ? (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px]" style={{ border: '1px solid var(--blue-line)', background: 'var(--inset)' }} data-bwf-port-editor>
+                  <span style={{ color: 'var(--text-3)' }}>MCP :</span>
+                  <input
+                    type="number"
+                    min={1024}
+                    max={65535}
+                    value={bwfPortDraft}
+                    onChange={(event) => setBwfPortDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void saveBwfPort();
+                      if (event.key === 'Escape') { setEditingBwfPort(false); setBwfPortDraft(String(bwfPort)); }
+                    }}
+                    className="mono w-16 bg-transparent text-[11px] outline-none"
+                    style={{ color: 'var(--text-1)' }}
+                    autoFocus
+                  />
+                  <button type="button" className="cursor-pointer font-semibold" style={{ color: 'var(--blue)' }} onClick={() => void saveBwfPort()}>保存</button>
+                  <button type="button" className="cursor-pointer" style={{ color: 'var(--text-3)' }} onClick={() => { setEditingBwfPort(false); setBwfPortDraft(String(bwfPort)); }}>取消</button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  data-bwf-port={bwfPort}
+                  onClick={() => { setBwfPortDraft(String(bwfPort)); setEditingBwfPort(true); }}
+                  title="点击修改星露谷 BWF MCP 端口（默认 18088，避开 Amazon Quick 等占用的 18080；保存时自动同步写入 BWF config.json）"
+                  className="pill mono cursor-pointer"
+                >
+                  MCP :{bwfPort}
+                </button>
+              )}
               <button
                 data-avatar-sync={avatarSync?.enabled === true ? 'on' : 'off'}
                 onClick={() => void toggleAvatarSync()}
@@ -1006,7 +1068,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                 <GameDiagnostics
                   title="高级诊断"
                   rows={[
-                    ['桥接方式', 'BWF Mod 本机服务 (:18080)'],
+                    ['桥接方式', `BWF Mod 本机服务 (:${bwfPort})`],
                     ['可用动作', '78 个白名单动作'],
                     ['卡死策略', '大脑救援问询 + 离线阶梯兜底'],
                     ['直写工具', '默认关闭（运行期安全锁）'],

@@ -44,6 +44,7 @@ import type { CharacterRegistry } from './character-registry';
 import { characterReflex } from './character-persona';
 import type { PetWindowManager } from './pet-window-manager';
 import type { VoiceHost } from './voice-host';
+import { bwfMcpEndpoint } from './bwf-settings';
 
 export interface CoopPlannerOptions {
   fallbackPlanner?: Planner;
@@ -98,7 +99,7 @@ const DEFAULT_ENDPOINTS: McpEndpoint[] = [
     id: 'default',
     displayName: '本机星露谷（小鲸）',
     gameId: 'stardew',
-    endpoint: 'http://127.0.0.1:18080/mcp',
+    endpoint: bwfMcpEndpoint(),
     characterId: 'blue-whale-maid',
     enabled: true,
   }),

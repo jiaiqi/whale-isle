@@ -13,6 +13,7 @@ import { createEggTheater } from './egg-theater';
 import { decidePeakOutfit, isPeakOutfitFamily, resolvePeakPeriod, type PeakOutfitState } from './peak-schedule';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
+import { bwfMcpEndpoint } from './bwf-settings';
 import { createPetPrefsStore } from './pet-prefs';
 import { PetWindowManager, type ManagedPetWindow, type PetWindowCreateInput, type WindowBounds } from './pet-window-manager';
 import { createCharacterRegistry } from './character-registry';
@@ -923,20 +924,23 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       action: (agentId, actionState, durationMs) => petControl.petControlApi.action(agentId, actionState, durationMs),
     },
   });
-  // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
-  const MAIN_GAME_ENDPOINT = 'http://127.0.0.1:18080/mcp';
+  // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发；端口随 modsHost 可配置项联动
+  const mainGameEndpoint = (): string => bwfMcpEndpoint(modsHost.bwfMcpPort);
   const autodrive = createAutodriveHost(
-    MAIN_GAME_ENDPOINT,
+    mainGameEndpoint(),
     join(app.getPath('userData'), 'provider-vault.json'),
     voice,
     memory,
     'stardew',
     undefined,
-    () => coopHost?.list().some((agent) => agent.running && agent.endpoint === MAIN_GAME_ENDPOINT)
+    () => coopHost?.list().some((agent) => agent.running && agent.endpoint === mainGameEndpoint())
       ? '该端点已被「联机协作」页接管；请先停止对应 AI 队友，避免两个 Runner 抢同一角色'
       : null,
     characters,
   );
+  modsHost.onBwfPortChange((port) => {
+    void autodrive.setEndpoint(bwfMcpEndpoint(port));
+  });
   // 多桌宠联机协作（T-M6-39）：复用 autodrive 的 Gateway/饭碗，但每 Agent 独立 planner/persona/voice。
   coopHost = createCoopHost({
     userDataDir: app.getPath('userData'),
@@ -945,7 +949,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     voiceHost: voice,
     petWindows: petWindowManager,
     characters,
-    isEndpointBusyByMain: (endpoint) => endpoint === MAIN_GAME_ENDPOINT && autodrive.runner.isRunning(),
+    isEndpointBusyByMain: (endpoint) => endpoint === mainGameEndpoint() && autodrive.runner.isRunning(),
     // 联机求助接力 / 共同目标完成 → 对应角色涨好感（T-M6-48）
     onFriendshipEvent: (kind, agentId) => {
       const endpoint = coopHost?.list().find((item) => item.id === agentId);
@@ -1073,14 +1077,15 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       }
     },
   });
-  // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100，结果如实回报（不伪造「已连接」）
+  // 三游戏桥接探活（T-M6-25）：只读探测当前配置端口（星露谷默认 18088 / 泰拉瑞亚 18090 / 饥荒 18100），结果如实回报
   ipcMain.handle('game:health', async (_event, gameId: GameId, endpoint?: string) => {
+    const resolvedEndpoint = endpoint ?? (gameId === 'stardew' ? mainGameEndpoint() : undefined);
     try {
-      return await probeGameHealth(gameId, { ...(endpoint === undefined ? {} : { endpoint }) });
+      return await probeGameHealth(gameId, { ...(resolvedEndpoint === undefined ? {} : { endpoint: resolvedEndpoint }) });
     } catch (error) {
       return {
         gameId,
-        endpoint: endpoint ?? '',
+        endpoint: resolvedEndpoint ?? '',
         status: 'offline' as const,
         ok: false,
         latencyMs: 0,

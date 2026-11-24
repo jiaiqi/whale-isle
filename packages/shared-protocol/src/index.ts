@@ -765,11 +765,16 @@ export const StardewModsOpResultSchema = z.object({
 });
 export type StardewModsOpResult = z.infer<typeof StardewModsOpResultSchema>;
 
+/** 星露谷 BWF Mod 默认 MCP 端口（避开 Amazon Quick 等工具写死的 18080，也不撞泰拉瑞亚 18090 / 饥荒 18100） */
+export const DEFAULT_BWF_MCP_PORT = 18088;
+
 /** Mod 目录配置（userData/stardew-mods.json） */
 export const StardewModsConfigSchema = z.object({
   modsDir: z.string().default(''),
   /** BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭不显示；经 /settings 远程下发运行时生效 */
   bwfShowHud: z.boolean().default(false),
+  /** 星露谷 BWF Mod MCP 监听端口（单点事实源：同步写入 Mods/BlindWhaleFarmer/config.json 的 McpPort） */
+  bwfMcpPort: z.number().int().min(1024).max(65535).default(DEFAULT_BWF_MCP_PORT),
 });
 export type StardewModsConfig = z.infer<typeof StardewModsConfigSchema>;
 

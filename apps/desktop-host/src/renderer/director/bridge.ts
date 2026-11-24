@@ -446,6 +446,9 @@ export interface DirectorBridge {
   modsSetBwfHud(value: boolean): Promise<{
     ok: boolean; showHud?: boolean; applied?: boolean; needsGameRestart?: boolean; gameOffline?: boolean; error?: string;
   }>;
+  modsSetBwfPort(port: number): Promise<{
+    ok: boolean; port?: number; configSynced?: boolean; configUpdated?: boolean; configPath?: string; warning?: string; needsGameRestart?: boolean; error?: string;
+  }>;
   modsSetDir(dir: string): Promise<ModsOpView>;
   modsScan(): Promise<ModsOpView>;
   modsToggle(folderName: string, enabled: boolean): Promise<ModsOpView>;
@@ -480,6 +483,8 @@ export interface ModsStateView {
   configured?: boolean;
   /** BWF 游戏内 HUD 当前偏好（T-M6-16，默认 false 不显示） */
   bwfShowHud?: boolean;
+  /** BWF MCP 当前配置端口（默认 18088，避开 18080 冲突） */
+  bwfMcpPort?: number;
   candidates?: Array<{ path: string; exists: boolean }>;
   snapshot?: ModsSnapshotView | null;
   error?: string;

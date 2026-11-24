@@ -71,6 +71,8 @@ export interface AutodriveHost {
   feedRice(grains: number): { balance: number; budget: number; consumedToday: number; level: string };
   /** 一键启停当前游戏自驾（供桌宠右键菜单直接复用） */
   toggleDrive(): Promise<{ ok: boolean; running: boolean; error?: string }>;
+  /** 动态更新星露谷主端点（修改 BWF 端口后热重建 runner，无需重启工作台） */
+  setEndpoint(nextEndpoint: string): Promise<void>;
   /** T-M6-39：联机协商/指令解析复用当前 Gateway 与饭碗计量；未配置 Key 返回 null */
   completeForCoop(
     slot: WorkbenchRoleSlot,
@@ -793,6 +795,15 @@ ${ackHint}`;
       } catch (error) {
         return { ok: false, running: false, error: error instanceof Error ? error.message : String(error) };
       }
+    },
+    async setEndpoint(nextEndpoint: string) {
+      if (nextEndpoint === endpoint) return;
+      endpoint = nextEndpoint;
+      if (gameId !== initialGameId) return;
+      const wasRunning = runner.isRunning();
+      if (wasRunning) await runner.stopAndWait();
+      adapter = gameAdapters.create(gameId, { endpoint });
+      runner = createRunner();
     },
     async completeForCoop(slot, system, user, maxTokens = 400) {
       if (gateway === null) return null;
