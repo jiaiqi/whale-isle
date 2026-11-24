@@ -6,9 +6,22 @@
  *   → avatar 192×192 / portrait-card 256×384 → WebP 编码（复用中控台渲染进程 canvas）。
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { dialog, ipcMain, nativeImage, type BrowserWindow, type NativeImage } from 'electron';
-import { PetCustomCharacterSchema, type PetCustomCharacter } from '@workbench/shared-protocol';
+import {
+  ImageGenBatchRequestSchema,
+  ImageGenDraftCommitSchema,
+  ImageGenOneRequestSchema,
+  ImageGenProviderDescriptorSchema,
+  PetCustomCharacterSchema,
+  type ImageGenProgress,
+  type ImageGenProviderDescriptor,
+  type PetCustomCharacter,
+} from '@workbench/shared-protocol';
+import { generateImage } from './image-gen-client';
+import { collectDoneDraftFiles, draftDirFor, draftExtension, draftPosePrompt, imageModelsFor, resolveReferenceImage, runWithConcurrency } from './image-gen-drafts';
+import { hasVaultKey, readVaultKey } from './provider-vault';
 import {
   contentBounds,
   enforceBlinkOnlyEyes,
@@ -83,6 +96,8 @@ export function createCreatorHost(options: {
   getDirectorWindow: () => BrowserWindow | null;
   /** 主脑聊天（未配置 Key 时返回 null）；用于彩蛋 5 态台词 */
   chat?: (system: string, user: string) => Promise<string | null>;
+  /** provider-vault 路径：生图 Key 只在这里解密（T-M6-56） */
+  vaultPath?: string;
 }): { registerIpc(): void } {
   const encodeWebp = async (raw: RawImage): Promise<Buffer> => {
     const window = options.getDirectorWindow();
@@ -248,7 +263,223 @@ export function createCreatorHost(options: {
     return { ok: true, id, poses, avatar: 'avatar.webp', portrait: 'portrait-card.webp', warnings };
   };
 
+  // ── T-M6-56：AI 直连生图（批量草稿 / 单张重画 / 确认入库） ──
+  interface DraftItem {
+    pose: string;
+    status: 'queued' | 'generating' | 'done' | 'failed';
+    index: number;
+    total: number;
+    file?: string;
+    error?: string;
+  }
+  interface DraftJob {
+    id: string;
+    dir: string;
+    prompt: string;
+    size: string;
+    referenceImagePath?: string;
+    items: DraftItem[];
+  }
+  const MAX_DRAFT_POSES = 24;
+  const draftsRoot = join(options.userDataDir, 'creator-drafts');
+  const draftJobs = new Map<string, DraftJob>();
+
+  const providerDocs = (raw: unknown): ImageGenProviderDescriptor[] => {
+    if (!Array.isArray(raw)) return [];
+    const out: ImageGenProviderDescriptor[] = [];
+    for (const entry of raw) {
+      const parsed = ImageGenProviderDescriptorSchema.safeParse(entry);
+      if (parsed.success) out.push(parsed.data);
+    }
+    return out;
+  };
+
+  const defaultImageModels = (protocol: 'openai' | 'gemini'): string[] => imageModelsFor(protocol, []);
+
+  /** 参考图只接受真实存在的图片文件（≤20MB）；不做任何目录拼接，原样 resolve 后交给读取方。 */
+  const resolveDraftReference = (raw?: string): string | undefined => resolveReferenceImage(raw);
+
+  const pushGenProgress = (progress: ImageGenProgress): void => {
+    const window = options.getDirectorWindow();
+    if (window === null || window.isDestroyed()) return;
+    window.webContents.send('creator:gen-progress', progress);
+  };
+
+  const generateDraftItem = async (
+    job: DraftJob,
+    item: DraftItem,
+    args: { provider: ImageGenProviderDescriptor; modelId: string; apiKey: string; size: string; referenceImagePath?: string },
+  ): Promise<void> => {
+    item.status = 'generating';
+    pushGenProgress({ jobId: job.id, pose: item.pose, status: 'generating', index: item.index, total: item.total });
+    try {
+      const image = await generateImage({
+        protocol: args.provider.protocol,
+        baseUrl: args.provider.baseUrl,
+        apiKey: args.apiKey,
+        modelId: args.modelId,
+        prompt: draftPosePrompt(job.prompt, item.pose),
+        size: args.size,
+        timeoutMs: 60_000,
+        ...(args.referenceImagePath === undefined ? {} : { referenceImagePath: args.referenceImagePath }),
+      });
+      const ext = draftExtension(image.mimeType);
+      const file = join(job.dir, `${item.pose}.${ext}`);
+      writeFileSync(file, image.buffer);
+      item.file = file;
+      item.status = 'done';
+      delete item.error;
+      pushGenProgress({
+        jobId: job.id,
+        pose: item.pose,
+        status: 'done',
+        index: item.index,
+        total: item.total,
+        file: `${item.pose}.${ext}`,
+        dataUrl: `data:${image.mimeType};base64,${image.buffer.toString('base64')}`,
+      });
+    } catch (error) {
+      item.status = 'failed';
+      // generateImage 已脱敏；这里再截断，绝不落盘 Key 或请求头
+      item.error = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+      pushGenProgress({ jobId: job.id, pose: item.pose, status: 'failed', index: item.index, total: item.total, error: item.error });
+    }
+  };
+
+  const summarizeJob = (job: DraftJob): Array<{ pose: string; status: DraftItem['status']; file?: string; error?: string }> =>
+    job.items.map((item) => ({
+      pose: item.pose,
+      status: item.status,
+      ...(item.file === undefined ? {} : { file: item.file.split(sep).pop() ?? item.file }),
+      ...(item.error === undefined ? {} : { error: item.error }),
+    }));
+
+  const generateBatch = async (input: unknown): Promise<{ ok: boolean; error?: string; jobId?: string; items?: ReturnType<typeof summarizeJob> }> => {
+    const parsed = ImageGenBatchRequestSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
+    const request = parsed.data;
+    if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+    const apiKey = readVaultKey(options.vaultPath, request.provider.id);
+    if (apiKey === null) {
+      return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key；请先在「模型服务商」页保存` };
+    }
+    let referenceImagePath: string | undefined;
+    try {
+      referenceImagePath = resolveDraftReference(request.referenceImagePath);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    const poses = [...new Set(request.poses)].slice(0, MAX_DRAFT_POSES);
+    const jobId = request.jobId ?? `gen-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    let dir: string;
+    try {
+      dir = draftDirFor(draftsRoot, jobId);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    const items: DraftItem[] = poses.map((pose, index) => ({ pose, status: 'queued', index, total: poses.length }));
+    const job: DraftJob = {
+      id: jobId,
+      dir,
+      prompt: request.prompt,
+      size: request.size,
+      ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+      items,
+    };
+    draftJobs.set(jobId, job);
+    for (const item of items) pushGenProgress({ jobId, pose: item.pose, status: 'queued', index: item.index, total: item.total });
+    const queue = [...items];
+    // 并发上限 2：避免中转站/官方限流，也控制内存中的图片 Buffer
+    await runWithConcurrency(queue, 2, async (item) => {
+      await generateDraftItem(job, item, {
+        provider: request.provider,
+        modelId: request.modelId,
+        apiKey,
+        size: request.size,
+        ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+      });
+    });
+    return { ok: true, jobId, items: summarizeJob(job) };
+  };
+
+  const regenerateOne = async (input: unknown): Promise<{ ok: boolean; error?: string; jobId?: string; item?: ReturnType<typeof summarizeJob>[number] }> => {
+    const parsed = ImageGenOneRequestSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
+    const request = parsed.data;
+    const job = draftJobs.get(request.jobId);
+    if (job === undefined) return { ok: false, error: '草稿任务不存在（应用重启后请重新生成）' };
+    if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+    const apiKey = readVaultKey(options.vaultPath, request.provider.id);
+    if (apiKey === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+    let referenceImagePath: string | undefined;
+    try {
+      referenceImagePath = resolveDraftReference(request.referenceImagePath ?? job.referenceImagePath);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    const item = job.items.find((entry) => entry.pose === request.pose);
+    if (item === undefined) return { ok: false, error: `草稿里没有姿态：${request.pose}` };
+    await generateDraftItem(job, item, {
+      provider: request.provider,
+      modelId: request.modelId,
+      apiKey,
+      size: request.size,
+      ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+    });
+    const summary = summarizeJob(job).find((entry) => entry.pose === request.pose);
+    return summary === undefined ? { ok: false, error: '重画后未生成结果' } : { ok: true, jobId: job.id, item: summary };
+  };
+
+  const commitDraft = async (input: unknown): Promise<{ ok: boolean; error?: string; id?: string; poses?: string[]; warnings?: string[] }> => {
+    const parsed = ImageGenDraftCommitSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
+    const request = parsed.data;
+    const job = draftJobs.get(request.jobId);
+    if (job === undefined) return { ok: false, error: '草稿任务不存在（应用重启后请重新生成）' };
+    // 目录再次校验，绝不因内存里的 dir 被篡改而越界
+    const expectedDir = draftDirFor(draftsRoot, request.jobId);
+    if (resolve(job.dir) !== expectedDir) return { ok: false, error: '草稿目录校验失败' };
+    const files = collectDoneDraftFiles(job.items);
+    if (files.length === 0) return { ok: false, error: '草稿里还没有成功出图的姿态' };
+    try {
+      const result = await importImages({
+        id: request.id,
+        paths: files,
+        ...(request.displayName === undefined ? {} : { displayName: request.displayName }),
+        ...(request.characterPatch === undefined ? {} : { characterPatch: request.characterPatch as Partial<PetCustomCharacter> }),
+      });
+      return { ok: true, id: result.id, poses: result.poses, warnings: result.warnings };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+
   const registerIpc = (): void => {
+    ipcMain.handle('creator:image-gen-providers', (_event, raw: unknown) => {
+      const descriptors = providerDocs(raw);
+      const configured = descriptors.filter((descriptor) => options.vaultPath !== undefined && hasVaultKey(options.vaultPath, descriptor.id));
+      return {
+        ok: true,
+        configured: configured.length,
+        detected: descriptors.length,
+        providers: configured.map((descriptor) => {
+          const models = [...new Set([
+            ...descriptor.candidateModels,
+            ...(descriptor.candidateModels.length === 0 ? defaultImageModels(descriptor.protocol) : []),
+          ])].slice(0, 12);
+          return {
+            id: descriptor.id,
+            name: descriptor.name || descriptor.id,
+            protocol: descriptor.protocol,
+            baseUrl: descriptor.baseUrl,
+            models,
+          };
+        }),
+      };
+    });
+    ipcMain.handle('creator:generate-batch', async (_event, input: unknown) => generateBatch(input));
+    ipcMain.handle('creator:regenerate-one', async (_event, input: unknown) => regenerateOne(input));
+    ipcMain.handle('creator:commit-draft', async (_event, input: unknown) => commitDraft(input));
     ipcMain.handle('creator:pose-tiers', () => ({ tiers: POSE_TIERS, locks: BUILTIN_LOCKS }));
     ipcMain.handle('creator:compile-character', (_event, input: { lock: string; customName?: string; customTraits?: string; tiers: PoseTier[]; extra?: string }) =>
       ({ ok: true, prompt: compileCharacterPrompt(input) }));

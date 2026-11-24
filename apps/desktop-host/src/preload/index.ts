@@ -243,6 +243,15 @@ contextBridge.exposeInMainWorld('directorBridge', {
   creatorPickFolder: (): Promise<{ ok: boolean; folder?: string }> => ipcRenderer.invoke('creator:pick-folder'),
   creatorImport: (input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; avatar?: string; portrait?: string; warnings?: string[]; error?: string }> => ipcRenderer.invoke('creator:import', input),
   creatorGenerateEggLines: (input: unknown): Promise<{ ok: boolean; lines?: Record<string, string[]>; error?: string }> => ipcRenderer.invoke('creator:generate-egg-lines', input),
+  creatorImageGenProviders: (descriptors: unknown): Promise<{ ok: boolean; detected?: number; configured?: number; providers?: Array<{ id: string; name: string; protocol: 'openai' | 'gemini'; baseUrl: string; models: string[] }> }> => ipcRenderer.invoke('creator:image-gen-providers', descriptors),
+  creatorGenerateBatch: (input: unknown): Promise<{ ok: boolean; jobId?: string; items?: Array<{ pose: string; status: string; file?: string; error?: string }>; error?: string }> => ipcRenderer.invoke('creator:generate-batch', input),
+  creatorRegenerateOne: (input: unknown): Promise<{ ok: boolean; jobId?: string; item?: { pose: string; status: string; file?: string; error?: string }; error?: string }> => ipcRenderer.invoke('creator:regenerate-one', input),
+  creatorCommitDraft: (input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; warnings?: string[]; error?: string }> => ipcRenderer.invoke('creator:commit-draft', input),
+  onCreatorGenProgress: (handler: (progress: { jobId: string; pose: string; status: 'queued' | 'generating' | 'done' | 'failed'; index: number; total: number; dataUrl?: string; file?: string; error?: string }) => void): (() => void) => {
+    const listener = (_event: unknown, progress: { jobId: string; pose: string; status: 'queued' | 'generating' | 'done' | 'failed'; index: number; total: number; dataUrl?: string; file?: string; error?: string }): void => handler(progress);
+    ipcRenderer.on('creator:gen-progress', listener);
+    return () => { ipcRenderer.removeListener('creator:gen-progress', listener); };
+  },
   creatorListCustom: (): Promise<Array<{ id: string; name: string; poses: string[] }>> => ipcRenderer.invoke('creator:list-custom'),
   customList: (): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }> => ipcRenderer.invoke('custom:list'),
   customGet: (id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }> => ipcRenderer.invoke('custom:get', id),

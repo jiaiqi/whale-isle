@@ -449,6 +449,7 @@ app.whenReady().then(async () => {
   createCreatorHost({
     userDataDir: app.getPath('userData'),
     getDirectorWindow: () => directorWindow,
+    vaultPath,
     chat: async (system, user) => {
       const result = await autodrive.completeForCoop('STARDEW_GAME_PLANNER' as never, system, user, 600);
       return result === null ? null : result.content;

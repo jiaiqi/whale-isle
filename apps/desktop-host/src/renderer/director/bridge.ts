@@ -362,6 +362,11 @@ export interface DirectorBridge {
   creatorPickFolder(): Promise<{ ok: boolean; folder?: string }>;
   creatorImport(input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; avatar?: string; portrait?: string; warnings?: string[]; error?: string }>;
   creatorGenerateEggLines(input: unknown): Promise<{ ok: boolean; lines?: Record<string, string[]>; error?: string }>;
+  creatorImageGenProviders(descriptors: unknown): Promise<{ ok: boolean; detected?: number; configured?: number; providers?: Array<{ id: string; name: string; protocol: 'openai' | 'gemini'; baseUrl: string; models: string[] }> }>;
+  creatorGenerateBatch(input: unknown): Promise<{ ok: boolean; jobId?: string; items?: Array<{ pose: string; status: string; file?: string; error?: string }>; error?: string }>;
+  creatorRegenerateOne(input: unknown): Promise<{ ok: boolean; jobId?: string; item?: { pose: string; status: string; file?: string; error?: string }; error?: string }>;
+  creatorCommitDraft(input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; warnings?: string[]; error?: string }>;
+  onCreatorGenProgress(handler: (progress: { jobId: string; pose: string; status: 'queued' | 'generating' | 'done' | 'failed'; index: number; total: number; dataUrl?: string; file?: string; error?: string }) => void): () => void;
   creatorListCustom(): Promise<Array<{ id: string; name: string; poses: string[] }>>;
   customList(): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }>;
   customGet(id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }>;

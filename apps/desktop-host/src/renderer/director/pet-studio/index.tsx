@@ -8,6 +8,8 @@
 import { useEffect, useState } from 'react';
 import { BookHeart, Clapperboard, Cpu, Sparkles, Stethoscope } from 'lucide-react';
 import type { PetStudioCatalog } from '@workbench/shared-protocol';
+import type { ModelProviderConfig } from '@workbench/shared-protocol';
+import type { DirectorStore } from '@workbench/local-store/dexie';
 import type { AutodriveEventView, CharacterSummary } from '../bridge';
 import { PetStagePanel } from '../pet-stage-panel';
 import { CharacterStrip } from './character-strip';
@@ -39,8 +41,12 @@ export function PetStudioPanel(props: {
   /** 桌宠右键/顶栏「创作中心」「验收台」信号 */
   openCreatorSignal?: number;
   openBenchSignal?: number;
+  /** 生图供应商（创作中心直连出图用；Key 只在主进程 vault） */
+  providers?: ModelProviderConfig[];
+  store?: DirectorStore;
+  onOpenProviders?: () => void;
 }): React.JSX.Element {
-  const { events, running, characters, characterId, onSelectCharacter, openNotebookSignal, openCreatorSignal, openBenchSignal } = props;
+  const { events, running, characters, characterId, onSelectCharacter, openNotebookSignal, openCreatorSignal, openBenchSignal, providers, store, onOpenProviders } = props;
   const [tab, setTab] = useState<PetStudioTab>('stage');
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [benchOpen, setBenchOpen] = useState(false);
@@ -155,6 +161,9 @@ export function PetStudioPanel(props: {
         characterId={characterId}
         characterName={characterName}
         onReloaded={() => window.dispatchEvent(new Event('pet:characters-changed'))}
+        {...(providers === undefined ? {} : { providers })}
+        {...(store === undefined ? {} : { store })}
+        {...(onOpenProviders === undefined ? {} : { onOpenProviders })}
       />
       <AcceptanceBench open={benchOpen} onClose={() => setBenchOpen(false)} />
     </div>

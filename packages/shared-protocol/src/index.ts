@@ -1178,6 +1178,71 @@ export const PetCustomCharacterSchema = z.object({
 });
 export type PetCustomCharacter = z.infer<typeof PetCustomCharacterSchema>;
 
+// ───────────────────────── 创作中心直连生图（T-M6-56） ─────────────────────────
+/** 生图协议：OpenAI 兼容 Images API / Gemini Native generateContent(IMAGE)。 */
+export const ImageGenProtocolSchema = z.enum(['openai', 'gemini']);
+export type ImageGenProtocol = z.infer<typeof ImageGenProtocolSchema>;
+
+/**
+ * 渲染层只上送「非敏感」供应商描述（id/名称/端点/模型候选）；
+ * API Key 永远只由主进程 provider-vault 解密，绝不经 IPC 往返。
+ */
+export const ImageGenProviderDescriptorSchema = z.object({
+  id: z.string().min(1).max(120),
+  name: z.string().max(160).default(''),
+  baseUrl: z.string().url(),
+  protocol: ImageGenProtocolSchema.default('openai'),
+  candidateModels: z.array(z.string().min(1).max(200)).max(40).default([]),
+});
+export type ImageGenProviderDescriptor = z.infer<typeof ImageGenProviderDescriptorSchema>;
+
+const POSE_ID_PATTERN = /^[A-Za-z0-9\u4e00-\u9fa5][A-Za-z0-9\u4e00-\u9fa5_-]{0,59}$/;
+const JOB_ID_PATTERN = /^[a-z0-9][a-z0-9-]{3,59}$/;
+
+export const ImageGenBatchRequestSchema = z.object({
+  provider: ImageGenProviderDescriptorSchema,
+  modelId: z.string().min(1).max(200),
+  prompt: z.string().min(1).max(6000),
+  /** 选中的姿态列表或彩蛋 4 态（文件名即姿态名，已做安全字符限制） */
+  poses: z.array(z.string().regex(POSE_ID_PATTERN)).min(1).max(24),
+  size: z.string().regex(/^\d{2,5}x\d{2,5}$/).default('1024x1024'),
+  referenceImagePath: z.string().max(4096).optional(),
+  jobId: z.string().regex(JOB_ID_PATTERN).optional(),
+});
+export type ImageGenBatchRequest = z.infer<typeof ImageGenBatchRequestSchema>;
+
+export const ImageGenOneRequestSchema = z.object({
+  jobId: z.string().regex(JOB_ID_PATTERN),
+  provider: ImageGenProviderDescriptorSchema,
+  modelId: z.string().min(1).max(200),
+  prompt: z.string().min(1).max(6000),
+  pose: z.string().regex(POSE_ID_PATTERN),
+  size: z.string().regex(/^\d{2,5}x\d{2,5}$/).default('1024x1024'),
+  referenceImagePath: z.string().max(4096).optional(),
+});
+export type ImageGenOneRequest = z.infer<typeof ImageGenOneRequestSchema>;
+
+export const ImageGenProgressSchema = z.object({
+  jobId: z.string().min(1),
+  pose: z.string().min(1),
+  status: z.enum(['queued', 'generating', 'done', 'failed']),
+  index: z.number().int().nonnegative().default(0),
+  total: z.number().int().nonnegative().default(0),
+  /** 预览 data URL（≤ 8MB 原图；主进程不落盘 base64） */
+  dataUrl: z.string().max(12_000_000).optional(),
+  file: z.string().max(1024).optional(),
+  error: z.string().max(2000).optional(),
+});
+export type ImageGenProgress = z.infer<typeof ImageGenProgressSchema>;
+
+export const ImageGenDraftCommitSchema = z.object({
+  jobId: z.string().regex(JOB_ID_PATTERN),
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/),
+  displayName: z.string().max(40).optional(),
+  characterPatch: z.record(z.string(), z.unknown()).optional(),
+});
+export type ImageGenDraftCommit = z.infer<typeof ImageGenDraftCommitSchema>;
+
 // ───────────────────────── 对外本机驱动口（T-M6-49：/api/pet/:agentId/*） ─────────────────────────
 export const PetApiSayRequestSchema = z.object({
   text: z.string().min(1).max(500),

@@ -703,6 +703,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               openNotebookSignal={notebookSignal}
               openCreatorSignal={creatorSignal}
               openBenchSignal={benchSignal}
+              providers={providers}
+              store={store}
+              onOpenProviders={() => setTab('providers')}
             />
           </div>
         )}

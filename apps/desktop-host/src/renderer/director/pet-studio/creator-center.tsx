@@ -4,11 +4,32 @@
  * 零 emoji；所有数据经真实 IPC，不伪造「已出图/已保存」。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Copy, FolderOpen, ImagePlus, Sparkles, UploadCloud, Wand2, X } from 'lucide-react';
+import { CheckCheck, Copy, FolderOpen, ImagePlus, Link2, RefreshCw, Sparkles, UploadCloud, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import type { ModelProviderConfig } from '@workbench/shared-protocol';
+import type { DirectorStore } from '@workbench/local-store/dexie';
+import { CUSTOM_KEY, type CustomProviderRecord } from '../providers/catalog';
 
 type CreatorTab = 'char' | 'egg' | 'import';
 type TierId = 'A' | 'B' | 'C' | 'MEME';
+
+interface ImageProviderView {
+  id: string;
+  name: string;
+  protocol: 'openai' | 'gemini';
+  baseUrl: string;
+  models: string[];
+}
+
+interface GenItemView {
+  pose: string;
+  status: 'queued' | 'generating' | 'done' | 'failed';
+  dataUrl?: string;
+  file?: string;
+  error?: string;
+}
+
+const EGG_IMAGE_POSES = ['pop', 'pretend', 'caught', 'bye', 'escape'] as const;
 
 const inputStyle: React.CSSProperties = { border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)', borderRadius: 8 };
 const labelStyle: React.CSSProperties = { fontSize: 11, color: 'var(--text-2)' };
@@ -25,8 +46,14 @@ export function CreatorCenter(props: {
   characterId: string;
   characterName: string;
   onReloaded: () => void;
+  /** 已同步到主脑的供应商配置（渲染层只上送非敏感描述，Key 留在主进程 vault） */
+  providers?: ModelProviderConfig[];
+  /** 读取自定义服务商（Dexie customProviders） */
+  store?: DirectorStore;
+  /** 未配置生图供应商时一键跳「模型服务商」 */
+  onOpenProviders?: () => void;
 }): React.JSX.Element | null {
-  const { open, onClose, characterId, characterName, onReloaded } = props;
+  const { open, onClose, characterId, characterName, onReloaded, providers = [], store, onOpenProviders } = props;
   const [tab, setTab] = useState<CreatorTab>('char');
   const [tiers, setTiers] = useState<Array<{ id: TierId; label: string; count: number; poses: Array<{ id: string; hint: string }> }>>([]);
   const [locks, setLocks] = useState<Array<{ id: string; label: string; reference: string; traits: string }>>([]);
@@ -60,6 +87,15 @@ export function CreatorCenter(props: {
   const [customList, setCustomList] = useState<Array<{ id: string; name: string; poses: string[] }>>([]);
   const [renameTarget, setRenameTarget] = useState('');
   const [renameName, setRenameName] = useState('');
+  const [imageProviders, setImageProviders] = useState<ImageProviderView[]>([]);
+  const [imageProviderStats, setImageProviderStats] = useState({ detected: 0, configured: 0 });
+  const [imageProviderId, setImageProviderId] = useState('');
+  const [imageModelId, setImageModelId] = useState('');
+  const [referenceImage, setReferenceImage] = useState('');
+  const [genJobId, setGenJobId] = useState('');
+  const [genItems, setGenItems] = useState<GenItemView[]>([]);
+  const [genBusy, setGenBusy] = useState(false);
+  const genJobRef = useRef('');
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,6 +110,169 @@ export function CreatorCenter(props: {
       }
     }).catch(() => undefined);
   }, [open]);
+
+  /** 组装非敏感供应商描述：内置 + Dexie 自定义（只上送端点/模型候选，Key 永不进渲染进程）。 */
+  const imageDescriptors = useCallback(async (): Promise<Array<{ id: string; name: string; baseUrl: string; protocol: 'openai' | 'gemini'; candidateModels: string[] }>> => {
+    const list: Array<{ id: string; name: string; baseUrl: string; protocol: 'openai' | 'gemini'; candidateModels: string[] }> = [];
+    const imageish = (ids: string[]): string[] => ids.filter((id) => /image|dall-e|imagen/i.test(id));
+    for (const provider of providers) {
+      const variant = provider.variants.find((entry) => entry.region === provider.activeRegion && entry.planType === provider.activePlanType) ?? provider.variants[0];
+      if (variant === undefined) continue;
+      const nativeGemini = /gemini|google|generativelanguage/i.test(`${provider.id} ${provider.name} ${variant.baseUrl}`);
+      list.push({
+        id: provider.id,
+        name: provider.name,
+        baseUrl: variant.baseUrl,
+        protocol: nativeGemini ? 'gemini' : 'openai',
+        candidateModels: imageish(provider.discoveredModels.map((model) => model.id).concat(provider.activeModelId)),
+      });
+    }
+    if (store !== undefined) {
+      const customs = await store.getConfig<CustomProviderRecord[]>(CUSTOM_KEY).catch(() => undefined);
+      for (const custom of customs ?? []) {
+        if (!custom.enabled) continue;
+        const variant = custom.variants[0];
+        if (variant === undefined) continue;
+        const nativeGemini = /gemini|google|generativelanguage/i.test(`${custom.id} ${custom.name} ${variant.baseUrl}`);
+        list.push({
+          id: custom.id,
+          name: custom.name,
+          baseUrl: variant.baseUrl,
+          protocol: nativeGemini ? 'gemini' : 'openai',
+          candidateModels: imageish(custom.models.filter((model) => model.enabled).map((model) => model.id)),
+        });
+      }
+    }
+    return list;
+  }, [providers, store]);
+
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      try {
+        const result = await window.directorBridge.creatorImageGenProviders(await imageDescriptors());
+        const next = result.providers ?? [];
+        setImageProviders(next);
+        setImageProviderStats({ detected: result.detected ?? next.length, configured: result.configured ?? next.length });
+        const first = next[0];
+        if (first !== undefined) {
+          setImageProviderId((prev) => (next.some((entry) => entry.id === prev) ? prev : first.id));
+          setImageModelId((prev) => (prev !== '' && next.some((entry) => entry.models.includes(prev)) ? prev : first.models[0] ?? ''));
+        } else {
+          setImageProviderId('');
+          setImageModelId('');
+        }
+      } catch {
+        setImageProviders([]);
+        setImageProviderStats({ detected: 0, configured: 0 });
+      }
+    })();
+  }, [open, imageDescriptors]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    // 进度事件按 jobId 过滤：上一次任务的迟到事件绝不能污染当前网格
+    return window.directorBridge.onCreatorGenProgress((progress) => {
+      if (progress.jobId !== genJobRef.current) return;
+      setGenItems((prev) => prev.map((item) => (item.pose === progress.pose
+        ? {
+          ...item,
+          status: progress.status,
+          ...(progress.dataUrl === undefined ? {} : { dataUrl: progress.dataUrl }),
+          ...(progress.file === undefined ? {} : { file: progress.file }),
+          ...(progress.error === undefined ? {} : { error: progress.error }),
+        }
+        : item)));
+    });
+  }, [open]);
+
+  const selectedImageProvider = imageProviders.find((entry) => entry.id === imageProviderId) ?? null;
+  const activePrompt = tab === 'egg' ? eggPrompt : charPrompt;
+
+  const runBatch = async (poses: string[]): Promise<void> => {
+    if (selectedImageProvider === null || imageModelId === '') {
+      toast.error('未配置可用的生图供应商/模型：请先在「模型服务商」保存支持生图的 Key');
+      return;
+    }
+    if (activePrompt.trim() === '') { toast.error('生图提示词还没编译完成'); return; }
+    if (poses.length === 0) { toast.error('先选择要生成的姿态'); return; }
+    setGenBusy(true);
+    const jobId = `gen-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    genJobRef.current = jobId;
+    setGenJobId(jobId);
+    setGenItems(poses.map((pose) => ({ pose, status: 'queued' })));
+    try {
+      const result = await window.directorBridge.creatorGenerateBatch({
+        provider: {
+          id: selectedImageProvider.id,
+          name: selectedImageProvider.name,
+          baseUrl: selectedImageProvider.baseUrl,
+          protocol: selectedImageProvider.protocol,
+          candidateModels: selectedImageProvider.models,
+        },
+        modelId: imageModelId,
+        prompt: activePrompt,
+        poses,
+        size: '1024x1024',
+        jobId,
+        ...(referenceImage === '' ? {} : { referenceImagePath: referenceImage }),
+      });
+      if (!result.ok) {
+        toast.error(result.error ?? '批量出图失败');
+        setGenItems((prev) => prev.map((item) => ({ ...item, status: item.status === 'queued' ? 'failed' : item.status, error: result.error })));
+        return;
+      }
+      const summary = result.items ?? [];
+      setGenItems((prev) => prev.map((item) => {
+        const done = summary.find((entry) => entry.pose === item.pose);
+        return done === undefined ? item : { ...item, status: done.status as GenItemView['status'], ...(done.file === undefined ? {} : { file: done.file }), ...(done.error === undefined ? {} : { error: done.error }) };
+      }));
+      const okCount = summary.filter((entry) => entry.status === 'done').length;
+      if (okCount === 0) toast.error(`出图全部失败（${summary.length} 张）——检查模型是否支持图像生成`);
+      else toast.success(`出图完成 ${okCount}/${summary.length} 张，可逐张重画或确认入库`);
+    } finally {
+      setGenBusy(false);
+    }
+  };
+
+  const regenerate = async (pose: string): Promise<void> => {
+    if (selectedImageProvider === null || imageModelId === '' || genJobId === '') return;
+    setGenItems((prev) => prev.map((item) => (item.pose === pose ? { ...item, status: 'generating', error: undefined } : item)));
+    const result = await window.directorBridge.creatorRegenerateOne({
+      jobId: genJobId,
+      provider: {
+        id: selectedImageProvider.id,
+        name: selectedImageProvider.name,
+        baseUrl: selectedImageProvider.baseUrl,
+        protocol: selectedImageProvider.protocol,
+        candidateModels: selectedImageProvider.models,
+      },
+      modelId: imageModelId,
+      prompt: activePrompt,
+      pose,
+      size: '1024x1024',
+      ...(referenceImage === '' ? {} : { referenceImagePath: referenceImage }),
+    });
+    if (!result.ok) toast.error(result.error ?? '重画失败');
+    else toast.success(`已重画 ${pose}`);
+  };
+
+  const commitDraft = async (): Promise<void> => {
+    if (genJobId === '') { toast.error('还没有可入库的草稿'); return; }
+    const targetId = tab === 'egg' ? eggId : importId;
+    const targetName = tab === 'egg' ? eggName : (importName.trim() === '' ? targetId : importName.trim());
+    const result = await window.directorBridge.creatorCommitDraft({
+      jobId: genJobId,
+      id: targetId,
+      ...(targetName.trim() === '' ? {} : { displayName: targetName.trim() }),
+      ...(tab === 'egg' ? { characterPatch: { egg: true } } : {}),
+    });
+    if (!result.ok) { toast.error(result.error ?? '入库失败'); return; }
+    toast.success(`已入库 ${result.poses?.length ?? 0} 个姿态并完成后处理`);
+    await window.directorBridge.customReload();
+    await window.directorBridge.characterSelect(`custom-${result.id ?? targetId}`).catch(() => undefined);
+    onReloaded();
+  };
 
   const charInput = useMemo(() => ({
     lock,
@@ -190,6 +389,117 @@ export function CreatorCenter(props: {
           ))}
         </div>
 
+        {(tab === 'char' || tab === 'egg') && (
+          <div className="mb-3 rounded-xl p-3" style={{ border: '1px solid var(--stroke)', background: 'var(--surface-2)' }} data-image-gen-toolbar>
+            {imageProviders.length === 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
+                <span>
+                  未检测到已配置 Key 的生图供应商（引擎探测到 {imageProviderStats.detected} 家，vault 中可用 {imageProviderStats.configured} 家）。
+                  不会伪造出图结果，也不会用聊天模型冒充生图。
+                </span>
+                {onOpenProviders !== undefined && (
+                  <button type="button" className="btn-pill ghost" data-gen-open-providers onClick={onOpenProviders}>
+                    <Link2 size={12} />去「模型服务商」配置
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                  <label className="block" style={labelStyle}>生图供应商
+                    <select
+                      data-image-provider
+                      value={imageProviderId}
+                      onChange={(event) => {
+                        const next = imageProviders.find((entry) => entry.id === event.target.value);
+                        setImageProviderId(event.target.value);
+                        setImageModelId(next?.models[0] ?? '');
+                      }}
+                      className="mt-1 w-full px-3 py-2 text-[12px]"
+                      style={inputStyle}
+                    >
+                      {imageProviders.map((entry) => (
+                        <option key={entry.id} value={entry.id}>{entry.name}（{entry.protocol === 'gemini' ? 'Gemini 原生' : 'OpenAI Images'}）</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block" style={labelStyle}>生图模型
+                    <select data-image-model value={imageModelId} onChange={(event) => setImageModelId(event.target.value)} className="mt-1 w-full px-3 py-2 text-[12px] mono" style={inputStyle}>
+                      {(selectedImageProvider?.models ?? []).map((model) => <option key={model} value={model}>{model}</option>)}
+                    </select>
+                  </label>
+                  <div className="flex items-end gap-1.5">
+                    <button
+                      type="button"
+                      className="btn-pill ghost"
+                      data-gen-pick-reference
+                      onClick={() => void window.directorBridge.creatorPickImages().then((result) => {
+                        if (result.ok && result.paths !== undefined && result.paths.length > 0) setReferenceImage(result.paths[0]!);
+                      })}
+                    >
+                      <ImagePlus size={12} />{referenceImage === '' ? '参考图（可选）' : '更换参考图'}
+                    </button>
+                    {referenceImage !== '' && (
+                      <button type="button" className="btn-pill ghost" onClick={() => setReferenceImage('')}>清除</button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                  单张 60s 超时 · 并发 ≤2 · Key 只在主进程 vault 解密
+                  {referenceImage !== '' && <span className="mono ml-2">参考图：{referenceImage.split('/').slice(-1)[0]}</span>}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {(tab === 'char' || tab === 'egg') && genItems.length > 0 && (
+          <div className="mb-3 rounded-xl p-3" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-gen-grid>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>
+                生成网格 · {genItems.filter((item) => item.status === 'done').length}/{genItems.length} 完成
+                {genJobId !== '' && <span className="mono ml-2 text-[10px]" style={{ color: 'var(--text-3)' }}>{genJobId}</span>}
+              </span>
+              <button
+                type="button"
+                className="btn-pill primary"
+                data-gen-commit
+                disabled={genBusy || genItems.every((item) => item.status !== 'done')}
+                onClick={() => void commitDraft()}
+              >
+                <CheckCheck size={12} />确认入库并后处理
+              </button>
+            </div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
+              {genItems.map((item) => (
+                <div key={item.pose} data-gen-item={item.pose} data-gen-status={item.status} className="rounded-lg p-2" style={{ border: '1px solid var(--stroke)', background: 'var(--surface)' }}>
+                  <div className="mono flex items-center justify-between text-[10px]" style={{ color: 'var(--text-2)' }}>
+                    <span>{item.pose}</span>
+                    <span style={{ color: item.status === 'done' ? 'var(--green)' : item.status === 'failed' ? 'var(--red)' : item.status === 'generating' ? 'var(--blue)' : 'var(--text-3)' }}>
+                      {item.status === 'queued' ? '排队中' : item.status === 'generating' ? '生成中' : item.status === 'done' ? '已完成' : '失败'}
+                    </span>
+                  </div>
+                  <div className="mt-1 grid h-[76px] place-items-center overflow-hidden rounded-md" style={{ background: 'var(--surface-2)' }}>
+                    {item.dataUrl !== undefined
+                      ? <img src={item.dataUrl} alt={item.pose} style={{ maxWidth: '100%', maxHeight: '76px', objectFit: 'contain' }} />
+                      : <span className="text-[9.5px]" style={{ color: 'var(--text-3)' }}>{item.status === 'failed' ? '未生成' : '等待模型…'}</span>}
+                  </div>
+                  {item.error !== undefined && <div className="mt-1 text-[9px] leading-snug" style={{ color: 'var(--red)' }}>{item.error}</div>}
+                  <button
+                    type="button"
+                    className="btn-pill ghost mt-1 w-full"
+                    data-gen-regenerate={item.pose}
+                    disabled={genBusy}
+                    onClick={() => void regenerate(item.pose)}
+                  >
+                    <RefreshCw size={10} />重画此张
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {tab === 'char' && (
           <section data-creator-pane="char" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
@@ -227,9 +537,11 @@ export function CreatorCenter(props: {
               <button className="btn-pill ghost" onClick={() => void copy(charPrompt, '已复制完整生图提示词')}><Copy size={12} />一键复制提示词</button>
               <button
                 className="btn-pill primary"
-                onClick={() => toast.info('生图模型调用未接线：请复制提示词到你的生图工具，出图后拖到「自定义建角」页自动处理；或在「模型服务商」配置支持图像生成的供应商')}
+                data-gen-batch
+                disabled={genBusy || imageProviders.length === 0}
+                onClick={() => void runBatch(tiers.filter((tier) => selectedTiers.includes(tier.id)).flatMap((tier) => tier.poses.map((pose) => pose.id)))}
               >
-                <Wand2 size={12} />调用生图模型批量出图
+                <Wand2 size={12} />{genBusy ? '出图中…' : '调用生图模型批量出图'}
               </button>
             </div>
           </section>
@@ -273,6 +585,14 @@ export function CreatorCenter(props: {
             )}
             <div className="flex flex-wrap justify-end gap-2">
               <button className="btn-pill ghost" onClick={() => void copy(eggPrompt, '已复制双参考图彩蛋提示词')}><Copy size={12} />复制提示词</button>
+              <button
+                className="btn-pill primary"
+                data-gen-batch-egg
+                disabled={genBusy || imageProviders.length === 0}
+                onClick={() => void runBatch([...EGG_IMAGE_POSES])}
+              >
+                <Wand2 size={12} />{genBusy ? '出图中…' : '批量生成 5 态立绘'}
+              </button>
               <button className="btn-pill violet" data-egg-generate disabled={eggBusy} onClick={() => void generateEggLines()}>
                 <Sparkles size={12} />{eggBusy ? '生成中…' : '生成 5 态台词并入库'}
               </button>
