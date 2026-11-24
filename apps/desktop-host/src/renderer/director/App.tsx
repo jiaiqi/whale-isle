@@ -184,6 +184,28 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   // 桌宠工坊 / 语音中心的分页签状态由各自面板内聚（T-M6-46）
   // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
+  // T-M6-62：桌宠形象同步进星露谷（开关 + Mod 安装状态，全部真实 IPC）
+  const [avatarSync, setAvatarSync] = useState<{ enabled: boolean; modInstalled: boolean; modCompiled: boolean; spriteReady: boolean } | null>(null);
+  useEffect(() => {
+    void window.directorBridge.stardewAvatarState().then((state) => setAvatarSync({
+      enabled: state.enabled, modInstalled: state.modInstalled, modCompiled: state.modCompiled, spriteReady: state.spriteReady,
+    })).catch(() => setAvatarSync(null));
+  }, []);
+  const toggleAvatarSync = async (): Promise<void> => {
+    const next = !(avatarSync?.enabled ?? false);
+    const state = await window.directorBridge.stardewAvatarSetEnabled(next);
+    setAvatarSync({ enabled: state.enabled, modInstalled: state.modInstalled, modCompiled: state.modCompiled, spriteReady: state.spriteReady });
+    if (next && !state.modInstalled) toast('已开启同步：还需要点「安装 Mod」把 WhaleIsleAvatar 装进星露谷 Mods 目录');
+    else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内保持当前外观，不再随桌宠切换');
+  };
+  const installAvatarMod = async (): Promise<void> => {
+    const result = await window.directorBridge.stardewAvatarInstall();
+    if (!result.ok) { toast.error(result.error ?? '安装失败'); return; }
+    if (result.compiled === false) toast.error(result.error ?? 'Mod 文件已复制但 DLL 未编译');
+    else toast.success('WhaleIsleAvatar Mod 已安装到星露谷 Mods 目录（重启游戏或热重载后生效）');
+    const state = await window.directorBridge.stardewAvatarState();
+    setAvatarSync({ enabled: state.enabled, modInstalled: state.modInstalled, modCompiled: state.modCompiled, spriteReady: state.spriteReady });
+  };
   const flowRef = useRef<HTMLDivElement | null>(null);
   // T-M6-27 会话归属：只消费当前 autodrive 会话的事件。
   //  - 联机端点事件（带 agentId）不进单机会话页
@@ -814,6 +836,22 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               >
                 <Monitor size={11} />游戏内提示 {bwfHud ? '开' : '关'}
               </button>
+              <button
+                data-avatar-sync={avatarSync?.enabled === true ? 'on' : 'off'}
+                onClick={() => void toggleAvatarSync()}
+                title="开启后：当前桌宠角色/皮肤会实时同步成星露谷玩家像素外观（原版预设兜底 + 像素表覆盖）"
+                className={`pill cursor-pointer${avatarSync?.enabled === true ? ' pill-green' : ''}`}
+              >
+                <Monitor size={11} />同步桌宠形象进游戏 {avatarSync?.enabled === true ? '开' : '关'}
+              </button>
+              {avatarSync !== null && !avatarSync.modInstalled && (
+                <button data-avatar-install onClick={() => void installAvatarMod()} className="pill cursor-pointer" title="把 WhaleIsleAvatar SMAPI Mod 复制进星露谷 Mods 目录">
+                  安装 Mod
+                </button>
+              )}
+              {avatarSync?.enabled === true && avatarSync.modInstalled && !avatarSync.spriteReady && (
+                <span className="pill" style={{ fontSize: 9.5 }} title="当前角色还没有 64×128 像素表：去创作中心「星露谷像素表」生成；现在用原版预设兜底">原版预设兜底</span>
+              )}
               <div className="flex-1" />
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
             </div>

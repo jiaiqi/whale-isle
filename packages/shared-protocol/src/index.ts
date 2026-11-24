@@ -1308,6 +1308,43 @@ export function statusLabelZh(status: string | undefined | null): string {
   return WORKBENCH_STATUS_LABELS_ZH[status] ?? status;
 }
 
+// ───────────────────────── 星露谷像素表生成请求（T-M6-62，创作中心 IPC 入参） ─────────────────────────
+export const StardewSpriteGenRequestSchema = z.object({
+  characterId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,60}$/),
+  provider: ImageGenProviderDescriptorSchema,
+  modelId: z.string().min(1).max(200),
+  /** 缺省时由主进程用 compileStardewSpritePrompt 编译 */
+  prompt: z.string().max(6000).optional(),
+});
+export type StardewSpriteGenRequest = z.infer<typeof StardewSpriteGenRequestSchema>;
+
+// ───────────────────────── 星露谷桌宠像素外观同步（T-M6-62） ─────────────────────────
+/** 原版兜底外观预设：非破坏性（只改发色/发型/衣裤/肤色/帽子等外观字段，不动存档数据）。 */
+export const StardewAvatarPresetSchema = z.object({
+  hair: z.number().int().min(0).max(300).default(0),
+  hairColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#8a5a2b'),
+  shirt: z.number().int().min(0).max(300).default(0),
+  pantsColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#3b5bdb'),
+  skin: z.number().int().min(0).max(30).default(0),
+  /** -1 = 不戴帽子 */
+  hatId: z.number().int().min(-1).max(300).default(-1),
+});
+export type StardewAvatarPreset = z.infer<typeof StardewAvatarPresetSchema>;
+
+/**
+ * `Mods/WhaleIsleAvatar/active-avatar.json` 契约：主进程原子写入，SMAPI Mod 主线程热重载。
+ * spriteSheetPath 为相对 Mod 目录的文件名（64×128 PNG，4 行×4 列，每帧 16×32，
+ * 行序 下/右/上/左，列序 待机+3 行走帧）；缺省或坏图时 Mod 回落原版预设。
+ */
+export const StardewAvatarSyncSchema = z.object({
+  version: z.literal(1),
+  characterId: z.string().min(1).max(80),
+  displayName: z.string().min(1).max(40),
+  preset: StardewAvatarPresetSchema,
+  spriteSheetPath: z.string().max(260).optional(),
+});
+export type StardewAvatarSync = z.infer<typeof StardewAvatarSyncSchema>;
+
 // ───────────────────────── 对外本机驱动口（T-M6-49：/api/pet/:agentId/*） ─────────────────────────
 export const PetApiSayRequestSchema = z.object({
   text: z.string().min(1).max(500),

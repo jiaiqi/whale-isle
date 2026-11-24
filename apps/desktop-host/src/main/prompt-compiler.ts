@@ -222,3 +222,22 @@ export function parseEggLines(content: string): Record<'pop' | 'pretend' | 'caug
   }
   return out;
 }
+
+/**
+ * 星露谷像素表提示词（T-M6-62）：16×32 四方向 4×4 网格，锁定当前角色参考图。
+ * 输出约定与 pixel-sprite-pipeline 的切格规则一一对应（行=下/右/上/左，列=待机+3 行走帧）。
+ */
+export function compileStardewSpritePrompt(input: { name: string; traits?: string }): string {
+  return [
+    `为角色「${input.name}」生成一张星露谷（Stardew Valley）风格的像素精灵表（sprite sheet）。`,
+    input.traits !== undefined && input.traits.trim() !== '' ? `角色外观锁定：${input.traits.trim()}。` : '',
+    '硬性规格：',
+    '- 整张图是 4 列 × 4 行的网格，每格是一个 16×32 像素的角色帧，网格之间不留间距、不画格线；',
+    '- 行序固定：第 1 行朝下（正面）、第 2 行朝右、第 3 行朝上（背面）、第 4 行朝左；',
+    '- 列序固定：第 1 列站立待机，第 2-4 列是行走循环的 3 个帧（左右脚交替）；',
+    '- 每格角色脚底贴合格子底边、水平居中，头身比例与星露谷原版农夫一致（约 2 头身）；',
+    '- 透明背景（不要白底、不要阴影、不要地面），角色轮廓清晰；',
+    '- 像素风：硬边像素、有限色板、无抗锯齿、无渐变模糊、无文字无水印；',
+    '- 四个方向必须是同一个角色的同一套服装配色，只是朝向与步伐不同。',
+  ].filter((line) => line !== '').join('\n');
+}

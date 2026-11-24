@@ -5,7 +5,7 @@
  *   白底抠像/透明保真 → 内容包围盒 → 90% 身高 + 脚底对齐 → idle-blink 仅闭眼贴回
  *   → avatar 192×192 / portrait-card 256×384 → WebP 编码（复用中控台渲染进程 canvas）。
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog, ipcMain, nativeImage, type BrowserWindow, type NativeImage } from 'electron';
@@ -15,11 +15,14 @@ import {
   ImageGenOneRequestSchema,
   ImageGenProviderDescriptorSchema,
   PetCustomCharacterSchema,
+  StardewSpriteGenRequestSchema,
   type ImageGenProgress,
   type ImageGenProviderDescriptor,
   type PetCustomCharacter,
 } from '@workbench/shared-protocol';
 import { generateImage } from './image-gen-client';
+import { buildStardewSpriteSheet, validateSpriteSheet } from './pixel-sprite-pipeline';
+import { compileStardewSpritePrompt } from './prompt-compiler';
 import { detectCodexCli, type CodexCliDetection } from './codex-image-backend';
 import { collectDoneDraftFiles, draftDirFor, draftExtension, draftPosePrompt, imageModelsFor, resolveReferenceImage, runWithConcurrency } from './image-gen-drafts';
 import { hasVaultKey, readVaultKey } from './provider-vault';
@@ -518,12 +521,84 @@ export function createCreatorHost(options: {
             baseUrl: descriptor.baseUrl,
             models,
           };
-        }),
+        })],
       };
     });
     ipcMain.handle('creator:generate-batch', async (_event, input: unknown) => generateBatch(input));
     ipcMain.handle('creator:regenerate-one', async (_event, input: unknown) => regenerateOne(input));
     ipcMain.handle('creator:commit-draft', async (_event, input: unknown) => commitDraft(input));
+    ipcMain.handle('creator:compile-stardew-sprite', (_event, input: { name?: string; traits?: string }) =>
+      ({ ok: true, prompt: compileStardewSpritePrompt({ name: String(input?.name ?? '桌宠'), ...(input?.traits === undefined ? {} : { traits: String(input.traits) }) }) }));
+    ipcMain.handle('creator:generate-stardew-sprite', async (_event, input: unknown) => {
+      const parsed = StardewSpriteGenRequestSchema.safeParse(input);
+      if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
+      const request = parsed.data;
+      const isCodex = request.provider.protocol === 'codex-cli';
+      let apiKey = '';
+      let codex: CodexCliDetection | null = null;
+      if (isCodex) {
+        codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+        if (!codex.available) return { ok: false, error: `未检测到本机 Codex CLI：${codex.installHint}` };
+        if (!codex.loggedIn) return { ok: false, error: `本机 Codex 未登录：请先运行 ${codex.loginHint}` };
+      } else {
+        if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+        const key = readVaultKey(options.vaultPath, request.provider.id);
+        if (key === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+        apiKey = key;
+      }
+      try {
+        const prompt = request.prompt !== undefined && request.prompt.trim() !== ''
+          ? request.prompt
+          : compileStardewSpritePrompt({ name: request.characterId });
+        const image = await generateImage({
+          protocol: request.provider.protocol,
+          baseUrl: request.provider.baseUrl,
+          apiKey,
+          modelId: request.modelId,
+          prompt,
+          size: '1024x1024',
+          timeoutMs: isCodex ? 90_000 : 60_000,
+          ...(codex === null ? {} : { codex: { detection: codex } }),
+        });
+        // 统一落临时文件再解码（复用渲染层 canvas 解码 WebP 的既有链路）
+        const tempDir = join(options.userDataDir, 'creator-drafts', 'sprite-tmp');
+        mkdirSync(tempDir, { recursive: true });
+        const tempPath = join(tempDir, `${request.characterId}-${Date.now().toString(36)}.png`);
+        writeFileSync(tempPath, image.buffer);
+        const native = await decodeToNative(tempPath);
+        const result = buildStardewSpriteSheet(toRaw(native));
+        const validation = validateSpriteSheet(result.sheet);
+        if (!validation.ok) return { ok: false, error: validation.error };
+        const outDir = request.characterId.startsWith('custom-')
+          ? join(customCharactersRoot(options.userDataDir), request.characterId.slice('custom-'.length))
+          : join(options.userDataDir, 'stardew-avatars', request.characterId);
+        if (!resolve(outDir).startsWith(`${resolve(options.userDataDir)}${sep}`)) return { ok: false, error: '输出目录越界' };
+        mkdirSync(outDir, { recursive: true });
+        const png = fromRaw(result.sheet).toPNG();
+        const target = join(outDir, 'stardew-sprite.png');
+        const temp = `${target}.tmp`;
+        writeFileSync(temp, png);
+        renameSync(temp, target);
+        return {
+          ok: true,
+          emptyCells: result.emptyCells,
+          dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+        };
+      } catch (error) {
+        return { ok: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 300) };
+      }
+    });
+    ipcMain.handle('creator:stardew-sprite-get', (_event, characterId: string) => {
+      const id = String(characterId);
+      if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(id)) return { ok: false, error: '非法角色 id' };
+      const candidates = id.startsWith('custom-')
+        ? [join(customCharactersRoot(options.userDataDir), id.slice('custom-'.length), 'stardew-sprite.png')]
+        : [join(options.userDataDir, 'stardew-avatars', id, 'stardew-sprite.png')];
+      const found = candidates.find((path) => existsSync(path));
+      if (found === undefined) return { ok: false };
+      const buffer = readFileSync(found);
+      return { ok: true, dataUrl: `data:image/png;base64,${buffer.toString('base64')}` };
+    });
     ipcMain.handle('creator:pose-tiers', () => ({ tiers: POSE_TIERS, locks: BUILTIN_LOCKS }));
     ipcMain.handle('creator:compile-character', (_event, input: { lock: string; customName?: string; customTraits?: string; tiers: PoseTier[]; extra?: string }) =>
       ({ ok: true, prompt: compileCharacterPrompt(input) }));

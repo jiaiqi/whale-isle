@@ -67,6 +67,7 @@
     "RiceBowlStatus",
     "PetStudioCatalog",
     "PetCustomCharacter",
+    "StardewAvatarSync",
     "PetApiSayRequest",
     "PetApiActionRequest",
     "PetApiState",
@@ -262,6 +263,9 @@
     },
     "PetCustomCharacter": {
       "$ref": "#/$defs/PetCustomCharacter"
+    },
+    "StardewAvatarSync": {
+      "$ref": "#/$defs/StardewAvatarSync"
     },
     "PetApiSayRequest": {
       "$ref": "#/$defs/PetApiSayRequest"
@@ -6075,6 +6079,76 @@
       },
       "required": [
         "name"
+      ],
+      "additionalProperties": false
+    },
+    "StardewAvatarSync": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "preset": {
+          "type": "object",
+          "properties": {
+            "hair": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 300
+            },
+            "hairColor": {
+              "default": "#8a5a2b",
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "shirt": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 300
+            },
+            "pantsColor": {
+              "default": "#3b5bdb",
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "skin": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30
+            },
+            "hatId": {
+              "default": -1,
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 300
+            }
+          },
+          "additionalProperties": false
+        },
+        "spriteSheetPath": {
+          "type": "string",
+          "maxLength": 260
+        }
+      },
+      "required": [
+        "version",
+        "characterId",
+        "displayName",
+        "preset"
       ],
       "additionalProperties": false
     },

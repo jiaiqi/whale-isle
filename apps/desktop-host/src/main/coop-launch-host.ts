@@ -34,6 +34,9 @@ export function createCoopLaunchHost(options: {
   repoRoot: string;
   endpoints: () => CoopLaunchEndpoint[];
   nodeExecutable?: string;
+  /** T-M6-62：为每个星露谷 AI 队友的隔离 profile 写专属 active-avatar.json */
+  avatarSync?: { writeForProfile(input: { profileModsDir: string; characterId: string; displayName: string }): { ok: boolean; error?: string } };
+  characterName?: (characterId: string) => string;
 }): { registerIpc(): void; dstClusterDir: string; profilesRoot: string } {
   const profilesRoot = join(options.userDataDir, 'coop-profiles', 'stardew');
   const terrariaProfilesRoot = join(options.userDataDir, 'coop-profiles', 'terraria');
@@ -143,6 +146,15 @@ export function createCoopLaunchHost(options: {
       const port = Number(new URL(endpoint.endpoint).port || '18080');
       try {
         const prepared = await prepareStardewProfile({ modsDir, profileDir: profilesRoot, agentId, port });
+        // T-M6-62：把该队友的桌宠形象写进隔离 profile（Mod 目录已由 prepareStardewProfile 实体复制）
+        if (options.avatarSync !== undefined && endpoint.characterId !== '') {
+          const written = options.avatarSync.writeForProfile({
+            profileModsDir: prepared.profileModsDir,
+            characterId: endpoint.characterId,
+            displayName: options.characterName?.(endpoint.characterId) ?? endpoint.characterId,
+          });
+          if (!written.ok) console.warn('[coop-launch] 队友外观写入失败：', written.error);
+        }
         const status = (await detect()).find((item) => item.gameId === 'stardew');
         if (status?.executable == null) return { ok: false, error: '未找到 StardewModdingAPI' };
         const child = spawnGameProcess(status.executable, ['--mods-path', prepared.profileModsDir]);

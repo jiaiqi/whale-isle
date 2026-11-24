@@ -379,6 +379,16 @@ export interface DirectorBridge {
   creatorCommitDraft(input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; warnings?: string[]; error?: string }>;
   onCreatorGenProgress(handler: (progress: { jobId: string; pose: string; status: 'queued' | 'generating' | 'done' | 'failed'; index: number; total: number; dataUrl?: string; file?: string; error?: string }) => void): () => void;
   creatorListCustom(): Promise<Array<{ id: string; name: string; poses: string[] }>>;
+  /** T-M6-62：星露谷像素表生成与外观同步 */
+  creatorCompileStardewSprite(input: { name: string; traits?: string }): Promise<{ ok: boolean; prompt: string }>;
+  creatorGenerateStardewSprite(input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; error?: string }>;
+  creatorStardewSpriteGet(characterId: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
+  stardewAvatarState(): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; currentCharacterId: string; spriteReady: boolean }>;
+  stardewAvatarSetEnabled(next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; currentCharacterId: string; spriteReady: boolean }>;
+  stardewAvatarInstall(): Promise<{ ok: boolean; error?: string; compiled?: boolean }>;
+  stardewAvatarUninstall(): Promise<{ ok: boolean; error?: string }>;
+  stardewAvatarSyncNow(): Promise<{ ok: boolean; error?: string; sprite?: boolean }>;
+  stardewAvatarApplyCharacter(characterId: string): Promise<{ ok: boolean; error?: string; sprite?: boolean }>;
   customList(): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }>;
   customGet(id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }>;
   customSave(id: string, input: unknown): Promise<{ ok: boolean; error?: string }>;

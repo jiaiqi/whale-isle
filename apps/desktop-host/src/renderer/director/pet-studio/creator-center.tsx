@@ -10,15 +10,23 @@ import type { ModelProviderConfig } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
 import { CUSTOM_KEY, type CustomProviderRecord } from '../providers/catalog';
 
-type CreatorTab = 'char' | 'egg' | 'import';
+type CreatorTab = 'char' | 'egg' | 'import' | 'pixel';
 type TierId = 'A' | 'B' | 'C' | 'MEME';
 
 interface ImageProviderView {
   id: string;
   name: string;
-  protocol: 'openai' | 'gemini';
+  protocol: 'openai' | 'gemini' | 'codex-cli';
   baseUrl: string;
   models: string[];
+}
+
+interface CodexInfoView {
+  detected: boolean;
+  backend: 'codex-imagegen' | 'codex-exec' | null;
+  loggedIn: boolean;
+  installHint: string;
+  loginHint: string;
 }
 
 interface GenItemView {
@@ -85,10 +93,18 @@ export function CreatorCenter(props: {
   const [cloneName, setCloneName] = useState('');
   const [cloneBuiltinId, setCloneBuiltinId] = useState('crosspet-deepseek');
   const [customList, setCustomList] = useState<Array<{ id: string; name: string; poses: string[] }>>([]);
+  const [pixelCharacterId, setPixelCharacterId] = useState(characterId);
+  const [pixelCharacters, setPixelCharacters] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [pixelPrompt, setPixelPrompt] = useState('');
+  const [pixelDataUrl, setPixelDataUrl] = useState('');
+  const [pixelEmptyCells, setPixelEmptyCells] = useState(0);
+  const [pixelBusy, setPixelBusy] = useState(false);
+  const [pixelSpriteReady, setPixelSpriteReady] = useState(false);
   const [renameTarget, setRenameTarget] = useState('');
   const [renameName, setRenameName] = useState('');
   const [imageProviders, setImageProviders] = useState<ImageProviderView[]>([]);
   const [imageProviderStats, setImageProviderStats] = useState({ detected: 0, configured: 0 });
+  const [codexInfo, setCodexInfo] = useState<CodexInfoView | null>(null);
   const [imageProviderId, setImageProviderId] = useState('');
   const [imageModelId, setImageModelId] = useState('');
   const [referenceImage, setReferenceImage] = useState('');
@@ -154,6 +170,7 @@ export function CreatorCenter(props: {
         const next = result.providers ?? [];
         setImageProviders(next);
         setImageProviderStats({ detected: result.detected ?? next.length, configured: result.configured ?? next.length });
+        setCodexInfo(result.codex ?? null);
         const first = next[0];
         if (first !== undefined) {
           setImageProviderId((prev) => (next.some((entry) => entry.id === prev) ? prev : first.id));
@@ -185,6 +202,63 @@ export function CreatorCenter(props: {
         : item)));
     });
   }, [open]);
+
+  // T-M6-62：像素表角色清单（内置 9 角色 + 默认小鲸 + 自定义角色）
+  useEffect(() => {
+    if (!open) return;
+    void window.directorBridge.characterList().then((list) => {
+      const eligible = list.filter((entry) => entry.id === 'blue-whale-maid' || entry.id.startsWith('aboutme-') || entry.id.startsWith('custom-'));
+      setPixelCharacters(eligible);
+      if (!eligible.some((entry) => entry.id === pixelCharacterId)) setPixelCharacterId(eligible[0]?.id ?? characterId);
+    }).catch(() => setPixelCharacters([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || tab !== 'pixel' || pixelCharacterId === '') return;
+    const name = pixelCharacters.find((entry) => entry.id === pixelCharacterId)?.displayName ?? pixelCharacterId;
+    void window.directorBridge.creatorCompileStardewSprite({ name }).then((result) => setPixelPrompt(result.prompt)).catch(() => undefined);
+    void window.directorBridge.creatorStardewSpriteGet(pixelCharacterId).then((result) => {
+      setPixelDataUrl(result.ok && result.dataUrl !== undefined ? result.dataUrl : '');
+      setPixelSpriteReady(result.ok === true);
+    }).catch(() => { setPixelDataUrl(''); setPixelSpriteReady(false); });
+  }, [open, tab, pixelCharacterId, pixelCharacters]);
+
+  const generatePixelSprite = async (): Promise<void> => {
+    if (selectedImageProvider === null || imageModelId === '') {
+      toast.error('未配置可用的生图供应商/模型：请先在「模型服务商」保存 Key，或使用本机 Codex CLI');
+      return;
+    }
+    if (pixelCharacterId === '') { toast.error('先选择要生成像素表的角色'); return; }
+    setPixelBusy(true);
+    try {
+      const result = await window.directorBridge.creatorGenerateStardewSprite({
+        characterId: pixelCharacterId,
+        provider: {
+          id: selectedImageProvider.id,
+          name: selectedImageProvider.name,
+          baseUrl: selectedImageProvider.baseUrl,
+          protocol: selectedImageProvider.protocol,
+          candidateModels: selectedImageProvider.models,
+        },
+        modelId: imageModelId,
+        ...(pixelPrompt.trim() === '' ? {} : { prompt: pixelPrompt }),
+      });
+      if (!result.ok) { toast.error(result.error ?? '像素表生成失败'); return; }
+      setPixelDataUrl(result.dataUrl ?? '');
+      setPixelEmptyCells(result.emptyCells ?? 0);
+      setPixelSpriteReady(true);
+      toast.success(`像素表已生成（64×128，${result.emptyCells ?? 0} 个空格）并写入角色目录`);
+    } finally {
+      setPixelBusy(false);
+    }
+  };
+
+  const applyPixelSprite = async (): Promise<void> => {
+    const result = await window.directorBridge.stardewAvatarApplyCharacter(pixelCharacterId);
+    if (!result.ok) { toast.error(result.error ?? '应用失败'); return; }
+    toast.success(result.sprite === true ? '已把像素表写进星露谷 Mod 目录（游戏内热变身）' : '已写入原版外观预设（该角色还没有像素表）');
+  };
 
   const selectedImageProvider = imageProviders.find((entry) => entry.id === imageProviderId) ?? null;
   const activePrompt = tab === 'egg' ? eggPrompt : charPrompt;
@@ -383,13 +457,14 @@ export function CreatorCenter(props: {
           {([
             ['char', 'AI 角色/皮肤生图'],
             ['egg', 'AI 彩蛋生成器 (5 态)'],
+            ['pixel', '星露谷像素表'],
             ['import', '自定义建角与拖入处理'],
           ] as Array<[CreatorTab, string]>).map(([id, label]) => (
             <button key={id} className={`seg-tab${tab === id ? ' on' : ''}`} data-creator-tab={id} onClick={() => setTab(id)}>{label}</button>
           ))}
         </div>
 
-        {(tab === 'char' || tab === 'egg') && (
+        {(tab === 'char' || tab === 'egg' || tab === 'pixel') && (
           <div className="mb-3 rounded-xl p-3" style={{ border: '1px solid var(--stroke)', background: 'var(--surface-2)' }} data-image-gen-toolbar>
             {imageProviders.length === 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
@@ -425,7 +500,11 @@ export function CreatorCenter(props: {
                   </label>
                   <label className="block" style={labelStyle}>生图模型
                     <select data-image-model value={imageModelId} onChange={(event) => setImageModelId(event.target.value)} className="mt-1 w-full px-3 py-2 text-[12px] mono" style={inputStyle}>
-                      {(selectedImageProvider?.models ?? []).map((model) => <option key={model} value={model}>{model}</option>)}
+                      {(selectedImageProvider?.models ?? []).map((model) => (
+                        <option key={model} value={model}>
+                          {model === 'codex-imagegen' ? '快速模式（codex-imagegen）' : model === 'codex-exec' ? '慢速兜底（codex exec）' : model}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <div className="flex items-end gap-1.5">
@@ -445,9 +524,31 @@ export function CreatorCenter(props: {
                   </div>
                 </div>
                 <div className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
-                  单张 60s 超时 · 并发 ≤2 · Key 只在主进程 vault 解密
+                  单张 60s 超时（Codex CLI 90s）· 并发 ≤2 · Key 只在主进程 vault 解密
                   {referenceImage !== '' && <span className="mono ml-2">参考图：{referenceImage.split('/').slice(-1)[0]}</span>}
                 </div>
+                {codexInfo !== null && (!codexInfo.detected || !codexInfo.loggedIn || codexInfo.backend !== 'codex-imagegen') && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]" data-codex-hint style={{ color: 'var(--amber)' }}>
+                    <span>
+                      {!codexInfo.detected
+                        ? '未检测到本机 Codex CLI；想用免 Key 订阅出图可安装开源封装：'
+                        : !codexInfo.loggedIn
+                          ? '已检测到 Codex CLI 但未登录，请先在终端运行：'
+                          : '当前为官方 codex exec 慢速兜底；安装 codex-imagegen 可提速：'}
+                    </span>
+                    <code className="mono rounded px-1.5 py-0.5" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}>
+                      {!codexInfo.detected || codexInfo.backend !== 'codex-imagegen' ? codexInfo.installHint : codexInfo.loginHint}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn-pill ghost"
+                      data-codex-copy-hint
+                      onClick={() => void copy(!codexInfo.detected || codexInfo.backend !== 'codex-imagegen' ? codexInfo.installHint : codexInfo.loginHint, '已复制命令（不会替你静默安装/登录）')}
+                    >
+                      <Copy size={10} />复制
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -600,6 +701,51 @@ export function CreatorCenter(props: {
           </section>
         )}
 
+        {tab === 'pixel' && (
+          <section data-creator-pane="pixel" className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block" style={labelStyle}>目标角色（内置 9 角色 / 自定义角色）
+                <select data-pixel-character value={pixelCharacterId} onChange={(event) => setPixelCharacterId(event.target.value)} className="mt-1 w-full px-3 py-2 text-[12px]" style={inputStyle}>
+                  {pixelCharacters.map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}（{entry.id}）</option>)}
+                </select>
+              </label>
+              <div className="text-[11px] rounded-lg px-3 py-2" style={{ ...inputStyle, color: 'var(--text-2)' }}>
+                规格：64×128 PNG · 4 行（下/右/上/左）× 4 列（待机+3 行走帧）· 每帧 16×32 · 最近邻缩放不模糊
+              </div>
+            </div>
+            <label className="block" style={labelStyle}>像素表提示词（可编辑；锁定当前角色参考图）
+              <textarea data-pixel-prompt value={pixelPrompt} onChange={(event) => setPixelPrompt(event.target.value)} rows={7} className="mt-1 w-full px-3 py-2 text-[10.5px] mono" style={{ ...inputStyle, resize: 'vertical' }} />
+            </label>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button className="btn-pill primary" data-pixel-generate disabled={pixelBusy} onClick={() => void generatePixelSprite()}>
+                <Wand2 size={12} />{pixelBusy ? '生成中…' : '生成星露谷像素表'}
+              </button>
+              <button className="btn-pill ghost" data-pixel-apply disabled={!pixelSpriteReady} onClick={() => void applyPixelSprite()}>
+                <CheckCheck size={12} />一键应用到星露谷
+              </button>
+            </div>
+            {pixelDataUrl !== '' && (
+              <div className="grid gap-3 md:grid-cols-[160px_1fr]" data-pixel-preview>
+                <div className="rounded-xl p-2 text-center" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}>
+                  <SpritePreview dataUrl={pixelDataUrl} />
+                  <div className="mt-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>四方向行走动画预览（pixelated）</div>
+                </div>
+                <div className="rounded-xl p-2" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}>
+                  <img src={pixelDataUrl} alt="stardew sprite sheet" style={{ width: 128, height: 256, imageRendering: 'pixelated' }} />
+                  <div className="mt-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
+                    完整 64×128 像素表{pixelEmptyCells > 0 ? ` · ${pixelEmptyCells} 个空格（该方向/帧缺内容，游戏内回落原版预设）` : ' · 16 格全满'}
+                  </div>
+                </div>
+              </div>
+            )}
+            {pixelDataUrl === '' && (
+              <div className="rounded-lg px-3 py-2 text-[11px]" style={{ border: '1px dashed var(--stroke)', color: 'var(--text-3)' }}>
+                该角色还没有像素表：生成后才会出现预览；「一键应用到星露谷」需要先在游戏共玩页开启「同步桌宠形象进游戏」并安装 Mod。
+              </div>
+            )}
+          </section>
+        )}
+
         {tab === 'import' && (
           <section data-creator-pane="import" className="space-y-3">
             <div
@@ -701,4 +847,32 @@ export function CreatorCenter(props: {
       </div>
     </div>
   );
+}
+
+/** 星露谷像素表四方向行走动画预览（T-M6-62）：canvas 最近邻放大，绝不模糊。 */
+function SpritePreview({ dataUrl }: { dataUrl: string }): React.JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return undefined;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return undefined;
+    ctx.imageSmoothingEnabled = false;
+    const img = new Image();
+    let raf = 0;
+    const start = performance.now();
+    img.onload = () => {
+      const draw = (now: number): void => {
+        const frame = Math.floor((now - start) / 220) % 4;
+        const direction = Math.floor((now - start) / 1600) % 4;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, frame * 16, direction * 32, 16, 32, 0, 0, 64, 128);
+        raf = requestAnimationFrame(draw);
+      };
+      raf = requestAnimationFrame(draw);
+    };
+    img.src = dataUrl;
+    return () => cancelAnimationFrame(raf);
+  }, [dataUrl]);
+  return <canvas ref={canvasRef} width={64} height={128} style={{ width: 128, height: 256, imageRendering: 'pixelated' }} data-sprite-preview />;
 }

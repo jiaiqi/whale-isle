@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b && node scripts/build.mjs",
     "start": "node scripts/build.mjs && electron dist/main/index.js",
-    "package": "pnpm build && electron-builder"
+    "package": "pnpm build && pnpm build:avatar-mod && electron-builder",
+    "build:avatar-mod": "node ../../tools/scripts/build-avatar-mod.mjs"
   },
   "build": {
     "appId": "com.whaleisle.desktop",
@@ -37,6 +38,10 @@
       {
         "from": "../../tools/hooks",
         "to": "hooks"
+      },
+      {
+        "from": "../../mods/stardew-avatar-sync/publish",
+        "to": "mods/WhaleIsleAvatar"
       }
     ],
     "asar": true,

@@ -32,6 +32,7 @@ import { customCharacterPairs, invalidateCustomCharacters, linesForPose, matchCh
 import { resolvePose } from './pose-resolver';
 import { createWorkFollowHost } from './work-follow-host';
 import { createWorkFollowInstaller } from './work-follow-installer';
+import { createStardewAvatarHost } from './stardew-avatar-host';
 import { createFrontAppWatcher } from './front-app-watcher';
 import { PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
@@ -312,6 +313,10 @@ app.whenReady().then(async () => {
     prefs.patch({ characterId: id });
     const next = characters.selected();
     setCurrentPersonaCharacter(next.id, next.personaPrompt);
+    // T-M6-62：开关开启时把新角色外观写进星露谷（Mod 热重载；未开启/未安装时静默跳过）
+    try {
+      stardewAvatar.syncCharacter({ characterId: next.id, displayName: next.displayName });
+    } catch { /* 外观同步失败不影响切角 */ }
     // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
     petWindowManager?.patch('default', { characterId: next.id });
     petWindowManager?.sendAgent('default', 'pet:character-changed', { ...next });
@@ -748,6 +753,39 @@ app.whenReady().then(async () => {
     },
   });
 
+  // T-M6-62：星露谷桌宠像素外观同步（安装 Mod / 开关 / 原子写 active-avatar.json）
+  const stardewAvatar = createStardewAvatarHost({
+    userDataDir: app.getPath('userData'),
+    homeDir: homedir(),
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    repoRoot: join(here, '../../../..'),
+  });
+  ipcMain.handle('stardew-avatar:state', () => {
+    const current = characters.selected();
+    return { ...stardewAvatar.state(), currentCharacterId: current.id, spriteReady: stardewAvatar.spriteReady(current.id) };
+  });
+  ipcMain.handle('stardew-avatar:set-enabled', (_event, next: boolean) => {
+    const state = stardewAvatar.setEnabled(Boolean(next));
+    if (state.enabled) {
+      const current = characters.selected();
+      stardewAvatar.syncCharacter({ characterId: current.id, displayName: current.displayName });
+    }
+    return { ...state, currentCharacterId: characters.selected().id, spriteReady: stardewAvatar.spriteReady(characters.selected().id) };
+  });
+  ipcMain.handle('stardew-avatar:install', () => stardewAvatar.installMod());
+  ipcMain.handle('stardew-avatar:uninstall', () => stardewAvatar.uninstallMod());
+  ipcMain.handle('stardew-avatar:sync-now', () => {
+    const current = characters.selected();
+    return stardewAvatar.syncCharacter({ characterId: current.id, displayName: current.displayName });
+  });
+  ipcMain.handle('stardew-avatar:apply-character', (_event, characterId: string) => {
+    const id = String(characterId);
+    const known = characters.list().find((character) => character.id === id);
+    return stardewAvatar.syncCharacter({ characterId: id, displayName: known?.displayName ?? id });
+  });
+
   // 联机启动器宿主（T-M6-51 拆分）：探测/隔离 profile/参数数组 spawn 全部在此
   const coopLaunch = createCoopLaunchHost({
     userDataDir: app.getPath('userData'),
@@ -761,6 +799,8 @@ app.whenReady().then(async () => {
       characterId: item.characterId,
       endpoint: item.endpoint,
     })),
+    avatarSync: stardewAvatar,
+    characterName: (id) => characters.list().find((character) => character.id === id)?.displayName ?? id,
   });
   coopLaunch.registerIpc();
   // T-M6-37：直播最小链路（弹幕回放 → 护栏 → 注意力 → 中控台/插件总线/语音）

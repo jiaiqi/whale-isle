@@ -47,9 +47,14 @@ export async function prepareStardewProfile(input: {
   for (const entry of readdirSync(input.modsDir, { withFileTypes: true })) {
     const source = join(input.modsDir, entry.name);
     const target = join(profileModsDir, entry.name);
-    if (entry.name === bwf.folderName) continue;
+    // WhaleIsleAvatar 必须实体复制：每个 AI 队友要写自己的 active-avatar.json（T-M6-62）
+    if (entry.name === bwf.folderName || entry.name === 'WhaleIsleAvatar') continue;
     if (existsSync(target)) continue;
     try { symlinkSync(source, target, entry.isDirectory() ? 'dir' : 'file'); } catch { /* 平台不支持符号链接时跳过，不阻塞 BWF */ }
+  }
+  const sourceAvatar = join(input.modsDir, 'WhaleIsleAvatar');
+  if (existsSync(join(sourceAvatar, 'manifest.json'))) {
+    cpSync(sourceAvatar, join(profileModsDir, 'WhaleIsleAvatar'), { recursive: true, force: true });
   }
   const sourceBwf = join(input.modsDir, bwf.folderName);
   const targetBwf = join(profileModsDir, bwf.folderName);

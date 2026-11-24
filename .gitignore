@@ -48,3 +48,7 @@ apps/desktop-host/.v2c/
 assets/pet-packs/*
 !assets/pet-packs/README.md
 !assets/pet-packs/SYNC-MANIFEST.json
+mods/stardew-avatar-sync/bin/
+mods/stardew-avatar-sync/obj/
+mods/stardew-avatar-sync/publish/*.dll
+mods/stardew-avatar-sync/publish/*.pdb
