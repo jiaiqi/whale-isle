@@ -1611,8 +1611,9 @@ stage.addEventListener('contextmenu', (event) => {
   if (scaleMenu !== null) { closeScaleMenu(); return; }
   void bridge.forceInteractive(true);
   scaleMenu = document.createElement('div');
-  scaleMenu.style.cssText = `position:absolute; left:${Math.round(BASE_STAGE.width * petScale / 2 - 60)}px; bottom:8px;
-    display:flex; gap:4px; padding:6px; border-radius:12px; pointer-events:auto;
+  scaleMenu.style.cssText = `position:absolute; left:50%; transform:translateX(-50%); bottom:8px;
+    display:flex; flex-wrap:wrap; justify-content:center; gap:4px; padding:6px; border-radius:12px; pointer-events:auto;
+    width:${Math.max(220, Math.round(BASE_STAGE.width * petScale - 16))}px; box-sizing:border-box;
     background:rgba(12,20,32,0.92); border:1px solid rgba(120,180,255,0.35); z-index:20;`;
   const makeTextButton = (label: string, onClick: () => void): HTMLButtonElement => {
     const btn = document.createElement('button');

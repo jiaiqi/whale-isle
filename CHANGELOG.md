@@ -12,6 +12,11 @@
 - **T-M6-65 小本子/彩蛋/日志/峰谷**：小本子双页（相处记录 + 朋友留言，留言者手写体、便签/贴纸/挚友双人对话卡 + 双头像），8 套纸张主题，`notebookFontId` 持久化；冷启动只读补录 Claude/Codex JSONL（只统计 timestamp/model/tool_use/function_call，marker 幂等、零正文）；`egg-theater` 15 个 egg-* 专属 host/hostSkin 优先、pop→pretend→抓包/溜走五段、并发防重入与退出清理；`cli-log-watcher` 1.5s 增量 (path,inode,offset)、启动 EOF、截断重置、坏行跳过、与 Hook 5s 去重；北京峰谷 00:30–08:30 空闲、仅跨边界换装一次，中控台/托盘 24h 时间条与皮肤选择。
 - **回归证据**：全仓 **1231 tests / 分支 90.41%**；`pnpm verify:gate` **7 过 / 0 跳过**；`pnpm --filter @workbench/desktop-host build` 通过；全量 Electron E2E **13/13（6 spec，新增 `pet-evolution.e2e.spec.ts`）**，含 crosspet-claude 真实 pose-config、气泡 `ShangShouGummy`、`windowLayer`/`bubbleFontScale` 持久化与真实窗口置顶、小本子双页/8 手写体注入、彩蛋打开→抓包→收口无僵尸窗。macOS 真机与 Windows 11 验收清单见 `docs/VERIFY.md`（尚未收到「macOS 真机通过」确认，未合并 main）。
 
+### Fixed（T-M6-63~65 真机操作首轮）
+
+- **桌宠右键菜单溢出窗口**：新增「显示层级 ▸」后，菜单单行宽度超过 400px 桌宠窗，`睡觉/彩蛋/小本子` 等按钮被窗口裁切、鼠标不可达。改为 `left:50% + translateX(-50%) + flex-wrap + 宽度=舞台宽-16px`，全部按钮在窗口内换行可见；真机复验右键菜单完整显示。
+- **真机操作证据（AI 直接操作 macOS）**：真实点击「扫描本机历史记录补录」→ **42 个文件 / 5180 轮**，二次点击「本机已补录过」；小蓝狐（GLM）纸张「湖蓝便签」+ 志莽行书、小芽「星紫横线」+ 站酷快乐体；`s` 键睡眠 `sleeping:true` 闭眼、再按唤醒；桌宠窗口 x 228→283→308 自主巡逻；彩蛋剧场真实打开 egg 窗并在超时后自动关闭（无僵尸窗）；演示会话 8 次工具 → crosspet-claude 窗口戴皇冠 + 双任务卡绿勾；切小蓝狐后峰谷卡片真实出现且开关 toast 生效。指针相关的头/脸/身分区点击、晃动静默记仇/两段哄好、贴边探出与主副对调仍待人工复核（CUA 合成点击会落在真实指针位置，透明桌宠窗无法可靠模拟）。
+
 ### Added（T-M6-60：macOS + Windows 11 双端托盘常驻与 Magpie 风格快捷浮窗）
 
 - **托盘宿主 `tray-host.ts`**：macOS 18×18 `trayTemplate.png` + 36×36 `@2x`（`setTemplateImage(true)` 自动适配深浅菜单栏）；Windows 11 32×32 `tray-win-dark/light.png`，按 `nativeTheme.shouldUseDarkColors` 选取并监听 `updated` 实时切换。图标由 `scripts/generate-tray-icons.ts` 直接读取 `shared/brand.ts` 的鲸鱼路径生成（4×4 超采样 + 内置 PNG 编码，零外部图像库）；构建随 `assets/brand → dist/renderer/brand` 进入 asar。
