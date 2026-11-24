@@ -25,6 +25,7 @@
 - **后台切角不再偷改游戏外观**：`switchDefaultCharacter` 不再写星露谷外观；只有用户显式动作才同步（共玩页开关/同步当前、创作中心一键应用、工作台或托盘手动切角）。启动恢复、召唤、前台应用、工作跟随等后台路径只换桌面桌宠，不会用过期会话覆盖用户已应用的像素表；真机验证启动后 `active-avatar.json` 保持 aboutme-gemini，而工坊手动切到小鲸/切回小芽会各自写回对应像素表。
 - **像素目标默认当前桌宠**：创作中心像素页签每次打开默认选中当前桌宠（而非上一次临时覆盖的角色），显示「游戏内当前」并给出「目标不是当前桌宠」琥珀提示；应用后同步刷新「游戏内当前」与预览，避免状态自相矛盾。
 - **E2E 去抖**：三游戏连接引导断言改为轮询等待 `data-game-conn` 从 `unknown` 落到 online/reachable/offline，消除探测未完成就读取导致的偶发失败。
+- **E2E 与真实游戏隔离**：`PET_STAGE_E2E=1` 时星露谷外观宿主改用 `e2e-profile/e2e-mods` 空槽位；E2E 里的「同步开关」不再写用户真实 `Mods/WhaleIsleAvatar/active-avatar.json`（复盘时发现 E2E 曾把真实游戏目标改成 crosspet-claude），测试后真实文件保持 aboutme-gemini。
 
 
 ### Added（T-M6-60：macOS + Windows 11 双端托盘常驻与 Magpie 风格快捷浮窗）
