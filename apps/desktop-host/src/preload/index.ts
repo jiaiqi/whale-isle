@@ -276,8 +276,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
   creatorCompileStardewSprite: (input: { name: string; traits?: string }): Promise<{ ok: boolean; prompt: string }> => ipcRenderer.invoke('creator:compile-stardew-sprite', input),
   creatorGenerateStardewSprite: (input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; error?: string }> => ipcRenderer.invoke('creator:generate-stardew-sprite', input),
   creatorStardewSpriteGet: (characterId: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }> => ipcRenderer.invoke('creator:stardew-sprite-get', characterId),
-  stardewAvatarState: (): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; currentCharacterId: string; spriteReady: boolean }> => ipcRenderer.invoke('stardew-avatar:state'),
-  stardewAvatarSetEnabled: (next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; currentCharacterId: string; spriteReady: boolean }> => ipcRenderer.invoke('stardew-avatar:set-enabled', next),
+  stardewAvatarState: (): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }> => ipcRenderer.invoke('stardew-avatar:state'),
+  stardewAvatarSetEnabled: (next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }> => ipcRenderer.invoke('stardew-avatar:set-enabled', next),
+  onStardewAvatarChanged: (handler: () => void): (() => void) => {
+    const listener = (): void => handler();
+    ipcRenderer.on('stardew-avatar:changed', listener);
+    return () => { ipcRenderer.removeListener('stardew-avatar:changed', listener); };
+  },
   stardewAvatarInstall: (): Promise<{ ok: boolean; error?: string; compiled?: boolean }> => ipcRenderer.invoke('stardew-avatar:install'),
   stardewAvatarUninstall: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('stardew-avatar:uninstall'),
   stardewAvatarSyncNow: (): Promise<{ ok: boolean; error?: string; sprite?: boolean }> => ipcRenderer.invoke('stardew-avatar:sync-now'),

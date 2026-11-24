@@ -57,6 +57,16 @@ export interface StardewAvatarState {
   modInstalled: boolean;
   /** WhaleIsleAvatar.dll 存在（dotnet 编译产物）；false 时安装器如实提示 */
   modCompiled: boolean;
+  /** 游戏 Mod 目录里 active-avatar.json 当前同步的角色（未同步为 null） */
+  syncedCharacterId: string | null;
+  syncedDisplayName: string | null;
+  /** 该同步角色是否有像素表贴图（active-avatar.json 的 spriteSheetPath 指向的文件存在） */
+  syncedSpriteReady: boolean;
+}
+
+/** 角色 id 安全边界：只允许小写字母/数字/连字符，杜绝 `..` 与路径分隔符。 */
+export function isSafeCharacterId(characterId: string): boolean {
+  return /^[a-z0-9][a-z0-9-]{0,60}$/.test(characterId);
 }
 
 export interface StardewAvatarHost {
@@ -90,10 +100,15 @@ export function createStardewAvatarHost(options: {
   repoRoot?: string;
   /** 测试注入：直接指定 Mods 目录 */
   modsDirOverride?: string;
+  /** 状态变化回调（开关/安装/卸载/写入 active-avatar.json 后触发；主进程据此广播给渲染层） */
+  onChange?: () => void;
 }): StardewAvatarHost {
   const homeDir = options.homeDir ?? process.env.HOME ?? '';
   const platform = options.platform ?? process.platform;
   const settingsPath = join(options.userDataDir, SETTINGS_FILE);
+  const notifyChange = (): void => {
+    try { options.onChange?.(); } catch { /* 状态广播失败不影响真实写入 */ }
+  };
   let enabled = false;
   try {
     if (existsSync(settingsPath)) {
@@ -125,16 +140,37 @@ export function createStardewAvatarHost(options: {
   };
 
   const spritePathFor = (characterId: string): string | null => {
+    if (!isSafeCharacterId(characterId)) return null;
     const candidates: string[] = [];
     if (characterId.startsWith('custom-')) {
-      candidates.push(join(options.userDataDir, 'pet-characters', characterId.slice('custom-'.length), SPRITE_FILE));
+      const customDir = assertInside(options.userDataDir, join(options.userDataDir, 'pet-characters', characterId.slice('custom-'.length), SPRITE_FILE));
+      candidates.push(customDir);
     }
-    candidates.push(join(options.userDataDir, 'stardew-avatars', characterId, SPRITE_FILE));
+    candidates.push(assertInside(options.userDataDir, join(options.userDataDir, 'stardew-avatars', characterId, SPRITE_FILE)));
     return candidates.find((path) => existsSync(path)) ?? null;
+  };
+
+  /** 读取 Mod 目录中当前生效的 active-avatar.json（供 UI 展示「游戏内当前角色」）。 */
+  const readSyncedAvatar = (): { characterId: string; displayName: string; spriteReady: boolean } | null => {
+    const dir = modsDir();
+    if (dir === null) return null;
+    const modDir = join(dir, MOD_FOLDER);
+    const configPath = join(modDir, 'active-avatar.json');
+    if (!existsSync(configPath)) return null;
+    try {
+      const parsed = StardewAvatarSyncSchema.safeParse(JSON.parse(readFileSync(configPath, 'utf8')));
+      if (!parsed.success) return null;
+      const spriteReady = parsed.data.spriteSheetPath !== undefined
+        && existsSync(join(modDir, parsed.data.spriteSheetPath));
+      return { characterId: parsed.data.characterId, displayName: parsed.data.displayName, spriteReady };
+    } catch {
+      return null;
+    }
   };
 
   /** 组装 + Zod 校验 + 原子写入 active-avatar.json（含像素表复制）。 */
   const writeActiveAvatar = (modDir: string, input: { characterId: string; displayName: string }): { ok: boolean; error?: string; sprite?: boolean } => {
+    if (!isSafeCharacterId(input.characterId)) return { ok: false, error: `角色 id 非法：${input.characterId.slice(0, 64)}` };
     try {
       const safeModDir = assertInside(resolve(modDir, '..'), modDir);
       mkdirSync(safeModDir, { recursive: true });
@@ -148,7 +184,8 @@ export function createStardewAvatarHost(options: {
         copyFileSync(spriteSource, join(safeModDir, spriteFileName));
         for (const entry of readdirSync(safeModDir)) {
           if (entry.startsWith(SPRITE_HASH_PREFIX) && entry.endsWith('.png') && entry !== spriteFileName) {
-            rmSync(join(safeModDir, entry), { force: true });
+            // Windows 上正在被游戏加载的旧贴图可能删不掉：忽略单个失败，绝不因此让新贴图同步失败
+            try { rmSync(join(safeModDir, entry), { force: true }); } catch { /* 旧文件留待下次清理 */ }
           }
         }
         spriteSheetPath = spriteFileName;
@@ -164,6 +201,7 @@ export function createStardewAvatarHost(options: {
       const temp = `${target}.tmp`;
       writeFileSync(temp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
       renameSync(temp, target);
+      notifyChange();
       return { ok: true, sprite: spriteSheetPath !== undefined };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -173,11 +211,15 @@ export function createStardewAvatarHost(options: {
   const state = (): StardewAvatarState => {
     const dir = modsDir();
     const modDir = dir === null ? null : join(dir, MOD_FOLDER);
+    const synced = readSyncedAvatar();
     return {
       enabled,
       modsDir: dir,
       modInstalled: modDir !== null && existsSync(join(modDir, 'manifest.json')),
       modCompiled: modDir !== null && existsSync(join(modDir, 'WhaleIsleAvatar.dll')),
+      syncedCharacterId: synced?.characterId ?? null,
+      syncedDisplayName: synced?.displayName ?? null,
+      syncedSpriteReady: synced?.spriteReady === true,
     };
   };
 
@@ -186,6 +228,7 @@ export function createStardewAvatarHost(options: {
     setEnabled(next) {
       enabled = next === true;
       persist();
+      notifyChange();
       return state();
     },
     installMod() {
@@ -197,6 +240,7 @@ export function createStardewAvatarHost(options: {
       try {
         cpSync(source, target, { recursive: true, force: true });
         const compiled = existsSync(join(target, 'WhaleIsleAvatar.dll'));
+        notifyChange();
         return {
           ok: true,
           compiled,
@@ -212,6 +256,7 @@ export function createStardewAvatarHost(options: {
       const target = join(dir, MOD_FOLDER);
       try {
         if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+        notifyChange();
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };

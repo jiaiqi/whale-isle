@@ -103,6 +103,33 @@ describe('syncCharacter', () => {
     expect(existsSync(join(modsDir, 'WhaleIsleAvatar', second.spriteSheetPath!))).toBe(true);
   });
 
+  it('state 从 active-avatar.json 读出游戏内当前同步角色与像素表状态', () => {
+    const { userData, modsDir, host } = sandbox({ enabled: true });
+    expect(host.state().syncedCharacterId).toBeNull();
+    const spriteDir = join(userData, 'stardew-avatars', 'aboutme-kimi');
+    mkdirSync(spriteDir, { recursive: true });
+    writeFileSync(join(spriteDir, 'stardew-sprite.png'), 'png', 'utf8');
+    expect(host.syncCharacter({ characterId: 'aboutme-kimi', displayName: 'Kimi' }).ok).toBe(true);
+    expect(host.state()).toMatchObject({
+      syncedCharacterId: 'aboutme-kimi',
+      syncedDisplayName: 'Kimi',
+      syncedSpriteReady: true,
+    });
+    // 卸载后 active-avatar.json 随目录消失，状态如实回到 null
+    expect(host.uninstallMod().ok).toBe(true);
+    expect(host.state().syncedCharacterId).toBeNull();
+    expect(existsSync(join(modsDir, 'WhaleIsleAvatar'))).toBe(false);
+  });
+
+  it('非法/越界 characterId 拒绝写入（防路径穿越）', () => {
+    const { modsDir, host } = sandbox({ enabled: true });
+    const result = host.syncCharacter({ characterId: 'custom-../../evil', displayName: 'x' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('非法');
+    expect(existsSync(join(modsDir, 'WhaleIsleAvatar', 'active-avatar.json'))).toBe(false);
+    expect(host.spriteReady('custom-../../evil')).toBe(false);
+  });
+
   it('内置角色像素表读 stardew-avatars 目录；Mod 未安装时如实报错', () => {
     const { userData, host } = sandbox({ enabled: true, withMod: false });
     const spriteDir = join(userData, 'stardew-avatars', 'aboutme-kimi');

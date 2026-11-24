@@ -40,18 +40,9 @@ public sealed class AvatarConfig
     public string? SpriteSheetPath { get; set; }
 }
 
-/// <summary>联机广播载荷（只含外观，不含任何凭据/存档数据）。</summary>
-public sealed class AvatarBroadcast
-{
-    public string CharacterId { get; set; } = "";
-    public string DisplayName { get; set; } = "";
-    public AvatarPreset Preset { get; set; } = new();
-}
-
 public sealed class ModEntry : StardewModdingAPI.Mod
 {
     private const string ConfigFileName = "active-avatar.json";
-    private const string MessageType = "WhaleIsleAvatarSync";
 
     private FileSystemWatcher? _watcher;
     private volatile bool _dirty;
@@ -59,8 +50,6 @@ public sealed class ModEntry : StardewModdingAPI.Mod
     private Texture2D? _sprite;
     /** 4=旧版 64×128（仅待机/行走）；6=96×128（多动作/表情列）。 */
     private int _spriteColumns;
-    private AvatarConfig _current = new();
-    private readonly Dictionary<long, AvatarBroadcast> _peers = new();
     private Harmony? _harmony;
 
     public override void Entry(IModHelper helper)
@@ -80,9 +69,7 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             prefix: new HarmonyMethod(typeof(DrawPatch), nameof(DrawPatch.Prefix)));
 
         helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
-        helper.Events.GameLoop.SaveLoaded += (_, _) => { MarkDirty(); Broadcast(); };
-        helper.Events.Multiplayer.PeerConnected += (_, _) => Broadcast();
-        helper.Events.Multiplayer.ModMessageReceived += OnMessageReceived;
+        helper.Events.GameLoop.SaveLoaded += (_, _) => MarkDirty();
 
         StartWatcher();
         MarkDirty();
@@ -143,10 +130,8 @@ public sealed class ModEntry : StardewModdingAPI.Mod
                 Monitor.Log("active-avatar.json 版本不符，忽略本次热切换", LogLevel.Warn);
                 return;
             }
-            _current = config;
             ApplyPreset(Game1.player, config);
             _sprite = LoadSprite(config.SpriteSheetPath);
-            Broadcast();
         }
         catch (Exception ex)
         {
@@ -209,35 +194,9 @@ public sealed class ModEntry : StardewModdingAPI.Mod
         return fallback;
     }
 
-    private void Broadcast()
-    {
-        if (!Context.IsMultiplayer) return;
-        try
-        {
-            Helper.Multiplayer.SendMessage(new AvatarBroadcast
-            {
-                CharacterId = _current.CharacterId,
-                DisplayName = _current.DisplayName,
-                Preset = _current.Preset,
-            }, MessageType, new[] { MessageType });
-        }
-        catch (Exception ex)
-        {
-            Monitor.Log($"联机外观广播失败：{ex.Message}", LogLevel.Trace);
-        }
-    }
-
-    private void OnMessageReceived(object? sender, ModMessageReceivedEventArgs e)
-    {
-        if (e.Type != MessageType || e.FromPlayerID == Game1.player.UniqueMultiplayerID) return;
-        var payload = e.ReadAs<AvatarBroadcast>();
-        if (payload == null) return;
-        _peers[e.FromPlayerID] = payload;
-    }
-
     internal Texture2D? SpriteFor(Farmer farmer)
     {
-        // 只有本端玩家有像素表；其他玩家由各自客户端的 Mod 用预设/像素表渲染
+        // 只替换本端玩家；联机多开时每个游戏实例各自安装 Mod、各自读取自己的 active-avatar.json
         return farmer.IsLocalPlayer ? _sprite : null;
     }
 

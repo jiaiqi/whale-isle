@@ -1315,6 +1315,8 @@ export const StardewSpriteGenRequestSchema = z.object({
   modelId: z.string().min(1).max(200),
   /** 缺省时由主进程用 compileStardewSpritePrompt 编译 */
   prompt: z.string().max(6000).optional(),
+  /** 可选参考图（创作中心「参考图」按钮选择；主进程复核存在性/扩展名/大小） */
+  referenceImagePath: z.string().min(1).max(1024).optional(),
 });
 export type StardewSpriteGenRequest = z.infer<typeof StardewSpriteGenRequestSchema>;
 

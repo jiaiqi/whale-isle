@@ -383,8 +383,9 @@ export interface DirectorBridge {
   creatorCompileStardewSprite(input: { name: string; traits?: string }): Promise<{ ok: boolean; prompt: string }>;
   creatorGenerateStardewSprite(input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; error?: string }>;
   creatorStardewSpriteGet(characterId: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
-  stardewAvatarState(): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; currentCharacterId: string; spriteReady: boolean }>;
-  stardewAvatarSetEnabled(next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; currentCharacterId: string; spriteReady: boolean }>;
+  stardewAvatarState(): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }>;
+  stardewAvatarSetEnabled(next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }>;
+  onStardewAvatarChanged(handler: () => void): () => void;
   stardewAvatarInstall(): Promise<{ ok: boolean; error?: string; compiled?: boolean }>;
   stardewAvatarUninstall(): Promise<{ ok: boolean; error?: string }>;
   stardewAvatarSyncNow(): Promise<{ ok: boolean; error?: string; sprite?: boolean }>;

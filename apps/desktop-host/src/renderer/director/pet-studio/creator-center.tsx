@@ -97,7 +97,7 @@ export function CreatorCenter(props: {
   const [pixelCharacters, setPixelCharacters] = useState<Array<{ id: string; displayName: string }>>([]);
   const [pixelPrompt, setPixelPrompt] = useState('');
   const [pixelDataUrl, setPixelDataUrl] = useState('');
-  const [pixelEmptyCells, setPixelEmptyCells] = useState(0);
+  const [pixelEmptyCells, setPixelEmptyCells] = useState(-1); // -1 = 从磁盘读取的旧图，空格数未知，不臆造「全满」
   const [pixelBusy, setPixelBusy] = useState(false);
   const [pixelSpriteReady, setPixelSpriteReady] = useState(false);
   const [renameTarget, setRenameTarget] = useState('');
@@ -203,13 +203,23 @@ export function CreatorCenter(props: {
     });
   }, [open]);
 
-  // T-M6-62：像素表角色清单（内置 9 角色 + 默认小鲸 + 自定义角色）
+  // T-M6-62：像素表角色清单（内置 9 角色 + 默认小鲸 + 自定义角色）；优先默认到游戏内已同步角色
+  const [pixelSynced, setPixelSynced] = useState<{ id: string; displayName: string } | null>(null);
   useEffect(() => {
     if (!open) return;
-    void window.directorBridge.characterList().then((list) => {
+    void Promise.all([
+      window.directorBridge.characterList(),
+      window.directorBridge.stardewAvatarState().catch(() => null),
+    ]).then(([list, avatar]) => {
       const eligible = list.filter((entry) => entry.id === 'blue-whale-maid' || entry.id.startsWith('aboutme-') || entry.id.startsWith('custom-'));
       setPixelCharacters(eligible);
-      if (!eligible.some((entry) => entry.id === pixelCharacterId)) setPixelCharacterId(eligible[0]?.id ?? characterId);
+      setPixelSynced(avatar?.syncedCharacterId == null
+        ? null
+        : { id: avatar.syncedCharacterId, displayName: avatar.syncedDisplayName ?? avatar.syncedCharacterId });
+      // 默认目标 = 当前桌宠（它是同步的主状态），不是游戏里上一次的临时覆盖
+      const preferred = [characterId, avatar?.syncedCharacterId ?? null]
+        .find((id) => id !== null && eligible.some((entry) => entry.id === id)) ?? null;
+      setPixelCharacterId(preferred ?? eligible[0]?.id ?? characterId);
     }).catch(() => setPixelCharacters([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -242,13 +252,14 @@ export function CreatorCenter(props: {
           candidateModels: selectedImageProvider.models,
         },
         modelId: imageModelId,
+        ...(referenceImage === '' ? {} : { referenceImagePath: referenceImage }),
         ...(pixelPrompt.trim() === '' ? {} : { prompt: pixelPrompt }),
       });
       if (!result.ok) { toast.error(result.error ?? '像素表生成失败'); return; }
       setPixelDataUrl(result.dataUrl ?? '');
       setPixelEmptyCells(result.emptyCells ?? 0);
       setPixelSpriteReady(true);
-      toast.success(`像素表已生成（96×128，${result.emptyCells ?? 0} 个空格）并写入角色目录`);
+      toast.success(`像素表已生成（96×128，${result.emptyCells ?? 0} 个空格）并写入角色目录；点「一键应用到星露谷」生效`);
     } finally {
       setPixelBusy(false);
     }
@@ -257,6 +268,13 @@ export function CreatorCenter(props: {
   const applyPixelSprite = async (): Promise<void> => {
     const result = await window.directorBridge.stardewAvatarApplyCharacter(pixelCharacterId);
     if (!result.ok) { toast.error(result.error ?? '应用失败'); return; }
+    // 应用后重新读取角色目录里的真实文件，避免预览停留在应用前的旧图
+    const refreshed = await window.directorBridge.creatorStardewSpriteGet(pixelCharacterId);
+    if (refreshed.ok && refreshed.dataUrl !== undefined) setPixelDataUrl(refreshed.dataUrl);
+    setPixelSynced({
+      id: pixelCharacterId,
+      displayName: pixelCharacters.find((entry) => entry.id === pixelCharacterId)?.displayName ?? pixelCharacterId,
+    });
     toast.success(result.sprite === true ? '已把像素表写进星露谷 Mod 目录（游戏内热变身）' : '已写入原版外观预设（该角色还没有像素表）');
   };
 
@@ -524,7 +542,7 @@ export function CreatorCenter(props: {
                   </div>
                 </div>
                 <div className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
-                  单张 60s 超时（Codex CLI 90s）· 并发 ≤2 · Key 只在主进程 vault 解密
+                  单张 60s 超时（Codex CLI 150s）· 并发 ≤2 · Key 只在主进程 vault 解密
                   {referenceImage !== '' && <span className="mono ml-2">参考图：{referenceImage.split('/').slice(-1)[0]}</span>}
                 </div>
                 {codexInfo !== null && (!codexInfo.detected || !codexInfo.loggedIn || codexInfo.backend !== 'codex-imagegen') && (
@@ -704,25 +722,38 @@ export function CreatorCenter(props: {
         {tab === 'pixel' && (
           <section data-creator-pane="pixel" className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="block" style={labelStyle}>目标角色（内置 9 角色 / 自定义角色）
+              <label className="block" style={labelStyle}>目标角色（内置 / 自定义角色）
                 <select data-pixel-character value={pixelCharacterId} onChange={(event) => setPixelCharacterId(event.target.value)} className="mt-1 w-full px-3 py-2 text-[12px]" style={inputStyle}>
                   {pixelCharacters.map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}（{entry.id}）</option>)}
                 </select>
+                {pixelSynced !== null && (
+                  <span className="mt-1 block text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    游戏内当前：{pixelSynced.displayName}（{pixelSynced.id}）
+                  </span>
+                )}
               </label>
               <div className="text-[11px] rounded-lg px-3 py-2" style={{ ...inputStyle, color: 'var(--text-2)' }}>
                 规格：96×128 PNG · 4 行（下/右/上/左）× 6 列（待机 + 3 行走 + 动作 + 表情）· 每帧 16×32 · 最近邻缩放不模糊
               </div>
             </div>
-            <label className="block" style={labelStyle}>像素表提示词（可编辑；锁定当前角色参考图）
+            {pixelCharacterId !== characterId && (
+              <div className="rounded-lg px-3 py-2 text-[10.5px]" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)', color: 'var(--amber)' }}>
+                目标不是当前桌宠：应用只改游戏内形象；切换桌宠或重启工作台后，游戏会跟随当前桌宠「{characterName}」。
+              </div>
+            )}
+            <label className="block" style={labelStyle}>像素表提示词（可编辑；共享的「参考图」会随请求发给生图供应商锁定外观）
               <textarea data-pixel-prompt value={pixelPrompt} onChange={(event) => setPixelPrompt(event.target.value)} rows={7} className="mt-1 w-full px-3 py-2 text-[10.5px] mono" style={{ ...inputStyle, resize: 'vertical' }} />
             </label>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button className="btn-pill primary" data-pixel-generate disabled={pixelBusy} onClick={() => void generatePixelSprite()}>
-                <Wand2 size={12} />{pixelBusy ? '生成中…' : '生成星露谷像素表'}
+                <Wand2 size={12} />{pixelBusy ? '生成中…（约 30–90 秒）' : '生成星露谷像素表'}
               </button>
-              <button className="btn-pill ghost" data-pixel-apply disabled={!pixelSpriteReady} onClick={() => void applyPixelSprite()}>
+              <button className="btn-pill ghost" data-pixel-apply disabled={!pixelSpriteReady} onClick={() => void applyPixelSprite()} title="需先在游戏共玩页开启「同步桌宠形象进游戏」并安装 Mod">
                 <CheckCheck size={12} />一键应用到星露谷
               </button>
+            </div>
+            <div className="text-right text-[10px]" style={{ color: 'var(--text-3)' }}>
+              Codex CLI 最长 150 秒；OpenAI/Gemini 单张 60 秒。应用后游戏内 200ms 热切换，无需重启。
             </div>
             {pixelDataUrl !== '' && (
               <div className="grid gap-3 md:grid-cols-[160px_1fr]" data-pixel-preview>
@@ -733,7 +764,7 @@ export function CreatorCenter(props: {
                 <div className="rounded-xl p-2" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}>
                   <img src={pixelDataUrl} alt="stardew sprite sheet" style={{ width: 192, height: 256, imageRendering: 'pixelated' }} />
                   <div className="mt-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
-                    完整 96×128 像素表{pixelEmptyCells > 0 ? ` · ${pixelEmptyCells} 个空格（该方向/帧缺内容，游戏内回落原版预设）` : ' · 24 格全满'}
+                    完整 96×128 像素表 · 行：下/右/上/左 · 列：待机/左脚/右脚/过渡/动作/表情{pixelEmptyCells > 0 ? ` · ${pixelEmptyCells} 个空格（该方向/帧缺内容，游戏内回落原版预设）` : ' · 24 格全满'}
                   </div>
                 </div>
               </div>

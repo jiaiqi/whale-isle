@@ -1,6 +1,6 @@
 {
   "Name": "Whale Isle Avatar Sync",
-  "Description": "把鲸屿当前桌宠形象同步成星露谷玩家像素外观（原版预设兜底 + 96x128 像素表覆盖，联机广播）。",
+  "Description": "把鲸屿当前桌宠形象同步成星露谷玩家像素外观（原版预设兜底 + 96x128 像素表覆盖（只替换本端玩家））。",
   "Author": "Whale Isle",
   "Version": "0.2.0-dev.1",
   "UniqueID": "WhaleIsle.AvatarSync",

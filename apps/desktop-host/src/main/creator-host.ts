@@ -326,7 +326,7 @@ export function createCreatorHost(options: {
         modelId: args.modelId,
         prompt: draftPosePrompt(job.prompt, item.pose),
         size: args.size,
-        timeoutMs: args.provider.protocol === 'codex-cli' ? 90_000 : 60_000,
+        timeoutMs: args.provider.protocol === 'codex-cli' ? 150_000 : 60_000,
         ...(args.referenceImagePath === undefined ? {} : { referenceImagePath: args.referenceImagePath }),
         ...(args.codex === undefined || args.codex === null ? {} : { codex: { detection: args.codex } }),
       });
@@ -550,6 +550,9 @@ export function createCreatorHost(options: {
         const prompt = request.prompt !== undefined && request.prompt.trim() !== ''
           ? request.prompt
           : compileStardewSpritePrompt({ name: request.characterId });
+        const referenceImagePath = request.referenceImagePath === undefined
+          ? undefined
+          : resolveDraftReference(request.referenceImagePath);
         const image = await generateImage({
           protocol: request.provider.protocol,
           baseUrl: request.provider.baseUrl,
@@ -557,7 +560,9 @@ export function createCreatorHost(options: {
           modelId: request.modelId,
           prompt,
           size: '1024x1024',
-          timeoutMs: isCodex ? 90_000 : 60_000,
+          // codex-imagegen 真实出图常见 60–120s，90s 会误杀；后端上限 180s
+          timeoutMs: isCodex ? 150_000 : 60_000,
+          ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
           ...(codex === null ? {} : { codex: { detection: codex } }),
         });
         // 统一落临时文件再解码（复用渲染层 canvas 解码 WebP 的既有链路）
