@@ -253,6 +253,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   acceptanceCatalog: (): Promise<unknown> => ipcRenderer.invoke('acceptance:catalog'),
   acceptancePause: (paused: boolean): Promise<{ ok: boolean; paused: boolean }> => ipcRenderer.invoke('acceptance:pause', paused),
   acceptancePose: (pose: string): Promise<{ ok: boolean; pose?: string; fallback?: boolean }> => ipcRenderer.invoke('acceptance:pose', pose),
+  acceptanceCarousel: (on: boolean, intervalMs?: number): Promise<{ ok: boolean; on?: boolean; poses?: string[]; intervalMs?: number; error?: string }> => ipcRenderer.invoke('acceptance:carousel', on, intervalMs),
+  acceptanceGuides: (on: boolean): Promise<{ ok: boolean; on?: boolean }> => ipcRenderer.invoke('acceptance:guides', on),
   acceptanceRun: (scenarioId: string): Promise<unknown> => ipcRenderer.invoke('acceptance:run', scenarioId),
   acceptanceRunAll: (): Promise<unknown> => ipcRenderer.invoke('acceptance:run-all'),
   acceptanceReport: (): Promise<{ ok: boolean; markdown?: string }> => ipcRenderer.invoke('acceptance:report'),
@@ -323,10 +325,18 @@ contextBridge.exposeInMainWorld('petStage', {
   petDismiss: (): Promise<{ ok: boolean; closed: number }> => ipcRenderer.invoke('pet:dismiss'),
   petEggSummon: (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => ipcRenderer.invoke('pet:egg-summon'),
   petOpenNotebook: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:open-notebook'),
-  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean }> =>
+  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean; idleActions?: string[]; glyph?: { fill?: string; stroke?: string; text?: string }; apps?: string[] }> =>
     ipcRenderer.invoke('custom:pose-config', characterId),
+  customGreeting: (characterId: string): Promise<{ ok: boolean; greeting?: { key: string; pose: string; line: string } | null }> =>
+    ipcRenderer.invoke('custom:greeting', characterId),
   onPetPose: (handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void => {
     ipcRenderer.on('pet:pose', (_e, payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => handler(payload));
+  },
+  onBenchGuides: (handler: (payload: { on: boolean }) => void): void => {
+    ipcRenderer.on('pet:guides', (_e, payload: { on: boolean }) => handler(payload));
+  },
+  onBenchCarousel: (handler: (payload: { on: boolean; pose?: string; index?: number; total?: number }) => void): void => {
+    ipcRenderer.on('pet:carousel', (_e, payload: { on: boolean; pose?: string; index?: number; total?: number }) => handler(payload));
   },
   reloadCharacters: (): Promise<{ ok: boolean; count?: number }> => ipcRenderer.invoke('pet:reload-characters'),
   onBenchSleep: (handler: (payload: { asleep: boolean }) => void): void => {

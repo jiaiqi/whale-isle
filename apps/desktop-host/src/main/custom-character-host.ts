@@ -11,6 +11,7 @@ import {
   saveCustomCharacter,
   type CustomCharacterEntry,
 } from './custom-character';
+import { claimFirstMeeting, fileGreetingStore, resolveGreeting, ymd, type GreetingResolution } from './greeting-schedule';
 
 export interface CustomCharacterSummary {
   id: string;
@@ -86,7 +87,43 @@ export function createCustomCharacterHost(options: {
       const dirId = id.startsWith('custom-') ? id.slice('custom-'.length) : id;
       const entry = readCustomCharacters(options.userDataDir).entries.find((item) => item.id === dirId || item.character.id === id);
       if (entry === undefined) return { ok: false };
-      return { ok: true, correctedPose: entry.data.correctedPose, longThink: entry.data.longThink, pokePose: entry.data.pokePose, fx: entry.data.fx, egg: entry.data.egg };
+      return {
+        ok: true,
+        correctedPose: entry.data.correctedPose,
+        longThink: entry.data.longThink,
+        pokePose: entry.data.pokePose,
+        fx: entry.data.fx,
+        egg: entry.data.egg,
+        idleActions: entry.data.idleActions,
+        glyph: entry.data.glyph,
+        apps: entry.data.apps,
+      };
+    });
+    /**
+     * 首见登场（T-M6-55）：节日姿态优先 → 时段姿态 → 缺图返回 null（渲染层回退每日问候）。
+     * 按「角色 id + 日期 + 键」落盘去重，同一角色同一天同一场景只触发一次。
+     */
+    ipcMain.handle('custom:greeting', (_event, characterId: string) => {
+      const id = String(characterId);
+      const dirId = id.startsWith('custom-') ? id.slice('custom-'.length) : id;
+      const entry = readCustomCharacters(options.userDataDir).entries.find((item) => item.id === dirId || item.character.id === id);
+      if (entry === undefined) return { ok: true, greeting: null };
+      const now = new Date();
+      const resolved: GreetingResolution | null = resolveGreeting({
+        date: now,
+        availablePoses: entry.poses,
+        lines: entry.data.lines,
+      });
+      if (resolved === null) return { ok: true, greeting: null };
+      const first = claimFirstMeeting(
+        fileGreetingStore(options.userDataDir),
+        entry.character.id,
+        ymd(now),
+        resolved.key,
+        now,
+      );
+      if (!first) return { ok: true, greeting: null };
+      return { ok: true, greeting: resolved };
     });
     ipcMain.handle('custom:reload', () => {
       invalidateCustomCharacters();

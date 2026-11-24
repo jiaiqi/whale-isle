@@ -1495,6 +1495,7 @@ class PetDesktopPrefs(BaseModel):
     autoHideFullscreen: bool | None = True
     sfxEnabled: bool | None = True
     sfxVolume: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.7
+    followFrontApp: bool | None = False
 
 
 class Kind(StrEnum):
@@ -2076,6 +2077,7 @@ class Glyph(BaseModel):
         extra='forbid',
     )
     fill: str | None = ''
+    stroke: str | None = ''
     text: str | None = ''
 
 
@@ -2104,6 +2106,8 @@ class Notebook(BaseModel):
     title: str | None = ''
     font: str | None = ''
     entries: list[str] | None = []
+    notes: list[str] | None = []
+    sign: str | None = ''
 
 
 class PetCustomCharacter(BaseModel):
@@ -2118,7 +2122,7 @@ class PetCustomCharacter(BaseModel):
     greeting: str | None = ''
     lines: dict[str, list[str]] | None = {}
     glyph: Annotated[Glyph | None, Field(validate_default=True)] = cast(
-        'Glyph | None', {'fill': '', 'text': ''}
+        'Glyph | None', {'fill': '', 'stroke': '', 'text': ''}
     )
     idleActions: list[str] | None = []
     pokePose: str | None = 'pout'
@@ -2129,7 +2133,8 @@ class PetCustomCharacter(BaseModel):
     fx: dict[str, str] | None = {}
     milestones: Annotated[list[Milestone] | None, Field(validate_default=True)] = []
     notebook: Annotated[Notebook | None, Field(validate_default=True)] = cast(
-        'Notebook | None', {'title': '', 'font': '', 'entries': []}
+        'Notebook | None',
+        {'title': '', 'font': '', 'entries': [], 'notes': [], 'sign': ''},
     )
     outfit: str | None = ''
     aura: str | None = ''

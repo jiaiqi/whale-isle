@@ -15,6 +15,8 @@ import { AudioLeaseManager } from './audio-lease';
 import { mountBubbleWidgets } from './widgets/bubbles';
 import { mountRiceBowlWidget } from './widgets/rice-bowl-widget';
 import { buildPlaybackLease, sampleVisemeTimeline, type SpeakRequest } from './tts-router';
+import { pickIdleMix } from './idle-mix';
+import { glyphColors, glyphParticles, isReadingOrSearchingPose, type GlyphConfig } from './glyph-effects';
 
 interface PetStageBridge {
   ready: boolean;
@@ -61,7 +63,12 @@ interface PetStageBridge {
   petSummon?(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
   /** T-M6-53：工作跟随代理/验收台按姿态名直放 */
   onPetPose?(handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void;
-  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean }>;
+  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean; idleActions?: string[]; glyph?: { fill?: string; stroke?: string; text?: string }; apps?: string[] }>;
+  /** T-M6-55：时段/节日首见登场（主进程按角色+日期+键去重） */
+  customGreeting?(characterId: string): Promise<{ ok: boolean; greeting?: { key: string; pose: string; line: string } | null }>;
+  /** T-M6-55：验收台参考线与姿态轮播 */
+  onBenchGuides?(handler: (payload: { on: boolean }) => void): void;
+  onBenchCarousel?(handler: (payload: { on: boolean; pose?: string; index?: number; total?: number }) => void): void;
   /** 自定义角色热重载：重新读取注册表与 manifest（零重启） */
   reloadCharacters?(): Promise<{ ok: boolean; count?: number }>;
   /** T-M6-53：验收台暂停/睡眠演练与创作中心/验收台入口 */
@@ -324,8 +331,19 @@ type PetAvatarManifest = import('@workbench/shared-protocol').PetAvatarManifest;
 type SpriteMeta = import('@workbench/shared-protocol').PetSpriteMeta;
 /** 当前窗口正显示的角色（友谊记分 / pose 台词用）。 */
 let currentCharacterId = petContext.characterId ?? 'blue-whale-maid';
-/** 自定义角色的纠正/长思考姿态（T-M6-53） */
-let poseConfig: { correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean } | null = null;
+/** 自定义角色的纠正/长思考姿态（T-M6-53）与闲时动作/飘字/前台应用（T-M6-55） */
+let poseConfig: {
+  correctedPose?: string;
+  longThink?: { after: number; pose: string };
+  pokePose?: string;
+  fx?: Record<string, string>;
+  egg?: boolean;
+  idleActions?: string[];
+  glyph?: GlyphConfig;
+  apps?: string[];
+} | null = null;
+/** 当前实际播放的姿态名（参考线角标用；未知时回退动作槽位） */
+let lastPoseName = 'idle';
 let lastFailureAt = 0;
 let longThinkTimer: ReturnType<typeof setTimeout> | null = null;
 async function loadCharacterManifest(id: string): Promise<void> {
@@ -379,20 +397,50 @@ void (async () => {
     characterId = own?.characterId ?? globals.characterId;
   }
   await loadCharacterManifest(characterId);
-  // 当天首次见面：问候一次（主进程按角色+日期去重，不重复打扰）
-  void bridge.friendMeet?.(characterId).then((line) => {
-    if (line === '') return;
-    widgets.showDialog(line);
-    setTimeout(() => widgets.hideDialog(), 9_000);
-  }).catch(() => undefined);
+  playGreeting(characterId);
 })().catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
 bridge.onCharacterChanged?.((character) => {
   // manager 只会向 default 窗口发送全局角色快切；各联机窗角色由 URL/窗口 prefs 固定
   if (typeof character.anchorRatio === 'number') {
     document.documentElement.style.setProperty('--pet-anchor-ratio', String(character.anchorRatio));
   }
-  void loadCharacterManifest(character.id).catch((error) => console.warn('[pet-stage] 角色切换失败：', error));
+  void loadCharacterManifest(character.id)
+    .then(() => playGreeting(character.id))
+    .catch((error) => console.warn('[pet-stage] 角色切换失败：', error));
 });
+
+/**
+ * 首见登场（T-M6-55）：自定义角色的节日姿态 → 时段姿态 → 缺图回退原每日问候。
+ * 去重在主进程（角色 id + 日期 + 键），这里只负责播图与弹台词。
+ */
+function playGreeting(characterId: string): void {
+  void (async () => {
+    const custom = bridge.customGreeting === undefined
+      ? null
+      : await bridge.customGreeting(characterId).catch(() => null);
+    const greeting = custom?.ok === true ? custom.greeting ?? null : null;
+    if (greeting !== null) {
+      if (renderer instanceof PoseSkinRenderer) {
+        try {
+          await renderer.playPose(greeting.pose);
+          lastPoseName = greeting.pose;
+        } catch {
+          /* 缺图已由主进程过滤，播放失败仍继续弹问候 */
+        }
+      }
+      if (greeting.line !== '') {
+        widgets.showDialog(greeting.line);
+        setTimeout(() => widgets.hideDialog(), 9_000);
+      }
+      lastEventAt = Date.now();
+      return;
+    }
+    const line = await bridge.friendMeet?.(characterId).catch(() => '') ?? '';
+    if (line === '') return;
+    widgets.showDialog(line);
+    setTimeout(() => widgets.hideDialog(), 9_000);
+  })();
+}
 
 // ---- T-M5-16（D16）：动作库预览 + ambient 空闲随机链 + 三层情绪映射 ----
 let lastEventAt = Date.now();
@@ -473,12 +521,81 @@ bridge.onPetPose?.((payload) => {
   if (eventsPaused && payload.source !== 'bench') return;
   if (!(renderer instanceof PoseSkinRenderer)) return;
   void renderer.playPose(payload.pose).then(() => {
+    lastPoseName = payload.pose;
+    // T-M6-55：读文件/搜索 → 代码符号飘字；回 idle 立即清空
+    if (isReadingOrSearchingPose(payload.pose)) showGlyphs();
+    else if (payload.pose === 'idle') clearGlyphs();
     if (payload.line !== undefined && payload.line !== '') {
       widgets.showDialog(payload.line);
       setTimeout(() => widgets.hideDialog(), 8_000);
     }
     lastEventAt = Date.now();
   }).catch(() => undefined);
+});
+
+// ── T-M6-55：代码符号飘字层（阅读/搜索姿态触发，省电自动关闭） ──
+const glyphLayer = document.createElement('div');
+glyphLayer.id = 'glyph-layer';
+glyphLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5';
+stage.appendChild(glyphLayer);
+const glyphKeyframes = document.createElement('style');
+glyphKeyframes.textContent = '@keyframes whaleGlyphFloat{0%{opacity:0;transform:translateY(0) rotate(var(--glyph-rotate,0deg))}18%{opacity:.92}100%{opacity:0;transform:translateY(-86px) rotate(var(--glyph-rotate,0deg))}}';
+document.head.appendChild(glyphKeyframes);
+let glyphActive = false;
+function clearGlyphs(): void {
+  if (glyphLayer.childElementCount > 0) glyphLayer.replaceChildren();
+  glyphActive = false;
+}
+function showGlyphs(): void {
+  if (powerSaver) return;
+  clearGlyphs();
+  const colors = glyphColors(poseConfig?.glyph ?? null);
+  for (const particle of glyphParticles(poseConfig?.glyph ?? null)) {
+    const el = document.createElement('span');
+    el.textContent = particle.symbol;
+    el.style.cssText = `position:absolute;left:${particle.leftPercent}%;bottom:${particle.bottomPx}px;
+      font:700 ${particle.sizePx}px ui-monospace, SFMono-Regular, Menlo, monospace;
+      color:${colors.fill};-webkit-text-stroke:1px ${colors.stroke};paint-order:stroke fill;
+      opacity:0;--glyph-rotate:${particle.rotateDeg}deg;
+      animation:whaleGlyphFloat ${particle.durationMs}ms ease-out ${particle.delayMs}ms forwards;`;
+    glyphLayer.appendChild(el);
+  }
+  glyphActive = true;
+}
+
+// ── T-M6-55：验收台参考线层（90% 身高虚线框 + 97% 脚底基线 + 当前姿态角标） ──
+const guideLayer = document.createElement('div');
+guideLayer.id = 'guide-layer';
+guideLayer.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:9;display:none';
+guideLayer.innerHTML = [
+  '<div style="position:absolute;left:14%;right:14%;top:7%;height:90%;border:1.5px dashed rgba(111,183,255,.62);border-radius:10px"></div>',
+  '<div style="position:absolute;left:0;right:0;top:97%;border-top:1.5px dashed rgba(48,209,88,.85)"></div>',
+  '<div style="position:absolute;left:6px;top:97%;transform:translateY(-13px);font:9px ui-monospace,monospace;color:#7ee2a8;background:rgba(8,14,24,.72);padding:1px 5px;border-radius:5px">97% 脚底基线</div>',
+  '<div style="position:absolute;left:6px;top:7%;font:9px ui-monospace,monospace;color:#9ccfff;background:rgba(8,14,24,.72);padding:1px 5px;border-radius:5px">90% 身高</div>',
+  '<div id="guide-label" style="position:absolute;right:6px;top:4px;font:10px ui-monospace,monospace;color:#cfe6ff;background:rgba(8,14,24,.78);padding:2px 6px;border-radius:6px;border:1px solid rgba(111,183,255,.4)">姿态 idle</div>',
+].join('');
+stage.appendChild(guideLayer);
+const guideLabel = guideLayer.querySelector('#guide-label') as HTMLDivElement | null;
+function setGuidesVisible(on: boolean): void {
+  guideLayer.style.display = on ? 'block' : 'none';
+  if (on) updateGuideLabel(lastPoseName);
+}
+function updateGuideLabel(pose: string): void {
+  if (guideLabel !== null) guideLabel.textContent = `姿态 ${pose} · 1.5s 轮播`;
+}
+bridge.onBenchGuides?.((payload) => { setGuidesVisible(payload.on); });
+bridge.onBenchCarousel?.((payload) => {
+  if (!payload.on) {
+    setGuidesVisible(false);
+    lastPoseName = 'idle';
+    clearGlyphs();
+    return;
+  }
+  setGuidesVisible(true);
+  if (payload.pose !== undefined) {
+    lastPoseName = payload.pose;
+    updateGuideLabel(payload.pose);
+  }
 });
 
 // T-M6-48：两只桌宠撞在一起 → Q 弹互撞 + 吐槽（主进程按真实窗口几何触发）
@@ -856,6 +973,8 @@ setInterval(() => {
   if (next !== powerSaver) {
     powerSaver = next;
     document.documentElement.dataset.powerSaver = String(next);
+    // 省电模式立即关掉飘字粒子（不再为装饰性动画唤醒 GPU）
+    if (next && glyphActive) clearGlyphs();
   }
   if (interaction.asleep && idle > 90_000 && Math.random() < 0.05) {
     widgets.showDialog('唔……梦里也有好多米饭……');
@@ -1244,23 +1363,30 @@ void bridge.appMeta().then((meta) => {
 
 // T-M5-16：事件分类与映射（三层映射表消费端——import 已移至文件头）
 
-// ambient 空闲随机链：30s 无事件 → pickAmbient 播 6s 回 idle（D16 素材全利用）
+// ambient 空闲随机链：30s 无事件 → 自定义 idleActions 与内置氛围池混播 6s 回 idle（T-M6-55）
 const ambientLoop = setInterval(() => {
   if (shouldBlockWhileAsleep(interaction, 'ambient') || powerSaver) return;
   if (Date.now() - lastEventAt < AMBIENT_IDLE_MS) return;
   if (previewTimer) return; // 预览播放中不抢
   const manifest = renderer.manifest;
   if (!manifest || manifest.ambientPool.length === 0) return;
-  const picked = pickAmbient(manifest);
-  if (!picked.webmPath) return;
-  void (async () => {
-    try {
-      await renderer.play(previewActionFor(picked.clipId) ?? 'idle');
-    } catch { /* 预览失败静默回 idle */ }
-  })();
+  if (renderer instanceof PoseSkinRenderer) {
+    const picked = pickIdleMix({
+      idleActions: poseConfig?.idleActions ?? [],
+      available: renderer.availablePoses(),
+      ambientIds: manifest.ambientPool.map((clip) => clip.clipId),
+    });
+    if (picked === null) return;
+    void renderer.playPose(picked.id).then(() => { lastPoseName = picked.id; }).catch(() => { void renderer.play('idle').catch(() => undefined); });
+  } else {
+    const picked = pickAmbient(manifest);
+    if (!picked.webmPath) return;
+    void renderer.play(previewActionFor(picked.clipId) ?? 'idle').catch(() => undefined);
+  }
   previewTimer = setTimeout(() => {
     previewTimer = null;
     void renderer.play('idle');
+    lastPoseName = 'idle';
   }, AMBIENT_PLAY_MS);
 }, 5_000);
 void ambientLoop;

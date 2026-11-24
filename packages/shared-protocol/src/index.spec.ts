@@ -14,6 +14,7 @@ import {
   TerrariaActionReceiptSchema,
   DstActionReceiptSchema,
   WorkbenchRoleSlotSchema,
+  PetCustomCharacterSchema,
 } from './index';
 import { CONTRACT_SCHEMAS, CONTRACT_VERSION } from './registry';
 
@@ -357,5 +358,13 @@ describe('契约注册表', () => {
     for (const [name, schema] of Object.entries(CONTRACT_SCHEMAS)) {
       expect(typeof schema.safeParse, `${name} 应为 Zod Schema`).toBe('function');
     }
+  });
+});
+
+describe('自定义角色新增字段默认值（T-M6-55）', () => {
+  it('glyph.stroke 与 notebook.notes/sign 缺省安全回退', () => {
+    const parsed = PetCustomCharacterSchema.parse({ name: '小海豹' });
+    expect(parsed.glyph).toEqual({ fill: '', stroke: '', text: '' });
+    expect(parsed.notebook).toEqual({ title: '', font: '', entries: [], notes: [], sign: '' });
   });
 });

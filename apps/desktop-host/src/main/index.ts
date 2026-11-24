@@ -28,9 +28,10 @@ import { createAcpSessionCache } from './acp-session-cache';
 import { createCustomCharacterHost } from './custom-character-host';
 import { createCreatorHost } from './creator-host';
 import { createAcceptanceHost } from './acceptance-host';
-import { customCharacterPairs, invalidateCustomCharacters, linesForPose, readCustomCharacters, resolveProxyCharacter } from './custom-character';
+import { customCharacterPairs, invalidateCustomCharacters, linesForPose, matchCharacterForApp, readCustomCharacters, resolveProxyCharacter } from './custom-character';
 import { resolvePose } from './pose-resolver';
 import { createWorkFollowHost } from './work-follow-host';
+import { createFrontAppWatcher } from './front-app-watcher';
 import { PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
 import { createMemoryHost, dayKeyOf } from './memory-host';
@@ -408,6 +409,24 @@ app.whenReady().then(async () => {
   petControl.registerIpc();
   const summonPet = petControl.summonPet;
 
+  // T-M6-55：前台应用自动切角（macOS 3s 低频只读轮询；偏好关闭时立即停止并保持手选角色）
+  const frontAppWatcher = createFrontAppWatcher({
+    enabled: () => prefs.get().followFrontApp,
+    onBundle: (bundleId) => {
+      const match = matchCharacterForApp({
+        userDataDir: app.getPath('userData'),
+        bundleId,
+        packsRoot: petPacksRoot,
+      });
+      if (match === null) return;
+      if (prefs.get().characterId === match.characterId) return;
+      console.log(`[pet] 前台应用 ${bundleId} → 自动切换到 ${match.name}（${match.characterId}）`);
+      switchDefaultCharacter(petControl.nightOutfit(match.characterId));
+    },
+  });
+  frontAppWatcher.start();
+  app.on('will-quit', () => frontAppWatcher.stop());
+
   /** 自定义角色热重载：清缓存 → 广播角色列表 → 每个桌宠窗重载自身 manifest（零重启）。 */
   const reloadCustomCharacters = (): number => {
     invalidateCustomCharacters();
@@ -630,6 +649,11 @@ app.whenReady().then(async () => {
       });
     },
     remember: (text) => { memory.store.addNode({ nodeType: 'event', text }); },
+    customCharacter: (characterId) => {
+      const entry = readCustomCharacters(app.getPath('userData')).entries.find((item) => item.character.id === characterId);
+      if (entry === undefined) return null;
+      return { milestones: entry.data.milestones, notebook: entry.data.notebook };
+    },
   });
   registerFriendshipIpc(friendship, {
     activeCharacterIds: () => (petWindowManager?.list() ?? []).filter((view) => view.visible).map((view) => view.characterId),

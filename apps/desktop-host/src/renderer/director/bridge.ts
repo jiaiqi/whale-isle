@@ -373,17 +373,21 @@ export interface DirectorBridge {
     scenarios: Array<{ id: string; label: string; description: string }>;
     character: { name: string; id: string; available: string[]; fallbacks: Array<{ requested: string; pose: string; status: 'ok' | 'fallback' | 'missing'; reason: string }> };
     paused: boolean;
+    guides?: boolean;
+    carousel?: boolean;
   }>;
   acceptancePause(paused: boolean): Promise<{ ok: boolean; paused: boolean }>;
   acceptancePose(pose: string): Promise<{ ok: boolean; pose?: string; fallback?: boolean }>;
+  acceptanceCarousel(on: boolean, intervalMs?: number): Promise<{ ok: boolean; on?: boolean; poses?: string[]; intervalMs?: number; error?: string }>;
+  acceptanceGuides(on: boolean): Promise<{ ok: boolean; on?: boolean }>;
   acceptanceRun(scenarioId: string): Promise<{ ok: boolean; result?: { scenarioId: string; label: string; status: 'completed' | 'failed'; steps: number; note: string }; error?: string }>;
   acceptanceRunAll(): Promise<{ ok: boolean; results: Array<{ scenarioId: string; label: string; status: 'completed' | 'failed'; steps: number; note: string }> }>;
   acceptanceReport(): Promise<{ ok: boolean; markdown?: string }>;
   onOpenCreator(handler: () => void): void;
   onOpenBench(handler: () => void): void;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
-  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number }>;
-  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number }): Promise<unknown>;
+  prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number; followFrontApp?: boolean }>;
+  prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number; followFrontApp?: boolean }): Promise<unknown>;
   // T-M6-21 多角色
   characterList(): Promise<CharacterSummary[]>;
   characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;

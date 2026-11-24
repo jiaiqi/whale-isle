@@ -4284,6 +4284,10 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "followFrontApp": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -5897,11 +5901,16 @@
         "glyph": {
           "default": {
             "fill": "",
+            "stroke": "",
             "text": ""
           },
           "type": "object",
           "properties": {
             "fill": {
+              "default": "",
+              "type": "string"
+            },
+            "stroke": {
               "default": "",
               "type": "string"
             },
@@ -5992,7 +6001,9 @@
           "default": {
             "title": "",
             "font": "",
-            "entries": []
+            "entries": [],
+            "notes": [],
+            "sign": ""
           },
           "type": "object",
           "properties": {
@@ -6010,6 +6021,17 @@
               "items": {
                 "type": "string"
               }
+            },
+            "notes": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sign": {
+              "default": "",
+              "type": "string"
             }
           },
           "additionalProperties": false

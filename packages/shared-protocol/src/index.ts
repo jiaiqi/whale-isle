@@ -845,6 +845,8 @@ export const PetDesktopPrefsSchema = z.object({
   /** 精灵图动作原声音效开关/音量（T-M6-44） */
   sfxEnabled: z.boolean().default(true),
   sfxVolume: z.number().min(0).max(1).default(0.7),
+  /** 前台应用自动切角（T-M6-55）：命中角色 character.json.apps 时切 default 主桌宠 */
+  followFrontApp: z.boolean().default(false),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 
@@ -1105,6 +1107,8 @@ export type PetStudioCatalog = z.infer<typeof PetStudioCatalogSchema>;
 // ───────────────────────── 自定义角色深度协议（T-M6-53：兼容 CrossPet character.json） ─────────────────────────
 export const PetCustomGlyphSchema = z.object({
   fill: z.string().default(''),
+  /** 描边色（T-M6-55：CrossPet glyph 双色；留空只填充） */
+  stroke: z.string().default(''),
   text: z.string().default(''),
 });
 export type PetCustomGlyph = z.infer<typeof PetCustomGlyphSchema>;
@@ -1128,6 +1132,10 @@ export const PetNotebookConfigSchema = z.object({
   title: z.string().default(''),
   font: z.string().default(''),
   entries: z.array(z.string()).default([]),
+  /** CrossPet 兼容：notes 与 entries 合并展示（T-M6-55） */
+  notes: z.array(z.string()).default([]),
+  /** 小本子落款（支持 {h} 占位当前小时） */
+  sign: z.string().default(''),
 });
 export type PetNotebookConfig = z.infer<typeof PetNotebookConfigSchema>;
 
@@ -1147,7 +1155,7 @@ export const PetCustomCharacterSchema = z.object({
   greeting: z.string().default(''),
   /** 姿态/场景 → 台词池（含 greet_* / fest_*） */
   lines: z.record(z.string(), z.array(z.string())).default({}),
-  glyph: PetCustomGlyphSchema.default({ fill: '', text: '' }),
+  glyph: PetCustomGlyphSchema.default({ fill: '', stroke: '', text: '' }),
   idleActions: z.array(z.string()).default([]),
   pokePose: z.string().default('pout'),
   /** 出错/被打断后 3 分钟内再次对话时触发的姿态 */
@@ -1156,7 +1164,7 @@ export const PetCustomCharacterSchema = z.object({
   /** 具名 SVG 特效映射：bubbles/steam/celebrate/victory/priceDown/priceUp 等 */
   fx: z.record(z.string(), z.string()).default({}),
   milestones: z.array(PetMilestoneSchema).default([]),
-  notebook: PetNotebookConfigSchema.default({ title: '', font: '', entries: [] }),
+  notebook: PetNotebookConfigSchema.default({ title: '', font: '', entries: [], notes: [], sign: '' }),
   // ── CrossPet 现存字段（保持兼容，缺省安全回退） ──
   outfit: z.string().default(''),
   aura: z.string().default(''),

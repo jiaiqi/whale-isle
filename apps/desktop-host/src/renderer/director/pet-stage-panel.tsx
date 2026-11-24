@@ -84,7 +84,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
-  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7 });
+  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false });
 
   useEffect(() => {
     void window.directorBridge.petsManifest().then((res) => {
@@ -100,6 +100,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
         autoHideFullscreen: p.autoHideFullscreen ?? true,
         sfxEnabled: p.sfxEnabled ?? true,
         sfxVolume: p.sfxVolume ?? 0.7,
+        followFrontApp: p.followFrontApp ?? false,
       });
     }).catch(() => undefined);
   }, [characterId]);
@@ -267,12 +268,16 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
             ['Ctrl+Option+P 暂藏/唤回', 'shortcutHideEnabled'],
             ['全屏应用时自动隐藏', 'autoHideFullscreen'],
             ['播放动作原声', 'sfxEnabled'],
+            ['跟随前台 AI 应用自动切角', 'followFrontApp'],
           ] as const).map(([label, key]) => (
-            <div key={key} className="flex items-center justify-between py-1.5 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
+            <div key={key} className="flex items-center justify-between py-1.5 text-[11.5px]" style={{ color: 'var(--text-2)' }} data-desk-pref={key}>
               <span>{label}</span>
               <button aria-pressed={desk[key]} className={`sw${desk[key] ? ' on' : ''}`} onClick={() => { const next = { ...desk, [key]: !desk[key] }; setDesk(next); void window.directorBridge.prefsSet({ [key]: next[key] }); }} />
             </div>
           ))}
+          <p className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+            跟随前台应用：仅 macOS，每 3 秒只读 bundle id；命中角色 character.json.apps 时切换主桌宠，关闭开关后保持你手动选中的角色。
+          </p>
           <label className="mt-2 block text-[11px]" style={{ color: 'var(--text-2)' }}>
             动作原声音量 <span className="mono">{Math.round(desk.sfxVolume * 100)}%</span>
             <input type="range" className="wb-range mt-1.5" min={0} max={1} step={0.05} value={desk.sfxVolume} onChange={(event) => setDesk({ ...desk, sfxVolume: Number(event.target.value) })} onMouseUp={(event) => void window.directorBridge.prefsSet({ sfxVolume: Number((event.target as HTMLInputElement).value) })} />

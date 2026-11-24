@@ -25,7 +25,16 @@ interface StatsView {
 }
 interface NoteView { id: number; text: string; createdAt: number }
 interface BanterView { id: number; aName: string; aText: string; bName: string; bText: string; createdAt: number }
-interface NotebookView { characterId: string; stats: StatsView | null; notes: NoteView[]; banter: BanterView[] }
+interface NotebookView {
+  characterId: string;
+  stats: StatsView | null;
+  notes: NoteView[];
+  banter: BanterView[];
+  milestones?: Array<{ id: string; text: string; at: number }>;
+  notebookTitle?: string;
+  notebookEntries?: string[];
+  notebookSign?: string;
+}
 
 const TIER_LABEL: Record<StatsView['tier'], string> = {
   stranger: '初次见面',
@@ -65,14 +74,21 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
   const quarterHearts = stats?.quarterHearts ?? 0;
   const achievements = useMemo(() => {
     if (stats === null) return [];
+    // 自定义角色的 milestones 优先展示（at=0 视为无条件，>0 按真实友谊积分判断）
+    const custom = (view?.milestones ?? []).map((item) => ({
+      id: `custom-${item.id}`,
+      label: item.text,
+      unlocked: item.at === 0 || stats.points >= item.at,
+    }));
     return [
+      ...custom,
       { id: 'first-pat', label: '第一次被摸头', unlocked: stats.pats > 0 },
       { id: 'ten-pats', label: '摸头十连', unlocked: stats.pats >= 10 },
       { id: 'teammate', label: '一起扛过活', unlocked: stats.cowork + stats.cofinish > 0 },
       { id: 'goal', label: '共同目标达成', unlocked: stats.cofinish > 0 },
       { id: 'friend', label: '成为好朋友', unlocked: quarterHearts >= 20 },
     ];
-  }, [stats, quarterHearts]);
+  }, [stats, quarterHearts, view?.milestones]);
 
   const pairChat = async (): Promise<void> => {
     setBusy('pair');
@@ -174,6 +190,20 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
             </span>
           ))}
         </div>
+
+        {((view?.notebookEntries?.length ?? 0) > 0 || (view?.notebookSign ?? '') !== '' || (view?.notebookTitle ?? '') !== '') && (
+          <div className="mb-2 rounded-xl px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }} data-notebook-custom>
+            {(view?.notebookTitle ?? '') !== '' && (
+              <div className="mb-1 text-[11px] font-semibold" style={{ color: 'var(--blue)' }}>{view?.notebookTitle}</div>
+            )}
+            {(view?.notebookEntries ?? []).map((entry, index) => (
+              <div key={`${index}:${entry}`} className="text-[11px] leading-relaxed" style={{ color: 'var(--text-2)' }}>· {entry}</div>
+            ))}
+            {(view?.notebookSign ?? '') !== '' && (
+              <div className="mt-1 text-right text-[10.5px]" style={{ color: 'var(--text-3)' }}>{view?.notebookSign}</div>
+            )}
+          </div>
+        )}
 
         <div className="mt-2 flex gap-1.5">
           <input

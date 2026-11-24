@@ -77,26 +77,30 @@ export function AcceptanceBench({ open, onClose }: { open: boolean; onClose: () 
     } finally { setBusy(null); }
   };
 
-  const toggleCarousel = (): void => {
+  const toggleCarousel = async (): Promise<void> => {
     if (carouselRef.current !== null) {
       clearInterval(carouselRef.current);
       carouselRef.current = null;
       setCarousel(false);
       setCarouselPose('');
+      const stopped = await window.directorBridge.acceptanceCarousel(false);
+      if (!stopped.ok) toast.error('停止轮播失败');
       return;
     }
-    const poses = character?.fallbacks.map((entry) => entry.requested) ?? [];
+    const result = await window.directorBridge.acceptanceCarousel(true, 1_500);
+    if (!result.ok) { toast.error(result.error ?? '当前角色没有可轮播的姿态'); return; }
+    const poses = result.poses ?? [];
     if (poses.length === 0) { toast.error('当前角色没有可轮播的姿态'); return; }
     let index = 0;
     setCarousel(true);
+    // 节拍由主进程真实驱动桌宠窗；这里只同步本地角标显示，避免两处各自下发姿态
     const step = (): void => {
-      const pose = poses[index % poses.length]!;
+      setCarouselPose(poses[index % poses.length]!);
       index += 1;
-      setCarouselPose(pose);
-      void window.directorBridge.acceptancePose(pose).catch(() => undefined);
     };
     step();
-    carouselRef.current = setInterval(step, 1_500);
+    carouselRef.current = setInterval(step, result.intervalMs ?? 1_500);
+    toast.success(`桌面桌宠窗已开启 1.5s 全姿态轮播（${poses.length} 个姿态）并叠加 90% 参考线`);
   };
 
   const exportReport = async (): Promise<void> => {
@@ -112,6 +116,8 @@ export function AcceptanceBench({ open, onClose }: { open: boolean; onClose: () 
       clearInterval(carouselRef.current);
       carouselRef.current = null;
       setCarousel(false);
+      // 关闭弹窗也必须撤掉桌面参考线并恢复 idle（主进程收口）
+      void window.directorBridge.acceptanceCarousel(false).catch(() => undefined);
     }
   }, [open]);
 

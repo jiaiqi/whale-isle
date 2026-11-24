@@ -28,6 +28,28 @@ export function createAcceptanceHost(options: {
 }): { registerIpc(): void; paused: () => boolean } {
   let paused = false;
   let lastResults: BenchResult[] = [];
+  /** T-M6-55：全姿态轮播（主进程 1.5s 节拍）与 90% 参考线开关 */
+  let carouselTimer: ReturnType<typeof setInterval> | null = null;
+  let carouselPoses: string[] = [];
+  let carouselIndex = 0;
+  let guidesOn = false;
+
+  const sendGuides = (on: boolean): void => {
+    guidesOn = on;
+    options.manager()?.sendAgent(options.defaultAgentId(), 'pet:guides', { on });
+  };
+
+  const stopCarousel = (restoreIdle: boolean): void => {
+    if (carouselTimer !== null) clearInterval(carouselTimer);
+    carouselTimer = null;
+    carouselPoses = [];
+    carouselIndex = 0;
+    if (restoreIdle) {
+      // 轮播结束必须回到 idle，绝不把验收姿态留在桌面上
+      options.petControl.pose(options.defaultAgentId(), 'idle', undefined, 'bench');
+      options.manager()?.sendAgent(options.defaultAgentId(), 'pet:carousel', { on: false });
+    }
+  };
 
   const availablePoses = (): string[] => {
     const character = options.characters().selected();
@@ -83,7 +105,40 @@ export function createAcceptanceHost(options: {
       scenarios: BENCH_SCENARIOS.map(({ id, label, description }) => ({ id, label, description })),
       character: characterView(),
       paused,
+      guides: guidesOn,
+      carousel: carouselTimer !== null,
     }));
+    ipcMain.handle('acceptance:carousel', (_event, on: boolean, intervalMs?: number) => {
+      if (!Boolean(on)) {
+        stopCarousel(true);
+        sendGuides(false);
+        return { ok: true, on: false, poses: [], intervalMs: 0 };
+      }
+      stopCarousel(false);
+      const poses = availablePoses();
+      if (poses.length === 0) {
+        return { ok: false, error: '当前角色没有可轮播的姿态（WebM/精灵角色不参与）', on: false, poses: [], intervalMs: 0 };
+      }
+      const every = Math.min(Math.max(Math.round(Number(intervalMs ?? 1_500) || 1_500), 500), 10_000);
+      carouselPoses = poses;
+      carouselIndex = 0;
+      sendGuides(true);
+      const step = (): void => {
+        const pose = carouselPoses[carouselIndex % carouselPoses.length]!;
+        const index = carouselIndex;
+        carouselIndex += 1;
+        options.petControl.pose(options.defaultAgentId(), pose, undefined, 'bench');
+        options.manager()?.sendAgent(options.defaultAgentId(), 'pet:carousel', { on: true, pose, index: index + 1, total: carouselPoses.length });
+      };
+      step();
+      carouselTimer = setInterval(step, every);
+      carouselTimer.unref?.();
+      return { ok: true, on: true, poses: [...carouselPoses], intervalMs: every };
+    });
+    ipcMain.handle('acceptance:guides', (_event, on: boolean) => {
+      sendGuides(Boolean(on));
+      return { ok: true, on: guidesOn };
+    });
     ipcMain.handle('acceptance:pause', (_event, next: boolean) => {
       paused = Boolean(next);
       options.manager()?.broadcast('pet:pause-events', { paused });

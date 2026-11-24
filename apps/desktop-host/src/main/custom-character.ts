@@ -252,6 +252,66 @@ export function linesForPose(data: PetCustomCharacter, pose: string): string[] {
   return data.lines[pose] ?? data.lines.idle ?? [];
 }
 
+/**
+ * 前台应用匹配（T-M6-55）：apps 里可以是 bundle id 或应用名。
+ * 精确匹配优先；其次允许「应用名包含在 bundle id 里」或反向包含（≥4 字符，避免短词误命）。
+ */
+export function matchesFrontApp(apps: readonly string[], bundleId: string): boolean {
+  const target = bundleId.trim().toLowerCase();
+  if (target === '') return false;
+  for (const raw of apps) {
+    const token = raw.trim().toLowerCase();
+    if (token === '') continue;
+    if (token === target) return true;
+    if (token.length >= 4 && (target.includes(token) || token.includes(target))) return true;
+  }
+  return false;
+}
+
+export interface AppCharacterMatch {
+  characterId: string;
+  name: string;
+  app: string;
+}
+
+/**
+ * 前台应用 → 角色（自定义角色 + 随包 CrossPet 角色）。
+ * 同一角色被多个 token 命中时只返回一次；自定义角色优先于随包角色。
+ */
+export function matchCharacterForApp(input: {
+  userDataDir: string;
+  bundleId: string;
+  packsRoot?: string;
+}): AppCharacterMatch | null {
+  const candidates: Array<{ characterId: string; name: string; apps: string[] }> = [];
+  for (const entry of readCustomCharacters(input.userDataDir).entries) {
+    if (entry.data.apps.length === 0) continue;
+    candidates.push({ characterId: entry.character.id, name: entry.character.displayName, apps: entry.data.apps });
+  }
+  if (input.packsRoot !== undefined) {
+    const root = join(input.packsRoot, 'crosspet', 'characters');
+    if (existsSync(root)) {
+      for (const dirEntry of readdirSync(root, { withFileTypes: true })) {
+        if (!dirEntry.isDirectory()) continue;
+        const characterPath = join(root, dirEntry.name, 'character.json');
+        if (!existsSync(characterPath)) continue;
+        try {
+          const parsed = PetCustomCharacterSchema.safeParse(JSON.parse(readFileSync(characterPath, 'utf8')));
+          if (!parsed.success || parsed.data.apps.length === 0) continue;
+          candidates.push({ characterId: `crosspet-${dirEntry.name}`, name: parsed.data.name, apps: parsed.data.apps });
+        } catch {
+          // 坏角色包跳过，不影响其他匹配
+        }
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    const hit = candidate.apps.find((app) => matchesFrontApp([app], input.bundleId));
+    if (hit !== undefined) return { characterId: candidate.characterId, name: candidate.name, app: hit };
+  }
+  return null;
+}
+
 export function poseFileStat(dir: string): number {
   try {
     return statSync(dir).mtimeMs;

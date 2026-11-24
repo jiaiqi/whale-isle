@@ -8,7 +8,12 @@ import { createFriendshipHost } from './friendship-host';
 
 const NOW = new Date('2026-11-24T12:00:00').getTime();
 
-function makeHost(options: { speak?: (id: string, text: string) => void; remember?: (text: string) => void; now?: () => number } = {}) {
+function makeHost(options: {
+  speak?: (id: string, text: string) => void;
+  remember?: (text: string) => void;
+  now?: () => number;
+  customCharacter?: (characterId: string) => { milestones?: Array<{ id: string; at?: number; text?: string }>; notebook?: { title?: string; entries?: string[]; notes?: string[]; sign?: string } } | null;
+} = {}) {
   const store = new FriendshipStore(':memory:');
   const host = createFriendshipHost({
     userDataDir: '/tmp/whale-isle-test',
@@ -88,5 +93,42 @@ describe('friendship host', () => {
     const { host } = makeHost();
     expect(host.record('pat', '')).toBeNull();
     expect(host.notebook('nobody').stats).toBeNull();
+  });
+
+  it('自定义角色：milestones 的 {h} 用当前小时替换，notebook entries/notes/sign 覆盖通用文案', () => {
+    const { host } = makeHost({
+      now: () => new Date('2026-11-24T15:30:00').getTime(),
+      customCharacter: (characterId) => (characterId === 'custom-seal'
+        ? {
+          milestones: [
+            { id: 'first', at: 1, text: '第一次一起干活' },
+            { id: 'hour', at: 0, text: '{h} 点了，该喝水啦' },
+            { id: 'blank', at: 0, text: '   ' },
+            { id: 'no-id', at: 5, text: '{h} 点打卡' },
+          ],
+          notebook: { title: '海豹本子', entries: ['今天很乖'], notes: ['{h}:00 记得收衣服'], sign: '—— 小海豹 {h} 点留' },
+        }
+        : null),
+    });
+    const view = host.notebook('custom-seal');
+    expect(view.milestones).toEqual([
+      { id: 'first', at: 1, text: '第一次一起干活' },
+      { id: 'hour', at: 0, text: '15 点了，该喝水啦' },
+      { id: 'no-id', at: 5, text: '15 点打卡' },
+    ]);
+    expect(view.notebookTitle).toBe('海豹本子');
+    expect(view.notebookEntries).toEqual(['今天很乖', '15:00 记得收衣服']);
+    expect(view.notebookSign).toBe('—— 小海豹 15 点留');
+    // 缺项回落：通用角色没有任何自定义里程碑/小本子文本
+    const generic = host.notebook('aboutme-dsh');
+    expect(generic.milestones).toEqual([]);
+    expect(generic.notebookEntries).toEqual([]);
+    expect(generic.notebookSign).toBe('');
+  });
+
+  it('customCharacter 抛错时不影响通用小本子', () => {
+    const { host } = makeHost({ customCharacter: () => { throw new Error('坏 character.json'); } });
+    expect(host.notebook('aboutme-dsh').notebookEntries).toEqual([]);
+    expect(host.notebook('aboutme-dsh').notes).toEqual([]);
   });
 });

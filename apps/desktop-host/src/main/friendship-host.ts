@@ -13,11 +13,29 @@ import { ipcMain } from 'electron';
 import { FriendshipStore, type FriendshipAction, type FriendshipStats, type NotebookBanter, type NotebookNote } from '@workbench/local-store/friendship';
 import { createBreakReminderState, dueReminder, greetingForHour, isQuietHours, reminderLine, type BreakReminderKind, type BreakReminderState } from './break-reminders';
 
+export interface NotebookMilestoneView {
+  id: string;
+  text: string;
+  /** 0=手动/无条件；>0 时按友谊积分判断是否解锁（真实计数，不造假） */
+  at: number;
+}
+
 export interface NotebookView {
   characterId: string;
   stats: FriendshipStats | null;
   notes: NotebookNote[];
   banter: NotebookBanter[];
+  /** 自定义角色专属（T-M6-55）：milestones / notebook.notes / notebook.sign，缺项回落通用文案 */
+  milestones: NotebookMilestoneView[];
+  notebookTitle: string;
+  notebookEntries: string[];
+  notebookSign: string;
+}
+
+/** 自定义角色的小本子/里程碑数据（由宿主从 character.json 读取，缺项为 null）。 */
+export interface CustomNotebookSource {
+  milestones?: Array<{ id: string; at?: number; text?: string }>;
+  notebook?: { title?: string; entries?: string[]; notes?: string[]; sign?: string };
 }
 
 export interface FriendshipHost {
@@ -50,6 +68,8 @@ export function createFriendshipHost(options: {
   remember?: (text: string) => void;
   now?: () => number;
   store?: FriendshipStore;
+  /** 自定义角色的 milestones / notebook（缺省或返回 null 时用通用小本子文案） */
+  customCharacter?: (characterId: string) => CustomNotebookSource | null;
 }): FriendshipHost {
   const now = options.now ?? Date.now;
   const store = options.store ?? new FriendshipStore(join(options.userDataDir, 'friendship.sqlite'));
@@ -72,12 +92,34 @@ export function createFriendshipHost(options: {
 
   const host: FriendshipHost = {
     record,
-    notebook: (characterId) => ({
-      characterId,
-      stats: store.get(characterId, now()),
-      notes: store.listNotes(characterId),
-      banter: store.listBanter(),
-    }),
+    notebook: (characterId) => {
+      const custom = (() => {
+        try {
+          return options.customCharacter?.(characterId) ?? null;
+        } catch {
+          return null;
+        }
+      })();
+      const hour = new Date(now()).getHours();
+      // {h} 替换为当前小时（CrossPet 里程碑文案约定）；其余文本原样，不臆造
+      const fillHour = (text: string): string => text.replace(/\{h\}/g, String(hour));
+      const milestones = (custom?.milestones ?? [])
+        .filter((item) => (item.text ?? '').trim() !== '')
+        .map((item) => ({ id: item.id, text: fillHour(item.text ?? ''), at: Math.max(0, item.at ?? 0) }));
+      const entries = [...(custom?.notebook?.entries ?? []), ...(custom?.notebook?.notes ?? [])]
+        .map((text) => fillHour(text))
+        .filter((text) => text.trim() !== '');
+      return {
+        characterId,
+        stats: store.get(characterId, now()),
+        notes: store.listNotes(characterId),
+        banter: store.listBanter(),
+        milestones,
+        notebookTitle: (custom?.notebook?.title ?? '').trim(),
+        notebookEntries: entries,
+        notebookSign: fillHour((custom?.notebook?.sign ?? '').trim()),
+      };
+    },
     addNote: (characterId, text) => store.addNote(characterId, text, now()),
     wipe: () => {
       store.wipe();
