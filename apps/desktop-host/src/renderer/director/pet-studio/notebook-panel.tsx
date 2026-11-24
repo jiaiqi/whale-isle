@@ -1,14 +1,24 @@
 /**
- * 「我们的小本子」（T-M6-48，对齐 design/pet-stage.html Tab 3）。
+ * 「我们的小本子」（T-M6-48 / T-M6-65，对齐 design/pet-stage.html Tab 3）。
  *
- * 真实数据：友谊 SQLite（`friendship:notebook`）、8 套 CrossPet 手写字体（`whale-pet://` 直链）、
- * 好友留言（`friendship:note-add`）、最近互聊（`friendship:pair-chat` 经全局语音锁串行播报）。
- * 成就只按真实计数解锁，不显示未达成的假徽章。
+ * 双页书签：
+ *   1. 相处记录：真实友谊 SQLite 统计、里程碑、主人留言；
+ *   2. 朋友们的留言：从真实互聊记录反向抽取，每条用留言者自己的手写体；
+ *      按好感档位分层（便签 / 贴纸徽章 / 挚友双人对话卡 + 双头像合照）。
+ *
+ * 8 套随包手写体按角色家族自动匹配，也可手动指定并存 prefs.notebookFontId；
+ * 冷启动「扫描本机历史记录补录」只读统计时间/模型/工具数，幂等且零正文。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookHeart, Eraser, Heart, MessageSquareHeart, PenLine } from 'lucide-react';
+import { BookHeart, ChevronLeft, ChevronRight, Eraser, Heart, History, MessageSquareHeart, PenLine, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
-import type { PetStudioFont } from '@workbench/shared-protocol';
+import {
+  notebookFontById,
+  notebookFontForCharacter,
+  notebookFontUrl,
+  notebookPaperForCharacter,
+  NOTEBOOK_FONTS,
+} from '@workbench/pet-renderer/notebook-fonts';
 
 interface StatsView {
   characterId: string;
@@ -24,12 +34,23 @@ interface StatsView {
   cofinish: number;
 }
 interface NoteView { id: number; text: string; createdAt: number }
-interface BanterView { id: number; aName: string; aText: string; bName: string; bText: string; createdAt: number }
+interface BanterView { id: number; aId: string; aName: string; aText: string; bId: string; bName: string; bText: string; createdAt: number }
+interface FriendNoteView {
+  id: number;
+  characterId: string;
+  name: string;
+  text: string;
+  replyText: string;
+  replyName: string;
+  tier: StatsView['tier'];
+  createdAt: number;
+}
 interface NotebookView {
   characterId: string;
   stats: StatsView | null;
   notes: NoteView[];
   banter: BanterView[];
+  friendNotes?: FriendNoteView[];
   milestones?: Array<{ id: string; text: string; at: number }>;
   notebookTitle?: string;
   notebookEntries?: string[];
@@ -42,16 +63,50 @@ const TIER_LABEL: Record<StatsView['tier'], string> = {
   friend: '好朋友',
   best: '最好的朋友',
 };
-const FONT_STORAGE_KEY = 'whale-isle:notebook:font';
+const BANTER_PAGE_SIZE = 3;
+
+function portraitUrl(characterId: string): string | null {
+  if (!characterId.startsWith('crosspet-')) return null;
+  const dir = characterId.slice('crosspet-'.length);
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(dir)) return null;
+  return `whale-pet://crosspet/characters/${encodeURIComponent(dir)}/portrait.webp`;
+}
+
+function Avatar({ characterId, name, accent }: { characterId: string; name: string; accent: string }): React.JSX.Element {
+  const [failed, setFailed] = useState(false);
+  const url = portraitUrl(characterId);
+  if (url !== null && !failed) {
+    return (
+      <img
+        src={url}
+        alt={name}
+        width={22}
+        height={22}
+        style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', border: `1px solid ${accent}`, background: 'var(--inset)' }}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      title={name}
+      style={{ width: 22, height: 22, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700, color: accent, border: `1px solid ${accent}`, background: 'var(--inset)' }}
+    >
+      {name.slice(0, 1)}
+    </span>
+  );
+}
 
 export function NotebookPanel({ characterId, characterName }: { characterId: string; characterName: string }): React.JSX.Element {
   const [view, setView] = useState<NotebookView | null>(null);
-  const [fonts, setFonts] = useState<PetStudioFont[]>([]);
-  const [fontId, setFontId] = useState<string>(() => {
-    try { return localStorage.getItem(FONT_STORAGE_KEY) ?? ''; } catch { return ''; }
-  });
+  const [page, setPage] = useState<'records' | 'friends'>('records');
+  const [fontId, setFontId] = useState('auto');
+  const [wide, setWide] = useState(false);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [backfill, setBackfill] = useState<{ already?: boolean; scannedFiles?: number; rounds?: number; busiestDate?: string } | null>(null);
+  const [banterPage, setBanterPage] = useState(0);
 
   const reload = useCallback((): void => {
     void window.directorBridge.friendNotebook(characterId)
@@ -61,20 +116,26 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
 
   useEffect(() => {
     reload();
-    void window.directorBridge.petStudioCatalog().then((catalog) => setFonts(catalog.fonts)).catch(() => setFonts([]));
-  }, [reload]);
+    void window.directorBridge.prefsGet()
+      .then((prefs) => setFontId(prefs.notebookFontId || 'auto'))
+      .catch(() => undefined);
+    setBanterPage(0);
+    setPage('records');
+  }, [reload, characterId]);
 
-  const font = fonts.find((entry) => entry.id === fontId);
-  const fontFace = useMemo(() => {
-    if (font === undefined) return '';
-    return `@font-face{font-family:whale-notebook;src:url("${font.url}");font-display:swap} .whale-notebook-font{font-family:whale-notebook, var(--font-sans)}`;
-  }, [font]);
+  const paper = notebookPaperForCharacter(characterId);
+  const autoFont = notebookFontForCharacter(characterId);
+  const selectedFont = fontId === 'auto' ? autoFont : notebookFontById(fontId);
+  const currentFontFamily = selectedFont === null ? undefined : `whale-hand-${selectedFont.id}`;
+  /** 所有 8 套字体一次性注入：朋友留言必须各自用留言者的手写体 */
+  const fontFaces = useMemo(() => NOTEBOOK_FONTS.map((font) =>
+    `@font-face{font-family:'whale-hand-${font.id}';src:url("${notebookFontUrl(font.file)}");font-display:swap}`
+  ).join('\n'), []);
 
   const stats = view?.stats ?? null;
   const quarterHearts = stats?.quarterHearts ?? 0;
   const achievements = useMemo(() => {
     if (stats === null) return [];
-    // 自定义角色的 milestones 优先展示（at=0 视为无条件，>0 按真实友谊积分判断）
     const custom = (view?.milestones ?? []).map((item) => ({
       id: `custom-${item.id}`,
       label: item.text,
@@ -112,15 +173,51 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
     } finally { setBusy(null); }
   };
 
+  const runBackfill = async (): Promise<void> => {
+    setBusy('backfill');
+    try {
+      const result = await window.directorBridge.friendBackfillHistory();
+      if (!result.ok) { toast.error(result.error ?? '历史补录失败'); return; }
+      setBackfill(result);
+      toast.success(result.already
+        ? `本机历史已补录过：${result.scannedFiles ?? 0} 个文件 / ${result.rounds ?? 0} 轮`
+        : `已扫描 ${result.scannedFiles ?? 0} 个文件，补录 ${result.rounds ?? 0} 轮（只统计，不读正文）`);
+      reload();
+    } finally { setBusy(null); }
+  };
+
+  const friendNotes = view?.friendNotes ?? [];
+  const banter = view?.banter ?? [];
+  const banterPages = Math.max(1, Math.ceil(banter.length / BANTER_PAGE_SIZE));
+  const banterSlice = banter.slice(banterPage * BANTER_PAGE_SIZE, banterPage * BANTER_PAGE_SIZE + BANTER_PAGE_SIZE);
+  const noteFontFamily = (writerId: string): string | undefined => {
+    const font = notebookFontForCharacter(writerId);
+    return font === null ? undefined : `whale-hand-${font.id}`;
+  };
+
   return (
-    <section className="grid gap-3 xl:grid-cols-2" data-notebook-panel>
-      {fontFace !== '' && <style>{fontFace}</style>}
-      <div className="card p-4">
+    <section className={`grid gap-3 ${wide ? '' : 'xl:grid-cols-2'}`} data-notebook-panel data-notebook-width={wide ? 'wide' : 'narrow'}>
+      <style>{`${fontFaces}\n${currentFontFamily !== undefined ? `.whale-notebook-font{font-family:'${currentFontFamily}', var(--font-sans)}` : ''}`}</style>
+      <div
+        className="card p-4"
+        data-notebook-page="records"
+        style={{ display: page === 'records' ? 'block' : 'none', background: paper.paper, borderColor: 'var(--stroke-2)' }}
+      >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <BookHeart size={15} style={{ color: 'var(--blue)' }} />我们的小本子 · {characterName}
+          <h3 className="flex items-center gap-2 text-sm font-semibold" style={{ color: paper.accent }}>
+            <BookHeart size={15} />我们的小本子 · {characterName}
           </h3>
-          <span className="pill pill-blue" style={{ fontSize: 10 }}>{fonts.length} 套手写字体 · SQLite</span>
+          <div className="flex items-center gap-1.5">
+            <span className="pill" style={{ fontSize: 9.5, borderColor: paper.accent, color: paper.accent }}>{paper.label}</span>
+            <button type="button" className="btn-pill ghost" data-notebook-width-toggle onClick={() => setWide((value) => !value)}>
+              {wide ? '窄版' : '宽版'}
+            </button>
+          </div>
+        </div>
+
+        <div className="seg-tabs mb-3">
+          <button type="button" data-notebook-page-tab="records" className="seg-tab on" onClick={() => setPage('records')}>相处记录</button>
+          <button type="button" data-notebook-page-tab="friends" className="seg-tab" onClick={() => setPage('friends')}>朋友们的留言</button>
         </div>
 
         <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -145,15 +242,17 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
             <PenLine size={11} />
             <select
               value={fontId}
+              data-notebook-font-select
               onChange={(event) => {
-                setFontId(event.target.value);
-                try { localStorage.setItem(FONT_STORAGE_KEY, event.target.value); } catch { /* ignore */ }
+                const value = event.target.value;
+                setFontId(value);
+                void window.directorBridge.prefsSet({ notebookFontId: value });
               }}
               className="rounded-full px-2 py-0.5 text-[11px] outline-none"
               style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
             >
-              <option value="">默认字体</option>
-              {fonts.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+              <option value="auto">跟随角色{autoFont === null ? '' : `（${autoFont.label}）`}</option>
+              {NOTEBOOK_FONTS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
             </select>
           </label>
         </div>
@@ -194,7 +293,7 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
         {((view?.notebookEntries?.length ?? 0) > 0 || (view?.notebookSign ?? '') !== '' || (view?.notebookTitle ?? '') !== '') && (
           <div className="mb-2 rounded-xl px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }} data-notebook-custom>
             {(view?.notebookTitle ?? '') !== '' && (
-              <div className="mb-1 text-[11px] font-semibold" style={{ color: 'var(--blue)' }}>{view?.notebookTitle}</div>
+              <div className="mb-1 text-[11px] font-semibold" style={{ color: paper.accent }}>{view?.notebookTitle}</div>
             )}
             {(view?.notebookEntries ?? []).map((entry, index) => (
               <div key={`${index}:${entry}`} className="text-[11px] leading-relaxed" style={{ color: 'var(--text-2)' }}>· {entry}</div>
@@ -229,7 +328,7 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
           </button>
         </div>
 
-        <div className={`mt-3 space-y-1.5 ${font !== undefined ? 'whale-notebook-font' : ''}`} data-notebook-notes>
+        <div className={`mt-3 space-y-1.5 ${currentFontFamily !== undefined ? 'whale-notebook-font' : ''}`} data-notebook-notes>
           {(view?.notes ?? []).map((entry) => (
             <div key={entry.id} className="rounded-lg px-2.5 py-1.5 text-[11.5px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
               {entry.text}
@@ -238,24 +337,106 @@ export function NotebookPanel({ characterId, characterName }: { characterId: str
           ))}
           {(view?.notes ?? []).length === 0 && <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>小本子还是空的，写第一句话吧。</div>}
         </div>
+
+        <div className="mt-3 rounded-xl px-3 py-2" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)' }} data-notebook-backfill-card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[10.5px]" style={{ color: 'var(--text-2)' }}>
+              <History size={11} className="mr-1 inline" />冷启动历史补录：只读统计时间/模型/工具数，幂等
+            </span>
+            <button type="button" className="btn-pill ghost" data-notebook-backfill disabled={busy !== null} onClick={() => void runBackfill()}>
+              <ScanLine size={11} />{busy === 'backfill' ? '扫描中…' : '扫描本机历史记录补录'}
+            </button>
+          </div>
+          {backfill !== null && (
+            <div className="mono mt-1 text-[10px]" style={{ color: 'var(--text-3)' }} data-notebook-backfill-result>
+              {backfill.already ? '已补录过' : '本次补录'}：{backfill.scannedFiles ?? 0} 个文件 · {backfill.rounds ?? 0} 轮
+              {backfill.busiestDate ? ` · 最忙 ${backfill.busiestDate}` : ''}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="card p-4">
+      <div
+        className="card p-4"
+        data-notebook-page="friends"
+        style={{ display: page === 'friends' ? 'block' : 'none', background: paper.paper, borderColor: 'var(--stroke-2)' }}
+      >
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">她们最近聊了什么</h3>
-          <button className="btn-pill violet" data-notebook-pair-chat disabled={busy !== null} onClick={() => void pairChat()}>
-            <MessageSquareHeart size={12} />{busy === 'pair' ? '正在聊…' : '触发闲时互聊'}
-          </button>
+          <h3 className="text-sm font-semibold" style={{ color: paper.accent }}>朋友们的留言</h3>
+          <div className="seg-tabs">
+            <button type="button" data-notebook-page-tab="records" className="seg-tab" onClick={() => setPage('records')}>相处记录</button>
+            <button type="button" data-notebook-page-tab="friends" className="seg-tab on" onClick={() => setPage('friends')}>朋友们的留言</button>
+          </div>
         </div>
-        <div className="space-y-2" data-notebook-banter>
-          {(view?.banter ?? []).map((entry) => (
+
+        <div className="space-y-2" data-notebook-friend-notes>
+          {friendNotes.map((entry) => {
+            const writerFont = noteFontFamily(entry.characterId);
+            const writerStyle = { fontFamily: writerFont === undefined ? undefined : `'${writerFont}', var(--font-sans)` };
+            return (
+              <div key={`${entry.id}:${entry.characterId}`} data-notebook-friend-note data-notebook-tier={entry.tier}>
+                {entry.tier === 'best' ? (
+                  <div className="rounded-2xl px-3 py-2.5" style={{ background: 'var(--surface-2)', border: `1px solid ${paper.accent}` }}>
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                      <Avatar characterId={characterId} name={characterName} accent={paper.accent} />
+                      <Avatar characterId={entry.characterId} name={entry.name} accent={paper.accent} />
+                      <span className="rounded-full px-1.5 py-px text-[9px]" style={{ background: 'var(--violet-dim)', color: 'var(--violet)' }}>挚友 · 双人对话</span>
+                      <span className="ml-auto text-[9px]" style={{ color: 'var(--text-3)' }}>{new Date(entry.createdAt).toLocaleDateString('zh-CN')}</span>
+                    </div>
+                    <div className="text-[11.5px]" style={{ color: 'var(--text-2)', ...writerStyle }}><b>{entry.name}</b>：{entry.text}</div>
+                    {entry.replyText !== '' && (
+                      <div className="mt-1 rounded-xl px-2.5 py-1.5 text-[11.5px]" style={{ color: 'var(--text-1)', background: 'var(--inset)', ...(currentFontFamily === undefined ? {} : { fontFamily: `'${currentFontFamily}', var(--font-sans)` }) }}>
+                        <b>{entry.replyName || characterName}</b>：{entry.replyText}
+                      </div>
+                    )}
+                  </div>
+                ) : entry.tier === 'friend' ? (
+                  <div className="flex items-start gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--inset)', border: `1px dashed ${paper.accent}` }}>
+                    <Avatar characterId={entry.characterId} name={entry.name} accent={paper.accent} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-[10px]" style={{ color: paper.accent }}>
+                        <b>{entry.name}</b>
+                        <span className="rounded-full px-1.5 py-px text-[9px]" style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}>好朋友 · 贴纸</span>
+                      </div>
+                      <div className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-2)', ...writerStyle }}>{entry.text}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg px-3 py-2" style={{ background: 'var(--surface-2)', borderLeft: `3px solid ${paper.accent}` }}>
+                    <div className="text-[10px]" style={{ color: 'var(--text-3)' }}><b>{entry.name}</b> · 便签 · {new Date(entry.createdAt).toLocaleDateString('zh-CN')}</div>
+                    <div className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-2)', ...writerStyle }}>{entry.text}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {friendNotes.length === 0 && (
+            <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+              还没有朋友留言。打开至少两只桌宠后触发一次「闲时互聊」，对方的真实回话会自动收录到这里，并用手写体呈现。
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between">
+          <h4 className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>最近互聊</h4>
+          <div className="flex items-center gap-1">
+            <button type="button" className="btn-pill ghost" data-notebook-banter-prev disabled={banterPage === 0} onClick={() => setBanterPage((value) => Math.max(0, value - 1))}><ChevronLeft size={11} /></button>
+            <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{banterPage + 1}/{banterPages}</span>
+            <button type="button" className="btn-pill ghost" data-notebook-banter-next disabled={banterPage >= banterPages - 1} onClick={() => setBanterPage((value) => Math.min(banterPages - 1, value + 1))}><ChevronRight size={11} /></button>
+            <button className="btn-pill violet ml-1" data-notebook-pair-chat disabled={busy !== null} onClick={() => void pairChat()}>
+              <MessageSquareHeart size={12} />{busy === 'pair' ? '正在聊…' : '触发闲时互聊'}
+            </button>
+          </div>
+        </div>
+        <div className="mt-1.5 space-y-2" data-notebook-banter>
+          {banterSlice.map((entry) => (
             <div key={entry.id} className="rounded-xl px-3 py-2 text-[11.5px]" style={{ background: 'var(--violet-dim)', border: '1px solid var(--violet-line)' }}>
-              <div><b style={{ color: 'var(--violet)' }}>{entry.aName}</b>：{entry.aText}</div>
-              <div className="mt-1"><b style={{ color: 'var(--blue)' }}>{entry.bName}</b>：{entry.bText}</div>
+              <div style={{ ...(noteFontFamily(entry.aId) === undefined ? {} : { fontFamily: `'${noteFontFamily(entry.aId)}', var(--font-sans)` }) }}><b style={{ color: 'var(--violet)' }}>{entry.aName}</b>：{entry.aText}</div>
+              <div className="mt-1" style={{ ...(noteFontFamily(entry.bId) === undefined ? {} : { fontFamily: `'${noteFontFamily(entry.bId)}', var(--font-sans)` }) }}><b style={{ color: 'var(--blue)' }}>{entry.bName}</b>：{entry.bText}</div>
               <div className="mt-1 text-[9px]" style={{ color: 'var(--text-3)' }}>{new Date(entry.createdAt).toLocaleString('zh-CN')}</div>
             </div>
           ))}
-          {(view?.banter ?? []).length === 0 && (
+          {banter.length === 0 && (
             <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
               还没有互聊记录——打开至少两只桌宠后点「触发闲时互聊」，她们会经全局语音锁串行说两句。
             </div>

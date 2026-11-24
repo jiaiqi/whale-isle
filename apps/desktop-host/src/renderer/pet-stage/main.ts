@@ -61,6 +61,10 @@ interface PetStageBridge {
   petAssemble?(): Promise<{ ok: boolean; windows: unknown[] }>;
   petDismiss?(): Promise<{ ok: boolean; closed: number }>;
   petEggSummon?(): Promise<{ ok: boolean; agentId?: string; name?: string; error?: string }>;
+  /** T-M6-65：双宠彩蛋小剧场 + 抓包 */
+  petEggTheater?(): Promise<{ ok: boolean; agentId?: string; script?: unknown; error?: string }>;
+  eggCatch?(): Promise<{ ok: boolean; caught?: boolean; error?: string }>;
+  onEggTheaterMode?(handler: (payload: { active: boolean }) => void): void;
   petOpenNotebook?(): Promise<{ ok: boolean }>;
   characterList?(): Promise<Array<{ id: string; displayName: string; packId?: string }>>;
   petSummon?(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
@@ -137,6 +141,9 @@ let workCardCount = 0;
 let wasWorkBusy = false;
 let lastWorkShakeLineAt = 0;
 let sleepTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+/** T-M6-65：彩蛋小剧场进行中（点击彩蛋窗 = 抓包，不逃跑） */
+let eggTheaterActive = false;
+bridge.onEggTheaterMode?.((payload) => { eggTheaterActive = payload.active; });
 let clickTimer: ReturnType<typeof setTimeout> | null = null;
 let lastDizzyVisual = 0;
 let slingshotRaf = 0;
@@ -1157,6 +1164,11 @@ stage.addEventListener('mouseleave', () => { pointerOnStage = false; setPeek(fal
 let pendingClickY = 0;
 stage.addEventListener('click', (event) => {
   if (dragMoved) return;
+  // 彩蛋剧场：抓包分支（不再走摸头逃跑）
+  if (eggTheaterActive) {
+    void bridge.eggCatch?.().catch(() => undefined);
+    return;
+  }
   if (interaction.asleep) { wakeUp(); return; }
   pendingClickY = event.clientY;
   if (clickTimer !== null) clearTimeout(clickTimer);
@@ -1682,12 +1694,26 @@ stage.addEventListener('contextmenu', (event) => {
     setTimeout(() => { panel.remove(); void bridge.forceInteractive(false); }, 8_000);
   });
   makeTextButton('彩蛋', () => {
-    void bridge.petEggSummon?.().then((result) => {
-      if (result?.ok === false) {
-        widgets.showDialog(result.error ?? '彩蛋召唤失败');
-        setTimeout(() => widgets.hideDialog(), 6_000);
-      }
-    });
+    // T-M6-65：优先双宠小剧场（专属 host 匹配 → 抓包/溜走）；无素材再回退随机召唤
+    const theater = bridge.petEggTheater;
+    if (theater !== undefined) {
+      void theater().then((result) => {
+        if (result.ok) return;
+        void bridge.petEggSummon?.().then((fallback) => {
+          if (fallback?.ok === false) {
+            widgets.showDialog(fallback.error ?? result.error ?? '彩蛋召唤失败');
+            setTimeout(() => widgets.hideDialog(), 6_000);
+          }
+        });
+      }).catch(() => undefined);
+    } else {
+      void bridge.petEggSummon?.().then((result) => {
+        if (result?.ok === false) {
+          widgets.showDialog(result.error ?? '彩蛋召唤失败');
+          setTimeout(() => widgets.hideDialog(), 6_000);
+        }
+      });
+    }
     closeScaleMenu();
   });
   makeTextButton('小本子', () => { void bridge.petOpenNotebook?.(); closeScaleMenu(); });

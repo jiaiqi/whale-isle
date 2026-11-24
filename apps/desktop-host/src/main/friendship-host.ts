@@ -20,11 +20,27 @@ export interface NotebookMilestoneView {
   at: number;
 }
 
+export interface NotebookFriendNote {
+  id: number;
+  /** 留言者角色 id（用其自己的手写体渲染） */
+  characterId: string;
+  name: string;
+  text: string;
+  /** 同一条互聊里当前角色的真实回话（挚友档双人对话卡用；无则空串） */
+  replyText: string;
+  replyName: string;
+  /** 留言者与当前角色的好感档位（决定便签/徽章/对话卡视觉） */
+  tier: FriendshipStats['tier'];
+  createdAt: number;
+}
+
 export interface NotebookView {
   characterId: string;
   stats: FriendshipStats | null;
   notes: NotebookNote[];
   banter: NotebookBanter[];
+  /** T-M6-65：朋友们的留言（副页数据；按好感档位分层呈现） */
+  friendNotes: NotebookFriendNote[];
   /** 自定义角色专属（T-M6-55）：milestones / notebook.notes / notebook.sign，缺项回落通用文案 */
   milestones: NotebookMilestoneView[];
   notebookTitle: string;
@@ -109,11 +125,30 @@ export function createFriendshipHost(options: {
       const entries = [...(custom?.notebook?.entries ?? []), ...(custom?.notebook?.notes ?? [])]
         .map((text) => fillHour(text))
         .filter((text) => text.trim() !== '');
+      const banter = store.listBanter(30);
+      // 朋友们的留言：从真实互聊记录反向抽出「对方对我说的话」，绝不伪造
+      const friendNotes: NotebookFriendNote[] = [];
+      for (const entry of banter) {
+        const otherId = entry.aId === characterId ? entry.bId : entry.bId === characterId ? entry.aId : '';
+        if (otherId === '' || otherId === characterId) continue;
+        const fromA = entry.aId === otherId;
+        friendNotes.push({
+          id: entry.id,
+          characterId: otherId,
+          name: fromA ? entry.aName : entry.bName,
+          text: fromA ? entry.aText : entry.bText,
+          replyText: fromA ? entry.bText : entry.aText,
+          replyName: fromA ? entry.bName : entry.aName,
+          tier: store.get(otherId, now())?.tier ?? 'stranger',
+          createdAt: entry.createdAt,
+        });
+      }
       return {
         characterId,
         stats: store.get(characterId, now()),
         notes: store.listNotes(characterId),
-        banter: store.listBanter(),
+        banter,
+        friendNotes: friendNotes.slice(0, 20),
         milestones,
         notebookTitle: (custom?.notebook?.title ?? '').trim(),
         notebookEntries: entries,

@@ -8,7 +8,9 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerStageIpc } from './passthrough';
-import { createPetPacksProtocolHandler, PET_PACKS_SCHEME, readBundledAboutmePacks, readCrossPetCharacters, registerPetPacksIpc, resolvePetPacksDir } from './pet-packs';
+import { createPetPacksProtocolHandler, PET_PACKS_SCHEME, readBundledAboutmePacks, readCrossPetCharacters, readCrossPetEggScripts, registerPetPacksIpc, resolvePetPacksDir } from './pet-packs';
+import { createEggTheater } from './egg-theater';
+import { decidePeakOutfit, isPeakOutfitFamily, resolvePeakPeriod, type PeakOutfitState } from './peak-schedule';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
@@ -22,6 +24,7 @@ import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createVoiceBindingStore, registerVoiceBindingIpc } from './voice-bindings';
 import { createFriendshipHost, registerFriendshipIpc } from './friendship-host';
+import { backfillCliHistory } from './cli-history-backfill';
 import { createPetControlHost, matchPetViewForCharacter } from './pet-control-host';
 import { createCoopLaunchHost } from './coop-launch-host';
 import { createAcpSessionCache } from './acp-session-cache';
@@ -31,6 +34,7 @@ import { createAcceptanceHost } from './acceptance-host';
 import { customCharacterPairs, invalidateCustomCharacters, linesForPose, matchCharacterForApp, readCustomCharacters, resolveProxyCharacter } from './custom-character';
 import { resolvePose } from './pose-resolver';
 import { createWorkFollowHost } from './work-follow-host';
+import { createCliLogWatcher } from './cli-log-watcher';
 import { createWorkFollowInstaller } from './work-follow-installer';
 import { createFrontAppWatcher } from './front-app-watcher';
 import { PetApiStateSchema } from '@workbench/shared-protocol';
@@ -374,6 +378,36 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   });
   void characters;
 
+  // T-M6-65：DeepSeek/GLM 峰谷自动换装（仅跨时段边界触发一次，不覆盖同时段手动皮肤）
+  let peakState: PeakOutfitState = { lastPeriod: null };
+  const peakTick = (): void => {
+    const current = prefs.get();
+    const decision = decidePeakOutfit(peakState, new Date(), current.characterId, {
+      enabled: current.peakOutfitEnabled,
+      peakOutfitDay: current.peakOutfitDay,
+      peakOutfitOffPeak: current.peakOutfitOffPeak,
+    });
+    peakState = decision.state;
+    if (!decision.apply || decision.skinId === null) return;
+    if (!characters.list().some((character) => character.id === decision.skinId)) return;
+    switchDefaultCharacter(decision.skinId);
+  };
+  peakTick();
+  const peakTimer = setInterval(peakTick, 60_000);
+  peakTimer.unref();
+  app.on('will-quit', () => clearInterval(peakTimer));
+  ipcMain.handle('pet:peak-status', () => {
+    const current = prefs.get();
+    return {
+      ...resolvePeakPeriod(new Date()),
+      characterId: current.characterId,
+      family: isPeakOutfitFamily(current.characterId),
+      enabled: current.peakOutfitEnabled,
+      peakOutfitDay: current.peakOutfitDay,
+      peakOutfitOffPeak: current.peakOutfitOffPeak,
+    };
+  });
+
   // 语音中心（T-M6-46）：每个角色可独立改绑音色，覆盖值优先于角色包默认
   const voiceBindings = createVoiceBindingStore({
     filePath: join(app.getPath('userData'), 'voice-bindings.json'),
@@ -459,10 +493,63 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   petControl.registerIpc();
   const summonPet = petControl.summonPet;
 
+  // T-M6-65：15 个 egg-* 彩蛋的双宠小剧场（专属 host/hostSkin 优先，pop→pretend→抓包/溜走）
+  const eggTheater = createEggTheater({
+    scripts: () => [
+      ...readCrossPetEggScripts(petPacksRoot),
+      ...readCustomCharacters(app.getPath('userData')).entries
+        .filter((entry) => entry.data.egg)
+        .map((entry) => ({
+          characterId: entry.character.id,
+          name: entry.character.displayName,
+          host: entry.data.host,
+          hostSkin: entry.data.hostSkin,
+          aura: entry.data.aura,
+          lines: {
+            pop: entry.data.lines.pop ?? [],
+            pretend: entry.data.lines.pretend ?? [],
+            caught: entry.data.lines.caught ?? [],
+            bye: entry.data.lines.bye ?? [],
+            escape: entry.data.lines.escape ?? [],
+          },
+        })),
+    ],
+    openEgg: async (script) => {
+      const manager = petWindowManager;
+      if (manager === null) return { ok: false, error: '桌宠窗未就绪' };
+      const agentId = `egg-${script.characterId.replace(/[^A-Za-z0-9._-]/g, '').slice(-20)}-${Date.now().toString(36).slice(-4)}`;
+      const opened = await manager.open(agentId, script.characterId);
+      if (!opened.ok) return { ok: false, error: opened.error ?? '彩蛋窗打开失败' };
+      // 放在主桌宠右侧，不抢焦点（manager.open 内部 showInactive）
+      const main = manager.get('default');
+      if (main !== null) {
+        manager.setPosition(agentId, { x: main.bounds.x + main.bounds.width + 8, y: main.bounds.y, displayId: prefs.get().position.displayId });
+      }
+      manager.sendAgent(agentId, 'pet:egg-theater-mode', { active: true });
+      return { ok: true, agentId };
+    },
+    sayEgg: (agentId, text) => { petWindowManager?.sendAgent(agentId, 'pet:say', { text }); },
+    sayHost: (text) => { petWindowManager?.sendAgent('default', 'pet:say', { text }); },
+    onPhase: (phase, agentId) => { petWindowManager?.sendAgent(agentId, 'pet:pose', { pose: phase }); },
+    closeEgg: (agentId) => { petControl.closeAgent(agentId); },
+  });
+  ipcMain.handle('pet:egg-theater', () => eggTheater.start(prefs.get().characterId));
+  ipcMain.handle('egg:catch', () => eggTheater.catch());
+  const randomEggTimer = setInterval(() => {
+    if (!prefs.get().randomEggEnabled || eggTheater.state() !== 'idle') return;
+    if (workFollowRef?.status().sessions.some((session) => session.active) ?? false) return;
+    if (Math.random() >= 0.2) return;
+    void eggTheater.start(prefs.get().characterId);
+  }, 15 * 60_000);
+  randomEggTimer.unref();
+  app.on('will-quit', () => { clearInterval(randomEggTimer); eggTheater.dismiss(); });
+
   // T-M6-55：前台应用自动切角（macOS 3s 低频只读轮询；偏好关闭时立即停止并保持手选角色）
   // T-M6-64：always-with-app 策略下，即使不切角也会在检测到对应 AI App 时自动召唤桌宠
+  // 注意：watcher.start() 会立即 tick 一次，此时 workFollow 尚未初始化——用函数变量避免 TDZ。
+  let presencePolicyOf = (): 'idle-leave' | 'app-exit' | 'always-with-app' => 'idle-leave';
   const frontAppWatcher = createFrontAppWatcher({
-    enabled: () => prefs.get().followFrontApp || workFollowRef?.presencePolicy() === 'always-with-app',
+    enabled: () => prefs.get().followFrontApp || presencePolicyOf() === 'always-with-app',
     onBundle: (bundleId) => {
       const match = matchCharacterForApp({
         userDataDir: app.getPath('userData'),
@@ -470,7 +557,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         packsRoot: petPacksRoot,
       });
       if (match === null) return;
-      if (workFollowRef?.presencePolicy() === 'always-with-app') {
+      if (presencePolicyOf() === 'always-with-app') {
         void summonPet(petControl.nightOutfit(match.characterId));
       }
       if (!prefs.get().followFrontApp) return;
@@ -630,6 +717,15 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     },
   });
   workFollowRef = workFollow;
+  presencePolicyOf = () => workFollow.presencePolicy();
+  // T-M6-65：免 Hook 只读日志监听（启动即定位到 EOF，只取 sessionId/kind/tool/model/ts）
+  const cliLogWatcher = createCliLogWatcher({
+    homeDir: homedir(),
+    enabled: () => workFollow.logWatchEnabled(),
+    onEvent: (event) => { workFollow.ingest(event); },
+  });
+  cliLogWatcher.start();
+  app.on('will-quit', () => cliLogWatcher.stop());
   // T-M6-58：8 家 CLI 钩子一键安装（只动已知标准 JSON 文件；手动模式只给可复制片段）
   const hookSourceCandidates = app.isPackaged
     ? [join(process.resourcesPath, 'hooks', 'work-follow-hook.mjs')]
@@ -676,14 +772,17 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const altMonitor = new GlobalAltMonitor();
   altMonitor.start();
   let altTestOverride: boolean | null = null;
+  /** E2E 固定测试点：避免真实鼠标不在桌宠上时 50ms 轮询把透明度立刻复位（套件负载高时偶发） */
+  let altTestPoint: { x: number; y: number } | null = null;
   setInterval(() => {
-    const point = screen.getCursorScreenPoint();
+    const point = altTestOverride !== null && altTestPoint !== null ? altTestPoint : screen.getCursorScreenPoint();
     const windows = petWindowManager?.list().map((view) => ({ agentId: view.agentId, bounds: view.bounds })) ?? [];
     petWindowManager?.applyPeekTargets(resolveAltPeekTargets(windows, point, altTestOverride ?? altMonitor.current()));
   }, 50).unref();
   if (TEST_MODE) {
     ipcMain.handle('test:alt-peek', (_event, point: { x: number; y: number }, altDown: boolean) => {
       altTestOverride = altDown;
+      altTestPoint = point;
       const windows = petWindowManager?.list().map((view) => ({ agentId: view.agentId, bounds: view.bounds })) ?? [];
       const targets = resolveAltPeekTargets(windows, point, altDown);
       petWindowManager?.applyPeekTargets(targets);
@@ -776,6 +875,14 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   });
   registerFriendshipIpc(friendship, {
     activeCharacterIds: () => (petWindowManager?.list() ?? []).filter((view) => view.visible).map((view) => view.characterId),
+  });
+  // T-M6-65：冷启动只读历史补录（幂等；只统计时间/模型/工具数，绝不读正文）
+  ipcMain.handle('friendship:backfill-history', async () => {
+    try {
+      return await backfillCliHistory({ userDataDir: app.getPath('userData') });
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+    }
   });
   // 桌宠睡眠态由渲染层上报：提醒在任一桌宠入睡期间免打扰
   ipcMain.on('pet:sleep-state', (_event, agentId: string, asleep: boolean) => {

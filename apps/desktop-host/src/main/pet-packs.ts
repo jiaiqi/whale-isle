@@ -230,6 +230,35 @@ export function buildPoseSkinManifest(input: {
   });
 }
 
+/** 读全部随包 egg-* 彩蛋剧本（T-M6-65）：host/hostSkin/aura + 五段台词。 */
+export function readCrossPetEggScripts(packsRoot: string): import('./egg-theater').EggScript[] {
+  const root = join(packsRoot, 'crosspet', 'characters');
+  if (!existsSync(root)) return [];
+  const out: import('./egg-theater').EggScript[] = [];
+  for (const dirName of readdirSync(root).sort()) {
+    if (!dirName.startsWith('egg-')) continue;
+    const profile = readCrossPetPoseProfile(packsRoot, `crosspet-${dirName}`);
+    if (profile === null) continue;
+    const lines = {
+      pop: profile.lines.pop ?? [],
+      pretend: profile.lines.pretend ?? [],
+      caught: profile.lines.caught ?? [],
+      bye: profile.lines.bye ?? [],
+      escape: profile.lines.escape ?? [],
+    };
+    if ([lines.pop, lines.pretend, lines.caught, lines.bye, lines.escape].every((pool) => pool.length === 0)) continue;
+    out.push({
+      characterId: profile.characterId,
+      name: profile.name,
+      host: profile.host ?? '',
+      hostSkin: profile.hostSkin ?? '',
+      aura: profile.aura ?? '',
+      lines,
+    });
+  }
+  return out;
+}
+
 /**
  * CrossPet 随包角色的完整扩展档案（T-M6-63）。
  *

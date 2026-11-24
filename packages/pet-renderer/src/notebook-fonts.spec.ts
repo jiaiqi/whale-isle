@@ -1,12 +1,15 @@
 /** 小本子 8 套手写体映射（T-M6-63）：家族识别、auto 回退、URL 编码。 */
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_NOTEBOOK_PAPER,
   NOTEBOOK_FONTS,
   NOTEBOOK_FONT_BY_FAMILY,
+  NOTEBOOK_PAPER_BY_FAMILY,
   notebookFamilyOf,
   notebookFontById,
   notebookFontForCharacter,
   notebookFontUrl,
+  notebookPaperForCharacter,
 } from './notebook-fonts';
 
 describe('NOTEBOOK_FONT_BY_FAMILY', () => {
@@ -48,5 +51,18 @@ describe('notebookFontById / notebookFontUrl', () => {
   it('固定 whale-pet:// 路径并对文件名做百分号编码', () => {
     expect(notebookFontUrl('ma-shan-zheng.woff2')).toBe('whale-pet://crosspet/app/web/fonts/notebook/ma-shan-zheng.woff2');
     expect(notebookFontUrl('中文 体.woff2')).toBe('whale-pet://crosspet/app/web/fonts/notebook/%E4%B8%AD%E6%96%87%20%E4%BD%93.woff2');
+  });
+});
+
+describe('笔记本纸张主题', () => {
+  it('8 家族各有专属纸张/强调色，同家族皮肤一致', () => {
+    expect(Object.keys(NOTEBOOK_PAPER_BY_FAMILY)).toHaveLength(8);
+    expect(notebookPaperForCharacter('crosspet-deepseek-pajamas')).toBe(NOTEBOOK_PAPER_BY_FAMILY.deepseek);
+    expect(notebookPaperForCharacter('aboutme-claude')).toBe(NOTEBOOK_PAPER_BY_FAMILY.claude);
+  });
+
+  it('未知/自定义角色回退素色便签', () => {
+    expect(notebookPaperForCharacter('custom-x')).toBe(DEFAULT_NOTEBOOK_PAPER);
+    expect(notebookPaperForCharacter('blue-whale-maid')).toBe(DEFAULT_NOTEBOOK_PAPER);
   });
 });

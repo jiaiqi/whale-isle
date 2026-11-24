@@ -96,6 +96,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> => ipcRenderer.invoke('rice:status'),
+  // T-M6-65：DeepSeek/GLM 峰谷时段（中控台与托盘时间条）
+  peakStatus: (): Promise<{ period: 'peak' | 'off-peak'; minutesOfDay: number; nextSwitchInMinutes: number; characterId: string; family: boolean; enabled: boolean; peakOutfitDay: string; peakOutfitOffPeak: string }> => ipcRenderer.invoke('pet:peak-status'),
   // T-M6-21 多角色注册表（切换由主进程写 prefs + 广播桌宠窗重载）
   characterList: (): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string; packId?: string }>> => ipcRenderer.invoke('pet:character-list'),
   characterSelect: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('pet:character-select', id),
@@ -220,6 +222,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   friendWipe: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('friendship:wipe'),
   friendPairChat: (): Promise<{ ok: boolean; aName?: string; aText?: string; bName?: string; bText?: string; error?: string }> =>
     ipcRenderer.invoke('friendship:pair-chat'),
+  // T-M6-65：冷启动只读历史补录（幂等；只回扫描文件数与补录轮数）
+  friendBackfillHistory: (): Promise<{ ok: boolean; already?: boolean; scannedFiles?: number; rounds?: number; busiestDate?: string; byFamily?: Record<string, number>; error?: string }> =>
+    ipcRenderer.invoke('friendship:backfill-history'),
   friendGreeting: (characterId: string): Promise<string> => ipcRenderer.invoke('friendship:greeting', characterId),
   friendMeet: (characterId: string): Promise<string> => ipcRenderer.invoke('friendship:meet', characterId),
   petSummon: (characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }> => ipcRenderer.invoke('pet:summon', characterId),
@@ -361,13 +366,19 @@ contextBridge.exposeInMainWorld('petStage', {
   petAssemble: (): Promise<{ ok: boolean; windows: unknown[] }> => ipcRenderer.invoke('pet:assemble'),
   petDismiss: (): Promise<{ ok: boolean; closed: number }> => ipcRenderer.invoke('pet:dismiss'),
   petEggSummon: (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => ipcRenderer.invoke('pet:egg-summon'),
+  petEggTheater: (): Promise<{ ok: boolean; agentId?: string; script?: unknown; error?: string }> => ipcRenderer.invoke('pet:egg-theater'),
+  eggCatch: (): Promise<{ ok: boolean; caught?: boolean; error?: string }> => ipcRenderer.invoke('egg:catch'),
   petOpenNotebook: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:open-notebook'),
-  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean; idleActions?: string[]; glyph?: { fill?: string; stroke?: string; text?: string }; apps?: string[] }> =>
+  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string; fx?: Record<string, string>; egg?: boolean; idleActions?: string[]; glyph?: { fill?: string; stroke?: string; text?: string }; apps?: string[]; lines?: Record<string, string[]> }> =>
     ipcRenderer.invoke('custom:pose-config', characterId),
   customGreeting: (characterId: string): Promise<{ ok: boolean; greeting?: { key: string; pose: string; line: string } | null }> =>
     ipcRenderer.invoke('custom:greeting', characterId),
   onPetPose: (handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void => {
     ipcRenderer.on('pet:pose', (_e, payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => handler(payload));
+  },
+  /** T-M6-65：彩蛋小剧场进行中 → 点击彩蛋窗走抓包分支（不再逃跑） */
+  onEggTheaterMode: (handler: (payload: { active: boolean }) => void): void => {
+    ipcRenderer.on('pet:egg-theater-mode', (_e, payload: { active: boolean }) => handler(payload));
   },
   // T-M6-64：工作跟随任务卡（≤4 张，仅标题/状态）
   onWorkCards: (handler: (payload: { cards: Array<{ sessionId: string; title: string; state: 'running' | 'asking' | 'done' | 'error' }> }) => void): void => {

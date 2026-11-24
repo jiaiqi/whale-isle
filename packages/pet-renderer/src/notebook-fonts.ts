@@ -51,3 +51,36 @@ export function notebookFontById(fontId: string): NotebookFontDefinition | null 
   if (fontId === '' || fontId === 'auto') return null;
   return NOTEBOOK_FONTS.find((font) => font.id === fontId) ?? null;
 }
+
+/** 每个角色的专属纸张底纹/强调色（深浅主题通用：半透明叠色，不写死白底）。 */
+export interface NotebookPaper {
+  /** CSS background（纸张底纹） */
+  paper: string;
+  /** 强调色（书名、页签、落款） */
+  accent: string;
+  /** 纸张类型名（UI 小字） */
+  label: string;
+}
+
+export const NOTEBOOK_PAPER_BY_FAMILY: Readonly<Record<string, NotebookPaper>> = {
+  deepseek: { paper: 'linear-gradient(180deg, rgba(59,91,181,.18), rgba(59,91,181,.05))', accent: '#6f9bff', label: '深蓝格纹' },
+  claude: { paper: 'linear-gradient(180deg, rgba(232,163,61,.18), rgba(232,163,61,.05))', accent: '#e8a33d', label: '米黄信纸' },
+  gpt: { paper: 'linear-gradient(180deg, rgba(16,163,127,.16), rgba(16,163,127,.04))', accent: '#3ecfa2', label: '青绿方格' },
+  gemini: { paper: 'linear-gradient(180deg, rgba(138,99,255,.18), rgba(138,99,255,.05))', accent: '#a98bff', label: '星紫横线' },
+  glm: { paper: 'linear-gradient(180deg, rgba(84,160,255,.16), rgba(84,160,255,.04))', accent: '#6fb7ff', label: '湖蓝便签' },
+  qwen: { paper: 'linear-gradient(180deg, rgba(124,77,255,.16), rgba(124,77,255,.04))', accent: '#9d7bff', label: '紫罗兰格' },
+  kimi: { paper: 'linear-gradient(180deg, rgba(255,180,84,.14), rgba(255,180,84,.04))', accent: '#ffb454', label: '暖金信笺' },
+  grok: { paper: 'linear-gradient(180deg, rgba(255,107,107,.14), rgba(255,107,107,.04))', accent: '#ff8a8a', label: '赤霞横线' },
+};
+
+export const DEFAULT_NOTEBOOK_PAPER: NotebookPaper = {
+  paper: 'linear-gradient(180deg, rgba(120,150,190,.12), rgba(120,150,190,.03))',
+  accent: '#8fb8e8',
+  label: '素色便签',
+};
+
+export function notebookPaperForCharacter(characterId: string): NotebookPaper {
+  const family = notebookFamilyOf(characterId);
+  if (family === null) return DEFAULT_NOTEBOOK_PAPER;
+  return NOTEBOOK_PAPER_BY_FAMILY[family] ?? DEFAULT_NOTEBOOK_PAPER;
+}

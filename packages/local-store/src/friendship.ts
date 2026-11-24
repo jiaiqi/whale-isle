@@ -43,8 +43,10 @@ export interface FriendshipStats {
 
 export interface NotebookBanter {
   id: number;
+  aId: string;
   aName: string;
   aText: string;
+  bId: string;
   bName: string;
   bText: string;
   createdAt: number;
@@ -175,8 +177,10 @@ export class FriendshipStore {
     `).run(entry.aId, clipped(entry.aName), clipped(entry.aText), entry.bId, clipped(entry.bName), clipped(entry.bText), now);
     return {
       id: Number(info.lastInsertRowid),
+      aId: entry.aId,
       aName: clipped(entry.aName),
       aText: clipped(entry.aText),
+      bId: entry.bId,
       bName: clipped(entry.bName),
       bText: clipped(entry.bText),
       createdAt: now,
@@ -187,8 +191,10 @@ export class FriendshipStore {
     const rows = this.db.prepare('SELECT * FROM notebook_banter ORDER BY id DESC LIMIT ?').all(limit) as Array<Record<string, number | string>>;
     return rows.map((row) => ({
       id: Number(row.id),
+      aId: String(row.a_id),
       aName: String(row.a_name),
       aText: String(row.a_text),
+      bId: String(row.b_id),
       bName: String(row.b_name),
       bText: String(row.b_text),
       createdAt: Number(row.created_at),

@@ -212,6 +212,7 @@ function App(): React.JSX.Element {
   const [coop, setCoop] = useState<CoopEndpointView[]>([]);
   const [health, setHealth] = useState<GameHealthView | null>(null);
   const [rice, setRice] = useState<RiceView | null>(null);
+  const [peak, setPeak] = useState<{ period: 'peak' | 'off-peak'; minutesOfDay: number; nextSwitchInMinutes: number; family: boolean } | null>(null);
   const [work, setWork] = useState<WorkStatusView>({ mode: 'multi', sessions: [] });
   const [voice, setVoice] = useState<VoiceConfigView | null>(null);
   const [voiceBackend, setVoiceBackend] = useState<VoiceBackendView | null>(null);
@@ -234,7 +235,7 @@ function App(): React.JSX.Element {
   }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
-    const [chars, prefs, windows, sleepState, status, objectiveState, endpoints, riceState, workState, voiceState, webuiState, backend] =
+    const [chars, prefs, windows, sleepState, status, objectiveState, endpoints, riceState, workState, voiceState, webuiState, backend, peakState] =
       await Promise.all([
         settle<CharacterView[]>(bridge.characterList(), []),
         settle<{ characterId?: string }>(bridge.prefsGet(), {}),
@@ -248,6 +249,7 @@ function App(): React.JSX.Element {
         settle<VoiceConfigView | null>(bridge.voiceConfigGet(), null),
         settle<WebUiView>(bridge.webuiInfo(), { ok: false, port: 0, token: '' }),
         settle<VoiceBackendView | null>(bridge.voiceBackend(), null),
+        settle<{ period: 'peak' | 'off-peak'; minutesOfDay: number; nextSwitchInMinutes: number; family: boolean } | null>(bridge.peakStatus(), null),
       ]);
     setCharacters(chars);
     const selected = typeof prefs.characterId === 'string' ? prefs.characterId : '';
@@ -258,6 +260,7 @@ function App(): React.JSX.Element {
     setObjective(objectiveState.objective);
     setCoop(endpoints);
     setRice(riceState);
+    setPeak(peakState);
     setWork(workState);
     setVoice(voiceState);
     setWebui(webuiState);
@@ -754,6 +757,26 @@ function App(): React.JSX.Element {
                 {rice === null ? '饭碗数据尚未加载' : `日预算 ${formatNumber(rice.budget)} 粒 · 1 粒 = 1 Token`}
               </div>
             </div>
+
+            {peak?.family === true && (
+              <div className="card" data-peak-outfit style={{ padding: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
+                  <span className="tiny" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />峰谷时段</span>
+                  <span className="pill" style={{ fontSize: 9, color: peak.period === 'peak' ? 'var(--red)' : 'var(--green)', background: peak.period === 'peak' ? 'var(--red-dim)' : 'var(--green-dim)' }}>
+                    {peak.period === 'peak' ? '高峰' : '空闲'} · {peak.nextSwitchInMinutes} 分
+                  </span>
+                </div>
+                <div style={{ position: 'relative', height: 10, borderRadius: 99, overflow: 'hidden', background: 'var(--inset)' }} data-peak-bar>
+                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(30 / 1440) * 100}%`, background: 'color-mix(in srgb, var(--red) 55%, transparent)' }} />
+                  <div style={{ position: 'absolute', left: `${(30 / 1440) * 100}%`, top: 0, bottom: 0, width: `${(480 / 1440) * 100}%`, background: 'color-mix(in srgb, var(--green) 55%, transparent)' }} />
+                  <div style={{ position: 'absolute', left: `${(510 / 1440) * 100}%`, top: 0, bottom: 0, right: 0, background: 'color-mix(in srgb, var(--red) 55%, transparent)' }} />
+                  <div style={{ position: 'absolute', top: 0, bottom: 0, width: 2, background: 'var(--text-1)', left: `${(peak.minutesOfDay / 1440) * 100}%` }} />
+                </div>
+                <div className="tiny" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 3, opacity: 0.65 }}>
+                  <span>00:30</span><span>08:30</span><span>24:00</span>
+                </div>
+              </div>
+            )}
 
             <div className="section-title"><Route size={11} />跨 AI 工作跟随</div>
             <div className="list" data-work-follow>

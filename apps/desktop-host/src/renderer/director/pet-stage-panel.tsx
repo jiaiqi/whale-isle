@@ -84,7 +84,18 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
-  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false, windowLayer: 'always' as 'always' | 'follow-ai' | 'normal', bubbleFontScale: null as number | null, patrolEnabled: true, randomEggEnabled: true });
+  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false, windowLayer: 'always' as 'always' | 'follow-ai' | 'normal', bubbleFontScale: null as number | null, patrolEnabled: true, randomEggEnabled: true, peakOutfitEnabled: false, peakOutfitDay: 'crosspet-deepseek', peakOutfitOffPeak: 'crosspet-deepseek-pajamas' });
+  const [peak, setPeak] = useState<{ period: 'peak' | 'off-peak'; minutesOfDay: number; nextSwitchInMinutes: number; family: boolean } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const loadPeak = (): void => {
+      void window.directorBridge.peakStatus().then((next) => { if (alive) setPeak(next); }).catch(() => undefined);
+    };
+    loadPeak();
+    const timer = setInterval(loadPeak, 30_000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [characterId]);
 
   useEffect(() => {
     void window.directorBridge.petsManifest().then((res) => {
@@ -105,6 +116,9 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
         bubbleFontScale: p.bubbleFontScale ?? null,
         patrolEnabled: p.patrolEnabled ?? true,
         randomEggEnabled: p.randomEggEnabled ?? true,
+        peakOutfitEnabled: p.peakOutfitEnabled ?? false,
+        peakOutfitDay: p.peakOutfitDay ?? 'crosspet-deepseek',
+        peakOutfitOffPeak: p.peakOutfitOffPeak ?? 'crosspet-deepseek-pajamas',
       });
     }).catch(() => undefined);
   }, [characterId]);
@@ -114,6 +128,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
   const latestTalk = [...events].reverse().find((e) => e.tool === 'chat_reply' || e.tool === 'reflex_spray' || (e.type === 'receipt' && e.tool === 'fish'));
   const goals = useMemo(() => goalOf(latestState?.clock ?? ''), [latestState?.clock]);
   const staminaPct = latestState?.stamina != null && latestState.staminaMax ? Math.round((latestState.stamina / latestState.staminaMax) * 100) : 0;
+  const peakCharacters = characters.filter((character) => /deepseek|glm/i.test(character.id));
 
   const patchVoice = async (next: Partial<{ enabled: boolean; innerVoice: boolean; volume: number }>): Promise<void> => {
     const applied = await window.directorBridge.voiceConfigSet(next);
@@ -295,6 +310,66 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
           </button>
         </div>
 
+        {peak?.family === true && (
+          <div className="card px-4 py-3.5" data-peak-outfit>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold" style={{ color: 'var(--text-2)' }}>DeepSeek / GLM 峰谷时段</h3>
+              <span className="pill" style={{ fontSize: 9.5, color: peak.period === 'peak' ? 'var(--red)' : 'var(--green)', background: peak.period === 'peak' ? 'var(--red-dim)' : 'var(--green-dim)' }}>
+                {peak.period === 'peak' ? '高峰' : '优惠空闲'} · {peak.nextSwitchInMinutes} 分钟后切换
+              </span>
+            </div>
+            <div className="relative h-3.5 overflow-hidden rounded-full" style={{ background: 'var(--inset)' }} data-peak-bar>
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${(30 / 1440) * 100}%`, background: 'color-mix(in srgb, var(--red) 55%, transparent)' }} />
+              <div style={{ position: 'absolute', left: `${(30 / 1440) * 100}%`, top: 0, bottom: 0, width: `${(480 / 1440) * 100}%`, background: 'color-mix(in srgb, var(--green) 55%, transparent)' }} />
+              <div style={{ position: 'absolute', left: `${(510 / 1440) * 100}%`, top: 0, bottom: 0, right: 0, background: 'color-mix(in srgb, var(--red) 55%, transparent)' }} />
+              <div style={{ position: 'absolute', top: 0, bottom: 0, width: 2, background: 'var(--text-1)', left: `${(peak.minutesOfDay / 1440) * 100}%` }} />
+            </div>
+            <div className="mono mt-1 flex justify-between text-[9px]" style={{ color: 'var(--text-3)' }}>
+              <span>00:30</span><span>08:30</span><span>24:00</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[11.5px]" style={{ color: 'var(--text-2)' }}>
+              <span>跨时段自动换装</span>
+              <button
+                aria-pressed={desk.peakOutfitEnabled}
+                data-peak-enabled
+                className={`sw${desk.peakOutfitEnabled ? ' on' : ''}`}
+                onClick={() => {
+                  const next = { ...desk, peakOutfitEnabled: !desk.peakOutfitEnabled };
+                  setDesk(next);
+                  void window.directorBridge.prefsSet({ peakOutfitEnabled: next.peakOutfitEnabled });
+                  toast(next.peakOutfitEnabled ? '高峰/空闲跨时段将自动换装' : '已关闭峰谷自动换装（保持手动皮肤）');
+                }}
+              />
+            </div>
+            <div className="mt-2 grid gap-1.5">
+              <label className="flex items-center justify-between gap-2 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                高峰皮肤
+                <select
+                  data-peak-day
+                  value={desk.peakOutfitDay}
+                  onChange={(event) => { const value = event.target.value; setDesk({ ...desk, peakOutfitDay: value }); void window.directorBridge.prefsSet({ peakOutfitDay: value }); }}
+                  className="rounded-full px-2 py-0.5 text-[10.5px] outline-none"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
+                >
+                  {peakCharacters.map((character) => <option key={character.id} value={character.id}>{character.displayName}</option>)}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-2 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                空闲皮肤
+                <select
+                  data-peak-offpeak
+                  value={desk.peakOutfitOffPeak}
+                  onChange={(event) => { const value = event.target.value; setDesk({ ...desk, peakOutfitOffPeak: value }); void window.directorBridge.prefsSet({ peakOutfitOffPeak: value }); }}
+                  className="rounded-full px-2 py-0.5 text-[10.5px] outline-none"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
+                >
+                  {peakCharacters.map((character) => <option key={character.id} value={character.id}>{character.displayName}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+        )}
+
         <div className="card px-4 py-3.5">
           <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>语音设置</h3>
           {([
@@ -326,6 +401,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
             ['播放动作原声', 'sfxEnabled'],
             ['跟随前台 AI 应用自动切角', 'followFrontApp'],
             ['空闲自主巡逻（25–45s 随机散步）', 'patrolEnabled'],
+            ['随机触发双宠彩蛋小剧场', 'randomEggEnabled'],
           ] as const).map(([label, key]) => (
             <div key={key} className="flex items-center justify-between py-1.5 text-[11.5px]" style={{ color: 'var(--text-2)' }} data-desk-pref={key}>
               <span>{label}</span>

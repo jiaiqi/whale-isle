@@ -282,11 +282,13 @@ export interface DirectorBridge {
     characterId: string;
     stats: { points: number; dailyGained: number; quarterHearts: number; hearts: number; tier: string; pats: number; pokes: number; rounds: number; cowork: number; cofinish: number } | null;
     notes: Array<{ id: number; text: string; createdAt: number }>;
-    banter: Array<{ id: number; aName: string; aText: string; bName: string; bText: string; createdAt: number }>;
+    banter: Array<{ id: number; aId: string; aName: string; aText: string; bId: string; bName: string; bText: string; createdAt: number }>;
+    friendNotes?: Array<{ id: number; characterId: string; name: string; text: string; replyText: string; replyName: string; tier: string; createdAt: number }>;
   }>;
   friendNoteAdd(characterId: string, text: string): Promise<{ ok: boolean; error?: string }>;
   friendWipe(): Promise<{ ok: boolean }>;
   friendPairChat(): Promise<{ ok: boolean; aName?: string; aText?: string; bName?: string; bText?: string; error?: string }>;
+  friendBackfillHistory(): Promise<{ ok: boolean; already?: boolean; scannedFiles?: number; rounds?: number; busiestDate?: string; byFamily?: Record<string, number>; error?: string }>;
   friendGreeting(characterId: string): Promise<string>;
   friendMeet(characterId: string): Promise<string>;
   petSummon(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
@@ -392,6 +394,7 @@ export interface DirectorBridge {
   trayPopoverTest?(action: 'open' | 'hide' | 'bounds'): Promise<{ ok: boolean; bounds?: unknown; visible?: boolean }>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
   riceStatus(): Promise<import('@workbench/shared-protocol').RiceBowlStatus>;
+  peakStatus(): Promise<{ period: 'peak' | 'off-peak'; minutesOfDay: number; nextSwitchInMinutes: number; characterId: string; family: boolean; enabled: boolean; peakOutfitDay: string; peakOutfitOffPeak: string }>;
   brainApplyConfig(config: import('@workbench/shared-protocol').BrainRuntimeConfig): Promise<BrainApplyView>;
   plannerSwitch(mode: 'rule' | 'llm'): Promise<{ ok: boolean; error?: string; mode?: string }>;
   plannerStatus(): Promise<{ mode: string; llmReady: boolean }>;
