@@ -14,6 +14,10 @@
     "./dexie": {
       "types": "./dist/dexie.d.ts",
       "default": "./dist/dexie.js"
+    },
+    "./friendship": {
+      "types": "./dist/friendship.d.ts",
+      "default": "./dist/friendship.js"
     }
   },
   "scripts": {
