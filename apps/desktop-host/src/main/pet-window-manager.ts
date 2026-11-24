@@ -378,11 +378,18 @@ export class PetWindowManager {
     const entry = this.entries.get(agentId);
     if (entry === undefined) return false;
     if (hidden) entry.window.hide(); else entry.window.showInactive();
+    this.notify();
     return true;
   }
 
-  hideAll(): void { for (const entry of this.entries.values()) entry.window.hide(); }
-  showAll(): void { for (const entry of this.entries.values()) entry.window.showInactive(); }
+  hideAll(): void {
+    for (const entry of this.entries.values()) entry.window.hide();
+    if (this.entries.size > 0) this.notify();
+  }
+  showAll(): void {
+    for (const entry of this.entries.values()) entry.window.showInactive();
+    if (this.entries.size > 0) this.notify();
+  }
   anyHidden(): boolean { return [...this.entries.values()].some((entry) => !entry.window.isVisible()); }
 
   /** 兼容旧 PetDesktopPrefs 位置写入：立即更新 default/指定窗口坐标并落盘。 */

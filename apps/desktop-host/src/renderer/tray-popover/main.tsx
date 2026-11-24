@@ -224,6 +224,7 @@ function App(): React.JSX.Element {
   const [chatReply, setChatReply] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshRef = useRef<() => Promise<void>>(async () => undefined);
 
   const notify = useCallback((kind: Message['kind'], text: string) => {
@@ -303,6 +304,7 @@ function App(): React.JSX.Element {
       offWindows();
       window.removeEventListener('keydown', onKey);
       if (messageTimer.current !== null) clearTimeout(messageTimer.current);
+      if (volumeTimer.current !== null) clearTimeout(volumeTimer.current);
     };
   }, [bridge, refresh]);
 
@@ -337,8 +339,11 @@ function App(): React.JSX.Element {
   const activeCharacter = characters.find((character) => character.id === activeCharacterId) ?? characters[0];
   const selectableCharacters = characters.filter((character) => !(character.packId ?? '').startsWith('crosspet-'));
   const bundledCharacters = selectableCharacters.filter((character) => character.packId !== undefined);
-  // 9 个随包角色优先占满快切条；素材缺失时回退到内置 + 自定义角色，绝不空着。
-  const visibleCharacters = (bundledCharacters.length > 0 ? bundledCharacters : selectableCharacters).slice(0, 9);
+  const customCharacters = selectableCharacters.filter((character) => !character.builtin && character.packId === undefined);
+  // 自定义角色置前 + 随包 9 角色；素材缺失时回退全部可选角色，确保创作中心新角色可见。
+  const visibleCharacters = bundledCharacters.length > 0
+    ? [...customCharacters, ...bundledCharacters.slice(0, 9)]
+    : selectableCharacters;
   const anyVisible = petWindows.some((window) => window.visible);
   const activeGame: GameId = drive.gameId ?? 'stardew';
   const gameLabel = GAME_LABELS[activeGame];
@@ -367,6 +372,7 @@ function App(): React.JSX.Element {
       if (result.ok) {
         setChatReply(result.reply ?? '已收到，我记下啦。');
         setChatText('');
+        void refreshRef.current();
       } else {
         notify('err', result.error ?? '发送失败');
       }
@@ -393,7 +399,6 @@ function App(): React.JSX.Element {
       return;
     }
     await runAction('drive', () => bridge.autodriveStart(activeGame), `自驾已启动：${gameLabel}`);
-    await refreshRef.current();
   };
 
   const clearObjective = async (): Promise<void> => {
@@ -446,9 +451,13 @@ function App(): React.JSX.Element {
 
   const changeVolume = (value: number): void => {
     setVoice((previous) => (previous === null ? previous : { ...previous, volume: value }));
-    void bridge.voiceConfigSet({ volume: value }).catch((error: unknown) => {
-      notify('err', error instanceof Error ? error.message : String(error));
-    });
+    if (volumeTimer.current !== null) clearTimeout(volumeTimer.current);
+    volumeTimer.current = setTimeout(() => {
+      volumeTimer.current = null;
+      void bridge.voiceConfigSet({ volume: value }).catch((error: unknown) => {
+        notify('err', error instanceof Error ? error.message : String(error));
+      });
+    }, 120);
   };
 
   const copyWebui = async (): Promise<void> => {

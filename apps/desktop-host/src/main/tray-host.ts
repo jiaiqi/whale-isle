@@ -19,6 +19,7 @@ import type {
   Point,
   Rectangle,
   Tray,
+  WebContents,
 } from 'electron';
 
 export interface PopoverSize {
@@ -180,6 +181,8 @@ export interface TrayHostOptions {
   isQuitting: () => boolean;
   onOpenDirector: () => void;
   onOpenBench: () => void;
+  /** 浮窗首次创建或重建后回调，供主进程把浮窗接入事件广播目标。 */
+  onPopoverCreated?: (webContents: WebContents) => void;
   /** 显示/暂藏全部桌宠（菜单文案由 petState 驱动）。 */
   onTogglePets: () => void;
   petState: () => { anyHidden: boolean };
@@ -192,6 +195,8 @@ export interface TrayHost {
   tray: Tray | null;
   showPopover(): void;
   hidePopover(): void;
+  /** 当前存活浮窗的 webContents（供主进程广播实时事件）。 */
+  popoverWebContents(): WebContents | null;
   /** 最近一次浮窗坐标（E2E/诊断只读）。 */
   lastBounds(): Rectangle | null;
   isPopoverVisible(): boolean;
@@ -206,6 +211,8 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
   const popoverSize = options.popoverSize ?? POPOVER_SIZE;
   const guard = createPopoverToggleGuard();
   let popover: BrowserWindow | null = null;
+  let popoverReady = false;
+  let pendingShow = false;
   let tray: Tray | null = null;
   let lastBounds: Rectangle | null = null;
   let lastIconDark: boolean | null = null;
@@ -237,6 +244,7 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
   };
 
   const createPopover = (): BrowserWindow => {
+    popoverReady = false;
     const win = new BrowserWindow({
       ...popoverSize,
       show: false,
@@ -260,6 +268,15 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
       },
     });
     win.setAlwaysOnTop(true, 'floating');
+    win.once('ready-to-show', () => {
+      if (popover !== win || win.isDestroyed()) return;
+      popoverReady = true;
+      if (pendingShow && !destroying && !options.isQuitting()) {
+        pendingShow = false;
+        win.show();
+        win.focus();
+      }
+    });
     win.loadFile(options.popoverHtml).catch((error: unknown) => {
       console.warn('[tray] 浮窗加载失败：', error);
     });
@@ -272,19 +289,24 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
     win.on('close', (event) => {
       if (destroying || options.isQuitting()) return;
       event.preventDefault();
+      pendingShow = false;
       win.hide();
       guard.markHidden(Date.now());
     });
     win.on('closed', () => {
-      if (popover === win) popover = null;
+      if (popover === win) {
+        popover = null;
+        popoverReady = false;
+        pendingShow = false;
+      }
     });
+    options.onPopoverCreated?.(win.webContents);
     return win;
   };
 
   const showPopover = (): void => {
     if (options.isQuitting()) return;
-    popover ??= createPopover();
-    if (popover.isDestroyed()) {
+    if (popover === null || popover.isDestroyed()) {
       popover = createPopover();
     }
     const trayBounds = tray?.getBounds() ?? { x: 0, y: 0, width: 0, height: 0 };
@@ -302,17 +324,24 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
     });
     lastBounds = bounds;
     popover.setBounds(bounds);
-    popover.show();
-    popover.focus();
+    if (popoverReady) {
+      pendingShow = false;
+      popover.show();
+      popover.focus();
+    } else {
+      pendingShow = true;
+    }
   };
 
   const hidePopover = (): void => {
+    pendingShow = false;
     if (popover === null || popover.isDestroyed() || !popover.isVisible()) return;
     popover.hide();
     guard.markHidden(Date.now());
   };
 
   if (!options.testMode) {
+    lastIconDark = nativeTheme.shouldUseDarkColors;
     tray = new Tray(iconForTheme());
     tray.setToolTip(options.appName);
     const onThemeUpdated = (): void => applyTrayIcon();
@@ -333,7 +362,8 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
     }
     tray.on('right-click', () => {
       const menu = Menu.buildFromTemplate([
-        { label: '打开中控台', click: () => options.onOpenDirector() },
+        { label: '打开中控台', click: () => { hidePopover(); options.onOpenDirector(); } },
+        { label: '打开桌宠验收台', click: () => { hidePopover(); options.onOpenBench(); } },
         { label: options.petState().anyHidden ? '显示全部桌宠' : '暂藏全部桌宠', click: () => options.onTogglePets() },
         { type: 'separator' },
         { label: `退出 ${options.appName}`, click: () => options.onQuit() },
@@ -348,16 +378,19 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
     },
     showPopover,
     hidePopover,
+    popoverWebContents: () => (popover !== null && !popover.isDestroyed() ? popover.webContents : null),
     lastBounds: () => lastBounds,
     isPopoverVisible: () => popover?.isVisible() === true,
     destroy(): void {
       destroying = true;
+      pendingShow = false;
       if (themeListener !== null) {
         nativeTheme.removeListener('updated', themeListener);
         themeListener = null;
       }
       if (popover !== null && !popover.isDestroyed()) popover.destroy();
       popover = null;
+      popoverReady = false;
       if (tray !== null) {
         tray.destroy();
         tray = null;

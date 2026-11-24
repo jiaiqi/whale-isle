@@ -269,4 +269,38 @@ describe('PetWindowManager 定向投递（T-M6-51）', () => {
     const payload = windows.get('default')?.sent.find((item) => item.channel === 'pet:bump')?.payload;
     expect(payload).toMatchObject({ agentId: '*', partner: 'x' });
   });
+
+  it('setHidden / hideAll / showAll 均触发 onWindowsChanged 并同步最新 visible 状态', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pet-window-manager-'));
+    dirs.push(dir);
+    const snapshots: Array<Array<{ agentId: string; visible: boolean }>> = [];
+    const manager = new PetWindowManager({
+      userDataDir: dir,
+      createWindow: (input) => new FakeWindow(input),
+      onWindowsChanged: (list) => {
+        snapshots.push(list.map((view) => ({ agentId: view.agentId, visible: view.visible })));
+      },
+    });
+    await manager.open('default', 'blue-whale-maid');
+    await manager.open('agent-2', 'blue-whale-maid');
+    snapshots.length = 0;
+
+    expect(manager.setHidden('agent-2', true)).toBe(true);
+    expect(snapshots.at(-1)).toEqual([
+      { agentId: 'default', visible: true },
+      { agentId: 'agent-2', visible: false },
+    ]);
+
+    manager.hideAll();
+    expect(snapshots.at(-1)).toEqual([
+      { agentId: 'default', visible: false },
+      { agentId: 'agent-2', visible: false },
+    ]);
+
+    manager.showAll();
+    expect(snapshots.at(-1)).toEqual([
+      { agentId: 'default', visible: true },
+      { agentId: 'agent-2', visible: true },
+    ]);
+  });
 });

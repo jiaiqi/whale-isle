@@ -225,66 +225,6 @@ export interface AutodriveEventView {
   agentId?: string;
 }
 
-export interface ImportProviderPreview {
-  id: string;
-  name: string;
-  protocol: 'openai' | 'anthropic';
-  baseUrl: string;
-  models: string[];
-  hasKey: boolean;
-  keyMask: string;
-  matchedBuiltin: boolean;
-}
-
-export interface ImportScanView {
-  ok: boolean;
-  error?: string;
-  source: 'magpie' | 'ccswitch' | 'file';
-  detectedPath: string;
-  items: ImportProviderPreview[];
-}
-
-export interface ImportedProviderMeta {
-  id: string;
-  name: string;
-  protocol: 'openai' | 'anthropic';
-  baseUrl: string;
-  isFullUrl: boolean;
-  models: string[];
-  matchedBuiltin: boolean;
-  action: 'create' | 'update' | 'skip';
-  keyMask: string;
-}
-
-export interface ImportApplyView {
-  ok: boolean;
-  error?: string;
-  items: ImportedProviderMeta[];
-}
-
-export interface BrainApplyView {
-  ok: boolean;
-  mode: 'rule' | 'llm';
-  llmReady: boolean;
-  providers: string[];
-  missingKeys: string[];
-  error?: string;
-}
-
-export interface HarnessPresetInfo {
-  id: string; label: string; command: string | null; authHint: string;
-}
-export interface HarnessStatusInfo {
-  presetId: string; label: string; running: boolean; sessions: string[];
-}
-export interface HarnessEventMsg {
-  presetId: string;
-  type: 'initialized' | 'session-started' | 'update' | 'permission' | 'turn-complete' | 'auth-required' | 'error' | 'exit';
-  sessionId?: string; block?: { type: string; text?: string };
-  requestId?: number; toolName?: string; input?: Record<string, unknown>;
-  message?: string; code?: number;
-}
-
 export interface DirectorBridge {
   saveProviderKey(providerId: string, plainKey: string): Promise<ProviderVaultResponse>;
   providerKeyMask(providerId: string): Promise<ProviderVaultResponse>;

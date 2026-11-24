@@ -250,7 +250,25 @@ function createDirectorWindow(): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(async () => {
+/** 同时向中控台与存活的托盘快捷浮窗广播 UI 实时更新。 */
+function sendToUiWindows(channel: string, payload?: unknown): void {
+  if (directorWindow !== null && !directorWindow.isDestroyed()) {
+    directorWindow.webContents.send(channel, payload);
+  }
+  const popover = trayHost?.popoverWebContents() ?? null;
+  if (popover !== null && !popover.isDestroyed()) {
+    popover.send(channel, payload);
+  }
+}
+
+// 托盘常驻必须启用单实例锁（E2E 多进程测试除外），避免 Windows 11 再次双击图标拉起双实例。
+const gotSingleInstanceLock = TEST_MODE ? true : app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  isQuitting = true;
+  app.quit();
+}
+
+if (gotSingleInstanceLock) app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   const dockIcon = nativeImage.createFromPath(brandAssetPath(BRAND_ASSETS.iconPng));
   if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon);
@@ -315,7 +333,7 @@ app.whenReady().then(async () => {
     // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
     petWindowManager?.patch('default', { characterId: next.id });
     petWindowManager?.sendAgent('default', 'pet:character-changed', { ...next });
-    if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:character-changed', next);
+    sendToUiWindows('pet:character-changed', next);
   }
 
   const characters = createCharacterRegistry({
@@ -388,7 +406,7 @@ app.whenReady().then(async () => {
       characterId: prefs.get().characterId,
     }),
     onWindowsChanged: (list) => {
-      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:window-list-changed', list);
+      sendToUiWindows('pet:window-list-changed', list);
     },
     // T-M6-48：两只桌宠撞在一起 → 双方 Q 弹互撞 + 互吐槽（真实窗口几何驱动）
     onCollision: ({ a, b }) => {
@@ -476,11 +494,17 @@ app.whenReady().then(async () => {
     summonEgg: () => petControl.summonEgg(),
   }).registerIpc();
 
-  // 桌宠右键入口 → 聚焦中控台并打开对应弹窗
-  const focusDirectorWith = (channel: string): { ok: boolean } => {
-    if (directorWindow && !directorWindow.isDestroyed()) {
+  // 桌宠右键 / 托盘浮窗入口 → 聚焦或重建中控台并打开对应弹窗
+  let showDirectorImpl: () => void = () => {
+    if (directorWindow !== null && !directorWindow.isDestroyed()) {
       directorWindow.show();
       directorWindow.focus();
+    }
+  };
+  const focusDirectorWith = (channel: string): { ok: boolean } => {
+    trayHost?.hidePopover();
+    showDirectorImpl();
+    if (directorWindow !== null && !directorWindow.isDestroyed()) {
       directorWindow.webContents.send(channel);
     }
     return { ok: true };
@@ -536,7 +560,7 @@ app.whenReady().then(async () => {
       if (view !== undefined) petWindowManager?.sendAgent(view.agentId, 'pet:crown', { on: true });
     },
     onUpdate: (status) => {
-      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('work-follow:update', status);
+      sendToUiWindows('work-follow:update', status);
     },
   });
   workFollowRef = workFollow;
@@ -853,9 +877,13 @@ app.whenReady().then(async () => {
     console.warn('[webui] 初始化失败（不影响主进程）:', error);
   }
   const wireTargets = () => {
-    const targets = [...petBrowserWindows.values(), directorWindow]
-      .filter((w): w is NonNullable<typeof w> => w !== null)
-      .map((w) => w.webContents);
+    const popoverWc = trayHost?.popoverWebContents() ?? null;
+    const targets = [
+      ...[...petBrowserWindows.values(), directorWindow]
+        .filter((w): w is NonNullable<typeof w> => w !== null && !w.isDestroyed())
+        .map((w) => w.webContents),
+      ...(popoverWc !== null && !popoverWc.isDestroyed() ? [popoverWc] : []),
+    ];
     autodrive.setTargets(targets);
     harness.setTargets(targets);
     plugins.setTargets(targets);
@@ -868,7 +896,7 @@ app.whenReady().then(async () => {
   stageWindow = petBrowserWindows.get('default') ?? null;
   wireTargets();
 
-  /** 中控台显示/重建（托盘菜单、浮窗按钮、Dock 激活共用）。 */
+  /** 中控台显示/重建（托盘菜单、浮窗按钮、Dock 激活、单实例唤起共用）。 */
   const showDirector = (): void => {
     if (directorWindow !== null && !directorWindow.isDestroyed()) {
       directorWindow.show();
@@ -878,6 +906,10 @@ app.whenReady().then(async () => {
     directorWindow = createDirectorWindow();
     wireTargets();
   };
+  showDirectorImpl = showDirector;
+  app.on('second-instance', () => {
+    showDirector();
+  });
 
   /** 真正退出：先停 agent 池、销毁托盘，再让 Electron 关闭所有窗口。 */
   const quitApp = (): void => {
@@ -893,6 +925,7 @@ app.whenReady().then(async () => {
   };
 
   ipcMain.handle('ui:open-director', () => {
+    trayHost?.hidePopover();
     showDirector();
     return { ok: true };
   });
@@ -963,10 +996,8 @@ app.whenReady().then(async () => {
       testMode: TEST_MODE,
       isQuitting: () => isQuitting,
       onOpenDirector: showDirector,
-      onOpenBench: () => {
-        showDirector();
-        directorWindow?.webContents.send('ui:open-bench');
-      },
+      onOpenBench: () => { focusDirectorWith('ui:open-bench'); },
+      onPopoverCreated: () => { wireTargets(); },
       onTogglePets: () => {
         if (petWindowManager?.anyHidden() === true) petWindowManager.showAll();
         else petWindowManager?.hideAll();
