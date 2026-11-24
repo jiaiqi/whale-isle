@@ -369,6 +369,31 @@ const RESCUE_TOOLS = new Set([
   'tidy_backpack', 'ship_items', 'store_items', 'donate_bundles', 'craft', 'place_item', 'trash_item', 'interact',
 ]);
 
+/**
+ * 环境级失败：换模型/重试都不会消失（缺工具/缺材料/地点不对）。
+ * 规则日程必须立刻绕开，否则「没鱼竿 → 规则日程又选 fish」会无限空转（2026-11-24 真机）。
+ */
+const ENV_FAIL_RE = /没有鱼竿|没有(?:能用的)?(?:镐|斧头|斧|锄头|锄|喷壶|工具)|需要先(?:拿到|装备|买)|材料不够|材料不足|这里没有箱子/;
+
+/** 生存类工具：失败一次仍应重试（体力见底/菜单挡住），不参与「连败当日跳过」 */
+const SURVIVAL_TOOLS: ReadonlySet<string> = new Set([
+  'eat', 'sleep', 'travel_to', 'dialogue', 'close_menu', 'skip_event', 'set_name', 'wait',
+]);
+
+/**
+ * 背包里是否有鱼竿（中文「鱼竿/钓竿」或英文 Rod 都认）。
+ * 返回 null 表示状态里没有背包段（未知，不阻断日程）；false 才表示「明确没有鱼竿」。
+ * 2026-11-24 真机：夏2日 Beach 没鱼竿仍反复 fish，靠这条前置检查在规则侧直接转采集。
+ */
+export function hasFishingRod(raw: string): boolean | null {
+  const bagStart = raw.indexOf('## 背包');
+  if (bagStart < 0) return null;
+  const rest = raw.slice(bagStart + 4);
+  const nextSection = rest.indexOf('\n## ');
+  const bag = nextSection < 0 ? rest : rest.slice(0, nextSection);
+  return /鱼竿|钓竿|Rod/i.test(bag);
+}
+
 /** 对话框/菜单优先处理表（BWF 语义：有界面时其他动作会被拒绝） */
 function handleMenu(state: GameStateSnapshot): PlannerDecision | null {
   const menu = state.menu;
@@ -407,8 +432,26 @@ export class RulePlanner implements Planner {
   /** 满包救援阶梯（T-M6-10 真机：tidy 无箱子必败，连续失败会空转） */
   private rescueTried = new Set<string>();
   private lastRescueFail = '';
+  /**
+   * 工具级失败记忆（2026-11-24 真机死循环修复）：所有工具（不只满包救援工具）的失败都要记账。
+   * LlmPlanner 的 repeated 护栏会把决策退回规则日程，规则若不知道 fish 刚失败就会继续 fish。
+   */
+  private readonly failStreak = new Map<string, number>();
+  /** 当天避开不再尝试的工具（环境级失败一次即避开，普通失败连续两次避开；成功一次解除） */
+  private readonly avoidTools = new Set<string>();
 
   observeReceipt(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void {
+    // T-M6-52：先记工具级失败——规则兜底也必须换做法，不能只记住满包救援工具。
+    // 生存类工具（吃饭/睡觉/赶路/界面）失败一次不代表该放弃（体力见底、菜单挡住都需要重试），
+    // 因此只对非生存类工具做「连败 ≥2 当日跳过」；生存类仍由各自分支的确定性兜底处理。
+    if (status === 'COMPLETED') {
+      this.failStreak.delete(tool);
+      this.avoidTools.delete(tool);
+    } else if ((status === 'FAILED' || status === 'ERROR' || status === 'TIMEOUT') && !SURVIVAL_TOOLS.has(tool)) {
+      const streak = (this.failStreak.get(tool) ?? 0) + 1;
+      this.failStreak.set(tool, streak);
+      if (streak >= 2 || ENV_FAIL_RE.test(summary)) this.avoidTools.add(tool);
+    }
     if (!RESCUE_TOOLS.has(tool)) return;
     if (status === 'COMPLETED') {
       this.rescueTried.clear();
@@ -430,6 +473,8 @@ export class RulePlanner implements Planner {
       this.phase = 'morning-mail';
       this.rescueTried.clear();
       this.lastRescueFail = '';
+      this.failStreak.clear();
+      this.avoidTools.clear();
     }
     void dayKey;
 
@@ -541,6 +586,11 @@ export class RulePlanner implements Planner {
           this.phase = 'forage';
           return this.forage(state);
         }
+        // 没鱼竿 / fish 已连败冷却：重试 fish 毫无意义，转采集（规则兜底的安全替代，不空转）
+        if (this.fishingUnavailable(state)) {
+          this.phase = 'forage';
+          return this.forage(state);
+        }
         return { kind: 'act', tool: 'fish', args: { casts: 5 }, intent: '钓鱼赚米！这可是正经的生产活动（傲娇）' };
       case 'forage':
         // 18:30 后的睡觉切换由上方全局规则统一处理，这里只做傍晚采集
@@ -548,9 +598,16 @@ export class RulePlanner implements Planner {
     }
   }
 
+  /** 今天还能不能钓鱼：明确没鱼竿（背包段存在且无鱼竿）或 fish 已在失败冷却 → 不能 */
+  private fishingUnavailable(state: GameStateSnapshot): boolean {
+    return this.avoidTools.has('fish') || hasFishingRod(state.raw) === false;
+  }
+
   private farmWork(state: GameStateSnapshot): PlannerDecision {
     if (state.clockMinutes >= 11 * 60) {
       this.phase = 'fishing';
+      // 今天钓鱼已不可行（没鱼竿）：直接转采集，别白跑海滩
+      if (this.fishingUnavailable(state)) return this.forage(state);
       return { kind: 'act', tool: 'travel_to', args: { location: 'Beach' }, intent: '上午农活干完，去海滩钓鱼！' };
     }
     if (!isRaining(state) && /剩 \d+ 株没浇|需要浇水/.test(state.raw)) {
@@ -565,12 +622,23 @@ export class RulePlanner implements Planner {
     if (state.location !== 'Farm' && state.location !== 'FarmHouse') {
       return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场继续干活' };
     }
-    // 没有明确农活 → 直接进入钓鱼阶段
+    // 没有明确农活 → 直接进入钓鱼阶段（没鱼竿则转采集）
     this.phase = 'fishing';
+    if (this.fishingUnavailable(state)) return this.forage(state);
     return { kind: 'act', tool: 'travel_to', args: { location: 'Beach' }, intent: '农活告一段落，海滩钓鱼去～' };
   }
 
   private forage(state: GameStateSnapshot): PlannerDecision {
+    // 采集也失败（背包满/地点不对）：回农场干徒手活；clear_area 也失败就明确求助，绝不空转
+    if (this.avoidTools.has('forage')) {
+      if (state.location !== 'Farm' && state.location !== 'FarmHouse') {
+        return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '采集也不顺利，先回农场看看有什么能干' };
+      }
+      if (!this.avoidTools.has('clear_area')) {
+        return { kind: 'act', tool: 'clear_area', args: {}, intent: '钓鱼采集都干不了，先把农场清一清' };
+      }
+      return { kind: 'wait', seconds: 60, reason: '钓鱼/采集/清地都失败了——需要主人看看是不是缺工具（鱼竿/斧头）或背包满了' };
+    }
     if (state.location !== 'Town') {
       return { kind: 'act', tool: 'travel_to', args: { location: 'Town' }, intent: '傍晚去镇上翻垃圾桶（侦察！才不是摸鱼）' };
     }

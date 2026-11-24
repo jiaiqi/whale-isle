@@ -19,7 +19,8 @@ const STATE_OK = `【你的长期笔记】x
 地点：Farm（泡泡湾农场），室外
 邮箱里有 7 封未读信件
 ## 背包
-5: 防风草种子 x15`;
+5: 防风草种子 x15
+6: 竹鱼竿（手持）`;
 
 function okClient(text: string, delayMs = 0): BwfMcpClient {
   const response = { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text }] }, isError: false }) } as unknown as Response;
@@ -965,5 +966,106 @@ describe('T-M6-10 真机回归：BWF 自暂停与冻结恢复', () => {
     runner.stop();
     expect(events.some((event) => event.type === 'watchdog' && event.kind === 'stuck' && event.detail.includes('交还 planner'))).toBe(true);
     expect(events.some((event) => event.type === 'decision')).toBe(true);
+  });
+});
+
+describe('全局防刷屏熔断（2026-11-24 真机没鱼竿 fish 循环）', () => {
+  it('相同失败签名 + 时钟未推进连续 3 次 → watchdog 暂停 30s，不再无限刷屏', async () => {
+    const events: AutodriveEvent[] = [];
+    const sleeps: number[] = [];
+    const runner = new AutodriveRunner((e) => { if (events.length < 200) events.push(e); }, {
+      sleep: async (ms) => { sleeps.push(ms); },
+      endpoint: 'http://mock/mcp',
+      maxCycles: 4,
+    });
+    runner.setPlanner({
+      name: 'always-fish',
+      decide: async () => ({ kind: 'act', tool: 'fish', args: {}, intent: '钓鱼' }),
+    });
+    const impl = async (_url: unknown, init?: { body?: string }) => {
+      const body = JSON.parse(init?.body ?? '{}') as { params: { name: string } };
+      const tool = body.params.name;
+      const text = tool === 'get_state' ? STATE_OK : '失败：背包里没有鱼竿';
+      return {
+        text: async () => JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { content: [{ type: 'text', text }], isError: tool !== 'get_state' },
+        }),
+      } as Response;
+    };
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    await runner.start();
+    await new Promise((r) => setTimeout(r, 120));
+    const fuse = events.filter((e) => e.type === 'watchdog' && e.kind === 'stuck' && e.detail.includes('同一动作连续失败'));
+    expect(fuse.length).toBeGreaterThanOrEqual(1);
+    expect(sleeps).toContain(30_000);
+  });
+});
+
+describe('submitObjective 单机目标注入（2026-11-24）', () => {
+  it('runner.submitObjective → 下一轮 planner.setObjective 收到目标', async () => {
+    const objectives: Array<string | null> = [];
+    const runner = new AutodriveRunner(() => undefined, {
+      sleep: async () => undefined,
+      endpoint: 'http://mock/mcp',
+      maxCycles: 1,
+    });
+    runner.setPlanner({
+      name: 'capture',
+      decide: async () => ({ kind: 'act', tool: 'wait', args: {}, intent: '等' }),
+      setObjective: (objective) => { objectives.push(objective); },
+    });
+    const impl = async (_url: unknown, init?: { body?: string }) => {
+      const body = JSON.parse(init?.body ?? '{}') as { params: { name: string } };
+      const text = body.params.name === 'get_state' ? STATE_OK : 'ok';
+      return {
+        text: async () => JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { content: [{ type: 'text', text }], isError: false },
+        }),
+      } as Response;
+    };
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.submitObjective('去箱子找鱼竿或在鱼店买一根');
+    await runner.start();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(objectives).toContain('去箱子找鱼竿或在鱼店买一根');
+  });
+});
+
+
+describe('clearObjective 清空旧目标（T-M6-54）', () => {
+  it('立即清 planner 当前目标，且未消费的 pending 不再注入', async () => {
+    const objectives: Array<string | null> = [];
+    const runner = new AutodriveRunner(() => undefined, {
+      sleep: async () => undefined,
+      endpoint: 'http://mock/mcp',
+      maxCycles: 1,
+    });
+    runner.setPlanner({
+      name: 'capture',
+      decide: async () => ({ kind: 'act', tool: 'wait', args: {}, intent: '等' }),
+      setObjective: (objective) => { objectives.push(objective); },
+    });
+    runner.submitObjective('去箱子找鱼竿');
+    runner.clearObjective();
+    expect(objectives).toEqual([null]);
+    const impl = async (_url: unknown, init?: { body?: string }) => {
+      const body = JSON.parse(init?.body ?? '{}') as { params: { name: string } };
+      const text = body.params.name === 'get_state' ? STATE_OK : 'ok';
+      return {
+        text: async () => JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { content: [{ type: 'text', text }], isError: false },
+        }),
+      } as Response;
+    };
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    await runner.start();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(objectives).not.toContain('去箱子找鱼竿');
   });
 });

@@ -177,3 +177,115 @@ describe('RulePlanner 满包救援阶梯（真机回归 T-M6-10）', () => {
     }
   });
 });
+
+describe('工具级失败记忆（2026-11-24 真机「没鱼竿 → fish 无限失败」死循环修复）', () => {
+  const BEACH_NOON = `## 基本状态
+时间：第1年夏2日 11:10（Mon），天气：晴，明天天气：晴
+金钱：19519g  体力：270/270  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：Beach（沙滩），室外
+## 背包（序号: 物品）
+0: 斧头（手持）
+1: 竹鱼竿（手持）
+背包空位：20 个（共 24 格）
+`;
+
+  it('环境级失败（没鱼竿）一次即绕开 fish：规则日程转采集，不再重复空转', async () => {
+    const planner = new RulePlanner();
+    const state = parseGameState(BEACH_NOON);
+    const goBeach = await planner.decide(state); // 11:00 后农活收尾 → 去海滩
+    expect(goBeach.kind === 'act' && goBeach.tool).toBe('travel_to');
+    const fish = await planner.decide(state); // 到海滩进入钓鱼阶段
+    expect(fish.kind === 'act' && fish.tool).toBe('fish');
+    planner.observeReceipt('fish', 'FAILED', '失败：背包里没有鱼竿（第二天早上上海边找威利 Willy 会送你一根，或者在鱼店 FishShop 买）');
+    const next = await planner.decide(state);
+    expect(next.kind === 'act' && next.tool).not.toBe('fish');
+    expect(next.kind === 'act' && next.tool).toBe('travel_to'); // 转采集：先去镇上
+  });
+
+  it('普通失败连续两次才绕开 fish（一次失败仍按日程继续）', async () => {
+    const planner = new RulePlanner();
+    const state = parseGameState(BEACH_NOON);
+    await planner.decide(state); // 11:00 后农活收尾 → 去海滩，phase=fishing
+    planner.observeReceipt('fish', 'FAILED', '失败：鱼跑掉了');
+    const stillFish = await planner.decide(state);
+    expect(stillFish.kind === 'act' && stillFish.tool).toBe('fish');
+    planner.observeReceipt('fish', 'FAILED', '失败：鱼又跑掉了');
+    const avoided = await planner.decide(state);
+    expect(avoided.kind === 'act' && avoided.tool).not.toBe('fish');
+  });
+});
+
+describe('采集/清地兜底不空转（失败记忆链）', () => {
+  const BEACH_NOON = `## 基本状态
+时间：第1年夏2日 11:10（Mon），天气：晴，明天天气：晴
+金钱：19519g  体力：270/270  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：Beach（沙滩），室外
+## 背包（序号: 物品）
+0: 斧头（手持）
+1: 竹鱼竿（手持）
+背包空位：20 个（共 24 格）
+`;
+
+  it('采集也连败 → 回农场清地；清地也连败 → 明确求助（wait 不空转）', async () => {
+    const planner = new RulePlanner();
+    const beach = parseGameState(BEACH_NOON);
+    await planner.decide(beach); // 热身：首轮 decide 会触发跨日重置，先让它过去
+    planner.observeReceipt('fish', 'FAILED', '失败：背包里没有鱼竿');
+    planner.observeReceipt('forage', 'FAILED', '失败：这里没有可以采集的东西');
+    planner.observeReceipt('forage', 'FAILED', '失败：这里没有可以采集的东西');
+    const toFarm = await planner.decide(beach);
+    expect(toFarm.kind === 'act' && toFarm.tool).toBe('travel_to');
+    expect(toFarm.kind === 'act' && toFarm.args).toMatchObject({ location: 'Farm' });
+    const atFarm = parseGameState(BEACH_NOON.replace('地点：Beach（沙滩），室外', '地点：Farm（泡泡湾农场），室外'));
+    const clear = await planner.decide(atFarm);
+    expect(clear.kind === 'act' && clear.tool).toBe('clear_area');
+    planner.observeReceipt('clear_area', 'FAILED', '失败：这里没有可以清理的东西');
+    planner.observeReceipt('clear_area', 'FAILED', '失败：这里没有可以清理的东西');
+    const giveUp = await planner.decide(atFarm);
+    expect(giveUp.kind).toBe('wait');
+  });
+});
+
+describe('生存类工具不参与当日避让', () => {
+  it('sleep 连续失败仍按作息重试（不被 failStreak 跳过）', async () => {
+    const planner = new RulePlanner();
+    const late = parseGameState(`## 基本状态
+时间：第1年夏2日 23:10（Mon），天气：晴
+金钱：100g  体力：100/100  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：FarmHouse（农舍），室内
+## 背包（序号: 物品）
+0: 斧头（手持）
+背包空位：5 个（共 12 格）
+`);
+    planner.observeReceipt('sleep', 'FAILED', '失败：还没到睡觉时间');
+    planner.observeReceipt('sleep', 'FAILED', '失败：还没到睡觉时间');
+    const d = await planner.decide(late);
+    expect(d.kind === 'act' && d.tool).toBe('sleep');
+  });
+});
+
+describe('hasFishingRod 未知态不阻断日程', () => {
+  it('状态里没有背包段（null）→ 规则照常钓鱼，不误判为没鱼竿', async () => {
+    const planner = new RulePlanner();
+    const noBag = parseGameState(`## 基本状态
+时间：第1年夏2日 11:10（Mon），天气：晴
+金钱：100g  体力：100/100  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：Beach（沙滩），室外
+`);
+    await planner.decide(noBag); // 农活收尾 → 去海滩
+    const d = await planner.decide(noBag);
+    expect(d.kind === 'act' && d.tool).toBe('fish');
+  });
+});

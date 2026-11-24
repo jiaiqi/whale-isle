@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDirectiveSystemPrompt,
   buildDirectiveUserPrompt,
+  isCancelDirective,
   parseDirectiveResponse,
   resolveKeywordDirective,
   STARDEW_DIRECTIVE_PROFILE,
@@ -84,7 +85,49 @@ describe('DirectiveProfile（M7 多游戏指令档案）', () => {
     expect(buildDirectiveSystemPrompt(fakeProfile)).toContain('《泰拉瑞亚》');
     expect(buildDirectiveSystemPrompt(fakeProfile)).toContain('mine {"target":"copper|stone"}');
     expect(buildDirectiveSystemPrompt()).toContain('《星露谷物语》');
-    expect(parseDirectiveResponse('{"tool":"mine","args":{"target":"copper"},"intent":"挖"}', fakeProfile)?.tool).toBe('mine');
+    const parsed = parseDirectiveResponse('{"tool":"mine","args":{"target":"copper"},"intent":"挖"}', fakeProfile);
+    expect(parsed?.kind === 'act' ? parsed.tool : '').toBe('mine');
     expect(parseDirectiveResponse('{"tool":"fish","args":{},"intent":"钓鱼"}', fakeProfile)).toBeNull();
+  });
+});
+
+describe('多步目标解析（2026-11-24 真机「去找鱼竿」只回复不执行）', () => {
+  it('「去找鱼竿」→ objective + 首步 list_chests（不再静默 null）', () => {
+    const order = parseDirectiveResponse(
+      '{"tool":"","objective":"找到或买一根鱼竿","firstTool":"list_chests","firstArgs":{},"intent":"去箱子找鱼竿"}',
+    );
+    expect(order).toMatchObject({ kind: 'objective', objective: '找到或买一根鱼竿', firstTool: 'list_chests' });
+    expect(order?.kind === 'objective' ? order.firstArgs : undefined).toEqual({});
+  });
+
+  it('objective 缺 firstTool 也可接单；firstTool 越权则丢弃但保留目标', () => {
+    const plain = parseDirectiveResponse('{"tool":"","objective":"攒钱买鸡舍","intent":"攒钱"}');
+    expect(plain).toMatchObject({ kind: 'objective', objective: '攒钱买鸡舍' });
+    expect(plain?.kind === 'objective' ? plain.firstTool : 'x').toBeUndefined();
+    const bad = parseDirectiveResponse('{"tool":"","objective":"买夏季种子","firstTool":"teleport","firstArgs":{}}');
+    expect(bad).toMatchObject({ kind: 'objective', objective: '买夏季种子' });
+    expect(bad?.kind === 'objective' ? bad.firstTool : 'x').toBeUndefined();
+  });
+
+  it('关键词层不接「去找鱼竿」，交给 LLM 多步目标；toolDoc 含 list_chests 与 FishShop', () => {
+    expect(resolveKeywordDirective('去找鱼竿')).toBeNull();
+    expect(buildDirectiveSystemPrompt()).toContain('list_chests');
+    expect(buildDirectiveSystemPrompt()).toContain('FishShop');
+  });
+
+  it('空 tool 且空 objective → null（纯闲聊不动手）', () => {
+    expect(parseDirectiveResponse('{"tool":"","args":{},"intent":""}')).toBeNull();
+  });
+});
+
+
+describe('取消多步目标识别（T-M6-54）', () => {
+  it('短路取消语命中；普通聊天/疑问不误判', () => {
+    for (const text of ['算了', '算了，别找了', '取消目标', '取消任务', '不用了', '停止目标', '别做了！', '不找了']) {
+      expect(isCancelDirective(text), text).toBe(true);
+    }
+    for (const text of ['算了吧，今天天气不错', '取消订单要花钱吗', '我在想昨天的事', '继续找鱼竿', '不用鱼竿也能钓吗？']) {
+      expect(isCancelDirective(text), text).toBe(false);
+    }
   });
 });

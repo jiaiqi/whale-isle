@@ -32,10 +32,11 @@ import { dayKeyOf, type MemoryHost } from './memory-host';
 import {
   buildDirectiveSystemPrompt,
   buildDirectiveUserPrompt,
+  isCancelDirective,
   parseDirectiveResponse,
   resolveKeywordDirective,
   STARDEW_DIRECTIVE_PROFILE,
-  type ChatDirective,
+  type ChatOrder,
   type DirectiveProfile,
 } from './chat-directive';
 import type { VoiceHost, VoiceScene } from './voice-host';
@@ -205,6 +206,8 @@ export function createAutodriveHost(
   let recentReceipts: string[] = [];
   /** 主人刚下的单（T-M6-53）：执行失败要把原因回灌到聊天/气泡，避免「只回复不办事」的感知 */
   let pendingChatOrder: { tool: string; intent: string } | null = null;
+  /** 当前生效的多步目标：新单步指令/「算了」/切换游戏时清空，防止旧目标继续驱动 */
+  let activeObjective: string | null = null;
   let lastGameClock = '';
   let eventSeq = 0;
   // T-M6-27（多游戏/多端点隔离）：会话代次——切换游戏或重建 runner 时递增；
@@ -346,50 +349,68 @@ export function createAutodriveHost(
     if (!gateway) return { ok: false, error: '主脑未接通（供应商 key 未配置）' };
     // ── T-M6-17：指令先行（串行）——先解析接不接单，再让回话「说到做到」──
     // 旧实现 void tryChatDirective 并行互不知情：回话可能否认自己要做的动作；自驾没开时更是只回复不动手
-    let order: ChatDirective | null = null;
+    let order: ChatOrder | null = null;
     let gameOffline = false;
     let directiveError: string | null = null;
-    try {
-      const keywordHit = resolveKeywordDirective(text, directiveProfile);
-      if (keywordHit !== null) {
-        order = keywordHit;
-      } else {
-        // LLM 状态感知解析：拉一份当前游戏状态给它填参（游戏没开 → 如实标记，绝不假装接单）
-        let stateRaw: string | null = null;
-        try {
-          const stateRes = await runner.client.callTool('get_state', {}, { timeoutMs: 15_000 });
-          stateRaw = stateRes.kind === 'ok' ? stateRes.text : null;
-        } catch {
-          stateRaw = null;
-        }
-        if (stateRaw === null) {
-          gameOffline = true;
+    // 取消多步目标：只有确实有活跃目标时才消费「算了/取消目标」，避免把普通闲聊误当指令
+    let cancelledObjective: string | null = null;
+    if (activeObjective !== null && isCancelDirective(text)) {
+      cancelledObjective = activeObjective;
+      activeObjective = null;
+      pendingChatOrder = null;
+      runner.clearObjective();
+      broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消多步目标：${cancelledObjective}` } as AutodriveEvent);
+    }
+    if (cancelledObjective === null) {
+      try {
+        const keywordHit = resolveKeywordDirective(text, directiveProfile);
+        if (keywordHit !== null) {
+          order = keywordHit;
         } else {
-          const r = await gateway.chat(PLANNER_SLOTS[gameId], [
-            { role: 'system', content: buildDirectiveSystemPrompt(directiveProfile, shortNameOf(characterNow())) },
-            { role: 'user', content: buildDirectiveUserPrompt(text, { raw: stateRaw }) },
-          ], { maxTokens: 200 });
-          const parsed = parseDirectiveResponse(r.content, directiveProfile);
-          if (parsed !== null) order = { ...parsed, intent: `主人指令：${parsed.intent}` };
+          // LLM 状态感知解析：拉一份当前游戏状态给它填参（游戏没开 → 如实标记，绝不假装接单）
+          let stateRaw: string | null = null;
+          try {
+            const stateRes = await runner.client.callTool('get_state', {}, { timeoutMs: 15_000 });
+            stateRaw = stateRes.kind === 'ok' ? stateRes.text : null;
+          } catch {
+            stateRaw = null;
+          }
+          if (stateRaw === null) {
+            gameOffline = true;
+          } else {
+            const r = await gateway.chat(PLANNER_SLOTS[gameId], [
+              { role: 'system', content: buildDirectiveSystemPrompt(directiveProfile, shortNameOf(characterNow())) },
+              { role: 'user', content: buildDirectiveUserPrompt(text, { raw: stateRaw }) },
+            ], { maxTokens: 200 });
+            const parsed = parseDirectiveResponse(r.content, directiveProfile);
+            if (parsed !== null) order = { ...parsed, intent: `主人指令：${parsed.intent}` };
+          }
         }
+        if (order !== null) {
+          const label = order.kind === 'act' ? `${order.tool} ${JSON.stringify(order.args)}` : `目标「${order.objective}」首步 ${order.firstTool ?? '由大脑决定'}`;
+          console.log('[chat-directive] 接单 →', label, `(${order.source})`);
+        }
+      } catch (error) {
+        // 解析失败不能静默（2026-11-24 用户反馈「只回复不办事」）：记录原因，回话时如实说明，事件流可见
+        directiveError = error instanceof Error ? error.message : String(error);
+        console.error('[chat-directive] 解析失败（未接单）：', directiveError);
       }
-      if (order !== null) console.log('[chat-directive] 接单 →', order.tool, JSON.stringify(order.args), `(${order.source})`);
-    } catch (error) {
-      // 解析失败不能静默（2026-11-24 用户反馈「只回复不办事」）：记录原因，回话时如实说明，事件流可见
-      directiveError = error instanceof Error ? error.message : String(error);
-      console.error('[chat-directive] 解析失败（未接单）：', directiveError);
     }
     try {
       // T-M5-04：记忆增强——「你昨天做了什么」类问句检索图谱注入 system
       const memoryContext = memoryHost?.contextFor(text) ?? '';
       // T-M6-17 回话 ack：她嘴里说的必须和她马上要做的一致（接单/游戏没开两种情形都如实）
-      const ackHint = order !== null
-        ? `\n\n【你刚刚接下单子并马上要在游戏里执行：${order.tool}（${order.intent.replace('主人指令：', '')}）。回话要自然承认这件事、傲娇地领任务，绝不能只嘴上说说或否认。】`
-        : gameOffline
+      const ackHint = cancelledObjective !== null
+        ? `\n\n【主人刚取消了多步目标「${cancelledObjective}」：回话要自然承认已经停下，不要再声称正在继续做。】`
+        : order === null
+        ? (gameOffline
           ? '\n\n【游戏现在没有开：如果主人的话是想让你在游戏里做事，如实撒娇说等开游戏再办，别假装去做。】'
           : directiveError !== null
             ? `\n\n【指令解析没成功（${directiveError}）：如果主人是在给你下单，如实说没听清或没连上，别假装接单；纯闲聊照常回。】`
-            : '';
+            : '')
+        : order.kind === 'act'
+          ? `\n\n【你刚刚接下单子并马上要在游戏里执行：${order.tool}（${order.intent.replace('主人指令：', '')}）。回话要自然承认这件事、傲娇地领任务，绝不能只嘴上说说或否认。】`
+          : `\n\n【你刚刚接下主人的多步目标：「${order.objective}」，会持续去做直到完成。回话要承认这件事并说出第一步打算做什么（${order.firstTool ?? '自己决定'}），绝不能只嘴上说说或否认。】`;
       const base = memoryContext === '' ? personaSystemPrompt() : `${personaSystemPrompt()}
 
 ${memoryContext}
@@ -406,8 +427,13 @@ ${ackHint}`;
       if (replyVisible !== '') speak({ text: replyVisible, scene: 'normal' });
       // ── T-M6-17 接单下发：自驾没开就自动拉起，绝不「只回复不动手」──
       if (order !== null) {
-        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `${order.tool}｜${order.intent}` } as AutodriveEvent);
-        pendingChatOrder = { tool: order.tool, intent: order.intent };
+        const orderLabel = order.kind === 'act' ? order.tool : `多步目标：${order.objective}`;
+        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `${orderLabel}｜${order.intent}` } as AutodriveEvent);
+        // 失败回灌只跟踪真实工具动作（多步目标的首步；纯目标由 planner 自己换方案）
+        pendingChatOrder = {
+          tool: order.kind === 'act' ? order.tool : (order.firstTool ?? ''),
+          intent: order.intent,
+        };
         if (!runner.isRunning()) {
           try {
             await runner.start();
@@ -417,7 +443,24 @@ ${ackHint}`;
             return { ok: true, reply: replyVisible };
           }
         }
-        runner.submitDirective(order.tool, order.args, order.intent);
+        if (order.kind === 'act') {
+          // 新的单步原子指令意味着旧多步目标作废：立即清空，别让「找鱼竿」继续驱动
+          if (activeObjective !== null) {
+            const previous = activeObjective;
+            activeObjective = null;
+            runner.clearObjective();
+            broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `收到新的单步指令，已结束旧目标：${previous}` } as AutodriveEvent);
+          }
+          runner.submitDirective(order.tool, order.args, order.intent);
+        } else {
+          // 多步目标：注入 planner 每轮 user prompt（单机 objective 不再被 teamContext 短路），
+          // 有首步则立刻插队执行，之后由大脑持续朝目标推进。
+          activeObjective = order.objective;
+          runner.submitObjective(order.objective, order.intent);
+          if (order.firstTool !== undefined) {
+            runner.submitDirective(order.firstTool, order.firstArgs ?? {}, order.intent);
+          }
+        }
       } else if (directiveError !== null) {
         broadcastCurrent({ type: 'watchdog', kind: 'heartbeat', detail: `指令解析失败（未接单）：${directiveError}` } as AutodriveEvent);
       }

@@ -4,7 +4,7 @@
  * chat 全注入 mock（零网络）。真机病灶：同一冻结分钟 dialogue×191 / place_item×96 / donate_bundles×29。
  */
 import { describe, expect, it } from 'vitest';
-import { extractDecisionJson, festivalWindowOf, LlmPlanner, LLM_TOOL_WHITELIST, pickGuideContext, pickPrematureReservedEdible, pickShippableItem } from './llm-planner';
+import { extractDecisionJson, festivalWindowOf, LlmPlanner, LLM_TOOL_WHITELIST, MAX_OBJECTIVE_ROUNDS, pickGuideContext, pickPrematureReservedEdible, pickShippableItem } from './llm-planner';
 import { countWood, hasChestItem, isRaining, parseGameState, pickFurnitureToPlace, RulePlanner, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `时间：第1年春16日 07:30（Tue），天气：晴
@@ -86,7 +86,7 @@ describe('LLM Planner adapter seam', () => {
       fallbackPlanner: { name: 'dst-rule', decide: async () => ({ kind: 'act', tool: 'gather', args: {}, intent: 'DST 兜底' }) },
       chat: async () => { retries++; return { content: '{"tool":"fish","args":{}}' }; },
     });
-    expect(await invalid.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: 'DST 兜底' });
+    expect(await invalid.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: '规则兜底：DST 兜底' });
     expect(retries).toBe(2);
     expect(invalid.asks).toBe(1);
   });
@@ -105,7 +105,10 @@ describe('LLM Planner adapter seam', () => {
     await planner.decide(state());
     who = '小克';
     await planner.decide(state());
-    expect(systems).toEqual(['你是蓝蓝，正在替主人游玩《泰拉瑞亚》。', '你是小克，正在替主人游玩《泰拉瑞亚》。']);
+    expect(systems).toEqual([
+      '你是蓝蓝，正在替主人游玩《泰拉瑞亚》。',
+      '你是小克，正在替主人游玩《泰拉瑞亚》。',
+    ]);
   });
 
   it('retries adapter gateway errors and then falls back to its rule planner', async () => {
@@ -119,7 +122,7 @@ describe('LLM Planner adapter seam', () => {
         throw new Error('gateway offline');
       },
     });
-    expect(await planner.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: '离线规则' });
+    expect(await planner.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: '规则兜底：离线规则' });
     expect(slots).toEqual(['STARDEW_GAME_PLANNER', 'STARDEW_GAME_PLANNER']);
   });
 
@@ -852,14 +855,13 @@ describe('LlmPlanner 决策链', () => {
       'FAILED store_items: 失败：这里没有箱子',
     ];
     // 大脑脚本（救援问询与正常流程共用同一个 chat）：无损捐赠先试 → 查缺料 → 再捐 →
-    // 可再生牺牲（吃预留鱼）→ 砍树攒木 → craft —— 全部由大脑自选，护栏只做白名单/冷却/重复防护
-    // 注意：craft 一步由 421 确定性分支直接下发（wood≥50+有空位不烧 token），不走 chat 脚本
+    // 可再生牺牲（吃预留鱼）→ 摆箱后回到正常日程。
+    // 注意：clear_area 砍树与 craft/place 由确定性分支直接下发（不烧 token），脚本不占位。
     const brainScript = [
       '{"tool":"donate_bundles","args":{},"intent":"先试试无损的：把预留材料捐了"}',
       '{"tool":"bundle_info","args":{},"intent":"捐失败了，查查缺什么"}',
       '{"tool":"donate_bundles","args":{},"intent":"再试一次捐"}',
       '{"tool":"eat","args":{"item":"沙丁鱼","force":true},"intent":"捐赠无门，吃条预留鱼腾格（回头再钓）"}',
-      '{"tool":"clear_area","args":{"include_trees":true},"intent":"去农场砍树攒木材，凑 50 造箱"}',
       '{"tool":"fish","args":{},"intent":"箱子摆好了，继续钓鱼"}',
     ];
     let call = 0;
@@ -1024,7 +1026,7 @@ describe('LlmPlanner 决策链', () => {
     expect(d.kind === 'act' && d.tool).toBe('store_items');
   });
 
-  it('同一工具连续两次失败（非背包）→ 换规则日程，不重复死磕', async () => {
+  it('同一工具连续两次失败（非背包）→ 先问大脑换做法，护栏拒绝重复后回落规则日程', async () => {
     let asked = 0;
     const planner = new LlmPlanner({
       chat: async () => { asked++; return { content: '{"tool":"fish","args":{}}' }; },
@@ -1032,7 +1034,8 @@ describe('LlmPlanner 决策链', () => {
     });
     const d = await planner.decide(state());
     expect(d.kind === 'act' && d.tool).not.toBe('fish');
-    expect(asked).toBe(0);
+    // 连续失败不再静默回落规则：先问一次大脑（两次输出都被「禁止重复 fish」护栏拒绝，再走规则兜底）
+    expect(asked).toBe(2);
   });
 });
 
@@ -1496,5 +1499,176 @@ describe('T-M6-39 团队黑板动态注入', () => {
       chat: async () => ({ content: '{"tool":"read_mail","args":{},"intent":"读信"}' }),
     });
     expect(await empty.decide(state())).toMatchObject({ kind: 'act', tool: 'read_mail' });
+  });
+});
+
+describe('连续失败换做法（2026-11-24 真机「没鱼竿 → fish 无限失败」死循环修复）', () => {
+  const BEACH_NOON = `## 基本状态
+时间：第1年夏2日 11:10（Mon），天气：晴，明天天气：晴
+金钱：19519g  体力：270/270  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：Beach（沙滩），室外
+## 背包（序号: 物品）
+0: 斧头（手持）
+1: 竹鱼竿（手持）
+背包空位：20 个（共 24 格）
+`;
+
+  it('连续 FAILED fish → 问大脑换做法：拒绝重复 fish 后接受替代动作', async () => {
+    const systems: string[] = [];
+    const planner = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        systems.push(messages[1]?.content ?? '');
+        return {
+          content: systems.length === 1
+            ? '{"tool":"fish","args":{}}'
+            : '{"tool":"forage","args":{},"intent":"没鱼竿，先去采集"}',
+        };
+      },
+      recentReceipts: [
+        'FAILED fish: 失败：背包里没有鱼竿（第二天早上上海边找威利 Willy 会送你一根，或者在鱼店 FishShop 买）',
+        'FAILED fish: 失败：背包里没有鱼竿',
+      ],
+    });
+    const decision = await planner.decide(parseGameState(BEACH_NOON));
+    expect(decision.kind === 'act' && decision.tool).toBe('forage');
+    expect(systems).toHaveLength(2); // 第一次坚持 fish 被护栏拒绝，第二次换做法
+    expect(systems[0]).toContain('已失败到冷却');
+  });
+
+  it('observeReceipt 转发给规则兜底：没鱼竿后规则日程也不再选 fish', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => { throw new Error('brain offline'); },
+      recentReceipts: [],
+    });
+    const beach = parseGameState(BEACH_NOON);
+    const first = await planner.decide(beach); // 规则：农活收尾 → 去海滩
+    expect(first.kind === 'act' && first.tool).toBe('travel_to');
+    const second = await planner.decide(beach); // 规则：钓鱼阶段 → fish
+    expect(second.kind === 'act' && second.tool).toBe('fish');
+    planner.observeReceipt('fish', 'FAILED', '失败：背包里没有鱼竿');
+    const third = await planner.decide(beach); // 规则已学到失败 → 转采集
+    expect(third.kind === 'act' && third.tool).not.toBe('fish');
+  });
+});
+
+describe('多游戏适配器路径的连败防护', () => {
+  it('连续 FAILED 后问大脑换做法（systemPrompt 路径）', async () => {
+    const planner = new LlmPlanner({
+      systemPrompt: '你是泰拉瑞亚规划器，只输出一行 JSON。',
+      chat: async () => ({ content: '{"tool":"forage","args":{},"intent":"换个办法采集"}' }),
+      recentReceipts: ['FAILED fish: 失败：这里没有水', 'FAILED fish: 失败：这里没有水'],
+    });
+    const state = parseGameState(`## 基本状态
+时间：第1年夏2日 11:10（Mon），天气：晴
+金钱：100g  体力：100/100  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：Beach（沙滩），室外
+## 背包（序号: 物品）
+0: 斧头（手持）
+背包空位：5 个（共 12 格）
+`);
+    const decision = await planner.decide(state);
+    expect(decision.kind === 'act' && decision.tool).toBe('forage');
+    // 成功回执解除咨询冷却（覆盖 observeReceipt 的 COMPLETED 分支）
+    planner.observeReceipt('fish', 'COMPLETED', '钓到一条鱼');
+  });
+});
+
+describe('规则兜底冷却拦截（2026-11-24）', () => {
+  it('兜底动作已冷却 → wait 求助，不原样发出', async () => {
+    const beach = parseGameState(`## 基本状态
+时间：第1年夏2日 11:10（Mon），天气：晴
+金钱：100g  体力：270/270  生命：100/100
+## 当前界面
+无（可以自由行动）
+## 位置
+地点：Beach（沙滩），室外
+## 背包（序号: 物品）
+0: 斧头（手持）
+1: 竹鱼竿（手持）
+背包空位：20 个（共 24 格）
+`);
+    const planner = new LlmPlanner({
+      chat: async () => { throw new Error('brain offline'); },
+      recentReceipts: ['FAILED fish: 失败：背包里没有鱼竿', 'FAILED fish: 失败：背包里没有鱼竿'],
+    });
+    const first = await planner.decide(beach); // 规则：农活收尾 → 去海滩
+    expect(first.kind === 'act' && first.tool).toBe('travel_to');
+    const second = await planner.decide(beach); // 钓鱼阶段 → fish 已冷却 → wait
+    expect(second.kind).toBe('wait');
+    expect(second.kind === 'wait' ? second.reason : '').toContain('已冷却');
+  });
+});
+
+describe('规则兜底透传（覆盖非 act 早退分支）', () => {
+  it('兜底返回 wait 时原样透传，不套「规则兜底」前缀', async () => {
+    const planner = new LlmPlanner({
+      chat: async () => { throw new Error('offline'); },
+      fallbackPlanner: { name: 'wait-rule', decide: async () => ({ kind: 'wait', seconds: 5, reason: '等一会儿' }) },
+    });
+    const d = await planner.decide(state());
+    expect(d).toMatchObject({ kind: 'wait', seconds: 5, reason: '等一会儿' });
+  });
+});
+
+
+describe('多步目标生命周期（T-M6-54：跨日/完成/最大轮数）', () => {
+  const capturePlanner = (reply: string): { planner: LlmPlanner; prompts: string[] } => {
+    const prompts: string[] = [];
+    const planner = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        prompts.push(messages[1]?.content ?? '');
+        return { content: reply };
+      },
+    });
+    return { planner, prompts };
+  };
+
+  it('决策 JSON objectiveDone:true → 立即清空目标，后续 prompt 不再注入', async () => {
+    expect(extractDecisionJson('{"tool":"read_mail","args":{},"objectiveDone":true}')).toMatchObject({ objectiveDone: true });
+    expect(extractDecisionJson('{"tool":"read_mail","args":{},"objectiveDone":false}')?.objectiveDone).toBeUndefined();
+    const { planner, prompts } = capturePlanner('{"tool":"read_mail","args":{},"intent":"读完了","objectiveDone":true}');
+    planner.setObjective('把邮箱里的信读完');
+    await planner.decide(state());
+    expect(prompts[0]).toContain('主人当前目标：把邮箱里的信读完');
+    await planner.decide(state());
+    expect(prompts[1]).not.toContain('主人当前目标');
+    expect((planner as unknown as { objective: string | null }).objective).toBeNull();
+  });
+
+  it(`推进超过 ${MAX_OBJECTIVE_ROUNDS} 轮自动清空，防旧目标无限驱动`, async () => {
+    const { planner, prompts } = capturePlanner('{"tool":"fish","args":{},"intent":"钓鱼"}');
+    planner.setObjective('钓到 5 条鱼');
+    for (let i = 0; i < MAX_OBJECTIVE_ROUNDS; i++) await planner.decide(state());
+    expect(prompts.at(-1)).toContain('主人当前目标：钓到 5 条鱼');
+    await planner.decide(state());
+    expect(prompts.at(-1)).not.toContain('主人当前目标');
+    expect((planner as unknown as { objectiveRounds: number }).objectiveRounds).toBe(0);
+  });
+
+  it('跨日重置清空目标（昨天的目标不延续到今天）', async () => {
+    const { planner, prompts } = capturePlanner('{"tool":"fish","args":{},"intent":"钓鱼"}');
+    planner.setObjective('去鱼店买鱼竿');
+    await planner.decide(state());
+    expect(prompts.at(-1)).toContain('主人当前目标：去鱼店买鱼竿');
+    const nextDay = parseGameState(STATE_OK.replace('第1年春16日', '第2年春17日'));
+    await planner.decide(nextDay);
+    expect(prompts.at(-1)).not.toContain('主人当前目标');
+    expect((planner as unknown as { objective: string | null }).objective).toBeNull();
+  });
+
+  it('setObjective(null/空白) 与全新目标都会重置轮数', () => {
+    const planner = new LlmPlanner({ chat: async () => ({ content: '{"tool":"fish","args":{}}' }) });
+    planner.setObjective('目标 A');
+    (planner as unknown as { objectiveRounds: number }).objectiveRounds = 12;
+    planner.setObjective(null);
+    expect((planner as unknown as { objectiveRounds: number }).objectiveRounds).toBe(0);
+    planner.setObjective('目标 B');
+    expect((planner as unknown as { objectiveRounds: number }).objectiveRounds).toBe(0);
   });
 });

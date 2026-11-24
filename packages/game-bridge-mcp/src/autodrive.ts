@@ -59,6 +59,10 @@ export class AutodriveRunner {
   private lastMutationAt: number;
   /** 最近一次 watchdog/恢复尝试时间，防止冻结时每 2 秒重复调用 */
   private lastStaleRecoveryAt = 0;
+  /** 全局防刷屏熔断：相同 (tool + FAILED summary) 且游戏时钟未推进的连续次数 */
+  private stallSignature: string | null = null;
+  private stallClock = '';
+  private stallCount = 0;
 
   constructor(
     private readonly onEvent: (event: AutodriveEvent) => void,
@@ -94,6 +98,15 @@ export class AutodriveRunner {
   submitObjective(objective: string, intent = objective): void {
     this.pendingObjective = objective.trim().slice(0, 300);
     this.onEvent({ type: 'decision', planner: 'team-objective', tool: 'wait', args: {}, intent: intent.trim().slice(0, 160) });
+  }
+
+  /**
+   * 清空多步目标：新单步原子指令 / 用户「算了」/ 切换游戏时立即生效。
+   * 同时清 pending（还没被循环消费的）与 planner 已生效的 objective，避免旧目标继续驱动。
+   */
+  clearObjective(): void {
+    this.pendingObjective = null;
+    this.planner.setObjective?.(null);
   }
 
   isRunning(): boolean {
@@ -272,6 +285,34 @@ export class AutodriveRunner {
         // 回执反馈给规划器（规则兜底据此升级救援阶梯，避免满包死循环）
         this.planner.observeReceipt?.(decision.tool, receipt.status, receipt.summary);
         this.onEvent({ type: 'receipt', tool: decision.tool, status: receipt.status, summary: receipt.summary });
+
+        // 全局防刷屏熔断（2026-11-24 真机）：同一 (tool + FAILED summary) 连续 ≥3 次且游戏时钟
+        // 未推进 → 暂停 30s 并告警。这是任何规划器/兜底都失效时的最后一道网，绝不让事件流无限刷屏。
+        if (receipt.status === 'FAILED') {
+          const signature = `${decision.tool}|${receipt.summary}`;
+          if (signature === this.stallSignature && state.gameClock === this.stallClock) {
+            this.stallCount++;
+          } else {
+            this.stallSignature = signature;
+            this.stallClock = state.gameClock;
+            this.stallCount = 1;
+          }
+          if (this.stallCount >= 3) {
+            this.onEvent({
+              type: 'watchdog',
+              kind: 'stuck',
+              detail: `同一动作连续失败 ${this.stallCount} 次且游戏时间未推进：${decision.tool}（${receipt.summary.slice(0, 80)}）→ 暂停 30s，请主人检查是否缺工具/卡菜单`,
+            });
+            this.onEvent({ type: 'cycle-end', delayMs: 30_000 });
+            this.stallCount = 0;
+            this.stallSignature = null;
+            await sleep(30_000);
+            continue;
+          }
+        } else {
+          this.stallCount = 0;
+          this.stallSignature = null;
+        }
 
         // 5. 间步延迟（长动作回执后稍等游戏结算）
         await sleep(receipt.status === 'TIMEOUT' ? 15_000 : stepDelay);
