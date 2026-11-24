@@ -1086,3 +1086,93 @@ describe('clearObjective 清空旧目标（T-M6-54）', () => {
     expect(objectives).toEqual([null]);
   });
 });
+
+describe('objectiveDone 闭环（T-M6-57）', () => {
+  it('submitObjective 广播 objective set 事件（UI 目标条的单点事实源）', () => {
+    const events: AutodriveEvent[] = [];
+    const runner = new AutodriveRunner((event) => events.push(event), { sleep: async () => undefined, endpoint: 'http://mock/mcp' });
+    runner.submitObjective('去鱼店买鱼竿');
+    expect(events.some((event) => event.type === 'objective' && event.objective === '去鱼店买鱼竿' && event.reason === 'set')).toBe(true);
+  });
+
+  it('模型声明 objectiveDone 且动作成功 → 广播「目标已完成」并清空目标', async () => {
+    const events: AutodriveEvent[] = [];
+    const impl = async (_url: unknown, init?: { body?: string }): Promise<Response> => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      const text = tool === 'get_state' ? STATE_OK : '成功：买到了鱼竿';
+      return { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError: false } }) } as unknown as Response;
+    };
+    let donePending: string | null = '去鱼店买鱼竿';
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      sleep: async () => undefined,
+      endpoint: 'http://mock/mcp',
+      maxCycles: 2,
+    });
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.setPlanner({
+      name: 'llm-test',
+      decide: async () => ({ kind: 'act', tool: 'buy', args: { item: '鱼竿' }, intent: '买鱼竿' }),
+      setObjective: () => undefined,
+      hasObjective: () => false,
+      consumeObjectiveDone: () => { const value = donePending; donePending = null; return value; },
+      restoreObjectiveDone: () => undefined,
+    });
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(events.some((event) => event.type === 'objective' && event.objective === null && event.reason === 'done')).toBe(true);
+    expect(events.some((event) => event.type === 'receipt' && event.tool === 'chat_order' && event.status === 'COMPLETED' && event.summary.includes('目标已完成：去鱼店买鱼竿'))).toBe(true);
+  });
+
+  it('planner 未实现 objectiveDone 可选方法时照常执行，不误报完成', async () => {
+    const events: AutodriveEvent[] = [];
+    const impl = async (_url: unknown, init?: { body?: string }): Promise<Response> => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      const text = tool === 'get_state' ? STATE_OK : '成功：做好了';
+      return { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError: false } }) } as unknown as Response;
+    };
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      sleep: async () => undefined,
+      endpoint: 'http://mock/mcp',
+      maxCycles: 1,
+    });
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.setPlanner({
+      name: 'simple',
+      decide: async () => ({ kind: 'act', tool: 'water_crops', args: {}, intent: '浇水' }),
+    });
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(events.some((event) => event.type === 'receipt' && event.status === 'COMPLETED' && event.tool === 'water_crops')).toBe(true);
+    expect(events.some((event) => event.type === 'receipt' && event.tool === 'chat_order' && (event.summary ?? '').startsWith('目标已完成'))).toBe(false);
+  });
+
+  it('objectiveDone 动作失败 → 撤回完成声明、不播「目标已完成」', async () => {
+    const events: AutodriveEvent[] = [];
+    const impl = async (_url: unknown, init?: { body?: string }): Promise<Response> => {
+      const tool = (JSON.parse(init?.body ?? '{}') as { params: { name: string } }).params.name;
+      const text = tool === 'get_state' ? STATE_OK : '失败：钱不够';
+      const isError = tool !== 'get_state';
+      return { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError } }) } as unknown as Response;
+    };
+    let restored = 0;
+    let donePending: string | null = '去鱼店买鱼竿';
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      sleep: async () => undefined,
+      endpoint: 'http://mock/mcp',
+      maxCycles: 1,
+    });
+    (runner.client as unknown as { fetchImpl: typeof fetch }).fetchImpl = impl as unknown as typeof fetch;
+    runner.setPlanner({
+      name: 'llm-test',
+      decide: async () => ({ kind: 'act', tool: 'buy', args: { item: '鱼竿' }, intent: '买鱼竿' }),
+      setObjective: () => undefined,
+      hasObjective: () => false,
+      consumeObjectiveDone: () => { const value = donePending; donePending = null; return value; },
+      restoreObjectiveDone: () => { restored += 1; },
+    });
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(restored).toBeGreaterThan(0);
+    expect(events.some((event) => event.type === 'receipt' && event.tool === 'chat_order' && (event.summary ?? '').startsWith('目标已完成'))).toBe(false);
+  });
+});

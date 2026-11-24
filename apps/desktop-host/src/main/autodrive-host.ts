@@ -361,6 +361,7 @@ export function createAutodriveHost(
       // 只有 planner 里真的还有目标才播报取消；已完成/自动清空的目标不报假状态
       if (runner.clearObjective()) {
         cancelledObjective = previous;
+        broadcastCurrent({ type: 'objective', objective: null, reason: 'cancel' } as AutodriveEvent);
         broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消多步目标：${cancelledObjective}` } as AutodriveEvent);
       }
     }
@@ -453,6 +454,7 @@ ${ackHint}`;
             activeObjective = null;
             // 目标可能已被 objectiveDone/跨日/轮数上限自动清空，此时不播报「已结束」
             if (runner.clearObjective()) {
+              broadcastCurrent({ type: 'objective', objective: null, reason: 'replaced' } as AutodriveEvent);
               broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `收到新的单步指令，已结束旧目标：${previous}` } as AutodriveEvent);
             }
           }
@@ -475,6 +477,21 @@ ${ackHint}`;
     }
   };
   ipcMain.handle('chat:say', (_e, text: string) => say(text));
+  /** 当前多步目标快照（UI 目标条水合用，不触发任何动作） */
+  ipcMain.handle('autodrive:objective-status', () => ({ ok: true, objective: activeObjective }));
+  /** 一键取消目标（T-M6-57）：与聊天「算了」同源，走 runner.clearObjective 核实后如实播报。 */
+  ipcMain.handle('autodrive:clear-objective', () => {
+    const previous = activeObjective;
+    if (previous === null) return { ok: true, had: false };
+    activeObjective = null;
+    pendingChatOrder = null;
+    const cleared = runner.clearObjective();
+    broadcastCurrent({ type: 'objective', objective: null, reason: 'cancel' } as AutodriveEvent);
+    if (cleared) {
+      broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消多步目标：${previous}` } as AutodriveEvent);
+    }
+    return { ok: true, had: cleared, objective: previous };
+  });
   ipcMain.handle('guides:load', () => {
     if (!llmPlanner) return { ok: false, error: 'LLM 大脑未就绪' };
     try {
@@ -574,6 +591,11 @@ ${ackHint}`;
     (event: AutodriveEvent): void => {
       const meta = getMeta();
       if (meta.generation !== generation) return; // 旧会话销毁后的迟到事件：直接丢弃
+      // T-M6-57：目标生命周期事件是宿主状态的单点事实源（set/cancel/done 都以它为准）
+      if (event.type === 'objective') {
+        activeObjective = event.objective;
+        if (event.objective === null) pendingChatOrder = null;
+      }
       if (event.type === 'receipt' && event.tool !== 'autodrive' && voiceHost?.config.enabled) {
         // 回执短评（D11 节流 8s 防刷）：翻车心虚 / 收获欢呼
         if (event.status === 'UNCERTAIN') speak({ text: shortReply('uncertain'), scene: 'normal' });

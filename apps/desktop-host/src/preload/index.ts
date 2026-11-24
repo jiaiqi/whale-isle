@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // autodrive（T-M5-02）：启停/插队/事件订阅（事件经桥中继为 CustomEvent）
   autodriveStart: (gameId?: 'stardew' | 'terraria' | 'dst'): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('autodrive:start', gameId),
   autodriveStop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('autodrive:stop'),
+  autodriveObjectiveStatus: (): Promise<{ ok: boolean; objective: string | null }> => ipcRenderer.invoke('autodrive:objective-status'),
+  autodriveClearObjective: (): Promise<{ ok: boolean; had?: boolean; objective?: string }> => ipcRenderer.invoke('autodrive:clear-objective'),
   autodriveStatus: (): Promise<{ running: boolean; gameId?: 'stardew' | 'terraria' | 'dst'; sessionId?: string; generation?: number; events?: unknown[] }> => ipcRenderer.invoke('autodrive:status'),
   // T-M6-27：expectedSessionId 用于拒绝来自已切换会话的迟到指令（可选，省略保持兼容）
   autodriveDirective: (tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }> =>

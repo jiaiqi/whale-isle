@@ -634,8 +634,10 @@ bridge.onPetCrown?.((payload) => {
 
 // ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
 type AutodriveEventLite = {
-  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user';
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective';
   tool?: string; status?: string; summary?: string; intent?: string; clock?: string;
+  /** T-M6-57 目标生命周期（本窗只消费回执文案，不单独绘制） */
+  objective?: string | null; reason?: 'set' | 'replaced' | 'cancel' | 'done';
   /** T-M6-27 会话归属：联机端点事件（agentId）与旧 generation 事件不驱动主桌宠 */
   agentId?: string; generation?: number;
 };
@@ -683,7 +685,7 @@ if (window.directorBridge?.onAutodriveEvent) {
       clearTimeout(thoughtTimer);
       thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
     }
-    if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray') && event.summary) {
+    if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray' || event.tool === 'chat_order') && event.summary) {
       const voiceBridge = (window as unknown as { directorBridge?: { voiceConfigGet?: () => Promise<{ enabled: boolean }> } }).directorBridge;
       void voiceBridge?.voiceConfigGet?.().then((config) => { bubbleVoiceEnabled = config.enabled; }).catch(() => undefined);
       const effect = showBubble(bubbleState, event.summary, Date.now(), bubbleVoiceEnabled);

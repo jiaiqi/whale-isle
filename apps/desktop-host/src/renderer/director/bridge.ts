@@ -198,7 +198,7 @@ export interface GameHealthView {
 }
 
 export interface AutodriveEventView {
-  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user';
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective';
   clock?: string;
   stamina?: number;
   staminaMax?: number;
@@ -213,6 +213,9 @@ export interface AutodriveEventView {
   kind?: 'stuck' | 'heartbeat';
   detail?: string;
   delayMs?: number;
+  /** T-M6-57 目标生命周期事件 */
+  objective?: string | null;
+  reason?: 'set' | 'replaced' | 'cancel' | 'done';
   /** 主进程单调序号：刷新水合时去重（同一事件不插两次卡） */
   seq?: number;
   /** T-M6-27 会话归属：单例 autodrive 事件带 sessionId/gameId/generation；联机端点事件带 agentId */
@@ -295,6 +298,8 @@ export interface DirectorBridge {
   providerImportApply(args: { source: 'magpie' | 'ccswitch' | 'file'; filePath?: string; selectedIds: string[]; policy: 'skip' | 'overwrite' }): Promise<ImportApplyView>;
   autodriveStart(gameId?: GameId): Promise<{ ok: boolean; error?: string }>;
   autodriveStop(): Promise<{ ok: boolean }>;
+  autodriveObjectiveStatus(): Promise<{ ok: boolean; objective: string | null }>;
+  autodriveClearObjective(): Promise<{ ok: boolean; had?: boolean; objective?: string }>;
   autodriveStatus(): Promise<{ running: boolean; gameId?: GameId; sessionId?: string; generation?: number; events?: AutodriveEventView[] }>;
   autodriveDirective(tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }>;
   onAutodriveEvent(handler: (event: AutodriveEventView) => void): void;

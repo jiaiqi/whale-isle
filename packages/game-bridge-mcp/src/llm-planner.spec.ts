@@ -1637,10 +1637,54 @@ describe('多步目标生命周期（T-M6-54：跨日/完成/最大轮数）', (
     expect(planner.hasObjective()).toBe(true);
     await planner.decide(state());
     expect(prompts[0]).toContain('主人当前目标：把邮箱里的信读完');
+    expect(prompts[0]).toContain('objectiveDone');
+    expect(prompts[0]).toContain('动作回执成功后目标才算完成');
     expect(planner.hasObjective()).toBe(false);
     await planner.decide(state());
     expect(prompts[1]).not.toContain('主人当前目标');
     expect((planner as unknown as { objective: string | null }).objective).toBeNull();
+  });
+
+  it('objectiveDone 需真实回执确认：成功 consume 一次，失败 restore 继续推进', async () => {
+    const { planner } = capturePlanner('{"tool":"buy","args":{},"intent":"买鱼竿","objectiveDone":true}');
+    planner.setObjective('去鱼店买鱼竿');
+    await planner.decide(state());
+    expect(planner.hasObjective()).toBe(false);
+    expect(planner.consumeObjectiveDone()).toBe('去鱼店买鱼竿');
+    expect(planner.consumeObjectiveDone()).toBeNull();
+
+    planner.setObjective('去鱼店买鱼竿');
+    await planner.decide(state());
+    planner.restoreObjectiveDone();
+    expect(planner.hasObjective()).toBe(true);
+    expect(planner.consumeObjectiveDone()).toBeNull();
+    // 新目标覆盖旧目标时，未确认的完成声明作废
+    const second = capturePlanner('{"tool":"buy","args":{},"intent":"买鱼竿","objectiveDone":true}').planner;
+    second.setObjective('去鱼店买鱼竿');
+    await second.decide(state());
+    second.setObjective('改去矿洞');
+    expect(second.consumeObjectiveDone()).toBeNull();
+  });
+
+  it('环境提示注入 user prompt：无鱼竿/打烊/低空位/箱子摘要', async () => {
+    let captured = '';
+    const planner = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        captured = messages[1]?.content ?? '';
+        return { content: '{"tool":"travel_to","args":{"location":"FishShop"},"intent":"去鱼店买鱼竿"}' };
+      },
+      recentReceipts: ['COMPLETED list_chests: Farm 箱子1：鱼竿 x1、木材 x50'],
+    });
+    const raw = `时间：第1年春16日 18:20（Tue），天气：晴
+## 背包
+5: 防风草种子 x15
+背包空位：1 个（共 12 格）`;
+    await planner.decide({ ...state(), raw, clockMinutes: 18 * 60 + 20 });
+    expect(captured).toContain('环境提示（已确证的前置事实，别白撞）');
+    expect(captured).toContain('背包没有鱼竿');
+    expect(captured).toContain('17:00 已打烊');
+    expect(captured).toContain('背包只剩 1 个空位');
+    expect(captured).toContain('Farm 箱子1：鱼竿 x1、木材 x50');
   });
 
   it(`推进超过 ${MAX_OBJECTIVE_ROUNDS} 轮自动清空，防旧目标无限驱动`, async () => {

@@ -362,6 +362,10 @@ export interface Planner {
   setObjective?(objective: string | null): void;
   /** 可选：当前是否真的还有目标（宿主播报取消/替换前先核实，不报假状态） */
   hasObjective?(): boolean;
+  /** 可选：动作成功收尾后确认目标达成（T-M6-57），返回已结束的目标文本 */
+  consumeObjectiveDone?(): string | null;
+  /** 可选：objectiveDone 动作失败时撤回「完成」声明，目标继续推进 */
+  restoreObjectiveDone?(): void;
   /** 可选：编排器回执反馈（规则兜底据此做失败升级，避免离线模式死循环） */
   observeReceipt?(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void;
 }

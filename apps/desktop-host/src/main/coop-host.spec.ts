@@ -99,16 +99,17 @@ function fakeBrain(runnerByAgent: Map<string, FakeRunner>): CoopBrainHost {
   };
 }
 
-function setup(initialEndpoints: McpEndpoint[] = [endpoint('agent-1', '小鲸'), endpoint('agent-2', '泡芙')], clock = { value: 1_000_000 }): { call: (channel: string, ...args: unknown[]) => Promise<unknown>; runners: Map<string, FakeRunner>; clock: { value: number } } {
+function setup(initialEndpoints: McpEndpoint[] = [endpoint('agent-1', '小鲸'), endpoint('agent-2', '泡芙')], clock = { value: 1_000_000 }): { call: (channel: string, ...args: unknown[]) => Promise<unknown>; runners: Map<string, FakeRunner>; clock: { value: number }; sent: Array<{ channel: string; payload: unknown }> } {
   handlers.clear();
   const dir = mkdtempSync(join(tmpdir(), 'coop-host-'));
   dirs.push(dir);
   writeFileSync(join(dir, 'mcp-endpoints.json'), JSON.stringify(initialEndpoints), 'utf8');
   const runners = new Map<string, FakeRunner>();
+  const sent: Array<{ channel: string; payload: unknown }> = [];
   let index = 0;
   createCoopHost({
     userDataDir: dir,
-    windows: () => [],
+    windows: () => [{ isDestroyed: () => false, send: (channel: string, payload: unknown) => { sent.push({ channel, payload }); } } as never],
     brain: fakeBrain(runners),
     now: () => clock.value,
     characters: { list: chars, selected: () => chars()[0]!, manifestOf: () => ({ ok: false, error: 'test' }) },
@@ -128,7 +129,7 @@ function setup(initialEndpoints: McpEndpoint[] = [endpoint('agent-1', '小鲸'),
     if (handler === undefined) throw new Error(`missing handler ${channel}`);
     return handler({}, ...args);
   };
-  return { call, runners, clock };
+  return { call, runners, clock, sent };
 }
 
 beforeEach(() => {
@@ -251,6 +252,21 @@ describe('CoopHost IPC（T-M6-39）', () => {
     expect(runners.get('agent-2')?.objectives.some((item) => item.includes('砍'))).toBe(true);
     const board = await call('coop:blackboard-get') as { snapshot: { assignments: Array<{ agentId: string; task: string }> } };
     expect(board.snapshot.assignments.find((item) => item.agentId === 'agent-1')?.task).toBe('钓鱼凑钱');
+  });
+
+  it('Agent 目标生命周期事件带 agentId 广播：推进/取消/完成都可观测', async () => {
+    const { call, runners, sent } = setup();
+    await call('coop:start', 'agent-1');
+    runners.get('agent-1')?.emit({ type: 'objective', objective: '钓鱼凑钱', reason: 'set' });
+    runners.get('agent-1')?.emit({ type: 'objective', objective: null, reason: 'cancel' });
+    const objectiveEvents = sent
+      .filter((entry) => entry.channel === 'autodrive:event')
+      .map((entry) => entry.payload as { type?: string; agentId?: string; objective?: string | null; reason?: string })
+      .filter((payload) => payload.type === 'objective');
+    expect(objectiveEvents).toMatchObject([
+      { agentId: 'agent-1', objective: '钓鱼凑钱', reason: 'set' },
+      { agentId: 'agent-1', objective: null, reason: 'cancel' },
+    ]);
   });
 
   it('普通闲聊只进群聊，不触发 Huddle 或 directive', async () => {

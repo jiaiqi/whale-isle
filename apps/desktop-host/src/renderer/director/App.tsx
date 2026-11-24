@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm';
 import { Toaster, toast } from 'sonner';
 import {
   Activity, Brain, ChevronRight, Monitor, Play, Radio, RotateCcw, Send, ShieldAlert,
-  Square, Volume2, VolumeX, Wheat, Zap,
+  Square, Target, Volume2, VolumeX, Wheat, Zap,
 } from 'lucide-react';
 import { ModelProviderConfigSchema, type DiningProfilePreset, type ModelProviderConfig, type WorkbenchRoleSlot } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
@@ -498,6 +498,26 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const decisions = events.filter((e) => e.type === 'decision');
   const watchdog = events.filter((e) => e.type === 'watchdog');
   const lastDecision = decisions[decisions.length - 1];
+  // T-M6-57：当前多步目标（objective 事件是单点事实源；启动时向主进程水合一次）
+  const [objective, setObjective] = useState<string | null>(null);
+  useEffect(() => {
+    void window.directorBridge.autodriveObjectiveStatus().then((status) => setObjective(status.objective)).catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type === 'objective') {
+        setObjective(event.objective ?? null);
+        break;
+      }
+    }
+  }, [events]);
+  const cancelObjective = async (): Promise<void> => {
+    const result = await window.directorBridge.autodriveClearObjective();
+    if (!result.ok) { toast.error('取消失败：主进程未响应'); return; }
+    if (result.had === false) toast('当前没有正在推进的多步目标');
+    else toast.success('已取消多步目标，大脑回到日常节奏');
+  };
   const currentNav = NAV_FLAT.find((item) => item.id === tab);
   const currentGame = GAME_OPTIONS.find((game) => game.id === activeGame) ?? GAME_OPTIONS[0]!;
   const currentTitle = tab === 'stardew'
@@ -647,7 +667,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                     </p>
                   </div>
                 )}
-                {events.map((e, i) => <EventCard key={i} event={e} />)}
+                {events.map((e, i) => <EventCard key={i} event={e} objectiveActive={objective !== null} />)}
               </div>
             </div>
             {driveError !== null && <div className="px-6 pb-1 text-xs" style={{ color: 'var(--red)' }} data-drive-error>{driveError}</div>}
@@ -796,6 +816,17 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
             </div>
 
+            {objective !== null && (
+              <div data-objective-bar className="mb-4 flex flex-wrap items-center gap-2 rounded-xl px-4 py-2.5" style={{ border: '1px solid var(--violet-line)', background: 'var(--violet-dim)' }}>
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: 'var(--violet)' }}>
+                  <Target size={12} />当前多步目标
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[11.5px]" style={{ color: 'var(--text-1)' }}>{objective}</span>
+                <button type="button" className="btn-pill ghost" data-objective-cancel onClick={() => void cancelObjective()}>
+                  取消目标
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-[1.18fr_0.98fr_0.84fr] gap-4">
               <section className="flex flex-col gap-3">
                 <GameCurrentActionCard
@@ -895,7 +926,7 @@ function KV({ k, v }: { k: string; v: string }): React.JSX.Element {
   );
 }
 
-function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element {
+function EventCard({ event, objectiveActive = false }: { event: AutodriveEventView; objectiveActive?: boolean }): React.JSX.Element {
   if (event.type === 'user') {
     return (
       <div data-event="user" className="mb-3 flex justify-end">
@@ -930,11 +961,40 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
       </div>
     );
   }
+  if (event.type === 'objective') {
+    const meta: Record<NonNullable<AutodriveEventView['reason']>, { label: string; color: string; bg: string }> = {
+      set: { label: '目标已开始', color: 'var(--violet)', bg: 'var(--violet-dim)' },
+      replaced: { label: '目标被新指令替换', color: 'var(--amber)', bg: 'var(--amber-dim)' },
+      cancel: { label: '目标已取消', color: 'var(--text-2)', bg: 'var(--surface-2)' },
+      done: { label: '目标已完成', color: 'var(--green)', bg: 'var(--green-dim)' },
+    };
+    const view = meta[event.reason ?? 'set'];
+    return (
+      <div data-event="objective" data-objective-reason={event.reason} className="mb-3 rounded-2xl px-3.5 py-2.5" style={{ border: `1px solid ${view.color}`, background: view.bg }}>
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: view.color }}>
+          <Target size={12} />{view.label}
+        </div>
+        {event.objective !== null && event.objective !== undefined && (
+          <div className="mt-1 text-[11.5px]" style={{ color: 'var(--text-2)' }}>{event.objective}</div>
+        )}
+      </div>
+    );
+  }
   if (event.type === 'decision') {
+    const fallback = (event.intent ?? '').startsWith('规则兜底：');
+    const remote = event.planner === 'remote';
+    const badge = remote
+      ? { label: '主人插队', color: 'var(--amber)', bg: 'var(--amber-dim)' }
+      : fallback
+        ? { label: '规则兜底', color: 'var(--red)', bg: 'var(--red-dim)' }
+        : objectiveActive
+          ? { label: '目标推进中', color: 'var(--violet)', bg: 'var(--violet-dim)' }
+          : { label: '大脑决策', color: 'var(--blue)', bg: 'var(--blue-dim)' };
     return (
       <div data-event="decision" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--blue-line)', background: 'var(--blue-dim)' }}>
-        <div className="mono text-[10px]" style={{ color: 'var(--blue)' }}>
-          {event.planner === 'remote' ? 'P0 插队' : `决策 · ${event.planner ?? 'planner'}`}
+        <div className="mono flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: 'var(--blue)' }}>
+          <span data-decision-badge={badge.label} className="rounded px-1.5 py-px text-[9.5px] font-semibold" style={{ color: badge.color, background: badge.bg, border: `1px solid ${badge.color}` }}>{badge.label}</span>
+          <span>{event.planner ?? 'planner'}</span>
         </div>
         <div className="mono mt-1 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{toolLabel(event.tool)}</div>
         <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{event.intent}</div>
@@ -983,7 +1043,25 @@ function EventCard({ event }: { event: AutodriveEventView }): React.JSX.Element 
   if (event.type === 'receipt') {
     // T-M6-17 接单卡：聊天下单成功 → 琥珀卡展示「接单 → 工具｜意图」，与她的回话气泡紧邻
     if (event.tool === 'chat_order') {
-      const [tool, ...rest] = (event.summary ?? '').split('｜');
+      const summaryText = event.summary ?? '';
+      // T-M6-57：目标完成/取消/替换是生命周期收尾，不再显示成「接单」卡（不报假状态）
+      if (summaryText.startsWith('目标已完成')) {
+        return (
+          <div data-event="chat-order" data-order-done className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--green-line)', background: 'var(--green-dim)' }}>
+            <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--green)' }}><Target size={12} />目标已完成</div>
+            <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{summaryText.replace(/^目标已完成[:：]\s*/, '')}</div>
+          </div>
+        );
+      }
+      if (summaryText.startsWith('已取消多步目标') || summaryText.startsWith('收到新的单步指令')) {
+        return (
+          <div data-event="chat-order" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--stroke-2)', background: 'var(--surface-2)' }}>
+            <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}><Target size={12} />目标已收尾</div>
+            <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{summaryText}</div>
+          </div>
+        );
+      }
+      const [tool, ...rest] = summaryText.split('｜');
       return (
         <div data-event="chat-order" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)' }}>
           <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--amber)' }}>

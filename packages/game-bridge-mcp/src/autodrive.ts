@@ -18,6 +18,8 @@ export type AutodriveEvent =
   | { type: 'decision'; planner: string; tool: string; args: Record<string, unknown>; intent: string }
   | { type: 'receipt'; tool: string; status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR'; summary: string }
   | { type: 'watchdog'; kind: 'stuck' | 'heartbeat'; detail: string }
+  /** 多步目标生命周期（T-M6-57）：set/replaced/cancel/done，供 UI 目标条与徽标使用 */
+  | { type: 'objective'; objective: string | null; reason: 'set' | 'replaced' | 'cancel' | 'done' }
   | { type: 'cycle-end'; delayMs: number };
 
 export interface AutodriveOptions {
@@ -97,6 +99,7 @@ export class AutodriveRunner {
   /** 团队目标：不锁死具体工具，由当前 planner 在安全护栏内决定动作。 */
   submitObjective(objective: string, intent = objective): void {
     this.pendingObjective = objective.trim().slice(0, 300);
+    this.onEvent({ type: 'objective', objective: this.pendingObjective, reason: 'set' });
     this.onEvent({ type: 'decision', planner: 'team-objective', tool: 'wait', args: {}, intent: intent.trim().slice(0, 160) });
   }
 
@@ -286,6 +289,17 @@ export class AutodriveRunner {
         });
         // 回执反馈给规划器（规则兜底据此升级救援阶梯，避免满包死循环）
         this.planner.observeReceipt?.(decision.tool, receipt.status, receipt.summary);
+        // T-M6-57 objectiveDone 闭环：模型声明完成但动作失败 → 撤回声明继续推进；
+        // 动作真实成功 → 目标结束并广播「目标已完成」给聊天流/桌宠气泡。
+        if (receipt.status === 'COMPLETED') {
+          const completed = this.planner.consumeObjectiveDone?.() ?? null;
+          if (completed !== null) {
+            this.onEvent({ type: 'objective', objective: null, reason: 'done' });
+            this.onEvent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `目标已完成：${completed}` });
+          }
+        } else {
+          this.planner.restoreObjectiveDone?.();
+        }
         this.onEvent({ type: 'receipt', tool: decision.tool, status: receipt.status, summary: receipt.summary });
 
         // 全局防刷屏熔断（2026-11-24 真机）：同一 (tool + FAILED summary) 连续 ≥3 次且游戏时钟
