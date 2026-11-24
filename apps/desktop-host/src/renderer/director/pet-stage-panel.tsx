@@ -66,6 +66,8 @@ export interface PetStagePanelProps {
   characters: CharacterSummary[];
   characterId: string;
   onSelectCharacter: (id: string) => void;
+  onOpenCreator?: () => void;
+  onOpenBench?: () => void;
 }
 
 function goalOf(clock: string): string[] {
@@ -76,7 +78,7 @@ function goalOf(clock: string): string[] {
   return ['回家睡觉（绝不晕倒）', '确认出货箱收益', '明早 6:00 起床'];
 }
 
-export function PetStagePanel({ events, running, characters, characterId, onSelectCharacter }: PetStagePanelProps): React.JSX.Element {
+export function PetStagePanel({ events, running, characters, characterId, onSelectCharacter, onOpenCreator, onOpenBench }: PetStagePanelProps): React.JSX.Element {
   const [manifest, setManifest] = useState<ManifestShape | null>(null);
   const [activeAction, setActiveAction] = useState('idle');
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
@@ -121,6 +123,11 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
 
   return (
     <div className="grid grid-cols-[1fr_320px] gap-4">
+      <div className="col-span-2 flex flex-wrap items-center gap-2">
+        {onOpenCreator !== undefined && <button type="button" className="btn-pill primary" data-open-creator onClick={onOpenCreator}>创作中心（生图 / 彩蛋 / 建角）</button>}
+        {onOpenBench !== undefined && <button type="button" className="btn-pill ghost" data-open-bench onClick={onOpenBench}>验收台 (Opt+右键)</button>}
+        <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>所有操作直接驱动真实桌宠窗口；验收台可先暂停真实事件</span>
+      </div>
       <section className="card relative overflow-hidden" style={{ height: 590, background: 'radial-gradient(120% 90% at 50% 105%, rgba(10,132,255,0.12), transparent 60%), var(--surface)' }}>
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px)', backgroundSize: '18px 18px' }} />
         <div className="absolute right-3 top-3 z-10"><CharacterPackStore /></div>

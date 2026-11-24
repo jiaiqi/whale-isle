@@ -2,13 +2,14 @@
  * pet-stage 渲染层装配（T-M1-02）：WebmVideoRenderer + alpha 穿透探针 + 拖拽甩抛。
  * 注意：webm 资产不入库（DEV_ONLY_NON_COMMERCIAL），未放置资产时舞台为透明空窗——属预期。
  */
-import { SpritesheetRenderer, WebmVideoRenderer, pickAmbient, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
+import { PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState } from '@workbench/shared-protocol';
 import { createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
 import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, shouldBlockWhileAsleep, shouldEnterPowerSaver } from './interaction';
 import { createGlide, createSlingshot, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
+import { poseSamplePoint } from './pose-hit';
 import type { PetDesktopPrefs } from '@workbench/shared-protocol';
 import { AudioLeaseManager } from './audio-lease';
 import { mountBubbleWidgets } from './widgets/bubbles';
@@ -41,6 +42,37 @@ interface PetStageBridge {
   onPetState?(handler: (event: { agentId: string; state?: unknown }) => void): void;
   onScaleChanged?(handler: (scale: number) => void): void;
   characterManifest(id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
+  /** T-M6-48：CrossPet pose-skin 预置台词（character.json.lines） */
+  crossPetLines(characterId: string): Promise<Record<string, string[]>>;
+  /** T-M6-48：友谊涨分（摸头/戳/协作）与睡眠态上报（提醒免打扰） */
+  friendRecord?(characterId: string, action: 'pat' | 'poke' | 'chat' | 'cowork' | 'cofinish'): Promise<unknown>;
+  sleepState?(agentId: string, asleep: boolean): void;
+  /** T-M6-48：当天首次见面问候（主进程按日去重） */
+  friendMeet?(characterId: string): Promise<string>;
+  /** T-M6-48：多宠互撞 */
+  onPetBump?(handler: (payload: { partner: string; partnerName: string }) => void): void;
+  /** T-M6-48：eggs 彩蛋被点中 → 逃跑关窗 */
+  petFlee?(agentId: string): Promise<{ ok: boolean; fled?: boolean }>;
+  petAssemble?(): Promise<{ ok: boolean; windows: unknown[] }>;
+  petDismiss?(): Promise<{ ok: boolean; closed: number }>;
+  petEggSummon?(): Promise<{ ok: boolean; agentId?: string; name?: string; error?: string }>;
+  petOpenNotebook?(): Promise<{ ok: boolean }>;
+  characterList?(): Promise<Array<{ id: string; displayName: string; packId?: string }>>;
+  petSummon?(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
+  /** T-M6-53：工作跟随代理/验收台按姿态名直放 */
+  onPetPose?(handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void;
+  customPoseConfig?(characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string }>;
+  /** 自定义角色热重载：重新读取注册表与 manifest（零重启） */
+  reloadCharacters?(): Promise<{ ok: boolean; count?: number }>;
+  /** T-M6-53：验收台暂停/睡眠演练与创作中心/验收台入口 */
+  onBenchSleep?(handler: (payload: { asleep: boolean }) => void): void;
+  onPauseEvents?(handler: (payload: { paused: boolean }) => void): void;
+  openCreator?(): Promise<{ ok: boolean }>;
+  openBench?(): Promise<{ ok: boolean }>;
+  /** T-M6-49：本机驱动口/工作跟随下发 */
+  onPetSay?(handler: (payload: { text: string }) => void): void;
+  onPetWake?(handler: () => void): void;
+  onPetCrown?(handler: (payload: { on: boolean }) => void): void;
   onCharacterChanged?(handler: (character: { id: string; anchorRatio: number }) => void): void;
   riceStatus(): Promise<{ balance: number; budget: number; consumedToday: number; level: string }>;
   appMeta(): Promise<{ transparent: boolean; frame: boolean; alwaysOnTop: boolean; skipTaskbar: boolean; testMode: boolean }>;
@@ -152,7 +184,67 @@ const videoFactory: VideoFactory = (src): VideoHandle => {
 };
 
 const webmRenderer = new WebmVideoRenderer({ host, videoFactory });
-let renderer: WebmVideoRenderer | SpritesheetRenderer = webmRenderer;
+let renderer: WebmVideoRenderer | SpritesheetRenderer | PoseSkinRenderer = webmRenderer;
+
+/** T-M6-48：CrossPet 姿势图句柄（<img> 交叉淡入）。 */
+class PoseImageSurface implements VideoHandle {
+  readonly src: string;
+  readonly el: HTMLImageElement;
+  constructor(src: string) {
+    this.src = src;
+    this.el = document.createElement('img');
+    this.el.decoding = 'async';
+    this.el.style.position = 'absolute';
+    this.el.style.width = `${BASE_STAGE.width}px`;
+    this.el.style.height = `${BASE_STAGE.height}px`;
+    this.el.style.objectFit = 'contain';
+    this.el.style.opacity = '0';
+    this.el.style.transition = 'opacity 220ms ease';
+  }
+  play(): Promise<void> {
+    // 创建时机可能晚于初始 applyStageScale；这里按当前缩放补一次，避免小窗时图超出舞台
+    this.el.style.width = `${BASE_STAGE.width * petScale}px`;
+    this.el.style.height = `${BASE_STAGE.height * petScale}px`;
+    return new Promise((resolve, reject) => {
+      this.el.onload = () => resolve();
+      this.el.onerror = () => reject(new Error(`姿势图加载失败：${this.src}`));
+      this.el.src = this.src;
+      if (this.el.complete && this.el.naturalWidth > 0) resolve();
+    });
+  }
+  pause(): void { /* 静态图无需暂停 */ }
+  detach(): void { this.el.remove(); }
+}
+
+const poseImageFactory = (src: string): PoseImageSurface => new PoseImageSurface(src);
+
+/** CrossPet 姿势 → 头顶 SVG 动效（T-M6-48）。 */
+const POSE_EFFECTS: Record<string, string> = {
+  pat: 'heart', happy: 'sparkle', proud: 'sparkle', coaxed: 'heart', hum: 'note',
+  sleeping: 'zzz', sulk: 'zzz', puffed: 'steam', redhot: 'steam', annoyed: 'anger', dizzy: 'anger',
+};
+const poseEffectLayer = document.createElement('div');
+poseEffectLayer.id = 'pose-effect-layer';
+poseEffectLayer.style.cssText = 'position:absolute;left:50%;top:0;transform:translateX(-50%);pointer-events:none;z-index:6;display:flex;gap:2px';
+stage.appendChild(poseEffectLayer);
+let lastEffect = '';
+function renderPoseEffect(kind: string | null): void {
+  if (kind === lastEffect) return;
+  lastEffect = kind ?? '';
+  poseEffectLayer.innerHTML = '';
+  if (kind === null) return;
+  const svg = poseEffectSvg(kind as import('@workbench/pet-renderer').PoseEffectKind);
+  for (const offset of poseEffectOffsets(kind as import('@workbench/pet-renderer').PoseEffectKind)) {
+    const holder = document.createElement('span');
+    holder.style.cssText = `position:absolute;transform:translate(${offset.dx}px,${offset.dy}px);animation:poseFloat 1.6s ease-in-out ${offset.delayMs}ms infinite`;
+    holder.innerHTML = svg;
+    poseEffectLayer.appendChild(holder);
+  }
+}
+setInterval(() => {
+  if (!(renderer instanceof PoseSkinRenderer)) { renderPoseEffect(null); return; }
+  renderPoseEffect(renderer.effectOf(renderer.currentAction() ?? 'idle'));
+}, 700);
 
 class CanvasSpriteSurface implements VideoHandle {
   readonly src: string;
@@ -228,7 +320,14 @@ const surfaceFactory = (src: string, meta: SpriteMeta, rate: number): VideoHandl
 // 装载当前角色真形象清单（T-M6-21：manifest 经主进程契约校验后由 IPC 下发，不再写死 blue-whale-maid）
 type PetAvatarManifest = import('@workbench/shared-protocol').PetAvatarManifest;
 type SpriteMeta = import('@workbench/shared-protocol').PetSpriteMeta;
+/** 当前窗口正显示的角色（友谊记分 / pose 台词用）。 */
+let currentCharacterId = petContext.characterId ?? 'blue-whale-maid';
+/** 自定义角色的纠正/长思考姿态（T-M6-53） */
+let poseConfig: { correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string } | null = null;
+let lastFailureAt = 0;
+let longThinkTimer: ReturnType<typeof setTimeout> | null = null;
 async function loadCharacterManifest(id: string): Promise<void> {
+  currentCharacterId = id;
   const res = await bridge.characterManifest(id);
   if (!res.ok || res.manifest === undefined) throw new Error(res.error ?? 'manifest 不可用');
   const rawManifest = res.manifest as PetAvatarManifest;
@@ -247,12 +346,23 @@ async function loadCharacterManifest(id: string): Promise<void> {
       sfxVolume,
       spriteMetaLoader: async (src) => (await fetch(src)).json() as Promise<unknown>,
     });
+  } else if (rawManifest.renderer === 'pose-skin') {
+    const lines = await bridge.crossPetLines(id).catch(() => ({}));
+    renderer.dispose();
+    renderer = new PoseSkinRenderer({ host, imageFactory: poseImageFactory, lines, effects: POSE_EFFECTS });
   } else if (!(renderer instanceof WebmVideoRenderer)) {
     renderer.dispose();
     renderer = webmRenderer;
   }
   await renderer.load(rawManifest);
   await renderer.play('idle');
+  poseConfig = null;
+  if (bridge.customPoseConfig !== undefined) {
+    const config = await bridge.customPoseConfig(id).catch(() => null);
+    if (config?.ok === true) poseConfig = config;
+  }
+  lastFailureAt = 0;
+  if (longThinkTimer !== null) { clearTimeout(longThinkTimer); longThinkTimer = null; }
 }
 void (async () => {
   const globals = await bridge.prefsGet();
@@ -262,6 +372,12 @@ void (async () => {
     characterId = own?.characterId ?? globals.characterId;
   }
   await loadCharacterManifest(characterId);
+  // 当天首次见面：问候一次（主进程按角色+日期去重，不重复打扰）
+  void bridge.friendMeet?.(characterId).then((line) => {
+    if (line === '') return;
+    widgets.showDialog(line);
+    setTimeout(() => widgets.hideDialog(), 9_000);
+  }).catch(() => undefined);
 })().catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
 bridge.onCharacterChanged?.((character) => {
   // manager 只会向 default 窗口发送全局角色快切；各联机窗角色由 URL/窗口 prefs 固定
@@ -313,8 +429,7 @@ if (petStageBridge?.onPetRice) {
   });
 }
 if (petStageBridge?.onPetPreview) {
-  petStageBridge.onPetPreview((detail) => {
-    if (detail.clipId) {
+  petStageBridge.onPetPreview((detail) => {    if (detail.clipId) {
       const manifest = renderer.manifest;
       // ambient 单条：先找槽位（语义命中播槽位）→ 不在槽位则直查 ambientPool 走 playClip
       const slotAction = previewActionFor(detail.clipId);
@@ -337,6 +452,61 @@ if (petStageBridge?.onPetPreview) {
     }, AMBIENT_PLAY_MS);
   });
 }
+// T-M6-53：验收台暂停真实事件 / 睡眠演练
+let eventsPaused = false;
+bridge.onPauseEvents?.((payload) => { eventsPaused = payload.paused; });
+bridge.onBenchSleep?.((payload) => {
+  if (payload.asleep) { if (!interaction.asleep) toggleSleep(); }
+  else if (interaction.asleep) wakeUp();
+});
+
+// T-M6-53：按姿态名直放（pose-skin）；缺失回退已由主进程解析
+bridge.onPetPose?.((payload) => {
+  // 验收台演练期间屏蔽真实工作跟随事件（bench 自身除外）
+  if (eventsPaused && payload.source !== 'bench') return;
+  if (!(renderer instanceof PoseSkinRenderer)) return;
+  void renderer.playPose(payload.pose).then(() => {
+    if (payload.line !== undefined && payload.line !== '') {
+      widgets.showDialog(payload.line);
+      setTimeout(() => widgets.hideDialog(), 8_000);
+    }
+    lastEventAt = Date.now();
+  }).catch(() => undefined);
+});
+
+// T-M6-48：两只桌宠撞在一起 → Q 弹互撞 + 吐槽（主进程按真实窗口几何触发）
+bridge.onPetBump?.((payload) => {
+  if (shouldBlockWhileAsleep(interaction, 'ambient')) return;
+  void renderer.play('clumsy_panic').catch(() => undefined);
+  stage.animate(
+    [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }],
+    { duration: 260, iterations: 2 },
+  );
+  widgets.showDialog(`哎呀，撞到${payload.partnerName}了，你走路不看路呀！`);
+  setTimeout(() => widgets.hideDialog(), 6_000);
+  lastEventAt = Date.now();
+});
+// T-M6-49：本机驱动口 say / wake / 工作跟随戴皇冠
+bridge.onPetSay?.((payload) => {
+  wakeUp();
+  widgets.showDialog(payload.text);
+  void renderer.play('happy_maid').catch(() => undefined);
+  setTimeout(() => widgets.hideDialog(), 8_000);
+  lastEventAt = Date.now();
+});
+bridge.onPetWake?.(() => { wakeUp(); });
+const crownLayer = document.createElement('div');
+crownLayer.id = 'crown-layer';
+crownLayer.style.cssText = 'position:absolute;left:50%;top:-6px;transform:translateX(-50%);z-index:7;pointer-events:none;display:none';
+crownLayer.innerHTML = '<svg viewBox="0 0 32 22" width="34" height="24" aria-label="大活皇冠"><path d="M2 19 3.5 6l7 5L16 3l5.5 8 7-5L30 19Z" fill="#ffd166" stroke="#c99a1e" stroke-width="1.2" stroke-linejoin="round"/><rect x="4" y="19" width="24" height="2.4" rx="1.2" fill="#e0a92a"/></svg>';
+stage.appendChild(crownLayer);
+bridge.onPetCrown?.((payload) => {
+  crownLayer.style.display = payload.on ? 'block' : 'none';
+  if (payload.on) {
+    widgets.showDialog('大活干完啦，戴上小皇冠！');
+    setTimeout(() => widgets.hideDialog(), 8_000);
+  }
+});
 
 // ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
 type AutodriveEventLite = {
@@ -351,6 +521,24 @@ if (window.directorBridge?.onAutodriveEvent) {
     // T-M6-38：只消费本窗 agent 的事件；无 agentId 的旧单机事件只归 default，
     // 避免单机自驾回执把其他联机桌宠也带着播动作/气泡。
     if (!isEventForThisPet(event.agentId)) return;
+    if (eventsPaused) return;
+    // T-M6-53：出错/打断后 3 分钟内再次对话 → 播放自定义 correctedPose（一次性）
+    if (event.type === 'receipt' && (event.status === 'FAILED' || event.status === 'UNCERTAIN')) lastFailureAt = Date.now();
+    if (event.type === 'receipt' && event.tool === 'chat_reply' && lastFailureAt > 0 && Date.now() - lastFailureAt < 180_000) {
+      if (poseConfig?.correctedPose !== undefined && renderer instanceof PoseSkinRenderer) {
+        void renderer.playPose(poseConfig.correctedPose).catch(() => undefined);
+      }
+      lastFailureAt = 0;
+    }
+    // 长思考：decision 后超过 longThink.after 秒仍未完成 → 切 deepthink 姿态
+    if (longThinkTimer !== null) { clearTimeout(longThinkTimer); longThinkTimer = null; }
+    if (event.type === 'decision' && poseConfig?.longThink !== undefined && renderer instanceof PoseSkinRenderer) {
+      const { after, pose } = poseConfig.longThink;
+      longThinkTimer = setTimeout(() => {
+        longThinkTimer = null;
+        if (renderer instanceof PoseSkinRenderer) void renderer.playPose(pose).catch(() => undefined);
+      }, Math.max(1, after) * 1_000);
+    }
     if (shouldBlockWhileAsleep(interaction, event.type === 'receipt' ? 'work' : 'thought')) return;
     lastActivityAt = Date.now();
     if (dockedEdge !== null) {
@@ -479,12 +667,49 @@ function applyStageScale(): void {
     canvas.style.width = `${BASE_STAGE.width * petScale}px`;
     canvas.style.height = `${BASE_STAGE.height * petScale}px`;
   }
+  // T-M6-51：CrossPet pose-skin 用 <img> 渲染，必须与 video/canvas 同步缩放
+  for (const img of stage.querySelectorAll('img')) {
+    img.style.width = `${BASE_STAGE.width * petScale}px`;
+    img.style.height = `${BASE_STAGE.height * petScale}px`;
+  }
+}
+
+/** 当前可见的姿势图（交叉淡入期间取透明度最高的那张）。 */
+function activePoseImage(): HTMLImageElement | null {
+  let best: HTMLImageElement | null = null;
+  let bestOpacity = 0.05;
+  for (const img of stage.querySelectorAll('img')) {
+    if (img.naturalWidth === 0) continue;
+    const opacity = Number(getComputedStyle(img).opacity);
+    if (opacity > bestOpacity) {
+      best = img;
+      bestOpacity = opacity;
+    }
+  }
+  return best;
+}
+
+/**
+ * <img> + object-fit: contain 的 alpha 采样：先把舞台坐标换算到图片实际绘制矩形，
+ * 再映射到 natural 像素并只画 1×1 到探针画布。
+ */
+function samplePoseImageAlpha(img: HTMLImageElement, vx: number, vy: number): number {
+  const point = poseSamplePoint(BASE_STAGE.width, BASE_STAGE.height, img.naturalWidth, img.naturalHeight, vx, vy);
+  if (point === null) return 0;
+  try {
+    probeCtx?.clearRect(0, 0, 1, 1);
+    probeCtx?.drawImage(img, point.sx, point.sy, 1, 1, 0, 0, 1, 1);
+    return probeCtx?.getImageData(0, 0, 1, 1).data[3] ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 async function sampleAlpha(): Promise<number> {
   const video = stage.querySelector('video');
   const sprite = stage.querySelector('canvas');
-  if ((!video || video.readyState < 2) && sprite === null) return 0;
+  const pose = activePoseImage();
+  if ((!video || video.readyState < 2) && sprite === null && pose === null) return 0;
   const point = await bridge.mousePoint();
   const winPos = await bridge.winPosition();
   if (!winPos) return 0;
@@ -502,6 +727,7 @@ async function sampleAlpha(): Promise<number> {
     if (px < 0 || py < 0 || px >= sprite.width || py >= sprite.height) return 0;
     return ctx.getImageData(px, py, 1, 1).data[3] ?? 0;
   }
+  if (pose !== null) return samplePoseImageAlpha(pose, vx, vy);
   return 0;
 }
 
@@ -528,18 +754,27 @@ const setPeek = (active: boolean): void => {
 const wakeUp = (): void => {
   if (!interaction.asleep) return;
   setAsleep(interaction, false);
+  bridge.sleepState?.(dockedAgentId, false);
   void renderer.play('idle').catch(() => undefined);
   lastEventAt = Date.now();
 };
 const toggleSleep = (): void => {
   if (interaction.asleep) { wakeUp(); return; }
   setAsleep(interaction, true);
+  bridge.sleepState?.(dockedAgentId, true);
   headPat(interaction);
   void renderer.play('sleep_mute').catch(() => undefined);
 };
 const patHeadOnce = (): void => {
   wakeUp();
   headPat(interaction);
+  void bridge.friendRecord?.(currentCharacterId, 'pat').catch(() => undefined);
+  // 串门彩蛋：被点中就逃跑（关窗），不留假状态
+  if (currentCharacterId.startsWith('crosspet-egg-')) {
+    widgets.showDialog('被抓住了！下次再来串门～');
+    setTimeout(() => { void bridge.petFlee?.(dockedAgentId).catch(() => undefined); }, 900);
+    return;
+  }
   lastDizzyVisual = 0;
   lastActivityAt = Date.now();
   void renderer.play('happy_maid').catch(() => undefined);
@@ -863,7 +1098,13 @@ const closeScaleMenu = (): void => {
 };
 stage.addEventListener('contextmenu', (event) => {
   event.preventDefault();
+  // T-M6-53：Option/Alt + 右键直达验收台
+  if (event.altKey && bridge.openBench !== undefined) {
+    void bridge.openBench();
+    return;
+  }
   wakeUp();
+  void bridge.friendRecord?.(currentCharacterId, 'poke').catch(() => undefined);
   void renderer.play('rage_spray').catch(() => undefined);
   void bridge.pokeLine?.(dockedAgentId).then((result) => {
     if (result.ok && result.line !== undefined) {
@@ -895,6 +1136,58 @@ stage.addEventListener('contextmenu', (event) => {
   }
   makeTextButton('戳一下', () => { wakeUp(); void renderer.play('rage_spray').catch(() => undefined); closeScaleMenu(); });
   makeTextButton(interaction.asleep ? '叫醒' : '睡觉', () => { toggleSleep(); closeScaleMenu(); });
+  makeTextButton('叫她出来 ▸', () => {
+    // 只移除一级菜单 DOM，保持交互态；二级面板关闭/超时后再恢复穿透
+    scaleMenu?.remove();
+    scaleMenu = null;
+    void bridge.characterList?.().then((list) => {
+      const others = list.filter((character) => character.id !== currentCharacterId && !(character.packId ?? '').startsWith('crosspet-')).slice(0, 10);
+      if (others.length === 0) return;
+      const panel = document.createElement('div');
+      panel.style.cssText = `position:absolute; left:50%; bottom:34px; transform:translateX(-50%); display:flex; flex-wrap:wrap; gap:4px;
+        max-width:${Math.round(BASE_STAGE.width * petScale - 20)}px; padding:6px; border-radius:12px; pointer-events:auto; z-index:21;
+        background:rgba(12,20,32,0.94); border:1px solid rgba(120,180,255,0.35);`;
+      for (const character of others) {
+        const btn = document.createElement('button');
+        btn.textContent = character.displayName;
+        btn.style.cssText = 'font:11px monospace;color:#cdd8e8;background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;';
+        btn.addEventListener('click', () => {
+          void bridge.petSummon?.(character.id).then((result) => {
+            if (result.ok) widgets.showDialog(`${character.displayName} 来啦！`);
+            else {
+              widgets.showDialog(result.error ?? '召唤失败');
+            }
+            setTimeout(() => widgets.hideDialog(), 6_000);
+          });
+          panel.remove();
+          void bridge.forceInteractive(false);
+        });
+        panel.appendChild(btn);
+      }
+      stage.appendChild(panel);
+      setTimeout(() => { panel.remove(); void bridge.forceInteractive(false); }, 8_000);
+    });
+  });
+  makeTextButton('集合！', () => { void bridge.petAssemble?.(); closeScaleMenu(); });
+  makeTextButton('解散', () => { void bridge.petDismiss?.(); closeScaleMenu(); });
+  makeTextButton('彩蛋', () => {
+    void bridge.petEggSummon?.().then((result) => {
+      if (result?.ok === false) {
+        widgets.showDialog(result.error ?? '彩蛋召唤失败');
+        setTimeout(() => widgets.hideDialog(), 6_000);
+      }
+    });
+    closeScaleMenu();
+  });
+  makeTextButton('小本子', () => { void bridge.petOpenNotebook?.(); closeScaleMenu(); });
+  makeTextButton('创作中心', () => { void bridge.openCreator?.(); closeScaleMenu(); });
+  makeTextButton('验收台', () => { void bridge.openBench?.(); closeScaleMenu(); });
+  makeTextButton('重新载入', () => {
+    void bridge.reloadCharacters?.().then((result) => {
+      if (result.ok) void loadCharacterManifest(currentCharacterId).then(() => widgets.showDialog('角色配置已重新载入')).catch(() => undefined);
+    });
+    closeScaleMenu();
+  });
   stage.appendChild(scaleMenu);
   window.addEventListener('mousedown', (e) => {
     if (scaleMenu !== null && !scaleMenu.contains(e.target as Node)) closeScaleMenu();

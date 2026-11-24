@@ -24,6 +24,7 @@ import {
   GAME_OPTIONS,
   type CharacterSummary,
   type CoopEndpointView,
+  type DstWizardStatusView,
   type GameId,
   type LaunchStatusView,
 } from './bridge';
@@ -113,6 +114,8 @@ export function CoopPanel(): React.JSX.Element {
   const [addOpen, setAddOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [launchStatus, setLaunchStatus] = useState<LaunchStatusView[]>([]);
+  const [dstStatus, setDstStatus] = useState<DstWizardStatusView | null>(null);
+  const [dstToken, setDstToken] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [goalEditing, setGoalEditing] = useState(false);
   const [goalDraft, setGoalDraft] = useState('');
@@ -136,6 +139,7 @@ export function CoopPanel(): React.JSX.Element {
     setEndpoints(endpointResult);
     setWindows(windowResult);
     setLaunchStatus(await window.directorBridge.coopLaunchStatus().catch(() => []));
+    setDstStatus(await window.directorBridge.coopDstStatus().catch(() => null));
     if (boardResult !== null) {
       setSnapshot(boardResult.snapshot);
       setMessages((previous) => mergeMessages(previous, boardResult.messages));
@@ -145,8 +149,9 @@ export function CoopPanel(): React.JSX.Element {
   useEffect(() => {
     void refresh();
     void window.directorBridge.characterList().then((list) => {
-      setCharacters(list);
-      setAddForm((previous) => ({ ...previous, characterId: previous.characterId || list[0]?.id || '' }));
+      const nine = list.filter((character) => !(character.packId ?? '').startsWith('crosspet-'));
+      setCharacters(nine);
+      setAddForm((previous) => ({ ...previous, characterId: previous.characterId || nine[0]?.id || '' }));
     }).catch(() => undefined);
     const timer = window.setInterval(() => { void refresh(); }, 10_000);
     return () => window.clearInterval(timer);
@@ -333,15 +338,46 @@ export function CoopPanel(): React.JSX.Element {
       const game = goal.gameId;
       if (kind === 'human') {
         const result = await window.directorBridge.coopLaunchHuman(game);
-        if (!result.ok) toast.error(result.error ?? '启动失败'); else toast.success(`真人实例已启动（PID ${result.pid ?? '—'}）`);
+        if (!result.ok) toast.error(result.error ?? '启动失败');
+        else toast.success(game === 'dst' ? `DST 专用服 + Sidecar 已启动（:18100）` : `实例已启动（PID ${result.pid ?? '—'}${result.aiPorts !== undefined && result.aiPorts.length > 0 ? ` · AI 端口 ${result.aiPorts.join('/')}` : ''}）`);
       } else {
         const candidate = endpoints.find((endpoint) => endpoint.gameId === game && !endpoint.running) ?? endpoints.find((endpoint) => endpoint.gameId === game);
         if (candidate === undefined) { toast.error('请先添加对应游戏的 AI 队友'); return; }
         const result = await window.directorBridge.coopLaunchAi(candidate.id);
         if (!result.ok) toast.error(result.error ?? 'AI 实例启动失败');
-        else toast.success(`AI 实例已启动（端口 ${result.port ?? '—'}，PID ${result.pid ?? '—'}）`);
+        else toast.success(result.note ?? `AI 实例已启动（端口 ${result.port ?? '—'}，PID ${result.pid ?? '—'}）`);
       }
       await refresh();
+    } finally { setBusy(null); }
+  };
+
+  /** 泰拉瑞亚：按端点顺序为每只 AI 拉起客户端（各自 18090/18091 桥接端口）。 */
+  const launchTerrariaAiAll = async (): Promise<void> => {
+    const list = endpoints.filter((endpoint) => endpoint.gameId === 'terraria');
+    if (list.length === 0) { toast.error('请先添加泰拉瑞亚 AI 队友'); return; }
+    setBusy('launch:terraria-ai');
+    try {
+      let ok = 0;
+      const errors: string[] = [];
+      for (const endpoint of list) {
+        const result = await window.directorBridge.coopLaunchAi(endpoint.id);
+        if (result.ok) ok += 1;
+        else errors.push(`${endpoint.displayName}：${result.error ?? '失败'}`);
+      }
+      if (ok > 0) toast.success(`已拉起 ${ok}/${list.length} 只 AI 客户端（桥接端口见队友卡）`);
+      for (const error of errors) toast.error(error);
+      await refresh();
+    } finally { setBusy(null); }
+  };
+
+  const saveDstToken = async (): Promise<void> => {
+    if (dstToken.trim() === '') { toast.error('请先粘贴 Klei 专用服 token'); return; }
+    setBusy('dst-token');
+    try {
+      const result = await window.directorBridge.coopDstSaveToken(dstToken);
+      setDstToken('');
+      if (!result.ok) toast.error(result.error ?? '保存失败');
+      else { toast.success('cluster_token 已以 0600 落盘（内容不回显、不写日志）'); await refresh(); }
     } finally { setBusy(null); }
   };
 
@@ -541,27 +577,76 @@ export function CoopPanel(): React.JSX.Element {
         </button>
         {guideOpen && (
           <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-            {(goal.gameId === 'stardew' ? [
-              { text: '启动真人主机（SMAPI）', action: () => void launch('human') },
-              { text: '为 AI 生成隔离 Mods 并拉起实例', action: () => void launch('ai') },
-              { text: '游戏内输入 127.0.0.1 加入联机', action: null },
-            ] : goal.gameId === 'terraria' ? [
-              { text: '启动 tModLoaderServer:7777（路径确认后启用）', action: null },
-              { text: '按队友分配 18090/18091 AI 端口', action: null },
-              { text: '进入服务器验证桥接在线', action: null },
-            ] : [
-              { text: '配置 cluster_token（Klei 账号生成）', action: null },
-              { text: '勾选托管角色 Klei UserID', action: null },
-              { text: '启动专用服与 sidecar :18100', action: null },
-            ]).map((step, index) => (
-              <div key={step.text} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[11px]" style={{ border: '1px solid var(--stroke)', background: 'var(--surface)' }}>
-                <span className="grid h-5 w-5 place-items-center rounded-full text-[10px]" style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}>{index + 1}</span>
-                <span className="flex-1" style={{ color: 'var(--text-2)' }}>{step.text}</span>
-                {step.action !== null ? <button type="button" className="btn-pill ghost" style={{ fontSize: 10 }} disabled={busy !== null} onClick={step.action}>启动</button> : <CheckCircle2 size={12} style={{ color: 'var(--text-3)' }} />}
-              </div>
-            ))}
+            {goal.gameId === 'stardew' && (
+              <>
+                <LaunchStep index={1} title="启动真人主机（SMAPI）" done={false}
+                  action={{ label: '启动', onClick: () => void launch('human'), disabled: busy !== null }} />
+                <LaunchStep index={2} title="为 AI 生成隔离 Mods 并拉起实例" done={false}
+                  action={{ label: '启动', onClick: () => void launch('ai'), disabled: busy !== null }} />
+                <LaunchStep index={3} title="游戏内输入 127.0.0.1 加入联机" done={false} />
+              </>
+            )}
+            {goal.gameId === 'terraria' && (
+              <>
+                <LaunchStep
+                  index={1}
+                  title="启动本地 tModLoader 专用服 :7777"
+                  done={false}
+                  hint={launchStatus.find((item) => item.gameId === 'terraria')?.bridge?.detail}
+                  action={{ label: '启动本地服', onClick: () => void launch('human'), disabled: busy !== null }}
+                />
+                <LaunchStep
+                  index={2}
+                  title="按队友分配 18090/18091 并拉起 AI 客户端"
+                  done={false}
+                  hint={endpoints.filter((endpoint) => endpoint.gameId === 'terraria').map((endpoint) => `${endpoint.displayName} ${new URL(endpoint.endpoint).port || '18090'}`).join(' · ') || '尚未添加泰拉瑞亚队友'}
+                  action={{ label: '拉起双 AI', onClick: () => void launchTerrariaAiAll(), disabled: busy !== null }}
+                />
+                <LaunchStep index={3} title="真人连入 127.0.0.1:7777（F8 随时接管）" done={false} />
+              </>
+            )}
+            {goal.gameId === 'dst' && (
+              <>
+                <LaunchStep
+                  index={1}
+                  title="保存 Klei cluster_token"
+                  done={dstStatus?.tokenSaved === true}
+                  hint={dstStatus?.tokenSaved === true ? `${dstStatus.clusterDir}/cluster_token.txt（0600）` : '专用服 token 需在 Klei 账号后台生成'}
+                  action={undefined}
+                >
+                  <div className="mt-1.5 flex gap-1.5">
+                    <input
+                      type="password"
+                      value={dstToken}
+                      onChange={(event) => setDstToken(event.target.value)}
+                      placeholder="粘贴专用服 token…"
+                      data-dst-token
+                      className="min-w-0 flex-1 rounded px-2 py-1 text-[11px] outline-none"
+                      style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
+                    />
+                    <button type="button" className="btn-pill primary" style={{ fontSize: 10 }} disabled={busy !== null} onClick={() => void saveDstToken()}>保存</button>
+                  </div>
+                </LaunchStep>
+                <LaunchStep
+                  index={2}
+                  title="托管角色 Klei UserID 写入 modoverrides"
+                  done={dstStatus?.overridesSaved === true}
+                  hint={dstStatus !== null && dstStatus.agents.length > 0
+                    ? dstStatus.agents.map((agent) => agent.routingId || `${agent.id}(缺 UserID)`).join(', ')
+                    : '先在联机端点填写 routingId（Klei UserID）'}
+                />
+                <LaunchStep
+                  index={3}
+                  title="启动专用服 + 单 Sidecar :18100"
+                  done={false}
+                  hint={dstStatus?.sidecarAvailable === false ? 'sidecar 未构建：先运行 pnpm --filter @workbench/dst-bridge-sidecar build' : undefined}
+                  action={{ label: '一键启动', onClick: () => void launch('human'), disabled: busy !== null || dstStatus?.tokenSaved !== true }}
+                />
+              </>
+            )}
             <div className="md:col-span-3 text-[10px]" style={{ color: 'var(--text-3)' }}>
               {launchStatus.find((item) => item.gameId === goal.gameId)?.detail ?? '正在探测本机路径…'}
+              {goal.gameId === 'dst' && dstStatus !== null ? ` · sidecar ${dstStatus.sidecarAvailable ? '已就绪' : '未构建'}` : ''}
             </div>
           </div>
         )}
@@ -895,6 +980,41 @@ export function CoopPanel(): React.JSX.Element {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 联机向导步骤卡（T-M6-47）：真实状态用 done 表达，不伪造进度。 */
+function LaunchStep(props: {
+  index: number;
+  title: string;
+  done: boolean;
+  hint?: string | undefined;
+  action?: { label: string; onClick: () => void; disabled: boolean } | undefined;
+  children?: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div
+      data-launch-step={props.index}
+      className="rounded-lg px-3 py-2 text-[11px]"
+      style={{
+        border: `1px solid ${props.done ? 'var(--green-line)' : 'var(--stroke)'}`,
+        background: props.done ? 'var(--green-dim)' : 'var(--surface)',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="grid h-5 w-5 place-items-center rounded-full text-[10px]" style={{ background: props.done ? 'var(--green)' : 'var(--blue-dim)', color: props.done ? '#fff' : 'var(--blue)' }}>{props.index}</span>
+        <span className="flex-1" style={{ color: 'var(--text-1)' }}>{props.title}</span>
+        {props.done
+          ? <CheckCircle2 size={12} style={{ color: 'var(--green)' }} />
+          : props.action !== undefined && (
+            <button type="button" className="btn-pill ghost" style={{ fontSize: 10 }} disabled={props.action.disabled} onClick={props.action.onClick}>{props.action.label}</button>
+          )}
+      </div>
+      {props.hint !== undefined && props.hint !== '' && (
+        <div className="mt-1 pl-7 text-[10px]" style={{ color: 'var(--text-3)' }}>{props.hint}</div>
+      )}
+      {props.children !== undefined && <div className="pl-7">{props.children}</div>}
     </div>
   );
 }

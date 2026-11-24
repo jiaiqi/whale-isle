@@ -2,7 +2,7 @@
  * preload 桥（contextIsolation 开启）：renderer ↔ main 的唯一通道。
  * forceAlpha 仅在 PET_STAGE_E2E=1 时暴露（运行期安全锁）。
  */
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
 
@@ -88,11 +88,14 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // pets 动作库（T-M5-16，D16）：manifest + 预览
   petsManifest: (): Promise<{ ok: boolean; manifest?: unknown; error?: string }> => ipcRenderer.invoke('pets:manifest'),
   petsPreview: (action: string, clipId: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke('pets:preview', action, clipId),
+  // T-M6-45 随包素材目录（全量动作/槽位/皮肤/字体）与素材根路径
+  petStudioCatalog: (): Promise<unknown> => ipcRenderer.invoke('pet:studio-catalog'),
+  petPacksRoot: (): Promise<string> => ipcRenderer.invoke('pet:packs-root'),
   // 饭碗档位（D16）：投喂与余额查询（autodrive 扣米在主进程）
   riceFeed: (grains: number): Promise<{ ok: boolean; balance: number }> => ipcRenderer.invoke('rice:feed', grains),
   riceStatus: (): Promise<{ balance: number; budget: number; consumedToday: number; level: string }> => ipcRenderer.invoke('rice:status'),
   // T-M6-21 多角色注册表（切换由主进程写 prefs + 广播桌宠窗重载）
-  characterList: (): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string }>> => ipcRenderer.invoke('pet:character-list'),
+  characterList: (): Promise<Array<{ id: string; displayName: string; builtin: boolean; licenseScope: string; voiceId: string; packId?: string }>> => ipcRenderer.invoke('pet:character-list'),
   characterSelect: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('pet:character-select', id),
   // T-M6-22 多桌宠联机 agent 池
   coopEndpoints: (): Promise<unknown> => ipcRenderer.invoke('coop:endpoints'),
@@ -107,6 +110,10 @@ contextBridge.exposeInMainWorld('directorBridge', {
   coopHuddleStart: (input?: { goalTitle?: string; reason?: string; note?: string }): Promise<{ ok: boolean; error?: string; fallback?: boolean; rounds?: number }> =>
     ipcRenderer.invoke('coop:huddle-start', input),
   coopLaunchStatus: (): Promise<unknown> => ipcRenderer.invoke('coop:launch-status'),
+  // T-M6-47 DST 向导：token 只上行（主进程 0600 落盘），状态只回布尔
+  coopDstStatus: (): Promise<{ clusterDir: string; tokenSaved: boolean; overridesSaved: boolean; sidecarEntry: string; sidecarAvailable: boolean; agents: Array<{ id: string; routingId: string; characterId: string }> }> =>
+    ipcRenderer.invoke('coop:dst-status'),
+  coopDstSaveToken: (token: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('coop:dst-save-token', token),
   coopLaunchHuman: (gameId: string): Promise<{ ok: boolean; error?: string; pid?: number }> => ipcRenderer.invoke('coop:launch-human', gameId),
   coopLaunchAi: (agentId: string): Promise<{ ok: boolean; error?: string; pid?: number; profileModsDir?: string; port?: number }> => ipcRenderer.invoke('coop:launch-ai', agentId),
   coopHelpRequest: (input: { agentId: string; reason: string }): Promise<{ ok: boolean; error?: string; mode?: string; helperAgentId?: string; fallback?: boolean }> =>
@@ -173,6 +180,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
   }> => ipcRenderer.invoke('voice:catalog'),
   voiceAudition: (voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('voice:audition', voiceId, mode, text),
+  // T-M6-46 语音中心：9 角色声线绑定条（每角色独立覆盖，落 userData/voice-bindings.json）
+  voiceCharacterBindings: (): Promise<Array<{ characterId: string; displayName: string; voiceId: string; defaultVoiceId: string; overridden: boolean }>> =>
+    ipcRenderer.invoke('voice:character-bindings'),
+  voiceCharacterBind: (characterId: string, voiceId: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('voice:character-bind', characterId, voiceId),
   // 星露谷 Mod 管理（T-M6-06）：只经主进程读写玩家 Mods 目录
   modsState: (): Promise<unknown> => ipcRenderer.invoke('mods:state'),
   // BWF 游戏内 HUD 开关（T-M6-16）：默认关闭；主进程持久化 + /settings 运行时下发
@@ -199,6 +211,53 @@ contextBridge.exposeInMainWorld('directorBridge', {
   memoryGraph: (): Promise<unknown> => ipcRenderer.invoke('memory:graph'),
   memoryPin: (id: string, pinned: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('memory:pin', id, pinned),
   webuiInfo: (): Promise<{ ok: boolean; port: number; token: string }> => ipcRenderer.invoke('webui:info'),
+  // T-M6-48：小本子 / 互聊 / 多宠召唤（中控台）
+  friendNotebook: (characterId: string): Promise<unknown> => ipcRenderer.invoke('friendship:notebook', characterId),
+  friendNoteAdd: (characterId: string, text: string): Promise<{ ok: boolean; note?: unknown; error?: string }> =>
+    ipcRenderer.invoke('friendship:note-add', characterId, text),
+  friendWipe: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('friendship:wipe'),
+  friendPairChat: (): Promise<{ ok: boolean; aName?: string; aText?: string; bName?: string; bText?: string; error?: string }> =>
+    ipcRenderer.invoke('friendship:pair-chat'),
+  friendGreeting: (characterId: string): Promise<string> => ipcRenderer.invoke('friendship:greeting', characterId),
+  friendMeet: (characterId: string): Promise<string> => ipcRenderer.invoke('friendship:meet', characterId),
+  petSummon: (characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }> => ipcRenderer.invoke('pet:summon', characterId),
+  petAssemble: (): Promise<{ ok: boolean; windows: unknown[] }> => ipcRenderer.invoke('pet:assemble'),
+  petDismiss: (): Promise<{ ok: boolean; closed: number }> => ipcRenderer.invoke('pet:dismiss'),
+  petEggSummon: (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => ipcRenderer.invoke('pet:egg-summon'),
+  // T-M6-49：跨 AI 工作跟随
+  workFollowStatus: (): Promise<unknown> => ipcRenderer.invoke('work-follow:status'),
+  workFollowIngest: (event: unknown): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('work-follow:ingest', event),
+  workFollowMode: (mode: 'single' | 'multi'): Promise<unknown> => ipcRenderer.invoke('work-follow:mode', mode),
+  onWorkFollowUpdate: (handler: (status: unknown) => void): () => void => {
+    const listener = (_e: unknown, status: unknown): void => handler(status);
+    ipcRenderer.on('work-follow:update', listener);
+    return () => ipcRenderer.removeListener('work-follow:update', listener);
+  },
+  onOpenPetNotebook: (handler: () => void): void => { ipcRenderer.on('pet:open-notebook', () => handler()); },
+  // T-M6-53：创作中心 / 验收台
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
+  creatorPoseTiers: (): Promise<unknown> => ipcRenderer.invoke('creator:pose-tiers'),
+  creatorCompileCharacter: (input: unknown): Promise<{ ok: boolean; prompt: string }> => ipcRenderer.invoke('creator:compile-character', input),
+  creatorCompileEgg: (input: unknown): Promise<{ ok: boolean; prompt: string }> => ipcRenderer.invoke('creator:compile-egg', input),
+  creatorPickImages: (): Promise<{ ok: boolean; paths?: string[] }> => ipcRenderer.invoke('creator:pick-images'),
+  creatorPickFolder: (): Promise<{ ok: boolean; folder?: string }> => ipcRenderer.invoke('creator:pick-folder'),
+  creatorImport: (input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; avatar?: string; portrait?: string; warnings?: string[]; error?: string }> => ipcRenderer.invoke('creator:import', input),
+  creatorGenerateEggLines: (input: unknown): Promise<{ ok: boolean; lines?: Record<string, string[]>; error?: string }> => ipcRenderer.invoke('creator:generate-egg-lines', input),
+  creatorListCustom: (): Promise<Array<{ id: string; name: string; poses: string[] }>> => ipcRenderer.invoke('creator:list-custom'),
+  customList: (): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }> => ipcRenderer.invoke('custom:list'),
+  customGet: (id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }> => ipcRenderer.invoke('custom:get', id),
+  customSave: (id: string, input: unknown): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('custom:save', id, input),
+  customRename: (id: string, name: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('custom:rename', id, name),
+  customClone: (input: { builtinId: string; newId: string; displayName?: string }): Promise<{ ok: boolean; characterId?: string; error?: string }> => ipcRenderer.invoke('custom:clone', input),
+  customReload: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('custom:reload'),
+  acceptanceCatalog: (): Promise<unknown> => ipcRenderer.invoke('acceptance:catalog'),
+  acceptancePause: (paused: boolean): Promise<{ ok: boolean; paused: boolean }> => ipcRenderer.invoke('acceptance:pause', paused),
+  acceptancePose: (pose: string): Promise<{ ok: boolean; pose?: string; fallback?: boolean }> => ipcRenderer.invoke('acceptance:pose', pose),
+  acceptanceRun: (scenarioId: string): Promise<unknown> => ipcRenderer.invoke('acceptance:run', scenarioId),
+  acceptanceRunAll: (): Promise<unknown> => ipcRenderer.invoke('acceptance:run-all'),
+  acceptanceReport: (): Promise<{ ok: boolean; markdown?: string }> => ipcRenderer.invoke('acceptance:report'),
+  onOpenCreator: (handler: () => void): void => { ipcRenderer.on('ui:open-creator', () => handler()); },
+  onOpenBench: (handler: () => void): void => { ipcRenderer.on('ui:open-bench', () => handler()); },
 });
 
 contextBridge.exposeInMainWorld('petStage', {
@@ -253,6 +312,40 @@ contextBridge.exposeInMainWorld('petStage', {
   // T-M6-21 多角色：manifest 与切换事件
   characterManifest: (id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }> =>
     ipcRenderer.invoke('pet:character-manifest', id),
+  crossPetLines: (characterId: string): Promise<Record<string, string[]>> =>
+    ipcRenderer.invoke('pet:crosspet-lines', characterId),
+  // T-M6-48 友谊 / 小本子 / 互聊 / 提醒
+  friendRecord: (characterId: string, action: 'pat' | 'poke' | 'chat' | 'cowork' | 'cofinish'): Promise<unknown> =>
+    ipcRenderer.invoke('friendship:record', characterId, action),
+  sleepState: (agentId: string, asleep: boolean): void => { ipcRenderer.send('pet:sleep-state', agentId, asleep); },
+  petFlee: (agentId: string): Promise<{ ok: boolean; fled?: boolean }> => ipcRenderer.invoke('pet:flee', agentId),
+  petAssemble: (): Promise<{ ok: boolean; windows: unknown[] }> => ipcRenderer.invoke('pet:assemble'),
+  petDismiss: (): Promise<{ ok: boolean; closed: number }> => ipcRenderer.invoke('pet:dismiss'),
+  petEggSummon: (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => ipcRenderer.invoke('pet:egg-summon'),
+  petOpenNotebook: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:open-notebook'),
+  customPoseConfig: (characterId: string): Promise<{ ok: boolean; correctedPose?: string; longThink?: { after: number; pose: string }; pokePose?: string }> =>
+    ipcRenderer.invoke('custom:pose-config', characterId),
+  onPetPose: (handler: (payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => void): void => {
+    ipcRenderer.on('pet:pose', (_e, payload: { pose: string; line?: string; source?: 'work-follow' | 'bench' }) => handler(payload));
+  },
+  reloadCharacters: (): Promise<{ ok: boolean; count?: number }> => ipcRenderer.invoke('pet:reload-characters'),
+  onBenchSleep: (handler: (payload: { asleep: boolean }) => void): void => {
+    ipcRenderer.on('pet:bench-sleep', (_e, payload: { asleep: boolean }) => handler(payload));
+  },
+  onPauseEvents: (handler: (payload: { paused: boolean }) => void): void => {
+    ipcRenderer.on('pet:pause-events', (_e, payload: { paused: boolean }) => handler(payload));
+  },
+  openCreator: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('ui:open-creator'),
+  openBench: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('ui:open-bench'),
+  characterList: (): Promise<Array<{ id: string; displayName: string; packId?: string }>> => ipcRenderer.invoke('pet:character-list'),
+  petSummon: (characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }> => ipcRenderer.invoke('pet:summon', characterId),
+  onPetBump: (handler: (payload: { partner: string; partnerName: string }) => void): void => {
+    ipcRenderer.on('pet:bump', (_e, payload: { partner: string; partnerName: string }) => handler(payload));
+  },
+  // T-M6-49 本机驱动口 / 工作跟随
+  onPetSay: (handler: (payload: { text: string }) => void): void => { ipcRenderer.on('pet:say', (_e, payload: { text: string }) => handler(payload)); },
+  onPetWake: (handler: () => void): void => { ipcRenderer.on('pet:wake', () => handler()); },
+  onPetCrown: (handler: (payload: { on: boolean }) => void): void => { ipcRenderer.on('pet:crown', (_e, payload: { on: boolean }) => handler(payload)); },
   onCharacterChanged: (handler: (character: { id: string; anchorRatio: number }) => void): void => {
     ipcRenderer.on('pet:character-changed', (_e, c: { id: string; anchorRatio: number }) => handler(c));
   },

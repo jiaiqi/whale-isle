@@ -53,6 +53,8 @@ export interface CharacterSummary {
   builtin: boolean;
   licenseScope: string;
   voiceId: string;
+  /** 来源包 id（aboutme-pets / crosspet-*）；主条只展示 9 角色，CrossPet 由召唤/跟随使用 */
+  packId?: string;
 }
 
 /** 联机端点视图（主进程 coop:endpoints） */
@@ -61,8 +63,21 @@ export interface LaunchStatusView {
   gameId: GameId;
   detected: boolean;
   executable: string | null;
+  /** T-M6-47：泰拉瑞亚客户端与桥接 Mod、DST 集群目录 */
+  clientExecutable?: string | null;
+  bridge?: { detected: boolean; path: string | null; detail: string };
+  clusterRoot?: string;
   detail: string;
   agents: Array<{ agentId: string; profileDir: string; ready: boolean }>;
+}
+
+export interface DstWizardStatusView {
+  clusterDir: string;
+  tokenSaved: boolean;
+  overridesSaved: boolean;
+  sidecarEntry: string;
+  sidecarAvailable: boolean;
+  agents: Array<{ id: string; routingId: string; characterId: string }>;
 }
 export interface PetPackCatalogItem {
   slug: string;
@@ -312,6 +327,60 @@ export interface DirectorBridge {
   onLiveBatch(handler: (batch: unknown) => void): void;
   petsManifest(): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
   petsPreview(action: string, clipId: string | null): Promise<{ ok: boolean }>;
+  /** T-M6-45 随包素材目录（1,040 动作 / 11 槽位 / 皮肤彩蛋 / 字体） */
+  petStudioCatalog(): Promise<import('@workbench/shared-protocol').PetStudioCatalog>;
+  petPacksRoot(): Promise<string>;
+  /** T-M6-48 友谊 / 小本子 / 互聊 / 多宠召唤 */
+  friendRecord(characterId: string, action: 'pat' | 'poke' | 'chat' | 'cowork' | 'cofinish'): Promise<unknown>;
+  friendNotebook(characterId: string): Promise<{
+    characterId: string;
+    stats: { points: number; dailyGained: number; quarterHearts: number; hearts: number; tier: string; pats: number; pokes: number; rounds: number; cowork: number; cofinish: number } | null;
+    notes: Array<{ id: number; text: string; createdAt: number }>;
+    banter: Array<{ id: number; aName: string; aText: string; bName: string; bText: string; createdAt: number }>;
+  }>;
+  friendNoteAdd(characterId: string, text: string): Promise<{ ok: boolean; error?: string }>;
+  friendWipe(): Promise<{ ok: boolean }>;
+  friendPairChat(): Promise<{ ok: boolean; aName?: string; aText?: string; bName?: string; bText?: string; error?: string }>;
+  friendGreeting(characterId: string): Promise<string>;
+  friendMeet(characterId: string): Promise<string>;
+  petSummon(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
+  petAssemble(): Promise<{ ok: boolean; windows: unknown[] }>;
+  petDismiss(): Promise<{ ok: boolean; closed: number }>;
+  petEggSummon(): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }>;
+  /** T-M6-49 跨 AI 工作跟随 */
+  workFollowStatus(): Promise<import('@workbench/shared-protocol').WorkFollowStatus>;
+  workFollowIngest(event: unknown): Promise<{ ok: boolean; error?: string }>;
+  workFollowMode(mode: 'single' | 'multi'): Promise<import('@workbench/shared-protocol').WorkFollowStatus>;
+  onWorkFollowUpdate(handler: (status: import('@workbench/shared-protocol').WorkFollowStatus) => void): () => void;
+  onOpenPetNotebook(handler: () => void): void;
+  /** T-M6-53 创作中心 / 验收台 */
+  pathForFile(file: File): string;
+  creatorPoseTiers(): Promise<{ tiers: Array<{ id: 'A' | 'B' | 'C' | 'MEME'; label: string; count: number; poses: Array<{ id: string; hint: string }> }>; locks: Array<{ id: string; label: string; reference: string; traits: string }> }>;
+  creatorCompileCharacter(input: unknown): Promise<{ ok: boolean; prompt: string }>;
+  creatorCompileEgg(input: unknown): Promise<{ ok: boolean; prompt: string }>;
+  creatorPickImages(): Promise<{ ok: boolean; paths?: string[] }>;
+  creatorPickFolder(): Promise<{ ok: boolean; folder?: string }>;
+  creatorImport(input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; avatar?: string; portrait?: string; warnings?: string[]; error?: string }>;
+  creatorGenerateEggLines(input: unknown): Promise<{ ok: boolean; lines?: Record<string, string[]>; error?: string }>;
+  creatorListCustom(): Promise<Array<{ id: string; name: string; poses: string[] }>>;
+  customList(): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }>;
+  customGet(id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }>;
+  customSave(id: string, input: unknown): Promise<{ ok: boolean; error?: string }>;
+  customRename(id: string, name: string): Promise<{ ok: boolean; error?: string }>;
+  customClone(input: { builtinId: string; newId: string; displayName?: string }): Promise<{ ok: boolean; characterId?: string; error?: string }>;
+  customReload(): Promise<{ ok: boolean }>;
+  acceptanceCatalog(): Promise<{
+    scenarios: Array<{ id: string; label: string; description: string }>;
+    character: { name: string; id: string; available: string[]; fallbacks: Array<{ requested: string; pose: string; status: 'ok' | 'fallback' | 'missing'; reason: string }> };
+    paused: boolean;
+  }>;
+  acceptancePause(paused: boolean): Promise<{ ok: boolean; paused: boolean }>;
+  acceptancePose(pose: string): Promise<{ ok: boolean; pose?: string; fallback?: boolean }>;
+  acceptanceRun(scenarioId: string): Promise<{ ok: boolean; result?: { scenarioId: string; label: string; status: 'completed' | 'failed'; steps: number; note: string }; error?: string }>;
+  acceptanceRunAll(): Promise<{ ok: boolean; results: Array<{ scenarioId: string; label: string; status: 'completed' | 'failed'; steps: number; note: string }> }>;
+  acceptanceReport(): Promise<{ ok: boolean; markdown?: string }>;
+  onOpenCreator(handler: () => void): void;
+  onOpenBench(handler: () => void): void;
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
   prefsGet(): Promise<{ scale: number; dragBehavior: 'stick' | 'glide' | 'gravity'; characterId?: string; mcpEndpointId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number }>;
   prefsSet(update: { scale?: number; dragBehavior?: 'stick' | 'glide' | 'gravity'; characterId?: string; powerSaverEnabled?: boolean; shortcutHideEnabled?: boolean; autoHideFullscreen?: boolean; sfxEnabled?: boolean; sfxVolume?: number }): Promise<unknown>;
@@ -331,8 +400,11 @@ export interface DirectorBridge {
   coopChatSend(input: { text: string; mentions?: string[] }): Promise<{ ok: boolean; error?: string; route?: string; fallback?: boolean }>;
   coopHuddleStart(input?: { goalTitle?: string; reason?: string; note?: string }): Promise<{ ok: boolean; error?: string; fallback?: boolean; rounds?: number; plan?: TeamPlan }>;
   coopLaunchStatus(): Promise<LaunchStatusView[]>;
-  coopLaunchHuman(gameId: GameId): Promise<{ ok: boolean; error?: string; pid?: number }>;
-  coopLaunchAi(agentId: string): Promise<{ ok: boolean; error?: string; pid?: number; profileModsDir?: string; port?: number }>;
+  coopLaunchHuman(gameId: GameId): Promise<{ ok: boolean; error?: string; pid?: number; aiPorts?: number[] }>;
+  coopLaunchAi(agentId: string): Promise<{ ok: boolean; error?: string; pid?: number; profileModsDir?: string; port?: number; note?: string }>;
+  /** T-M6-47 DST 向导：token 只上行，状态只回布尔 */
+  coopDstStatus(): Promise<DstWizardStatusView>;
+  coopDstSaveToken(token: string): Promise<{ ok: boolean; error?: string }>;
   coopHelpRequest(input: { agentId: string; reason: string }): Promise<{ ok: boolean; error?: string; mode?: string; helperAgentId?: string; fallback?: boolean }>;
   onCoopBlackboardUpdate(handler: (payload: { snapshot: TeamBlackboardSnapshot; messages: TeamCommsMessage[] }) => void): () => void;
   onCoopCommsMessage(handler: (message: TeamCommsMessage) => void): () => void;
@@ -361,6 +433,9 @@ export interface DirectorBridge {
     currentVoiceId: string;
   }>;
   voiceAudition(voiceId: string, mode: string, text?: string): Promise<{ ok: boolean; error?: string }>;
+  /** T-M6-46 语音中心：每角色声线绑定（覆盖优先，落 voice-bindings.json） */
+  voiceCharacterBindings(): Promise<Array<{ characterId: string; displayName: string; voiceId: string; defaultVoiceId: string; overridden: boolean }>>;
+  voiceCharacterBind(characterId: string, voiceId: string): Promise<{ ok: boolean; error?: string }>;
   memoryQuery(query: string): Promise<{
     ok: boolean;
     context: string;

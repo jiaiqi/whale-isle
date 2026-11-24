@@ -2,12 +2,13 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from 'electron';
 import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerStageIpc } from './passthrough';
+import { createPetPacksProtocolHandler, PET_PACKS_SCHEME, readBundledAboutmePacks, readCrossPetCharacters, registerPetPacksIpc, resolvePetPacksDir } from './pet-packs';
 import { registerProviderVaultIpc } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { createPetPrefsStore } from './pet-prefs';
@@ -19,16 +20,26 @@ import { createProviderImportHost } from './provider-import-host';
 import { createAutodriveHost } from './autodrive-host';
 import { createHarnessHost } from './agent-host';
 import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
+import { createVoiceBindingStore, registerVoiceBindingIpc } from './voice-bindings';
+import { createFriendshipHost, registerFriendshipIpc } from './friendship-host';
+import { createPetControlHost } from './pet-control-host';
+import { createCoopLaunchHost } from './coop-launch-host';
+import { createAcpSessionCache } from './acp-session-cache';
+import { createCustomCharacterHost } from './custom-character-host';
+import { createCreatorHost } from './creator-host';
+import { createAcceptanceHost } from './acceptance-host';
+import { customCharacterPairs, invalidateCustomCharacters, linesForPose, readCustomCharacters, resolveProxyCharacter } from './custom-character';
+import { resolvePose } from './pose-resolver';
+import { createWorkFollowHost } from './work-follow-host';
+import { PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
-import { detectLaunchStatus, prepareStardewProfile, spawnGameProcess } from './coop-launcher';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
-import { guessModsDirs } from '@workbench/stardew-mods';
 import { homedir } from 'node:os';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
@@ -44,6 +55,13 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
+
+// whale-pet:// 必须在 app ready 之前登记特权（standard/secure/supportFetchAPI），
+// 否则 <img>/<audio>/fetch 会被当成非标准协议拦截。见 T-M6-45。
+protocol.registerSchemesAsPrivileged([{
+  scheme: PET_PACKS_SCHEME,
+  privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
+}]);
 
 // macOS 的 safeStorage Keychain 服务名是「<app name> Safe Storage」；开发态沿用 Electron 名称
 // 才能解密旧版凭据库。打包后 productName 已是鲸屿，Keychain 服务自然切换；显示名各处显式用 APP_NAME。
@@ -128,6 +146,8 @@ let petWindowManager: PetWindowManager | null = null;
 const petBrowserWindows = new Map<string, BrowserWindow>();
 let petPrefsStore: ReturnType<typeof createPetPrefsStore> | null = null;
 let coopHost: ReturnType<typeof createCoopHost> | null = null;
+/** 任一桌宠处于安静睡眠时，久坐/喝水提醒免打扰（T-M6-48）。 */
+const asleepAgents = new Set<string>();
 
 /**
  * Electron 适配层：PetWindowManager 只依赖最小窗口接口，真实 BrowserWindow 在此创建。
@@ -231,6 +251,20 @@ app.whenReady().then(async () => {
     iconPath: brandAssetPath(BRAND_ASSETS.iconIcns),
   });
   registerStageIpc({ getWindow: () => stageWindow, testMode: TEST_MODE });
+  // 随包素材（T-M6-45）：assets/pet-packs → 只读 whale-pet:// 协议；打包后取 Resources/pet-packs
+  const petPacksRoot = resolvePetPacksDir({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    repoRoot: join(here, '../../../..'),
+  });
+  protocol.handle(PET_PACKS_SCHEME, createPetPacksProtocolHandler({
+    packsRoot: petPacksRoot,
+    fetchFile: (filePath) => net.fetch(pathToFileURL(filePath).toString()),
+  }));
+  registerPetPacksIpc({ packsRoot: petPacksRoot });
+  if (!existsSync(petPacksRoot)) {
+    console.warn(`[pet-packs] 素材目录不存在：${petPacksRoot}（先跑 pnpm sync:pet-packs；随包角色将只剩内置小鲸）`);
+  }
   // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）
   const vaultPath = join(app.getPath('userData'), 'provider-vault.json');
   registerProviderVaultIpc(vaultPath);
@@ -258,21 +292,45 @@ app.whenReady().then(async () => {
     }
     void prev;
   }));
+  /**
+   * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
+   * 工作跟随「单宠换装」复用此函数，绝不关闭 default（T-M6-51 P0）。
+   */
+  function switchDefaultCharacter(id: string): void {
+    prefs.patch({ characterId: id });
+    const next = characters.selected();
+    setCurrentPersonaCharacter(next.id, next.personaPrompt);
+    // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
+    petWindowManager?.patch('default', { characterId: next.id });
+    petWindowManager?.sendAgent('default', 'pet:character-changed', { ...next });
+    if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:character-changed', next);
+  }
+
   const characters = createCharacterRegistry({
     userDataDir: app.getPath('userData'),
     getPrefs: () => prefs.get(),
-    setCharacter: (id) => {
-      prefs.patch({ characterId: id });
-      const next = characters.selected();
-      setCurrentPersonaCharacter(next.id, next.personaPrompt);
-      // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
-      petWindowManager?.patch('default', { characterId: next.id });
-      petWindowManager?.send('pet:character-changed', 'default', next);
-      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:character-changed', next);
-    },
+    setCharacter: switchDefaultCharacter,
     builtinAssetsDir: join(here, '../renderer/pet-stage/assets'),
+    bundled: () => {
+      const aboutme = readBundledAboutmePacks(petPacksRoot);
+      const crosspet = readCrossPetCharacters(petPacksRoot);
+      const bundled = [...aboutme.characters, ...crosspet.characters].flatMap((character) => {
+        const manifest = aboutme.manifests.get(character.id) ?? crosspet.manifests.get(character.id);
+        return manifest === undefined ? [] : [{ character, manifest }];
+      });
+      // T-M6-53：userData 自定义角色（含克隆/热重载）与随包角色合并；同 id 随包优先
+      const customIds = new Set(bundled.map((pair) => pair.character.id));
+      return [...bundled, ...customCharacterPairs(app.getPath('userData')).filter((pair) => !customIds.has(pair.character.id))];
+    },
   });
   void characters;
+
+  // 语音中心（T-M6-46）：每个角色可独立改绑音色，覆盖值优先于角色包默认
+  const voiceBindings = createVoiceBindingStore({
+    filePath: join(app.getPath('userData'), 'voice-bindings.json'),
+    defaultVoiceOf: (id) => characters.list().find((character) => character.id === id)?.voiceId,
+  });
+  registerVoiceBindingIpc({ store: voiceBindings, characters: () => characters.list() });
 
   let packImportBusy = false;
   ipcMain.handle('pet:pack-catalog', () => readPackCatalog(app.getPath('userData')));
@@ -320,7 +378,137 @@ app.whenReady().then(async () => {
     onWindowsChanged: (list) => {
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:window-list-changed', list);
     },
+    // T-M6-48：两只桌宠撞在一起 → 双方 Q 弹互撞 + 互吐槽（真实窗口几何驱动）
+    onCollision: ({ a, b }) => {
+      const nameOf = (id: string): string => characters.list().find((character) => character.id === id)?.displayName ?? '桌宠';
+      petWindowManager?.sendAgent(a.agentId, 'pet:bump', { partner: b.characterId, partnerName: nameOf(b.characterId) });
+      petWindowManager?.sendAgent(b.agentId, 'pet:bump', { partner: a.characterId, partnerName: nameOf(a.characterId) });
+    },
   });
+
+  // 桌宠控制宿主（T-M6-51 拆分）：召唤/集合/解散/彩蛋 + 对外驱动口 + 相关 IPC
+  const petControl = createPetControlHost({
+    manager: () => petWindowManager,
+    characters: () => characters,
+    crossPetCharacters: () => readCrossPetCharacters(petPacksRoot).characters,
+    getPrefs: () => prefs.get(),
+    switchDefaultCharacter,
+    voice: () => voice,
+    voiceBindings: () => voiceBindings,
+    asleepAgents,
+    openNotebook: () => {
+      if (directorWindow && !directorWindow.isDestroyed()) {
+        directorWindow.show();
+        directorWindow.focus();
+        directorWindow.webContents.send('pet:open-notebook');
+      }
+    },
+  });
+  petControl.registerIpc();
+  const summonPet = petControl.summonPet;
+
+  /** 自定义角色热重载：清缓存 → 广播角色列表 → 每个桌宠窗重载自身 manifest（零重启）。 */
+  const reloadCustomCharacters = (): number => {
+    invalidateCustomCharacters();
+    const fresh = characters.list();
+    for (const view of petWindowManager?.list() ?? []) {
+      const character = fresh.find((item) => item.id === view.characterId);
+      if (character !== undefined) petWindowManager?.sendAgent(view.agentId, 'pet:character-changed', { ...character });
+    }
+    if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:characters-changed');
+    return fresh.length;
+  };
+  ipcMain.handle('pet:reload-characters', () => ({ ok: true, count: reloadCustomCharacters() }));
+  createCustomCharacterHost({
+    userDataDir: app.getPath('userData'),
+    packsRoot: petPacksRoot,
+    onReload: () => { reloadCustomCharacters(); },
+  }).registerIpc();
+
+  // 创作中心（T-M6-53）：生图提示词/彩蛋台词/拖入处理
+  createCreatorHost({
+    userDataDir: app.getPath('userData'),
+    getDirectorWindow: () => directorWindow,
+    chat: async (system, user) => {
+      const result = await autodrive.completeForCoop('STARDEW_GAME_PLANNER' as never, system, user, 600);
+      return result === null ? null : result.content;
+    },
+  }).registerIpc();
+
+  // 姿态与场景验收台（T-M6-53）：12 场景直接驱动真实桌宠窗口
+  createAcceptanceHost({
+    characters: () => characters,
+    petControl,
+    manager: () => petWindowManager,
+    defaultAgentId: () => 'default',
+    summonEgg: () => petControl.summonEgg(),
+  }).registerIpc();
+
+  // 桌宠右键入口 → 聚焦中控台并打开对应弹窗
+  const focusDirectorWith = (channel: string): { ok: boolean } => {
+    if (directorWindow && !directorWindow.isDestroyed()) {
+      directorWindow.show();
+      directorWindow.focus();
+      directorWindow.webContents.send(channel);
+    }
+    return { ok: true };
+  };
+  ipcMain.handle('ui:open-creator', () => focusDirectorWith('ui:open-creator'));
+  ipcMain.handle('ui:open-bench', () => focusDirectorWith('ui:open-bench'));
+
+  // 跨 AI 工作跟随（T-M6-49）：只读事件 + 自动召唤/换装/戴皇冠
+  let workFollowRef: import('./work-follow-host').WorkFollowHost | null = null;
+  const workFollow = createWorkFollowHost({
+    userDataDir: app.getPath('userData'),
+    summon: (characterId) => {
+      // 多 AI 同屏最多 4 只跨 AI 桌宠，避免会话多开时窗口爆量
+      const crossPets = petWindowManager?.list().filter((view) => view.characterId.startsWith('crosspet-')) ?? [];
+      if (crossPets.length >= 4) return;
+      void summonPet(characterId);
+    },
+    switchCharacter: (characterId) => {
+      // 单宠换装：只关掉其他跨 AI 窗口，default 主窗保留并原地换角色（含夜间睡衣）
+      petWindowManager?.dismissAll('default');
+      switchDefaultCharacter(petControl.nightOutfit(characterId));
+    },
+    onSessionIdle: (session) => {
+      // multi 模式闲置退场：同一角色还有活跃会话时保留窗口
+      const stillActive = workFollowRef?.status().sessions.some((item) => item.active && item.characterId === session.characterId) ?? false;
+      if (stillActive) return;
+      const view = petWindowManager?.list().find((item) => item.characterId === session.characterId);
+      if (view === undefined) return;
+      // 先告别再退场：气泡保留 2.5s 后关窗，避免“突然消失”
+      petWindowManager?.sendAgent(view.agentId, 'pet:say', { text: '这边忙完啦，我先撤～下次再一起干活！' });
+      setTimeout(() => petControl.closeAgent(view.agentId), 2_500);
+    },
+    resolveCharacter: (event) => resolveProxyCharacter(app.getPath('userData'), event.source, event.modelName)?.character.id ?? null,
+    onAgentPose: (session, pose) => {
+      const view = petWindowManager?.list().find((item) => item.characterId === session.characterId);
+      if (view === undefined) return;
+      const character = characters.list().find((item) => item.id === session.characterId);
+      if (character === undefined) return;
+      const manifestResult = characters.manifestOf(character);
+      const available = manifestResult.ok
+        ? [...manifestResult.manifest.actions.flatMap((action) => action.clips.map((clip) => clip.clipId)), ...manifestResult.manifest.ambientPool.map((clip) => clip.clipId)]
+        : [];
+      const resolved = resolvePose(pose, available);
+      let line: string | undefined;
+      if (session.characterId.startsWith('custom-')) {
+        const entry = readCustomCharacters(app.getPath('userData')).entries.find((item) => item.character.id === session.characterId);
+        if (entry !== undefined) line = linesForPose(entry.data, resolved.pose)[0];
+      }
+      petControl.pose(view.agentId, resolved.pose, line, 'work-follow');
+    },
+    onCrown: (session) => {
+      const view = petWindowManager?.list().find((item) => item.characterId === session.characterId);
+      if (view !== undefined) petWindowManager?.sendAgent(view.agentId, 'pet:crown', { on: true });
+    },
+    onUpdate: (status) => {
+      if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('work-follow:update', status);
+    },
+  });
+  workFollowRef = workFollow;
+  app.on('will-quit', () => workFollow.dispose());
   ipcMain.handle('pet:window-open', async (_event, agentId: string, characterId?: string) => {
     const known = characterId === undefined ? undefined : characters.list().find((character) => character.id === characterId);
     if (characterId !== undefined && known === undefined) return { ok: false, error: `未知角色：${characterId}` };
@@ -406,20 +594,15 @@ app.whenReady().then(async () => {
   }, 5_000).unref();
   app.on('will-quit', () => { altMonitor.stop(); globalShortcut.unregisterAll(); });
 
-  // T-M6-31：外部插件生产链路（发现/启停/工具注册/审批/崩溃隔离）
-  const plugins = createPluginHost({
-    userDataDir: app.getPath('userData'),
-    windows: () => [...petBrowserWindows.values(), directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
-  });
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
   const voice = createVoiceHost(process.platform, {
-    resolveVoiceId: (characterId) => characters.list().find((character) => character.id === characterId)?.voiceId ?? null,
+    resolveVoiceId: (characterId) => voiceBindings.resolve(characterId) ?? null,
     onSpeakerChange: (event) => {
-      petWindowManager?.send('coop:speaker', '*', event);
+      petWindowManager?.broadcast('coop:speaker', { ...event });
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('coop:speaker', event);
     },
     onSpeechResult: (event) => {
-      petWindowManager?.send('pet:speech-result', '*', event);
+      petWindowManager?.broadcast('pet:speech-result', { ...event });
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:speech-result', event);
     },
   });
@@ -427,6 +610,59 @@ app.whenReady().then(async () => {
   // 记忆图谱（T-M5-04）：回执入图谱 + 聊天检索
   const memory = createMemoryHost(app.getPath('userData'));
   void dayKeyOf;
+  // 友谊 / 小本子 / 互聊 / 久坐喝水提醒（T-M6-48）
+  const friendship = createFriendshipHost({
+    userDataDir: app.getPath('userData'),
+    characters: () => characters.list(),
+    speak: (characterId, text) => {
+      const character = characters.list().find((item) => item.id === characterId);
+      void voice.speak({
+        text,
+        scene: 'normal',
+        ...(character === undefined ? {} : {
+          characterId: character.id,
+          speakerName: character.displayName,
+          voiceId: voiceBindings.resolve(character.id) ?? character.voiceId,
+          ratePercent: character.voiceRatePercent,
+          pitchMul: character.voicePitchMul,
+        }),
+      });
+    },
+    remember: (text) => { memory.store.addNode({ nodeType: 'event', text }); },
+  });
+  registerFriendshipIpc(friendship, {
+    activeCharacterIds: () => (petWindowManager?.list() ?? []).filter((view) => view.visible).map((view) => view.characterId),
+  });
+  // 桌宠睡眠态由渲染层上报：提醒在任一桌宠入睡期间免打扰
+  ipcMain.on('pet:sleep-state', (_event, agentId: string, asleep: boolean) => {
+    if (asleep) asleepAgents.add(agentId);
+    else asleepAgents.delete(agentId);
+  });
+  // 久坐/喝水提醒：60s 轮询，23:00–07:00 与睡眠态由 host 内部免打扰
+  const reminderTimer = setInterval(() => {
+    const reminder = friendship.tickReminders(Date.now(), asleepAgents.size > 0);
+    if (reminder === null) return;
+    const character = characters.selected();
+    void voice.speak({
+      text: reminder.text,
+      scene: 'normal',
+      characterId: character.id,
+      speakerName: character.displayName,
+      voiceId: voiceBindings.resolve(character.id) ?? character.voiceId,
+    });
+  }, 60_000);
+  app.on('will-quit', () => { clearInterval(reminderTimer); friendship.close(); });
+
+  // T-M6-31：外部插件生产链路（发现/启停/工具注册/审批/崩溃隔离）
+  const plugins = createPluginHost({
+    userDataDir: app.getPath('userData'),
+    windows: () => [...petBrowserWindows.values(), directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
+    petApi: {
+      state: (agentId) => petControl.petControlApi.state(agentId),
+      say: (agentId, text, request) => petControl.petControlApi.say(agentId, text, request),
+      action: (agentId, actionState, durationMs) => petControl.petControlApi.action(agentId, actionState, durationMs),
+    },
+  });
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发
   const MAIN_GAME_ENDPOINT = 'http://127.0.0.1:18080/mcp';
   const autodrive = createAutodriveHost(
@@ -441,34 +677,6 @@ app.whenReady().then(async () => {
       : null,
     characters,
   );
-  const stardewModsDir = (): string | null => guessModsDirs(process.platform, homedir()).find((dir) => existsSync(dir)) ?? null;
-  const profilesRoot = join(app.getPath('userData'), 'coop-profiles', 'stardew');
-  ipcMain.handle('coop:launch-status', async () => detectLaunchStatus(process.platform, homedir(), profilesRoot));
-  ipcMain.handle('coop:launch-human', async (_e, gameId: 'stardew' | 'terraria' | 'dst') => {
-    if (gameId !== 'stardew') return { ok: false, error: `${gameId} 一键启动需本机安装路径确认；当前仅完成星露谷参数数组启动` };
-    const status = (await detectLaunchStatus(process.platform, homedir(), profilesRoot)).find((item) => item.gameId === 'stardew');
-    if (status?.executable == null) return { ok: false, error: status?.detail ?? '未找到 StardewModdingAPI' };
-    const child = spawnGameProcess(status.executable, []);
-    child.unref();
-    return { ok: true, pid: child.pid };
-  });
-  ipcMain.handle('coop:launch-ai', async (_e, agentId: string) => {
-    const endpoint = coopHost?.list().find((item) => item.id === agentId);
-    if (endpoint === undefined) return { ok: false, error: '未知队友端点' };
-    if (endpoint.gameId !== 'stardew') return { ok: false, error: `${endpoint.gameId} AI 实例启动待本机路径确认` };
-    const modsDir = stardewModsDir();
-    if (modsDir === null) return { ok: false, error: '未找到星露谷 Mods 目录' };
-    const port = Number(new URL(endpoint.endpoint).port || '18080');
-    try {
-      const prepared = await prepareStardewProfile({ modsDir, profileDir: profilesRoot, agentId, port });
-      const status = (await detectLaunchStatus(process.platform, homedir(), profilesRoot)).find((item) => item.gameId === 'stardew');
-      if (status?.executable == null) return { ok: false, error: '未找到 StardewModdingAPI' };
-      const child = spawnGameProcess(status.executable, ['--mods-path', prepared.profileModsDir]);
-      child.unref();
-      return { ok: true, pid: child.pid, profileModsDir: prepared.profileModsDir, port };
-    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
-  });
-
   // 多桌宠联机协作（T-M6-39）：复用 autodrive 的 Gateway/饭碗，但每 Agent 独立 planner/persona/voice。
   coopHost = createCoopHost({
     userDataDir: app.getPath('userData'),
@@ -478,7 +686,28 @@ app.whenReady().then(async () => {
     petWindows: petWindowManager,
     characters,
     isEndpointBusyByMain: (endpoint) => endpoint === MAIN_GAME_ENDPOINT && autodrive.runner.isRunning(),
+    // 联机求助接力 / 共同目标完成 → 对应角色涨好感（T-M6-48）
+    onFriendshipEvent: (kind, agentId) => {
+      const endpoint = coopHost?.list().find((item) => item.id === agentId);
+      if (endpoint !== undefined) friendship.record(kind, endpoint.characterId);
+    },
   });
+
+  // 联机启动器宿主（T-M6-51 拆分）：探测/隔离 profile/参数数组 spawn 全部在此
+  const coopLaunch = createCoopLaunchHost({
+    userDataDir: app.getPath('userData'),
+    platform: process.platform,
+    homeDir: homedir(),
+    repoRoot: join(here, '../../../..'),
+    endpoints: () => (coopHost?.list() ?? []).map((item) => ({
+      id: item.id,
+      gameId: item.gameId,
+      routingId: item.routingId,
+      characterId: item.characterId,
+      endpoint: item.endpoint,
+    })),
+  });
+  coopLaunch.registerIpc();
   // T-M6-37：直播最小链路（弹幕回放 → 护栏 → 注意力 → 中控台/插件总线/语音）
   const live = createLiveHost({
     windows: () => [...petBrowserWindows.values(), directorWindow].filter((w): w is NonNullable<typeof w> => w !== null).map((w) => w.webContents),
@@ -487,7 +716,22 @@ app.whenReady().then(async () => {
   });
   // 自驾事件进插件总线（插件只能经总线观察，不直接访问 autodrive）
   autodrive.subscribe((event) => plugins.emit('autodrive:event', event));
-  const harness = createHarnessHost();
+  // ACP 会话 id 缓存：session-started / permission / exit 必须落在同一个 sessionId 上，
+  // 否则在工作跟随面板会分裂成“开始一个、工具记到另一个、退出又一个”的幽灵会话。
+  const acpSessions = createAcpSessionCache();
+  const harness = createHarnessHost({
+    // ACP 事件镜像到工作跟随（只取事件类型/工具名/会话 id，不碰正文）
+    onEvent: (presetId, event) => {
+      if (event.type === 'session-started') {
+        const sessionId = acpSessions.onStarted(presetId, event.sessionId);
+        workFollow.ingest({ source: 'acp', sessionId, kind: 'start', modelName: presetId, taskTitle: presetId });
+      } else if (event.type === 'permission') {
+        workFollow.ingest({ source: 'acp', sessionId: acpSessions.resolve(presetId), kind: 'tool', toolName: event.toolName });
+      } else if (event.type === 'exit') {
+        workFollow.ingest({ source: 'acp', sessionId: acpSessions.onExit(presetId), kind: 'stop' });
+      }
+    },
+  });
   // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100，结果如实回报（不伪造「已连接」）
   ipcMain.handle('game:health', async (_event, gameId: GameId, endpoint?: string) => {
     try {
@@ -511,6 +755,11 @@ app.whenReady().then(async () => {
   // 包裹 try/catch：WebUI 起不来只告警，绝不拖垮 Electron 主进程。
   try {
     const webui = createWebUIServer({
+      petApi: {
+        state: (agentId) => petControl.petControlApi.state(agentId),
+        say: (agentId, request) => petControl.petControlApi.say(agentId, request.text, { scene: request.scene, wake: request.wake }),
+        action: (agentId, request) => petControl.petControlApi.action(agentId, request.actionState, request.durationMs),
+      },
       getState: () => ({
         running: autodrive.runner.isRunning(),
         brainMode: autodrive.getBrainMode().mode,

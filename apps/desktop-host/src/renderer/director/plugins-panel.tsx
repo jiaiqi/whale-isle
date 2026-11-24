@@ -22,14 +22,14 @@ export interface PluginCatalogItem {
 export const PLUGIN_CATALOG: PluginCatalogItem[] = [
   { id: 'chat', name: '聊天 · 小鲸', tag: '核心', group: '交互中枢', icon: MessageSquare, desc: 'LLM 回话、内心戏、指令插队与记忆注入', permissions: 'llm/* · memory/*' },
   { id: 'memory', name: '记忆图谱与日记', tag: '内置', group: '交互中枢', icon: Brain, desc: 'JSONL 图谱、换日日记、混合检索与钉住', permissions: 'fs/memory/*' },
-  { id: 'voice', name: '声音工坊与音色库', tag: '内置', group: '声形与舞台', icon: AudioLines, desc: '5×5 试听矩阵、TTS 调音台、RVC 实验室', permissions: 'audio/*' },
-  { id: 'pet', name: '桌宠舞台与动作库', tag: '核心', group: '声形与舞台', icon: Fish, desc: '114 动作、双轨气泡、语音锁与饭碗挂件', permissions: 'fs/assets/*' },
+  { id: 'voice', name: '语音中心', tag: '内置', group: '桌宠与声音', icon: AudioLines, desc: '5×5 试听矩阵、TTS 调音台、RVC 实验室', permissions: 'audio/*' },
+  { id: 'pet', name: '桌宠工坊', tag: '核心', group: '桌宠与声音', icon: Fish, desc: '114 动作、双轨气泡、语音锁与饭碗挂件', permissions: 'fs/assets/*' },
   { id: 'stardew', name: '星露谷共玩', tag: 'dsh', group: '游戏与直播', icon: Sprout, desc: 'BWF MCP 自动驾驶、LLM 规划器与攻略注入', permissions: 'net/mcp/* · llm/*' },
   { id: 'terraria', name: '泰拉瑞亚共玩', tag: 'M7', group: '游戏与直播', icon: Swords, desc: 'tModLoader 模组桥、寻路与生存反射', permissions: 'net/http/* · llm/*' },
   { id: 'dst', name: '饥荒 DST 共玩', tag: 'M7', group: '游戏与直播', icon: Flame, desc: '本地专用服 + Lua 模组 + sidecar 桥', permissions: 'net/http/* · llm/*' },
   { id: 'mods', name: 'Mod 管理', tag: '内置', group: '游戏与直播', icon: Package, desc: 'SMAPI 目录扫描、启停与 ZIP 安装', permissions: 'fs/mods/*' },
-  { id: 'obs', name: 'OBS 透明挂件', tag: 'dsh', group: '游戏与直播', icon: MonitorPlay, desc: '18765 透明源：双轨气泡/议会/歌词/饭碗', permissions: 'net/stage/*' },
-  { id: 'harness', name: 'Harness · ACP', tag: 'dsh', group: '平台与底层', icon: Terminal, desc: 'ACP agents 握手、事件流与 Y/N/A 审批', permissions: 'shell/agent/*' },
+  { id: 'obs', name: 'OBS 挂件', tag: 'dsh', group: '游戏与直播', icon: MonitorPlay, desc: '18765 透明源：双轨气泡/议会/歌词/饭碗', permissions: 'net/stage/*' },
+  { id: 'harness', name: 'Harness', tag: 'dsh', group: '平台与底层', icon: Terminal, desc: 'ACP agents 握手、事件流与 Y/N/A 审批', permissions: 'shell/agent/*' },
   { id: 'providers', name: '模型供应商', tag: '核心', group: '平台与底层', icon: Cpu, desc: '干饭套餐、六槽位绑定与 safeStorage 凭据', permissions: 'vault://*' },
 ];
 

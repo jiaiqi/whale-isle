@@ -15,14 +15,12 @@ import type { DirectorStore } from '@workbench/local-store/dexie';
 import { GAME_OPTIONS, isCurrentSessionEvent, type AutodriveEventView, type CharacterSummary, type GameId } from './bridge';
 import { ProvidersPanel } from './providers-panel';
 import { HarnessPanel } from './harness-panel';
-import { PetsPanel } from './pets-panel';
-import { VoicePanel } from './voice-panel';
-import { VoiceStudioPanel } from './voice-studio-panel';
+import { VoiceCenterPanel } from './voice-center-panel';
 import { ModsPanel } from './mods-panel';
 import { MemoryPanel } from './memory-panel';
 import { ObsPanel } from './obs-panel';
 import { PluginsPanel } from './plugins-panel';
-import { PetStagePanel } from './pet-stage-panel';
+import { PetStudioPanel } from './pet-studio';
 import { CoopPanel } from './coop-panel'; // T-M6-22 多桌宠联机端点
 import { TerrariaPanel } from './terraria-panel';
 import { DstPanel, type DstPanelEvent } from './dst-panel';
@@ -164,6 +162,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [mainModelId, setMainModelId] = useState('');
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
   const [characterId, setCharacterId] = useState('blue-whale-maid');
+  // 桌宠右键「小本子」→ 每次自增，切到桌宠工坊 Tab 3
+  const [notebookSignal, setNotebookSignal] = useState(0);
+  const [creatorSignal, setCreatorSignal] = useState(0);
+  const [benchSignal, setBenchSignal] = useState(0);
   const [voiceOn, setVoiceOn] = useState(true);
   // T-M6-33：实际语音后端（mcode / say / unsupported），顶栏如实展示，避免把 say 当角色 TTS
   const [voiceBackend, setVoiceBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
@@ -177,8 +179,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [memoryStats, setMemoryStats] = useState<{ nodes: number; edges: number; lastDay: string | null } | null>(null);
   const [guides, setGuides] = useState<string[]>([]);
   const [chatFilter, setChatFilter] = useState<ReceiptFilter>('all');
-  const [voiceTab, setVoiceTab] = useState<'library' | 'studio'>('library');
-  const [petTab, setPetTab] = useState<'stage' | 'library'>('stage');
+  // 桌宠工坊 / 语音中心的分页签状态由各自面板内聚（T-M6-46）
   // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
   const flowRef = useRef<HTMLDivElement | null>(null);
@@ -209,9 +210,26 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       if (history.length > 0) setEvents((prev) => mergeHydrated(history, prev));
     });
     void window.directorBridge.plannerStatus().then((s) => setBrain(s));
-    const refreshCharacters = (): void => { void window.directorBridge.characterList().then(setCharacters).catch(() => setCharacters([])); };
+    // T-M6-48：主条只展示 9 角色（+内置小鲸）；CrossPet 的 30 个角色由召唤/彩蛋/跨 AI 跟随单独使用
+    const refreshCharacters = (): void => {
+      void window.directorBridge.characterList()
+        .then((list) => setCharacters(list.filter((character) => !(character.packId ?? '').startsWith('crosspet-'))))
+        .catch(() => setCharacters([]));
+    };
     refreshCharacters();
     window.addEventListener('pet:characters-changed', refreshCharacters);
+    window.directorBridge.onOpenPetNotebook(() => {
+      setTab('pet');
+      setNotebookSignal((value) => value + 1);
+    });
+    window.directorBridge.onOpenCreator(() => {
+      setTab('pet');
+      setCreatorSignal((value) => value + 1);
+    });
+    window.directorBridge.onOpenBench(() => {
+      setTab('pet');
+      setBenchSignal((value) => value + 1);
+    });
     void window.directorBridge.prefsGet().then((p) => {
       if (typeof p.characterId === 'string') setCharacterId(p.characterId);
     }).catch(() => undefined);
@@ -666,35 +684,26 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
         {tab === 'voice' && (
           <div className="h-full overflow-y-auto px-6 py-5">
-            <header className="mb-4 flex items-end justify-between">
-              <div>
-                <h1 className="text-xl font-semibold">声音工坊与音色库</h1>
-                <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>5 音色 × 5 情感试听 · TTS 调音台 · RVC 实验室（:18790）</p>
-              </div>
-              <div className="seg-tabs">
-                <button className={`seg-tab${voiceTab === 'library' ? ' on' : ''}`} onClick={() => setVoiceTab('library')}>音色库</button>
-                <button className={`seg-tab${voiceTab === 'studio' ? ' on' : ''}`} onClick={() => setVoiceTab('studio')}>声音工坊</button>
-              </div>
-            </header>
-            {voiceTab === 'library' ? <VoicePanel bare /> : <VoiceStudioPanel bare characterId={characterId} characterName={characters.find((c) => c.id === characterId)?.displayName ?? '小鲸'} />}
+            <VoiceCenterPanel
+              characters={characters}
+              characterId={characterId}
+              onSelectCharacter={(id) => void selectCharacter(id)}
+            />
           </div>
         )}
 
         {tab === 'pet' && (
           <div className="h-full overflow-y-auto px-6 py-5">
-            <header className="mb-4 flex items-end justify-between">
-              <div>
-                <h1 className="text-xl font-semibold">桌宠舞台与动作库</h1>
-                <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>透明舞台 · 双轨气泡 · 114 动作全量预览</p>
-              </div>
-              <div className="seg-tabs">
-                <button className={`seg-tab${petTab === 'stage' ? ' on' : ''}`} onClick={() => setPetTab('stage')}>透明舞台</button>
-                <button className={`seg-tab${petTab === 'library' ? ' on' : ''}`} onClick={() => setPetTab('library')}>动作库</button>
-              </div>
-            </header>
-            {petTab === 'stage'
-              ? <PetStagePanel events={events} running={running} characters={characters} characterId={characterId} onSelectCharacter={(id) => void selectCharacter(id)} />
-              : <PetsPanel />}
+            <PetStudioPanel
+              events={events}
+              running={running}
+              characters={characters}
+              characterId={characterId}
+              onSelectCharacter={(id) => void selectCharacter(id)}
+              openNotebookSignal={notebookSignal}
+              openCreatorSignal={creatorSignal}
+              openBenchSignal={benchSignal}
+            />
           </div>
         )}
 

@@ -27,20 +27,38 @@ const MODE_SAMPLE: Record<string, string> = {
   surprised: '诶诶诶！主人居然给本鱼准备了礼物？！真的吗真的吗！',
 };
 
-export function VoicePanel({ bare = false }: { bare?: boolean } = {}): React.JSX.Element {
+export function VoicePanel({
+  bare = false,
+  characterName,
+  boundVoiceId,
+  onBind,
+}: {
+  bare?: boolean;
+  /** T-M6-46 语音中心：当前配置角色的显示名 */
+  characterName?: string;
+  /** 该角色当前生效音色（覆盖值优先）；提供后顶部高亮以它为准 */
+  boundVoiceId?: string;
+  /** 提供时改为「绑定到当前角色」，不再写全局 voice.config */
+  onBind?: (voiceId: string) => Promise<{ ok: boolean; error?: string }>;
+} = {}): React.JSX.Element {
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [modes, setModes] = useState<ModeOption[]>([]);
   const [currentVoiceId, setCurrentVoiceId] = useState<string>('');
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const who = characterName ?? '小鲸';
 
   useEffect(() => {
     void window.directorBridge.voiceCatalog().then((catalog) => {
       setVoices(catalog.voices);
       setModes(catalog.modes);
-      setCurrentVoiceId(catalog.currentVoiceId);
+      setCurrentVoiceId(boundVoiceId ?? catalog.currentVoiceId);
     });
-  }, []);
+  }, [boundVoiceId]);
+
+  useEffect(() => {
+    if (boundVoiceId !== undefined) setCurrentVoiceId(boundVoiceId);
+  }, [boundVoiceId]);
 
   const audition = async (voiceId: string, mode: string): Promise<void> => {
     setBusy(`${voiceId}:${mode}`);
@@ -52,6 +70,13 @@ export function VoicePanel({ bare = false }: { bare?: boolean } = {}): React.JSX
 
   const pickVoice = async (voiceId: string): Promise<void> => {
     setCurrentVoiceId(voiceId);
+    if (onBind !== undefined) {
+      const res = await onBind(voiceId);
+      setNotice(res.ok
+        ? `✅ 已绑定「${who}」→ ${voices.find((v) => v.id === voiceId)?.label ?? voiceId}（多桌宠各自独立音色）`
+        : `错误：绑定失败：${res.error ?? '未知错误'}`);
+      return;
+    }
     await window.directorBridge.voiceConfigSet({ voiceId });
     setNotice(`✅ 已切换音色：${voices.find((v) => v.id === voiceId)?.label ?? voiceId}（聊天/游戏播报/内心戏立即生效）`);
   };
@@ -62,7 +87,7 @@ export function VoicePanel({ bare = false }: { bare?: boolean } = {}): React.JSX
         <div>
           <h1 className="text-xl font-semibold">音色库</h1>
           <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
-            选择小鲸的声音 · 点击任一档位试听 · 每档情感参数独立（音高/语速/响度）
+            选择{who}的声音 · 点击任一档位试听 · 每档情感参数独立（音高/语速/响度）
           </p>
         </div>
         <span className="pill pill-violet">{voices.length} 个候选音色</span>
@@ -116,7 +141,7 @@ export function VoicePanel({ bare = false }: { bare?: boolean } = {}): React.JSX
                   }
                 >
                   {selected ? <Check size={13} /> : <Star size={13} />}
-                  {selected ? '已选中' : '使用此音色'}
+                  {selected ? '已选中' : onBind !== undefined ? '绑定给此角色' : '使用此音色'}
                 </button>
               </div>
 

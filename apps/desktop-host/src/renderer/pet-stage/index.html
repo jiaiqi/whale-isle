@@ -17,6 +17,12 @@
         height: 260px;
       }
       #stage video { width: 400px; height: 260px; }
+      /* T-M6-48 CrossPet 姿势动效（爱心/蒸汽/星星/音符/zzz/生气） */
+      @keyframes poseFloat {
+        0% { opacity: 0; transform: translateY(6px) scale(.8); }
+        30% { opacity: .95; }
+        100% { opacity: 0; transform: translateY(-18px) scale(1.08); }
+      }
       /* T-M6-44 省电：暂停非必要毛玻璃/阴影；WebM 源素材 24fps，精灵 canvas 在 JS 侧限 30fps */
       html[data-power-saver="true"] .pet-bubble {
         backdrop-filter: none !important;

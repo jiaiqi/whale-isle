@@ -31,10 +31,10 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
-    label: '声形与舞台',
+    label: '桌宠与声音',
     items: [
-      { id: 'voice', label: '声音工坊与音色库', icon: AudioLines, group: '声形与舞台' },
-      { id: 'pet', label: '桌宠舞台与动作库', icon: Fish, group: '声形与舞台' },
+      { id: 'pet', label: '桌宠工坊', icon: Fish, group: '桌宠与声音' },
+      { id: 'voice', label: '语音中心', icon: AudioLines, group: '桌宠与声音' },
     ],
   },
   {
@@ -42,15 +42,15 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '游戏与直播', live: true },
       { id: 'coop', label: '联机协作', icon: Users, group: '游戏与直播' },
-      { id: 'obs', label: 'OBS 透明挂件', icon: MonitorPlay, group: '游戏与直播' },
+      { id: 'obs', label: 'OBS 挂件', icon: MonitorPlay, group: '游戏与直播' },
     ],
   },
   {
     label: '平台与底层',
     items: [
-      { id: 'harness', label: 'Harness · ACP', icon: Terminal, group: '平台与底层' },
-      { id: 'providers', label: '模型与服务商', icon: Cpu, group: '平台与底层' },
-      { id: 'plugins', label: '插件与权限策略', icon: Blocks, group: '平台与底层' },
+      { id: 'harness', label: 'Harness', icon: Terminal, group: '平台与底层' },
+      { id: 'providers', label: '模型服务商', icon: Cpu, group: '平台与底层' },
+      { id: 'plugins', label: '扩展与权限', icon: Blocks, group: '平台与底层' },
     ],
   },
 ];
