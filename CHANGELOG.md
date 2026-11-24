@@ -3,6 +3,61 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] — 2026-11-24
+
+### Added（全量素材随包 + 桌宠工坊 / 语音中心重构）
+
+- **`assets/pet-packs/` 全量素材直入（T-M6-45）**：新增 `pnpm sync:pet-packs`（GitHub tree 枚举 + 8 并发 + 按字节数断点续传 + 失败重试 + `SYNC-MANIFEST.json`）。实拉 aboutme-pets 2,624 文件 / 1,894 MiB（9 包 · 1,050 精灵图 · 480 条 `.m4a`）、crosspet 946 文件 / 87 MiB（8 基础 + 7 皮肤 + 15 彩蛋 + 8 套手写字体）、上首软糖体.ttf；二次运行 0 下载 / 3,571 跳过。`apps/desktop-host/package.json` 增 `extraResources: assets/pet-packs → Resources/pet-packs`（不进 asar/dist）。
+- **`whale-pet://` 只读协议**：主进程 `resolvePetPacksDir()`（打包态 `Resources/pet-packs`、开发态仓库 `assets/pet-packs`）+ `protocol.registerSchemesAsPrivileged`（standard/secure/supportFetchAPI/stream）+ 严格穿越校验（编码 `%2e%2e`/`%2f`、反斜杠、空段、非白名单扩展名 → 403；缺失 → 404；非 GET → 405），音频走 `net.fetch(file://)` 支持 Range。9 包 manifest/角色由 `buildAboutmePackArtifacts()` 统一生成（与 userData 导入共用同一套槽位/音轨规则），注册表合并随包角色（同名 userData 包不再重复）。
+- **桌宠工坊（T-M6-46）**：侧栏精简为 4 组（桌宠工坊 / 语音中心 / 游戏共玩 / 联机协作 / OBS 挂件 / Harness / 模型服务商 / 扩展与权限），`pet-stage-panel` 升级为四页签外壳：舞台与互动、动作预览与素材库（640×360 12fps Canvas 逐帧播放器、Space/←→/↑↓、进度条、`.m4a` 随帧 seek、MediaRecorder 导出 WebM、推到桌宠试播、全量动作/11 槽位/CrossPet 皮肤彩蛋实时搜索）、小本子与友谊、跨 AI 跟随与接口；顶部 9 角色 + 皮肤快切条。`pets-panel.tsx` 退役。
+- **语音中心（T-M6-46）**：9 角色声线绑定条 + 5×5 试听按所选角色绑定（`voice:character-bind` → `userData/voice-bindings.json`，主进程 `resolveVoiceId` 覆盖优先）；如实展示 mcode/say/未适配后端、动作原声 ducking 开关与 live 抢麦锁状态；高阶情感/RVC 精调随 `characterId` 切换。
+- **联机一键启动向导（T-M6-47）**：Terraria 本地服参数数组启动（`-port/-world/-worldname/-noupnp/-autocreate`）+ `terraria-bridge.tmod` 探测 + 每 AI `bridge-port.txt` + 客户端 `-join` 尝试；DST `cluster_token.txt` 0600 落盘（校验 Klei 字符集、不回显/不写日志）、`Master/modoverrides.lua` 写受控 UserID 与同源 pair_token、专用服 + 单 Sidecar :18100（`ELECTRON_RUN_AS_NODE`）；向导三步显示真实落盘/构建状态。
+- **9 角色平权收口（T-M6-48 切片）**：未登记角色使用中性人设与中性短评，不再继承小鲸的「大肥鱼」雷区与口吻。
+
+### Added（批次 3-4：CrossPet 社交 / 跨 AI 跟随 / 对外驱动口）
+
+- **CrossPet 姿势渲染（T-M6-48）**：契约新增 `PetRendererType='pose-skin'` 与 `PetCharacter.skins`；`PoseSkinRenderer` 以「姿势图 = 1 帧 clip」接入 `RendererHost`（交叉淡入 + Q 弹），`pose-effects` 提供 6 类 SVG 头顶动效；`pet-packs` 把 30 个 CrossPet 角色目录（8 基础 + 7 换装 + 15 `egg-*` 彩蛋）转成角色与 manifest，`character.json.lines` 原样供气泡使用；夜间 22:00–07:00 自动换睡衣，`egg-*` 被点击即逃跑关窗。
+- **多宠社交（T-M6-48）**：`PetWindowManager` 新增 `collisions()`（重叠 >12% 才触发，2 秒去抖）、`assemble()`（底部排排站）、`dismissAll()`；主进程 `pet:summon / assemble / dismiss / egg-summon`；两只桌宠相撞互 Q 弹 + 吐槽。
+- **友谊与「我们的小本子」（T-M6-48）**：`FriendshipStore`（Electron/Node 内置 `node:sqlite`）实现 10 颗心 / 1/4 填充 / 每日上限 15 / 4 档关系；摸头/戳/协作/完成共同目标/互聊涨分；留言、互聊记录与一键隐私擦除；`friendship-host` 提供闲时互聊（角色预置模板，经全局语音锁串行播报并写入 memory-graph）、久坐/喝水提醒（60/45 分钟，23:00–07:00 与睡眠免打扰）与每日首次见面问候；桌宠工坊 Tab 3 接入 8 套 CrossPet 手写字体、统计、成就与留言板。
+- **跨 AI 工作跟随（T-M6-49）**：`work-follow-host` 只读 source/session/工具名/模型名，支持 single（主宠随活跃 AI 换装）与 multi（每个 AI 各来一只），单会话工具调用 ≥8 自动戴皇冠；ACP Harness 事件直接镜像，本机 CLI 用 `tools/hooks/work-follow-hook.mjs` 追加 `userData/work-follow/events.jsonl`（坏行跳过、按偏移增量）；Tab 4 实时任务卡与事件流。
+- **对外本机驱动口（T-M6-49）**：WebUI 新增 `GET /api/pet/:agentId/state`、`POST /say`（睡觉态 409，`wake:true` 叫醒）、`POST /action`（500ms–60s）；入参过 `PetApiSayRequest / PetApiActionRequest` Zod 契约，设备 token 鉴权；`plugin-kit` 的插件上下文在清单声明 `{resource:'pet:control',policy:'allow'}` 时注入 `petApi.state/say/action`。
+- **9 角色平权收口**：未登记角色使用中性人设与中性短评，不再继承小鲸的「大肥鱼」雷区与口吻。
+
+### Fixed（2026-11-24 真机：没鱼竿 → fish 无限失败卡死 / 指令只回复不办事）
+
+- **连败退回规则日程不再复读同一动作**：`LlmPlanner` 检测到同一工具连续两次失败时，旧实现直接 `fallback.decide()`，但 `RulePlanner` 不知道失败原因（`observeReceipt` 未转发），按日程在 07:10 继续 `fish` → 事件流无限刷屏、游戏时间冻结（真机截图：`第1年夏2日 07:10 · Beach` 循环数十条「钓鱼赚米！」）。现在：
+  - `LlmPlanner.observeReceipt` 把回执转发给规则兜底；
+  - `RulePlanner` 记录**所有工具**的失败（环境级失败「没有鱼竿/没有工具/材料不够」一次即避开，普通失败连续两次避开，成功解除），钓鱼阶段绕开 `fish` 转采集，采集/清地也失败则 `wait` 明确求助；
+  - 连败时先带「必须换做法」约束问大脑一次（新增 `STUCK_SYSTEM`，单日每工具一次，护栏拒绝重复工具），大脑不可用才回落规则日程。
+- **指令解析失败不再静默**：`chat:say` 的指令解析异常此前被空 `catch` 吞掉，用户只收到回话、游戏里毫无动静。现在记录原因、事件流广播「指令解析失败（未接单）」，并在回话 system 里要求如实说明，不假装接单。
+- **下单失败回灌**：主人刚下的单执行失败时，除原回执外补一条 `chat_order FAILED` 事件与气泡语音（「主人，X 没办成……原因」），不再只看到一句「好嘞」。
+
+### Fixed（T-M6-51：批次 1-4 审计缺陷）
+
+- **定向投递参数序**：删除 `PetWindowManager.send(channel, agentId, payload)` 双字符串入口，统一 `sendAgent(agentId, channel, payload)` 与 `broadcast`；修复 bump / summoned / crown / wake / say / preview 全部被写反后静默丢弃的问题。
+- **CrossPet 透明穿透**：`<img>`（pose-skin）补齐 alpha 采样（object-fit contain 几何）与缩放同步，皮肤/彩蛋可正常点击、拖拽、摸头、右键与逃跑。
+- **单宠换装**：工作跟随不再 `dismissAll(null)` 销毁 default 主窗；改为只关其他 AI 窗并在 default 原地换角色（保留 `/api/pet/default/*` 与自驾目标），含夜间睡衣解析。
+- **工作跟随完整性**：ACP `session-started/permission/exit` 共用缓存 sessionId；modelName 优先映射角色；single 模式 tool 命中新角色也换装；multi 60s 闲置先告别再退场。
+- **其它**：CrossPet `portrait/avatar/portrait-card` 不进入动作槽；`whale-pet://` 显式 `Content-Type`；右键「叫她出来」二级面板期间保持交互；FrameCanvas 按真实帧尺寸绘制；工作跟随监听器可退订；非星露谷 planner systemPrompt 惰性读取当前角色名；拆分 `pet-control-host` / `coop-launch-host` / `acp-session-cache`。
+
+### Added（T-M6-53：创作中心与姿态验收台）
+
+- **自定义角色深度协议**：`PetCustomCharacter` 契约兼容 CrossPet `character.json`（name/accent/apps/greeting/lines/glyph/idleActions/pokePose/correctedPose/longThink/fx/outfit/aura/host/skin/egg）并扩展 `reactTo`、`milestones`、`notebook`；`userData/pet-characters/<id>/` 目录加载、克隆内置、改名（本机 settings，升级不丢）、零重启热重载（右键「重新载入」/创作中心保存）。
+- **reactTo 代演**：命中来源或 modelName 的自定义角色优先代演工作状态、多会话与庆祝；姿态缺失按 compact→writing、asking→listening、其余→idle 回退；correctedPose（出错 3 分钟内再次对话一次性触发）与 longThink（decision 后 N 秒切 deepthink）。
+- **创作中心**：三页签（角色/皮肤生图提示词编译器、5 态彩蛋提示词 + 主脑台词生成、拖入建角）；11/5/5/社区梗姿态批次；主进程图像后处理（白底抠像、90% 身高脚底对齐、idle-blink 仅闭眼贴回、avatar 192×192、portrait-card 256×384、WebP 编码）。
+- **姿态验收台**：暂停真实事件、12 场景直接驱动真实桌宠窗口、缺失姿态回退检查、1.5s 全姿态轮播 + 90% 参考线、脱敏 Markdown 报告（零对话正文/路径/密钥）、桌宠 Option+右键直达。
+
+### Fixed（T-M6-50：动作库按角色/形象分库，对齐 aboutme-pets 线上实现）
+
+- **动作库不再混包**：逐行分析上游 `preview.json` 播放器后，按「每角色自己的 categories + `idleAnimationId` + `totalActions`」重建 Tab 2：切角色即整套动作库替换、清空搜索、自动播该角色待机动作；默认只显示当前角色（claude 166 / dsh 101 …），「全部 9 包」仍可显式切换。
+- **逐动作帧元数据**：`PetStudioAction` 增加 `frameWidth/frameHeight/rows`，`PetStudioPack` 增加 `idleClipId`；播放器与 WebM 导出使用每个动作自己的尺寸与 fps，不再假定全局 640×360。
+- **声画同步改为上游同款**：音轨 fetch 成 blob + 隐藏 `<audio>`，**音频作为时钟**（帧号 = `floor(currentTime×fps)`），blob 就绪前冻结动画；暂停/恢复与音频同步，拖动/逐帧会 seek 音频；按 category 折叠分组，搜索只作用于当前角色。
+
+### Changed
+
+- `docs/THIRD_PARTY_NOTICES.md` 登记 `assets/pet-packs/` 三类素材（aboutme-pets MIT、crosspet CC BY-NC-SA 4.0、上首软糖体字体待核实），统一 `DEV_ONLY_NON_COMMERCIAL`；`license-scanner` 跳过 `assets/pet-packs` 二进制树。
+- `.gitignore` 忽略 `assets/pet-packs/*` 二进制（保留 README 与 SYNC-MANIFEST）；1.85 GiB 素材只在本机与安装包中存在。
+
 ## [Unreleased] — 2026-11-23
 
 ### Added

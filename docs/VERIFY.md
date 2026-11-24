@@ -14,6 +14,7 @@
 | C# / Lua 模组 | `dotnet build` / `luac -p` 属编译期证据，**不等于**游戏内加载与游玩通过。 |
 | 直播 / 插件 / OBS / 点歌 | `LiveEventHub`、`plugin-kit` 等目前仅在包与测试中存在，**未接入 desktop-host 生产收流路径**；界面存在不代表能力可用。 |
 | 语音 | 桌面主路径为 macOS `mcode-tools → say → afplay`；`audio-ai-worker` 的合成仍含 stub；Windows 语音明确未适配。 |
+| SQLite 引擎（2026-11-24） | 友谊/小本子表改用 Electron/Node 内置 `node:sqlite`（Electron 45 = Node 24.22），避免 better-sqlite3 原生模块 ABI 重编译；常客账本/Token 流水/点歌缓存仍用 better-sqlite3。两者都是标准 SQLite，语义一致。 |
 
 ## 状态总览（按里程碑）
 
@@ -131,3 +132,51 @@
 | M7 泰拉瑞亚 | ① 已用 GitHub Release tML v2026.09.3.1 程序集编译并打包 `terraria-bridge.tmod` 到 Mods 目录（**编译已通过**）；开 Steam tModLoader 启动游戏，确认 HttpListener 18090 可 `curl /health /state`；③ 自驾启动后真机观察「砍树→造掩体→插火把→过夜」；④ 按 F8 验证 <100ms 接管、岩浆反射与低血喝药；⑤ 编译期 API 名称（`SetControls`/`Tile.HasTile`/`tile.lava()`/`Main.mouseX`）按 1.4.4.9 实况校正 | ⏳ | — |
 | M7 饥荒 DST | ① 人类用 Klei 账号在官方专用服页面生成 `cluster_token.txt` 写入本地集群目录（sidecar 缺 token 直接报错，不可绕过）；② 启动 `dst-bridge` all-clients mod + sidecar 18100，本地专用服自起后客户端 localhost 加入；③ 验证 mod 2s tick 上报快照过 `DstStateSnapshot` 契约、0.25s 动作层真实执行；④ `luac -p mods/dst-bridge/**/*.lua` 语法校验**已通过（Lua 5.5.1）**；⑤ 验证 unsafedata 文件降级通道的部署目录约定；⑥ 真机「采集→营火→应对夜幕」生存首日 | ⏳ | — |
 | M7 宿主热切换与打包态 | 在已运行的桌面端分别连接星露谷、泰拉瑞亚、DST 的真实桥接端点并连续切换；确认旧动作先结束、规划槽/提示词/记忆日键/攻略路径随游戏更新，角色反射提示与可见回复正确；从实际安装包启动并验证攻略读取 | ⏳ | — |
+
+## 2026-11-24 批次证据（素材随包 / 工坊重构 / 联机向导）
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| T-M6-45 素材随包 | `[SIMULATION]` 单测 + 实拉 | `pnpm sync:pet-packs`：aboutme 2,624 文件 / 1,894 MiB、crosspet 946 / 87 MiB、字体 1 / 3.9 MiB；二次运行 `下载 0，跳过 2624/946/1`；`pet-packs.spec.ts` 8/8（打包/开发路径、中文路径解码、`%2e%2e`/`%2f`/反斜杠/空段/非白名单/缺失 403·404、POST 405 且不触达读盘、读盘异常 404、9 包 manifest 全 `whale-pet://`、坏 JSON 只记错误、目录槽位/皮肤/字体分类）；`aboutme-pets.spec.ts` 7/7 回归；`pnpm gen:contracts` 67 契约（PetStudioCatalog / PetApi* / WorkFollow* 新增）；`verify:gate` 7 过 | 2026-11-24 |
+| T-M6-46 套件 | `[SIMULATION]` 单测 + 构建 | `voice-bindings.spec.ts` 4/4（继承默认/覆盖持久化/改回默认删除覆盖/未知角色拒绝/坏文件降级/9 角色视图标记）；`pnpm --filter @workbench/desktop-host build` 通过（main/preload/pet-stage/director）；全仓 `pnpm test` 903 tests 全绿、分支 90.04% | 2026-11-24 |
+| T-M6-47 联机向导 | `[SIMULATION]` 单测 | `coop-launcher.spec.ts` 7/7（星露谷隔离 profile 2 旧例 + 泰拉参数数组/世界名过滤/非法端口、端口文件 18090/18091、桥接缺失如实失败、DST token 0600/非法 token 拒绝、modoverrides 受控 UserID 与同源 pair_token/Lua 转义、spawn 两端同 token 且 `ELECTRON_RUN_AS_NODE=1`/返回值不含 token） | 2026-11-24 |
+| T-M6-48 平权切片 | `[SIMULATION]` 单测 | `character-persona.spec.ts` 5/5：9 角色完整 `PetPersonaConfig` 经 `loadPersona`、专属雷区 0-token 命中、右键台词不重复；新增「未登记角色不继承大肥鱼雷区」 | 2026-11-24 |
+
+### 待人类宿主真机验收（2026-11-24 新增）
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| 全量素材音画 | 打开发布版：9 角色切换后舞台/逐帧播放器能显示真实精灵图与 `.m4a` 原声；动作预览拖动进度条音画同步；导出 WebM 可播放；960+ 动作搜索无卡顿 | ⏳ |
+| 安装包自包含 | `pnpm --filter @workbench/desktop-host package` 后，在**断网**环境启动 DMG/NSIS，确认 `Resources/pet-packs/` 全量存在、9 角色与皮肤彩蛋可用（批次 4 复验） | ⏳ |
+| 语音中心 | 9 角色各绑定不同音色后，同屏多桌宠说话音色不同、严格串行；动作原声在 TTS 期间压低至 15% | ⏳ |
+| 联机向导 | 真实 Terraria：本地服 :7777 起服、客户端连入、18090/18091 桥接在线；真实 DST：Klei token 落盘、`modoverrides.lua` 生效、专用服 + sidecar :18100 在线、多 UserID 各控各的角色 | ⏳ |
+
+## 2026-11-24 批次证据（CrossPet 社交 / 跨 AI 跟随 / 对外驱动口 / 安装包）
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| T-M6-48 台词数据 | `[SIMULATION]` 实素材抽检 | 上游 `character.json.lines` 实测 deepseek **53** 类、grok **54** 类；`crossPetLinesOf` 原样下发 pet-stage 气泡 | 2026-11-24 |
+| T-M6-48 姿势渲染 | `[SIMULATION]` 单测 | `pose-skin.spec.ts` 5/5（姿势交叉淡入 + Q 弹、动效 heart/steam 映射、台词按姿势回退 idle、同动作短路/force 重播、非 pose-skin 拒绝、加载失败 `CLIP_PLAY_FAILED`、`playClip` 映射/直放、商业授权不挂水印、dispose 幂等）；`pose-effects.spec.ts` 2/2；`pet-packs.spec.ts` 10/10 含 CrossPet 目录 → pose-skin manifest、egg 标记、皮肤家族归属、台词读取 | 2026-11-24 |
+| T-M6-48 友谊/社交 | `[SIMULATION]` 单测 | `friendship.spec.ts` 7/7（10 心/1/4 填充/每日 15 分/跨日重置、留言裁剪、互聊记录、隐私擦除、文件库重开、关闭后抛错）；`friendship-host.spec.ts` 5/5（互聊 A→B 串行 1.2s 间隔 + memory 写入、免打扰/睡眠、每日首次问候去重、笔记本视图）；`break-reminders.spec.ts` 3/3；`pet-window-manager.spec.ts` 10/10（相撞去抖、排排站不重叠、解散保留 default） | 2026-11-24 |
+| T-M6-49 工作跟随 | `[SIMULATION]` 单测 | `work-follow-host.spec.ts` 4/4（非法事件拒绝、按来源召唤 crosspet 角色、≥8 工具只戴一次皇冠、stop inactive、recent 20 条、single 模式切换 + 持久化、JSONL 坏行跳过与增量消费） | 2026-11-24 |
+| T-M6-49 对外驱动口 | `[SIMULATION]` 单测 + `[E2E-HOST]` | `webui-server.spec.ts` 27/27：无 token 401、state 200/404、sleeping 409、wake=true 200、非法 body 400、非 POST 405、非法 agentId 400、未注入 501；`plugin-kit.spec.ts` 34/34 含 pet:control 注入/deny 不注入；`studio.e2e.spec.ts` 真实 Electron：侧栏 10 项 + 工坊 4 页签 + 目录 1,040 动作 + 小本子留言落库 + 工作跟随演示戴冠 + `GET /api/pet/default/state` 200 / 无 token 401 + 9 角色声线绑定条改绑读回 | 2026-11-24 |
+| T-M6-49 安装包 | `[BUILD]` 真实打包 | `pnpm --filter @workbench/desktop-host package` exit 0；`release/mac-arm64/鲸屿 Whale Isle.app/Contents/Resources/pet-packs` **2.2 GiB**，1,957 个 `.webp`（aboutme 1,050 + crosspet 907）与 480 条 `.m4a` 全量存在；DMG `鲸屿 Whale Isle-0.2.0-dev.1-arm64.dmg` **2,373,925,064 bytes**（重新打包后的最终产物；8 个 `.woff2` + 上首软糖体.ttf 亦在包内；`app.asar` 仅 189 MB，pet-packs 确实在 asar 之外；**挂载 DMG 实测**同样为 1,957 webp / 480 m4a / 8 woff2 + README + SYNC-MANIFEST） | 2026-11-24 |
+| 全仓门禁 | `pnpm verify:gate` | 7 过 / 0 跳过 / 0 待接线；**939 tests**、分支 ≥90%（最近实测 90.05%）；E2E 已改为 spec 串行（`fileParallelism: false`）并清理全屏隐藏态，连续 3 轮 11/11 稳定；Electron E2E **11/11** | 2026-11-24 |
+
+#| T-M6-50 动作库分库 | `[SIMULATION]` 单测 + `[E2E-HOST]` + 实机探测 | 目录 spec 10/10：每包 `idleClipId`（如 dsh=`待机呼吸`）、逐动作 `640×360/columns 8/rows`；E2E：进入工坊默认「全部 9 包」→ 选 claude 后 `data-action-count=166` 且视图内 `data-action-pack` 仅 `claude`、分类分组 ≥15，切 dsh=101；音频实测 `GET whale-pet://…/audio/工作加班.m4a → 200 / 741,333 B / duration 30s`，播放中帧号随 `audio.currentTime×12` 前进；暂停 600ms 帧与时间均冻结；拖动到第 60 帧 → 标签 `61 / 360`、音频 `5.000s` | 2026-11-24 |
+| 连败换做法 / 指令不静默（2026-11-24 真机卡死修复） | `[SIMULATION]` 单测 + 门禁 | 真机截图实锤死循环：`第1年夏2日 07:10 · Beach` 反复 `决策 llm-xiaojing → 钓鱼 (fish) → 失败：背包里没有鱼竿`（文案与 `RulePlanner.fishing` 一致，证明是 `repeated → fallback` 复读）。修复断言：`planner-rescue.spec.ts` +3（没鱼竿环境级失败一次即绕开 fish 转采集；普通失败两次才绕开；采集/清地连败 → `wait` 求助）、`llm-planner.spec.ts` +3（连败先问大脑换做法、拒绝重复 fish 后接受 `forage`、`observeReceipt` 转发规则兜底）；宿主 `chat:say` 解析失败广播「指令解析失败（未接单）」+ 下单失败补 `chat_order FAILED` 与气泡。全仓 **994 tests / 分支 90.05%**；`pnpm verify:gate` **7 过 / 0 跳过**；打包重建 `electron-builder --dir --arm64` 并重启 `.app`（asar 含 `stuckConsulted`/`pendingChatOrder`） | 2026-11-24 |
+
+| T-M6-51 修复 | `[SIMULATION]` 单测 + `[E2E-HOST]` | 定向投递 12/12（bump/crown/say/wake/preview 只达目标且 payload 带 agentId、未知静默、`*` 广播）；pose-hit 6/6（contain 矩形/letterbox 透明/边界夹紧）；ACP 3/3；work-follow 9/9（modelName 映射、single 工具换装、multi 60s 闲置、reactTo 代演、姿态回调）；pet-control 4/4（召唤复用、夜间睡衣、睡眠拒收/wake、preview 回 idle）；pet-packs 10/10（立绘过滤 + Content-Type）；planner 80/80 含惰性角色名；E2E 11/11 | 2026-11-24 |
+| T-M6-53 创作/验收 | `[SIMULATION]` 单测 + 实机探测 | 自定义角色 6/6（CrossPet 17 键 lines 兼容、立绘过滤、改名、克隆、Zod 拒绝）；prompt 6/6；image pipeline 8/8（白底抠像/包围盒/90% 脚底/头像/卡 2:3/眨眼差异/仅闭眼贴回/id 清洗）；acceptance 5/5（12 场景/回退三态/脱敏报告）；真实 Electron：导入 3 张 pose → `{ok:true,poses:[idle,compact,pat]}` + avatar/portrait 生成、自定义角色热重载后出现在注册表、验收台 12 场景、compact 场景通过、报告 `compact → writing`、Alt+右键直达 | 2026-11-24 |
+| 全仓（T-M6-51/53） | `pnpm verify:gate` + E2E | 洁净 HEAD 复核：991 tests / 分支 90.08%；Electron E2E 11/11；gate 7 过 / 0 跳过（工作区并行进行的 T-M6-52 planner 真机修复未提交，未计入本行） | 2026-11-24 |
+
+## 待人类宿主真机验收（2026-11-24 批次 3-4 新增）
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| 创作中心生图 | 配置支持图像生成的供应商后调用「生图模型批量出图」——该链路**当前未接线**，仅提供提示词复制与拖回后处理；需按供应商 API 补接 | ⏳ |
+| CrossPet 音画与手感 | 召唤 deepseek/claude 等角色看姿势切换与头顶动效；夜间自动睡衣；点 egg 彩蛋确认逃跑；拖动两只桌宠相撞看到互撞吐槽 | ⏳ |
+| 友谊/小本子 | 摸头/戳/联机求助后小本子心数与统计增长；切换 8 套手写字体；互聊经语音锁串行出声；隐私擦除后统计归零 | ⏳ |
+| 8 家 CLI 钩子 | 按 `tools/hooks/work-follow-hook.mjs` 接入 Claude Code / Codex / DeepSeek / Gemini / Cursor / Qwen / Kimi / Grok，确认只读事件进入 Tab 4、≥8 工具戴皇冠、单宠/多 AI 模式切换符合预期 | ⏳ |
+| 安装包断网 | 断网启动 DMG：9 角色与皮肤彩蛋全部可用、动作原声可播、`/api/pet/default/say` 从本机脚本可调通 | ⏳ |
+| 卡死修复真机复验（2026-11-24） | 重启后同一存档（第1年夏2日 Beach、背包里没有鱼竿）启动自驾：不应再出现连续「失败 钓鱼 (fish)」刷屏；最多两次 fish 失败后应看到替代动作（采集/去镇上/买鱼竿），或规则日程转采集/清地；聊天下单失败应看到「chat_order FAILED｜没办成：原因」与桌宠如实说明 | ⏳ |
