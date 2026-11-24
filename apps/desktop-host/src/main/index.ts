@@ -461,6 +461,7 @@ app.whenReady().then(async () => {
     userDataDir: app.getPath('userData'),
     getDirectorWindow: () => directorWindow,
     vaultPath,
+    homeDir: homedir(),
     chat: async (system, user) => {
       const result = await autodrive.completeForCoop('STARDEW_GAME_PLANNER' as never, system, user, 600);
       return result === null ? null : result.content;

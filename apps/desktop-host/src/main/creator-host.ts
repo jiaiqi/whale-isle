@@ -20,6 +20,7 @@ import {
   type PetCustomCharacter,
 } from '@workbench/shared-protocol';
 import { generateImage } from './image-gen-client';
+import { detectCodexCli, type CodexCliDetection } from './codex-image-backend';
 import { collectDoneDraftFiles, draftDirFor, draftExtension, draftPosePrompt, imageModelsFor, resolveReferenceImage, runWithConcurrency } from './image-gen-drafts';
 import { hasVaultKey, readVaultKey } from './provider-vault';
 import {
@@ -98,6 +99,8 @@ export function createCreatorHost(options: {
   chat?: (system: string, user: string) => Promise<string | null>;
   /** provider-vault 路径：生图 Key 只在这里解密（T-M6-56） */
   vaultPath?: string;
+  /** 本机 Codex CLI 探测用 home（T-M6-61；缺省 process.env.HOME） */
+  homeDir?: string;
 }): { registerIpc(): void } {
   const encodeWebp = async (raw: RawImage): Promise<Buffer> => {
     const window = options.getDirectorWindow();
@@ -308,7 +311,7 @@ export function createCreatorHost(options: {
   const generateDraftItem = async (
     job: DraftJob,
     item: DraftItem,
-    args: { provider: ImageGenProviderDescriptor; modelId: string; apiKey: string; size: string; referenceImagePath?: string },
+    args: { provider: ImageGenProviderDescriptor; modelId: string; apiKey: string; size: string; referenceImagePath?: string; codex?: CodexCliDetection | null },
   ): Promise<void> => {
     item.status = 'generating';
     pushGenProgress({ jobId: job.id, pose: item.pose, status: 'generating', index: item.index, total: item.total });
@@ -320,8 +323,9 @@ export function createCreatorHost(options: {
         modelId: args.modelId,
         prompt: draftPosePrompt(job.prompt, item.pose),
         size: args.size,
-        timeoutMs: 60_000,
+        timeoutMs: args.provider.protocol === 'codex-cli' ? 90_000 : 60_000,
         ...(args.referenceImagePath === undefined ? {} : { referenceImagePath: args.referenceImagePath }),
+        ...(args.codex === undefined || args.codex === null ? {} : { codex: { detection: args.codex } }),
       });
       const ext = draftExtension(image.mimeType);
       const file = join(job.dir, `${item.pose}.${ext}`);
@@ -358,10 +362,20 @@ export function createCreatorHost(options: {
     const parsed = ImageGenBatchRequestSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
     const request = parsed.data;
-    if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
-    const apiKey = readVaultKey(options.vaultPath, request.provider.id);
-    if (apiKey === null) {
-      return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key；请先在「模型服务商」页保存` };
+    const isCodex = request.provider.protocol === 'codex-cli';
+    let apiKey = '';
+    let codex: CodexCliDetection | null = null;
+    if (isCodex) {
+      codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+      if (!codex.available) return { ok: false, error: `未检测到本机 Codex CLI：${codex.installHint}（或安装官方 codex）` };
+      if (!codex.loggedIn) return { ok: false, error: `本机 Codex 未登录：请先运行 ${codex.loginHint}` };
+    } else {
+      if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+      const key = readVaultKey(options.vaultPath, request.provider.id);
+      if (key === null) {
+        return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key；请先在「模型服务商」页保存` };
+      }
+      apiKey = key;
     }
     let referenceImagePath: string | undefined;
     try {
@@ -397,6 +411,7 @@ export function createCreatorHost(options: {
         apiKey,
         size: request.size,
         ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+        codex,
       });
     });
     return { ok: true, jobId, items: summarizeJob(job) };
@@ -408,9 +423,19 @@ export function createCreatorHost(options: {
     const request = parsed.data;
     const job = draftJobs.get(request.jobId);
     if (job === undefined) return { ok: false, error: '草稿任务不存在（应用重启后请重新生成）' };
-    if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
-    const apiKey = readVaultKey(options.vaultPath, request.provider.id);
-    if (apiKey === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+    const isCodex = request.provider.protocol === 'codex-cli';
+    let apiKey = '';
+    let codex: CodexCliDetection | null = null;
+    if (isCodex) {
+      codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+      if (!codex.available) return { ok: false, error: `未检测到本机 Codex CLI：${codex.installHint}` };
+      if (!codex.loggedIn) return { ok: false, error: `本机 Codex 未登录：请先运行 ${codex.loginHint}` };
+    } else {
+      if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+      const key = readVaultKey(options.vaultPath, request.provider.id);
+      if (key === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+      apiKey = key;
+    }
     let referenceImagePath: string | undefined;
     try {
       referenceImagePath = resolveDraftReference(request.referenceImagePath ?? job.referenceImagePath);
@@ -425,6 +450,7 @@ export function createCreatorHost(options: {
       apiKey,
       size: request.size,
       ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+      codex,
     });
     const summary = summarizeJob(job).find((entry) => entry.pose === request.pose);
     return summary === undefined ? { ok: false, error: '重画后未生成结果' } : { ok: true, jobId: job.id, item: summary };
@@ -458,14 +484,32 @@ export function createCreatorHost(options: {
     ipcMain.handle('creator:image-gen-providers', (_event, raw: unknown) => {
       const descriptors = providerDocs(raw);
       const configured = descriptors.filter((descriptor) => options.vaultPath !== undefined && hasVaultKey(options.vaultPath, descriptor.id));
+      // T-M6-61：本机 Codex CLI（免 API Key）——只探测二进制与 auth.json 存在性，绝不读取凭据
+      const codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+      const codexProvider = codex.available && codex.loggedIn
+        ? [{
+          id: 'codex-cli',
+          name: `本机 Codex CLI（免 API Key）· ${codex.backend === 'codex-imagegen' ? '快速模式' : '慢速兜底'}`,
+          protocol: 'codex-cli' as const,
+          baseUrl: 'https://codex.local/',
+          models: [codex.backend ?? 'codex-exec'],
+        }]
+        : [];
       return {
         ok: true,
-        configured: configured.length,
-        detected: descriptors.length,
-        providers: configured.map((descriptor) => {
+        configured: configured.length + codexProvider.length,
+        detected: descriptors.length + (codex.available ? 1 : 0),
+        codex: {
+          detected: codex.available,
+          backend: codex.backend,
+          loggedIn: codex.loggedIn,
+          installHint: codex.installHint,
+          loginHint: codex.loginHint,
+        },
+        providers: [...codexProvider, ...configured.map((descriptor) => {
           const models = [...new Set([
             ...descriptor.candidateModels,
-            ...(descriptor.candidateModels.length === 0 ? defaultImageModels(descriptor.protocol) : []),
+            ...(descriptor.candidateModels.length === 0 && descriptor.protocol !== 'codex-cli' ? defaultImageModels(descriptor.protocol) : []),
           ])].slice(0, 12);
           return {
             id: descriptor.id,

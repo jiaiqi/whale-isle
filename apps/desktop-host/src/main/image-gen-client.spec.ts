@@ -1,4 +1,5 @@
 /** 生图客户端（T-M6-56）：OpenAI b64/url、Gemini inlineData、参考图 edits、超时与脱敏。 */
+import { writeFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   geminiGenerateEndpoint,
@@ -193,5 +194,55 @@ describe('redactSecrets', () => {
     expect(out).not.toContain(KEY);
     expect(out).toContain('••••');
     expect(out).toContain('&x=1');
+  });
+});
+
+describe('codex-cli 协议（T-M6-61）', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9]);
+  const detection = {
+    available: true,
+    backend: 'codex-imagegen' as const,
+    binary: '/usr/local/bin/codex-imagegen',
+    loggedIn: true,
+    codexHome: '/home/u/.codex',
+    installHint: 'npm install -g codex-imagegen-cli',
+    loginHint: 'codex login',
+  };
+
+  it('无需 API Key：execFile 参数数组出图并返回标准 GeneratedImage', async () => {
+    const calls: string[][] = [];
+    const result = await generateImage({
+      protocol: 'codex-cli',
+      baseUrl: 'https://codex.local/',
+      apiKey: '',
+      modelId: 'codex-imagegen',
+      prompt: '画一只像素鲸鱼',
+      size: '1024x1024',
+      codex: {
+        detection,
+        execFileImpl: (_file, args, _opts, callback) => {
+          calls.push(args);
+          const out = args[args.indexOf('--out') + 1]!;
+          writeFileSync(out, PNG);
+          callback(null, 'ok', '');
+        },
+      },
+    });
+    expect(result.mimeType).toBe('image/png');
+    expect(result.buffer.subarray(0, 4)).toEqual(PNG.subarray(0, 4));
+    expect(calls[0]!.slice(0, 8)).toEqual(['generate', '--prompt', '画一只像素鲸鱼', '--size', '1024x1024', '--background', 'opaque', '--out']);
+    expect(calls[0]![8]).toMatch(/whale-codex-.+\.png$/);
+  });
+
+  it('未注入探测结果 / CLI 失败：如实报错且不含 token', async () => {
+    await expect(generateImage({ protocol: 'codex-cli', baseUrl: 'https://codex.local/', apiKey: '', modelId: 'm', prompt: 'p' }))
+      .rejects.toThrow('未注入探测结果');
+    await expect(generateImage({
+      protocol: 'codex-cli', baseUrl: 'https://codex.local/', apiKey: '', modelId: 'm', prompt: 'p',
+      codex: {
+        detection: { ...detection, loggedIn: false },
+        execFileImpl: () => { throw new Error('不应执行'); },
+      },
+    })).rejects.toThrow('codex login');
   });
 });

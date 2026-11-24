@@ -1180,7 +1180,7 @@ export type PetCustomCharacter = z.infer<typeof PetCustomCharacterSchema>;
 
 // ───────────────────────── 创作中心直连生图（T-M6-56） ─────────────────────────
 /** 生图协议：OpenAI 兼容 Images API / Gemini Native generateContent(IMAGE)。 */
-export const ImageGenProtocolSchema = z.enum(['openai', 'gemini']);
+export const ImageGenProtocolSchema = z.enum(['openai', 'gemini', 'codex-cli']);
 export type ImageGenProtocol = z.infer<typeof ImageGenProtocolSchema>;
 
 /**
