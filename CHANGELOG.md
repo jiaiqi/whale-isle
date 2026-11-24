@@ -18,6 +18,24 @@
 - **真实目标进度**：`TeamGoalMetric.source` 支持 `team_money` / `shared_wood`；金币来自 Stardew 共享钱包，公共木材用 `list_chests item=木材` 仅统计箱子并排除背包；目标编辑支持金币/木材 target。
 - **E2E 兼容修复**：旧 `prefsSet` 位置写入手动同步到 `PetWindowManager` 的 default 窗口偏好，修复重启恢复 E2E；按窗口实际状态比对，不再依赖全局值是否变化。
 
+### Added（T-M6-41 / T-M6-42，2026-11-24）
+
+- **aboutme-pets 九角色包与 SpritesheetRenderer**：新增精灵图契约字段（sprite/meta/audio）、帧裁切与零黑帧切换、动作原声及 `coop:speaker` 下 duck 至 15%；Node 导入器支持 9 包、并发 6、断点跳过、进度事件、11 语义槽位 + ambientPool、角色 persona/专属 voiceId/语速音高；角色包商店接入舞台与协作页，素材只落 userData。许可证台账登记 hunmer/aboutme-pets + lokicorvus/crosspet（CC BY-NC-SA 4.0）。
+- **联机一键启动**：新增 `coop-launcher`，星露谷可生成隔离 Mods profile（普通 Mod 符号链接、BWF 独立拷贝、改写 McpPort/ShowHud）并以参数数组启动；协作页新增可折叠三游戏向导和自动端口分配。Terraria/DST 当前只做本机路径探测，不伪造启动成功。
+- **角色专属口癖**：`character-persona` 增加按 characterId 的专属雷区响应，小鲸保留原 persona-brain 规则。
+
+### Added（T-M6-44，2026-11-24）
+
+- **九角色功能平权**：`pets:manifest` 读取当前角色真实 manifest；自驾提示/回执短评/声线按角色动态；指令解析角色名动态；10 套完整 `PetPersonaConfig` 全部经 `persona-brain` 加载并具备 P0 `rage_spray`；舞台按 renderer 自动切换 WebM/精灵图；声音工坊按角色保存；Coop 角色优先级去特权。
+- **桌面防打扰**：贴边 45% 收起与 10s 回缩/事件探出、Alt 临时 0.35 透明度+穿透、全屏应用自动隐藏、`Control+Alt+P` 暂藏/唤回、闲置 30s 省电。
+- **无焦点 Alt 穿透与拖离贴边**：主进程以全局鼠标坐标 + macOS CGEventSource / Windows GetAsyncKeyState 轮询判定悬停 Alt，直接 setOpacity(0.35)/setIgnoreMouseEvents，不依赖窗口焦点；拖离边缘新增 clearDock，只清贴边记忆、不弹回旧位置。
+- **按角色恢复音色包**：voice-studio 新增 load-pack，切换角色时加载该角色已保存的五档情感参数与 SVC 参数。
+- **副桌宠身份与平滑探出**：pet-stage 使用本窗 agentId 执行 dock/undock；`pet:poke-line(agentId)` 按窗口角色返回专属台词；`undock` 改为 smoothstep 逐帧 setBounds。E2E 覆盖副窗 dock/poke。
+- **全屏按屏判定与双击弹弓**：`detectFullscreenForDisplay` 输入桌宠 display bounds + 可见全屏窗口 bounds，多屏只隐藏被覆盖的屏；E2E 复用同一函数。双击改为 drag-throw 阻尼弹簧位移，先弹射再精确回原点，并保留 Q 弹形变。
+- **九角色平权与专属戳一戳**：`pets:manifest` 与 `speak` 共用 `selectedCharacterManifest` / `voiceSceneForCharacter` seam，9 个 aboutme 角色逐项断言 manifest、characterId、speakerName、voiceId、语速音高；右键戳触发角色专属吐槽。
+- **气泡语音回执状态机**：新增纯 `bubble-lifecycle`（waiting/speaking/muted/hidden）：speaking 中不收起、语音完成即收、失败/超时/中断保留文字并显示静音角标、60s 兜底；`VoiceHost` 通过 `pet:speech-result` 广播 lease 终态，pet-stage 按 agentId 消费。
+- **交互与声学手感**：摸头哄好、右键戳、甩晕四级、双击 Q 弹、S/右键安静睡眠；气泡等待 `coop:speaker` 完成回执、60s 兜底与静音角标；精灵音轨 duck 15%。
+
 ### Fixed
 
 - **星露谷真机卡死（BWF 120s 自暂停 → 时钟冻结死锁）**：日志实锤 BWF 因「MCP 客户端 120 秒没有动作」暂停游戏；旧 watchdog 在当前无在途动作时 `cancel()` 直接返回、根本没发 `cancel_action`，却每 2 秒重复声称已兜底，形成永不进入 planner 的死循环。修复：无在途也真实发送 cancel；90 秒无变更动作自动发游戏原生 keepalive（星露谷 `wait minutes=1`）阻止自暂停；4 分钟冻结时 cancel + 最小恢复动作，恢复失败才交还 planner，并重置 stale 计时避免刷屏。补 3 项回归测试；`ActionLock.cancel` 仍以「是否有在途动作被取消」为返回值，保持旧语义。**当前运行实例仍是旧主进程，需重启 Electron 后生效。**

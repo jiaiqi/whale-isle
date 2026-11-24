@@ -114,6 +114,11 @@
 
 | T-M6-41 | `[SIMULATION]` + `[E2E-HOST]` | CoopHost **11/11**：DST routingId 优先/空值回退、DST 无 Klei UserID 拒绝接管、低体力持续 30s 自动求助并交接、短时抖动不求助、`parseChestWood` 排除背包木材、goal-set 拉取箱内木材并由状态事件更新团队金币；Electron UI E2E 7/7 新增 `coopGoalSet` 后标题与 `0 / 4,000g` 进度即时渲染。旧 `prefsSet` 位置写入已同步至多窗偏好，desktop E2E 恢复 1/1。真实 DST UserID、真实双 AI 目标进度待人类。 | 2026-11-24 |
 
+| T-M6-41 | `[SIMULATION]` + `[E2E-HOST]` | SpritesheetRenderer **7/7**（帧裁切、零黑帧顺序、duck 15%、meta loader、无工厂/并发/dispose）；aboutme 导入器 **7/7**（11 槽位、音轨、断点、路径/HTTP/空文件错误、角色目录）；Electron E2E 商店弹窗和 9 包目录。**未执行真实 9 包全量下载**；真实音画/性能待人类。 | 2026-11-24 |
+| T-M6-42 | `[SIMULATION]` + `[E2E-HOST]` | launcher **2/2**：普通 Mod symlink、BWF 独立拷贝与 McpPort=18081/ShowHud=false，原 config 保持 18080；路径/端口穿越拒绝。Electron E2E 三游戏向导展开与 Terraria 自动端口 18090。Terraria/DST 只实现本机路径探测，未实现完整启动；不得按“一键可玩”理解。 | 2026-11-24 |
+
+| T-M6-44 | `[SIMULATION]` + `[E2E-HOST]` | `character-persona.spec.ts` **3/3**：10 角色完整配置全部通过 `loadPersona`、每个专属雷区 0-token 命中、未命中和未知角色回退；`interaction.spec.ts` **4/4**：甩晕四级/摸头清零、睡眠屏蔽白/黑名单、左右贴边位置、30s 省电阈值。全仓 **885 tests / 分支 90.09%**；全屏纯函数 **4/4**（多屏只隐藏被覆盖屏/95% 阈值/AppleScript 矩形解析）、弹弓弹簧 **2/2**（位移后回原点/边界夹紧）、窗口管理 **8/8**（副窗独立状态/undock 多帧/clearDock/全局 Alt peek）、全局 Alt **2/2**；E2E 新增主进程 Alt 命中、拖离不弹回；气泡状态机 **5/5**、voice 终态 **6/6**、Electron E2E **9/9**（新增 aboutme 精灵舞台预览、贴边负坐标、Alt 0.35 透明度、globalShortcut 注册断言）。真实 9 包音画、多屏贴边手感、全屏检测权限与快捷键组合需人类真机。 | 2026-11-24 |
+
 ## 待人类宿主真机验收项
 
 | 里程碑 | 验收内容 | 状态 | 验收日期 |
