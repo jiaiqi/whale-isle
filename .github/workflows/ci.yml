@@ -122,8 +122,9 @@ jobs:
         run: pnpm verify:gate
 
       - name: Electron E2E（[E2E-HOST]，仅 macOS）
-        # 仅两个宿主 E2E 文件；Gate 4 回环已在 verify:gate 内跑过，避免重复。
+        # 三个宿主 E2E 文件；Gate 4 回环已在 verify:gate 内跑过，避免重复。
         run: >
           pnpm exec vitest run --config vitest.e2e.config.mts
           apps/desktop-host/e2e/desktop.e2e.spec.ts
           apps/desktop-host/e2e/ui.e2e.spec.ts
+          apps/desktop-host/e2e/tray-popover.e2e.spec.ts

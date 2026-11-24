@@ -226,6 +226,19 @@ contextBridge.exposeInMainWorld('directorBridge', {
   petAssemble: (): Promise<{ ok: boolean; windows: unknown[] }> => ipcRenderer.invoke('pet:assemble'),
   petDismiss: (): Promise<{ ok: boolean; closed: number }> => ipcRenderer.invoke('pet:dismiss'),
   petEggSummon: (): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }> => ipcRenderer.invoke('pet:egg-summon'),
+  // T-M6-60 托盘快捷浮窗：显示/暂藏、安静睡眠、贴边、退出与 WebUI 复制
+  petWindowsVisible: (visible: boolean): Promise<{ ok: boolean; visible: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke('pet:windows-visible', visible),
+  petSleepAll: (asleep: boolean): Promise<{ ok: boolean; asleep: boolean; count: number; error?: string }> =>
+    ipcRenderer.invoke('pet:sleep-all', asleep),
+  petSleepStatus: (): Promise<{ ok: boolean; asleep: boolean; count: number }> => ipcRenderer.invoke('pet:sleep-status'),
+  petDockAll: (): Promise<{ ok: boolean; docked: number; error?: string }> => ipcRenderer.invoke('pet:dock-all'),
+  openDirector: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('ui:open-director'),
+  openBench: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('ui:open-bench'),
+  appQuit: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('app:quit'),
+  hidePopover: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('tray:popover-hide'),
+  copyText: (text: string): Promise<boolean> =>
+    ipcRenderer.invoke('app:copy-text', String(text)).then((result: { ok: boolean }) => result.ok),
   // T-M6-49：跨 AI 工作跟随
   workFollowStatus: (): Promise<unknown> => ipcRenderer.invoke('work-follow:status'),
   workFollowIngest: (event: unknown): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('work-follow:ingest', event),
@@ -276,6 +289,12 @@ contextBridge.exposeInMainWorld('directorBridge', {
   acceptanceReport: (): Promise<{ ok: boolean; markdown?: string }> => ipcRenderer.invoke('acceptance:report'),
   onOpenCreator: (handler: () => void): void => { ipcRenderer.on('ui:open-creator', () => handler()); },
   onOpenBench: (handler: () => void): void => { ipcRenderer.on('ui:open-bench', () => handler()); },
+  ...(TEST_MODE
+    ? {
+        trayPopoverTest: (action: 'open' | 'hide' | 'bounds'): Promise<{ ok: boolean; bounds?: unknown; visible?: boolean }> =>
+          ipcRenderer.invoke('test:tray-popover', action),
+      }
+    : {}),
 });
 
 contextBridge.exposeInMainWorld('petStage', {

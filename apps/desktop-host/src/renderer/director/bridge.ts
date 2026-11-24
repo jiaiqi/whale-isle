@@ -435,6 +435,18 @@ export interface DirectorBridge {
   petWindowList(): Promise<PetWindowView[]>;
   petWindowPrefsSet(agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }): Promise<unknown>;
   onPetWindowListChanged(handler: (list: PetWindowView[]) => void): () => void;
+  // T-M6-60 托盘快捷浮窗：真实动作全部回落既有主进程能力
+  petWindowsVisible(visible: boolean): Promise<{ ok: boolean; visible: boolean; count: number; error?: string }>;
+  petSleepAll(asleep: boolean): Promise<{ ok: boolean; asleep: boolean; count: number; error?: string }>;
+  petSleepStatus(): Promise<{ ok: boolean; asleep: boolean; count: number }>;
+  petDockAll(): Promise<{ ok: boolean; docked: number; error?: string }>;
+  openDirector(): Promise<{ ok: boolean }>;
+  openBench(): Promise<{ ok: boolean }>;
+  appQuit(): Promise<{ ok: boolean }>;
+  hidePopover(): Promise<{ ok: boolean }>;
+  copyText(text: string): Promise<boolean>;
+  /** PET_STAGE_E2E=1 才暴露：E2E 打开/隐藏/读取浮窗坐标。 */
+  trayPopoverTest?(action: 'open' | 'hide' | 'bounds'): Promise<{ ok: boolean; bounds?: unknown; visible?: boolean }>;
   riceFeed(grains: number): Promise<{ ok: boolean; balance: number }>;
   riceStatus(): Promise<import('@workbench/shared-protocol').RiceBowlStatus>;
   brainApplyConfig(config: import('@workbench/shared-protocol').BrainRuntimeConfig): Promise<BrainApplyView>;

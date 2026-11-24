@@ -2,7 +2,7 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from 'electron';
 import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
@@ -42,6 +42,7 @@ import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
+import { createTrayHost, shouldHideDirectorOnClose, shouldQuitOnAllWindowsClosed, type TrayHost } from './tray-host';
 import { homedir } from 'node:os';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
@@ -144,6 +145,9 @@ if (TEST_MODE) {
 let stageWindow: BrowserWindow | null = null;
 let directorWindow: BrowserWindow | null = null;
 let petWindowManager: PetWindowManager | null = null;
+/** T-M6-60：托盘常驻宿主 + 真正退出标志（决定中控台关闭是隐藏还是销毁）。 */
+let trayHost: TrayHost | null = null;
+let isQuitting = false;
 /** agentId → 真实 BrowserWindow：旧 IPC 仍需要默认主窗，协作主机按 id 定向投递。 */
 const petBrowserWindows = new Map<string, BrowserWindow>();
 let petPrefsStore: ReturnType<typeof createPetPrefsStore> | null = null;
@@ -237,6 +241,12 @@ function createDirectorWindow(): BrowserWindow {
   });
   win.loadFile(join(here, '../renderer/director/index.html'));
   win.once('ready-to-show', () => win.show());
+  // T-M6-60：托盘常驻后「关窗口中控台」= 藏到后台，只有显式退出才允许销毁。
+  win.on('close', (event) => {
+    if (!shouldHideDirectorOnClose(isQuitting)) return;
+    event.preventDefault();
+    win.hide();
+  });
   return win;
 }
 
@@ -857,9 +867,120 @@ app.whenReady().then(async () => {
   if (!openedDefault.ok) console.error('[pet-window] 默认桌宠窗启动失败：', openedDefault.error);
   stageWindow = petBrowserWindows.get('default') ?? null;
   wireTargets();
+
+  /** 中控台显示/重建（托盘菜单、浮窗按钮、Dock 激活共用）。 */
+  const showDirector = (): void => {
+    if (directorWindow !== null && !directorWindow.isDestroyed()) {
+      directorWindow.show();
+      directorWindow.focus();
+      return;
+    }
+    directorWindow = createDirectorWindow();
+    wireTargets();
+  };
+
+  /** 真正退出：先停 agent 池、销毁托盘，再让 Electron 关闭所有窗口。 */
+  const quitApp = (): void => {
+    if (isQuitting) {
+      app.quit();
+      return;
+    }
+    isQuitting = true;
+    coopHost?.stopAll();
+    trayHost?.destroy();
+    trayHost = null;
+    app.quit();
+  };
+
+  ipcMain.handle('ui:open-director', () => {
+    showDirector();
+    return { ok: true };
+  });
+  ipcMain.handle('app:quit', () => {
+    quitApp();
+    return { ok: true };
+  });
+  ipcMain.handle('app:copy-text', (_event, text: string) => {
+    clipboard.writeText(String(text).slice(0, 20_000));
+    return { ok: true };
+  });
+  ipcMain.handle('tray:popover-hide', () => {
+    trayHost?.hidePopover();
+    return { ok: true };
+  });
+  ipcMain.handle('pet:windows-visible', (_event, visible: boolean) => {
+    const manager = petWindowManager;
+    if (manager === null) return { ok: false, visible: Boolean(visible), count: 0, error: '桌宠窗未就绪' };
+    const count = manager.list().length;
+    if (visible) manager.showAll();
+    else manager.hideAll();
+    return { ok: true, visible: Boolean(visible), count };
+  });
+  ipcMain.handle('pet:sleep-all', (_event, asleep: boolean) => {
+    const manager = petWindowManager;
+    if (manager === null) return { ok: false, asleep: Boolean(asleep), count: 0, error: '桌宠窗未就绪' };
+    const list = manager.list();
+    for (const view of list) {
+      if (asleep) asleepAgents.add(view.agentId);
+      else asleepAgents.delete(view.agentId);
+      manager.sendAgent(view.agentId, 'pet:bench-sleep', { asleep: Boolean(asleep) });
+    }
+    return { ok: true, asleep: Boolean(asleep), count: list.length };
+  });
+  ipcMain.handle('pet:sleep-status', () => {
+    const list = petWindowManager?.list() ?? [];
+    const sleeping = list.filter((view) => asleepAgents.has(view.agentId)).length;
+    return { ok: true, asleep: sleeping > 0, count: sleeping };
+  });
+  ipcMain.handle('pet:dock-all', () => {
+    const manager = petWindowManager;
+    if (manager === null) return { ok: false, docked: 0, error: '桌宠窗未就绪' };
+    const list = manager.list();
+    for (const view of list) {
+      const display = screen.getDisplayMatching(view.bounds);
+      const center = view.bounds.x + view.bounds.width / 2;
+      const edge = center < display.workArea.x + display.workArea.width / 2 ? 'left' : 'right';
+      manager.dock(view.agentId, edge);
+    }
+    return { ok: true, docked: list.length };
+  });
+  if (TEST_MODE) {
+    // E2E：无头环境没有真实 Tray，直接打开/隐藏复用浮窗，并回报真实坐标。
+    ipcMain.handle('test:tray-popover', (_event, action: 'open' | 'hide' | 'bounds') => {
+      if (action === 'open') trayHost?.showPopover();
+      else if (action === 'hide') trayHost?.hidePopover();
+      return { ok: true, bounds: trayHost?.lastBounds() ?? null, visible: trayHost?.isPopoverVisible() ?? false };
+    });
+  }
+
+  try {
+    trayHost = await createTrayHost({
+      platform: process.platform,
+      appName: APP_NAME,
+      iconDir: dirname(brandAssetPath(BRAND_ASSETS.iconPng)),
+      popoverHtml: join(here, '../renderer/tray-popover/index.html'),
+      preloadPath: join(here, '../preload/index.cjs'),
+      testMode: TEST_MODE,
+      isQuitting: () => isQuitting,
+      onOpenDirector: showDirector,
+      onOpenBench: () => {
+        showDirector();
+        directorWindow?.webContents.send('ui:open-bench');
+      },
+      onTogglePets: () => {
+        if (petWindowManager?.anyHidden() === true) petWindowManager.showAll();
+        else petWindowManager?.hideAll();
+      },
+      petState: () => ({ anyHidden: petWindowManager?.anyHidden() === true }),
+      onQuit: quitApp,
+    });
+  } catch (error) {
+    console.warn('[tray] 托盘创建失败（应用继续运行）:', error);
+  }
+
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      directorWindow = createDirectorWindow();
+    showDirector();
+    if ((petWindowManager?.list().length ?? 0) === 0) {
       void petWindowManager?.open('default', prefs.get().characterId).then(() => {
         stageWindow = petBrowserWindows.get('default') ?? null;
         wireTargets();
@@ -868,7 +989,17 @@ app.whenReady().then(async () => {
   });
 });
 
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+app.on('will-quit', () => {
+  trayHost?.destroy();
+  trayHost = null;
+});
+
 app.on('window-all-closed', () => {
+  // 托盘常驻：只有显式退出（app:quit / Cmd+Q）才结束进程，关窗只隐藏。
+  if (!shouldQuitOnAllWindowsClosed(isQuitting)) return;
   // 多桌宠 agent 池先停，避免残留 MCP 长轮询阻止进程退出
   coopHost?.stopAll();
   app.quit();
