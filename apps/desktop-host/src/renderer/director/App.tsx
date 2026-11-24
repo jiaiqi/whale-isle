@@ -469,6 +469,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       return;
     }
     setCharacterId(id);
+    // 用户主动切角 → 游戏跟随（后台恢复/召唤不写，避免启动覆盖已应用的像素表）
+    if (avatarSync?.enabled === true && avatarSync.modInstalled) {
+      void window.directorBridge.stardewAvatarSyncNow()
+        .then((sync) => { if (sync.ok) void refreshAvatarSync(); })
+        .catch(() => undefined);
+    }
     const selected = characters.find((character) => character.id === id);
     toast.success(`已切换陪伴角色：${selected?.displayName ?? id}`);
   };

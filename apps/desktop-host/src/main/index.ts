@@ -308,18 +308,14 @@ app.whenReady().then(async () => {
   /**
    * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
    * 工作跟随「单宠换装」复用此函数，绝不关闭 default（T-M6-51 P0）。
-   * `syncGame=false` 用于后台自动切换（前台应用/工作跟随）：不能悄悄改掉用户已应用到游戏的像素形象。
+   * 注意：这里**不**写星露谷外观——启动恢复/召唤/前台应用/工作跟随等后台路径都可能走它，
+   * 静默写会让游戏形象在启动时被过期会话覆盖。游戏同步只由用户显式动作触发
+   *（共玩页开关/同步当前/一键应用、工作台切角），见 stardew-avatar:* IPC 与 App.selectCharacter。
    */
-  function switchDefaultCharacter(id: string, syncGame = true): void {
+  function switchDefaultCharacter(id: string): void {
     prefs.patch({ characterId: id });
     const next = characters.selected();
     setCurrentPersonaCharacter(next.id, next.personaPrompt);
-    // T-M6-62：用户主动切角（工坊/托盘/召唤）时把新角色外观写进星露谷；后台自动切换不写
-    if (syncGame) {
-      try {
-        stardewAvatar.syncCharacter({ characterId: next.id, displayName: next.displayName });
-      } catch { /* 外观同步失败不影响切角 */ }
-    }
     // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
     petWindowManager?.patch('default', { characterId: next.id });
     petWindowManager?.sendAgent('default', 'pet:character-changed', { ...next });
@@ -440,7 +436,7 @@ app.whenReady().then(async () => {
       if (match === null) return;
       if (prefs.get().characterId === match.characterId) return;
       console.log(`[pet] 前台应用 ${bundleId} → 自动切换到 ${match.name}（${match.characterId}）`);
-      switchDefaultCharacter(petControl.nightOutfit(match.characterId), false);
+      switchDefaultCharacter(petControl.nightOutfit(match.characterId));
     },
   });
   frontAppWatcher.start();
@@ -510,7 +506,7 @@ app.whenReady().then(async () => {
     switchCharacter: (characterId) => {
       // 单宠换装：只关掉其他跨 AI 窗口，default 主窗保留并原地换角色（含夜间睡衣）
       petWindowManager?.dismissAll('default');
-      switchDefaultCharacter(petControl.nightOutfit(characterId), false);
+      switchDefaultCharacter(petControl.nightOutfit(characterId));
     },
     onSessionIdle: (session) => {
       // multi 模式闲置退场：同一角色还有活跃会话时保留窗口
