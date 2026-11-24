@@ -15,6 +15,10 @@ import {
   DstActionReceiptSchema,
   WorkbenchRoleSlotSchema,
   PetCustomCharacterSchema,
+  statusLabelZh,
+  toolLabelZh,
+  WORKBENCH_STATUS_LABELS_ZH,
+  WORKBENCH_TOOL_LABELS_ZH,
 } from './index';
 import { CONTRACT_SCHEMAS, CONTRACT_VERSION } from './registry';
 
@@ -358,6 +362,24 @@ describe('契约注册表', () => {
     for (const [name, schema] of Object.entries(CONTRACT_SCHEMAS)) {
       expect(typeof schema.safeParse, `${name} 应为 Zod Schema`).toBe('function');
     }
+  });
+});
+
+describe('中文化工具/状态词表（T-M6-59）', () => {
+  it('已知工具/状态返回中文；未知原样；空值给出占位', () => {
+    expect(WORKBENCH_TOOL_LABELS_ZH.fish).toBe('钓鱼');
+    expect(WORKBENCH_TOOL_LABELS_ZH['craft']).toBe('制作');
+    expect(WORKBENCH_STATUS_LABELS_ZH.COMPLETED).toBe('已完成');
+    expect(toolLabelZh('fish')).toBe('钓鱼');
+    expect(toolLabelZh('new_tool')).toBe('new_tool');
+    expect(toolLabelZh('')).toBe('待命');
+    expect(toolLabelZh(undefined)).toBe('待命');
+    expect(toolLabelZh(null)).toBe('待命');
+    expect(statusLabelZh('FAILED')).toBe('失败');
+    expect(statusLabelZh('WEIRD')).toBe('WEIRD');
+    expect(statusLabelZh('')).toBe('—');
+    expect(statusLabelZh(undefined)).toBe('—');
+    expect(statusLabelZh(null)).toBe('—');
   });
 });
 

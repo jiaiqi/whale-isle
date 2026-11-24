@@ -807,6 +807,7 @@ app.whenReady().then(async () => {
       getState: () => ({
         running: autodrive.runner.isRunning(),
         brainMode: autodrive.getBrainMode().mode,
+        characterName: characters.selected().displayName,
         memoryStats: { nodes: memory.store.size, edges: memory.store.allEdges().length },
         voice: {
           enabled: voice.config.enabled,

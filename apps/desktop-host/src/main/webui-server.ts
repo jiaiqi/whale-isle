@@ -24,6 +24,8 @@ import type { WebSocket as WsSocket, WebSocketServer as WsServer } from 'ws';
 import {
   PetApiActionRequestSchema,
   PetApiSayRequestSchema,
+  WORKBENCH_STATUS_LABELS_ZH,
+  WORKBENCH_TOOL_LABELS_ZH,
   type PetApiActionRequest,
   type PetApiSayRequest,
   type PetApiState,
@@ -70,6 +72,8 @@ export interface WebUIApprovePayload {
 export interface WebUIRuntimeState {
   running?: boolean;
   brainMode?: string | null;
+  /** 当前活跃桌宠角色名（T-M6-59：OBS 状态卡顶栏展示） */
+  characterName?: string;
   memoryStats?: {
     nodes?: number;
     edges?: number;
@@ -414,7 +418,7 @@ ol li { font-size: 12px; background: #020617; border-radius: 6px; padding: 6px 8
  */
 function renderObsHtml(token: string): string {
   return `<!doctype html>
-<html lang="zh-CN" data-stage-protocol="1">
+<html lang="zh-CN" data-stage-protocol="1" data-theme="dark" data-layout="card">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -423,56 +427,86 @@ function renderObsHtml(token: string): string {
 <meta name="webui-token" content="${escapeHtml(token)}">
 <title>鲸屿 · OBS 挂件</title>
 <style>
+  :root {
+    --obs-bg: rgba(10, 10, 14, 0.62); --obs-border: rgba(255, 255, 255, 0.16);
+    --obs-text: #f5f5f7; --obs-sub: #b9b9c0; --obs-accent: #6fb7ff;
+    --obs-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); --obs-ok: #48d38d; --obs-warn: #f5b74a; --obs-fail: #ff7b7b;
+  }
+  html[data-theme="light"] {
+    --obs-bg: rgba(255, 255, 255, 0.82); --obs-border: rgba(15, 23, 42, 0.16);
+    --obs-text: #0f172a; --obs-sub: #475569; --obs-accent: #0a84ff;
+    --obs-shadow: 0 1px 2px rgba(255, 255, 255, 0.7); --obs-ok: #15803d; --obs-warn: #b45309; --obs-fail: #b91c1c;
+  }
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
   body { font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif; }
   .stack { position: fixed; left: 28px; bottom: 28px; display: flex; flex-direction: column; gap: 8px; max-width: 620px; }
   .card {
     padding: 10px 14px; border-radius: 16px;
-    background: rgba(10, 10, 14, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
-    color: #f5f5f7; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    background: var(--obs-bg); border: 1px solid var(--obs-border);
+    color: var(--obs-text); text-shadow: var(--obs-shadow);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   }
-  .row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #b9b9c0; }
+  .row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--obs-sub); }
+  .who { margin-left: auto; font-weight: 600; color: var(--obs-accent); text-shadow: none; }
   .dot { width: 7px; height: 7px; border-radius: 99px; background: #8d8d93; }
   .dot.live { background: #30d158; box-shadow: 0 0 8px rgba(48, 209, 88, 0.8); }
-  .action { margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 700; color: #6fb7ff; }
-  .intent { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: #d5d5dc; }
-  .receipt { font-size: 12px; line-height: 1.55; color: #c9c9d1; }
-  .receipt b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .ok b { color: #48d38d; } .warn b { color: #f5b74a; } .fail b { color: #ff7b7b; }
+  .action { margin-top: 4px; font-size: 20px; font-weight: 700; color: var(--obs-accent); }
+  .intent { margin-top: 3px; font-size: 12.5px; line-height: 1.5; color: var(--obs-sub); }
+  .receipt { font-size: 12px; line-height: 1.55; color: var(--obs-sub); }
+  .receipt b { color: var(--obs-text); }
+  .ok b { color: var(--obs-ok); } .warn b { color: var(--obs-warn); } .fail b { color: var(--obs-fail); }
   .hide { display: none; }
+  html[data-layout="compact"] .stack { left: 18px; bottom: 18px; gap: 5px; max-width: 460px; }
+  html[data-layout="compact"] .card { padding: 6px 10px; border-radius: 11px; }
+  html[data-layout="compact"] .action { margin-top: 2px; font-size: 15px; }
+  html[data-layout="compact"] .intent { display: none; }
+  html[data-layout="compact"] .receipt { font-size: 11px; }
 </style>
 </head>
 <body>
 <div class="stack">
   <div class="card" id="action-card">
-    <div class="row"><span class="dot" id="dot"></span><span id="status">待命</span></div>
-    <div class="action" id="action">idle</div>
+    <div class="row"><span class="dot" id="dot"></span><span id="status">待命</span><span class="who" id="character"></span></div>
+    <div class="action" id="action">待命</div>
     <div class="intent" id="intent">等待自动驾驶启动…</div>
   </div>
   <div class="card receipt hide" id="receipt-card"><b id="receipt-status"></b> <span id="receipt-text"></span></div>
 </div>
 <script>
 (function () {
+  var TOOL_LABELS = ${JSON.stringify(WORKBENCH_TOOL_LABELS_ZH)};
+  var STATUS_LABELS = ${JSON.stringify(WORKBENCH_STATUS_LABELS_ZH)};
+  var params = new URLSearchParams(location.search);
+  var layout = params.get('layout') === 'compact' ? 'compact' : 'card';
+  var theme = params.get('theme') === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-layout', layout);
+  document.documentElement.setAttribute('data-theme', theme);
+
   var meta = document.querySelector('meta[name="webui-token"]');
   var token = meta ? meta.getAttribute('content') || '' : '';
   var actionEl = document.getElementById('action');
   var intentEl = document.getElementById('intent');
   var statusEl = document.getElementById('status');
   var dotEl = document.getElementById('dot');
+  var characterEl = document.getElementById('character');
   var receiptCard = document.getElementById('receipt-card');
   var receiptStatus = document.getElementById('receipt-status');
   var receiptText = document.getElementById('receipt-text');
   var hideTimer = 0;
+  function toolLabel(tool) { return TOOL_LABELS[tool] || String(tool || '') || '待命'; }
+  function statusLabel(status) { return STATUS_LABELS[status] || String(status || ''); }
   function setRunning(running) {
     statusEl.textContent = running ? '自动驾驶中' : '待命';
     dotEl.className = 'dot' + (running ? ' live' : '');
+  }
+  function setCharacter(name) {
+    if (typeof name === 'string' && name !== '') characterEl.textContent = name;
   }
   function applyEvent(event) {
     if (!event || typeof event !== 'object') return;
     if (event.type === 'state') { setRunning(true); return; }
     if (event.type === 'decision' && event.tool !== 'think') {
-      actionEl.textContent = String(event.tool || 'idle');
+      actionEl.textContent = toolLabel(event.tool);
       intentEl.textContent = String(event.intent || '');
       setRunning(true);
       return;
@@ -480,8 +514,8 @@ function renderObsHtml(token: string): string {
     if (event.type === 'receipt' && event.status) {
       var cls = event.status === 'COMPLETED' ? 'ok' : (event.status === 'UNCERTAIN' || event.status === 'TIMEOUT') ? 'warn' : 'fail';
       receiptCard.className = 'card receipt ' + cls;
-      receiptStatus.textContent = event.status;
-      receiptText.textContent = String(event.tool || '') + ' · ' + String(event.summary || '').slice(0, 120);
+      receiptStatus.textContent = statusLabel(event.status);
+      receiptText.textContent = toolLabel(event.tool) + ' · ' + String(event.summary || '').slice(0, 120);
       if (hideTimer) clearTimeout(hideTimer);
       hideTimer = setTimeout(function () { receiptCard.className = 'card receipt hide'; }, 12000);
     }
@@ -494,6 +528,7 @@ function renderObsHtml(token: string): string {
   api('/api/state').then(function (state) {
     if (!state) return;
     setRunning(state.running === true);
+    setCharacter(state.characterName);
     var events = Array.isArray(state.events) ? state.events : [];
     for (var i = events.length - 1; i >= 0 && i >= events.length - 20; i -= 1) applyEvent(events[i]);
   });
@@ -798,6 +833,7 @@ export function createWebUIServer(options: WebUIServerOptions = {}): WebUIServer
         events: [...eventBuffer],
         running: state.running === true,
         brainMode: state.brainMode ?? null,
+        characterName: state.characterName ?? '',
         memoryStats: state.memoryStats ?? null,
         voice: state.voice ?? null,
       });

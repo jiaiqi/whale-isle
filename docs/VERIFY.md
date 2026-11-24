@@ -119,6 +119,11 @@
 | T-M6-42 | `[SIMULATION]` + `[E2E-HOST]` | launcher **2/2**：普通 Mod symlink、BWF 独立拷贝与 McpPort=18081/ShowHud=false，原 config 保持 18080；路径/端口穿越拒绝。Electron E2E 三游戏向导展开与 Terraria 自动端口 18090。Terraria/DST 只实现本机路径探测，未实现完整启动；不得按“一键可玩”理解。 | 2026-11-24 |
 
 | T-M6-44 | `[SIMULATION]` + `[E2E-HOST]` | `character-persona.spec.ts` **3/3**：10 角色完整配置全部通过 `loadPersona`、每个专属雷区 0-token 命中、未命中和未知角色回退；`interaction.spec.ts` **4/4**：甩晕四级/摸头清零、睡眠屏蔽白/黑名单、左右贴边位置、30s 省电阈值。全仓 **885 tests / 分支 90.09%**；全屏纯函数 **4/4**（多屏只隐藏被覆盖屏/95% 阈值/AppleScript 矩形解析）、弹弓弹簧 **2/2**（位移后回原点/边界夹紧）、窗口管理 **8/8**（副窗独立状态/undock 多帧/clearDock/全局 Alt peek）、全局 Alt **2/2**；E2E 新增主进程 Alt 命中、拖离不弹回；气泡状态机 **5/5**、voice 终态 **6/6**、Electron E2E **9/9**（新增 aboutme 精灵舞台预览、贴边负坐标、Alt 0.35 透明度、globalShortcut 注册断言）。真实 9 包音画、多屏贴边手感、全屏检测权限与快捷键组合需人类真机。 | 2026-11-24 |
+| T-M6-55 | `[SIMULATION]` + `[E2E-HOST]` | `greeting-schedule.spec.ts` **25/25**（6 时段边界、8 节日含 2025/2026/2031/2035 农历边界、节日优先/缺图回退、角色+日期+键去重与坏文件）；`idle-mix.spec.ts` **5/5**（权重 2:1、缺图过滤、rng 0/1 边界）；`glyph-effects.spec.ts` **13/13**（reading/searching、色值回退、3–5 粒子边界）；`front-app-watcher.spec.ts` **5/5**（开关门控/去重/自身忽略/异步关闭不越权/非 macOS 空转）；`character-app-match.spec.ts` **4/4**（自定义优先/随包命中/坏包跳过）；`friendship-host` 新增 2（{h} 替换、notebook 覆盖、抛错降级）；Electron E2E 验收台 1.5s 轮播后 `#guide-layer` display=block、停止后 none。**待人类**：真实自定义角色 greet_*/fest_* 素材登场、macOS 自动化权限下前台切换观感。 | 2026-11-24 |
+| T-M6-56 | `[SIMULATION]` + `[E2E-HOST]` | `image-gen-client.spec.ts` **12/12**（OpenAI b64_json/临时 url 无 Authorization 二跳、dall-e response_format、参考图 edits multipart、Gemini x-goog-api-key + inline_data、HTTP 错误脱敏不含 Key、60s 超时 abort、缺参不发请求）；`image-gen-drafts.spec.ts` **7/7**（任务 id/目录防穿越、参考图缺失/非图片/20MB、提示词与扩展名、done 文件收集经 sanitizePoseId、并发峰值=2、模型候选去重）；Electron E2E 创作中心无 Key 时显示「未检测到已配置 Key 的生图供应商」且可跳转模型服务商。**待人类**：配置真实 OpenAI/Gemini Key 后批量出图、单张重画与入库后处理观感。 | 2026-11-24 |
+| T-M6-57 | `[SIMULATION]` + `[E2E-HOST]` | `state-hints.spec.ts` **7/7**（08:30 未开门/18:00 打烊、无鱼竿仅背包段存在时断言、空位 0/2 告警 3 不告警、list_chests COMPLETED/OK 取最后一条、空摘要跳过、≤240 字、空状态返回空串）；`llm-planner.spec.ts` 新增 3（objectiveDone 判据进 prompt、consume/restore/setObjective 作废、环境提示注入）；`autodrive.spec.ts` 新增 3（objective set 事件、成功后目标已完成 + objective null done、失败 restore 不播完成、无 consume 方法不误报）；`coop-host.spec.ts` 新增 1（agentId + objective set/cancel 广播），全量 12/12；Electron E2E 无活跃目标时 `[data-objective-bar]` 数量 0。**待人类**：真实星露谷多步目标达成（拿到鱼竿/物品入箱）后气泡与目标条收尾。 | 2026-11-24 |
+| T-M6-58 | `[SIMULATION]` + `[E2E-HOST]` | `work-follow-installer.spec.ts` **11/11**（临时 home 沙箱：8 家清单、命令标记、探测状态、首次安装备份 + 保留用户钩子、幂等不重复、干净卸载、坏 JSON 与未知 hooks 格式拒绝且文件不动、手动模式零写盘、hook 源缺失不动配置、纯合并不可变）；`work-follow-host.spec.ts` 新增 2（自检 ≤1.5s 真消费、轮询关闭时如实失败）；Electron E2E 8 张 CLI 卡片齐全 + `workFollowSelfTest` ok 且 elapsedMs ≤1500 + UI 自检结果卡 ok。**待人类**：在真实 Claude Code/Gemini CLI/Cursor 触发一次工具调用，确认钩子实际写入 `events.jsonl`（自检只证明鲸屿侧消费链路）。 | 2026-11-24 |
+| T-M6-59 | `[SIMULATION]` + `[E2E-HOST]` | `webui-server.spec.ts` **28/28**（新增 /obs 中文 `"fish":"钓鱼"` / `"COMPLETED":"已完成"`、layout/theme 参数解析、state.characterName 注入；/api/state 同步断言）；全仓 **1124 tests / 分支 90.2%**；`pnpm verify:gate` 7 过 / 0 跳过；Electron E2E 全量 **12/12**（`iteration.e2e.spec.ts` 新增 1：创作中心生图入口、验收台参考线轮播、CLI 探测/自检、OBS 中文参数、目标条不伪造）；DMG `2,373,955,045 B`，挂载校验 `Resources/hooks/work-follow-hook.mjs` 存在、`Resources/pet-packs/` 1.9G，无 `.temp*.dmg`。**待人类**：真实 OBS 浏览器源叠加观感、DMG 断网启动。 | 2026-11-24 |
 
 ## 待人类宿主真机验收项
 
@@ -148,6 +153,11 @@
 | --- | --- | --- |
 | 全量素材音画 | 打开发布版：9 角色切换后舞台/逐帧播放器能显示真实精灵图与 `.m4a` 原声；动作预览拖动进度条音画同步；导出 WebM 可播放；960+ 动作搜索无卡顿 | ⏳ |
 | 安装包自包含 | `pnpm --filter @workbench/desktop-host package` 后，在**断网**环境启动 DMG/NSIS，确认 `Resources/pet-packs/` 全量存在、9 角色与皮肤彩蛋可用（批次 4 复验） | ⏳ |
+| T-M6-55 自定义角色登场/前台切换 | 准备带 `greet_morning.webp` / `fest_christmas.webp` 等图与 lines 的自定义角色：首次见面应播对应姿态并弹台词，同日第二次不再重复；开启「跟随前台 AI 应用自动切角」后切到 Claude/Cursor，主桌宠应切到 apps 命中的角色；关闭开关后手动选中角色不再被改。macOS 首次会请求自动化/辅助功能权限。 | ⏳ |
+| T-M6-56 真实生图闭环 | 在「模型服务商」保存真实 OpenAI 或 Gemini Key → 创作中心选择供应商/模型 → 批量出图应真实请求、网格显示缩略图；失败显示服务端原文（脱敏后）；单张重画覆盖；「确认入库并后处理」后角色出现在桌面且 90% 脚底对齐、白底已抠。 | ⏳ |
+| T-M6-57 真实多步目标收尾 | 星露谷真机对桌宠说「去鱼店买根鱼竿」：目标条出现；买到鱼竿后模型输出 `objectiveDone` 且动作成功 → 气泡/事件流出现「目标已完成：…」、目标条消失；说「算了」或点「取消目标」应立即结束且不再驱动。 | ⏳ |
+| T-M6-58 真实 CLI 钩子触发 | 在 Claude Code（或 Gemini/Cursor）点「一键安装」后重启 CLI，执行一次工具调用 → 工坊 Tab 4 出现该会话与工具计数；卸载后 CLI 其他钩子仍工作、鲸屿条目消失；坏 JSON 配置应被拒绝且文件未被改动。 | ⏳ |
+| T-M6-59 真实 OBS 挂件 | OBS 添加浏览器源 `.../obs?token=…&layout=compact&theme=light`：画面只读透明、工具名显示中文（钓鱼/制作…）、状态显示已完成/失败、顶部显示当前桌宠角色名；切换 layout/theme 参数即时生效。 | ⏳ |
 | 语音中心 | 9 角色各绑定不同音色后，同屏多桌宠说话音色不同、严格串行；动作原声在 TTS 期间压低至 15% | ⏳ |
 | 联机向导 | 真实 Terraria：本地服 :7777 起服、客户端连入、18090/18091 桥接在线；真实 DST：Klei token 落盘、`modoverrides.lua` 生效、专用服 + sidecar :18100 在线、多 UserID 各控各的角色 | ⏳ |
 

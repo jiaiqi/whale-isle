@@ -1243,6 +1243,71 @@ export const ImageGenDraftCommitSchema = z.object({
 });
 export type ImageGenDraftCommit = z.infer<typeof ImageGenDraftCommitSchema>;
 
+// ───────────────────────── 中文化工具/状态词表（T-M6-59：OBS 挂件与 Shell 共用） ─────────────────────────
+/** 简短中文工具名（不带英文括号，适合 OBS 直播画面）；未知工具原样返回。 */
+export const WORKBENCH_TOOL_LABELS_ZH: Readonly<Record<string, string>> = {
+  travel_to: '前往',
+  fish: '钓鱼',
+  water_crops: '浇水',
+  harvest_crops: '收获',
+  till_area: '耕地',
+  plant_seeds: '播种',
+  clear_area: '清理',
+  forage: '采集',
+  tidy_backpack: '整理背包',
+  ship_items: '出货',
+  store_items: '存入箱子',
+  take_items: '取回物品',
+  trash_item: '扔掉',
+  eat: '吃东西',
+  read_mail: '读信',
+  quest_board: '任务板',
+  donate_bundles: '捐赠收集包',
+  bundle_info: '查看收集包',
+  sleep: '睡觉',
+  craft: '制作',
+  place_item: '摆放物品',
+  open_shop: '打开商店',
+  buy: '购买',
+  sell: '出售',
+  interact: '交互',
+  use_tool: '使用工具',
+  explore_mine: '探索矿洞',
+  fight: '战斗',
+  dialogue: '对话',
+  close_menu: '关闭界面',
+  skip_event: '跳过剧情',
+  set_name: '起名',
+  festival: '节日',
+  update_notes: '记笔记',
+  reserve_items: '预留物品',
+  gift_info: '查看礼物',
+  give_gift: '送礼物',
+  cook: '烹饪',
+  care_animals: '照顾动物',
+  chat_reply: '回话',
+  chat_order: '接单',
+  reflex_spray: '雷区反射',
+  autodrive: '自动驾驶',
+};
+export const WORKBENCH_STATUS_LABELS_ZH: Readonly<Record<string, string>> = {
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  UNCERTAIN: '不确定',
+  TIMEOUT: '超时',
+  ERROR: '错误',
+};
+
+export function toolLabelZh(tool: string | undefined | null): string {
+  if (tool === undefined || tool === null || tool === '') return '待命';
+  return WORKBENCH_TOOL_LABELS_ZH[tool] ?? tool;
+}
+
+export function statusLabelZh(status: string | undefined | null): string {
+  if (status === undefined || status === null || status === '') return '—';
+  return WORKBENCH_STATUS_LABELS_ZH[status] ?? status;
+}
+
 // ───────────────────────── 对外本机驱动口（T-M6-49：/api/pet/:agentId/*） ─────────────────────────
 export const PetApiSayRequestSchema = z.object({
   text: z.string().min(1).max(500),

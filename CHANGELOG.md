@@ -5,6 +5,14 @@
 
 ## [Unreleased] — 2026-11-24
 
+### Added（T-M6-55 ~ T-M6-59：桌宠全字段运行、AI 直连出图、星露谷大脑进化、CLI 钩子向导、OBS 挂件收口）
+
+- **T-M6-55 自定义角色全字段真运行**：新增 `greeting-schedule.ts`（6 时段 + 8 节日：公历元旦/万圣/圣诞/国庆，农历春节初一到初七/元宵/端午/中秋，内置 2025–2035 农历表零联网），按「角色 id + 日期 + 键」持久化去重；首见优先节日姿态 → 时段姿态 → 缺图回退每日问候。`custom:pose-config` 增发 `idleActions/glyph/apps`；ambient 空闲链按权重混播自定义立绘与内置氛围池；`#glyph-layer` 在 reading/searching 时渲染 3–5 个代码符号飘字（省电自动关闭）。主进程新增 macOS 3s 前台应用只读监听（`frontAppWatcher` + `matchCharacterForApp`，含随包 CrossPet apps），偏好 `followFrontApp` 默认关闭、关闭后严格保持手选角色。小本子/成就优先读自定义 `milestones`（`{h}` 替换当前小时）与 `notebook.notes/sign`。验收台新增 `acceptance:carousel`（主进程 1.5s 节拍）与 `acceptance:guides`，桌宠窗叠加 90% 身高虚线框 + 97% 脚底基线 + 姿态角标，停止/关闭弹窗自动回 idle。
+- **T-M6-56 创作中心 AI 直连出图**：新增 `image-gen-client.ts`（OpenAI Images `generations/edits` 兼容 `gpt-image-1`/`dall-e-3` 与中转站，解析 b64_json/临时 url；Gemini Native `generateContent` + `responseModalities:["IMAGE"]` 解析 inlineData；单张 60s 超时、Key 全程脱敏）与 `image-gen-drafts.ts`（草稿目录防穿越、参考图校验 ≤20MB、并发 ≤2、done 文件收集）。`creator-host` 新增 `creator:image-gen-providers / generate-batch / regenerate-one / commit-draft`，实时 `creator:gen-progress` 推 data URL，草稿确认后直接复用 `importImages` 流水线（抠像 → 90% 脚底 → blink 贴回 → avatar/portrait → 热重载）。创作中心 A/B 页签新增供应商/模型选择、参考图、实时网格（queued/generating/done/failed + 重画）与「确认入库并后处理」；无 Key 时如实提示并可一键跳转「模型服务商」。
+- **T-M6-57 星露谷大脑进化与联机同步**：`teamContext()` 明确 objectiveDone 完成判据（动作仍要执行，回执成功才算完成）；`LlmPlanner` 记录未确认的完成声明，`AutodriveRunner` 动作成功后广播 `目标已完成：…` 并结束目标，失败则撤回声明继续推进。新增 `state-hints.ts`（无鱼竿/商店 09:00-17:00 打烊/空位 ≤2/list_chests 摘要，≤240 字）注入每轮 user prompt。新增 `objective` 事件作为目标生命周期单点事实源；`autodrive:objective-status / clear-objective` IPC；游戏共玩事件流 4 种徽标（大脑决策/规则兜底/主人插队/目标推进中）、目标条与一键取消；联机 Agent 事件带 agentId 广播，Coop 共享同一 LlmPlanner 生命周期与 3 连败熔断。
+- **T-M6-58 8 家 CLI 钩子一键安装**：新增 `work-follow-installer.ts`：Claude Code / Gemini CLI / Cursor 标准 JSON 钩子幂等合并（`.whale-isle.bak` 备份、坏 JSON/未知格式拒绝写入、卸载仅移除鲸屿条目），其余 5 家诚实标注「手动模式」并给可复制命令；钩子脚本同步到 `userData/work-follow/hook.mjs`（打包 `Resources/hooks`），脚本支持 stdin JSON（session_id/tool_name/hook_event_name）。`work-follow:self-test` 写入受控事件并验证轮询消费 ≤1.5s；工坊 Tab 4 新增 8 家状态卡片与安装/卸载/复制/自检。
+- **T-M6-59 OBS 挂件收口**：`/obs` 复用中文化工具/状态词表（钓鱼/制作/已完成/失败），支持 `?layout=compact|card&theme=dark|light`，状态卡顶栏显示 `/api/state.characterName` 当前角色；中控台增加布局/主题选择并实时拼接带 token 的源地址。新增 `iteration.e2e.spec.ts` 覆盖创作中心生图入口、验收台参考线/轮播、CLI 探测与自检、OBS 中文化参数与目标条不伪造。重打 `release/鲸屿 Whale Isle-0.2.0-dev.1-arm64.dmg`（2,373,955,045 B），挂载校验 `Resources/hooks/work-follow-hook.mjs` 与 `Resources/pet-packs/`（1.9G）完整、无 `.temp*.dmg` 残留；全仓 1124 tests / 分支 90.2% / Electron E2E 12/12 / `verify:gate` 7 过。
+
 ### Fixed（T-M6-54：逐行审计 P0/P1 真实缺陷，2026-11-24）
 
 - **创作中心白底抠像（P0）**：`keyWhiteBackground` 先检测四角透明（已是透明图直接跳过，保留 alpha），再用**从四边出发的连通洪水填充**删除背景，只删与边缘连通的白，绝不全局删白——白色衣服、眼白、白龙等封闭区域完整保留；`creator-host` 抠像后改为 `fromRaw(raw).resize(...)`，去底结果真正进入输出的 90% 脚底对齐 WebP（旧实现直接缩放原图，抠像结果被丢弃）。

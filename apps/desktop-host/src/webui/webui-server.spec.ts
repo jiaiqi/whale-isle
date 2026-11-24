@@ -145,6 +145,7 @@ describe('[WebUI] 鉴权与状态', () => {
       events: [{ type: 'receipt', summary: '浇水完成' }],
       running: true,
       brainMode: 'llm',
+      characterName: '',
       memoryStats: { nodes: 3, edges: 2, lastDay: null },
       voice: { enabled: true, voiceId: 'qiaopi_mengmei', volume: 1 },
     });
@@ -242,6 +243,29 @@ describe('[WebUI] OBS 透明挂件 /obs（T-M6-34）', () => {
     const server = await startWebUI();
     const response = await fetch(`${base(server)}/obs?token=${TEST_TOKEN}`, { method: 'POST' });
     expect(response.status).toBe(405);
+  });
+
+  it('中文化工具/状态 + layout/theme 查询参数 + 当前角色名（T-M6-59）', async () => {
+    const server = await startWebUI({
+      getState: () => ({ running: true, brainMode: 'llm', characterName: '小鲸', memoryStats: null, voice: null }),
+    });
+    const response = await fetch(`${base(server)}/obs?token=${TEST_TOKEN}&layout=compact&theme=light`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    // 中文词表内联进页面（不再是裸露英文技术标签）
+    expect(html).toContain('"fish":"钓鱼"');
+    expect(html).toContain('"craft":"制作"');
+    expect(html).toContain('"COMPLETED":"已完成"');
+    expect(html).toContain('"FAILED":"失败"');
+    // 布局/主题参数在页面内解析并落到 data 属性
+    expect(html).toContain("params.get('layout') === 'compact'");
+    expect(html).toContain("params.get('theme') === 'light'");
+    expect(html).toContain('data-layout="card"');
+    expect(html).toContain('data-theme="dark"');
+    // 角色名来自 /api/state 而不是写死
+    expect(html).toContain('state.characterName');
+    const state = await (await fetch(`${base(server)}/api/state?token=${TEST_TOKEN}`)).json() as { characterName?: string };
+    expect(state.characterName).toBe('小鲸');
   });
 });
 

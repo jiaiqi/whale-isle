@@ -43,6 +43,11 @@ export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.El
     window.directorBridge.onLiveBatch(() => refreshLive());
   }, []);
   const [votes, setVotes] = useState([12, 7, 4]);
+  // T-M6-59：OBS 浏览器源布局/主题（/obs?layout=&theme=）
+  const [obsLayout, setObsLayout] = useState<'compact' | 'card'>('card');
+  const [obsTheme, setObsTheme] = useState<'dark' | 'light'>('dark');
+  const buildObsUrl = (port: number, token: string): string =>
+    `http://127.0.0.1:${port}/obs?token=${encodeURIComponent(token)}&layout=${obsLayout}&theme=${obsTheme}`;
   const latestThink = [...events].reverse().find((e) => e.type === 'decision')?.intent ?? '（小鲸还没有内心戏）';
   const latestTalk = [...events].reverse().find((e) => e.tool === 'chat_reply' || e.type === 'receipt')?.summary ?? '（暂无正式台词）';
   const total = votes.reduce((a, b) => a + b, 0);
@@ -59,12 +64,38 @@ export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.El
         </div>
         <div className="flex items-center gap-1.5">
           <span className="pill pill-green"><Radio size={11} />只读挂件已接通</span>
+          <label className="pill" style={{ gap: 4 }}>
+            布局
+            <select
+              data-obs-layout
+              value={obsLayout}
+              onChange={(event) => setObsLayout(event.target.value === 'compact' ? 'compact' : 'card')}
+              className="bg-transparent text-[10px] outline-none"
+              style={{ color: 'var(--text-1)' }}
+            >
+              <option value="card">卡片</option>
+              <option value="compact">紧凑</option>
+            </select>
+          </label>
+          <label className="pill" style={{ gap: 4 }}>
+            主题
+            <select
+              data-obs-theme
+              value={obsTheme}
+              onChange={(event) => setObsTheme(event.target.value === 'light' ? 'light' : 'dark')}
+              className="bg-transparent text-[10px] outline-none"
+              style={{ color: 'var(--text-1)' }}
+            >
+              <option value="dark">深色</option>
+              <option value="light">浅色</option>
+            </select>
+          </label>
           <button
             className="pill"
             data-obs-copy
             onClick={() => {
               void window.directorBridge.webuiInfo().then(async (info) => {
-                const url = `http://127.0.0.1:${info.port}/obs?token=${encodeURIComponent(info.token)}`;
+                const url = buildObsUrl(info.port, info.token);
                 try {
                   await navigator.clipboard.writeText(url);
                   toast.success('OBS 浏览器源地址已复制（含本机 token，勿外传）');
