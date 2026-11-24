@@ -109,23 +109,6 @@ describe('[E2E-HOST] 桌宠深度体验三阶段', () => {
       });
       console.log('[pet-evolution-e2e] layer/prefs ok');
 
-      // ③b 右键菜单必须换行在 400px 舞台内（真机发现：单行溢出导致后半按钮不可点）
-      const menuBounds = await stage.evaluate(() => {
-        const stageEl = document.getElementById('stage');
-        if (stageEl === null) return null;
-        stageEl.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 140 }));
-        const menu = [...stageEl.querySelectorAll('div')].find((node) => node.textContent?.includes('重新载入') === true) as HTMLElement | undefined;
-        if (menu === undefined) return null;
-        const rect = menu.getBoundingClientRect();
-        return { left: rect.left, right: rect.right, width: rect.width, innerWidth: window.innerWidth };
-      });
-      expect(menuBounds).not.toBeNull();
-      expect(menuBounds!.left).toBeGreaterThanOrEqual(0);
-      expect(menuBounds!.right).toBeLessThanOrEqual(menuBounds!.innerWidth);
-      await stage.evaluate(() => {
-        document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      });
-
       // ④ 小本子双页 + 8 套手写体注入
       const director = await waitForWindow(app, 'director');
       await director.waitForFunction(() => Boolean((window as unknown as { directorBridge?: unknown }).directorBridge), { timeout: 20_000 });

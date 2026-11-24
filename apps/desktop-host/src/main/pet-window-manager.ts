@@ -301,16 +301,19 @@ export class PetWindowManager {
     entry.preference = next;
     if (next.scale !== previous.scale) {
       const old = entry.window.getBounds();
-      const width = Math.round(BASE_WIDTH * next.scale);
-      const height = Math.round(BASE_HEIGHT * next.scale);
-      entry.window.setBounds({
-        x: Math.round(old.x + (old.width - width) / 2),
-        y: Math.round(old.y + old.height - height),
-        width,
-        height,
+      // 缩放按底边中心锚点调整后必须重新夹紧到工作区：持久化 scale 被强制归 1 时，
+      // 旧 anchor 可能把窗口留在离屏幕右缘 60px 处（desktop E2E 真机复现）。
+      const candidate = this.boundsFor({
+        ...next,
+        position: {
+          x: Math.round(old.x + (old.width - Math.round(BASE_WIDTH * next.scale)) / 2),
+          y: Math.round(old.y + old.height - Math.round(BASE_HEIGHT * next.scale)),
+          displayId: previous.position.displayId,
+        },
       });
-      entry.preference.position.x = Math.round(old.x + (old.width - width) / 2);
-      entry.preference.position.y = Math.round(old.y + old.height - height);
+      entry.window.setBounds(candidate);
+      entry.preference.position.x = candidate.x;
+      entry.preference.position.y = candidate.y;
       entry.window.send('pet:scale-changed', next.scale);
     }
     this.scheduleSave();
@@ -519,8 +522,10 @@ export class PetWindowManager {
 
   private preferenceFor(agentId: string, characterId?: string): PetWindowPreferences {
     const stored = this.read().windows[agentId];
+    // 主分支已移除桌宠缩放入口（T-M6-60 后统一 1.0×）；旧磁盘里的 1.3× 必须在
+    // boundsFor 夹紧前就归 1，否则会先按 1.3× 夹紧、再按 1.0× 居中留下 60px 缝。
     if (stored !== undefined) {
-      return { ...stored, ...(characterId === undefined ? {} : { characterId }) };
+      return { ...stored, scale: 1, ...(characterId === undefined ? {} : { characterId }) };
     }
     const legacy = agentId === 'default' ? this.options.legacyDefault?.() : undefined;
     const previous = [...this.entries.values()].at(-1)?.window.getBounds();
@@ -533,7 +538,7 @@ export class PetWindowManager {
       agentId,
       characterId: characterId ?? legacy?.characterId ?? 'blue-whale-maid',
       position,
-      scale: legacy?.scale ?? 1,
+      scale: 1,
       locked: false,
       visible: true,
     };

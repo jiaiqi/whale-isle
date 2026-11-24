@@ -1,0 +1,10 @@
+{
+  "Name": "Whale Isle Avatar Sync",
+  "Description": "把鲸屿当前桌宠形象同步成星露谷玩家外观（原版预设兜底 + 1x/2x/4x 多分辨率精灵表自适应 + 呼吸/弹跳/阴影灵动动画，仅替换本端玩家）。",
+  "Author": "Whale Isle",
+  "Version": "0.3.0-dev.1",
+  "UniqueID": "WhaleIsle.AvatarSync",
+  "EntryDll": "WhaleIsleAvatar.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}

@@ -361,7 +361,14 @@ function App(): React.JSX.Element {
   const selectCharacter = (id: string): void => {
     if (busy !== null || id === activeCharacterId) return;
     setActiveCharacterId(id);
-    void runAction('character', () => bridge.characterSelect(id), '已切换主桌宠角色');
+    void runAction('character', async () => {
+      const result = await bridge.characterSelect(id);
+      if (result.ok) {
+        // 用户主动切角 → 同步开启时游戏跟随；关闭时 sync-now 如实返回错误，这里只忽略这个可选副作用
+        await bridge.stardewAvatarSyncNow().catch(() => undefined);
+      }
+      return result;
+    }, '已切换主桌宠角色');
   };
 
   const sendChat = async (event: React.FormEvent): Promise<void> => {

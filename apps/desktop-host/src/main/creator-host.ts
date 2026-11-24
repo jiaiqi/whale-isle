@@ -5,7 +5,7 @@
  *   白底抠像/透明保真 → 内容包围盒 → 90% 身高 + 脚底对齐 → idle-blink 仅闭眼贴回
  *   → avatar 192×192 / portrait-card 256×384 → WebP 编码（复用中控台渲染进程 canvas）。
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dialog, ipcMain, nativeImage, type BrowserWindow, type NativeImage } from 'electron';
@@ -15,11 +15,17 @@ import {
   ImageGenOneRequestSchema,
   ImageGenProviderDescriptorSchema,
   PetCustomCharacterSchema,
+  StardewSpriteGenRequestSchema,
+  StardewSpriteReprocessRequestSchema,
   type ImageGenProgress,
   type ImageGenProviderDescriptor,
   type PetCustomCharacter,
+  type StardewSpriteTier,
 } from '@workbench/shared-protocol';
 import { generateImage } from './image-gen-client';
+import { buildStardewSpriteSheet, detectSpriteSheetMeta, readPngDimensions, validateSpriteSheet } from './pixel-sprite-pipeline';
+import { compileStardewSpritePrompt } from './prompt-compiler';
+import { detectCodexCli, type CodexCliDetection } from './codex-image-backend';
 import { collectDoneDraftFiles, draftDirFor, draftExtension, draftPosePrompt, imageModelsFor, resolveReferenceImage, runWithConcurrency } from './image-gen-drafts';
 import { hasVaultKey, readVaultKey } from './provider-vault';
 import {
@@ -98,6 +104,8 @@ export function createCreatorHost(options: {
   chat?: (system: string, user: string) => Promise<string | null>;
   /** provider-vault 路径：生图 Key 只在这里解密（T-M6-56） */
   vaultPath?: string;
+  /** 本机 Codex CLI 探测用 home（T-M6-61；缺省 process.env.HOME） */
+  homeDir?: string;
 }): { registerIpc(): void } {
   const encodeWebp = async (raw: RawImage): Promise<Buffer> => {
     const window = options.getDirectorWindow();
@@ -308,7 +316,7 @@ export function createCreatorHost(options: {
   const generateDraftItem = async (
     job: DraftJob,
     item: DraftItem,
-    args: { provider: ImageGenProviderDescriptor; modelId: string; apiKey: string; size: string; referenceImagePath?: string },
+    args: { provider: ImageGenProviderDescriptor; modelId: string; apiKey: string; size: string; referenceImagePath?: string; codex?: CodexCliDetection | null },
   ): Promise<void> => {
     item.status = 'generating';
     pushGenProgress({ jobId: job.id, pose: item.pose, status: 'generating', index: item.index, total: item.total });
@@ -320,8 +328,9 @@ export function createCreatorHost(options: {
         modelId: args.modelId,
         prompt: draftPosePrompt(job.prompt, item.pose),
         size: args.size,
-        timeoutMs: 60_000,
+        timeoutMs: args.provider.protocol === 'codex-cli' ? 150_000 : 60_000,
         ...(args.referenceImagePath === undefined ? {} : { referenceImagePath: args.referenceImagePath }),
+        ...(args.codex === undefined || args.codex === null ? {} : { codex: { detection: args.codex } }),
       });
       const ext = draftExtension(image.mimeType);
       const file = join(job.dir, `${item.pose}.${ext}`);
@@ -358,10 +367,20 @@ export function createCreatorHost(options: {
     const parsed = ImageGenBatchRequestSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
     const request = parsed.data;
-    if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
-    const apiKey = readVaultKey(options.vaultPath, request.provider.id);
-    if (apiKey === null) {
-      return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key；请先在「模型服务商」页保存` };
+    const isCodex = request.provider.protocol === 'codex-cli';
+    let apiKey = '';
+    let codex: CodexCliDetection | null = null;
+    if (isCodex) {
+      codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+      if (!codex.available) return { ok: false, error: `未检测到本机 Codex CLI：${codex.installHint}（或安装官方 codex）` };
+      if (!codex.loggedIn) return { ok: false, error: `本机 Codex 未登录：请先运行 ${codex.loginHint}` };
+    } else {
+      if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+      const key = readVaultKey(options.vaultPath, request.provider.id);
+      if (key === null) {
+        return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key；请先在「模型服务商」页保存` };
+      }
+      apiKey = key;
     }
     let referenceImagePath: string | undefined;
     try {
@@ -397,6 +416,7 @@ export function createCreatorHost(options: {
         apiKey,
         size: request.size,
         ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+        codex,
       });
     });
     return { ok: true, jobId, items: summarizeJob(job) };
@@ -408,9 +428,19 @@ export function createCreatorHost(options: {
     const request = parsed.data;
     const job = draftJobs.get(request.jobId);
     if (job === undefined) return { ok: false, error: '草稿任务不存在（应用重启后请重新生成）' };
-    if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
-    const apiKey = readVaultKey(options.vaultPath, request.provider.id);
-    if (apiKey === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+    const isCodex = request.provider.protocol === 'codex-cli';
+    let apiKey = '';
+    let codex: CodexCliDetection | null = null;
+    if (isCodex) {
+      codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+      if (!codex.available) return { ok: false, error: `未检测到本机 Codex CLI：${codex.installHint}` };
+      if (!codex.loggedIn) return { ok: false, error: `本机 Codex 未登录：请先运行 ${codex.loginHint}` };
+    } else {
+      if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+      const key = readVaultKey(options.vaultPath, request.provider.id);
+      if (key === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+      apiKey = key;
+    }
     let referenceImagePath: string | undefined;
     try {
       referenceImagePath = resolveDraftReference(request.referenceImagePath ?? job.referenceImagePath);
@@ -425,6 +455,7 @@ export function createCreatorHost(options: {
       apiKey,
       size: request.size,
       ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+      codex,
     });
     const summary = summarizeJob(job).find((entry) => entry.pose === request.pose);
     return summary === undefined ? { ok: false, error: '重画后未生成结果' } : { ok: true, jobId: job.id, item: summary };
@@ -458,14 +489,32 @@ export function createCreatorHost(options: {
     ipcMain.handle('creator:image-gen-providers', (_event, raw: unknown) => {
       const descriptors = providerDocs(raw);
       const configured = descriptors.filter((descriptor) => options.vaultPath !== undefined && hasVaultKey(options.vaultPath, descriptor.id));
+      // T-M6-61：本机 Codex CLI（免 API Key）——只探测二进制与 auth.json 存在性，绝不读取凭据
+      const codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+      const codexProvider = codex.available && codex.loggedIn
+        ? [{
+          id: 'codex-cli',
+          name: `本机 Codex CLI（免 API Key）· ${codex.backend === 'codex-imagegen' ? '快速模式' : '慢速兜底'}`,
+          protocol: 'codex-cli' as const,
+          baseUrl: 'https://codex.local/',
+          models: [codex.backend ?? 'codex-exec'],
+        }]
+        : [];
       return {
         ok: true,
-        configured: configured.length,
-        detected: descriptors.length,
-        providers: configured.map((descriptor) => {
+        configured: configured.length + codexProvider.length,
+        detected: descriptors.length + (codex.available ? 1 : 0),
+        codex: {
+          detected: codex.available,
+          backend: codex.backend,
+          loggedIn: codex.loggedIn,
+          installHint: codex.installHint,
+          loginHint: codex.loginHint,
+        },
+        providers: [...codexProvider, ...configured.map((descriptor) => {
           const models = [...new Set([
             ...descriptor.candidateModels,
-            ...(descriptor.candidateModels.length === 0 ? defaultImageModels(descriptor.protocol) : []),
+            ...(descriptor.candidateModels.length === 0 && descriptor.protocol !== 'codex-cli' ? defaultImageModels(descriptor.protocol) : []),
           ])].slice(0, 12);
           return {
             id: descriptor.id,
@@ -474,12 +523,145 @@ export function createCreatorHost(options: {
             baseUrl: descriptor.baseUrl,
             models,
           };
-        }),
+        })],
       };
     });
     ipcMain.handle('creator:generate-batch', async (_event, input: unknown) => generateBatch(input));
     ipcMain.handle('creator:regenerate-one', async (_event, input: unknown) => regenerateOne(input));
     ipcMain.handle('creator:commit-draft', async (_event, input: unknown) => commitDraft(input));
+    const stardewSpriteDir = (characterId: string): string | null => {
+      if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(characterId)) return null;
+      const outDir = characterId.startsWith('custom-')
+        ? join(customCharactersRoot(options.userDataDir), characterId.slice('custom-'.length))
+        : join(options.userDataDir, 'stardew-avatars', characterId);
+      if (!resolve(outDir).startsWith(`${resolve(options.userDataDir)}${sep}`)) return null;
+      return outDir;
+    };
+    ipcMain.handle('creator:compile-stardew-sprite', (_event, input: { name?: string; traits?: string; tier?: StardewSpriteTier }) => ({
+      ok: true,
+      prompt: compileStardewSpritePrompt({
+        name: String(input?.name ?? '桌宠'),
+        ...(input?.traits === undefined ? {} : { traits: String(input.traits) }),
+        ...(input?.tier === undefined ? {} : { tier: input.tier }),
+      }),
+    }));
+    ipcMain.handle('creator:generate-stardew-sprite', async (_event, input: unknown) => {
+      const parsed = StardewSpriteGenRequestSchema.safeParse(input);
+      if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
+      const request = parsed.data;
+      const isCodex = request.provider.protocol === 'codex-cli';
+      let apiKey = '';
+      let codex: CodexCliDetection | null = null;
+      if (isCodex) {
+        codex = detectCodexCli({ homeDir: options.homeDir ?? '' });
+        if (!codex.available) return { ok: false, error: `未检测到本机 Codex CLI：${codex.installHint}` };
+        if (!codex.loggedIn) return { ok: false, error: `本机 Codex 未登录：请先运行 ${codex.loginHint}` };
+      } else {
+        if (options.vaultPath === undefined) return { ok: false, error: 'provider-vault 未就绪，无法读取生图 Key' };
+        const key = readVaultKey(options.vaultPath, request.provider.id);
+        if (key === null) return { ok: false, error: `供应商「${request.provider.name || request.provider.id}」未配置可用 Key` };
+        apiKey = key;
+      }
+      try {
+        const prompt = request.prompt !== undefined && request.prompt.trim() !== ''
+          ? request.prompt
+          : compileStardewSpritePrompt({ name: request.characterId, tier: request.tier });
+        const referenceImagePath = request.referenceImagePath === undefined
+          ? undefined
+          : resolveDraftReference(request.referenceImagePath);
+        const image = await generateImage({
+          protocol: request.provider.protocol,
+          baseUrl: request.provider.baseUrl,
+          apiKey,
+          modelId: request.modelId,
+          prompt,
+          size: '1024x1024',
+          // codex-imagegen 真实出图常见 60–120s，90s 会误杀；后端上限 180s
+          timeoutMs: isCodex ? 150_000 : 60_000,
+          ...(referenceImagePath === undefined ? {} : { referenceImagePath }),
+          ...(codex === null ? {} : { codex: { detection: codex } }),
+        });
+        // 统一落临时文件再解码（复用渲染层 canvas 解码 WebP 的既有链路）
+        const tempDir = join(options.userDataDir, 'creator-drafts', 'sprite-tmp');
+        mkdirSync(tempDir, { recursive: true });
+        const tempPath = join(tempDir, `${request.characterId}-${Date.now().toString(36)}.png`);
+        writeFileSync(tempPath, image.buffer);
+        const native = await decodeToNative(tempPath);
+        const result = buildStardewSpriteSheet(toRaw(native), { tier: request.tier });
+        const validation = validateSpriteSheet(result.sheet);
+        if (!validation.ok) return { ok: false, error: validation.error };
+        const outDir = stardewSpriteDir(request.characterId);
+        if (outDir === null) return { ok: false, error: '输出目录越界' };
+        mkdirSync(outDir, { recursive: true });
+        // 保留原始 AI 大图，方便用户免重新生图在 1x/2x/4x 之间秒切清晰度
+        const rawTarget = join(outDir, 'stardew-sprite-raw.png');
+        const rawTmp = `${rawTarget}.tmp`;
+        writeFileSync(rawTmp, native.toPNG());
+        renameSync(rawTmp, rawTarget);
+        const png = fromRaw(result.sheet).toPNG();
+        const target = join(outDir, 'stardew-sprite.png');
+        const temp = `${target}.tmp`;
+        writeFileSync(temp, png);
+        renameSync(temp, target);
+        return {
+          ok: true,
+          emptyCells: result.emptyCells,
+          tier: result.tier,
+          width: result.sheet.width,
+          height: result.sheet.height,
+          hasRaw: true,
+          dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+        };
+      } catch (error) {
+        return { ok: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 300) };
+      }
+    });
+    ipcMain.handle('creator:reprocess-stardew-sprite', async (_event, input: unknown) => {
+      const parsed = StardewSpriteReprocessRequestSchema.safeParse(input);
+      if (!parsed.success) return { ok: false, error: `参数校验失败：${parsed.error.issues[0]?.message ?? '未知'}` };
+      const outDir = stardewSpriteDir(parsed.data.characterId);
+      if (outDir === null) return { ok: false, error: '非法角色 id' };
+      const rawPath = join(outDir, 'stardew-sprite-raw.png');
+      if (!existsSync(rawPath)) return { ok: false, error: '该角色没有保留的原始大图，请重新生成一次精灵表' };
+      try {
+        const native = await decodeToNative(rawPath);
+        const result = buildStardewSpriteSheet(toRaw(native), { tier: parsed.data.tier });
+        const validation = validateSpriteSheet(result.sheet);
+        if (!validation.ok) return { ok: false, error: validation.error };
+        const png = fromRaw(result.sheet).toPNG();
+        const target = join(outDir, 'stardew-sprite.png');
+        const temp = `${target}.tmp`;
+        writeFileSync(temp, png);
+        renameSync(temp, target);
+        return {
+          ok: true,
+          emptyCells: result.emptyCells,
+          tier: result.tier,
+          width: result.sheet.width,
+          height: result.sheet.height,
+          hasRaw: true,
+          dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+        };
+      } catch (error) {
+        return { ok: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 300) };
+      }
+    });
+    ipcMain.handle('creator:stardew-sprite-get', (_event, characterId: string) => {
+      const outDir = stardewSpriteDir(String(characterId));
+      if (outDir === null) return { ok: false, error: '非法角色 id' };
+      const target = join(outDir, 'stardew-sprite.png');
+      if (!existsSync(target)) return { ok: false };
+      const buffer = readFileSync(target);
+      const dims = readPngDimensions(buffer);
+      const meta = dims === null ? null : detectSpriteSheetMeta(dims.width, dims.height);
+      return {
+        ok: true,
+        dataUrl: `data:image/png;base64,${buffer.toString('base64')}`,
+        ...(dims === null ? {} : { width: dims.width, height: dims.height }),
+        ...(meta === null ? {} : { tier: meta.tier }),
+        hasRaw: existsSync(join(outDir, 'stardew-sprite-raw.png')),
+      };
+    });
     ipcMain.handle('creator:pose-tiers', () => ({ tiers: POSE_TIERS, locks: BUILTIN_LOCKS }));
     ipcMain.handle('creator:compile-character', (_event, input: { lock: string; customName?: string; customTraits?: string; tiers: PoseTier[]; extra?: string }) =>
       ({ ok: true, prompt: compileCharacterPrompt(input) }));

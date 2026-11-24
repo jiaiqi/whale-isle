@@ -336,8 +336,10 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       // ① 星露谷：连接引导条（真机未开游戏 → offline；真开了则 online，断言不依赖具体态）
       const conn = page.locator('[data-game-conn-banner]');
       await conn.waitFor({ timeout: 15_000 });
+      // 首次探测是异步的：等属性从 unknown 落到真实三态之一，避免读得太早导致偶发失败
+      await expect.poll(async () => conn.getAttribute('data-game-conn'), { timeout: 15_000 })
+        .toMatch(/^(online|reachable|offline)$/);
       const stardewConn = await conn.getAttribute('data-game-conn');
-      expect(['online', 'reachable', 'offline']).toContain(stardewConn);
       expect(await page.locator('[data-game-reprobe]').count()).toBe(1);
       if (stardewConn !== 'online') {
         expect(await page.locator('[data-game-conn-banner] ol li').count()).toBeGreaterThan(0);

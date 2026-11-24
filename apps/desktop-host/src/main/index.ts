@@ -2,7 +2,7 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, net, protocol, screen, type MenuItemConstructorOptions } from 'electron';
 import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
@@ -36,6 +36,7 @@ import { resolvePose } from './pose-resolver';
 import { createWorkFollowHost } from './work-follow-host';
 import { createCliLogWatcher } from './cli-log-watcher';
 import { createWorkFollowInstaller } from './work-follow-installer';
+import { createStardewAvatarHost, isSafeCharacterId } from './stardew-avatar-host';
 import { createFrontAppWatcher } from './front-app-watcher';
 import { PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
@@ -47,6 +48,7 @@ import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
 import { createTrayHost, shouldHideDirectorOnClose, shouldQuitOnAllWindowsClosed, type TrayHost } from './tray-host';
+import { buildPetContextMenuTemplate, labelForActionState } from './pet-context-menu';
 import { homedir } from 'node:os';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
@@ -151,6 +153,7 @@ let directorWindow: BrowserWindow | null = null;
 let petWindowManager: PetWindowManager | null = null;
 /** T-M6-60：托盘常驻宿主 + 真正退出标志（决定中控台关闭是隐藏还是销毁）。 */
 let trayHost: TrayHost | null = null;
+let webuiRef: { port: number; token: string } | null = null;
 let isQuitting = false;
 /** agentId → 真实 BrowserWindow：旧 IPC 仍需要默认主窗，协作主机按 id 定向投递。 */
 const petBrowserWindows = new Map<string, BrowserWindow>();
@@ -320,10 +323,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       if (!target.isDestroyed()) target.webContents.send('pet:global-prefs-changed', next);
     }
     if (prev.windowLayer !== next.windowLayer) applyWindowLayerNow();
+    // 主分支已移除桌宠缩放入口：不再把旧 PetDesktopPrefs.scale 同步回窗口，
+    // 否则任意设置变更都会把 1.0× 窗口重新拉回旧的 1.3×。
     // 旧全局 API 仅作用于 default 窗口；新协作大厅走 pet:window-prefs-set 按 agent 隔离。
     const windowPrefs = petWindowManager?.prefs('default');
     if (windowPrefs === null || windowPrefs === undefined) return;
-    if (windowPrefs.scale !== next.scale) petWindowManager?.patch('default', { scale: next.scale });
     if (
       windowPrefs.position.x !== next.position.x
       || windowPrefs.position.y !== next.position.y
@@ -336,6 +340,9 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
    * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
    * 工作跟随「单宠换装」复用此函数，绝不关闭 default（T-M6-51 P0）。
    * T-M6-64：若副宠窗口正好占着目标角色（含夜间睡衣变体），先与旧主宠角色对调，绝不重影。
+   * 注意：这里**不**写星露谷外观——启动恢复/召唤/前台应用/工作跟随等后台路径都可能走它，
+   * 静默写会让游戏形象在启动时被过期会话覆盖。游戏同步只由用户显式动作触发
+   *（共玩页开关/同步当前/一键应用、工作台切角），见 stardew-avatar:* IPC 与 App.selectCharacter。
    */
   function switchDefaultCharacter(id: string): void {
     const previous = prefs.get().characterId;
@@ -592,6 +599,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     userDataDir: app.getPath('userData'),
     getDirectorWindow: () => directorWindow,
     vaultPath,
+    homeDir: homedir(),
     chat: async (system, user) => {
       const result = await autodrive.completeForCoop('STARDEW_GAME_PLANNER' as never, system, user, 600);
       return result === null ? null : result.content;
@@ -944,6 +952,59 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     },
   });
 
+  // T-M6-62：星露谷桌宠像素外观同步（安装 Mod / 开关 / 原子写 active-avatar.json）
+  const stardewAvatar = createStardewAvatarHost({
+    userDataDir: app.getPath('userData'),
+    homeDir: homedir(),
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    repoRoot: join(here, '../../../..'),
+    // E2E 绝不能写到用户真实星露谷 Mods 目录：测试开关/切角只落在 e2e-profile 下的空 Mods 槽位
+    ...(process.env.PET_STAGE_E2E === '1'
+      ? { modsDirOverride: join(app.getPath('userData'), 'e2e-mods') }
+      : {}),
+    // 任何写入/安装/开关变化都广播给渲染层，避免共玩页的「游戏内当前角色」显示过期状态
+    onChange: () => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('stardew-avatar:changed');
+      }
+    },
+  });
+  ipcMain.handle('stardew-avatar:state', () => stardewAvatar.state());
+  ipcMain.handle('stardew-avatar:set-enabled', (_event, next: boolean) => {
+    const state = stardewAvatar.setEnabled(Boolean(next));
+    if (state.enabled) {
+      const current = characters.selected();
+      stardewAvatar.syncCharacter({ characterId: current.id, displayName: current.displayName });
+    }
+    return stardewAvatar.state();
+  });
+  ipcMain.handle('stardew-avatar:set-liveliness', (_event, next: boolean) => {
+    const state = stardewAvatar.setLiveliness(Boolean(next));
+    if (state.enabled && state.modInstalled) {
+      const targetId = state.syncedCharacterId ?? characters.selected().id;
+      const targetName = state.syncedDisplayName
+        ?? characters.list().find((character) => character.id === targetId)?.displayName
+        ?? targetId;
+      stardewAvatar.syncCharacter({ characterId: targetId, displayName: targetName });
+    }
+    return stardewAvatar.state();
+  });
+  ipcMain.handle('stardew-avatar:install', () => stardewAvatar.installMod());
+  ipcMain.handle('stardew-avatar:uninstall', () => stardewAvatar.uninstallMod());
+  ipcMain.handle('stardew-avatar:sync-now', () => {
+    const current = characters.selected();
+    return stardewAvatar.syncCharacter({ characterId: current.id, displayName: current.displayName });
+  });
+  ipcMain.handle('stardew-avatar:apply-character', (_event, characterId: unknown) => {
+    const id = typeof characterId === 'string' ? characterId : '';
+    if (!isSafeCharacterId(id)) return { ok: false, error: '角色 id 非法（只允许小写字母/数字/连字符）' };
+    const known = characters.list().find((character) => character.id === id);
+    if (known === undefined) return { ok: false, error: `未知角色：${id.slice(0, 64)}` };
+    return stardewAvatar.syncCharacter({ characterId: id, displayName: known.displayName });
+  });
+
   // 联机启动器宿主（T-M6-51 拆分）：探测/隔离 profile/参数数组 spawn 全部在此
   const coopLaunch = createCoopLaunchHost({
     userDataDir: app.getPath('userData'),
@@ -957,6 +1018,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       characterId: item.characterId,
       endpoint: item.endpoint,
     })),
+    avatarSync: stardewAvatar,
+    characterName: (id) => characters.list().find((character) => character.id === id)?.displayName ?? id,
   });
   coopLaunch.registerIpc();
   // T-M6-37：直播最小链路（弹幕回放 → 护栏 → 注意力 → 中控台/插件总线/语音）
@@ -1064,6 +1127,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         return { ok: true };
       },
     });
+    webuiRef = { port: webui.port, token: webui.token };
     ipcMain.handle('webui:info', () => ({ ok: true, port: webui.port, token: webui.token }));
     void webui.ready
       .then(() => {
@@ -1175,6 +1239,173 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       manager.dock(view.agentId, edge);
     }
     return { ok: true, docked: list.length };
+  });
+  ipcMain.handle('pet:context-menu', (event, rawAgentId?: string) => {
+    const manager = petWindowManager;
+    if (manager === null) return { ok: false };
+    const agentId = typeof rawAgentId === 'string' && rawAgentId.trim() !== '' ? rawAgentId.trim() : 'default';
+    const win = BrowserWindow.fromWebContents(event.sender) ?? petBrowserWindows.get(agentId) ?? stageWindow;
+    if (win === null || win.isDestroyed()) return { ok: false };
+    const view = manager.get(agentId);
+    const allCharacters = characters.list();
+    const characterId = view?.characterId ?? prefs.get().characterId;
+    const character = allCharacters.find((item) => item.id === characterId) ?? characters.selected();
+    const manifestResult = characters.manifestOf(character);
+    const manifest = manifestResult.ok ? manifestResult.manifest : null;
+    const selectable = allCharacters.filter((item) => !(item.packId ?? '').startsWith('crosspet-'));
+    const bundled = selectable.filter((item) => item.packId !== undefined);
+    const customs = selectable.filter((item) => !item.builtin && item.packId === undefined);
+    const switchableCharacters = (bundled.length > 0 ? [...customs, ...bundled.slice(0, 9)] : selectable)
+      .map((item) => ({ id: item.id, displayName: item.displayName }));
+    const summonableCharacters = switchableCharacters.filter((item) => item.id !== character.id);
+    const gameLabels: Record<GameId, string> = { stardew: '星露谷物语', terraria: '泰拉瑞亚', dst: '饥荒 DST' };
+    const rice = autodrive.riceStatus();
+    const sendBubble = (text: string): void => { manager.sendAgent(agentId, 'pet:bubble', { text, kind: 'dialog' }); };
+    const template = buildPetContextMenuTemplate({
+      agentId,
+      isDefault: agentId === 'default',
+      characterId: character.id,
+      characterName: character.displayName,
+      asleep: asleepAgents.has(agentId),
+      locked: view?.locked ?? false,
+      windowLayer: prefs.get().windowLayer,
+      availableActions: (manifest?.actions ?? []).map((entry) => ({
+        actionState: entry.actionState,
+        label: labelForActionState(entry.actionState),
+      })),
+      hasAmbientPool: (manifest?.ambientPool.length ?? 0) > 0,
+      switchableCharacters,
+      summonableCharacters,
+      onlinePetCount: manager.list().filter((item) => item.visible).length,
+      autodriveRunning: autodrive.runner.isRunning(),
+      gameLabel: gameLabels[autodrive.getGameId()],
+      riceBalance: rice.balance,
+      riceBudget: rice.budget,
+      voiceEnabled: voice.config.enabled,
+      sfxEnabled: prefs.get().sfxEnabled,
+      webuiUrl: webuiRef === null ? null : 'ready',
+    }, {
+      onPat: () => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        friendship.record('pat', character.id);
+        manager.sendAgent(agentId, 'pet:preview', { action: 'happy_maid', clipId: null });
+        sendBubble('嘿嘿，被摸头啦～');
+      },
+      onPoke: () => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        friendship.record('poke', character.id);
+        manager.sendAgent(agentId, 'pet:preview', { action: 'rage_spray', clipId: null });
+        sendBubble(characterPokeLine(character.id));
+      },
+      onPlayAction: (actionState) => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        manager.sendAgent(agentId, 'pet:preview', { action: actionState, clipId: null });
+      },
+      onPlayRandomAmbient: () => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        manager.sendAgent(agentId, 'pet:preview', { action: 'idle', clipId: '__random__' });
+      },
+      onOpenQuickChat: () => { trayHost?.showPopover(); },
+      onToggleSleep: () => {
+        const next = !asleepAgents.has(agentId);
+        if (next) asleepAgents.add(agentId);
+        else asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: next });
+      },
+      onSwitchCharacter: (nextId) => {
+        switchDefaultCharacter(nextId);
+        if (stardewAvatar.state().enabled) {
+          const next = characters.selected();
+          stardewAvatar.syncCharacter({ characterId: next.id, displayName: next.displayName });
+        }
+      },
+      onSummonCharacter: (targetId) => {
+        void summonPet(targetId).then((result) => {
+          const target = allCharacters.find((item) => item.id === targetId);
+          sendBubble(result.ok ? `${target?.displayName ?? '伙伴'}来陪你啦！` : (result.error ?? '召唤失败'));
+        });
+      },
+      onAssemble: () => { manager.assemble(manager.list().map((item) => item.agentId)); },
+      onDismissOthers: () => { manager.dismissAll('default'); },
+      onPairChat: () => {
+        const ids = manager.list().filter((item) => item.visible).map((item) => item.characterId);
+        const result = friendship.pairChat(ids);
+        if (!result.ok) sendBubble(result.error);
+      },
+      onSummonEgg: () => {
+        void petControl.summonEgg().then((result) => {
+          if (!result.ok) sendBubble(result.error ?? '没有可召唤的彩蛋');
+        });
+      },
+      onStartEggTheater: () => {
+        void eggTheater.start(character.id).then((result) => {
+          if (!result.ok) sendBubble(result.error ?? '彩蛋小剧场启动失败');
+        }).catch((error: unknown) => { sendBubble(error instanceof Error ? error.message : String(error)); });
+      },
+      onSetWindowLayer: (layer) => {
+        prefs.patch({ windowLayer: layer });
+        applyWindowLayerNow();
+        sendBubble(layer === 'always' ? '已设为始终置顶' : layer === 'follow-ai' ? 'AI 干活时才置顶' : '已切换为普通窗口层级');
+      },
+      onToggleAutodrive: () => {
+        void autodrive.toggleDrive().then((result) => {
+          if (!result.ok) sendBubble(result.error ?? '自驾启动失败');
+          else sendBubble(result.running ? `自驾已启动：${gameLabels[autodrive.getGameId()]}` : '已停止自驾，控制权交还给你');
+        });
+      },
+      onFeedRice: () => {
+        const updated = autodrive.feedRice(10_000);
+        const pct = updated.budget > 0 ? Math.round((updated.balance / updated.budget) * 100) : 100;
+        manager.sendAgent(agentId, 'pet:preview', { action: 'eat_rice', clipId: null });
+        sendBubble(`加饭成功！饭碗余量 ${pct}%`);
+      },
+      onSyncStardewAvatar: () => {
+        const synced = stardewAvatar.syncCharacter({ characterId: character.id, displayName: character.displayName });
+        sendBubble(synced.ok ? `已同步「${character.displayName}」到星露谷外观` : (synced.error ?? '星露谷外观同步失败'));
+      },
+      onToggleLock: () => {
+        manager.patch(agentId, { locked: !(view?.locked ?? false) });
+      },
+      onDock: (edge) => {
+        if (edge === null) void manager.undock(agentId);
+        else manager.dock(agentId, edge);
+      },
+      onResetPosition: () => {
+        const area = screen.getPrimaryDisplay().workArea;
+        const bounds = view?.bounds ?? { width: 400, height: 284 };
+        const x = Math.max(area.x, area.x + area.width - bounds.width - 24);
+        const y = Math.max(area.y, area.y + area.height - bounds.height - 24);
+        manager.clearDock(agentId);
+        manager.setPosition(agentId, { x, y, displayId: String(screen.getPrimaryDisplay().id) });
+        prefs.patch({ position: { x, y, displayId: String(screen.getPrimaryDisplay().id) } });
+      },
+      onHideAllPets: () => { manager.hideAll(); },
+      onToggleVoice: () => { voice.setConfig({ enabled: !voice.config.enabled }); },
+      onToggleSfx: () => { prefs.patch({ sfxEnabled: !prefs.get().sfxEnabled }); },
+      onOpenDirector: () => { trayHost?.hidePopover(); showDirector(); },
+      onOpenNotebook: () => { focusDirectorWith('pet:open-notebook'); },
+      onOpenCreator: () => { focusDirectorWith('ui:open-creator'); },
+      onOpenBench: () => { focusDirectorWith('ui:open-bench'); },
+      onReloadCharacters: () => {
+        reloadCustomCharacters();
+        sendBubble('角色配置已重新载入');
+      },
+      onCopyWebuiUrl: () => {
+        if (webuiRef === null) return;
+        const url = new URL(`http://localhost:${webuiRef.port}/`);
+        url.searchParams.set('token', webuiRef.token);
+        clipboard.writeText(url.toString());
+        sendBubble('已复制 WebUI 地址到剪贴板');
+      },
+      onDismissSelf: () => { manager.close(agentId); },
+      onQuit: () => { quitApp(); },
+    });
+    Menu.buildFromTemplate(template as MenuItemConstructorOptions[]).popup({ window: win });
+    return { ok: true };
   });
   if (TEST_MODE) {
     // E2E：无头环境没有真实 Tray，直接打开/隐藏复用浮窗，并回报真实坐标。

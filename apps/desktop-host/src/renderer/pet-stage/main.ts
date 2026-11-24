@@ -5,7 +5,7 @@
 import { mergePoseEffects, normalizePoseEffect, PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState, PetAvatarClip } from '@workbench/shared-protocol';
-import { createAlphaProbe } from './alpha-probe';
+import { ALPHA_THRESHOLD, createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
 import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, settleWorkGrudge, shouldBlockWhileAsleep, shouldEnterPowerSaver, type ShakeContext } from './interaction';
 import { createGlide, createSlingshot, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
@@ -85,6 +85,7 @@ interface PetStageBridge {
   onPauseEvents?(handler: (payload: { paused: boolean }) => void): void;
   openCreator?(): Promise<{ ok: boolean }>;
   openBench?(): Promise<{ ok: boolean }>;
+  openContextMenu?(agentId: string): Promise<{ ok: boolean }>;
   /** T-M6-49：本机驱动口/工作跟随下发 */
   onPetSay?(handler: (payload: { text: string }) => void): void;
   onPetWake?(handler: () => void): void;
@@ -226,6 +227,8 @@ class PoseImageSurface implements VideoHandle {
   constructor(src: string) {
     this.src = src;
     this.el = document.createElement('img');
+    this.el.crossOrigin = 'anonymous';
+    this.el.draggable = false;
     this.el.decoding = 'async';
     this.el.style.position = 'absolute';
     this.el.style.width = `${BASE_STAGE.width}px`;
@@ -301,6 +304,7 @@ class CanvasSpriteSurface implements VideoHandle {
   async play(loop: boolean): Promise<void> {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => resolve(img);
       img.onerror = () => reject(new Error(`精灵图加载失败：${this.src}`));
       img.src = this.src;
@@ -431,9 +435,6 @@ void (async () => {
 })().catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
 bridge.onCharacterChanged?.((character) => {
   // manager 只会向 default 窗口发送全局角色快切；各联机窗角色由 URL/窗口 prefs 固定
-  if (typeof character.anchorRatio === 'number') {
-    document.documentElement.style.setProperty('--pet-anchor-ratio', String(character.anchorRatio));
-  }
   void loadCharacterManifest(character.id)
     .then(() => playGreeting(character.id))
     .catch((error) => console.warn('[pet-stage] 角色切换失败：', error));
@@ -551,8 +552,17 @@ if (petStageBridge?.onPetRice) {
   });
 }
 if (petStageBridge?.onPetPreview) {
-  petStageBridge.onPetPreview((detail) => {    if (detail.clipId) {
-      const manifest = renderer.manifest;
+  petStageBridge.onPetPreview((detail) => {
+    const manifest = renderer.manifest;
+    if (detail.clipId === '__random__' && manifest !== null && manifest.ambientPool.length > 0) {
+      const picked = pickAmbient(manifest);
+      const ambientEntry = manifest.ambientPool.find((c) => c.clipId === picked.clipId);
+      if (renderer instanceof PoseSkinRenderer) {
+        void renderer.playPose(picked.clipId).then(() => { lastPoseName = picked.clipId; }).catch(() => undefined);
+      } else if (ambientEntry !== undefined) {
+        void renderer.playClip({ ...ambientEntry, loop: false, playbackRate: 1, fps: 24, weight: ambientEntry.weight }).catch(() => undefined);
+      }
+    } else if (detail.clipId) {
       // ambient 单条：先找槽位（语义命中播槽位）→ 不在槽位则直查 ambientPool 走 playClip
       const slotAction = previewActionFor(detail.clipId);
       const ambientEntry = manifest?.ambientPool.find((c) => c.clipId === detail.clipId);
@@ -974,30 +984,44 @@ function samplePoseImageAlpha(img: HTMLImageElement, vx: number, vy: number): nu
   }
 }
 
-async function sampleAlpha(): Promise<number> {
+/** 同步采样舞台局部坐标 (vx, vy) 处的像素 alpha；越界或读图失败统一返回 0（透明不可拖）。 */
+function sampleAlphaAtStage(vx: number, vy: number): number {
+  if (vx < 0 || vy < 0 || vx >= BASE_STAGE.width || vy >= BASE_STAGE.height) return 0;
   const video = stage.querySelector('video');
-  const sprite = stage.querySelector('canvas');
-  const pose = activePoseImage();
-  if ((!video || video.readyState < 2) && sprite === null && pose === null) return 0;
-  const point = await bridge.mousePoint();
-  const winPos = await bridge.winPosition();
-  if (!winPos) return 0;
-  const vx = (point.x - winPos[0]) / petScale - stageOffset.x;
-  const vy = (point.y - winPos[1]) / petScale - stageOffset.y;
   if (video !== null && video.readyState >= 2) {
-    ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
-    return probeCtx?.getImageData(0, 0, 1, 1).data[3] ?? 0;
+    try {
+      probeCtx?.clearRect(0, 0, 1, 1);
+      ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
+      return probeCtx?.getImageData(0, 0, 1, 1).data[3] ?? 0;
+    } catch {
+      return 0;
+    }
   }
+  const sprite = stage.querySelector('canvas');
   if (sprite !== null) {
     const ctx = sprite.getContext('2d');
     if (ctx === null) return 0;
     const px = Math.round(vx * sprite.width / BASE_STAGE.width);
     const py = Math.round(vy * sprite.height / BASE_STAGE.height);
     if (px < 0 || py < 0 || px >= sprite.width || py >= sprite.height) return 0;
-    return ctx.getImageData(px, py, 1, 1).data[3] ?? 0;
+    try {
+      return ctx.getImageData(px, py, 1, 1).data[3] ?? 0;
+    } catch {
+      return 0;
+    }
   }
+  const pose = activePoseImage();
   if (pose !== null) return samplePoseImageAlpha(pose, vx, vy);
   return 0;
+}
+
+async function sampleAlpha(): Promise<number> {
+  const point = await bridge.mousePoint();
+  const winPos = await bridge.winPosition();
+  if (!winPos) return 0;
+  const vx = (point.x - winPos[0]) / petScale - stageOffset.x;
+  const vy = (point.y - winPos[1]) / petScale - stageOffset.y;
+  return sampleAlphaAtStage(vx, vy);
 }
 
 function ctxDraw(video: HTMLVideoElement, sx: number, sy: number): void {
@@ -1277,6 +1301,10 @@ function restoreAfterDrag(): void {
 
 stage.addEventListener('mousedown', (event) => {
   if (event.button !== 0 || petLocked) return;
+  // 二次像素复核：仅桌宠实体像素（alpha > 64）允许拖动，透明区域绝不启动拖拽。
+  const alpha = sampleAlphaAtStage(event.clientX / petScale - stageOffset.x, event.clientY / petScale - stageOffset.y);
+  if (alpha <= ALPHA_THRESHOLD) return;
+  event.preventDefault();
   dragging = true;
   // 手动拖离 = 放弃「干活自动探出」的自动收回记忆（T-M6-64）
   void bridge.clearDock?.(dockedAgentId).catch(() => undefined);
@@ -1285,6 +1313,7 @@ stage.addEventListener('mousedown', (event) => {
     stopPatrolClip();
   }
   playDragSuspended();
+  void bridge.forceInteractive(true);
   throwSim = null;
   grabOffset = null;
   dragMoved = false;
@@ -1346,12 +1375,17 @@ function scheduleDockBack(edge: 'left' | 'right'): void {
   }, 10_000);
 }
 
-
+window.addEventListener('blur', () => {
+  if (!dragging) return;
+  dragging = false;
+  void bridge.forceInteractive(false);
+});
 
 window.addEventListener('mouseup', () => {
   if (!dragging) return;
   dragging = false;
   restoreAfterDrag();
+  void bridge.forceInteractive(false);
   void (async () => {
     const velocity = velocityFromSamples(samples);
     const bounds = await bridge.screenBounds();
@@ -1545,191 +1579,27 @@ riceBowlWidget.onClick(() => {
   lastEventAt = Date.now();
 });
 
-// ── T-M6-20 缩放：滚轮 / 右键菜单 / 主进程广播（中控台滑块）同步 ──
-const setScale = (next: number): void => {
-  if (petLocked) return;
-  const clamped = Math.min(Math.max(Math.round(next * 10) / 10, 0.6), 2);
-  if (clamped === petScale) return;
-  // 乐观更新：滚轮连续滚动时不等主进程广播回来就累计，否则连滚两格只生效一格
-  petScale = clamped;
-  applyStageScale();
-  widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  void bridge.windowPrefsSet(petContext.agentId, { scale: clamped }); // manager 改本窗 bounds + 广播
-};
+// 窗口锁定态同步（缩放功能已移除，固定 1× 原始比例；旧偏好残留非 1× 时自动复位）
 void bridge.windowPrefsGet(petContext.agentId).then((p) => {
   if (p === null) return;
   petLocked = p.locked;
-  if (p.scale !== 1) {
-    petScale = p.scale;
-    applyStageScale();
-    widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  }
+  if (p.scale !== 1) void bridge.windowPrefsSet(petContext.agentId, { scale: 1 });
 }).catch(() => undefined);
 bridge.onWindowPrefsChanged?.((prefs) => {
   petLocked = prefs.locked;
-  if (prefs.scale !== petScale) {
-    petScale = prefs.scale;
-    applyStageScale();
-    widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  }
 });
-bridge.onScaleChanged?.((scale) => {
-  petScale = scale;
-  applyStageScale();
-  widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-});
-// 滚轮缩放：只在桌宠实体区域触发（透明区仍穿透，不影响桌面操作）
-stage.addEventListener('wheel', (event) => {
-  event.preventDefault();
-  if (petLocked) return;
-  setScale(petScale + (event.deltaY < 0 ? 0.1 : -0.1));
-}, { passive: false });
 
-// 右键菜单：设为交互态防止 alpha 探针把窗口切穿透导致菜单点不到；档位即时生效
-let scaleMenu: HTMLDivElement | null = null;
-const closeScaleMenu = (): void => {
-  scaleMenu?.remove();
-  scaleMenu = null;
-  void bridge.forceInteractive(false);
-};
+// 原生系统右键菜单（参考 dsh-pet 并融合鲸屿全功能；仅实心像素区域弹出，突破小窗边界）
 stage.addEventListener('contextmenu', (event) => {
   event.preventDefault();
-  // T-M6-53：Option/Alt + 右键直达验收台
+  // T-M6-53：Option/Alt + 右键直达验收台（无论该点是否透明，都属显式快捷键）
   if (event.altKey && bridge.openBench !== undefined) {
     void bridge.openBench();
     return;
   }
-  wakeUp();
-  void bridge.friendRecord?.(currentCharacterId, 'poke').catch(() => undefined);
-  playPokePose();
-  void bridge.pokeLine?.(dockedAgentId).then((result) => {
-    if (result.ok && result.line !== undefined) {
-      widgets.showDialog(result.line);
-      setTimeout(() => widgets.hideDialog(), 10_000);
-    }
-  }).catch(() => undefined);
-  if (scaleMenu !== null) { closeScaleMenu(); return; }
-  void bridge.forceInteractive(true);
-  scaleMenu = document.createElement('div');
-  scaleMenu.style.cssText = `position:absolute; left:50%; transform:translateX(-50%); bottom:8px;
-    display:flex; flex-wrap:wrap; justify-content:center; gap:4px; padding:6px; border-radius:12px; pointer-events:auto;
-    width:${Math.max(220, Math.round(BASE_STAGE.width * petScale - 16))}px; box-sizing:border-box;
-    background:rgba(12,20,32,0.92); border:1px solid rgba(120,180,255,0.35); z-index:20;`;
-  const makeTextButton = (label: string, onClick: () => void): HTMLButtonElement => {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.style.cssText = 'font:11px monospace;color:#cdd8e8;background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;';
-    btn.addEventListener('click', onClick);
-    scaleMenu?.appendChild(btn);
-    return btn;
-  };
-  for (const option of [0.6, 0.8, 1, 1.2, 1.5, 2]) {
-    const btn = document.createElement('button');
-    btn.textContent = `${option}×`;
-    btn.style.cssText = `font:11px monospace; color:${option === petScale ? '#8cc8ff' : '#cdd8e8'};
-      background:transparent; border:1px solid rgba(120,180,255,0.25); border-radius:8px; padding:4px 6px; cursor:pointer;`;
-    btn.addEventListener('click', () => { setScale(option); closeScaleMenu(); });
-    scaleMenu.appendChild(btn);
-  }
-  makeTextButton('戳一下', () => { wakeUp(); playPokePose(); closeScaleMenu(); });
-  makeTextButton(interaction.asleep ? '叫醒' : '睡觉', () => { toggleSleep(); closeScaleMenu(); });
-  makeTextButton('叫她出来 ▸', () => {
-    // 只移除一级菜单 DOM，保持交互态；二级面板关闭/超时后再恢复穿透
-    scaleMenu?.remove();
-    scaleMenu = null;
-    void bridge.characterList?.().then((list) => {
-      const others = list.filter((character) => character.id !== currentCharacterId && !(character.packId ?? '').startsWith('crosspet-')).slice(0, 10);
-      if (others.length === 0) return;
-      const panel = document.createElement('div');
-      panel.style.cssText = `position:absolute; left:50%; bottom:34px; transform:translateX(-50%); display:flex; flex-wrap:wrap; gap:4px;
-        max-width:${Math.round(BASE_STAGE.width * petScale - 20)}px; padding:6px; border-radius:12px; pointer-events:auto; z-index:21;
-        background:rgba(12,20,32,0.94); border:1px solid rgba(120,180,255,0.35);`;
-      for (const character of others) {
-        const btn = document.createElement('button');
-        btn.textContent = character.displayName;
-        btn.style.cssText = 'font:11px monospace;color:#cdd8e8;background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;';
-        btn.addEventListener('click', () => {
-          void bridge.petSummon?.(character.id).then((result) => {
-            if (result.ok) widgets.showDialog(`${character.displayName} 来啦！`);
-            else {
-              widgets.showDialog(result.error ?? '召唤失败');
-            }
-            setTimeout(() => widgets.hideDialog(), 6_000);
-          });
-          panel.remove();
-          void bridge.forceInteractive(false);
-        });
-        panel.appendChild(btn);
-      }
-      stage.appendChild(panel);
-      setTimeout(() => { panel.remove(); void bridge.forceInteractive(false); }, 8_000);
-    });
-  });
-  makeTextButton('集合！', () => { void bridge.petAssemble?.(); closeScaleMenu(); });
-  makeTextButton('解散', () => { void bridge.petDismiss?.(); closeScaleMenu(); });
-  makeTextButton('显示层级 ▸', () => {
-    // 二级面板：三档层级（always/follow-ai/normal），保持交互态直到选择或超时
-    scaleMenu?.remove();
-    scaleMenu = null;
-    const panel = document.createElement('div');
-    panel.style.cssText = `position:absolute; left:50%; bottom:34px; transform:translateX(-50%); display:flex; gap:4px; padding:6px; border-radius:12px; pointer-events:auto; z-index:21;
-      background:rgba(12,20,32,0.94); border:1px solid rgba(120,180,255,0.35);`;
-    const options: Array<['always' | 'follow-ai' | 'normal', string]> = [
-      ['always', '始终置顶'],
-      ['follow-ai', 'AI 干活时置顶'],
-      ['normal', '普通层级'],
-    ];
-    for (const [layer, label] of options) {
-      const btn = document.createElement('button');
-      btn.textContent = label;
-      btn.style.cssText = `font:11px monospace;color:${currentWindowLayer === layer ? '#8cc8ff' : '#cdd8e8'};background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;`;
-      btn.addEventListener('click', () => {
-        currentWindowLayer = layer;
-        void bridge.prefsSet({ windowLayer: layer });
-        panel.remove();
-        void bridge.forceInteractive(false);
-      });
-      panel.appendChild(btn);
-    }
-    stage.appendChild(panel);
-    setTimeout(() => { panel.remove(); void bridge.forceInteractive(false); }, 8_000);
-  });
-  makeTextButton('彩蛋', () => {
-    // T-M6-65：优先双宠小剧场（专属 host 匹配 → 抓包/溜走）；无素材再回退随机召唤
-    const theater = bridge.petEggTheater;
-    if (theater !== undefined) {
-      void theater().then((result) => {
-        if (result.ok) return;
-        void bridge.petEggSummon?.().then((fallback) => {
-          if (fallback?.ok === false) {
-            widgets.showDialog(fallback.error ?? result.error ?? '彩蛋召唤失败');
-            setTimeout(() => widgets.hideDialog(), 6_000);
-          }
-        });
-      }).catch(() => undefined);
-    } else {
-      void bridge.petEggSummon?.().then((result) => {
-        if (result?.ok === false) {
-          widgets.showDialog(result.error ?? '彩蛋召唤失败');
-          setTimeout(() => widgets.hideDialog(), 6_000);
-        }
-      });
-    }
-    closeScaleMenu();
-  });
-  makeTextButton('小本子', () => { void bridge.petOpenNotebook?.(); closeScaleMenu(); });
-  makeTextButton('创作中心', () => { void bridge.openCreator?.(); closeScaleMenu(); });
-  makeTextButton('验收台', () => { void bridge.openBench?.(); closeScaleMenu(); });
-  makeTextButton('重新载入', () => {
-    void bridge.reloadCharacters?.().then((result) => {
-      if (result.ok) void loadCharacterManifest(currentCharacterId).then(() => widgets.showDialog('角色配置已重新载入')).catch(() => undefined);
-    });
-    closeScaleMenu();
-  });
-  stage.appendChild(scaleMenu);
-  window.addEventListener('mousedown', (e) => {
-    if (scaleMenu !== null && !scaleMenu.contains(e.target as Node)) closeScaleMenu();
-  }, { once: true });
+  const alpha = sampleAlphaAtStage(event.clientX / petScale - stageOffset.x, event.clientY / petScale - stageOffset.y);
+  if (alpha <= ALPHA_THRESHOLD) return;
+  void bridge.openContextMenu?.(dockedAgentId);
 });
 // 初始米量水合 + hover 显隐（默认隐藏；<15% 饿态强制亮灯）
 void bridge.riceStatus().then((st) => {

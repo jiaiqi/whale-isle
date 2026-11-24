@@ -4,21 +4,60 @@
  * 零 emoji；所有数据经真实 IPC，不伪造「已出图/已保存」。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCheck, Copy, FolderOpen, ImagePlus, Link2, RefreshCw, Sparkles, UploadCloud, Wand2, X } from 'lucide-react';
+import { CheckCheck, Copy, FolderOpen, ImagePlus, Layers, Link2, RefreshCw, Sparkles, UploadCloud, Wand2, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
-import type { ModelProviderConfig } from '@workbench/shared-protocol';
+import type { ModelProviderConfig, StardewSpriteTier } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
 import { CUSTOM_KEY, type CustomProviderRecord } from '../providers/catalog';
 
-type CreatorTab = 'char' | 'egg' | 'import';
+type CreatorTab = 'char' | 'egg' | 'import' | 'pixel';
 type TierId = 'A' | 'B' | 'C' | 'MEME';
+type SpritePreviewMode = 'walk' | 'idle' | 'action' | 'emote';
+
+const STARDEW_SPRITE_TIERS: Array<{
+  tier: StardewSpriteTier;
+  title: string;
+  badge: string;
+  spec: string;
+  desc: string;
+}> = [
+  {
+    tier: '2x',
+    title: '2× 精致像素',
+    badge: '推荐',
+    spec: '192×256 · 每帧 32×64',
+    desc: '64 色锐利像素，五官与发饰清晰，最贴合星露谷画风',
+  },
+  {
+    tier: '4x',
+    title: '4× 高清 Q 版',
+    badge: '细腻',
+    spec: '384×512 · 每帧 64×128',
+    desc: '全彩平滑下采样，接近桌宠立绘质感，细节最丰富',
+  },
+  {
+    tier: '1x',
+    title: '1× 原版像素',
+    badge: '复古',
+    spec: '96×128 · 每帧 16×32',
+    desc: '24 色经典硬边像素，与原版农夫 1:1 像素密度',
+  },
+];
 
 interface ImageProviderView {
   id: string;
   name: string;
-  protocol: 'openai' | 'gemini';
+  protocol: 'openai' | 'gemini' | 'codex-cli';
   baseUrl: string;
   models: string[];
+}
+
+interface CodexInfoView {
+  detected: boolean;
+  backend: 'codex-imagegen' | 'codex-exec' | null;
+  loggedIn: boolean;
+  installHint: string;
+  loginHint: string;
 }
 
 interface GenItemView {
@@ -46,6 +85,8 @@ export function CreatorCenter(props: {
   characterId: string;
   characterName: string;
   onReloaded: () => void;
+  /** 打开时自动切到指定页签（如从星露谷共玩页直达 pixel） */
+  initialTab?: CreatorTab;
   /** 已同步到主脑的供应商配置（渲染层只上送非敏感描述，Key 留在主进程 vault） */
   providers?: ModelProviderConfig[];
   /** 读取自定义服务商（Dexie customProviders） */
@@ -53,8 +94,11 @@ export function CreatorCenter(props: {
   /** 未配置生图供应商时一键跳「模型服务商」 */
   onOpenProviders?: () => void;
 }): React.JSX.Element | null {
-  const { open, onClose, characterId, characterName, onReloaded, providers = [], store, onOpenProviders } = props;
-  const [tab, setTab] = useState<CreatorTab>('char');
+  const { open, onClose, characterId, characterName, onReloaded, initialTab, providers = [], store, onOpenProviders } = props;
+  const [tab, setTab] = useState<CreatorTab>(initialTab ?? 'char');
+  useEffect(() => {
+    if (open && initialTab !== undefined) setTab(initialTab);
+  }, [open, initialTab]);
   const [tiers, setTiers] = useState<Array<{ id: TierId; label: string; count: number; poses: Array<{ id: string; hint: string }> }>>([]);
   const [locks, setLocks] = useState<Array<{ id: string; label: string; reference: string; traits: string }>>([]);
   const [lock, setLock] = useState('deepseek');
@@ -85,10 +129,22 @@ export function CreatorCenter(props: {
   const [cloneName, setCloneName] = useState('');
   const [cloneBuiltinId, setCloneBuiltinId] = useState('crosspet-deepseek');
   const [customList, setCustomList] = useState<Array<{ id: string; name: string; poses: string[] }>>([]);
+  const [pixelCharacterId, setPixelCharacterId] = useState(characterId);
+  const [pixelCharacters, setPixelCharacters] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [pixelTier, setPixelTier] = useState<StardewSpriteTier>('2x');
+  const [pixelPrompt, setPixelPrompt] = useState('');
+  const [pixelDataUrl, setPixelDataUrl] = useState('');
+  const [pixelMeta, setPixelMeta] = useState<{ width?: number; height?: number; tier?: StardewSpriteTier; hasRaw?: boolean }>({});
+  const [pixelEmptyCells, setPixelEmptyCells] = useState(-1); // -1 = 从磁盘读取的旧图，空格数未知，不臆造「全满」
+  const [pixelBusy, setPixelBusy] = useState(false);
+  const [pixelReprocessing, setPixelReprocessing] = useState(false);
+  const [pixelSpriteReady, setPixelSpriteReady] = useState(false);
+  const [pixelPreviewMode, setPixelPreviewMode] = useState<SpritePreviewMode>('walk');
   const [renameTarget, setRenameTarget] = useState('');
   const [renameName, setRenameName] = useState('');
   const [imageProviders, setImageProviders] = useState<ImageProviderView[]>([]);
   const [imageProviderStats, setImageProviderStats] = useState({ detected: 0, configured: 0 });
+  const [codexInfo, setCodexInfo] = useState<CodexInfoView | null>(null);
   const [imageProviderId, setImageProviderId] = useState('');
   const [imageModelId, setImageModelId] = useState('');
   const [referenceImage, setReferenceImage] = useState('');
@@ -154,6 +210,7 @@ export function CreatorCenter(props: {
         const next = result.providers ?? [];
         setImageProviders(next);
         setImageProviderStats({ detected: result.detected ?? next.length, configured: result.configured ?? next.length });
+        setCodexInfo(result.codex ?? null);
         const first = next[0];
         if (first !== undefined) {
           setImageProviderId((prev) => (next.some((entry) => entry.id === prev) ? prev : first.id));
@@ -185,6 +242,139 @@ export function CreatorCenter(props: {
         : item)));
     });
   }, [open]);
+
+  // T-M6-62：像素表角色清单（内置 9 角色 + 默认小鲸 + 自定义角色）；优先默认到游戏内已同步角色
+  const [pixelSynced, setPixelSynced] = useState<{ id: string; displayName: string } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    void Promise.all([
+      window.directorBridge.characterList(),
+      window.directorBridge.stardewAvatarState().catch(() => null),
+    ]).then(([list, avatar]) => {
+      const eligible = list.filter((entry) => entry.id === 'blue-whale-maid' || entry.id.startsWith('aboutme-') || entry.id.startsWith('custom-'));
+      setPixelCharacters(eligible);
+      setPixelSynced(avatar?.syncedCharacterId == null
+        ? null
+        : { id: avatar.syncedCharacterId, displayName: avatar.syncedDisplayName ?? avatar.syncedCharacterId });
+      // 默认目标 = 当前桌宠（它是同步的主状态），不是游戏里上一次的临时覆盖
+      const preferred = [characterId, avatar?.syncedCharacterId ?? null]
+        .find((id) => id !== null && eligible.some((entry) => entry.id === id)) ?? null;
+      setPixelCharacterId(preferred ?? eligible[0]?.id ?? characterId);
+    }).catch(() => setPixelCharacters([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || tab !== 'pixel' || pixelCharacterId === '') return;
+    const name = pixelCharacters.find((entry) => entry.id === pixelCharacterId)?.displayName ?? pixelCharacterId;
+    void window.directorBridge.creatorCompileStardewSprite({ name, tier: pixelTier }).then((result) => setPixelPrompt(result.prompt)).catch(() => undefined);
+  }, [open, tab, pixelCharacterId, pixelCharacters, pixelTier]);
+
+  useEffect(() => {
+    if (!open || tab !== 'pixel' || pixelCharacterId === '') return;
+    void window.directorBridge.creatorStardewSpriteGet(pixelCharacterId).then((result) => {
+      setPixelDataUrl(result.ok && result.dataUrl !== undefined ? result.dataUrl : '');
+      setPixelSpriteReady(result.ok === true);
+      setPixelEmptyCells(-1);
+      setPixelMeta({
+        ...(result.width === undefined ? {} : { width: result.width }),
+        ...(result.height === undefined ? {} : { height: result.height }),
+        ...(result.tier === undefined ? {} : { tier: result.tier }),
+        ...(result.hasRaw === undefined ? {} : { hasRaw: result.hasRaw }),
+      });
+      if (result.ok && (result.tier === '2x' || result.tier === '4x')) setPixelTier(result.tier);
+    }).catch(() => {
+      setPixelDataUrl('');
+      setPixelSpriteReady(false);
+      setPixelMeta({});
+    });
+  }, [open, tab, pixelCharacterId]);
+
+  const generatePixelSprite = async (): Promise<void> => {
+    if (selectedImageProvider === null || imageModelId === '') {
+      toast.error('未配置可用的生图供应商/模型：请先在「模型服务商」保存 Key，或使用本机 Codex CLI');
+      return;
+    }
+    if (pixelCharacterId === '') { toast.error('先选择要生成精灵表的角色'); return; }
+    setPixelBusy(true);
+    try {
+      const result = await window.directorBridge.creatorGenerateStardewSprite({
+        characterId: pixelCharacterId,
+        tier: pixelTier,
+        provider: {
+          id: selectedImageProvider.id,
+          name: selectedImageProvider.name,
+          baseUrl: selectedImageProvider.baseUrl,
+          protocol: selectedImageProvider.protocol,
+          candidateModels: selectedImageProvider.models,
+        },
+        modelId: imageModelId,
+        ...(referenceImage === '' ? {} : { referenceImagePath: referenceImage }),
+        ...(pixelPrompt.trim() === '' ? {} : { prompt: pixelPrompt }),
+      });
+      if (!result.ok) { toast.error(result.error ?? '精灵表生成失败'); return; }
+      setPixelDataUrl(result.dataUrl ?? '');
+      setPixelEmptyCells(result.emptyCells ?? 0);
+      setPixelSpriteReady(true);
+      setPixelMeta({
+        ...(result.width === undefined ? {} : { width: result.width }),
+        ...(result.height === undefined ? {} : { height: result.height }),
+        ...(result.tier === undefined ? {} : { tier: result.tier }),
+        hasRaw: result.hasRaw === true,
+      });
+      const sizeText = result.width !== undefined && result.height !== undefined ? `${result.width}×${result.height}` : pixelTier;
+      toast.success(`精灵表已生成（${sizeText}，${result.emptyCells ?? 0} 个空格）并保留原图；点「一键应用到星露谷」生效`);
+    } finally {
+      setPixelBusy(false);
+    }
+  };
+
+  const reprocessPixelSprite = async (targetTier: StardewSpriteTier): Promise<void> => {
+    if (pixelCharacterId === '') return;
+    setPixelReprocessing(true);
+    try {
+      const result = await window.directorBridge.creatorReprocessStardewSprite({
+        characterId: pixelCharacterId,
+        tier: targetTier,
+      });
+      if (!result.ok) { toast.error(result.error ?? '重切清晰度失败'); return; }
+      setPixelDataUrl(result.dataUrl ?? '');
+      setPixelEmptyCells(result.emptyCells ?? 0);
+      setPixelSpriteReady(true);
+      setPixelMeta({
+        ...(result.width === undefined ? {} : { width: result.width }),
+        ...(result.height === undefined ? {} : { height: result.height }),
+        ...(result.tier === undefined ? {} : { tier: result.tier }),
+        hasRaw: true,
+      });
+      const spec = STARDEW_SPRITE_TIERS.find((entry) => entry.tier === targetTier);
+      toast.success(`已从原图秒切至 ${spec?.title ?? targetTier}（${result.width ?? ''}×${result.height ?? ''}），点「一键应用到星露谷」即可热更新`);
+    } finally {
+      setPixelReprocessing(false);
+    }
+  };
+
+  const applyPixelSprite = async (): Promise<void> => {
+    const result = await window.directorBridge.stardewAvatarApplyCharacter(pixelCharacterId);
+    if (!result.ok) { toast.error(result.error ?? '应用失败'); return; }
+    // 应用后重新读取角色目录里的真实文件，避免预览停留在应用前的旧图
+    const refreshed = await window.directorBridge.creatorStardewSpriteGet(pixelCharacterId);
+    if (refreshed.ok && refreshed.dataUrl !== undefined) {
+      setPixelDataUrl(refreshed.dataUrl);
+      setPixelMeta({
+        ...(refreshed.width === undefined ? {} : { width: refreshed.width }),
+        ...(refreshed.height === undefined ? {} : { height: refreshed.height }),
+        ...(refreshed.tier === undefined ? {} : { tier: refreshed.tier }),
+        ...(refreshed.hasRaw === undefined ? {} : { hasRaw: refreshed.hasRaw }),
+      });
+    }
+    setPixelSynced({
+      id: pixelCharacterId,
+      displayName: pixelCharacters.find((entry) => entry.id === pixelCharacterId)?.displayName ?? pixelCharacterId,
+    });
+    const tierLabel = result.tier === '4x' ? '4× 高清 Q 版' : result.tier === '2x' ? '2× 精致像素' : '1× 像素表';
+    toast.success(result.sprite === true ? `已把 ${tierLabel} 写进星露谷 Mod 目录（游戏内 200ms 热变身）` : '已写入原版外观预设（该角色还没有精灵表）');
+  };
 
   const selectedImageProvider = imageProviders.find((entry) => entry.id === imageProviderId) ?? null;
   const activePrompt = tab === 'egg' ? eggPrompt : charPrompt;
@@ -383,13 +573,14 @@ export function CreatorCenter(props: {
           {([
             ['char', 'AI 角色/皮肤生图'],
             ['egg', 'AI 彩蛋生成器 (5 态)'],
+            ['pixel', '星露谷像素表'],
             ['import', '自定义建角与拖入处理'],
           ] as Array<[CreatorTab, string]>).map(([id, label]) => (
             <button key={id} className={`seg-tab${tab === id ? ' on' : ''}`} data-creator-tab={id} onClick={() => setTab(id)}>{label}</button>
           ))}
         </div>
 
-        {(tab === 'char' || tab === 'egg') && (
+        {(tab === 'char' || tab === 'egg' || tab === 'pixel') && (
           <div className="mb-3 rounded-xl p-3" style={{ border: '1px solid var(--stroke)', background: 'var(--surface-2)' }} data-image-gen-toolbar>
             {imageProviders.length === 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
@@ -425,7 +616,11 @@ export function CreatorCenter(props: {
                   </label>
                   <label className="block" style={labelStyle}>生图模型
                     <select data-image-model value={imageModelId} onChange={(event) => setImageModelId(event.target.value)} className="mt-1 w-full px-3 py-2 text-[12px] mono" style={inputStyle}>
-                      {(selectedImageProvider?.models ?? []).map((model) => <option key={model} value={model}>{model}</option>)}
+                      {(selectedImageProvider?.models ?? []).map((model) => (
+                        <option key={model} value={model}>
+                          {model === 'codex-imagegen' ? '快速模式（codex-imagegen）' : model === 'codex-exec' ? '慢速兜底（codex exec）' : model}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <div className="flex items-end gap-1.5">
@@ -445,9 +640,31 @@ export function CreatorCenter(props: {
                   </div>
                 </div>
                 <div className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
-                  单张 60s 超时 · 并发 ≤2 · Key 只在主进程 vault 解密
+                  单张 60s 超时（Codex CLI 150s）· 并发 ≤2 · Key 只在主进程 vault 解密
                   {referenceImage !== '' && <span className="mono ml-2">参考图：{referenceImage.split('/').slice(-1)[0]}</span>}
                 </div>
+                {codexInfo !== null && (!codexInfo.detected || !codexInfo.loggedIn || codexInfo.backend !== 'codex-imagegen') && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]" data-codex-hint style={{ color: 'var(--amber)' }}>
+                    <span>
+                      {!codexInfo.detected
+                        ? '未检测到本机 Codex CLI；想用免 Key 订阅出图可安装开源封装：'
+                        : !codexInfo.loggedIn
+                          ? '已检测到 Codex CLI 但未登录，请先在终端运行：'
+                          : '当前为官方 codex exec 慢速兜底；安装 codex-imagegen 可提速：'}
+                    </span>
+                    <code className="mono rounded px-1.5 py-0.5" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}>
+                      {!codexInfo.detected || codexInfo.backend !== 'codex-imagegen' ? codexInfo.installHint : codexInfo.loginHint}
+                    </code>
+                    <button
+                      type="button"
+                      className="btn-pill ghost"
+                      data-codex-copy-hint
+                      onClick={() => void copy(!codexInfo.detected || codexInfo.backend !== 'codex-imagegen' ? codexInfo.installHint : codexInfo.loginHint, '已复制命令（不会替你静默安装/登录）')}
+                    >
+                      <Copy size={10} />复制
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -600,6 +817,169 @@ export function CreatorCenter(props: {
           </section>
         )}
 
+        {tab === 'pixel' && (
+          <section data-creator-pane="pixel" className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block" style={labelStyle}>目标角色（内置 / 自定义角色）
+                <select data-pixel-character value={pixelCharacterId} onChange={(event) => setPixelCharacterId(event.target.value)} className="mt-1 w-full px-3 py-2 text-[12px]" style={inputStyle}>
+                  {pixelCharacters.map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}（{entry.id}）</option>)}
+                </select>
+                {pixelSynced !== null && (
+                  <span className="mt-1 block text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    游戏内当前：{pixelSynced.displayName}（{pixelSynced.id}）
+                  </span>
+                )}
+              </label>
+              <div className="rounded-lg px-3 py-2 text-[11px]" style={{ ...inputStyle, color: 'var(--text-2)' }}>
+                <div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--text-1)' }}>
+                  <Layers size={12} style={{ color: 'var(--blue)' }} />4 行（下/右/上/左）× 6 列（待机 + 3 行走 + 动作 + 表情）
+                </div>
+                <div className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                  生成时自动保留原始大图，后续可在 1× / 2× / 4× 清晰度之间秒切，无需重新花额度生图。
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold" style={{ color: 'var(--text-2)' }}>
+                <span>清晰度档位</span>
+                {pixelMeta.width !== undefined && pixelMeta.height !== undefined && (
+                  <span className="mono text-[10px] font-normal" style={{ color: 'var(--text-3)' }}>
+                    当前已存：{pixelMeta.width}×{pixelMeta.height}（{pixelMeta.tier ?? '自定义'}）{pixelMeta.hasRaw === true ? ' · 已保留原图' : ''}
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-2 md:grid-cols-3" data-pixel-tier-picker>
+                {STARDEW_SPRITE_TIERS.map((option) => {
+                  const active = pixelTier === option.tier;
+                  const isCurrentSaved = pixelMeta.tier === option.tier;
+                  return (
+                    <button
+                      key={option.tier}
+                      type="button"
+                      data-pixel-tier={option.tier}
+                      onClick={() => setPixelTier(option.tier)}
+                      className="rounded-xl p-2.5 text-left transition"
+                      style={{
+                        border: `1px solid ${active ? 'var(--blue-line)' : 'var(--stroke)'}`,
+                        background: active ? 'var(--blue-dim)' : 'var(--inset)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-[12px] font-semibold" style={{ color: active ? 'var(--blue)' : 'var(--text-1)' }}>
+                          {option.title}
+                        </span>
+                        <span
+                          className="rounded-full px-1.5 py-0.5 text-[9.5px]"
+                          style={{
+                            background: isCurrentSaved ? 'var(--green-dim)' : active ? 'var(--surface)' : 'var(--surface-2)',
+                            color: isCurrentSaved ? 'var(--green)' : active ? 'var(--blue)' : 'var(--text-3)',
+                            border: `1px solid ${isCurrentSaved ? 'var(--green-line)' : 'var(--stroke)'}`,
+                          }}
+                        >
+                          {isCurrentSaved ? '当前图' : option.badge}
+                        </span>
+                      </div>
+                      <div className="mono mt-1 text-[10px]" style={{ color: 'var(--text-2)' }}>{option.spec}</div>
+                      <div className="mt-1 text-[10px] leading-snug" style={{ color: 'var(--text-3)' }}>{option.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {pixelMeta.tier === '1x' && pixelMeta.hasRaw !== true && pixelDataUrl !== '' && (
+              <div className="rounded-lg px-3 py-2 text-[10.5px]" style={{ border: '1px solid var(--blue-line)', background: 'var(--blue-dim)', color: 'var(--text-1)' }}>
+                当前是旧版 1×（96×128）像素表，细节较少。建议选择 <strong>2× 精致像素</strong> 或 <strong>4× 高清 Q 版</strong> 重新生成一次，清晰度提升 4–16 倍并自动保留原图。
+              </div>
+            )}
+
+            {pixelCharacterId !== characterId && (
+              <div className="rounded-lg px-3 py-2 text-[10.5px]" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)', color: 'var(--amber)' }}>
+                目标不是当前桌宠：应用只改游戏内形象；切换桌宠或重启工作台后，游戏会跟随当前桌宠「{characterName}」。
+              </div>
+            )}
+            <label className="block" style={labelStyle}>精灵表提示词（随清晰度档位自动编译，可编辑；共享的「参考图」会随请求发给生图供应商锁定外观）
+              <textarea data-pixel-prompt value={pixelPrompt} onChange={(event) => setPixelPrompt(event.target.value)} rows={6} className="mt-1 w-full px-3 py-2 text-[10.5px] mono" style={{ ...inputStyle, resize: 'vertical' }} />
+            </label>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {pixelMeta.hasRaw === true && pixelMeta.tier !== pixelTier && (
+                <button
+                  type="button"
+                  className="btn-pill violet"
+                  data-pixel-reprocess
+                  disabled={pixelReprocessing || pixelBusy}
+                  onClick={() => void reprocessPixelSprite(pixelTier)}
+                >
+                  <Zap size={12} />{pixelReprocessing ? '正在重切…' : `从原图秒切至 ${pixelTier}（免重新生图）`}
+                </button>
+              )}
+              <button className="btn-pill primary" data-pixel-generate disabled={pixelBusy || pixelReprocessing} onClick={() => void generatePixelSprite()}>
+                <Wand2 size={12} />{pixelBusy ? '生成中…（约 30–90 秒）' : `生成 ${pixelTier} 精灵表`}
+              </button>
+              <button className="btn-pill ghost" data-pixel-apply disabled={!pixelSpriteReady || pixelBusy || pixelReprocessing} onClick={() => void applyPixelSprite()} title="需先在游戏共玩页开启「同步桌宠形象进游戏」并安装 Mod">
+                <CheckCheck size={12} />一键应用到星露谷
+              </button>
+            </div>
+            <div className="text-right text-[10px]" style={{ color: 'var(--text-3)' }}>
+              Codex CLI 最长 150 秒；OpenAI/Gemini 单张 60 秒。应用后游戏内 200ms 热切换，无需重启（Mod 需已升级至 0.3.0 以支持 2×/4× 与灵动动画）。
+            </div>
+            {pixelDataUrl !== '' && (
+              <div className="grid gap-3 md:grid-cols-[200px_1fr]" data-pixel-preview>
+                <div className="rounded-xl p-2.5 text-center" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}>
+                  <div className="mb-1.5 flex justify-center gap-1">
+                    {([
+                      ['walk', '行走'],
+                      ['idle', '呼吸'],
+                      ['action', '动作'],
+                      ['emote', '表情'],
+                    ] as Array<[SpritePreviewMode, string]>).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPixelPreviewMode(mode)}
+                        className="rounded px-1.5 py-0.5 text-[9.5px]"
+                        style={{
+                          border: `1px solid ${pixelPreviewMode === mode ? 'var(--blue-line)' : 'var(--stroke)'}`,
+                          background: pixelPreviewMode === mode ? 'var(--blue-dim)' : 'var(--surface)',
+                          color: pixelPreviewMode === mode ? 'var(--blue)' : 'var(--text-3)',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <SpritePreview dataUrl={pixelDataUrl} mode={pixelPreviewMode} />
+                  <div className="mt-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
+                    四方向实机效果预览（含呼吸/阴影）
+                  </div>
+                </div>
+                <div className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}>
+                  <img
+                    src={pixelDataUrl}
+                    alt="stardew sprite sheet"
+                    style={{
+                      width: 240,
+                      height: 320,
+                      objectFit: 'contain',
+                      imageRendering: pixelMeta.tier === '4x' ? 'auto' : 'pixelated',
+                    }}
+                  />
+                  <div className="mt-1.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
+                    完整 {pixelMeta.width ?? 192}×{pixelMeta.height ?? 256} 精灵表（{pixelMeta.tier ?? '未知档位'}） · 行：下/右/上/左 · 列：待机/左脚/右脚/过渡/动作/表情
+                    {pixelEmptyCells > 0 ? ` · ${pixelEmptyCells} 个空格` : pixelEmptyCells === 0 ? ' · 24 格全满' : ''}
+                  </div>
+                </div>
+              </div>
+            )}
+            {pixelDataUrl === '' && (
+              <div className="rounded-lg px-3 py-2 text-[11px]" style={{ border: '1px dashed var(--stroke)', color: 'var(--text-3)' }}>
+                该角色还没有精灵表：选择清晰度后点「生成」即可预览；「一键应用到星露谷」需要先在游戏共玩页开启「同步桌宠形象进游戏」并安装 Mod。
+              </div>
+            )}
+          </section>
+        )}
+
         {tab === 'import' && (
           <section data-creator-pane="import" className="space-y-3">
             <div
@@ -700,5 +1080,100 @@ export function CreatorCenter(props: {
         )}
       </div>
     </div>
+  );
+}
+
+/** 星露谷精灵表四方向实机效果预览（自适应 1×/2×/4× 分辨率 + 模拟游戏内呼吸/弹跳/脚底阴影）。 */
+function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreviewMode }): React.JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [smooth, setSmooth] = useState(false);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return undefined;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return undefined;
+    const img = new Image();
+    let raf = 0;
+    const start = performance.now();
+    const walkOrder = [1, 3, 2, 3];
+    img.onload = () => {
+      const cellH = Math.max(16, Math.round(img.naturalHeight / 4));
+      const cellW = Math.max(8, Math.round(cellH / 2));
+      const cols = Math.max(1, Math.round(img.naturalWidth / cellW));
+      const isHd = cellW >= 64;
+      setSmooth(isHd);
+      const draw = (now: number): void => {
+        const t = (now - start) / 1000;
+        const direction = Math.floor((now - start) / 1600) % 4;
+        let col = 0;
+        let squashX = 1;
+        let squashY = 1;
+        let bounceY = 0;
+        let tilt = 0;
+        if (mode === 'walk') {
+          const step = Math.floor((now - start) / 210) % walkOrder.length;
+          col = Math.min(cols - 1, walkOrder[step] ?? 0);
+          const stride = Math.abs(Math.sin(t * 11.5));
+          bounceY = -stride * 3.2;
+          squashY = 1 + stride * 0.025;
+          squashX = 1 - stride * 0.016;
+          if (direction === 1) tilt = 0.032;
+          else if (direction === 3) tilt = -0.032;
+        } else if (mode === 'idle') {
+          col = 0;
+          const breath = Math.sin(t * 2.4);
+          squashY = 1 + breath * 0.02;
+          squashX = 1 - breath * 0.012;
+        } else if (mode === 'action') {
+          col = cols >= 5 ? 4 : Math.min(cols - 1, 3);
+          const pulse = Math.sin(t * 10);
+          squashY = 1 + pulse * 0.032;
+          squashX = 1 - pulse * 0.022;
+          bounceY = -Math.max(0, pulse) * 2.2;
+        } else {
+          col = cols >= 6 ? 5 : 0;
+          const pulse = Math.sin(t * 8);
+          squashY = 1 + pulse * 0.028;
+          squashX = 1 - pulse * 0.018;
+          bounceY = -Math.max(0, pulse) * 2;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 脚底椭圆投影
+        const footX = canvas.width / 2;
+        const footY = canvas.height - 14;
+        const shadowRx = 22 * (1 - Math.min(0.2, Math.abs(bounceY) * 0.03));
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(footX, footY, shadowRx, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.imageSmoothingEnabled = isHd;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.translate(footX, footY + bounceY);
+        ctx.rotate(tilt);
+        ctx.scale(squashX, squashY);
+        const drawW = 84;
+        const drawH = 168;
+        ctx.drawImage(img, col * cellW, direction * cellH, cellW, cellH, -drawW / 2, -drawH, drawW, drawH);
+        ctx.restore();
+        raf = requestAnimationFrame(draw);
+      };
+      raf = requestAnimationFrame(draw);
+    };
+    img.src = dataUrl;
+    return () => cancelAnimationFrame(raf);
+  }, [dataUrl, mode]);
+  return (
+    <canvas
+      ref={canvasRef}
+      width={128}
+      height={200}
+      style={{ width: 128, height: 200, margin: '0 auto', imageRendering: smooth ? 'auto' : 'pixelated' }}
+      data-sprite-preview
+    />
   );
 }

@@ -95,9 +95,11 @@ export function createPetPacksProtocolHandler(options: {
     if (!resolved.ok) return new Response(resolved.error, { status: resolved.status });
     try {
       const upstream = await options.fetchFile(resolved.path);
-      // 显式声明 MIME：net.fetch(file://) 对 .m4a/.ttf 的推断在不同平台不一致
+      // 显式声明 MIME 与 CORS：net.fetch(file://) 对 .m4a/.ttf 的推断不一致；
+      // 桌宠页为 file://，必须返回 ACAO 允许 crossOrigin='anonymous' 读取 canvas alpha。
       const headers = new Headers(upstream.headers);
       headers.set('Content-Type', resolved.mime);
+      headers.set('Access-Control-Allow-Origin', '*');
       headers.set('Cache-Control', 'no-cache');
       return new Response(upstream.body, { status: upstream.status, headers });
     } catch {
