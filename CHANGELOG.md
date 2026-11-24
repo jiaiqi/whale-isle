@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-24
 
+### Added（T-M6-63 ~ T-M6-65：桌宠深度体验三阶段）
+
+- **T-M6-63 盘活随包素材与显示层级**：共享契约新增 `PetAvatarClip.facing/moving/category`、`PetDesktopPrefs.windowLayer/bubbleFontScale/patrolEnabled/notebookFontId/randomEggEnabled/peakOutfit*`；`resolvePoseCharacterProfile` 统一 custom-* 与随包 crosspet-* 的 pose-config/首见问候（立绘不计姿态、缺字段不猜）；气泡挂上首软糖体，8 套小本子手写体按家族映射；aboutme 动作保留分类/朝向/位移区间，三餐（06:30–09:30 / 11:30–13:30 / 17:30–20:30）×3、节日/季节 ×5、余额动作移出日常池，6 档余额动画 + 拖拽悬空动作；三档窗口层级（macOS screen-saver / Win11 floating）与气泡字号独立缩放（导演台 + 右键菜单）。
+- **T-M6-64 交互升级与工作跟随进化**：`patrol-controller` 自主巡逻（25–45s 低概率 4–8s、moving 帧区间按 speed 位移、workArea 夹紧、≤8px 边缘反转、facing 镜像只作用于精灵）；三段式睡眠过渡（小憩/哈欠 2.5s → sleep_mute；惊醒 2s → idle）；剪影 head/face/body 分区点击；工作态晃动只记仇不中断、结束后按 ≥8/≥5/≥2 触发 redhot/puffed/annoyed，level≥3 两段式哄好 coaxed→forgiven；工作跟随 2 路 busy/3 路 swamped、asking/compact/error、≤4 张悬浮任务卡、Hook 后 5s log-watch 去重、idle-leave/app-exit/always-with-app 三策略、贴边自动探出与 10s 收回、主副角色自动对调防重影；CLI 钩子支持 PreCompact/Notification/PermissionRequest。
+- **T-M6-65 小本子/彩蛋/日志/峰谷**：小本子双页（相处记录 + 朋友留言，留言者手写体、便签/贴纸/挚友双人对话卡 + 双头像），8 套纸张主题，`notebookFontId` 持久化；冷启动只读补录 Claude/Codex JSONL（只统计 timestamp/model/tool_use/function_call，marker 幂等、零正文）；`egg-theater` 15 个 egg-* 专属 host/hostSkin 优先、pop→pretend→抓包/溜走五段、并发防重入与退出清理；`cli-log-watcher` 1.5s 增量 (path,inode,offset)、启动 EOF、截断重置、坏行跳过、与 Hook 5s 去重；北京峰谷 00:30–08:30 空闲、仅跨边界换装一次，中控台/托盘 24h 时间条与皮肤选择。
+- **回归证据**：全仓 **1231 tests / 分支 90.41%**；`pnpm verify:gate` **7 过 / 0 跳过**；`pnpm --filter @workbench/desktop-host build` 通过；全量 Electron E2E **13/13（6 spec，新增 `pet-evolution.e2e.spec.ts`）**，含 crosspet-claude 真实 pose-config、气泡 `ShangShouGummy`、`windowLayer`/`bubbleFontScale` 持久化与真实窗口置顶、小本子双页/8 手写体注入、彩蛋打开→抓包→收口无僵尸窗。macOS 真机与 Windows 11 验收清单见 `docs/VERIFY.md`（尚未收到「macOS 真机通过」确认，未合并 main）。
+
 ### Added（T-M6-60：macOS + Windows 11 双端托盘常驻与 Magpie 风格快捷浮窗）
 
 - **托盘宿主 `tray-host.ts`**：macOS 18×18 `trayTemplate.png` + 36×36 `@2x`（`setTemplateImage(true)` 自动适配深浅菜单栏）；Windows 11 32×32 `tray-win-dark/light.png`，按 `nativeTheme.shouldUseDarkColors` 选取并监听 `updated` 实时切换。图标由 `scripts/generate-tray-icons.ts` 直接读取 `shared/brand.ts` 的鲸鱼路径生成（4×4 超采样 + 内置 PNG 编码，零外部图像库）；构建随 `assets/brand → dist/renderer/brand` 进入 asar。
