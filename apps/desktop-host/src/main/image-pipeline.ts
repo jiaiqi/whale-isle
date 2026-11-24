@@ -20,26 +20,53 @@ export interface Bounds {
 }
 
 const WHITE = 245;
-/** 纯白/近白底自动抠像：去掉白色像素并做轻微边缘羽化，返回被置透明的像素数。 */
+
+/** 近白判定：高亮 + 低彩度（避免把奶白/浅黄衣服当背景），alpha 已透明则忽略。 */
+function isBackgroundWhite(data: Uint8ClampedArray, index: number, threshold: number): boolean {
+  if (data[index + 3]! <= 0) return false;
+  const r = data[index]!;
+  const g = data[index + 1]!;
+  const b = data[index + 2]!;
+  const min = Math.min(r, g, b);
+  const max = Math.max(r, g, b);
+  return min >= threshold - 12 && max - min <= 12;
+}
+
+/**
+ * 纯白/近白底自动抠像：只从图像四边出发做边缘连通域洪水填充。
+ * - 四角已有透明像素 → 视为透明图，直接跳过（透明保真，绝不二次抠）；
+ * - 只删除与画布边缘连通的白色区域 → 白围裙、眼白、白龙等被角色轮廓包围的白色绝不被抠穿；
+ * 返回被置透明的像素数。
+ */
 export function keyWhiteBackground(image: RawImage, threshold = WHITE): number {
+  const { width, height, data } = image;
+  if (width <= 0 || height <= 0) return 0;
+  const cornerIndexes = [0, width - 1, (height - 1) * width, height * width - 1];
+  if (cornerIndexes.some((index) => data[index * 4 + 3]! <= 16)) return 0;
+
+  const visited = new Uint8Array(width * height);
+  const queue: number[] = [];
+  const enqueue = (index: number): void => {
+    if (visited[index] === 1) return;
+    if (!isBackgroundWhite(data, index * 4, threshold)) return;
+    visited[index] = 1;
+    queue.push(index);
+  };
+  for (let x = 0; x < width; x += 1) { enqueue(x); enqueue((height - 1) * width + x); }
+  for (let y = 0; y < height; y += 1) { enqueue(y * width); enqueue(y * width + width - 1); }
+
   let removed = 0;
-  for (let index = 0; index < image.data.length; index += 4) {
-    const alpha = image.data[index + 3]!;
-    if (alpha === 0) continue;
-    const r = image.data[index]!;
-    const g = image.data[index + 1]!;
-    const b = image.data[index + 2]!;
-    if (r >= threshold && g >= threshold && b >= threshold) {
-      image.data[index + 3] = 0;
-      removed += 1;
-      continue;
-    }
-    // 近白像素按距离羽化，避免硬边
-    const min = Math.min(r, g, b);
-    if (min >= threshold - 12) {
-      const ratio = (min - (threshold - 12)) / 12;
-      image.data[index + 3] = Math.round(alpha * (1 - Math.min(1, Math.max(0, ratio))));
-    }
+  let head = 0;
+  while (head < queue.length) {
+    const index = queue[head++]!;
+    data[index * 4 + 3] = 0;
+    removed += 1;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (x > 0) enqueue(index - 1);
+    if (x + 1 < width) enqueue(index + 1);
+    if (y > 0) enqueue(index - width);
+    if (y + 1 < height) enqueue(index + width);
   }
   return removed;
 }

@@ -152,7 +152,8 @@ export function createCreatorHost(options: {
     const bounds = contentBounds(raw);
     if (bounds === null) throw new Error(`图片没有可见内容（全透明/全白）：${path.split('/').pop() ?? path}`);
     const plan = planNormalize(bounds, STAGE, STAGE, 0.9, 0.97);
-    const scaled = image.resize({
+    // 必须从「已抠图」的 raw 重建图片再缩放；直接 resize 原始 image 会把去底结果丢掉
+    const scaled = fromRaw(raw).resize({
       width: Math.max(1, Math.round(raw.width * plan.scale)),
       height: Math.max(1, Math.round(raw.height * plan.scale)),
       quality: 'best',

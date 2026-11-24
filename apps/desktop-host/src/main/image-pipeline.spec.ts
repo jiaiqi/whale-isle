@@ -15,14 +15,33 @@ function image(width: number, height: number, fill: (x: number, y: number) => [n
 }
 
 describe('keyWhiteBackground', () => {
-  it('纯白底置透明，彩色内容保留，近白边缘羽化', () => {
-    const img = image(4, 1, (x) => (x === 0 ? [255, 255, 255, 255] : x === 1 ? [240, 240, 240, 255] : x === 2 ? [10, 20, 30, 255] : [0, 0, 0, 0]));
+  it('边缘连通的白底被抠掉；被角色包围的白眼白/白衣服保留', () => {
+    // 7x7：白底 + 黑色轮廓环 + 中心白色（眼白/裙子）——中心不与边缘连通，必须保留
+    const img = image(7, 7, (x, y) => {
+      const borderRing = x >= 2 && x <= 4 && y >= 2 && y <= 4 && !(x === 3 && y === 3);
+      if (borderRing) return [10, 10, 10, 255];
+      if (x === 3 && y === 3) return [250, 250, 250, 255];
+      return [255, 255, 255, 255];
+    });
     const removed = keyWhiteBackground(img);
-    expect(removed).toBe(1);
+    expect(removed).toBeGreaterThan(0);
+    expect(img.data[(0 * 7 + 0) * 4 + 3]).toBe(0);
+    // 中心白色被黑环包围，保留不透明
+    expect(img.data[(3 * 7 + 3) * 4 + 3]).toBe(255);
+  });
+
+  it('已透明图（四角有透明像素）直接跳过，不误抠内部白色', () => {
+    const img = image(4, 4, () => [255, 255, 255, 255]);
+    img.data[3] = 0; // 左上角透明 → 透明图
+    expect(keyWhiteBackground(img)).toBe(0);
+    expect(img.data[0]).toBe(255);
     expect(img.data[3]).toBe(0);
-    expect(img.data[7]).toBeGreaterThan(0);
-    expect(img.data[7]).toBeLessThan(255);
-    expect(img.data[11]).toBe(255);
+  });
+
+  it('彩色浅色（奶白/浅黄）不当作白底', () => {
+    const img = image(4, 1, (x) => (x < 2 ? [255, 250, 235, 255] : [10, 10, 10, 255]));
+    expect(keyWhiteBackground(img)).toBe(0);
+    expect(img.data[7]).toBe(255);
   });
 });
 
