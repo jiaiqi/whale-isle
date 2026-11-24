@@ -248,7 +248,7 @@ export function CreatorCenter(props: {
       setPixelDataUrl(result.dataUrl ?? '');
       setPixelEmptyCells(result.emptyCells ?? 0);
       setPixelSpriteReady(true);
-      toast.success(`像素表已生成（64×128，${result.emptyCells ?? 0} 个空格）并写入角色目录`);
+      toast.success(`像素表已生成（96×128，${result.emptyCells ?? 0} 个空格）并写入角色目录`);
     } finally {
       setPixelBusy(false);
     }
@@ -710,7 +710,7 @@ export function CreatorCenter(props: {
                 </select>
               </label>
               <div className="text-[11px] rounded-lg px-3 py-2" style={{ ...inputStyle, color: 'var(--text-2)' }}>
-                规格：64×128 PNG · 4 行（下/右/上/左）× 4 列（待机+3 行走帧）· 每帧 16×32 · 最近邻缩放不模糊
+                规格：96×128 PNG · 4 行（下/右/上/左）× 6 列（待机 + 3 行走 + 动作 + 表情）· 每帧 16×32 · 最近邻缩放不模糊
               </div>
             </div>
             <label className="block" style={labelStyle}>像素表提示词（可编辑；锁定当前角色参考图）
@@ -731,9 +731,9 @@ export function CreatorCenter(props: {
                   <div className="mt-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>四方向行走动画预览（pixelated）</div>
                 </div>
                 <div className="rounded-xl p-2" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}>
-                  <img src={pixelDataUrl} alt="stardew sprite sheet" style={{ width: 128, height: 256, imageRendering: 'pixelated' }} />
+                  <img src={pixelDataUrl} alt="stardew sprite sheet" style={{ width: 192, height: 256, imageRendering: 'pixelated' }} />
                   <div className="mt-1 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
-                    完整 64×128 像素表{pixelEmptyCells > 0 ? ` · ${pixelEmptyCells} 个空格（该方向/帧缺内容，游戏内回落原版预设）` : ' · 16 格全满'}
+                    完整 96×128 像素表{pixelEmptyCells > 0 ? ` · ${pixelEmptyCells} 个空格（该方向/帧缺内容，游戏内回落原版预设）` : ' · 24 格全满'}
                   </div>
                 </div>
               </div>
@@ -866,7 +866,7 @@ function SpritePreview({ dataUrl }: { dataUrl: string }): React.JSX.Element {
         const frame = Math.floor((now - start) / 220) % 4;
         const direction = Math.floor((now - start) / 1600) % 4;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, frame * 16, direction * 32, 16, 32, 0, 0, 64, 128);
+        ctx.drawImage(img, frame * 16, direction * 32, 16, 32, 0, 0, 48, 96);
         raf = requestAnimationFrame(draw);
       };
       raf = requestAnimationFrame(draw);
@@ -874,5 +874,5 @@ function SpritePreview({ dataUrl }: { dataUrl: string }): React.JSX.Element {
     img.src = dataUrl;
     return () => cancelAnimationFrame(raf);
   }, [dataUrl]);
-  return <canvas ref={canvasRef} width={64} height={128} style={{ width: 128, height: 256, imageRendering: 'pixelated' }} data-sprite-preview />;
+  return <canvas ref={canvasRef} width={48} height={96} style={{ width: 96, height: 192, imageRendering: 'pixelated' }} data-sprite-preview />;
 }

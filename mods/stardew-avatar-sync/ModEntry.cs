@@ -57,6 +57,8 @@ public sealed class ModEntry : StardewModdingAPI.Mod
     private volatile bool _dirty;
     private DateTime _dirtyAt = DateTime.MinValue;
     private Texture2D? _sprite;
+    /** 4=旧版 64×128（仅待机/行走）；6=96×128（多动作/表情列）。 */
+    private int _spriteColumns;
     private AvatarConfig _current = new();
     private readonly Dictionary<long, AvatarBroadcast> _peers = new();
     private Harmony? _harmony;
@@ -65,8 +67,16 @@ public sealed class ModEntry : StardewModdingAPI.Mod
     {
         DrawPatch.Mod = this;
         _harmony = new Harmony(ModManifest.UniqueID);
+        // 挂 FarmerRenderer.draw 的 12 参主实现（9 参重载只是两行转发，会被 JIT 内联，Harmony 拦不到；
+        // FashionSense 等成熟 Mod 也是挂这个主实现），直接复用原版算好的屏幕坐标、缩放支点、
+        // 层深与逐帧偏移，只替换 base 贴图帧。
         _harmony.Patch(
-            original: AccessTools.Method(typeof(Farmer), nameof(Farmer.draw), new[] { typeof(SpriteBatch) }),
+            original: AccessTools.Method(typeof(FarmerRenderer), nameof(FarmerRenderer.draw), new[]
+            {
+                typeof(SpriteBatch), typeof(FarmerSprite.AnimationFrame), typeof(int), typeof(Rectangle),
+                typeof(Vector2), typeof(Vector2), typeof(float), typeof(int), typeof(Color),
+                typeof(float), typeof(float), typeof(Farmer),
+            }),
             prefix: new HarmonyMethod(typeof(DrawPatch), nameof(DrawPatch.Prefix)));
 
         helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
@@ -159,11 +169,14 @@ public sealed class ModEntry : StardewModdingAPI.Mod
         try
         {
             var texture = Helper.ModContent.Load<Texture2D>(fileName);
-            if (texture.Width != 64 || texture.Height != 128)
+            // 96×128 = 4 行（下/右/上/左）× 6 列（待机+3 行走+动作+表情）；
+            // 64×128 为旧版兼容（缺动作/表情列时回退待机）
+            if (texture.Height != 128 || (texture.Width != 96 && texture.Width != 64))
             {
-                Monitor.Log($"像素表尺寸应为 64x128，实际 {texture.Width}x{texture.Height}，回落原版预设", LogLevel.Warn);
+                Monitor.Log($"像素表尺寸应为 96x128（或旧版 64x128），实际 {texture.Width}x{texture.Height}，回落原版预设", LogLevel.Warn);
                 return null;
             }
+            _spriteColumns = texture.Width / 16;
             return texture;
         }
         catch (Exception ex)
@@ -228,38 +241,103 @@ public sealed class ModEntry : StardewModdingAPI.Mod
         return farmer.IsLocalPlayer ? _sprite : null;
     }
 
-    /// <summary>Harmony 前缀：有合法像素表时完全接管绘制，否则交给原版。</summary>
+    /// <summary>Harmony 前缀：有合法像素表且非原版专属姿态时，接管 base 身体层的绘制。</summary>
     internal static class DrawPatch
     {
         internal static ModEntry? Mod;
 
-        internal static bool Prefix(Farmer __instance, SpriteBatch b)
+        // 原版 1.6 走路序列（反编译核对）：walk 0/8/16/24 为 1,0,2,0，run 32..56 为 8 帧。
+        // 像素表第 2/3/4 列（索引 1/2/3）是左脚在前/右脚在前/双脚过渡；用 1,3,2,3
+        // 比原版 1,0,2,0 多一个过渡帧，四相位循环更顺，且始终有脚在动。
+        private static readonly int[] WalkPose = { 1, 3, 2, 3 };
+        private static bool _loggedTakeover;
+
+        internal static bool Prefix(
+            SpriteBatch b,
+            FarmerSprite.AnimationFrame animationFrame,
+            int currentFrame,
+            Rectangle sourceRect,
+            Vector2 position,
+            Vector2 origin,
+            float layerDepth,
+            int facingDirection,
+            Color overrideColor,
+            float rotation,
+            float scale,
+            Farmer who)
         {
             var mod = Mod;
             if (mod == null) return true;
-            var texture = mod.SpriteFor(__instance);
+            if (FarmerRenderer.isDrawingForUI) return true;
+            var texture = mod.SpriteFor(who);
             if (texture == null) return true;
-
-            var direction = __instance.FacingDirection switch
+            // 原版专属姿态交还原版绘制，避免像素表摆出错误姿势：
+            // 洗澡/坐下/骑马/木筏/游泳/睡觉/晕倒/弹弓（手臂与瞄准线在 renderer 内部）
+            if (who.bathingClothes.Value || who.IsSitting() || who.isRidingHorse() || who.isRafting
+                || who.swimming.Value || who.isInBed.Value || who.usingSlingshot)
             {
-                0 => 0, // 下
-                1 => 1, // 右
-                2 => 2, // 上
-                3 => 3, // 左
+                return true;
+            }
+            if (currentFrame == 104 || currentFrame == 105) return true;
+
+            var farmerSprite = who.FarmerSprite;
+            if (farmerSprite == null) return true;
+            if (!_loggedTakeover)
+            {
+                _loggedTakeover = true;
+                mod.Monitor.Log($"已接管玩家身体绘制（像素表 {texture.Width}x{texture.Height}，{mod._spriteColumns} 列）", LogLevel.Trace);
+            }
+            int column = SelectColumn(who, farmerSprite, mod._spriteColumns);
+            // 像素表行序：下/右/上/左；原版 FacingDirection：0 上 / 1 右 / 2 下 / 3 左
+            int row = who.FacingDirection switch
+            {
+                0 => 2,
+                1 => 1,
+                2 => 0,
+                3 => 3,
                 _ => 0,
             };
-            // 上一 tick 真的移动过才播行走帧，静止用第 0 帧（待机）
-            var moving = __instance.movedDuringLastTick();
-            var frame = moving ? Math.Clamp(__instance.FarmerSprite.CurrentFrame, 0, 3) : 0;
-            var source = new Rectangle(frame * 16, direction * 32, 16, 32);
-            var zoom = Game1.options.zoomLevel;
-            var viewport = Game1.viewport;
-            var position = new Vector2(
-                (__instance.Position.X - viewport.X) * zoom,
-                (__instance.Position.Y - viewport.Y) * zoom);
-            var layerDepth = Math.Max(0f, (__instance.Position.Y + 32f) / 10000f);
-            b.Draw(texture, position, source, Color.White, 0f, Vector2.Zero, zoom, SpriteEffects.None, layerDepth);
+            var source = new Rectangle(column * 16, row * 32, 16, 32);
+
+            var drawPosition = new Vector2((float)Math.Floor(position.X), (float)Math.Floor(position.Y));
+            // 原版逐帧偏移：X 用 xOffset，Y 用 positionOffset（两者单位都是 1× 像素）
+            var frameOffset = new Vector2(animationFrame.xOffset * 4f, animationFrame.positionOffset * 4f);
+            var depth = FarmerRenderer.GetLayerDepth(layerDepth, FarmerRenderer.FarmerSpriteLayers.Base);
+            b.Draw(
+                texture,
+                drawPosition + origin + frameOffset,
+                source,
+                overrideColor,
+                rotation,
+                origin,
+                4f * scale,
+                SpriteEffects.None,
+                depth);
             return false;
+        }
+
+        private static int SelectColumn(Farmer who, FarmerSprite sprite, int columns)
+        {
+            int anim = sprite.currentSingleAnimation;
+            bool walk = anim >= 0 && anim < 32 && anim % 8 == 0;
+            bool run = anim >= 32 && anim < 64 && anim % 8 == 0;
+            bool carryWalk = anim >= 96 && anim < 128 && anim % 8 == 0;
+            bool carryRun = anim >= 128 && anim < 160 && anim % 8 == 0;
+            bool locomotion = walk || run || carryWalk || carryRun;
+            bool moving = who.isMoving() || who.movedDuringLastTick();
+
+            // 表情：原版 doEmote 用 animateOnce(AnimationFrame[]) 播身体动作（currentSingleAnimation = -1）
+            if (columns >= 6 && who.IsEmoting && sprite.PauseForSingleAnimation && anim < 0)
+                return 5;
+            // 工具/挥砍/钓鱼/吃喝/抓取：动作列（原版这些动画索引都 >= 64）
+            if (!locomotion && (who.UsingTool || sprite.PauseForSingleAnimation || anim >= 64))
+                return columns >= 5 ? 4 : 3;
+            if (locomotion && moving)
+                return WalkPose[Math.Abs(sprite.currentAnimationIndex) % WalkPose.Length];
+            if (who.UsingTool || sprite.PauseForSingleAnimation)
+                return columns >= 5 ? 4 : 3;
+            // 待机（原版 showNotCarrying 会借用 32/48 的站姿帧，不能按跑步处理）
+            return 0;
         }
     }
 

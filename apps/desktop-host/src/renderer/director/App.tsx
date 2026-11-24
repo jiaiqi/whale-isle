@@ -850,7 +850,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                 </button>
               )}
               {avatarSync?.enabled === true && avatarSync.modInstalled && !avatarSync.spriteReady && (
-                <span className="pill" style={{ fontSize: 9.5 }} title="当前角色还没有 64×128 像素表：去创作中心「星露谷像素表」生成；现在用原版预设兜底">原版预设兜底</span>
+                <span className="pill" style={{ fontSize: 9.5 }} title="当前角色还没有 96×128 像素表：去创作中心「星露谷像素表」生成；现在用原版预设兜底">原版预设兜底</span>
               )}
               <div className="flex-1" />
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>

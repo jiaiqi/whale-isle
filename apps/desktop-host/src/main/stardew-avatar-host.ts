@@ -12,7 +12,8 @@
  * 安全：active-avatar.json 只含外观字段；路径严格限制在 Mods/WhaleIsleAvatar 内；
  * 绝不读取/写入任何存档数据或凭据。
  */
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import {
   StardewAvatarSyncSchema,
@@ -23,6 +24,8 @@ import { guessModsDirs } from '@workbench/stardew-mods';
 
 export const MOD_FOLDER = 'WhaleIsleAvatar';
 export const SPRITE_FILE = 'stardew-sprite.png';
+/** Mod 目录内的实际贴图名：内容哈希后缀，避开 SMAPI 贴图缓存 */
+const SPRITE_HASH_PREFIX = 'stardew-sprite-';
 const SETTINGS_FILE = 'stardew-avatar-sync.json';
 
 /** 内置角色 → 原版外观预设（高还原近似值；发型/服装编号以原版 1.6 为准，真机可微调）。 */
@@ -138,8 +141,17 @@ export function createStardewAvatarHost(options: {
       const spriteSource = spritePathFor(input.characterId);
       let spriteSheetPath: string | undefined;
       if (spriteSource !== null) {
-        copyFileSync(spriteSource, join(safeModDir, SPRITE_FILE));
-        spriteSheetPath = SPRITE_FILE;
+        // SMAPI 的 ModContent 按文件名缓存贴图，同名覆盖不会重新解码；按内容哈希命名可强制热切换。
+        // 同一张表重复应用得到同一个文件名，不会无谓重载。
+        const hash = createHash('sha256').update(readFileSync(spriteSource)).digest('hex').slice(0, 8);
+        const spriteFileName = `${SPRITE_HASH_PREFIX}${hash}.png`;
+        copyFileSync(spriteSource, join(safeModDir, spriteFileName));
+        for (const entry of readdirSync(safeModDir)) {
+          if (entry.startsWith(SPRITE_HASH_PREFIX) && entry.endsWith('.png') && entry !== spriteFileName) {
+            rmSync(join(safeModDir, entry), { force: true });
+          }
+        }
+        spriteSheetPath = spriteFileName;
       }
       const payload: StardewAvatarSync = StardewAvatarSyncSchema.parse({
         version: 1,

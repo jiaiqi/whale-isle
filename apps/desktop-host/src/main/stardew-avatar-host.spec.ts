@@ -79,12 +79,28 @@ describe('syncCharacter', () => {
     writeFileSync(join(spriteDir, 'stardew-sprite.png'), 'png-bytes', 'utf8');
     const result = host.syncCharacter({ characterId: 'custom-seal', displayName: '小海豹' });
     expect(result).toMatchObject({ ok: true, sprite: true });
-    expect(readFileSync(join(modsDir, 'WhaleIsleAvatar', 'stardew-sprite.png'), 'utf8')).toBe('png-bytes');
     const parsed = StardewAvatarSyncSchema.parse(JSON.parse(readFileSync(join(modsDir, 'WhaleIsleAvatar', 'active-avatar.json'), 'utf8')));
-    expect(parsed.spriteSheetPath).toBe('stardew-sprite.png');
+    // 按内容哈希命名，绕开 SMAPI 的贴图缓存（同名覆盖不会重新解码）
+    expect(parsed.spriteSheetPath).toMatch(/^stardew-sprite-[0-9a-f]{8}\.png$/);
+    expect(readFileSync(join(modsDir, 'WhaleIsleAvatar', parsed.spriteSheetPath!), 'utf8')).toBe('png-bytes');
     expect(parsed.preset).toEqual(NEUTRAL_AVATAR_PRESET);
     expect(host.spriteReady('custom-seal')).toBe(true);
     expect(host.spriteReady('aboutme-dsh')).toBe(false);
+  });
+
+  it('像素表内容变化时换哈希文件名，并清理旧贴图（保证游戏内热切换真的换图）', () => {
+    const { userData, modsDir, host } = sandbox({ enabled: true });
+    const spriteDir = join(userData, 'stardew-avatars', 'aboutme-kimi');
+    mkdirSync(spriteDir, { recursive: true });
+    writeFileSync(join(spriteDir, 'stardew-sprite.png'), 'v1', 'utf8');
+    expect(host.syncCharacter({ characterId: 'aboutme-kimi', displayName: 'Kimi' }).ok).toBe(true);
+    const first = StardewAvatarSyncSchema.parse(JSON.parse(readFileSync(join(modsDir, 'WhaleIsleAvatar', 'active-avatar.json'), 'utf8')));
+    writeFileSync(join(spriteDir, 'stardew-sprite.png'), 'v2', 'utf8');
+    expect(host.syncCharacter({ characterId: 'aboutme-kimi', displayName: 'Kimi' }).ok).toBe(true);
+    const second = StardewAvatarSyncSchema.parse(JSON.parse(readFileSync(join(modsDir, 'WhaleIsleAvatar', 'active-avatar.json'), 'utf8')));
+    expect(second.spriteSheetPath).not.toBe(first.spriteSheetPath);
+    expect(existsSync(join(modsDir, 'WhaleIsleAvatar', first.spriteSheetPath!))).toBe(false);
+    expect(existsSync(join(modsDir, 'WhaleIsleAvatar', second.spriteSheetPath!))).toBe(true);
   });
 
   it('内置角色像素表读 stardew-avatars 目录；Mod 未安装时如实报错', () => {
