@@ -1634,8 +1634,10 @@ describe('多步目标生命周期（T-M6-54：跨日/完成/最大轮数）', (
     expect(extractDecisionJson('{"tool":"read_mail","args":{},"objectiveDone":false}')?.objectiveDone).toBeUndefined();
     const { planner, prompts } = capturePlanner('{"tool":"read_mail","args":{},"intent":"读完了","objectiveDone":true}');
     planner.setObjective('把邮箱里的信读完');
+    expect(planner.hasObjective()).toBe(true);
     await planner.decide(state());
     expect(prompts[0]).toContain('主人当前目标：把邮箱里的信读完');
+    expect(planner.hasObjective()).toBe(false);
     await planner.decide(state());
     expect(prompts[1]).not.toContain('主人当前目标');
     expect((planner as unknown as { objective: string | null }).objective).toBeNull();

@@ -360,6 +360,8 @@ export interface Planner {
   decide(state: GameStateSnapshot): Promise<PlannerDecision>;
   /** 可选：团队/主人下达的当前目标（不替代工具白名单与安全护栏；规则规划器可忽略） */
   setObjective?(objective: string | null): void;
+  /** 可选：当前是否真的还有目标（宿主播报取消/替换前先核实，不报假状态） */
+  hasObjective?(): boolean;
   /** 可选：编排器回执反馈（规则兜底据此做失败升级，避免离线模式死循环） */
   observeReceipt?(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void;
 }

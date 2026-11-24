@@ -355,11 +355,14 @@ export function createAutodriveHost(
     // 取消多步目标：只有确实有活跃目标时才消费「算了/取消目标」，避免把普通闲聊误当指令
     let cancelledObjective: string | null = null;
     if (activeObjective !== null && isCancelDirective(text)) {
-      cancelledObjective = activeObjective;
+      const previous = activeObjective;
       activeObjective = null;
       pendingChatOrder = null;
-      runner.clearObjective();
-      broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消多步目标：${cancelledObjective}` } as AutodriveEvent);
+      // 只有 planner 里真的还有目标才播报取消；已完成/自动清空的目标不报假状态
+      if (runner.clearObjective()) {
+        cancelledObjective = previous;
+        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消多步目标：${cancelledObjective}` } as AutodriveEvent);
+      }
     }
     if (cancelledObjective === null) {
       try {
@@ -448,8 +451,10 @@ ${ackHint}`;
           if (activeObjective !== null) {
             const previous = activeObjective;
             activeObjective = null;
-            runner.clearObjective();
-            broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `收到新的单步指令，已结束旧目标：${previous}` } as AutodriveEvent);
+            // 目标可能已被 objectiveDone/跨日/轮数上限自动清空，此时不播报「已结束」
+            if (runner.clearObjective()) {
+              broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `收到新的单步指令，已结束旧目标：${previous}` } as AutodriveEvent);
+            }
           }
           runner.submitDirective(order.tool, order.args, order.intent);
         } else {

@@ -1015,6 +1015,7 @@ describe('submitObjective 单机目标注入（2026-11-24）', () => {
       name: 'capture',
       decide: async () => ({ kind: 'act', tool: 'wait', args: {}, intent: '等' }),
       setObjective: (objective) => { objectives.push(objective); },
+      hasObjective: () => false,
     });
     const impl = async (_url: unknown, init?: { body?: string }) => {
       const body = JSON.parse(init?.body ?? '{}') as { params: { name: string } };
@@ -1048,10 +1049,13 @@ describe('clearObjective 清空旧目标（T-M6-54）', () => {
       name: 'capture',
       decide: async () => ({ kind: 'act', tool: 'wait', args: {}, intent: '等' }),
       setObjective: (objective) => { objectives.push(objective); },
+      hasObjective: () => false,
     });
     runner.submitObjective('去箱子找鱼竿');
-    runner.clearObjective();
+    expect(runner.clearObjective()).toBe(true);
     expect(objectives).toEqual([null]);
+    // 已经没有目标：再次清空不谎报「取消成功」
+    expect(runner.clearObjective()).toBe(false);
     const impl = async (_url: unknown, init?: { body?: string }) => {
       const body = JSON.parse(init?.body ?? '{}') as { params: { name: string } };
       const text = body.params.name === 'get_state' ? STATE_OK : 'ok';
@@ -1067,5 +1071,18 @@ describe('clearObjective 清空旧目标（T-M6-54）', () => {
     await runner.start();
     await new Promise((r) => setTimeout(r, 80));
     expect(objectives).not.toContain('去箱子找鱼竿');
+  });
+
+  it('pending 已被消费但 planner 仍持有目标时，clearObjective 仍返回 true 并清空', () => {
+    const objectives: Array<string | null> = [];
+    const runner = new AutodriveRunner(() => undefined, { sleep: async () => undefined, endpoint: 'http://mock/mcp' });
+    runner.setPlanner({
+      name: 'capture',
+      decide: async () => ({ kind: 'act', tool: 'wait', args: {}, intent: '等' }),
+      setObjective: (objective) => { objectives.push(objective); },
+      hasObjective: () => true,
+    });
+    expect(runner.clearObjective()).toBe(true);
+    expect(objectives).toEqual([null]);
   });
 });

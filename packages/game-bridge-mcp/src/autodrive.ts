@@ -104,9 +104,11 @@ export class AutodriveRunner {
    * 清空多步目标：新单步原子指令 / 用户「算了」/ 切换游戏时立即生效。
    * 同时清 pending（还没被循环消费的）与 planner 已生效的 objective，避免旧目标继续驱动。
    */
-  clearObjective(): void {
+  clearObjective(): boolean {
+    const had = this.pendingObjective !== null || (this.planner.hasObjective?.() ?? false);
     this.pendingObjective = null;
     this.planner.setObjective?.(null);
+    return had;
   }
 
   isRunning(): boolean {

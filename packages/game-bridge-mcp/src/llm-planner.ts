@@ -440,6 +440,10 @@ export class LlmPlanner implements Planner {
     this.objectiveRounds = 0;
   }
 
+  hasObjective(): boolean {
+    return this.objective !== null;
+  }
+
   /** 决策 JSON 可带 objectiveDone:true 主动结束多步目标。 */
   private parseDecision(content: string): ReturnType<typeof extractDecisionJson> {
     const decision = extractDecisionJson(content);
