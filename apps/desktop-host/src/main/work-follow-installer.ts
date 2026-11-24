@@ -117,7 +117,8 @@ export function manualSnippet(source: WorkFollowSource, hookPath: string, inboxD
 function isOurEntry(value: unknown): boolean {
   try {
     const text = JSON.stringify(value);
-    return text.includes(HOOK_MARKER) || text.includes('work-follow/hook.mjs') || text.includes('hook.mjs');
+    // 只用固定标记或「work-follow/hook.mjs」精确路径识别；绝不因用户自己的 xxx-hook.mjs 误删
+    return text.includes(HOOK_MARKER) || /work-follow[\\/]hook\.mjs/.test(text);
   } catch {
     return false;
   }

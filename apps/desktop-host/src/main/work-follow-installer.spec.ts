@@ -91,6 +91,7 @@ describe('安装 / 幂等 / 备份 / 卸载', () => {
       hooks: {
         stop: [{ command: 'echo user-stop' }],
         customEvent: [{ command: 'echo keep' }],
+        beforeShellExecution: [{ hooks: [{ type: 'command', command: 'node /Users/me/scripts/my-hook.mjs' }] }],
       },
     }, null, 2));
     expect(installer.install('cursor').ok).toBe(true);
@@ -99,8 +100,10 @@ describe('安装 / 幂等 / 备份 / 卸载', () => {
     expect(doc.version).toBe(1);
     expect(doc.hooks.stop).toEqual([{ command: 'echo user-stop' }]);
     expect(doc.hooks.customEvent).toEqual([{ command: 'echo keep' }]);
+    // 用户自己的 my-hook.mjs 不能被误认成鲸屿条目
+    expect(JSON.stringify(doc.hooks.beforeShellExecution)).toContain('my-hook.mjs');
     expect(doc.hooks.beforeSubmitPrompt).toBeUndefined();
-    expect(doc.hooks.beforeShellExecution).toBeUndefined();
+    expect(doc.hooks.beforeShellExecution).toHaveLength(1);
     expect(JSON.stringify(doc)).not.toContain('WB_WORK_FOLLOW_SOURCE');
     expect(installer.catalog().find((entry) => entry.source === 'cursor')?.installed).toBe(false);
   });
