@@ -1,7 +1,8 @@
 # CI —— 全量门禁与 Electron E2E 的最小可用编排（AGENTS.md §2.3 / §3.3）。
 #
 # 设计约束（刻意保持最小）：
-#   · Node 20（与根 package.json engines.node >=20 一致）；pnpm 12（本地与 lockfile v9 兼容）。
+#   · Node 22（与根 package.json engines.node >=22.5 一致；node:sqlite 需要 22.5+，
+#     且 Node 22 的 Map.groupBy 可避免 vitest 在失败汇总时二次崩溃）；pnpm 12（本地与 lockfile v9 兼容）。
 #   · 不注入任何 secrets；不跑真实游戏（星露谷/泰拉瑞亚/DST）、真实抖音直播间、真实模型 key。
 #   · ubuntu：typecheck + dependency-cruiser + 单元测试（排除 Electron E2E）+ Python ruff/mypy/pytest。
 #     Electron 二进制不下载（ELECTRON_SKIP_BINARY_DOWNLOAD=1），因此不跑宿主 E2E。
@@ -37,10 +38,10 @@ jobs:
         with:
           version: 12
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
@@ -94,10 +95,10 @@ jobs:
         with:
           version: 12
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
