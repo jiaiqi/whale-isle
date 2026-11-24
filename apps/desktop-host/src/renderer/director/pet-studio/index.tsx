@@ -40,15 +40,17 @@ export function PetStudioPanel(props: {
   openNotebookSignal?: number;
   /** 桌宠右键/顶栏「创作中心」「验收台」信号 */
   openCreatorSignal?: number;
+  openCreatorTab?: 'char' | 'egg' | 'import' | 'pixel';
   openBenchSignal?: number;
   /** 生图供应商（创作中心直连出图用；Key 只在主进程 vault） */
   providers?: ModelProviderConfig[];
   store?: DirectorStore;
   onOpenProviders?: () => void;
 }): React.JSX.Element {
-  const { events, running, characters, characterId, onSelectCharacter, openNotebookSignal, openCreatorSignal, openBenchSignal, providers, store, onOpenProviders } = props;
+  const { events, running, characters, characterId, onSelectCharacter, openNotebookSignal, openCreatorSignal, openCreatorTab, openBenchSignal, providers, store, onOpenProviders } = props;
   const [tab, setTab] = useState<PetStudioTab>('stage');
   const [creatorOpen, setCreatorOpen] = useState(false);
+  const [creatorInitialTab, setCreatorInitialTab] = useState<'char' | 'egg' | 'import' | 'pixel' | undefined>(undefined);
   const [benchOpen, setBenchOpen] = useState(false);
   const [catalog, setCatalog] = useState<PetStudioCatalog | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,8 +62,11 @@ export function PetStudioPanel(props: {
     if (openNotebookSignal !== undefined && openNotebookSignal > 0) setTab('social');
   }, [openNotebookSignal]);
   useEffect(() => {
-    if (openCreatorSignal !== undefined && openCreatorSignal > 0) setCreatorOpen(true);
-  }, [openCreatorSignal]);
+    if (openCreatorSignal !== undefined && openCreatorSignal > 0) {
+      setCreatorInitialTab(openCreatorTab);
+      setCreatorOpen(true);
+    }
+  }, [openCreatorSignal, openCreatorTab]);
   useEffect(() => {
     if (openBenchSignal !== undefined && openBenchSignal > 0) setBenchOpen(true);
   }, [openBenchSignal]);
@@ -157,10 +162,11 @@ export function PetStudioPanel(props: {
 
       <CreatorCenter
         open={creatorOpen}
-        onClose={() => setCreatorOpen(false)}
+        onClose={() => { setCreatorOpen(false); setCreatorInitialTab(undefined); }}
         characterId={characterId}
         characterName={characterName}
         onReloaded={() => window.dispatchEvent(new Event('pet:characters-changed'))}
+        {...(creatorInitialTab === undefined ? {} : { initialTab: creatorInitialTab })}
         {...(providers === undefined ? {} : { providers })}
         {...(store === undefined ? {} : { store })}
         {...(onOpenProviders === undefined ? {} : { onOpenProviders })}

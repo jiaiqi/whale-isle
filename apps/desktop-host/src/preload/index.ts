@@ -273,11 +273,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
     return () => { ipcRenderer.removeListener('creator:gen-progress', listener); };
   },
   creatorListCustom: (): Promise<Array<{ id: string; name: string; poses: string[] }>> => ipcRenderer.invoke('creator:list-custom'),
-  creatorCompileStardewSprite: (input: { name: string; traits?: string }): Promise<{ ok: boolean; prompt: string }> => ipcRenderer.invoke('creator:compile-stardew-sprite', input),
-  creatorGenerateStardewSprite: (input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; error?: string }> => ipcRenderer.invoke('creator:generate-stardew-sprite', input),
-  creatorStardewSpriteGet: (characterId: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }> => ipcRenderer.invoke('creator:stardew-sprite-get', characterId),
-  stardewAvatarState: (): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }> => ipcRenderer.invoke('stardew-avatar:state'),
-  stardewAvatarSetEnabled: (next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }> => ipcRenderer.invoke('stardew-avatar:set-enabled', next),
+  creatorCompileStardewSprite: (input: { name: string; traits?: string; tier?: '1x' | '2x' | '4x' }): Promise<{ ok: boolean; prompt: string }> => ipcRenderer.invoke('creator:compile-stardew-sprite', input),
+  creatorGenerateStardewSprite: (input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; error?: string }> => ipcRenderer.invoke('creator:generate-stardew-sprite', input),
+  creatorReprocessStardewSprite: (input: { characterId: string; tier: '1x' | '2x' | '4x' }): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; error?: string }> => ipcRenderer.invoke('creator:reprocess-stardew-sprite', input),
+  creatorStardewSpriteGet: (characterId: string): Promise<{ ok: boolean; dataUrl?: string; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; error?: string }> => ipcRenderer.invoke('creator:stardew-sprite-get', characterId),
+  stardewAvatarState: (): Promise<{ enabled: boolean; liveliness: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; modNeedsUpdate: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean; syncedSpriteTier: '1x' | '2x' | '4x' | null; syncedSpriteSize: { width: number; height: number } | null }> => ipcRenderer.invoke('stardew-avatar:state'),
+  stardewAvatarSetEnabled: (next: boolean): Promise<{ enabled: boolean; liveliness: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; modNeedsUpdate: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean; syncedSpriteTier: '1x' | '2x' | '4x' | null; syncedSpriteSize: { width: number; height: number } | null }> => ipcRenderer.invoke('stardew-avatar:set-enabled', next),
+  stardewAvatarSetLiveliness: (next: boolean): Promise<{ enabled: boolean; liveliness: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; modNeedsUpdate: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean; syncedSpriteTier: '1x' | '2x' | '4x' | null; syncedSpriteSize: { width: number; height: number } | null }> => ipcRenderer.invoke('stardew-avatar:set-liveliness', next),
   onStardewAvatarChanged: (handler: () => void): (() => void) => {
     const listener = (): void => handler();
     ipcRenderer.on('stardew-avatar:changed', listener);
@@ -285,8 +287,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   },
   stardewAvatarInstall: (): Promise<{ ok: boolean; error?: string; compiled?: boolean }> => ipcRenderer.invoke('stardew-avatar:install'),
   stardewAvatarUninstall: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('stardew-avatar:uninstall'),
-  stardewAvatarSyncNow: (): Promise<{ ok: boolean; error?: string; sprite?: boolean }> => ipcRenderer.invoke('stardew-avatar:sync-now'),
-  stardewAvatarApplyCharacter: (characterId: string): Promise<{ ok: boolean; error?: string; sprite?: boolean }> => ipcRenderer.invoke('stardew-avatar:apply-character', characterId),
+  stardewAvatarSyncNow: (): Promise<{ ok: boolean; error?: string; sprite?: boolean; tier?: '1x' | '2x' | '4x' }> => ipcRenderer.invoke('stardew-avatar:sync-now'),
+  stardewAvatarApplyCharacter: (characterId: string): Promise<{ ok: boolean; error?: string; sprite?: boolean; tier?: '1x' | '2x' | '4x' }> => ipcRenderer.invoke('stardew-avatar:apply-character', characterId),
   customList: (): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }> => ipcRenderer.invoke('custom:list'),
   customGet: (id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }> => ipcRenderer.invoke('custom:get', id),
   customSave: (id: string, input: unknown): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('custom:save', id, input),

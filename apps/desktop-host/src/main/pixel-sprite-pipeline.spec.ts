@@ -236,12 +236,36 @@ describe('reducePalette', () => {
   });
 });
 
-describe('validateSpriteSheet', () => {
-  it('尺寸不符/全透明拒绝；合法通过', () => {
+describe('validateSpriteSheet & 多档位（2x/4x）支持', () => {
+  it('尺寸不符/全透明拒绝；1x/2x/4x 合法尺寸均通过', () => {
     expect(validateSpriteSheet(makeImage(32, 64)).ok).toBe(false);
     expect(validateSpriteSheet(makeImage(SPRITE_SHEET_W, SPRITE_SHEET_H)).ok).toBe(false);
-    const ok = makeImage(SPRITE_SHEET_W, SPRITE_SHEET_H);
-    setPixel(ok, 0, 0, [1, 2, 3, 255]);
-    expect(validateSpriteSheet(ok).ok).toBe(true);
+    for (const [w, h] of [[96, 128], [64, 128], [192, 256], [384, 512]] as const) {
+      const ok = makeImage(w, h);
+      setPixel(ok, 0, 0, [1, 2, 3, 255]);
+      expect(validateSpriteSheet(ok).ok).toBe(true);
+    }
+  });
+
+  it('2x 精致像素输出 192×256 且 64 色锐利最近邻', () => {
+    const result = buildStardewSpriteSheet(gridImage(), { tier: '2x' });
+    expect(result.tier).toBe('2x');
+    expect(result.sheet.width).toBe(192);
+    expect(result.sheet.height).toBe(256);
+    expect(result.cellWidth).toBe(32);
+    expect(result.cellHeight).toBe(64);
+    expect(result.emptyCells).toBe(0);
+    expect(validateSpriteSheet(result.sheet).ok).toBe(true);
+  });
+
+  it('4x 高清 Q 版输出 384×512 并采用区域平均下采样不丢全彩细节', () => {
+    const result = buildStardewSpriteSheet(gridImage(), { tier: '4x' });
+    expect(result.tier).toBe('4x');
+    expect(result.sheet.width).toBe(384);
+    expect(result.sheet.height).toBe(512);
+    expect(result.cellWidth).toBe(64);
+    expect(result.cellHeight).toBe(128);
+    expect(result.emptyCells).toBe(0);
+    expect(validateSpriteSheet(result.sheet).ok).toBe(true);
   });
 });

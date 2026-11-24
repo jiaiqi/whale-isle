@@ -806,6 +806,17 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     }
     return stardewAvatar.state();
   });
+  ipcMain.handle('stardew-avatar:set-liveliness', (_event, next: boolean) => {
+    const state = stardewAvatar.setLiveliness(Boolean(next));
+    if (state.enabled && state.modInstalled) {
+      const targetId = state.syncedCharacterId ?? characters.selected().id;
+      const targetName = state.syncedDisplayName
+        ?? characters.list().find((character) => character.id === targetId)?.displayName
+        ?? targetId;
+      stardewAvatar.syncCharacter({ characterId: targetId, displayName: targetName });
+    }
+    return stardewAvatar.state();
+  });
   ipcMain.handle('stardew-avatar:install', () => stardewAvatar.installMod());
   ipcMain.handle('stardew-avatar:uninstall', () => stardewAvatar.uninstallMod());
   ipcMain.handle('stardew-avatar:sync-now', () => {

@@ -1,18 +1,23 @@
 /**
- * 星露谷像素表后处理（T-M6-62）。
+ * 星露谷精灵表后处理（T-M6-62 升级：多清晰度档位 1× / 2× / 4×）。
  *
- * 输入：AI 生成的 4×4 网格像素风精灵图（行序 下/右/上/左，列序 待机+3 行走帧）。
- * 输出：96×128 PNG（每帧 16×32，兼容旧版 64×128），供 SMAPI Mod 直接加载。
+ * 输入：AI 生成的 4×6 网格精灵图（行序 下/右/上/左，列序 待机+3 行走+动作+表情）。
+ * 输出：
+ *   - 1x 原版像素：96×128 PNG（每帧 16×32，最近邻缩放 + 24 色收敛，兼容旧版 64×128）；
+ *   - 2x 精致像素：192×256 PNG（每帧 32×64，最近邻缩放 + 64 色收敛，保留像素锐度且五官发饰清晰）；
+ *   - 4x 高清 Q 版：384×512 PNG（每帧 64×128，预乘 Alpha 区域平均下采样 + 全彩保留，细腻顺滑）。
  *
  * 铁律：
  *   - 四边连通洪水填充去白底（复用 image-pipeline，绝不全局删白）；
- *   - **整表统一等比缩放 + 每格脚底对齐**：以全部帧中最高的内容为 32px 基准，
+ *   - **整表统一等比缩放 + 每格脚底对齐**：以全部帧中最高的内容为单格高度基准，
  *     所有帧共用同一缩放系数，避免逐帧独立缩放导致走路时头忽大忽小/上下跳；
- *   - **最近邻（Nearest-Neighbor）整数采样**：输出颜色只能是输入颜色的子集，
- *     绝不用双线性/双三次插值（像素风一模糊就废）；
+ *   - 1×/2× 像素档严格采用最近邻（Nearest-Neighbor），输出颜色只能是输入颜色的子集；
+ *   - 4× 高清档采用预乘 Alpha 区域平均（Area/Box）下采样，避免锯齿断线和白边溢色；
  *   - 纯函数零 I/O，便于单测。
  */
 import { contentBounds, keyWhiteBackground, type Bounds, type RawImage } from './image-pipeline';
+
+export type SpriteTier = '1x' | '2x' | '4x';
 
 export const SPRITE_COLS = 6;
 export const SPRITE_ROWS = 4;
@@ -23,6 +28,74 @@ export const SPRITE_SHEET_W = SPRITE_COLS * SPRITE_CELL_W; // 96
 export const SPRITE_SHEET_H = SPRITE_ROWS * SPRITE_CELL_H; // 128
 /** 兼容早期 4 列（64×128）像素表：缺动作/表情列时回退待机 */
 export const LEGACY_SPRITE_SHEET_W = 64;
+
+export interface SpriteTierSpec {
+  tier: SpriteTier;
+  scale: 1 | 2 | 4;
+  cellWidth: number;
+  cellHeight: number;
+  sheetWidth: number;
+  sheetHeight: number;
+  sampling: 'nearest' | 'area';
+  /** null 表示全彩保留，不做中位切分调色板压缩 */
+  maxColors: number | null;
+  haloPasses: number;
+  label: string;
+  hint: string;
+}
+
+export const SPRITE_TIER_SPECS: Readonly<Record<SpriteTier, SpriteTierSpec>> = {
+  '1x': {
+    tier: '1x',
+    scale: 1,
+    cellWidth: 16,
+    cellHeight: 32,
+    sheetWidth: 96,
+    sheetHeight: 128,
+    sampling: 'nearest',
+    maxColors: 24,
+    haloPasses: 2,
+    label: '1× 原版像素',
+    hint: '96×128（每帧 16×32）· 24 色硬边像素，与原版农夫 1:1 密度',
+  },
+  '2x': {
+    tier: '2x',
+    scale: 2,
+    cellWidth: 32,
+    cellHeight: 64,
+    sheetWidth: 192,
+    sheetHeight: 256,
+    sampling: 'nearest',
+    maxColors: 64,
+    haloPasses: 2,
+    label: '2× 精致像素',
+    hint: '192×256（每帧 32×64）· 64 色锐利像素，五官发饰清晰且贴合画风',
+  },
+  '4x': {
+    tier: '4x',
+    scale: 4,
+    cellWidth: 64,
+    cellHeight: 128,
+    sheetWidth: 384,
+    sheetHeight: 512,
+    sampling: 'area',
+    maxColors: null,
+    haloPasses: 1,
+    label: '4× 高清 Q 版',
+    hint: '384×512（每帧 64×128）· 全彩平滑缩放，接近桌宠细腻质感',
+  },
+};
+
+export interface SpriteSheetMeta {
+  tier: SpriteTier;
+  scale: number;
+  cols: number;
+  rows: number;
+  cellWidth: number;
+  cellHeight: number;
+  width: number;
+  height: number;
+}
 
 export interface SpriteCellReport {
   row: number;
@@ -36,6 +109,9 @@ export interface SpriteSheetResult {
   sheet: RawImage;
   cells: SpriteCellReport[];
   emptyCells: number;
+  tier: SpriteTier;
+  cellWidth: number;
+  cellHeight: number;
 }
 
 function makeImage(width: number, height: number): RawImage {
@@ -65,6 +141,73 @@ export function nearestNeighborSample(
   return dest;
 }
 
+/**
+ * 预乘 Alpha 区域平均（Area/Box）下采样：专供 4× 高清 Q 版使用。
+ * 按目标像素对应的源区域覆盖面积加权求平均，并用 Alpha 加权 RGB，
+ * 避免透明背景黑/白边渗入轮廓，同时消除缩小后的锯齿断线与摩尔纹。
+ */
+export function areaDownsample(
+  source: RawImage,
+  srcRect: Bounds,
+  destWidth: number,
+  destHeight: number,
+): RawImage {
+  const dest = makeImage(destWidth, destHeight);
+  const scaleX = srcRect.width / destWidth;
+  const scaleY = srcRect.height / destHeight;
+  for (let y = 0; y < destHeight; y += 1) {
+    const sy0 = y * scaleY;
+    const sy1 = (y + 1) * scaleY;
+    const iy0 = Math.floor(sy0);
+    const iy1 = Math.min(srcRect.height - 1, Math.floor(sy1 - 1e-6));
+    for (let x = 0; x < destWidth; x += 1) {
+      const sx0 = x * scaleX;
+      const sx1 = (x + 1) * scaleX;
+      const ix0 = Math.floor(sx0);
+      const ix1 = Math.min(srcRect.width - 1, Math.floor(sx1 - 1e-6));
+      let areaSum = 0;
+      let alphaWeightSum = 0;
+      let rSum = 0;
+      let gSum = 0;
+      let bSum = 0;
+      for (let iy = iy0; iy <= iy1; iy += 1) {
+        const wy = Math.min(iy + 1, sy1) - Math.max(iy, sy0);
+        if (wy <= 0) continue;
+        const rowOffset = (srcRect.y + iy) * source.width;
+        for (let ix = ix0; ix <= ix1; ix += 1) {
+          const wx = Math.min(ix + 1, sx1) - Math.max(ix, sx0);
+          if (wx <= 0) continue;
+          const weight = wx * wy;
+          const srcIndex = (rowOffset + srcRect.x + ix) * 4;
+          const a = source.data[srcIndex + 3]! / 255;
+          const aw = weight * a;
+          areaSum += weight;
+          alphaWeightSum += aw;
+          rSum += source.data[srcIndex]! * aw;
+          gSum += source.data[srcIndex + 1]! * aw;
+          bSum += source.data[srcIndex + 2]! * aw;
+        }
+      }
+      const destIndex = (y * destWidth + x) * 4;
+      if (areaSum <= 0 || alphaWeightSum <= 1e-5) {
+        dest.data[destIndex + 3] = 0;
+        continue;
+      }
+      const outAlpha = Math.round(Math.min(1, alphaWeightSum / areaSum) * 255);
+      // 极低透明度的残影直接归零，保持轮廓干净
+      if (outAlpha < 12) {
+        dest.data[destIndex + 3] = 0;
+        continue;
+      }
+      dest.data[destIndex] = Math.min(255, Math.round(rSum / alphaWeightSum));
+      dest.data[destIndex + 1] = Math.min(255, Math.round(gSum / alphaWeightSum));
+      dest.data[destIndex + 2] = Math.min(255, Math.round(bSum / alphaWeightSum));
+      dest.data[destIndex + 3] = outAlpha;
+    }
+  }
+  return dest;
+}
+
 /** 裁出源图中的一个网格单元（保持原始像素，不做缩放）。 */
 function cropCell(source: RawImage, cellRect: Bounds): { image: RawImage; bounds: Bounds | null } {
   const image = makeImage(cellRect.width, cellRect.height);
@@ -82,30 +225,33 @@ function cropCell(source: RawImage, cellRect: Bounds): { image: RawImage; bounds
 }
 
 /**
- * 把一个格子的内容按「整表基准高度」缩放后放进 16×32 目标格：
- * 底边贴格底、水平居中；宽度超出 16px 时居中裁两侧。
+ * 把一个格子的内容按「整表基准高度」缩放后放进目标格：
+ * 底边贴格底、水平居中；宽度超出单格宽时居中裁两侧。
  */
 function placeCell(
   cell: { image: RawImage; bounds: Bounds | null },
   referenceHeight: number,
+  spec: SpriteTierSpec,
 ): RawImage {
-  const out = makeImage(SPRITE_CELL_W, SPRITE_CELL_H);
+  const out = makeImage(spec.cellWidth, spec.cellHeight);
   const bounds = cell.bounds;
   if (bounds === null) return out;
-  // 全局同一缩放系数：最高的一帧刚好 32px，其余帧按真实比例变矮，不逐帧拉伸
-  const scale = SPRITE_CELL_H / Math.max(1, referenceHeight);
+  // 全局同一缩放系数：最高的一帧刚好占满单格高度，其余帧按真实比例变矮，不逐帧拉伸
+  const scale = spec.cellHeight / Math.max(1, referenceHeight);
   const destW = Math.max(1, Math.round(bounds.width * scale));
-  const destH = Math.max(1, Math.min(SPRITE_CELL_H, Math.round(bounds.height * scale)));
-  const sampled = nearestNeighborSample(cell.image, bounds, destW, destH);
-  const cropX = Math.max(0, Math.round((destW - SPRITE_CELL_W) / 2)); // destW>16 时居中裁两侧
-  const offsetX = Math.max(0, Math.round((SPRITE_CELL_W - destW) / 2)); // destW<16 时居中留透明边
-  const offsetY = SPRITE_CELL_H - destH; // 脚底贴格底
+  const destH = Math.max(1, Math.min(spec.cellHeight, Math.round(bounds.height * scale)));
+  const sampled = spec.sampling === 'area'
+    ? areaDownsample(cell.image, bounds, destW, destH)
+    : nearestNeighborSample(cell.image, bounds, destW, destH);
+  const cropX = Math.max(0, Math.round((destW - spec.cellWidth) / 2));
+  const offsetX = Math.max(0, Math.round((spec.cellWidth - destW) / 2));
+  const offsetY = spec.cellHeight - destH; // 脚底贴格底
   for (let y = 0; y < destH; y += 1) {
-    for (let x = 0; x < SPRITE_CELL_W; x += 1) {
+    for (let x = 0; x < spec.cellWidth; x += 1) {
       const srcX = x + cropX;
       if (srcX >= destW) continue;
       const srcIndex = (y * destW + srcX) * 4;
-      const destIndex = ((offsetY + y) * SPRITE_CELL_W + (offsetX + x)) * 4;
+      const destIndex = ((offsetY + y) * spec.cellWidth + (offsetX + x)) * 4;
       out.data[destIndex] = sampled.data[srcIndex]!;
       out.data[destIndex + 1] = sampled.data[srcIndex + 1]!;
       out.data[destIndex + 2] = sampled.data[srcIndex + 2]!;
@@ -119,10 +265,12 @@ function placeCell(
 export function fitCellToSprite(
   source: RawImage,
   cellRect: Bounds,
+  tier: SpriteTier = '1x',
 ): { image: RawImage; empty: boolean; contentBounds: Bounds | null } {
+  const spec = SPRITE_TIER_SPECS[tier];
   const cell = cropCell(source, cellRect);
-  if (cell.bounds === null) return { image: makeImage(SPRITE_CELL_W, SPRITE_CELL_H), empty: true, contentBounds: null };
-  return { image: placeCell(cell, cell.bounds.height), empty: false, contentBounds: cell.bounds };
+  if (cell.bounds === null) return { image: makeImage(spec.cellWidth, spec.cellHeight), empty: true, contentBounds: null };
+  return { image: placeCell(cell, cell.bounds.height, spec), empty: false, contentBounds: cell.bounds };
 }
 
 /** 一维内容投影的连续区间（含首尾）。间隔 ≤ mergeGap 的相邻区间合并，避免头发/工具被拆碎。 */
@@ -193,16 +341,18 @@ function normalizeSpans(spans: Span[], target: number, totalWidth: number): Span
 }
 
 /**
- * 完整流水线：去白底 → 4×6 网格切分 → 每格脚底对齐最近邻缩放 → 96×128。
+ * 完整流水线：去白底 → 4×6 网格切分 → 每格脚底对齐缩放 → 目标分辨率精灵表。
  * 直接修改传入的 raw（去白底），调用方应传副本。
  *
- * 切格不按画布均分：AI 出图的 6 列常有自己的列距/左边距（真机实测列心 182px、列距 235px，
- * 而 1536 画布均分是 128px/256px），硬按画布切会把第 1 列切掉半只。这里改为：
- *   - 行：按水平投影找 4 条角色带（找不到 4 条就回落画布均分，保住「空行」语义）；
- *   - 列：逐行按垂直投影聚类出 6 个角色，多则合并最近邻、少则均分最宽段；
- *   - 每格再用内容包围盒做统一比例缩放 + 脚底对齐。
+ * 切格不按画布均分：AI 出图的 6 列常有自己的列距/左边距，硬按画布切会把第 1 列切掉半只。
+ * 这里按水平投影找 4 条角色带，再逐行按垂直投影聚类出 6 个角色；每格用全局统一缩放系数落格。
  */
-export function buildStardewSpriteSheet(raw: RawImage): SpriteSheetResult {
+export function buildStardewSpriteSheet(
+  raw: RawImage,
+  options?: { tier?: SpriteTier },
+): SpriteSheetResult {
+  const tier: SpriteTier = options?.tier ?? '1x';
+  const spec = SPRITE_TIER_SPECS[tier];
   keyWhiteBackground(raw);
   if (contentBounds(raw) === null) throw new Error('图片没有可见内容（全透明/全白）');
 
@@ -221,7 +371,7 @@ export function buildStardewSpriteSheet(raw: RawImage): SpriteSheetResult {
     }));
   }
 
-  const sheet = makeImage(SPRITE_SHEET_W, SPRITE_SHEET_H);
+  const sheet = makeImage(spec.sheetWidth, spec.sheetHeight);
   // 第一遍：逐行定位 6 个角色并裁格，找「整表最高内容」作为所有帧共用的缩放基准
   const crops: Array<{ row: number; col: number; image: RawImage; bounds: Bounds | null }> = [];
   let referenceHeight = 1;
@@ -256,14 +406,14 @@ export function buildStardewSpriteSheet(raw: RawImage): SpriteSheetResult {
   const cells: SpriteCellReport[] = [];
   let emptyCells = 0;
   for (const cell of crops) {
-    const fitted = placeCell(cell, referenceHeight);
+    const fitted = placeCell(cell, referenceHeight, spec);
     const empty = cell.bounds === null;
     if (empty) emptyCells += 1;
     cells.push({ row: cell.row, col: cell.col, empty, source: cell.bounds });
-    for (let y = 0; y < SPRITE_CELL_H; y += 1) {
-      for (let x = 0; x < SPRITE_CELL_W; x += 1) {
-        const srcIndex = (y * SPRITE_CELL_W + x) * 4;
-        const destIndex = ((cell.row * SPRITE_CELL_H + y) * SPRITE_SHEET_W + (cell.col * SPRITE_CELL_W + x)) * 4;
+    for (let y = 0; y < spec.cellHeight; y += 1) {
+      for (let x = 0; x < spec.cellWidth; x += 1) {
+        const srcIndex = (y * spec.cellWidth + x) * 4;
+        const destIndex = ((cell.row * spec.cellHeight + y) * spec.sheetWidth + (cell.col * spec.cellWidth + x)) * 4;
         sheet.data[destIndex] = fitted.data[srcIndex]!;
         sheet.data[destIndex + 1] = fitted.data[srcIndex + 1]!;
         sheet.data[destIndex + 2] = fitted.data[srcIndex + 2]!;
@@ -271,10 +421,17 @@ export function buildStardewSpriteSheet(raw: RawImage): SpriteSheetResult {
       }
     }
   }
-  // 缩到 16×32 后：先清轮廓外白晕，再收敛抗锯齿中间色（与星露谷原版色板密度一致）
-  cleanEdgeHalo(sheet, 2);
-  reducePalette(sheet, 24);
-  return { sheet, cells, emptyCells };
+  // 先清轮廓外白晕，再按档位决定是否做调色板收敛（4x 高清 Q 版保留全彩渐变）
+  cleanEdgeHalo(sheet, spec.haloPasses);
+  if (spec.maxColors !== null) reducePalette(sheet, spec.maxColors);
+  return {
+    sheet,
+    cells,
+    emptyCells,
+    tier,
+    cellWidth: spec.cellWidth,
+    cellHeight: spec.cellHeight,
+  };
 }
 
 /**
@@ -310,10 +467,8 @@ export function cleanEdgeHalo(image: RawImage, passes = 2): number {
 }
 
 /**
- * 调色板收敛（中位切分 / median cut）：AI 出图缩到 16×32 后每种颜色只剩几个像素、
- * 抗锯齿产生上千种近似色，按「出现次数取前 N」会把蓝发/肤色挤掉（真机教训）。
- * 中位切分按颜色空间分区，确保每个色域都分到槽位；代表色取桶内出现最多的**原始颜色**，
- * 因此输出颜色始终是输入颜色的子集，绝不混出新色。透明像素不参与。
+ * 调色板收敛（中位切分 / median cut）：确保每个色域都分到槽位；
+ * 代表色取桶内出现最多的**原始颜色**，因此输出颜色始终是输入颜色的子集，绝不混出新色。
  */
 interface PaletteEntry {
   rgb: [number, number, number];
@@ -394,27 +549,58 @@ export function reducePalette(image: RawImage, maxColors = 24): number {
   return palette.length;
 }
 
-/** 校验一张已生成的 96×128（或旧版 64×128）像素表（供宿主写入前复核）。 */
-export function validateSpriteSheet(sheet: RawImage): { ok: boolean; error?: string } {
-  const legal = (sheet.width === SPRITE_SHEET_W || sheet.width === LEGACY_SPRITE_SHEET_W) && sheet.height === SPRITE_SHEET_H;
-  if (!legal) {
-    return { ok: false, error: `像素表必须是 ${SPRITE_SHEET_W}×${SPRITE_SHEET_H}（或旧版 ${LEGACY_SPRITE_SHEET_W}×${SPRITE_SHEET_H}），实际 ${sheet.width}×${sheet.height}` };
+/** 根据精灵表像素宽高识别档位与网格（支持 1×/2×/4× 的 6 列与旧版 4 列）。 */
+export function detectSpriteSheetMeta(width: number, height: number): SpriteSheetMeta | null {
+  if (height <= 0 || height % SPRITE_ROWS !== 0) return null;
+  const cellHeight = height / SPRITE_ROWS;
+  if (cellHeight % 2 !== 0) return null;
+  const cellWidth = cellHeight / 2;
+  if (width <= 0 || width % cellWidth !== 0) return null;
+  const cols = width / cellWidth;
+  if (cols !== 6 && cols !== 4) return null;
+  const scale = cellWidth / SPRITE_CELL_W;
+  if (scale !== 1 && scale !== 2 && scale !== 4) return null;
+  const tier: SpriteTier = scale === 4 ? '4x' : scale === 2 ? '2x' : '1x';
+  return { tier, scale, cols, rows: SPRITE_ROWS, cellWidth, cellHeight, width, height };
+}
+
+/** 直接从 PNG 二进制 IHDR 头读取宽高（零图像解码开销；非 PNG 返回 null）。 */
+export function readPngDimensions(buffer: Uint8Array): { width: number; height: number } | null {
+  if (buffer.length < 24) return null;
+  // PNG 魔数：89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4e || buffer[3] !== 0x47
+    || buffer[4] !== 0x0d || buffer[5] !== 0x0a || buffer[6] !== 0x1a || buffer[7] !== 0x0a
+  ) return null;
+  const width = ((buffer[16]! << 24) | (buffer[17]! << 16) | (buffer[18]! << 8) | buffer[19]!) >>> 0;
+  const height = ((buffer[20]! << 24) | (buffer[21]! << 16) | (buffer[22]! << 8) | buffer[23]!) >>> 0;
+  if (width === 0 || height === 0) return null;
+  return { width, height };
+}
+
+/** 校验一张已生成的 1×/2×/4× 精灵表（支持 6 列及旧版 4 列）。 */
+export function validateSpriteSheet(sheet: RawImage): { ok: boolean; error?: string; meta?: SpriteSheetMeta } {
+  const meta = detectSpriteSheetMeta(sheet.width, sheet.height);
+  if (meta === null) {
+    return {
+      ok: false,
+      error: `精灵表尺寸必须是 96×128（1×）、192×256（2×）或 384×512（4×）（兼容 4 列旧图），实际 ${sheet.width}×${sheet.height}`,
+    };
   }
   let opaque = 0;
   for (let index = 3; index < sheet.data.length; index += 4) {
     if (sheet.data[index]! > 16) opaque += 1;
   }
-  if (opaque === 0) return { ok: false, error: '像素表全透明' };
-  return { ok: true };
+  if (opaque === 0) return { ok: false, error: '精灵表全透明' };
+  return { ok: true, meta };
 }
 
 /** 供测试断言：目标图颜色集合必须是源图颜色集合的子集（最近邻不混色）。 */
 export function colorSet(image: RawImage): Set<string> {
   const colors = new Set<string>();
-  for (let index = 0; index < image.data.length; index += 4) {
-    if (image.data[index + 3]! <= 16) continue;
-    colors.add(`${image.data[index]},${image.data[index + 1]},${image.data[index + 2]}`);
+  for (let index = 3; index < image.data.length; index += 4) {
+    if (image.data[index]! <= 16) continue;
+    colors.add(`${image.data[index - 3]},${image.data[index - 2]},${image.data[index - 1]}`);
   }
   return colors;
 }
-

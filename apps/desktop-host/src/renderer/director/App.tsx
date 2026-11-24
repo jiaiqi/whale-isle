@@ -167,6 +167,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   // 桌宠右键「小本子」→ 每次自增，切到桌宠工坊 Tab 3
   const [notebookSignal, setNotebookSignal] = useState(0);
   const [creatorSignal, setCreatorSignal] = useState(0);
+  const [creatorTab, setCreatorTab] = useState<'char' | 'egg' | 'import' | 'pixel' | undefined>(undefined);
   const [benchSignal, setBenchSignal] = useState(0);
   const [voiceOn, setVoiceOn] = useState(true);
   // T-M6-33：实际语音后端（mcode / say / unsupported），顶栏如实展示，避免把 say 当角色 TTS
@@ -184,14 +185,18 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   // 桌宠工坊 / 语音中心的分页签状态由各自面板内聚（T-M6-46）
   // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
-  // T-M6-62：桌宠形象同步进星露谷（开关 + Mod 安装状态 + 游戏内当前同步角色，全部真实 IPC）
+  // T-M6-62：桌宠形象同步进星露谷（开关 + 灵动动画 + Mod 安装/版本状态 + 游戏内当前同步角色与清晰度，全部真实 IPC）
   const [avatarSync, setAvatarSync] = useState<{
     enabled: boolean;
+    liveliness: boolean;
     modInstalled: boolean;
     modCompiled: boolean;
+    modNeedsUpdate: boolean;
     syncedCharacterId: string | null;
     syncedDisplayName: string | null;
     syncedSpriteReady: boolean;
+    syncedSpriteTier: '1x' | '2x' | '4x' | null;
+    syncedSpriteSize: { width: number; height: number } | null;
   } | null>(null);
   const refreshAvatarSync = useCallback(async (): Promise<void> => {
     try { setAvatarSync(await window.directorBridge.stardewAvatarState()); } catch { setAvatarSync(null); }
@@ -206,11 +211,18 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     if (next && !state.modInstalled) toast('已开启同步：还需要点「安装 Mod」把 WhaleIsleAvatar 装进星露谷 Mods 目录');
     else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内保持当前外观，不再随桌宠切换');
   };
+  const toggleAvatarLiveliness = async (): Promise<void> => {
+    const next = !(avatarSync?.liveliness ?? true);
+    const state = await window.directorBridge.stardewAvatarSetLiveliness(next);
+    setAvatarSync(state);
+    toast(next ? '已开启角色灵动动画（脚底阴影、待机微呼吸、走路轻弹跳）' : '已关闭角色灵动动画（恢复静态帧绘制）');
+  };
   const installAvatarMod = async (): Promise<void> => {
+    const wasUpdate = avatarSync?.modNeedsUpdate === true;
     const result = await window.directorBridge.stardewAvatarInstall();
     if (!result.ok) { toast.error(result.error ?? '安装失败'); return; }
     if (result.compiled === false) toast.error(result.error ?? 'Mod 文件已复制但 DLL 未编译');
-    else toast.success('WhaleIsleAvatar Mod 已安装到星露谷 Mods 目录（重启游戏后生效）');
+    else toast.success(wasUpdate ? 'WhaleIsleAvatar Mod 已升级到最新版（重启星露谷后生效）' : 'WhaleIsleAvatar Mod 已安装到星露谷 Mods 目录（重启游戏后生效）');
     await refreshAvatarSync();
   };
   const uninstallAvatarMod = async (): Promise<void> => {
@@ -223,8 +235,14 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const syncAvatarNow = async (): Promise<void> => {
     const result = await window.directorBridge.stardewAvatarSyncNow();
     if (!result.ok) { toast.error(result.error ?? '同步失败'); return; }
-    toast.success(result.sprite === true ? '已把当前角色像素表写入星露谷（热切换）' : '已写入当前角色原版外观预设');
+    const tierText = result.tier === '4x' ? '4× 高清 Q 版' : result.tier === '2x' ? '2× 精致像素' : '1× 像素表';
+    toast.success(result.sprite === true ? `已把当前角色 ${tierText} 写入星露谷（热切换）` : '已写入当前角色原版外观预设');
     await refreshAvatarSync();
+  };
+  const openPixelCreator = (): void => {
+    setCreatorTab('pixel');
+    setTab('pet');
+    setCreatorSignal((value) => value + 1);
   };
   const flowRef = useRef<HTMLDivElement | null>(null);
   // T-M6-27 会话归属：只消费当前 autodrive 会话的事件。
@@ -772,6 +790,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               onSelectCharacter={(id) => void selectCharacter(id)}
               openNotebookSignal={notebookSignal}
               openCreatorSignal={creatorSignal}
+              {...(creatorTab === undefined ? {} : { openCreatorTab: creatorTab })}
               openBenchSignal={benchSignal}
               providers={providers}
               store={store}
@@ -865,7 +884,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               <button
                 data-avatar-sync={avatarSync?.enabled === true ? 'on' : 'off'}
                 onClick={() => void toggleAvatarSync()}
-                title="开启后：当前桌宠角色/皮肤会实时同步成星露谷玩家像素外观（原版预设兜底 + 像素表覆盖）"
+                title="开启后：当前桌宠角色/皮肤会实时同步成星露谷玩家外观（原版预设兜底 + 1×/2×/4× 精灵表覆盖）"
                 className={`pill cursor-pointer${avatarSync?.enabled === true ? ' pill-green' : ''}`}
               >
                 <Monitor size={11} />同步桌宠形象进游戏 {avatarSync?.enabled === true ? '开' : '关'}
@@ -875,7 +894,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                   安装 Mod
                 </button>
               )}
-              {avatarSync !== null && avatarSync.modInstalled && (
+              {avatarSync !== null && avatarSync.modInstalled && avatarSync.modNeedsUpdate && (
+                <button data-avatar-upgrade onClick={() => void installAvatarMod()} className="pill pill-amber cursor-pointer" title="仓库已有新版 WhaleIsleAvatar（支持 2×/4× 高清与灵动动画），点击覆盖升级">
+                  升级 Mod
+                </button>
+              )}
+              {avatarSync !== null && avatarSync.modInstalled && !avatarSync.modNeedsUpdate && (
                 <span
                   data-avatar-mod-status
                   className={`pill${avatarSync.modCompiled ? '' : ' pill-amber'}`}
@@ -892,9 +916,28 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                   卸载 Mod
                 </button>
               )}
+              {avatarSync?.enabled === true && avatarSync.modInstalled && (
+                <button
+                  data-avatar-liveliness={avatarSync.liveliness ? 'on' : 'off'}
+                  onClick={() => void toggleAvatarLiveliness()}
+                  className={`pill cursor-pointer${avatarSync.liveliness ? ' pill-violet' : ''}`}
+                  title="脚底柔和投影 + 待机微呼吸 + 行走轻弹跳与微倾 + 动作弹性（实时热切换）"
+                >
+                  <Zap size={10} />灵动动画 {avatarSync.liveliness ? '开' : '关'}
+                </button>
+              )}
               {avatarSync?.enabled === true && avatarSync.modInstalled && avatarSync.syncedCharacterId !== null && (
-                <span data-avatar-synced className="pill" style={{ fontSize: 9.5 }} title="星露谷 Mod 目录 active-avatar.json 当前生效的角色">
-                  游戏内：{avatarSync.syncedDisplayName ?? avatarSync.syncedCharacterId} · {avatarSync.syncedSpriteReady ? '像素表' : '原版预设'}
+                <span
+                  data-avatar-synced
+                  className="pill"
+                  style={{ fontSize: 9.5 }}
+                  title={avatarSync.syncedSpriteSize !== null
+                    ? `星露谷 Mod 目录当前生效：${avatarSync.syncedSpriteSize.width}×${avatarSync.syncedSpriteSize.height}`
+                    : '星露谷 Mod 目录 active-avatar.json 当前生效的角色'}
+                >
+                  游戏内：{avatarSync.syncedDisplayName ?? avatarSync.syncedCharacterId} · {avatarSync.syncedSpriteReady
+                    ? (avatarSync.syncedSpriteTier === '4x' ? '4× 高清 Q 版' : avatarSync.syncedSpriteTier === '2x' ? '2× 精致像素' : '1× 像素表')
+                    : '原版预设'}
                 </span>
               )}
               {avatarSync?.enabled === true && avatarSync.modInstalled && avatarSync.syncedCharacterId === null && (
@@ -905,6 +948,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                   同步当前
                 </button>
               )}
+              <button data-avatar-resolution onClick={openPixelCreator} className="pill cursor-pointer" title="打开创作中心调整星露谷精灵表清晰度（1× / 2× / 4×）">
+                调清晰度
+              </button>
               <div className="flex-1" />
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
             </div>

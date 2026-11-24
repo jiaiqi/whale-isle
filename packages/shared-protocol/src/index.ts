@@ -1309,16 +1309,29 @@ export function statusLabelZh(status: string | undefined | null): string {
 }
 
 // ───────────────────────── 星露谷像素表生成请求（T-M6-62，创作中心 IPC 入参） ─────────────────────────
+/** 星露谷精灵表清晰度档位：1x 原版 16×32 · 2x 精致像素 32×64（推荐默认） · 4x 高清 Q 版 64×128 */
+export const StardewSpriteTierSchema = z.enum(['1x', '2x', '4x']);
+export type StardewSpriteTier = z.infer<typeof StardewSpriteTierSchema>;
+
 export const StardewSpriteGenRequestSchema = z.object({
   characterId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,60}$/),
   provider: ImageGenProviderDescriptorSchema,
   modelId: z.string().min(1).max(200),
+  /** 清晰度档位：默认 2x（192×256，兼顾星露谷像素感与清晰度） */
+  tier: StardewSpriteTierSchema.default('2x'),
   /** 缺省时由主进程用 compileStardewSpritePrompt 编译 */
   prompt: z.string().max(6000).optional(),
   /** 可选参考图（创作中心「参考图」按钮选择；主进程复核存在性/扩展名/大小） */
   referenceImagePath: z.string().min(1).max(1024).optional(),
 });
 export type StardewSpriteGenRequest = z.infer<typeof StardewSpriteGenRequestSchema>;
+
+/** 从已保留的原图秒切清晰度档位（免重新调用 AI 生图） */
+export const StardewSpriteReprocessRequestSchema = z.object({
+  characterId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,60}$/),
+  tier: StardewSpriteTierSchema,
+});
+export type StardewSpriteReprocessRequest = z.infer<typeof StardewSpriteReprocessRequestSchema>;
 
 // ───────────────────────── 星露谷桌宠像素外观同步（T-M6-62） ─────────────────────────
 /** 原版兜底外观预设：非破坏性（只改发色/发型/衣裤/肤色/帽子等外观字段，不动存档数据）。 */
@@ -1335,8 +1348,8 @@ export type StardewAvatarPreset = z.infer<typeof StardewAvatarPresetSchema>;
 
 /**
  * `Mods/WhaleIsleAvatar/active-avatar.json` 契约：主进程原子写入，SMAPI Mod 主线程热重载。
- * spriteSheetPath 为相对 Mod 目录的文件名（64×128 PNG，4 行×4 列，每帧 16×32，
- * 行序 下/右/上/左，列序 待机+3 行走帧）；缺省或坏图时 Mod 回落原版预设。
+ * spriteSheetPath 为相对 Mod 目录的文件名（支持 1× 96×128 / 2× 192×256 / 4× 384×512 PNG，
+ * 4 行×6 列，兼容旧版 4 列；行序 下/右/上/左，列序 待机+3 行走+动作+表情）；缺省或坏图时 Mod 回落原版预设。
  */
 export const StardewAvatarSyncSchema = z.object({
   version: z.literal(1),
@@ -1344,6 +1357,10 @@ export const StardewAvatarSyncSchema = z.object({
   displayName: z.string().min(1).max(40),
   preset: StardewAvatarPresetSchema,
   spriteSheetPath: z.string().max(260).optional(),
+  /** 贴图清晰度档位提示（Mod 也会按实际 PNG 像素宽高自动识别） */
+  spriteTier: StardewSpriteTierSchema.optional(),
+  /** 程序化灵动动画开关（脚底阴影、待机微呼吸、走路轻弹跳与微倾、动作弹性） */
+  liveliness: z.boolean().default(true),
 });
 export type StardewAvatarSync = z.infer<typeof StardewAvatarSyncSchema>;
 
