@@ -29,6 +29,10 @@
       {
         "from": "../../packages/shared-protocol/fixtures/blue-whale-maid.json",
         "to": "persona/blue-whale-maid.json"
+      },
+      {
+        "from": "../../assets/pet-packs",
+        "to": "pet-packs"
       }
     ],
     "asar": true,

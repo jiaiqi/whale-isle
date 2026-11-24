@@ -1,0 +1,33 @@
+{
+  "syncedAt": "2026-11-24T01:48:22.964Z",
+  "dryRun": false,
+  "sources": [
+    {
+      "id": "aboutme",
+      "repo": "hunmer/aboutme-pets",
+      "branch": "main",
+      "files": 2624,
+      "bytes": 1986231087,
+      "downloaded": 0,
+      "skipped": 2624
+    },
+    {
+      "id": "crosspet",
+      "repo": "lokicorvus/crosspet",
+      "branch": "main",
+      "files": 946,
+      "bytes": 91328656,
+      "downloaded": 0,
+      "skipped": 946
+    },
+    {
+      "id": "fonts",
+      "repo": "PC2005-cloud/dsh-pet",
+      "branch": "main",
+      "files": 1,
+      "bytes": 4083908,
+      "downloaded": 0,
+      "skipped": 1
+    }
+  ]
+}

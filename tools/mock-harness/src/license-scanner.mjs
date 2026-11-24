@@ -17,11 +17,17 @@ import { fileURLToPath } from 'node:url';
 const ROOT = process.argv[2] ? String(process.argv[2]) : join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const SELF = fileURLToPath(import.meta.url);
 const SELF_GUARD = 'license-scanner.mjs';
-const SCAN_DIRS = ['packages', 'apps', 'services', 'tools', 'mods'];
+const SCAN_DIRS = ['packages', 'apps', 'services', 'tools', 'mods', 'assets'];
 const SKIP_DIR_NAMES = new Set([
   'node_modules', 'dist', 'build', 'coverage', '.git', '.venv', '__pycache__',
   'bin', 'obj', '.ruff_cache', '.mypy_cache', 'out', 'test-fixtures',
 ]);
+/**
+ * T-M6-45：`assets/pet-packs/` 是二进制素材（webp/m4a/woff2/ttf），由 `pnpm sync:pet-packs`
+ * 从上游仓库同步，许可证见 docs/THIRD_PARTY_NOTICES.md §3；按源码特征扫描它们只会误报，整树跳过。
+ * 根目录其它 assets 仍按源码扫描。
+ */
+const SKIP_RELATIVE_PREFIXES = ['assets/pet-packs'];
 const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.py', '.cs']);
 
 const SECRET_RULES = [
@@ -40,6 +46,8 @@ const FORBIDDEN_MARKERS = [
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
     const abs = join(dir, entry);
+    const rel = relative(ROOT, abs).replace(/\\/g, '/');
+    if (SKIP_RELATIVE_PREFIXES.some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`))) continue;
     let st;
     try {
       st = statSync(abs);

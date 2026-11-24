@@ -42,3 +42,9 @@ release/
 .v2c/
 .zcode/
 apps/desktop-host/.v2c/
+
+# 桌宠随包素材（T-M6-45）：约 2GB 二进制，由 `pnpm sync:pet-packs` 幂等拉取后
+# 经 electron-builder extraResources 随安装包分发；不入 Git（上游许可见 THIRD_PARTY_NOTICES §3）
+assets/pet-packs/*
+!assets/pet-packs/README.md
+!assets/pet-packs/SYNC-MANIFEST.json
