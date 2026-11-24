@@ -11,7 +11,7 @@
 - **夜间睡衣工作跟随（P0）**：`onSessionIdle` / `onAgentPose` / `onCrown` 统一走 `matchPetViewForCharacter`，同时匹配 `session.characterId` 与 `nightOutfit(characterId)`（22:00–07:00 只开睡衣变体也能命中）。
 - **星露谷多步目标生命周期（P0）**：`resetDailyStateIfNeeded` 跨日清空 `objective`（首次决策初始化不算跨日）；`MAX_OBJECTIVE_ROUNDS=15` 上限；决策 JSON 支持 `objectiveDone:true` 主动完成；`AutodriveRunner.clearObjective()` + `autodrive-host` 在**新单步原子指令**或用户说「算了/取消目标/不用了」时清空旧目标并广播回执，避免旧目标跨日/被替换后继续驱动；删除未使用的 `stuckConsulted/failStreak/avoidTools` 死字段。
 - **自定义角色交互（P0/P1）**：`custom:pose-config` 下发 `fx`/`egg`；pet-stage 右键/「戳一下」优先 `pokePose`（pose-skin `playPose`，缺图回退 `rage_spray`），`fx` 经 `normalizePoseEffect`/`mergePoseEffects` 并入 PoseSkinRenderer（新增 bubbles/celebrate/victory/priceDown/priceUp SVG 动效），`egg:true` 的自定义角色被点中同样逃跑；`summonEgg` 把 userData `egg:true` 自定义角色与 CrossPet `egg-*` 合并随机挑选。
-- **回归证据**：`pose-effects` 4/4（含别名/脏值/默认映射保留）、`pet-control-host` 6/6（睡衣命中 + 自定义彩蛋）、`custom-character` 7/7（egg 标记）、`image-pipeline` 10/10（透明跳过/封闭白保留/浅色衣服保留）、planner 目标生命周期 4 例、autodrive `clearObjective`、chat-directive 取消语 12 例；全仓 **1020 tests / 分支 90.12%**，`pnpm verify:gate` **7 过 / 0 跳过**，Electron E2E **11/11**。
+- **回归证据**：`pose-effects` 4/4（含别名/脏值/默认映射保留）、`pet-control-host` 6/6（睡衣命中 + 自定义彩蛋）、`custom-character` 7/7（egg 标记）、`image-pipeline` 10/10（透明跳过/封闭白保留/浅色衣服保留）、planner 目标生命周期 4 例、autodrive `clearObjective`、chat-directive 取消语 12 例；全仓 **1021 tests / 分支 90.17%**，`pnpm verify:gate` **7 过 / 0 跳过**，Electron E2E **11/11**。
 
 ### Added（全量素材随包 + 桌宠工坊 / 语音中心重构）
 
