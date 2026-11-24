@@ -11,7 +11,7 @@
 - **跨平台智能锚点 `computePopoverBounds`**：托盘可用时按最近显示器边缘判断任务栏方位——macOS 顶部贴下方 6px、Win11 底部贴上方 8px、左右贴内侧；Win11 图标折叠进 `^` 溢出区导致 `tray.getBounds()` 全 0 时，回退光标所在屏 workArea 右下角并留 8px，绝不弹到 `(0,0)`；最终坐标夹紧在 workArea 内，覆盖多屏负坐标与 125%/150%/200% DPI。
 - **常驻生命周期**：新增 `isQuitting`；关闭中控台只 `preventDefault + hide`；`window-all-closed` 仅在真正退出时结束进程；`app:quit` 统一置位 → `coopHost.stopAll()` → `tray.destroy()` → `app.quit()`；`ui:open-director` 可从托盘/Dock 复原中控台。点击托盘使用 250ms 失焦防抖（blur 隐藏后同一次点击不重开）；右键原生菜单（打开中控台 / 显示或暂藏全部桌宠 / 退出），Win11 额外双击托盘打开中控台；`PET_STAGE_E2E=1` 跳过真实系统 Tray。
 - **Magpie 风格 360×500 快捷浮窗**：独立 `renderer/tray-popover` 入口（无边框/透明/置顶/跳过任务栏，macOS `vibrancy:'popover'`，Windows 透明窗 + CSS 圆角阴影），preload 复用 `directorBridge`。顶栏「鲸鱼 Logo + 鲸屿 + 自驾状态胶囊 + 刷新/中控台/验收台」；三段 Tab：桌宠（当前角色卡 + 9 角色快切 + 6 快捷动作 + 快捷发话 `/chat:say`）、自驾（真实探活/启停/目标条与取消/最近 3 回执/联机队友）、饭碗（SVG 环形余量 + 已用/档位 + 一键加饭 + 跨 AI 工作跟随活跃会话 + 语音开关/音量）；底栏「更新时间 · 复制 WebUI 地址」与「退出」。全部数据走真实 IPC，零 emoji、深浅双主题 CSS 变量。
-- **回归证据**：`tray-host.spec.ts` 10/10（双端定位、溢出区回退、负坐标/DPI 夹紧、250ms 防抖、深浅图标、关闭隐藏 vs 退出）；Electron E2E 新增 1/1（三 Tab 真实渲染、9 角色胶囊、6 动作、饭碗余额、360×500 非 0 坐标、隐藏不闪退）；全仓 **1134 tests / 分支 90.27%**；`pnpm verify:gate` **7 过 / 0 跳过**。macOS 真机已通过（2026-11-24），Windows 11 待后续真机。
+- **回归证据**：`tray-host.spec.ts` 10/10（双端定位、溢出区回退、负坐标/DPI 夹紧、250ms 防抖、深浅图标、关闭隐藏 vs 退出）；Electron E2E 新增 1/1（三 Tab 真实渲染、9 角色胶囊、6 动作、饭碗余额、360×500 非 0 坐标、隐藏不闪退）；全仓 **1138 tests / 分支 90.3%**；`pnpm verify:gate` **7 过 / 0 跳过**；Electron E2E **12/12（5 spec）**。最终 DMG **2,374,124,696 B**（含 `trayTemplate.png`/`tray-win-light.png` 与 `tray-popover/`，挂载校验通过，无 `.temp*.dmg`）。macOS 真机已通过（2026-11-24），Windows 11 待后续真机。
 
 ### Added（T-M6-55 ~ T-M6-59：桌宠全字段运行、AI 直连出图、星露谷大脑进化、CLI 钩子向导、OBS 挂件收口）
 
