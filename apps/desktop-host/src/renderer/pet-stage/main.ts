@@ -5,7 +5,7 @@
 import { mergePoseEffects, normalizePoseEffect, PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
 import type { PetActionState } from '@workbench/shared-protocol';
-import { createAlphaProbe } from './alpha-probe';
+import { ALPHA_THRESHOLD, createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
 import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, shouldBlockWhileAsleep, shouldEnterPowerSaver } from './interaction';
 import { createGlide, createSlingshot, createThrow, velocityFromSamples, type Bounds, type DragSample } from './drag-throw';
@@ -200,6 +200,8 @@ class PoseImageSurface implements VideoHandle {
   constructor(src: string) {
     this.src = src;
     this.el = document.createElement('img');
+    this.el.crossOrigin = 'anonymous';
+    this.el.draggable = false;
     this.el.decoding = 'async';
     this.el.style.position = 'absolute';
     this.el.style.width = `${BASE_STAGE.width}px`;
@@ -274,6 +276,7 @@ class CanvasSpriteSurface implements VideoHandle {
   async play(loop: boolean): Promise<void> {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => resolve(img);
       img.onerror = () => reject(new Error(`精灵图加载失败：${this.src}`));
       img.src = this.src;
@@ -831,30 +834,44 @@ function samplePoseImageAlpha(img: HTMLImageElement, vx: number, vy: number): nu
   }
 }
 
-async function sampleAlpha(): Promise<number> {
+/** 同步采样舞台局部坐标 (vx, vy) 处的像素 alpha；越界或读图失败统一返回 0（透明不可拖）。 */
+function sampleAlphaAtStage(vx: number, vy: number): number {
+  if (vx < 0 || vy < 0 || vx >= BASE_STAGE.width || vy >= BASE_STAGE.height) return 0;
   const video = stage.querySelector('video');
-  const sprite = stage.querySelector('canvas');
-  const pose = activePoseImage();
-  if ((!video || video.readyState < 2) && sprite === null && pose === null) return 0;
-  const point = await bridge.mousePoint();
-  const winPos = await bridge.winPosition();
-  if (!winPos) return 0;
-  const vx = (point.x - winPos[0]) / petScale - stageOffset.x;
-  const vy = (point.y - winPos[1]) / petScale - stageOffset.y;
   if (video !== null && video.readyState >= 2) {
-    ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
-    return probeCtx?.getImageData(0, 0, 1, 1).data[3] ?? 0;
+    try {
+      probeCtx?.clearRect(0, 0, 1, 1);
+      ctxDraw(video, vx * video.videoWidth / BASE_STAGE.width, vy * video.videoHeight / BASE_STAGE.height);
+      return probeCtx?.getImageData(0, 0, 1, 1).data[3] ?? 0;
+    } catch {
+      return 0;
+    }
   }
+  const sprite = stage.querySelector('canvas');
   if (sprite !== null) {
     const ctx = sprite.getContext('2d');
     if (ctx === null) return 0;
     const px = Math.round(vx * sprite.width / BASE_STAGE.width);
     const py = Math.round(vy * sprite.height / BASE_STAGE.height);
     if (px < 0 || py < 0 || px >= sprite.width || py >= sprite.height) return 0;
-    return ctx.getImageData(px, py, 1, 1).data[3] ?? 0;
+    try {
+      return ctx.getImageData(px, py, 1, 1).data[3] ?? 0;
+    } catch {
+      return 0;
+    }
   }
+  const pose = activePoseImage();
   if (pose !== null) return samplePoseImageAlpha(pose, vx, vy);
   return 0;
+}
+
+async function sampleAlpha(): Promise<number> {
+  const point = await bridge.mousePoint();
+  const winPos = await bridge.winPosition();
+  if (!winPos) return 0;
+  const vx = (point.x - winPos[0]) / petScale - stageOffset.x;
+  const vy = (point.y - winPos[1]) / petScale - stageOffset.y;
+  return sampleAlphaAtStage(vx, vy);
 }
 
 function ctxDraw(video: HTMLVideoElement, sx: number, sy: number): void {
@@ -1011,7 +1028,12 @@ let grabOffset: { x: number; y: number } | null = null;
 
 stage.addEventListener('mousedown', (event) => {
   if (event.button !== 0 || petLocked) return;
+  // 二次像素复核：仅桌宠实体像素（alpha > 64）允许拖动，透明区域绝不启动拖拽。
+  const alpha = sampleAlphaAtStage(event.clientX / petScale - stageOffset.x, event.clientY / petScale - stageOffset.y);
+  if (alpha <= ALPHA_THRESHOLD) return;
+  event.preventDefault();
   dragging = true;
+  void bridge.forceInteractive(true);
   throwSim = null;
   grabOffset = null;
   dragMoved = false;
@@ -1061,11 +1083,16 @@ function scheduleDockBack(edge: 'left' | 'right'): void {
   }, 10_000);
 }
 
-
+window.addEventListener('blur', () => {
+  if (!dragging) return;
+  dragging = false;
+  if (scaleMenu === null) void bridge.forceInteractive(false);
+});
 
 window.addEventListener('mouseup', () => {
   if (!dragging) return;
   dragging = false;
+  if (scaleMenu === null) void bridge.forceInteractive(false);
   void (async () => {
     const velocity = velocityFromSamples(samples);
     const bounds = await bridge.screenBounds();

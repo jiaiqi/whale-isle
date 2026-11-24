@@ -114,6 +114,7 @@ describe('whale-pet:// 只读协议与穿越校验', () => {
     const response = await good(new Request(`${PET_PACKS_SCHEME}://aboutme-pets/pets/dsh/spritesheet/待机呼吸.webp`));
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('image/webp');
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(await response.text()).toBe('bytes');
     expect(ok).toHaveBeenCalledOnce();
 
