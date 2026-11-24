@@ -538,7 +538,7 @@ export function CreatorCenter(props: {
               <button
                 className="btn-pill primary"
                 data-gen-batch
-                disabled={genBusy || imageProviders.length === 0}
+                disabled={genBusy}
                 onClick={() => void runBatch(tiers.filter((tier) => selectedTiers.includes(tier.id)).flatMap((tier) => tier.poses.map((pose) => pose.id)))}
               >
                 <Wand2 size={12} />{genBusy ? '出图中…' : '调用生图模型批量出图'}
@@ -588,7 +588,7 @@ export function CreatorCenter(props: {
               <button
                 className="btn-pill primary"
                 data-gen-batch-egg
-                disabled={genBusy || imageProviders.length === 0}
+                disabled={genBusy}
                 onClick={() => void runBatch([...EGG_IMAGE_POSES])}
               >
                 <Wand2 size={12} />{genBusy ? '出图中…' : '批量生成 5 态立绘'}
