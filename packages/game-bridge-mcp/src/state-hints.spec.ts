@@ -13,6 +13,7 @@ describe('extractEnvironmentHints', () => {
   it('早上 8:30：鱼店未开门 + 无鱼竿 + 只剩 2 格', () => {
     const hints = extractEnvironmentHints(STATE, 8 * 60 + 30, []);
     expect(hints).toContain('背包没有鱼竿');
+    expect(hints).toContain('list_chests');
     expect(hints).toContain('09:00 才开门');
     expect(hints).toContain('背包只剩 2 个空位');
   });
@@ -45,9 +46,9 @@ describe('extractEnvironmentHints', () => {
     expect(hints).toContain('Farm 箱子1：鱼竿 x1、木材 x50');
     expect(hints).not.toContain('旧箱子');
     expect(extractEnvironmentHints(STATE, 10 * 60, ['OK list_chests: 箱子A：蟹笼 x2'])).toContain('箱子A：蟹笼 x2');
-    expect(extractEnvironmentHints(STATE, 10 * 60, ['COMPLETED buy: 买了种子'])).not.toContain('箱子');
+    expect(extractEnvironmentHints(STATE, 10 * 60, ['COMPLETED buy: 买了种子'])).not.toContain('刚查到的箱子');
     // 成功前缀但摘要为空 → 跳过，不生成空箱子提示
-    expect(extractEnvironmentHints(STATE, 10 * 60, ['COMPLETED list_chests:   '])).not.toContain('箱子');
+    expect(extractEnvironmentHints(STATE, 10 * 60, ['COMPLETED list_chests:   '])).not.toContain('刚查到的箱子');
   });
 
   it('总长 ≤240 字（注入预算硬上限）', () => {

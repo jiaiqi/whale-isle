@@ -102,7 +102,7 @@ describe('generateImage', () => {
     const headers = calls[0]?.init.headers as Record<string, string>;
     expect(headers.Authorization).toBe(`Bearer ${KEY}`);
     const body = JSON.parse(String(calls[0]?.init.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ model: 'gpt-image-1', prompt: '画一只海豹', n: 1, size: '1024x1024' });
+    expect(body).toMatchObject({ model: 'gpt-image-1', prompt: '画一只海豹', n: 1, size: '1024x1024', background: 'transparent' });
     expect(body.response_format).toBeUndefined(); // gpt-image-1 不传 response_format
   });
 

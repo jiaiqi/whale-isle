@@ -43,7 +43,7 @@ export function extractEnvironmentHints(
   const facts: string[] = [];
   const backpack = backpackSection(stateRaw);
   if (backpack !== null && !/鱼竿/.test(backpack)) {
-    facts.push('背包没有鱼竿：想钓鱼先去鱼店买（营业 09:00-17:00）');
+    facts.push('背包没有鱼竿：先查箱子 list_chests，没有再去鱼店买（09:00-17:00）');
   }
   const free = /背包空位：(\d+)/.exec(stateRaw);
   if (free?.[1] !== undefined) {

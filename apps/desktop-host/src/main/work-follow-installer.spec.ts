@@ -71,8 +71,11 @@ describe('安装 / 幂等 / 备份 / 卸载', () => {
     expect(doc.hooks.PreToolUse).toHaveLength(2);
     expect(JSON.stringify(doc.hooks.PreToolUse?.[0])).toContain('echo user-hook');
     expect(JSON.stringify(doc.hooks.PreToolUse?.[1])).toContain('WB_WORK_FOLLOW_SOURCE=claude');
+    expect(JSON.stringify(doc.hooks.PreToolUse?.[1])).toContain('WB_WORK_FOLLOW_KIND=tool');
     expect(doc.hooks.UserPromptSubmit).toHaveLength(1);
+    expect(JSON.stringify(doc.hooks.UserPromptSubmit?.[0])).toContain('WB_WORK_FOLLOW_KIND=start');
     expect(doc.hooks.Stop).toHaveLength(1);
+    expect(JSON.stringify(doc.hooks.Stop?.[0])).toContain('WB_WORK_FOLLOW_KIND=stop');
 
     // 幂等：再装一次不重复
     expect(installer.install('claude').ok).toBe(true);

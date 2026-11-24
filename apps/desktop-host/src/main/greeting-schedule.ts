@@ -126,11 +126,15 @@ export function resolveGreeting(input: {
   date: Date;
   availablePoses: readonly string[];
   lines: Readonly<Record<string, readonly string[]>>;
+  rng?: () => number;
 }): GreetingResolution | null {
   const poses = new Set(input.availablePoses);
+  const pick = input.rng ?? Math.random;
   for (const key of greetingKeysFor(input.date)) {
     if (!poses.has(key)) continue;
-    return { key, pose: key, line: input.lines[key]?.[0] ?? '' };
+    const pool = input.lines[key] ?? [];
+    const index = pool.length <= 1 ? 0 : Math.min(pool.length - 1, Math.max(0, Math.floor(pick() * pool.length)));
+    return { key, pose: key, line: pool[index] ?? '' };
   }
   return null;
 }

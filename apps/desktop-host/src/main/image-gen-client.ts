@@ -190,6 +190,7 @@ async function generateOpenAi(args: GenerateImageArgs & {
   const endpoints = openAiImagesEndpoints(args.baseUrl);
   const size = args.size ?? '1024x1024';
   const isDallE = /^dall-e/i.test(args.modelId);
+  const isGptImage = /^gpt-image/i.test(args.modelId);
   let body: string | FormData;
   let headers: Record<string, string>;
   if (args.reference === null) {
@@ -200,6 +201,7 @@ async function generateOpenAi(args: GenerateImageArgs & {
       n: 1,
       size,
       ...(isDallE ? { response_format: 'b64_json' } : {}),
+      ...(isGptImage ? { background: 'transparent' } : {}),
     });
   } else {
     const form = new FormData();
@@ -208,6 +210,7 @@ async function generateOpenAi(args: GenerateImageArgs & {
     form.append('n', '1');
     form.append('size', size);
     if (isDallE) form.append('response_format', 'b64_json');
+    if (isGptImage) form.append('background', 'transparent');
     form.append('image', new Blob([new Uint8Array(args.reference.bytes)], { type: args.reference.mimeType }), args.reference.filename);
     body = form;
     headers = { Authorization: `Bearer ${args.apiKey}` };

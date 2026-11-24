@@ -22,8 +22,8 @@ export interface CliHookStrategy {
   mode: 'json' | 'manual';
   /** 标准 JSON 钩子文件（相对 home）；manual 模式为 undefined */
   configPath?: string;
-  /** 需要合并的事件名（顺序固定，便于幂等） */
-  events?: ReadonlyArray<{ name: string; matcher?: string }>;
+  /** 需要合并的事件名（顺序固定，便于幂等；显式携带 start/tool/stop 避免依赖各家私有 stdin 字段） */
+  events?: ReadonlyArray<{ name: string; kind: 'start' | 'tool' | 'stop'; matcher?: string }>;
   manualHint: string;
 }
 
@@ -31,19 +31,31 @@ export const CLI_STRATEGIES: readonly CliHookStrategy[] = [
   {
     source: 'claude', label: 'Claude Code', detectPath: '.claude', mode: 'json',
     configPath: '.claude/settings.json',
-    events: [{ name: 'UserPromptSubmit' }, { name: 'PreToolUse', matcher: '*' }, { name: 'Stop' }],
+    events: [
+      { name: 'UserPromptSubmit', kind: 'start' },
+      { name: 'PreToolUse', kind: 'tool', matcher: '*' },
+      { name: 'Stop', kind: 'stop' },
+    ],
     manualHint: '在 ~/.claude/settings.json 的 hooks 中写入下列命令（start/tool/stop 三个事件）',
   },
   {
     source: 'gemini', label: 'Gemini CLI', detectPath: '.gemini', mode: 'json',
     configPath: '.gemini/settings.json',
-    events: [{ name: 'BeforeAgent' }, { name: 'BeforeTool', matcher: '*' }, { name: 'AfterAgent' }],
+    events: [
+      { name: 'BeforeAgent', kind: 'start' },
+      { name: 'BeforeTool', kind: 'tool', matcher: '*' },
+      { name: 'AfterAgent', kind: 'stop' },
+    ],
     manualHint: '在 ~/.gemini/settings.json 的 hooks 中写入下列命令（BeforeAgent/BeforeTool/AfterAgent）',
   },
   {
     source: 'cursor', label: 'Cursor', detectPath: '.cursor', mode: 'json',
     configPath: '.cursor/hooks.json',
-    events: [{ name: 'beforeSubmitPrompt' }, { name: 'beforeShellExecution' }, { name: 'stop' }],
+    events: [
+      { name: 'beforeSubmitPrompt', kind: 'start' },
+      { name: 'beforeShellExecution', kind: 'tool' },
+      { name: 'stop', kind: 'stop' },
+    ],
     manualHint: '在 ~/.cursor/hooks.json 中写入下列命令（beforeSubmitPrompt/beforeShellExecution/stop）',
   },
   { source: 'codex', label: 'Codex CLI', detectPath: '.codex', mode: 'manual', manualHint: '在 Shell 包装脚本或项目任务前调用下列命令（kind=start/tool/stop）' },
@@ -159,7 +171,7 @@ function strategyOf(source: string): CliHookStrategy | null {
 export function mergeHooksDocument(
   document: Record<string, unknown>,
   strategy: CliHookStrategy,
-  command: string,
+  command: string | ((kind: 'start' | 'tool' | 'stop') => string),
 ): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
   const existing = document.hooks;
   if (existing !== undefined && (existing === null || typeof existing !== 'object' || Array.isArray(existing))) {
@@ -172,11 +184,12 @@ export function mergeHooksDocument(
       return { ok: false, error: `hooks.${event.name} 不是数组，拒绝写入（未知格式）` };
     }
     const kept = (Array.isArray(current) ? current : []).filter((entry) => !isOurEntry(entry));
+    const resolvedCommand = typeof command === 'function' ? command(event.kind) : command;
     hooks[event.name] = [
       ...kept,
       {
         ...(event.matcher === undefined ? {} : { matcher: event.matcher }),
-        hooks: [{ type: 'command', command }],
+        hooks: [{ type: 'command', command: resolvedCommand }],
       },
     ];
   }
@@ -260,7 +273,7 @@ export function createWorkFollowInstaller(options: {
     }
     const parsed = readJsonObject(path);
     if (!parsed.ok) return { ok: false, mode: 'json', error: parsed.error };
-    const merged = mergeHooksDocument(parsed.value, strategy, buildHookCommand(strategy.source, hookPath, inboxDir));
+    const merged = mergeHooksDocument(parsed.value, strategy, (kind) => buildHookCommand(strategy.source, hookPath, inboxDir, kind));
     if (!merged.ok) return { ok: false, mode: 'json', error: merged.error };
     try {
       const backupPath = backup(path);

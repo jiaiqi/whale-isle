@@ -102,6 +102,13 @@ describe('greetingKeysFor / resolveGreeting', () => {
     const resolved = resolveGreeting({ date: at('2026-03-02', 15), availablePoses: ['greet_afternoon'], lines: {} });
     expect(resolved).toEqual({ key: 'greet_afternoon', pose: 'greet_afternoon', line: '' });
   });
+
+  it('多条台词按 rng 随机轮换，不再写死第一句', () => {
+    const lines = { greet_morning: ['早安一', '早安二', '早安三'] };
+    expect(resolveGreeting({ date: at('2026-03-02', 9), availablePoses: ['greet_morning'], lines, rng: () => 0 })?.line).toBe('早安一');
+    expect(resolveGreeting({ date: at('2026-03-02', 9), availablePoses: ['greet_morning'], lines, rng: () => 0.5 })?.line).toBe('早安二');
+    expect(resolveGreeting({ date: at('2026-03-02', 9), availablePoses: ['greet_morning'], lines, rng: () => 0.99 })?.line).toBe('早安三');
+  });
 });
 
 describe('首见去重：角色 id + 日期 + 键', () => {
