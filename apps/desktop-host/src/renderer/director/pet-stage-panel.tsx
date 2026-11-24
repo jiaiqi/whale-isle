@@ -83,7 +83,6 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
   const [activeAction, setActiveAction] = useState('idle');
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
-  const [scale, setScale] = useState(1); // T-M6-20 桌宠缩放（滑块/滚轮/右键菜单同源）
   const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false });
 
   useEffect(() => {
@@ -93,7 +92,6 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
     }).catch(() => setManifest(null));
     void window.directorBridge.voiceConfigGet().then((c) => setVoice({ enabled: c.enabled, innerVoice: c.innerVoice, volume: c.volume }));
     void window.directorBridge.prefsGet().then((p) => {
-      setScale(p.scale);
       setDesk({
         powerSaverEnabled: p.powerSaverEnabled ?? true,
         shortcutHideEnabled: p.shortcutHideEnabled ?? true,
@@ -223,21 +221,6 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
           </div>
         </div>
 
-        <div className="card px-4 py-3.5">
-          <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>桌宠大小</h3>
-          <label className="block text-[11px]" style={{ color: 'var(--text-2)' }}>
-            当前 <span className="mono">{scale.toFixed(1)}×</span>（桌宠身上滚轮 / 右键菜单也可调）
-            <input
-              type="range" className="wb-range mt-1.5" min={0.6} max={2} step={0.1}
-              value={scale}
-              onChange={(e) => {
-                const next = Number(e.target.value);
-                setScale(next);
-                void window.directorBridge.prefsSet({ scale: next });
-              }}
-            />
-          </label>
-        </div>
 
         <div className="card px-4 py-3.5">
           <h3 className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}>语音设置</h3>

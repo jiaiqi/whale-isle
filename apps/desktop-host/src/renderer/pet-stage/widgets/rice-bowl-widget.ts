@@ -17,15 +17,15 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
   const LOW_RICE_WARNING_RATIO = 0.15;
   const root = document.createElement('div');
   root.className = 'pet-widget--rice-bowl';
-  // 角色主体水平锚点（T-M6-21）：由当前角色 manifest 的 anchorRatio 写入 CSS 变量；
-  // 默认 68.7% = 小鲸真机截图测量值；translateX(-50%) 以角色脚下水平居中
+  // 固定在桌宠正下方水平居中（left:50% + translateX(-50%)）
   root.style.cssText = `
-    position:absolute; left:var(--pet-anchor-ratio, 68.7%); transform:translateX(-50%); bottom:6px;
+    position:absolute; left:50%; transform:translateX(-50%); bottom:6px;
     display:none; align-items:center; gap:6px;
     background:rgba(15,43,76,0.55); border-radius:12px;
     padding:3px 8px; pointer-events:none; font:11px/1.4 monospace; color:#ffe9b8;`;
-  const emoji = document.createElement('span');
-  emoji.textContent = '🍚';
+  const icon = document.createElement('span');
+  icon.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;';
+  icon.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16a8 8 0 0 1-16 0Z"/><path d="M6 12c0-2.2 2.7-4 6-4s6 1.8 6 4"/><path d="M9 20h6"/></svg>';
   const bar = document.createElement('div');
   bar.style.cssText = `
     width:64px; height:8px; border-radius:4px; overflow:hidden;
@@ -35,7 +35,7 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
   bar.appendChild(fill);
   const label = document.createElement('span');
   label.textContent = '100%';
-  root.append(emoji, bar, label);
+  root.append(icon, bar, label);
   stage.appendChild(root);
 
   let current = 1;
@@ -53,7 +53,7 @@ export function mountRiceBowlWidget(stage: HTMLElement): RiceBowlWidget {
         ? 'linear-gradient(90deg,#b0b0b0,#8a8a8a)' // 饿瘪灰
         : 'linear-gradient(90deg,#ffd88a,#ffb347)';
       label.textContent = `${Math.round(clamped * 100)}%`;
-      emoji.textContent = clamped < LOW_RICE_WARNING_RATIO ? '🥣' : '🍚';
+      icon.style.color = clamped < LOW_RICE_WARNING_RATIO ? '#b8bec8' : '#ffe9b8';
     },
     ratio() {
       return current;

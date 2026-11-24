@@ -404,9 +404,6 @@ void (async () => {
 })().catch((error) => console.warn('[pet-stage] 角色清单未就绪（回退占位渲染）：', error));
 bridge.onCharacterChanged?.((character) => {
   // manager 只会向 default 窗口发送全局角色快切；各联机窗角色由 URL/窗口 prefs 固定
-  if (typeof character.anchorRatio === 'number') {
-    document.documentElement.style.setProperty('--pet-anchor-ratio', String(character.anchorRatio));
-  }
   void loadCharacterManifest(character.id)
     .then(() => playGreeting(character.id))
     .catch((error) => console.warn('[pet-stage] 角色切换失败：', error));
@@ -1213,47 +1210,17 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
 const widgets = mountBubbleWidgets(stage, { width: 400, height: 260 });
 const riceBowlWidget = mountRiceBowlWidget(stage);
 
-// ── T-M6-20 缩放：滚轮 / 右键菜单 / 主进程广播（中控台滑块）同步 ──
-const setScale = (next: number): void => {
-  if (petLocked) return;
-  const clamped = Math.min(Math.max(Math.round(next * 10) / 10, 0.6), 2);
-  if (clamped === petScale) return;
-  // 乐观更新：滚轮连续滚动时不等主进程广播回来就累计，否则连滚两格只生效一格
-  petScale = clamped;
-  applyStageScale();
-  widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  void bridge.windowPrefsSet(petContext.agentId, { scale: clamped }); // manager 改本窗 bounds + 广播
-};
+// 窗口锁定态同步（缩放功能已移除，固定 1× 原始比例；旧偏好残留非 1× 时自动复位）
 void bridge.windowPrefsGet(petContext.agentId).then((p) => {
   if (p === null) return;
   petLocked = p.locked;
-  if (p.scale !== 1) {
-    petScale = p.scale;
-    applyStageScale();
-    widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  }
+  if (p.scale !== 1) void bridge.windowPrefsSet(petContext.agentId, { scale: 1 });
 }).catch(() => undefined);
 bridge.onWindowPrefsChanged?.((prefs) => {
   petLocked = prefs.locked;
-  if (prefs.scale !== petScale) {
-    petScale = prefs.scale;
-    applyStageScale();
-    widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-  }
 });
-bridge.onScaleChanged?.((scale) => {
-  petScale = scale;
-  applyStageScale();
-  widgets.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
-});
-// 滚轮缩放：只在桌宠实体区域触发（透明区仍穿透，不影响桌面操作）
-stage.addEventListener('wheel', (event) => {
-  event.preventDefault();
-  if (petLocked) return;
-  setScale(petScale + (event.deltaY < 0 ? 0.1 : -0.1));
-}, { passive: false });
 
-// 右键菜单：设为交互态防止 alpha 探针把窗口切穿透导致菜单点不到；档位即时生效
+// 右键菜单：设为交互态防止 alpha 探针把窗口切穿透导致菜单点不到
 let scaleMenu: HTMLDivElement | null = null;
 const closeScaleMenu = (): void => {
   scaleMenu?.remove();
@@ -1279,8 +1246,8 @@ stage.addEventListener('contextmenu', (event) => {
   if (scaleMenu !== null) { closeScaleMenu(); return; }
   void bridge.forceInteractive(true);
   scaleMenu = document.createElement('div');
-  scaleMenu.style.cssText = `position:absolute; left:${Math.round(BASE_STAGE.width * petScale / 2 - 60)}px; bottom:8px;
-    display:flex; gap:4px; padding:6px; border-radius:12px; pointer-events:auto;
+  scaleMenu.style.cssText = `position:absolute; left:50%; transform:translateX(-50%); bottom:8px;
+    display:flex; flex-wrap:wrap; justify-content:center; gap:4px; max-width:${BASE_STAGE.width - 16}px; padding:6px; border-radius:12px; pointer-events:auto;
     background:rgba(12,20,32,0.92); border:1px solid rgba(120,180,255,0.35); z-index:20;`;
   const makeTextButton = (label: string, onClick: () => void): HTMLButtonElement => {
     const btn = document.createElement('button');
@@ -1290,14 +1257,6 @@ stage.addEventListener('contextmenu', (event) => {
     scaleMenu?.appendChild(btn);
     return btn;
   };
-  for (const option of [0.6, 0.8, 1, 1.2, 1.5, 2]) {
-    const btn = document.createElement('button');
-    btn.textContent = `${option}×`;
-    btn.style.cssText = `font:11px monospace; color:${option === petScale ? '#8cc8ff' : '#cdd8e8'};
-      background:transparent; border:1px solid rgba(120,180,255,0.25); border-radius:8px; padding:4px 6px; cursor:pointer;`;
-    btn.addEventListener('click', () => { setScale(option); closeScaleMenu(); });
-    scaleMenu.appendChild(btn);
-  }
   makeTextButton('戳一下', () => { wakeUp(); playPokePose(); closeScaleMenu(); });
   makeTextButton(interaction.asleep ? '叫醒' : '睡觉', () => { toggleSleep(); closeScaleMenu(); });
   makeTextButton('叫她出来 ▸', () => {
