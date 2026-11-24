@@ -96,6 +96,7 @@
       items: [
         { id: 'voice', href: 'voice-studio.html', icon: 'audio-lines', label: '声音工坊与音色库' },
         { id: 'pet', href: 'pet-stage.html', icon: 'fish', label: '桌宠舞台与动作库' },
+        { id: 'preview', href: 'pet-preview.html', icon: 'clapperboard', label: '素材预览工坊', badge: '1040' },
       ],
     },
     {

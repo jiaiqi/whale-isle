@@ -2,122 +2,184 @@
 <html lang="zh-CN" class="dark">
 <head>
 <meta charset="UTF-8">
-<title>桌宠舞台与动作库 — 大肥鱼工作台 v4</title>
+<title>桌宠舞台与动作库 — 鲸屿 Whale Isle</title>
 <link rel="stylesheet" href="tokens.css">
 <script src="vendor/lucide.min.js"></script>
 <script src="shell.js"></script>
 <style>
-  .page { max-width: 1200px; margin: 0 auto; padding: 20px 26px 56px; }
-  .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .page { max-width: 1220px; margin: 0 auto; padding: 18px 26px 56px; }
+  .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
   .head-row h1 { font-size: 20px; font-weight: 700; }
   .head-row p { font-size: 12px; color: var(--text-2); margin-top: 4px; }
   .tab-pane { display: none; }
   .tab-pane.on { display: block; }
 
+  /* 9 角色 + 皮肤快切条 */
+  .char-strip {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 14px; border-radius: var(--r-lg); margin-bottom: 14px;
+    border: 1px solid var(--stroke); background: var(--surface);
+  }
+  .char-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 980px;
+    font-size: 11.5px; font-weight: 600; border: 1px solid var(--stroke);
+    background: var(--inset); color: var(--text-2); cursor: pointer;
+    transition: all var(--dur-hover) var(--ease);
+  }
+  .char-chip:hover { border-color: var(--blue-line); color: var(--text-1); }
+  .char-chip.on { border-color: var(--blue-line); background: var(--blue-dim); color: var(--blue); }
+  .skin-sel {
+    margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text-2);
+  }
+  .skin-sel select {
+    padding: 4px 10px; border-radius: 980px; border: 1px solid var(--stroke-2);
+    background: var(--bg-elev); color: var(--text-1); font-size: 11.5px; outline: none;
+  }
+
+  /* 舞台工具条 */
+  .stage-tools {
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 10px;
+  }
+
   /* ── 桌面舞台 ── */
   .stage-zone {
-    position: relative; height: 590px; border: 1px dashed var(--stroke-2); border-radius: var(--r-xl); overflow: hidden;
+    position: relative; height: 540px; border: 1px dashed var(--stroke-2); border-radius: var(--r-xl); overflow: hidden;
     background: linear-gradient(160deg, #14213d 0%, #0a0f1e 50%, #10203a 100%);
     margin-bottom: 18px;
   }
-  .stage-zone .tag-tl { position: absolute; top: 12px; left: 14px; font-size: 10px; color: rgba(226,232,240,.5); font-family: var(--font-mono); z-index: 5; }
+  .stage-zone .tag-tl { position: absolute; top: 12px; left: 14px; font-size: 10px; color: rgba(226,232,240,.58); font-family: var(--font-mono); z-index: 5; }
   .stage-zone .grid { position: absolute; inset: 0; background-image: radial-gradient(rgba(148,163,184,.12) 1px, transparent 1px); background-size: 28px 28px; pointer-events: none; }
-  .pet-wrap { position: absolute; left: 50%; top: 53%; transform: translate(-50%,-50%); width: 320px; text-align: center; z-index: 3; }
+
+  .pet-wrap {
+    position: absolute; left: 46%; top: 53%; transform: translate(-50%,-50%); width: 300px; text-align: center; z-index: 3;
+    transition: left .38s var(--ease-out), opacity .22s var(--ease), transform .25s var(--ease);
+  }
+  .pet-wrap.docked { left: 97%; }
+  .pet-wrap.docked:hover { left: 89%; }
+  .pet-wrap.ghost-pass { opacity: 0.34; }
+  .pet-wrap.shaking { animation: petShake .42s ease-in-out 2; }
+  @keyframes petShake {
+    0%, 100% { transform: translate(-50%,-50%) rotate(0deg); }
+    25% { transform: translate(-56%,-50%) rotate(-7deg); }
+    75% { transform: translate(-44%,-50%) rotate(7deg); }
+  }
+
   .pet-body {
-    width: 280px; height: 215px; margin: 0 auto; position: relative; border-radius: 18px 18px 42px 42px;
+    width: 264px; height: 204px; margin: 0 auto; position: relative; border-radius: 18px 18px 42px 42px;
     background: linear-gradient(160deg, rgba(10,132,255,.28), rgba(10,132,255,.08));
     border: 2px solid rgba(10,132,255,.45); box-shadow: 0 0 40px rgba(10,132,255,.24), inset 0 1px 0 rgba(255,255,255,.18);
-    animation: breathe 3.4s ease-in-out infinite;
+    animation: breathe 3.4s ease-in-out infinite; transition: all .25s var(--ease);
   }
-  .pet-body .face { position: absolute; top: 44%; left: 50%; transform: translate(-50%,-50%); }
+  .pet-body.angry {
+    background: linear-gradient(160deg, rgba(255,69,58,.36), rgba(255,69,58,.1));
+    border-color: rgba(255,69,58,.72); box-shadow: 0 0 42px rgba(255,69,58,.32);
+  }
+  .pet-body.sleeping {
+    background: linear-gradient(160deg, rgba(191,90,242,.24), rgba(28,28,36,.4));
+    border-color: rgba(191,90,242,.5); animation-duration: 5.8s;
+  }
+  .pet-body .face { position: absolute; top: 44%; left: 50%; transform: translate(-50%,-50%); text-align: center; color: #eaf4ff; }
   .pet-body .zone {
     position: absolute; border-radius: 12px; border: 1.5px dashed rgba(10,132,255,.35); background: rgba(10,132,255,.06);
-    transition: all .2s var(--ease); display: grid; place-items: center; font-size: 10px; color: rgba(160,218,255,.75); cursor: pointer;
+    transition: all .2s var(--ease); display: grid; place-items: center; font-size: 10px; color: rgba(160,218,255,.82); cursor: pointer;
   }
-  .zone.head { top: 8px; left: 82px; width: 116px; height: 58px; }
-  .zone.belly { top: 106px; left: 95px; width: 90px; height: 74px; }
+  .zone.head { top: 8px; left: 74px; width: 116px; height: 52px; }
+  .zone.belly { top: 112px; left: 86px; width: 92px; height: 64px; }
   .zone:hover { color: #fff; border-color: var(--blue); background: rgba(10,132,255,.22); transform: scale(1.03); }
-  .pet-shadow { width: 180px; height: 14px; margin: 8px auto 0; border-radius: 50%; background: rgba(0,0,0,.55); filter: blur(5px); }
+  .pet-shadow { width: 170px; height: 14px; margin: 8px auto 0; border-radius: 50%; background: rgba(0,0,0,.55); filter: blur(5px); }
   .action-chip {
-    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 9px;
     font-size: 11px; padding: 4.5px 12px; border-radius: 980px;
     background: rgba(10,132,255,.18); color: #b6dcff; border: 1px solid rgba(10,132,255,.45); font-family: var(--font-mono);
   }
 
-  /* L1 / L2 气泡 */
+  /* 集合出来的副桌宠 */
+  .side-pet {
+    position: absolute; top: 56%; width: 126px; padding: 12px 10px; border-radius: 16px; text-align: center;
+    background: rgba(24,24,32,.78); border: 1.5px solid rgba(191,90,242,.5); color: #f5f5f7;
+    backdrop-filter: blur(18px); z-index: 3; display: none; transition: transform .25s var(--ease);
+    cursor: pointer;
+  }
+  .side-pet.show { display: block; }
+  .side-pet.left { left: 13%; }
+  .side-pet.right { left: 66%; }
+  .side-pet.bump { transform: translateY(-10px) scale(1.06); }
+
+  /* 气泡与控制卡 */
   .talk-bubble {
-    position: absolute; top: 88px; left: 53%; max-width: 290px; border-radius: 18px; padding: 12px 15px;
-    background: rgba(24,24,28,.84); border: 1px solid rgba(10,132,255,.45); backdrop-filter: blur(22px);
-    box-shadow: 0 12px 36px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.1); animation: floaty 4.5s ease-in-out infinite; z-index: 4; color: #f5f5f7;
+    position: absolute; top: 76px; left: 48%; max-width: 280px; border-radius: 18px; padding: 11px 14px;
+    background: rgba(24,24,28,.86); border: 1px solid rgba(10,132,255,.45); backdrop-filter: blur(22px);
+    box-shadow: 0 12px 36px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.1); z-index: 4; color: #f5f5f7;
   }
   .talk-bubble .who { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #98989f; font-family: var(--font-mono); margin-bottom: 5px; }
-  .talk-bubble .txt { font-size: 12.5px; line-height: 1.7; }
-  .talk-bubble .tts { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 7px; border-top: 1px dashed rgba(255,255,255,.12); font-size: 10px; color: #98989f; font-family: var(--font-mono); }
+  .talk-bubble .txt { font-size: 12.5px; line-height: 1.65; }
+  .talk-bubble .tts { display: flex; align-items: center; gap: 7px; margin-top: 7px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,.12); font-size: 10px; color: #98989f; font-family: var(--font-mono); }
 
   .cloud {
-    position: absolute; top: 44px; left: 26px; max-width: 270px; border-radius: 18px; padding: 12px 15px;
-    background: linear-gradient(135deg, rgba(191,90,242,.2), rgba(191,90,242,.08));
-    border: 1.5px dashed rgba(191,90,242,.55); color: #e6cdfc; font-size: 12px; line-height: 1.7;
-    backdrop-filter: blur(16px); animation: floaty 5.2s ease-in-out infinite .8s; z-index: 4;
+    position: absolute; top: 44px; left: 22px; max-width: 256px; border-radius: 18px; padding: 11px 14px;
+    background: linear-gradient(135deg, rgba(191,90,242,.22), rgba(191,90,242,.08));
+    border: 1.5px dashed rgba(191,90,242,.55); color: #e6cdfc; font-size: 11.5px; line-height: 1.65;
+    backdrop-filter: blur(16px); z-index: 4;
   }
-  .cloud::after { content: ''; position: absolute; bottom: -12px; left: 32px; width: 16px; height: 16px; border-radius: 50%; background: rgba(191,90,242,.15); border: 1.5px dashed rgba(191,90,242,.45); }
-  .cloud .who { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 5px; font-family: var(--font-mono); opacity: .8; }
+  .cloud .who { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-bottom: 4px; font-family: var(--font-mono); opacity: .85; }
 
   .voice-panel {
-    position: absolute; top: 32px; right: 20px; width: 244px; border-radius: 18px; padding: 13px 15px;
-    background: rgba(24,24,28,.86); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(26px);
+    position: absolute; top: 24px; right: 18px; width: 252px; border-radius: 18px; padding: 12px 14px;
+    background: rgba(24,24,28,.88); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(26px);
     box-shadow: 0 12px 36px rgba(0,0,0,.5); z-index: 6; color: #f5f5f7;
   }
-  .voice-panel h5 { font-size: 12px; font-weight: 650; display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-  .vrow { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 11.5px; color: #c7c7cc; }
+  .voice-panel h5 { font-size: 12px; font-weight: 650; display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+  .vrow { display: flex; align-items: center; justify-content: space-between; padding: 4.5px 0; font-size: 11px; color: #d1d1d6; gap: 8px; }
   .vrow .ds { font-size: 9.5px; color: #8e8e93; }
 
   .status-bar {
-    position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 5;
-    display: flex; align-items: center; gap: 10px; padding: 7.5px 14px; border-radius: 980px;
-    background: rgba(24,24,28,.82); border: 1px solid rgba(255,255,255,.16); backdrop-filter: blur(22px);
-    box-shadow: 0 8px 26px rgba(0,0,0,.45); white-space: nowrap; color: #f5f5f7;
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 5;
+    display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-radius: 980px;
+    background: rgba(24,24,28,.84); border: 1px solid rgba(255,255,255,.16); backdrop-filter: blur(22px);
+    box-shadow: 0 8px 26px rgba(0,0,0,.45); white-space: nowrap; color: #f5f5f7; font-size: 11px;
   }
-  .status-bar .seg { display: flex; align-items: center; gap: 5px; font-size: 11.5px; }
-  .status-bar .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: #636368; }
-  .status-bar .ticker { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: #30d158; font-family: var(--font-mono); background: rgba(48,209,88,.14); border: 1px solid rgba(48,209,88,.42); border-radius: 980px; padding: 2px 8px; }
 
-  .goal-card {
-    position: absolute; bottom: 76px; right: 20px; width: 295px; z-index: 5;
-    border-radius: 16px; background: rgba(24,24,28,.88); border: 1px solid rgba(255,255,255,.15);
-    backdrop-filter: blur(26px); color: #f5f5f7; transition: opacity .22s var(--ease), transform .22s var(--ease);
-  }
-  .goal-card.hidden { opacity: 0; transform: translateY(8px); pointer-events: none; }
-  .goal-card .g-h { display: flex; align-items: center; gap: 7px; padding: 10px 14px 6px; font-size: 12px; font-weight: 650; }
-  .goal-card .g-i { display: flex; align-items: center; gap: 8px; padding: 5px 14px; font-size: 11px; color: #c7c7cc; }
-  .goal-card .g-i.done { color: #636368; text-decoration: line-through; }
-  .goal-card .g-i .st { margin-left: auto; font-size: 9.5px; font-family: var(--font-mono); }
+  /* 通用卡片与网格 */
+  .sec { font-size: 10.5px; letter-spacing: 1px; color: var(--text-3); font-weight: 650; margin: 16px 0 10px; text-transform: uppercase; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .mx { border-radius: var(--r-lg); padding: 14px 16px; }
+  .mx h6 { font-size: 12.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .mx p { font-size: 11.5px; color: var(--text-2); line-height: 1.65; }
 
-  /* 场景矩阵 */
-  .sec { font-size: 10.5px; letter-spacing: 1.2px; color: var(--text-3); font-weight: 650; margin: 16px 0 10px; text-transform: uppercase; }
-  .matrix { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .mx { border-radius: var(--r-lg); padding: 13px 15px; }
-  .mx h6 { font-size: 12.5px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
-  .mx p { font-size: 11.5px; color: var(--text-2); line-height: 1.7; }
-
-  /* ── TAB 2: 114 动作库 (对齐 pets-panel.tsx) ── */
+  /* 动作库 */
   .lib-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  .slot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .slot-card { padding: 14px 16px; border-radius: var(--r-lg); }
   .slot-card .title { font-size: 13px; font-weight: 650; display: flex; align-items: center; justify-content: space-between; }
   .slot-card .sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
   .clips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .clip-btn {
     font-size: 11px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--stroke);
-    background: var(--inset); color: var(--text-2); transition: all .18s var(--ease);
+    background: var(--inset); color: var(--text-2); cursor: pointer; transition: all .18s var(--ease);
   }
   .clip-btn:hover { border-color: var(--blue-line); color: var(--blue); background: var(--blue-dim); }
   .clip-btn.playing { border-color: var(--green-line); color: var(--green); background: var(--green-dim); }
 
-  .cat-block { padding: 14px 16px; border-radius: var(--r-lg); margin-bottom: 10px; }
-  .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12.5px; font-weight: 650; }
-  .map-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-  @media (max-width: 960px) { .matrix, .slot-grid, .map-grid { grid-template-columns: 1fr; } }
+  /* 小本子与友谊 */
+  .book-card { padding: 18px 20px; border-radius: var(--r-xl); }
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+  .stat-box { padding: 10px; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--stroke); text-align: center; }
+  .stat-box b { display: block; font-size: 16px; font-family: var(--font-mono); color: var(--text-1); }
+  .stat-box span { font-size: 10.5px; color: var(--text-3); }
+  .note-item { padding: 9px 11px; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--stroke); margin-top: 8px; font-size: 12px; line-height: 1.6; }
+  .friend-row { padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--stroke); background: var(--inset); margin-bottom: 9px; }
+  .hearts { display: inline-flex; gap: 3px; color: var(--red); }
+
+  /* 工作跟随与对外 API */
+  .ai-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--stroke); font-size: 12px; }
+  .ai-row:last-child { border: none; }
+  .code-box {
+    font-family: var(--font-mono); font-size: 11px; padding: 11px 13px; border-radius: var(--r-md);
+    background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); line-height: 1.65;
+    overflow-x: auto;
+  }
+
+  @media (max-width: 960px) { .grid-2, .grid-3, .stat-row { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body data-wb-page="pet" data-wb-group="声形与舞台" data-wb-title="桌宠舞台与动作库">
@@ -125,188 +187,392 @@
     <div class="page">
       <div class="head-row">
         <div>
-          <h1>桌宠舞台与动作库</h1>
-          <p>D11/D12 透明窗语音与双轨气泡 + D16 114 个 VP9-Alpha 官方动作零闲置预览（11 语义槽位 + 77 氛围池）</p>
+          <h1>桌宠舞台与动作库 · 2.0</h1>
+          <p>融合 aboutme-pets 9 角色全量动态音轨 + dsh-pet 物理/静音睡眠/开放接口 + CrossPet 防打扰/友谊/小本子/跨 AI 跟随</p>
         </div>
         <div class="seg-tabs">
-          <button class="seg-tab on" data-ptab="stage" onclick="switchPetTab('stage')"><i data-lucide="sparkles" class="xs"></i>透明舞台与气泡</button>
-          <button class="seg-tab" data-ptab="library" onclick="switchPetTab('library')"><i data-lucide="film" class="xs"></i>114 动作库 (11槽位 + 77池)</button>
+          <button class="seg-tab on" data-ptab="stage" onclick="switchPetTab('stage')"><i data-lucide="sparkles" class="xs"></i>透明舞台与互动</button>
+          <button class="seg-tab" data-ptab="library" onclick="switchPetTab('library')"><i data-lucide="film" class="xs"></i>全量动作库</button>
+          <button class="seg-tab" data-ptab="social" onclick="switchPetTab('social')"><i data-lucide="book-heart" class="xs"></i>小本子与友谊</button>
+          <button class="seg-tab" data-ptab="work" onclick="switchPetTab('work')"><i data-lucide="cpu" class="xs"></i>跨 AI 跟随与接口</button>
         </div>
       </div>
 
-      <!-- TAB 1: 透明舞台 -->
+      <!-- 9 角色 + 皮肤统一切换条（所有 Tab 共享，100% 平权） -->
+      <div class="char-strip">
+        <span style="font-size:11px;color:var(--text-3);font-weight:600">当前主桌宠（9 角色平权）：</span>
+        <div id="char-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        <div class="skin-sel">
+          <i data-lucide="shirt" class="xs" style="color:var(--violet)"></i>
+          <span>皮肤：</span>
+          <select id="skin-select" onchange="changeSkin()"></select>
+        </div>
+      </div>
+
+      <!-- TAB 1: 透明舞台与防打扰/情感互动 -->
       <section class="tab-pane on" id="pet-stage">
+        <div class="stage-tools">
+          <button class="btn-pill ghost" onclick="toggleDock()"><i data-lucide="panel-right-close" class="xs"></i>模拟贴边探头</button>
+          <button class="btn-pill ghost" onclick="triggerShake()"><i data-lucide="flame" class="xs" style="color:var(--red)"></i>模拟甩晕红温</button>
+          <button class="btn-pill ghost" onclick="toggleSleep()"><i data-lucide="moon" class="xs" style="color:var(--violet)"></i>安静入睡 (S 键)</button>
+          <button class="btn-pill ghost" onclick="toggleOptionPass()"><i data-lucide="mouse-pointer-click" class="xs"></i>按住 Option 临时穿透</button>
+          <button class="btn-pill violet" onclick="toggleAssemble()"><i data-lucide="users" class="xs"></i><span id="assemble-lbl">集合！（召唤伙伴排排站）</span></button>
+        </div>
+
         <div class="stage-zone">
-          <span class="tag-tl">desktop-host / pet-stage · transparent + alwaysOnTop · 语音锁 active≤1 · 点击摸头/戳肚子可交互</span>
+          <span class="tag-tl" id="stage-tag">desktop-host / pet-stage · blue-whale-maid · WebmVideoRenderer · 语音锁 active≤1</span>
           <div class="grid"></div>
 
           <div class="cloud" id="stage-cloud">
             <div class="who"><i data-lucide="brain" class="xs"></i>内心戏云朵 · sleepy 气声队列</div>
-            <div id="cloud-txt">这块石头明显是它自己长出来的……才、才不是本鱼没看路！（改走 (58,13) 绕过去就当无事发生）</div>
+            <div id="cloud-txt">这块石头明显是它自己长出来的……才、才不是没看路！</div>
           </div>
 
           <div class="talk-bubble" id="stage-talk">
-            <div class="who"><i data-lucide="fish" class="xs" style="color:var(--blue)"></i><span id="talk-emo">小鲸 · 正式台词 · [开心迎接]</span></div>
-            <div class="txt" id="talk-txt">钓到啦！鳀鱼·完美品质！本鱼就说嘛，手感这东西是天生的，哼哼～</div>
-            <div class="tts"><i data-lucide="volume-2" class="xs" style="color:var(--blue)"></i><span id="talk-meta">俏皮萌妹 · happy_ref.wav · 口型同步中</span></div>
+            <div class="who"><i data-lucide="sparkles" class="xs" style="color:var(--blue)"></i><span id="talk-emo">小鲸 · 正式台词 · 气泡等播完再收</span></div>
+            <div class="txt" id="talk-txt">钓到啦！鳀鱼·完美品质！手感这东西是天生的，哼哼～</div>
+            <div class="tts"><i data-lucide="volume-2" class="xs" style="color:var(--blue)"></i><span id="talk-meta">俏皮萌妹 · 动作音效自动 ducking 至 15%</span></div>
           </div>
 
           <div class="voice-panel">
-            <h5><i data-lucide="audio-lines" class="xs" style="color:var(--blue)"></i>桌宠语音设置（D11）</h5>
-            <div class="vrow"><div>说话总开关<div class="ds">正式台词 / 播报</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-            <div class="vrow"><div>内心戏发声<div class="ds">sleepy 气声队列</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
-            <div class="vrow"><div>空闲碎碎念<div class="ds">30min 节流</div></div><div class="sw" onclick="this.classList.toggle('on')"></div></div>
-            <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.12)">
-              <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#98989f;margin-bottom:5px"><span>心声音量</span><b class="mono" id="inner-vol">70%</b></div>
-              <input class="wb-range violet" type="range" min="20" max="100" value="70" oninput="document.getElementById('inner-vol').textContent=this.value+'%'">
-            </div>
+            <h5><i data-lucide="sliders-horizontal" class="xs" style="color:var(--blue)"></i>桌面防打扰与声学设置</h5>
+            <div class="vrow"><div>贴边自动收起探头<div class="ds">干完活 10s 自动缩边</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="vrow"><div>全屏视频/演示隐藏<div class="ds">仅看当前所在屏幕</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="vrow"><div>动作原声音效 ducking<div class="ds">TTS 说话时降至 15%</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="vrow"><div>久坐 / 喝水提醒<div class="ds">60min · 23:00-07:00 免打扰</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="vrow"><div>闲置省电降帧模式<div class="ds">闲 30s 降 30fps / 停特效</div></div><div class="sw" onclick="this.classList.toggle('on')"></div></div>
           </div>
 
-          <div class="pet-wrap">
-            <div class="pet-body">
-              <svg class="face" viewBox="0 0 24 24" style="width:60px;height:60px" fill="none"><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" fill="var(--blue)" opacity=".45"/><path d="M3 12c0-4.4 3.6-8 8-8h5a5 5 0 0 1 5 5c0 6.6-5.4 12-12 12H4l2.5-3.2C4.4 16.3 3 14.3 3 12Z" stroke="#bfe0ff" stroke-width="1.4" stroke-linejoin="round"/><circle cx="17.5" cy="10.5" r="1" fill="#fff"/></svg>
-              <div class="zone head" onclick="petInteract('head')">摸头区 · happy_maid</div>
-              <div class="zone belly" onclick="petInteract('belly')">戳肚子 · rage_spray</div>
+          <!-- 集合召唤的伙伴（支持点击互撞） -->
+          <div class="side-pet left" id="side-pet-1" onclick="bumpPartner(this,'星璃')">
+            <div style="font-size:12px;font-weight:700">星璃</div>
+            <div style="font-size:10px;color:#b8b8c2;margin-top:2px">金发小魔女 · 到！</div>
+            <div class="pill pill-amber" style="font-size:9px;margin-top:6px">点击触发互撞</div>
+          </div>
+          <div class="side-pet right" id="side-pet-2" onclick="bumpPartner(this,'泡芙')">
+            <div style="font-size:12px;font-weight:700">泡芙</div>
+            <div style="font-size:10px;color:#b8b8c2;margin-top:2px">猫耳娘 · 到！</div>
+            <div class="pill pill-violet" style="font-size:9px;margin-top:6px">点击触发互撞</div>
+          </div>
+
+          <div class="pet-wrap" id="pet-wrap">
+            <div class="pet-body" id="pet-body">
+              <div class="face">
+                <i data-lucide="fish" style="width:42px;height:42px;color:#bfe0ff" id="pet-icon"></i>
+                <div style="font-size:13px;font-weight:700;margin-top:4px" id="pet-face-name">小鲸</div>
+                <div style="font-size:10px;opacity:.75" id="pet-face-skin">蓝鲸女仆 · 默认装</div>
+              </div>
+              <div class="zone head" onclick="petInteract('head')">摸头区（生气可哄好）</div>
+              <div class="zone belly" onclick="petInteract('belly')">戳一下 · 专属雷区</div>
             </div>
             <div class="pet-shadow"></div>
-            <div class="action-chip" id="stage-clip"><i data-lucide="play" class="xs"></i><span>work_fishing.webm（循环）</span></div>
-          </div>
-
-          <div class="goal-card" id="goal-card">
-            <div class="g-h"><i data-lucide="list-todo" class="xs" style="color:var(--green)"></i>今日目标 · 2/5<span style="margin-left:auto;font-size:10px;color:#8e8e93;font-family:var(--font-mono)">hybrid</span></div>
-            <div class="g-i done"><i data-lucide="mail" class="xs"></i>读信（7 封）<span class="st" style="color:var(--green)">done</span></div>
-            <div class="g-i done"><i data-lucide="fish" class="xs"></i>找威利拿竹鱼竿<span class="st" style="color:var(--green)">done</span></div>
-            <div class="g-i"><i data-lucide="waves" class="xs" style="color:var(--amber)"></i>海滩钓 5 条鱼<span class="st" style="color:var(--amber)">2/5</span></div>
-            <div class="g-i"><i data-lucide="trash-2" class="xs"></i>傍晚翻垃圾桶<span class="st">16:00</span></div>
-            <div class="g-i"><i data-lucide="bed" class="xs"></i>20:00 强制睡觉<span class="st">锁定</span></div>
+            <div class="action-chip" id="stage-clip"><i data-lucide="play" class="xs"></i><span>idle_呼吸.webm（循环）</span></div>
           </div>
 
           <div class="status-bar">
-            <span class="seg"><i data-lucide="fish" class="xs" style="color:var(--green)"></i>钓鱼中 <b class="mono">2/3</b></span>
-            <span class="dot-sep"></span>
-            <span class="seg" style="color:#c7c7cc"><i data-lucide="timer" class="xs" style="color:var(--amber)"></i><b class="mono">01:47</b></span>
-            <span class="dot-sep"></span>
-            <span class="ticker"><i data-lucide="check" class="xs"></i>鳀鱼(完美)</span>
-            <button class="icon-btn" style="color:#c7c7cc;width:24px;height:24px" onclick="document.getElementById('goal-card').classList.toggle('hidden')" title="展开/收起今日目标">
-              <i data-lucide="chevron-up" class="xs"></i>
-            </button>
+            <span><i data-lucide="shield-check" class="xs" style="color:var(--green)"></i> 9 角色 100% 能力平权</span>
+            <span style="opacity:.4">|</span>
+            <span>快捷键 <b class="mono">Ctrl+Opt+P</b> 暂藏 · <b class="mono">S</b> 键入睡 · <b class="mono">Opt</b> 临时穿透</span>
           </div>
-        </div>
-
-        <div class="sec">语音场景矩阵（D11 · 6 类触发与节流护栏）</div>
-        <div class="matrix stagger">
-          <div class="card mx"><h6><i data-lucide="message-circle" class="xs" style="color:var(--blue)"></i>正式台词 · 节流 8s</h6><p>回执短评、目标变更与直播互动；匹配五档参考音频，对话气泡 10s 自动收起。</p></div>
-          <div class="card mx"><h6><i data-lucide="brain" class="xs" style="color:var(--violet)"></i>内心戏发声 · 排队制</h6><p>think 抽 1 句精华以 sleepy 气声念出（-30% 音量 + 0.85x 语速），绝不打断正式台词。</p></div>
-          <div class="card mx"><h6><i data-lucide="flame" class="xs" style="color:var(--red)"></i>P0 雷区反射 · 立即打断</h6><p>命中「大肥鱼」等雷区词，0 token 直出 tsundere 炸毛语音并切 rage_spray 动作。</p></div>
         </div>
       </section>
 
-      <!-- TAB 2: 114 动作库 (对齐 pets-panel.tsx) -->
+      <!-- TAB 2: 全量动作库（随角色实时切换） -->
       <section class="tab-pane" id="pet-library">
         <div class="lib-bar">
           <div>
-            <span class="pill pill-blue">blue-whale-maid · 114 clips 零闲置</span>
-            <span class="k mono" style="margin-left:8px;font-size:11px">语义槽位 37 clips + 氛围池 77 clips · 点击任一动作在桌宠窗即播 6s 回 idle</span>
-          </div>
-          <div class="seg-tabs">
-            <button class="seg-tab on" data-lview="slots" onclick="switchLibView('slots')">11 语义槽位</button>
-            <button class="seg-tab" data-lview="ambient" onclick="switchLibView('ambient')">77 氛围池（7 分类）</button>
+            <span class="pill pill-blue" id="lib-badge">blue-whale-maid · 114 clips · WebmVideoRenderer</span>
+            <span class="k mono" style="margin-left:8px;font-size:11px" id="lib-sub">11 语义槽位 + 氛围池零闲置 · 点击任一动作在舞台即播</span>
           </div>
         </div>
+        <div id="lib-slots" class="grid-3"></div>
+      </section>
 
-        <div id="lib-slots" class="slot-grid stagger"></div>
-        <div id="lib-ambient" style="display:none"></div>
+      <!-- TAB 3: 我们的小本子 & 她们的友谊 -->
+      <section class="tab-pane" id="pet-social">
+        <div class="grid-2">
+          <div class="card book-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px">
+                <i data-lucide="book-open" class="sm" style="color:var(--blue)"></i>
+                <span id="book-title">我们的小本子 · 小鲸的专属手账</span>
+              </h3>
+              <span class="pill pill-blue" style="font-size:10px">本地 SQLite + memory-graph</span>
+            </div>
+            <div class="stat-row">
+              <div class="stat-box"><b id="st-days">18 天</b><span>桌面陪伴</span></div>
+              <div class="stat-box"><b id="st-rounds">142 轮</b><span>共玩/协作</span></div>
+              <div class="stat-box"><b id="st-pats">36 次</b><span>摸头哄好</span></div>
+              <div class="stat-box"><b id="st-angry">4 次</b><span>被甩红温</span></div>
+            </div>
+            <div class="sec" style="margin-top:10px">朋友们的留言板 &amp; 最近互聊</div>
+            <div id="book-notes"></div>
+          </div>
 
-        <div class="sec">三层事件映射表（emotion-map · 事件唯一事实源 → 语义槽位）</div>
-        <div class="map-grid">
-          <div class="card mx"><h6><i data-lucide="heart" class="xs" style="color:var(--blue)"></i>情绪五档映射</h6><p>sweet_normal → idle/happy_maid · tsundere_refuse → clumsy_panic · rage_spray → 喷水抗议 · lazy_yawn → hungry_lazy</p></div>
-          <div class="card mx"><h6><i data-lucide="gamepad-2" class="xs" style="color:var(--green)"></i>游戏回执七类</h6><p>钓鱼/收获 COMPLETED → happy_maid · UNCERTAIN → clumsy_panic · FAILED → rage_spray · 决策中 → game_focus</p></div>
-          <div class="card mx"><h6><i data-lucide="wheat" class="xs" style="color:var(--amber)"></i>饭碗五档联动</h6><p>starving/hungry (&lt;15%) → hungry_lazy · 投喂 fed_buff → eat_rice → full 档切 happy_maid 氛围池</p></div>
+          <div class="card book-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+              <h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px">
+                <i data-lucide="heart-handshake" class="sm" style="color:var(--red)"></i>
+                她们的友谊（10 颗像素心）
+              </h3>
+              <button class="btn-pill violet" style="font-size:11px;padding:4px 11px" onclick="triggerBanter()">
+                <i data-lucide="message-square-heart" class="xs"></i>触发一次闲时互聊
+              </button>
+            </div>
+            <div id="friend-list"></div>
+            <div class="note-item" id="banter-box" style="border-color:var(--violet-line);background:var(--violet-dim)">
+              <b style="font-size:11.5px;color:var(--violet)">最近一次闲时互聊（经全局语音锁串行播报）：</b>
+              <div id="banter-text" style="margin-top:4px">小鲸：「今天海滩鱼群超多，我卖了 1,400g！」 → 星璃：「切，我砍了 180 根木头，比你累多了好吧。」</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: 跨 AI 工作跟随 & 对外开放控制口 -->
+      <section class="tab-pane" id="pet-work">
+        <div class="grid-2">
+          <div class="card book-card">
+            <h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:10px">
+              <i data-lucide="workflow" class="sm" style="color:var(--blue)"></i>跨 AI 工作跟随（T-M5-07 · 借鉴 CrossPet）
+            </h3>
+            <p style="font-size:11.5px;color:var(--text-2);margin-bottom:10px">
+              跟着当前使用的 AI 客户端或实际模型自动切换/召唤对应 AI 娘；一轮调用 ≥8 次工具完成自动戴小皇冠庆祝，等待审批时抬头看着你。
+            </p>
+            <div id="ai-follow-list"></div>
+          </div>
+
+          <div class="card book-card">
+            <h3 style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:10px">
+              <i data-lucide="terminal" class="sm" style="color:var(--green)"></i>对外本机驱动口（借鉴 dsh-pet OpenAPI）
+            </h3>
+            <p style="font-size:11.5px;color:var(--text-2);margin-bottom:10px">
+              复用内嵌 WebUI 服务（127.0.0.1:18780 + device token 鉴权），让外部插件或脚本按 <span class="mono">agentId</span> 驱动任意桌宠说话、播动作或读状态。
+            </p>
+            <div class="code-box">
+POST /api/pet/:agentId/say     {"text":"巡检完成！","scene":"normal"}<br>
+POST /api/pet/:agentId/action  {"actionState":"happy_maid","durationMs":6000}<br>
+GET  /api/pet/:agentId/state   → {characterId, skin, sleeping, speaking, bounds}
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn-pill primary" style="font-size:11.5px" onclick="testPetApi()"><i data-lucide="play" class="xs"></i>模拟插件调用 /say</button>
+              <button class="btn-pill ghost" style="font-size:11.5px" onclick="wbToast('已复制本机接口调用示例（含 token 占位）')"><i data-lucide="copy" class="xs"></i>复制调用示例</button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
   </main>
 
 <script>
+  const CHARS = [
+    { id: 'blue-whale-maid', name: '小鲸', sub: '蓝鲸女仆', renderer: 'WebmVideoRenderer', clips: 114, audio: 0, voice: '俏皮萌妹', skins: ['默认女仆装', 'Claude 卫衣', '云朵睡衣', '针织毛衣'], reflex: '哼，才不是大肥鱼！这是优雅的流线型！', pat: '唔……多摸两下也不是不行啦。', days: 18, rounds: 142, pats: 36, angry: 4 },
+    { id: 'aboutme-grok', name: '星璃', sub: '金发小魔女', renderer: 'SpritesheetRenderer', clips: 106, audio: 106, voice: '傲娇大小姐', skins: ['默认小魔女', '哥特王冠装'], reflex: '嘴毒怎么了，干活效率全队第一不服来比！', pat: '喂、别随便碰我的魔女帽！……好吧仅此一次。', days: 9, rounds: 64, pats: 14, angry: 6 },
+    { id: 'aboutme-gemini', name: '泡芙', sub: '猫耳娘', renderer: 'SpritesheetRenderer', clips: 100, audio: 96, voice: '嗲嗲学妹', skins: ['默认猫耳装', '舞台魔术师'], reflex: '喵！我只是好奇心旺盛才不是多动症！', pat: '呼噜呼噜～主人手好暖呀！', days: 11, rounds: 78, pats: 29, angry: 1 },
+    { id: 'aboutme-kimi', name: '星芒', sub: '星芒小女仆', renderer: 'SpritesheetRenderer', clips: 105, audio: 105, voice: '清脆少女', skins: ['星芒女仆装', '月光提琴装'], reflex: '账本可以很长，但我只挑重点念给你听！', pat: '谢谢主人，今天的小提琴曲献给你～', days: 7, rounds: 41, pats: 12, angry: 0 },
+    { id: 'aboutme-glm', name: '青岚', sub: '蓝狐耳娘', renderer: 'SpritesheetRenderer', clips: 97, audio: 97, voice: '清脆少女(-2)', skins: ['蓝狐女仆装', '眼罩神秘装'], reflex: '狐狸耳朵只用来听情报，绝没有偷偷改价签！', pat: '尾巴尖被摸到了……正事我会记牢的。', days: 6, rounds: 35, pats: 9, angry: 2 },
+    { id: 'aboutme-qwen', name: '千羽', sub: 'Qwen 娘', renderer: 'SpritesheetRenderer', clips: 106, audio: 66, voice: '倔强朋友', skins: ['默认千金装', '折扇礼服'], reflex: '计划周密才不叫死板，走着瞧！', pat: '辛苦啦，等会儿请你喝奶茶～', days: 5, rounds: 28, pats: 8, angry: 1 },
+    { id: 'aboutme-claude', name: '克洛伊', sub: 'Claude 娘', renderer: 'SpritesheetRenderer', clips: 166, audio: 8, voice: '清脆少女(慢)', skins: ['默认学院装', '圣女长袍'], reflex: '我只是想把细节确认清楚再动手……好吧，你说得对。', pat: '谢谢安抚，我们继续把今天的目标收尾吧。', days: 12, rounds: 93, pats: 21, angry: 0 },
+    { id: 'aboutme-gpt', name: '小智', sub: 'GPT 娘', renderer: 'SpritesheetRenderer', clips: 92, audio: 0, voice: '倔强朋友(+2)', skins: ['默认御姐白龙', '降智龙崽连体服'], reflex: '先给结论：下一步最优动作我已经算好了！', pat: '收到正向反馈，工作效率提升 20%。', days: 8, rounds: 50, pats: 11, angry: 1 },
+    { id: 'aboutme-dsh1', name: '小鲸·新动作', sub: '167 扩展池', renderer: 'SpritesheetRenderer', clips: 167, audio: 2, voice: '俏皮萌妹', skins: ['活力扩展装'], reflex: '才没有偷懒！167 个新动作随时待命！', pat: '嘿嘿，新动作包是不是更丝滑啦？', days: 18, rounds: 142, pats: 36, angry: 4 },
+  ];
+
   const SLOTS = [
-    { id: 'idle', label: '待机呼吸', clips: ['待机呼吸', '待机眨眼', '尾巴轻摆', '伸懒腰'] },
-    { id: 'walk', label: '漫游走动', clips: ['小步漫游', '蹦跳走动', '巡逻侦察'] },
-    { id: 'eat_rice', label: '干饭吃米', clips: ['端碗扒饭', '满足嚼嚼', '加餐下饭菜'] },
-    { id: 'happy_maid', label: '开心女仆礼', clips: ['女仆鞠躬', '转圈撒花', '开心比心', '钓到大鱼'] },
-    { id: 'thinking_tail_wag', label: '歪头思考', clips: ['歪头摇尾', '托腮盘算', '翻小本本'] },
-    { id: 'rage_spray', label: '喷水抗议', clips: ['高压喷水', '鲸尾拍地', '气鼓鼓叉腰'] },
-    { id: 'clumsy_panic', label: '心虚冒汗', clips: ['冒汗甩锅', '撞石头晕眩', '手忙脚乱'] },
-    { id: 'game_focus', label: '游戏专注', clips: ['认真挥竿', '盯屏操作', '提灯下矿'] },
-    { id: 'sing_stage', label: '唱歌表演', clips: ['手持话筒', '打拍子跟唱', '谢幕鞠躬'] },
-    { id: 'hungry_lazy', label: '饿瘪瘫倒', clips: ['饿瘪瘫地', '舔空饭碗', '无力摆尾'] },
-    { id: 'sleep_mute', label: '睡觉静音', clips: ['入睡打哈欠', '抱尾熟睡循环', '被吵醒揉眼'] },
-  ];
-  const AMBIENT = [
-    { cat: '吃', count: 14, weight: 1.2, samples: ['偷吃小鱼干', '啃西瓜', '喝奶茶', '舔冰淇淋', '剥橘子', '捧热可可'] },
-    { cat: '玩', count: 15, weight: 1.0, samples: ['放风筝', '吹泡泡', '抛接水球', '转魔方', '叠纸飞机', '玩毛线球'] },
-    { cat: '时节', count: 10, weight: 0.9, samples: ['赏樱花', '撑雨伞', '堆雪人', '看烟花', '踩落叶'] },
-    { cat: '余额', count: 8, weight: 0.8, samples: ['数金币', '掏空口袋', '抱存钱罐', '算工资条'] },
-    { cat: '小动作', count: 14, weight: 1.1, samples: ['整理女仆帽', '理裙摆', '打喷嚏', '挠头', '擦眼镜'] },
-    { cat: '文字', count: 9, weight: 0.7, samples: ['举牌加油', '写日记', '贴便签', '举问号牌'] },
-    { cat: '睡眠接力', count: 7, weight: 0.6, samples: ['犯困点头', '盖小被子', '翻身说梦话'] },
+    { id: 'idle', label: '待机呼吸', clips: ['待机呼吸', '东张西望', '伸懒腰'] },
+    { id: 'walk', label: '漫游走动', clips: ['小步漫游', '左右转向', '巡逻侦察'] },
+    { id: 'eat_rice', label: '干饭吃米', clips: ['端碗扒饭', '满足嚼嚼', '加餐 Buff'] },
+    { id: 'happy_maid', label: '开心庆祝', clips: ['摸头开心', '大活戴皇冠', '钓到大鱼'] },
+    { id: 'thinking_tail_wag', label: '思考倾听', clips: ['歪头思考', '翻小本本', '倾听队友'] },
+    { id: 'rage_spray', label: '雷区 / 红温', clips: ['雷区反击', '甩晕红温', '背身赌气'] },
+    { id: 'clumsy_panic', label: '心虚冒汗', clips: ['撞石头甩锅', '手忙脚乱'] },
+    { id: 'game_focus', label: '游戏 / 工作专注', clips: ['认真挥竿', '跑命令', '读文件'] },
+    { id: 'sing_stage', label: '唱歌表演', clips: ['手持话筒', '谢幕鞠躬'] },
+    { id: 'hungry_lazy', label: '饿瘪 / 久坐提醒', clips: ['饿瘪瘫地', '捧杯提醒喝水'] },
+    { id: 'sleep_mute', label: '安静入睡 (S)', clips: ['打哈欠入睡', '熟睡循环', '周期梦话'] },
   ];
 
-  let playingClip = null;
+  const FRIENDS = [
+    { pair: '小鲸 × 星璃', level: '挚友', hearts: 9, note: '联机星露谷最常搭档，一边斗嘴一边凑齐鸡舍木材' },
+    { pair: '小鲸 × 泡芙', level: '好朋友', hearts: 7, note: '泡芙总把毛线团带到小鲸毛衣边上玩' },
+    { pair: '星璃 × 克洛伊', level: '认识了', hearts: 4, note: '开麦商量时一个拍板冲锋、一个负责核对细节' },
+  ];
 
-  function renderSlots() {
+  const AI_FOLLOW = [
+    { client: 'DeepSeek Harness / 主脑', pet: '小鲸', state: '运行中 · 思考/执行同步', on: true },
+    { client: 'Claude Code / ACP', pet: '克洛伊', state: '已接入 · 大活自动戴皇冠', on: true },
+    { client: 'Codex / OpenAI', pet: '小智', state: '已接入 · 额度重置提醒', on: true },
+    { client: 'Gemini / Antigravity', pet: '泡芙', state: '已接入 · 切窗口自动换装', on: true },
+    { client: 'Cursor / Qwen / Kimi / Grok', pet: '按实际模型自动切换', state: '待开启（可单开或各来一只）', on: false },
+  ];
+
+  let activeChar = CHARS[0];
+  let isDocked = false, isSleeping = false, isAngry = false, isGhost = false, isAssembled = false;
+
+  function renderCharStrip() {
+    document.getElementById('char-chips').innerHTML = CHARS.map((c) => `
+      <button class="char-chip${c.id === activeChar.id ? ' on' : ''}" onclick="selectChar('${c.id}')">
+        <span>${c.name}</span>
+        <span style="font-size:10px;opacity:.7">${c.clips}</span>
+      </button>`).join('');
+    const sel = document.getElementById('skin-select');
+    sel.innerHTML = activeChar.skins.map((s) => `<option value="${s}">${s}</option>`).join('');
+    syncCharViews();
+  }
+
+  function selectChar(id) {
+    activeChar = CHARS.find((c) => c.id === id) || CHARS[0];
+    isAngry = false; isSleeping = false;
+    document.getElementById('pet-body').classList.remove('angry', 'sleeping');
+    renderCharStrip();
+    wbToast(`已切换主桌宠为「${activeChar.name}」（${activeChar.voice} · ${activeChar.clips} 动作${activeChar.audio ? ' + ' + activeChar.audio + ' 音轨' : ''}）`);
+  }
+
+  function changeSkin() {
+    const skin = document.getElementById('skin-select').value;
+    document.getElementById('pet-face-skin').textContent = `${activeChar.sub} · ${skin}`;
+    wbToast(`「${activeChar.name}」已换装：${skin}`);
+  }
+
+  function syncCharViews() {
+    const ext = activeChar.renderer === 'WebmVideoRenderer' ? 'webm' : 'webp';
+    document.getElementById('stage-tag').textContent = `desktop-host / pet-stage · ${activeChar.id} · ${activeChar.renderer} · 语音锁 active≤1`;
+    document.getElementById('pet-face-name').textContent = activeChar.name;
+    document.getElementById('pet-face-skin').textContent = `${activeChar.sub} · ${activeChar.skins[0]}`;
+    document.getElementById('talk-emo').textContent = `${activeChar.name} · 正式台词 · 气泡等播完再收`;
+    document.getElementById('talk-meta').textContent = `${activeChar.voice} · ${activeChar.audio > 0 ? activeChar.audio + ' 原声音轨(ducking)' : 'TTS 同步'}`;
+    document.getElementById('stage-clip').innerHTML = `<i data-lucide="play" class="xs"></i><span>idle_呼吸.${ext}（循环）</span>`;
+    document.getElementById('lib-badge').textContent = `${activeChar.id} · ${activeChar.clips} clips · ${activeChar.renderer}`;
+    document.getElementById('lib-sub').textContent = activeChar.audio > 0
+      ? `零转码精灵图 + ${activeChar.audio} 条原生 .m4a 音轨 · 11 语义槽位零闲置`
+      : '11 语义槽位 + 氛围池零闲置 · 点击任一动作在舞台即播';
     document.getElementById('lib-slots').innerHTML = SLOTS.map((s) => `
       <div class="card slot-card">
         <div class="title"><span>${s.label}</span><span class="pill">${s.clips.length} clips</span></div>
         <div class="sub">${s.id}</div>
         <div class="clips">
-          ${s.clips.map((c) => `<button class="clip-btn${playingClip === c ? ' playing' : ''}" onclick="previewClip('${s.id}','${c}')">${c}.webm</button>`).join('')}
+          ${s.clips.map((c) => `<button class="clip-btn" onclick="previewClip('${c}.${ext}')">${c}.${ext}</button>`).join('')}
         </div>
       </div>`).join('');
-  }
-  function renderAmbient() {
-    document.getElementById('lib-ambient').innerHTML = AMBIENT.map((g) => `
-      <div class="card cat-block">
-        <div class="cat-head"><span>${g.cat}</span><span class="mono k">× ${g.count} 条 · 权重 ${g.weight}</span></div>
-        <div class="clips">
-          ${g.samples.map((c) => `<button class="clip-btn${playingClip === c ? ' playing' : ''}" onclick="previewClip('ambient','${c}')">${c}.webm</button>`).join('')}
-          <span class="pill" style="font-size:10px">…共 ${g.count} 条</span>
-        </div>
-      </div>`).join('');
-  }
-  function previewClip(slot, clip) {
-    playingClip = clip;
-    renderSlots(); renderAmbient();
-    document.getElementById('stage-clip').innerHTML = `<i data-lucide="play" class="xs"></i><span>${clip}.webm（预览 6s 回 idle）</span>`;
-    lucide.createIcons();
-    wbToast(`桌宠窗即播：${clip}.webm（6s 后自动回 idle）`);
-    setTimeout(() => { if (playingClip === clip) { playingClip = null; renderSlots(); renderAmbient(); } }, 3000);
-  }
-  function switchPetTab(t) {
-    document.querySelectorAll('[data-ptab]').forEach((b) => b.classList.toggle('on', b.dataset.ptab === t));
-    document.getElementById('pet-stage').classList.toggle('on', t === 'stage');
-    document.getElementById('pet-library').classList.toggle('on', t === 'library');
-  }
-  function switchLibView(v) {
-    document.querySelectorAll('[data-lview]').forEach((b) => b.classList.toggle('on', b.dataset.lview === v));
-    document.getElementById('lib-slots').style.display = v === 'slots' ? 'grid' : 'none';
-    document.getElementById('lib-ambient').style.display = v === 'ambient' ? 'block' : 'none';
-  }
-  function petInteract(part) {
-    if (part === 'head') {
-      document.getElementById('talk-emo').textContent = '小鲸 · 摸头触发 · [开心女仆礼]';
-      document.getElementById('talk-txt').textContent = '唔……主人突然摸头干嘛啦！才、才没有觉得很舒服呢，多摸两下也不是不行……';
-      document.getElementById('stage-clip').innerHTML = '<i data-lucide="play" class="xs"></i><span>happy_maid_摸头.webm</span>';
-      wbToast('触发摸头区 → happy_maid + daily 软萌语音');
-    } else {
-      document.getElementById('talk-emo').textContent = '小鲸 · 戳肚子触发 · [P0 傲娇炸毛]';
-      document.getElementById('talk-txt').textContent = '喂！不许戳本鱼肚子！都说了那是肌肉不是肥肉！！喷水抗议！';
-      document.getElementById('stage-clip').innerHTML = '<i data-lucide="play" class="xs"></i><span>rage_spray_鲸尾拍地.webm</span>';
-      wbToast('触发戳肚子 → rage_spray + tsundere 炸毛打断');
-    }
+
+    // 小本子同步
+    document.getElementById('book-title').textContent = `我们的小本子 · ${activeChar.name}的专属手账`;
+    document.getElementById('st-days').textContent = `${activeChar.days} 天`;
+    document.getElementById('st-rounds').textContent = `${activeChar.rounds} 轮`;
+    document.getElementById('st-pats').textContent = `${activeChar.pats} 次`;
+    document.getElementById('st-angry').textContent = `${activeChar.angry} 次`;
+    document.getElementById('book-notes').innerHTML = `
+      <div class="note-item"><b>星璃 留言：</b>上次联机你抢了我的海滩点位，下次矿洞记得带够吃的！</div>
+      <div class="note-item"><b>泡芙 留言：</b>和 ${activeChar.name} 一起站在桌面超安心，摸头次数又涨啦～</div>
+      <div class="note-item"><b>成就解锁：</b>「联机默契搭档」—— 连续 3 个游戏日无翻车完成共同目标</div>`;
+
     lucide.createIcons();
   }
 
-  document.addEventListener('DOMContentLoaded', () => { renderSlots(); renderAmbient(); });
+  function renderSocialAndWork() {
+    document.getElementById('friend-list').innerHTML = FRIENDS.map((f) => `
+      <div class="friend-row">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <b style="font-size:12.5px">${f.pair}</b>
+          <span class="pill pill-red" style="font-size:10px">${f.level} · ${f.hearts}/10 心</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-2)">${f.note}</div>
+      </div>`).join('');
+    document.getElementById('ai-follow-list').innerHTML = AI_FOLLOW.map((a) => `
+      <div class="ai-row">
+        <div><b>${a.client}</b><div style="font-size:11px;color:var(--text-3)">映射角色：${a.pet} · ${a.state}</div></div>
+        <div class="sw${a.on ? ' on' : ''}" onclick="this.classList.toggle('on')"></div>
+      </div>`).join('');
+  }
+
+  function previewClip(name) {
+    document.getElementById('stage-clip').innerHTML = `<i data-lucide="play" class="xs"></i><span>${name}（预览 6s 回 idle）</span>`;
+    lucide.createIcons();
+    wbToast(`已向「${activeChar.name}」窗口下发动作：${name}`);
+  }
+  function switchPetTab(t) {
+    document.querySelectorAll('[data-ptab]').forEach((b) => b.classList.toggle('on', b.dataset.ptab === t));
+    ['stage', 'library', 'social', 'work'].forEach((id) => document.getElementById('pet-' + id).classList.toggle('on', id === t));
+  }
+  function petInteract(part) {
+    const body = document.getElementById('pet-body');
+    if (isSleeping) {
+      toggleSleep();
+      return;
+    }
+    if (part === 'head') {
+      isAngry = false;
+      body.classList.remove('angry');
+      document.getElementById('talk-emo').textContent = `${activeChar.name} · 摸头触发 · [开心哄好]`;
+      document.getElementById('talk-txt').textContent = activeChar.pat;
+      wbToast(`摸头成功：${activeChar.name} 心情恢复（小本子摸头 +1）`);
+    } else {
+      document.getElementById('talk-emo').textContent = `${activeChar.name} · 专属雷区 · [P0 零 token 反射]`;
+      document.getElementById('talk-txt').textContent = activeChar.reflex;
+      wbToast(`触发 ${activeChar.name} 专属雷区反射（rage_spray + 串行 P0 语音）`);
+    }
+  }
+  function toggleDock() {
+    isDocked = !isDocked;
+    document.getElementById('pet-wrap').classList.toggle('docked', isDocked);
+    wbToast(isDocked ? '已贴边收起（鼠标靠近会探头，AI 干活时自动出来）' : '已从屏幕边缘回到桌面');
+  }
+  function triggerShake() {
+    isAngry = true;
+    const wrap = document.getElementById('pet-wrap');
+    const body = document.getElementById('pet-body');
+    wrap.classList.remove('shaking');
+    void wrap.offsetWidth;
+    wrap.classList.add('shaking');
+    body.classList.add('angry');
+    document.getElementById('talk-emo').textContent = `${activeChar.name} · 被甩晕红温 · [背身赌气]`;
+    document.getElementById('talk-txt').textContent = '停停停！头好晕！越甩越气——本小姐背过身去不理你了，摸头才哄得好！';
+    wbToast('触发快速左右甩 → 晕眩 → 红温赌气（点击摸头区可哄好）');
+  }
+  function toggleSleep() {
+    isSleeping = !isSleeping;
+    document.getElementById('pet-body').classList.toggle('sleeping', isSleeping);
+    if (isSleeping) {
+      document.getElementById('talk-emo').textContent = `${activeChar.name} · 安静睡眠模式 (S 键)`;
+      document.getElementById('talk-txt').textContent = '呼……（已屏蔽随机动作、碎碎念与提醒，仅周期冒一句梦话，点击即可叫醒）';
+      wbToast('已进入安静睡眠模式（屏蔽一切打扰）');
+    } else {
+      document.getElementById('talk-emo').textContent = `${activeChar.name} · 揉眼醒来`;
+      document.getElementById('talk-txt').textContent = '唔……睡得好香呀，主人找我有事吗？';
+      wbToast('已叫醒桌宠，恢复日常陪伴');
+    }
+  }
+  function toggleOptionPass() {
+    isGhost = !isGhost;
+    document.getElementById('pet-wrap').classList.toggle('ghost-pass', isGhost);
+    wbToast(isGhost ? 'Option 临时穿透已激活：桌宠半透明，鼠标直接点穿到背后窗口' : '已退出临时穿透模式');
+  }
+  function toggleAssemble() {
+    isAssembled = !isAssembled;
+    document.getElementById('side-pet-1').classList.toggle('show', isAssembled);
+    document.getElementById('side-pet-2').classList.toggle('show', isAssembled);
+    document.getElementById('assemble-lbl').textContent = isAssembled ? '解散（送回伙伴）' : '集合！（召唤伙伴排排站）';
+    wbToast(isAssembled ? '集合！星璃、泡芙依次弹出排排站喊「到！」（可点击体验互撞）' : '已解散，伙伴们挥手回去休息');
+  }
+  function bumpPartner(el, name) {
+    el.classList.add('bump');
+    setTimeout(() => el.classList.remove('bump'), 300);
+    wbToast(`${activeChar.name} 与 ${name} 发生Q弹互撞！双人友谊度 +1`);
+  }
+  function triggerBanter() {
+    const lines = [
+      '星璃：「喂，你今天摸头次数比我多两次，不公平！」 → 小鲸：「哼，那是因为本鱼钓鱼最卖力！」',
+      '泡芙：「克洛伊，刚刚那轮大活 10 次工具全过，快戴上小皇冠～」 → 克洛伊：「谢谢，下轮也稳稳推进。」',
+    ];
+    document.getElementById('banter-text').textContent = lines[Math.floor(Math.random() * lines.length)];
+    wbToast('已触发双宠闲时互聊（经全局语音锁串行播报，并写入小本子）');
+  }
+  function testPetApi() {
+    wbToast(`POST /api/pet/${activeChar.id}/say → 200 OK（已驱动「${activeChar.name}」开口并同步气泡）`);
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderCharStrip();
+    renderSocialAndWork();
+  });
 </script>
 </body>
 </html>
