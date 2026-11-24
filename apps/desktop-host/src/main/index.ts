@@ -2,7 +2,7 @@
  * Electron 主进程入口（T-M1-02）：透明桌宠窗。
  * transparent + frame:false + alwaysOnTop + skipTaskbar；穿透策略见 ./passthrough.ts。
  */
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, nativeImage, net, protocol, screen } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, net, protocol, screen, type MenuItemConstructorOptions } from 'electron';
 import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
@@ -44,6 +44,7 @@ import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
 import { createTrayHost, shouldHideDirectorOnClose, shouldQuitOnAllWindowsClosed, type TrayHost } from './tray-host';
+import { buildPetContextMenuTemplate, labelForActionState } from './pet-context-menu';
 import { homedir } from 'node:os';
 import type { GameId } from '@workbench/game-bridge-mcp';
 import {
@@ -148,6 +149,7 @@ let directorWindow: BrowserWindow | null = null;
 let petWindowManager: PetWindowManager | null = null;
 /** T-M6-60：托盘常驻宿主 + 真正退出标志（决定中控台关闭是隐藏还是销毁）。 */
 let trayHost: TrayHost | null = null;
+let webuiRef: { port: number; token: string } | null = null;
 let isQuitting = false;
 /** agentId → 真实 BrowserWindow：旧 IPC 仍需要默认主窗，协作主机按 id 定向投递。 */
 const petBrowserWindows = new Map<string, BrowserWindow>();
@@ -914,6 +916,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         return { ok: true };
       },
     });
+    webuiRef = { port: webui.port, token: webui.token };
     ipcMain.handle('webui:info', () => ({ ok: true, port: webui.port, token: webui.token }));
     void webui.ready
       .then(() => {
@@ -1025,6 +1028,162 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       manager.dock(view.agentId, edge);
     }
     return { ok: true, docked: list.length };
+  });
+  ipcMain.handle('pet:context-menu', (event, rawAgentId?: string) => {
+    const manager = petWindowManager;
+    if (manager === null) return { ok: false };
+    const agentId = typeof rawAgentId === 'string' && rawAgentId.trim() !== '' ? rawAgentId.trim() : 'default';
+    const win = BrowserWindow.fromWebContents(event.sender) ?? petBrowserWindows.get(agentId) ?? stageWindow;
+    if (win === null || win.isDestroyed()) return { ok: false };
+    const view = manager.get(agentId);
+    const allCharacters = characters.list();
+    const characterId = view?.characterId ?? prefs.get().characterId;
+    const character = allCharacters.find((item) => item.id === characterId) ?? characters.selected();
+    const manifestResult = characters.manifestOf(character);
+    const manifest = manifestResult.ok ? manifestResult.manifest : null;
+    const selectable = allCharacters.filter((item) => !(item.packId ?? '').startsWith('crosspet-'));
+    const bundled = selectable.filter((item) => item.packId !== undefined);
+    const customs = selectable.filter((item) => !item.builtin && item.packId === undefined);
+    const switchableCharacters = (bundled.length > 0 ? [...customs, ...bundled.slice(0, 9)] : selectable)
+      .map((item) => ({ id: item.id, displayName: item.displayName }));
+    const summonableCharacters = switchableCharacters.filter((item) => item.id !== character.id);
+    const gameLabels: Record<GameId, string> = { stardew: '星露谷物语', terraria: '泰拉瑞亚', dst: '饥荒 DST' };
+    const rice = autodrive.riceStatus();
+    const sendBubble = (text: string): void => { manager.sendAgent(agentId, 'pet:bubble', { text, kind: 'dialog' }); };
+    const template = buildPetContextMenuTemplate({
+      agentId,
+      isDefault: agentId === 'default',
+      characterId: character.id,
+      characterName: character.displayName,
+      asleep: asleepAgents.has(agentId),
+      locked: view?.locked ?? false,
+      availableActions: (manifest?.actions ?? []).map((entry) => ({
+        actionState: entry.actionState,
+        label: labelForActionState(entry.actionState),
+      })),
+      hasAmbientPool: (manifest?.ambientPool.length ?? 0) > 0,
+      switchableCharacters,
+      summonableCharacters,
+      onlinePetCount: manager.list().filter((item) => item.visible).length,
+      autodriveRunning: autodrive.runner.isRunning(),
+      gameLabel: gameLabels[autodrive.getGameId()],
+      riceBalance: rice.balance,
+      riceBudget: rice.budget,
+      voiceEnabled: voice.config.enabled,
+      sfxEnabled: prefs.get().sfxEnabled,
+      webuiUrl: webuiRef === null ? null : 'ready',
+    }, {
+      onPat: () => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        friendship.record('pat', character.id);
+        manager.sendAgent(agentId, 'pet:preview', { action: 'happy_maid', clipId: null });
+        sendBubble('嘿嘿，被摸头啦～');
+      },
+      onPoke: () => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        friendship.record('poke', character.id);
+        manager.sendAgent(agentId, 'pet:preview', { action: 'rage_spray', clipId: null });
+        sendBubble(characterPokeLine(character.id));
+      },
+      onPlayAction: (actionState) => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        manager.sendAgent(agentId, 'pet:preview', { action: actionState, clipId: null });
+      },
+      onPlayRandomAmbient: () => {
+        asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: false });
+        manager.sendAgent(agentId, 'pet:preview', { action: 'idle', clipId: '__random__' });
+      },
+      onOpenQuickChat: () => { trayHost?.showPopover(); },
+      onToggleSleep: () => {
+        const next = !asleepAgents.has(agentId);
+        if (next) asleepAgents.add(agentId);
+        else asleepAgents.delete(agentId);
+        manager.sendAgent(agentId, 'pet:bench-sleep', { asleep: next });
+      },
+      onSwitchCharacter: (nextId) => {
+        switchDefaultCharacter(nextId);
+        if (stardewAvatar.state().enabled) {
+          const next = characters.selected();
+          stardewAvatar.syncCharacter({ characterId: next.id, displayName: next.displayName });
+        }
+      },
+      onSummonCharacter: (targetId) => {
+        void summonPet(targetId).then((result) => {
+          const target = allCharacters.find((item) => item.id === targetId);
+          sendBubble(result.ok ? `${target?.displayName ?? '伙伴'}来陪你啦！` : (result.error ?? '召唤失败'));
+        });
+      },
+      onAssemble: () => { manager.assemble(manager.list().map((item) => item.agentId)); },
+      onDismissOthers: () => { manager.dismissAll('default'); },
+      onPairChat: () => {
+        const ids = manager.list().filter((item) => item.visible).map((item) => item.characterId);
+        const result = friendship.pairChat(ids);
+        if (!result.ok) sendBubble(result.error);
+      },
+      onSummonEgg: () => {
+        void petControl.summonEgg().then((result) => {
+          if (!result.ok) sendBubble(result.error ?? '没有可召唤的彩蛋');
+        });
+      },
+      onToggleAutodrive: () => {
+        void autodrive.toggleDrive().then((result) => {
+          if (!result.ok) sendBubble(result.error ?? '自驾启动失败');
+          else sendBubble(result.running ? `自驾已启动：${gameLabels[autodrive.getGameId()]}` : '已停止自驾，控制权交还给你');
+        });
+      },
+      onFeedRice: () => {
+        const updated = autodrive.feedRice(10_000);
+        const pct = updated.budget > 0 ? Math.round((updated.balance / updated.budget) * 100) : 100;
+        manager.sendAgent(agentId, 'pet:preview', { action: 'eat_rice', clipId: null });
+        sendBubble(`加饭成功！饭碗余量 ${pct}%`);
+      },
+      onSyncStardewAvatar: () => {
+        const synced = stardewAvatar.syncCharacter({ characterId: character.id, displayName: character.displayName });
+        sendBubble(synced.ok ? `已同步「${character.displayName}」到星露谷外观` : (synced.error ?? '星露谷外观同步失败'));
+      },
+      onToggleLock: () => {
+        manager.patch(agentId, { locked: !(view?.locked ?? false) });
+      },
+      onDock: (edge) => {
+        if (edge === null) void manager.undock(agentId);
+        else manager.dock(agentId, edge);
+      },
+      onResetPosition: () => {
+        const area = screen.getPrimaryDisplay().workArea;
+        const bounds = view?.bounds ?? { width: 400, height: 284 };
+        const x = Math.max(area.x, area.x + area.width - bounds.width - 24);
+        const y = Math.max(area.y, area.y + area.height - bounds.height - 24);
+        manager.clearDock(agentId);
+        manager.setPosition(agentId, { x, y, displayId: String(screen.getPrimaryDisplay().id) });
+        prefs.patch({ position: { x, y, displayId: String(screen.getPrimaryDisplay().id) } });
+      },
+      onHideAllPets: () => { manager.hideAll(); },
+      onToggleVoice: () => { voice.setConfig({ enabled: !voice.config.enabled }); },
+      onToggleSfx: () => { prefs.patch({ sfxEnabled: !prefs.get().sfxEnabled }); },
+      onOpenDirector: () => { trayHost?.hidePopover(); showDirector(); },
+      onOpenNotebook: () => { focusDirectorWith('pet:open-notebook'); },
+      onOpenCreator: () => { focusDirectorWith('ui:open-creator'); },
+      onOpenBench: () => { focusDirectorWith('ui:open-bench'); },
+      onReloadCharacters: () => {
+        reloadCustomCharacters();
+        sendBubble('角色配置已重新载入');
+      },
+      onCopyWebuiUrl: () => {
+        if (webuiRef === null) return;
+        const url = new URL(`http://localhost:${webuiRef.port}/`);
+        url.searchParams.set('token', webuiRef.token);
+        clipboard.writeText(url.toString());
+        sendBubble('已复制 WebUI 地址到剪贴板');
+      },
+      onDismissSelf: () => { manager.close(agentId); },
+      onQuit: () => { quitApp(); },
+    });
+    Menu.buildFromTemplate(template as MenuItemConstructorOptions[]).popup({ window: win });
+    return { ok: true };
   });
   if (TEST_MODE) {
     // E2E：无头环境没有真实 Tray，直接打开/隐藏复用浮窗，并回报真实坐标。

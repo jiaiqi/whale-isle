@@ -396,6 +396,7 @@ contextBridge.exposeInMainWorld('petStage', {
   },
   openCreator: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('ui:open-creator'),
   openBench: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('ui:open-bench'),
+  openContextMenu: (agentId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('pet:context-menu', agentId),
   characterList: (): Promise<Array<{ id: string; displayName: string; packId?: string }>> => ipcRenderer.invoke('pet:character-list'),
   petSummon: (characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }> => ipcRenderer.invoke('pet:summon', characterId),
   onPetBump: (handler: (payload: { partner: string; partnerName: string }) => void): void => {

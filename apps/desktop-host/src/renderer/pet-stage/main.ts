@@ -76,6 +76,7 @@ interface PetStageBridge {
   onPauseEvents?(handler: (payload: { paused: boolean }) => void): void;
   openCreator?(): Promise<{ ok: boolean }>;
   openBench?(): Promise<{ ok: boolean }>;
+  openContextMenu?(agentId: string): Promise<{ ok: boolean }>;
   /** T-M6-49：本机驱动口/工作跟随下发 */
   onPetSay?(handler: (payload: { text: string }) => void): void;
   onPetWake?(handler: () => void): void;
@@ -484,8 +485,17 @@ if (petStageBridge?.onPetRice) {
   });
 }
 if (petStageBridge?.onPetPreview) {
-  petStageBridge.onPetPreview((detail) => {    if (detail.clipId) {
-      const manifest = renderer.manifest;
+  petStageBridge.onPetPreview((detail) => {
+    const manifest = renderer.manifest;
+    if (detail.clipId === '__random__' && manifest !== null && manifest.ambientPool.length > 0) {
+      const picked = pickAmbient(manifest);
+      const ambientEntry = manifest.ambientPool.find((c) => c.clipId === picked.clipId);
+      if (renderer instanceof PoseSkinRenderer) {
+        void renderer.playPose(picked.clipId).then(() => { lastPoseName = picked.clipId; }).catch(() => undefined);
+      } else if (ambientEntry !== undefined) {
+        void renderer.playClip({ ...ambientEntry, loop: false, playbackRate: 1, fps: 24, weight: ambientEntry.weight }).catch(() => undefined);
+      }
+    } else if (detail.clipId) {
       // ambient 单条：先找槽位（语义命中播槽位）→ 不在槽位则直查 ambientPool 走 playClip
       const slotAction = previewActionFor(detail.clipId);
       const ambientEntry = manifest?.ambientPool.find((c) => c.clipId === detail.clipId);
@@ -1083,13 +1093,13 @@ function scheduleDockBack(edge: 'left' | 'right'): void {
 window.addEventListener('blur', () => {
   if (!dragging) return;
   dragging = false;
-  if (scaleMenu === null) void bridge.forceInteractive(false);
+  void bridge.forceInteractive(false);
 });
 
 window.addEventListener('mouseup', () => {
   if (!dragging) return;
   dragging = false;
-  if (scaleMenu === null) void bridge.forceInteractive(false);
+  void bridge.forceInteractive(false);
   void (async () => {
     const velocity = velocityFromSamples(samples);
     const bounds = await bridge.screenBounds();
@@ -1220,101 +1230,17 @@ bridge.onWindowPrefsChanged?.((prefs) => {
   petLocked = prefs.locked;
 });
 
-// 右键菜单：设为交互态防止 alpha 探针把窗口切穿透导致菜单点不到
-let scaleMenu: HTMLDivElement | null = null;
-const closeScaleMenu = (): void => {
-  scaleMenu?.remove();
-  scaleMenu = null;
-  void bridge.forceInteractive(false);
-};
+// 原生系统右键菜单（参考 dsh-pet 并融合鲸屿全功能；仅实心像素区域弹出，突破小窗边界）
 stage.addEventListener('contextmenu', (event) => {
   event.preventDefault();
+  const alpha = sampleAlphaAtStage(event.clientX / petScale - stageOffset.x, event.clientY / petScale - stageOffset.y);
+  if (alpha <= ALPHA_THRESHOLD) return;
   // T-M6-53：Option/Alt + 右键直达验收台
   if (event.altKey && bridge.openBench !== undefined) {
     void bridge.openBench();
     return;
   }
-  wakeUp();
-  void bridge.friendRecord?.(currentCharacterId, 'poke').catch(() => undefined);
-  playPokePose();
-  void bridge.pokeLine?.(dockedAgentId).then((result) => {
-    if (result.ok && result.line !== undefined) {
-      widgets.showDialog(result.line);
-      setTimeout(() => widgets.hideDialog(), 10_000);
-    }
-  }).catch(() => undefined);
-  if (scaleMenu !== null) { closeScaleMenu(); return; }
-  void bridge.forceInteractive(true);
-  scaleMenu = document.createElement('div');
-  scaleMenu.style.cssText = `position:absolute; left:50%; transform:translateX(-50%); bottom:8px;
-    display:flex; flex-wrap:wrap; justify-content:center; gap:4px; max-width:${BASE_STAGE.width - 16}px; padding:6px; border-radius:12px; pointer-events:auto;
-    background:rgba(12,20,32,0.92); border:1px solid rgba(120,180,255,0.35); z-index:20;`;
-  const makeTextButton = (label: string, onClick: () => void): HTMLButtonElement => {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.style.cssText = 'font:11px monospace;color:#cdd8e8;background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;';
-    btn.addEventListener('click', onClick);
-    scaleMenu?.appendChild(btn);
-    return btn;
-  };
-  makeTextButton('戳一下', () => { wakeUp(); playPokePose(); closeScaleMenu(); });
-  makeTextButton(interaction.asleep ? '叫醒' : '睡觉', () => { toggleSleep(); closeScaleMenu(); });
-  makeTextButton('叫她出来 ▸', () => {
-    // 只移除一级菜单 DOM，保持交互态；二级面板关闭/超时后再恢复穿透
-    scaleMenu?.remove();
-    scaleMenu = null;
-    void bridge.characterList?.().then((list) => {
-      const others = list.filter((character) => character.id !== currentCharacterId && !(character.packId ?? '').startsWith('crosspet-')).slice(0, 10);
-      if (others.length === 0) return;
-      const panel = document.createElement('div');
-      panel.style.cssText = `position:absolute; left:50%; bottom:34px; transform:translateX(-50%); display:flex; flex-wrap:wrap; gap:4px;
-        max-width:${Math.round(BASE_STAGE.width * petScale - 20)}px; padding:6px; border-radius:12px; pointer-events:auto; z-index:21;
-        background:rgba(12,20,32,0.94); border:1px solid rgba(120,180,255,0.35);`;
-      for (const character of others) {
-        const btn = document.createElement('button');
-        btn.textContent = character.displayName;
-        btn.style.cssText = 'font:11px monospace;color:#cdd8e8;background:transparent;border:1px solid rgba(120,180,255,.25);border-radius:8px;padding:4px 6px;cursor:pointer;';
-        btn.addEventListener('click', () => {
-          void bridge.petSummon?.(character.id).then((result) => {
-            if (result.ok) widgets.showDialog(`${character.displayName} 来啦！`);
-            else {
-              widgets.showDialog(result.error ?? '召唤失败');
-            }
-            setTimeout(() => widgets.hideDialog(), 6_000);
-          });
-          panel.remove();
-          void bridge.forceInteractive(false);
-        });
-        panel.appendChild(btn);
-      }
-      stage.appendChild(panel);
-      setTimeout(() => { panel.remove(); void bridge.forceInteractive(false); }, 8_000);
-    });
-  });
-  makeTextButton('集合！', () => { void bridge.petAssemble?.(); closeScaleMenu(); });
-  makeTextButton('解散', () => { void bridge.petDismiss?.(); closeScaleMenu(); });
-  makeTextButton('彩蛋', () => {
-    void bridge.petEggSummon?.().then((result) => {
-      if (result?.ok === false) {
-        widgets.showDialog(result.error ?? '彩蛋召唤失败');
-        setTimeout(() => widgets.hideDialog(), 6_000);
-      }
-    });
-    closeScaleMenu();
-  });
-  makeTextButton('小本子', () => { void bridge.petOpenNotebook?.(); closeScaleMenu(); });
-  makeTextButton('创作中心', () => { void bridge.openCreator?.(); closeScaleMenu(); });
-  makeTextButton('验收台', () => { void bridge.openBench?.(); closeScaleMenu(); });
-  makeTextButton('重新载入', () => {
-    void bridge.reloadCharacters?.().then((result) => {
-      if (result.ok) void loadCharacterManifest(currentCharacterId).then(() => widgets.showDialog('角色配置已重新载入')).catch(() => undefined);
-    });
-    closeScaleMenu();
-  });
-  stage.appendChild(scaleMenu);
-  window.addEventListener('mousedown', (e) => {
-    if (scaleMenu !== null && !scaleMenu.contains(e.target as Node)) closeScaleMenu();
-  }, { once: true });
+  void bridge.openContextMenu?.(dockedAgentId);
 });
 // 初始米量水合 + hover 显隐（默认隐藏；<15% 饿态强制亮灯）
 void bridge.riceStatus().then((st) => {

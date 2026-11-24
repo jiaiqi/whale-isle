@@ -65,6 +65,12 @@ export interface AutodriveHost {
   }): LlmPlanner | null;
   /** token-meter 当前可用余量（供协商预算护栏使用） */
   tokenBalance(): number;
+  /** 饭碗当前状态快照（供桌宠右键菜单读取） */
+  riceStatus(): { balance: number; budget: number; consumedToday: number; level: string };
+  /** 投喂加饭（供桌宠右键菜单直接复用） */
+  feedRice(grains: number): { balance: number; budget: number; consumedToday: number; level: string };
+  /** 一键启停当前游戏自驾（供桌宠右键菜单直接复用） */
+  toggleDrive(): Promise<{ ok: boolean; running: boolean; error?: string }>;
   /** T-M6-39：联机协商/指令解析复用当前 Gateway 与饭碗计量；未配置 Key 返回 null */
   completeForCoop(
     slot: WorkbenchRoleSlot,
@@ -764,6 +770,29 @@ ${ackHint}`;
     },
     tokenBalance() {
       return meter.status().balance;
+    },
+    riceStatus() {
+      return { ...riceStatus, balance: riceBalance };
+    },
+    feedRice(grains: number) {
+      riceStatus = meter.feed(grains);
+      riceBalance = riceStatus.balance;
+      broadcastRice(riceStatus.level);
+      return { ...riceStatus, balance: riceBalance };
+    },
+    async toggleDrive() {
+      if (runner.isRunning()) {
+        runner.stop();
+        return { ok: true, running: false };
+      }
+      const blocked = canStart?.();
+      if (blocked !== undefined && blocked !== null) return { ok: false, running: false, error: blocked };
+      try {
+        await runner.start();
+        return { ok: true, running: true };
+      } catch (error) {
+        return { ok: false, running: false, error: error instanceof Error ? error.message : String(error) };
+      }
     },
     async completeForCoop(slot, system, user, maxTokens = 400) {
       if (gateway === null) return null;
