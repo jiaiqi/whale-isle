@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PetApiState",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/PetApiState",
+  "$defs": {
+    "PetApiState": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "default": "",
+          "type": "string"
+        },
+        "skinId": {
+          "default": "",
+          "type": "string"
+        },
+        "sleeping": {
+          "default": false,
+          "type": "boolean"
+        },
+        "speaking": {
+          "default": false,
+          "type": "boolean"
+        },
+        "visible": {
+          "default": false,
+          "type": "boolean"
+        },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "agentId",
+        "characterId",
+        "bounds"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

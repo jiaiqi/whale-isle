@@ -9,7 +9,8 @@
       "enum": [
         "webm-alpha",
         "live2d",
-        "sprite-sheet"
+        "sprite-sheet",
+        "pose-skin"
       ]
     }
   }

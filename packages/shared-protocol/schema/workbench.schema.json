@@ -64,7 +64,14 @@
     "MemoryEdgeView",
     "MemoryGraphView",
     "BrainRuntimeConfig",
-    "RiceBowlStatus"
+    "RiceBowlStatus",
+    "PetStudioCatalog",
+    "PetCustomCharacter",
+    "PetApiSayRequest",
+    "PetApiActionRequest",
+    "PetApiState",
+    "WorkFollowEvent",
+    "WorkFollowStatus"
   ],
   "properties": {
     "PetRendererType": {
@@ -249,6 +256,27 @@
     },
     "RiceBowlStatus": {
       "$ref": "#/$defs/RiceBowlStatus"
+    },
+    "PetStudioCatalog": {
+      "$ref": "#/$defs/PetStudioCatalog"
+    },
+    "PetCustomCharacter": {
+      "$ref": "#/$defs/PetCustomCharacter"
+    },
+    "PetApiSayRequest": {
+      "$ref": "#/$defs/PetApiSayRequest"
+    },
+    "PetApiActionRequest": {
+      "$ref": "#/$defs/PetApiActionRequest"
+    },
+    "PetApiState": {
+      "$ref": "#/$defs/PetApiState"
+    },
+    "WorkFollowEvent": {
+      "$ref": "#/$defs/WorkFollowEvent"
+    },
+    "WorkFollowStatus": {
+      "$ref": "#/$defs/WorkFollowStatus"
     }
   },
   "additionalProperties": false,
@@ -258,7 +286,8 @@
       "enum": [
         "webm-alpha",
         "live2d",
-        "sprite-sheet"
+        "sprite-sheet",
+        "pose-skin"
       ]
     },
     "PetActionState": {
@@ -370,7 +399,8 @@
           "enum": [
             "webm-alpha",
             "live2d",
-            "sprite-sheet"
+            "sprite-sheet",
+            "pose-skin"
           ]
         },
         "licenseScope": {
@@ -4324,6 +4354,54 @@
         "builtin": {
           "default": false,
           "type": "boolean"
+        },
+        "skins": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "outfit": {
+                "default": "",
+                "type": "string"
+              },
+              "accent": {
+                "default": "",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "base",
+                  "skin",
+                  "egg"
+                ]
+              },
+              "previewUrl": {
+                "default": "",
+                "type": "string"
+              },
+              "frameCount": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
@@ -5500,6 +5578,761 @@
         "consumedToday",
         "level"
       ],
+      "additionalProperties": false
+    },
+    "PetStudioCatalog": {
+      "type": "object",
+      "properties": {
+        "generatedAt": {
+          "default": "",
+          "type": "string"
+        },
+        "packs": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "minLength": 1
+              },
+              "catalogId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "installed": {
+                "default": false,
+                "type": "boolean"
+              },
+              "actionCount": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "audioClipCount": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "idleClipId": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "catalogId",
+              "displayName"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "actions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slug": {
+                "type": "string",
+                "minLength": 1
+              },
+              "packId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "displayName": {
+                "default": "",
+                "type": "string"
+              },
+              "clipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "default": "小动作",
+                "type": "string"
+              },
+              "frameCount": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "columns": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "rows": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "frameWidth": {
+                "default": 640,
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "frameHeight": {
+                "default": 360,
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "sampleFps": {
+                "default": 12,
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "hasAudio": {
+                "default": false,
+                "type": "boolean"
+              },
+              "spriteUrl": {
+                "default": "",
+                "type": "string"
+              },
+              "audioUrl": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "slug",
+              "packId",
+              "clipId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "slots": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "packId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "walk",
+                  "eat_rice",
+                  "happy_maid",
+                  "thinking_tail_wag",
+                  "rage_spray",
+                  "clumsy_panic",
+                  "game_focus",
+                  "sing_stage",
+                  "hungry_lazy",
+                  "sleep_mute"
+                ]
+              },
+              "clipIds": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "packId",
+              "slot"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "skins": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "outfit": {
+                "default": "",
+                "type": "string"
+              },
+              "accent": {
+                "default": "",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "base",
+                  "skin",
+                  "egg"
+                ]
+              },
+              "previewUrl": {
+                "default": "",
+                "type": "string"
+              },
+              "frameCount": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "fonts": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
+              "file": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "file",
+              "url"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "errors": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PetCustomCharacter": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "default": 1,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent": {
+          "default": "#0a84ff",
+          "type": "string"
+        },
+        "apps": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reactTo": {
+          "default": "*",
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "*"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "greeting": {
+          "default": "",
+          "type": "string"
+        },
+        "lines": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "glyph": {
+          "default": {
+            "fill": "",
+            "text": ""
+          },
+          "type": "object",
+          "properties": {
+            "fill": {
+              "default": "",
+              "type": "string"
+            },
+            "text": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "idleActions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pokePose": {
+          "default": "pout",
+          "type": "string"
+        },
+        "correctedPose": {
+          "default": "sorry",
+          "type": "string"
+        },
+        "longThink": {
+          "default": {
+            "after": 20,
+            "pose": "deepthink"
+          },
+          "type": "object",
+          "properties": {
+            "after": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600
+            },
+            "pose": {
+              "default": "deepthink",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "fx": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "milestones": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "at": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "text": {
+                "default": "",
+                "type": "string"
+              },
+              "pose": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "notebook": {
+          "default": {
+            "title": "",
+            "font": "",
+            "entries": []
+          },
+          "type": "object",
+          "properties": {
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "font": {
+              "default": "",
+              "type": "string"
+            },
+            "entries": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "outfit": {
+          "default": "",
+          "type": "string"
+        },
+        "aura": {
+          "default": "",
+          "type": "string"
+        },
+        "caption": {
+          "default": "",
+          "type": "string"
+        },
+        "lowBalance": {
+          "default": 5,
+          "type": "number"
+        },
+        "host": {
+          "default": "",
+          "type": "string"
+        },
+        "hostSkin": {
+          "default": "",
+          "type": "string"
+        },
+        "skinName": {
+          "default": "",
+          "type": "string"
+        },
+        "skinOf": {
+          "default": "",
+          "type": "string"
+        },
+        "egg": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "PetApiSayRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "scene": {
+          "default": "normal",
+          "type": "string",
+          "enum": [
+            "normal",
+            "inner",
+            "p0"
+          ]
+        },
+        "wake": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "PetApiActionRequest": {
+      "type": "object",
+      "properties": {
+        "actionState": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "walk",
+            "eat_rice",
+            "happy_maid",
+            "thinking_tail_wag",
+            "rage_spray",
+            "clumsy_panic",
+            "game_focus",
+            "sing_stage",
+            "hungry_lazy",
+            "sleep_mute"
+          ]
+        },
+        "durationMs": {
+          "default": 6000,
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 60000
+        }
+      },
+      "required": [
+        "actionState"
+      ],
+      "additionalProperties": false
+    },
+    "PetApiState": {
+      "type": "object",
+      "properties": {
+        "agentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "default": "",
+          "type": "string"
+        },
+        "skinId": {
+          "default": "",
+          "type": "string"
+        },
+        "sleeping": {
+          "default": false,
+          "type": "boolean"
+        },
+        "speaking": {
+          "default": false,
+          "type": "boolean"
+        },
+        "visible": {
+          "default": false,
+          "type": "boolean"
+        },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "agentId",
+        "characterId",
+        "bounds"
+      ],
+      "additionalProperties": false
+    },
+    "WorkFollowEvent": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "acp",
+            "claude",
+            "codex",
+            "deepseek",
+            "gemini",
+            "cursor",
+            "qwen",
+            "kimi",
+            "grok"
+          ]
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "start",
+            "tool",
+            "stop"
+          ]
+        },
+        "toolName": {
+          "default": "",
+          "type": "string",
+          "maxLength": 120
+        },
+        "modelName": {
+          "default": "",
+          "type": "string",
+          "maxLength": 120
+        },
+        "taskTitle": {
+          "default": "",
+          "type": "string",
+          "maxLength": 120
+        },
+        "ts": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "source",
+        "sessionId",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "WorkFollowStatus": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": "multi",
+          "type": "string",
+          "enum": [
+            "single",
+            "multi"
+          ]
+        },
+        "sessions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "characterId": {
+                "default": "",
+                "type": "string"
+              },
+              "toolCalls": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "startedAt": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "lastEventAt": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              },
+              "taskTitle": {
+                "default": "",
+                "type": "string"
+              },
+              "modelName": {
+                "default": "",
+                "type": "string"
+              },
+              "crowned": {
+                "default": false,
+                "type": "boolean"
+              },
+              "active": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "source",
+              "sessionId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "recent": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "toolName": {
+                "default": "",
+                "type": "string"
+              },
+              "at": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "source",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
       "additionalProperties": false
     }
   }

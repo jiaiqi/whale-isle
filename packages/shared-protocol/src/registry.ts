@@ -61,6 +61,13 @@ import {
   RiceBowlStatusSchema,
   StickyRoutingGroupSchema,
   WorkbenchRoleSlotSchema,
+  PetStudioCatalogSchema,
+  PetCustomCharacterSchema,
+  PetApiSayRequestSchema,
+  PetApiActionRequestSchema,
+  PetApiStateSchema,
+  WorkFollowEventSchema,
+  WorkFollowStatusSchema,
 } from './index';
 
 /**
@@ -134,4 +141,11 @@ export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
   MemoryGraphView: MemoryGraphViewSchema,
   BrainRuntimeConfig: BrainRuntimeConfigSchema,
   RiceBowlStatus: RiceBowlStatusSchema,
+  PetStudioCatalog: PetStudioCatalogSchema,
+  PetCustomCharacter: PetCustomCharacterSchema,
+  PetApiSayRequest: PetApiSayRequestSchema,
+  PetApiActionRequest: PetApiActionRequestSchema,
+  PetApiState: PetApiStateSchema,
+  WorkFollowEvent: WorkFollowEventSchema,
+  WorkFollowStatus: WorkFollowStatusSchema,
 };

@@ -70,6 +70,54 @@
         "builtin": {
           "default": false,
           "type": "boolean"
+        },
+        "skins": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "outfit": {
+                "default": "",
+                "type": "string"
+              },
+              "accent": {
+                "default": "",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "base",
+                  "skin",
+                  "egg"
+                ]
+              },
+              "previewUrl": {
+                "default": "",
+                "type": "string"
+              },
+              "frameCount": {
+                "default": 0,
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [

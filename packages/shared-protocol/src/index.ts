@@ -4,7 +4,7 @@ import { z } from 'zod';
 // 1. 桌宠渲染与音频锁契约 (源自 dsh-pet 复评结论，预留 Live2D 扩展)
 // ============================================================================
 
-export const PetRendererTypeSchema = z.enum(['webm-alpha', 'live2d', 'sprite-sheet']);
+export const PetRendererTypeSchema = z.enum(['webm-alpha', 'live2d', 'sprite-sheet', 'pose-skin']);
 
 export const PetActionStateSchema = z.enum([
   'idle',              // 常态呼吸待机
@@ -897,6 +897,17 @@ export const CoopSpeakerEventSchema = z.object({
 export type CoopSpeakerEvent = z.infer<typeof CoopSpeakerEventSchema>;
 
 // ───────────────────────── 桌宠角色注册表（T-M6-21：多角色底座） ─────────────────────────
+export const PetStudioSkinSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  outfit: z.string().default(''),
+  accent: z.string().default(''),
+  kind: z.enum(['base', 'skin', 'egg']),
+  previewUrl: z.string().default(''),
+  frameCount: z.number().int().nonnegative().default(0),
+});
+export type PetStudioSkin = z.infer<typeof PetStudioSkinSchema>;
+
 /** 角色包元数据（不含密钥/大资产；资产由 manifest 的 webmPath 指向） */
 export const PetCharacterSchema = z.object({
   id: z.string().min(1),
@@ -919,6 +930,8 @@ export const PetCharacterSchema = z.object({
   anchorRatio: z.number().min(0).max(1).default(0.5),
   licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']).default('DEV_ONLY_NON_COMMERCIAL'),
   builtin: z.boolean().default(false),
+  /** T-M6-48：CrossPet 换装皮肤（含 egg-* 彩蛋）；pose-skin 渲染器按 skinId 热换装 */
+  skins: z.array(PetStudioSkinSchema).default([]),
 });
 export type PetCharacter = z.infer<typeof PetCharacterSchema>;
 
@@ -1025,3 +1038,209 @@ export const TeamCommsMessageSchema = z.object({
   planCard: TeamPlanSchema.optional(),
 });
 export type TeamCommsMessage = z.infer<typeof TeamCommsMessageSchema>;
+
+// ───────────────────────── 随包桌宠素材与桌宠工坊目录（T-M6-45：离线开箱即用） ─────────────────────────
+/**
+ * 桌宠工坊「动作预览与素材库」目录（IPC `pet:studio-catalog`）。
+ * 主进程只读 `assets/pet-packs/`（打包后 `Resources/pet-packs/`），素材经 `whale-pet://` 只读协议下发。
+ */
+export const PetStudioPackSchema = z.object({
+  slug: z.string().min(1),
+  catalogId: z.string().min(1),
+  displayName: z.string().min(1),
+  installed: z.boolean().default(false),
+  actionCount: z.number().int().nonnegative().default(0),
+  audioClipCount: z.number().int().nonnegative().default(0),
+  /** 上游 manifest.idleAnimationId：该角色/形象自己的待机动作（切角色时自动选中） */
+  idleClipId: z.string().default(''),
+});
+export type PetStudioPack = z.infer<typeof PetStudioPackSchema>;
+
+export const PetStudioActionSchema = z.object({
+  slug: z.string().min(1),
+  packId: z.string().min(1),
+  displayName: z.string().default(''),
+  clipId: z.string().min(1),
+  category: z.string().default('小动作'),
+  frameCount: z.number().int().nonnegative().default(0),
+  columns: z.number().int().nonnegative().default(0),
+  /** 上游每动作独立帧尺寸与网格（不是全局 640×360） */
+  rows: z.number().int().nonnegative().default(0),
+  frameWidth: z.number().int().positive().default(640),
+  frameHeight: z.number().int().positive().default(360),
+  sampleFps: z.number().positive().default(12),
+  hasAudio: z.boolean().default(false),
+  spriteUrl: z.string().default(''),
+  audioUrl: z.string().default(''),
+});
+export type PetStudioAction = z.infer<typeof PetStudioActionSchema>;
+
+export const PetStudioSlotSchema = z.object({
+  packId: z.string().min(1),
+  slot: PetActionStateSchema,
+  clipIds: z.array(z.string()).default([]),
+});
+export type PetStudioSlot = z.infer<typeof PetStudioSlotSchema>;
+
+export const PetStudioFontSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  file: z.string().min(1),
+  url: z.string().min(1),
+});
+export type PetStudioFont = z.infer<typeof PetStudioFontSchema>;
+
+export const PetStudioCatalogSchema = z.object({
+  generatedAt: z.string().default(''),
+  packs: z.array(PetStudioPackSchema).default([]),
+  actions: z.array(PetStudioActionSchema).default([]),
+  slots: z.array(PetStudioSlotSchema).default([]),
+  skins: z.array(PetStudioSkinSchema).default([]),
+  fonts: z.array(PetStudioFontSchema).default([]),
+  /** 素材包读取失败原因（缺包/坏 JSON）；只做展示，不阻断页面 */
+  errors: z.array(z.string()).default([]),
+});
+export type PetStudioCatalog = z.infer<typeof PetStudioCatalogSchema>;
+
+// ───────────────────────── 自定义角色深度协议（T-M6-53：兼容 CrossPet character.json） ─────────────────────────
+export const PetCustomGlyphSchema = z.object({
+  fill: z.string().default(''),
+  text: z.string().default(''),
+});
+export type PetCustomGlyph = z.infer<typeof PetCustomGlyphSchema>;
+
+export const PetLongThinkSchema = z.object({
+  after: z.number().int().min(1).max(600).default(20),
+  pose: z.string().min(1).default('deepthink'),
+});
+export type PetLongThink = z.infer<typeof PetLongThinkSchema>;
+
+export const PetMilestoneSchema = z.object({
+  id: z.string().min(1),
+  /** 工具调用次数 / 连续天数等阈值；0 表示手动触发 */
+  at: z.number().nonnegative().default(0),
+  text: z.string().default(''),
+  pose: z.string().default(''),
+});
+export type PetMilestone = z.infer<typeof PetMilestoneSchema>;
+
+export const PetNotebookConfigSchema = z.object({
+  title: z.string().default(''),
+  font: z.string().default(''),
+  entries: z.array(z.string()).default([]),
+});
+export type PetNotebookConfig = z.infer<typeof PetNotebookConfigSchema>;
+
+/**
+ * 自定义角色深度字段（`userData/pet-characters/<id>/character.json`）。
+ * lines 以「姿态/场景键 → 台词池」保存，CrossPet 的 greet_*（6 时段）与 fest_*（8 节日）
+ * 就是 lines 的键；额外补齐 reactTo / milestones / notebook 等 Workbench 扩展。
+ */
+export const PetCustomCharacterSchema = z.object({
+  schemaVersion: z.number().int().default(1),
+  name: z.string().min(1),
+  accent: z.string().default('#0a84ff'),
+  /** 该角色会跟随的桌面 AI 应用（bundle id / 名称，仅供展示与匹配提示） */
+  apps: z.array(z.string()).default([]),
+  /** 代演哪些 AI：`"*"` 或来源/modelName 列表 */
+  reactTo: z.union([z.literal('*'), z.array(z.string())]).default('*'),
+  greeting: z.string().default(''),
+  /** 姿态/场景 → 台词池（含 greet_* / fest_*） */
+  lines: z.record(z.string(), z.array(z.string())).default({}),
+  glyph: PetCustomGlyphSchema.default({ fill: '', text: '' }),
+  idleActions: z.array(z.string()).default([]),
+  pokePose: z.string().default('pout'),
+  /** 出错/被打断后 3 分钟内再次对话时触发的姿态 */
+  correctedPose: z.string().default('sorry'),
+  longThink: PetLongThinkSchema.default({ after: 20, pose: 'deepthink' }),
+  /** 具名 SVG 特效映射：bubbles/steam/celebrate/victory/priceDown/priceUp 等 */
+  fx: z.record(z.string(), z.string()).default({}),
+  milestones: z.array(PetMilestoneSchema).default([]),
+  notebook: PetNotebookConfigSchema.default({ title: '', font: '', entries: [] }),
+  // ── CrossPet 现存字段（保持兼容，缺省安全回退） ──
+  outfit: z.string().default(''),
+  aura: z.string().default(''),
+  caption: z.string().default(''),
+  lowBalance: z.number().default(5),
+  host: z.string().default(''),
+  hostSkin: z.string().default(''),
+  skinName: z.string().default(''),
+  skinOf: z.string().default(''),
+  egg: z.boolean().default(false),
+});
+export type PetCustomCharacter = z.infer<typeof PetCustomCharacterSchema>;
+
+// ───────────────────────── 对外本机驱动口（T-M6-49：/api/pet/:agentId/*） ─────────────────────────
+export const PetApiSayRequestSchema = z.object({
+  text: z.string().min(1).max(500),
+  scene: z.enum(['normal', 'inner', 'p0']).default('normal'),
+  /** 睡觉态默认拒收；显式 wake=true 才叫醒并说话 */
+  wake: z.boolean().default(false),
+});
+export type PetApiSayRequest = z.infer<typeof PetApiSayRequestSchema>;
+
+export const PetApiActionRequestSchema = z.object({
+  actionState: PetActionStateSchema,
+  durationMs: z.number().int().min(500).max(60_000).default(6_000),
+});
+export type PetApiActionRequest = z.infer<typeof PetApiActionRequestSchema>;
+
+export const PetApiStateSchema = z.object({
+  agentId: z.string().min(1),
+  characterId: z.string().min(1),
+  displayName: z.string().default(''),
+  skinId: z.string().default(''),
+  sleeping: z.boolean().default(false),
+  speaking: z.boolean().default(false),
+  visible: z.boolean().default(false),
+  bounds: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
+});
+export type PetApiState = z.infer<typeof PetApiStateSchema>;
+
+// ───────────────────────── 跨 AI 工作跟随（T-M6-49） ─────────────────────────
+export const WorkFollowEventSchema = z.object({
+  /** ACP harness / 本机 CLI 钩子来源 */
+  source: z.enum(['acp', 'claude', 'codex', 'deepseek', 'gemini', 'cursor', 'qwen', 'kimi', 'grok']),
+  sessionId: z.string().min(1).max(128),
+  kind: z.enum(['start', 'tool', 'stop']),
+  /** 只读工具名/模型名；绝不接收对话正文与凭据 */
+  toolName: z.string().max(120).default(''),
+  modelName: z.string().max(120).default(''),
+  taskTitle: z.string().max(120).default(''),
+  ts: z.number().int().nonnegative().default(0),
+});
+export type WorkFollowEvent = z.infer<typeof WorkFollowEventSchema>;
+
+export const WorkFollowSessionSchema = z.object({
+  source: z.string().min(1),
+  sessionId: z.string().min(1),
+  characterId: z.string().default(''),
+  toolCalls: z.number().int().nonnegative().default(0),
+  startedAt: z.number().int().nonnegative().default(0),
+  lastEventAt: z.number().int().nonnegative().default(0),
+  taskTitle: z.string().default(''),
+  modelName: z.string().default(''),
+  crowned: z.boolean().default(false),
+  active: z.boolean().default(false),
+});
+export type WorkFollowSession = z.infer<typeof WorkFollowSessionSchema>;
+
+export const WorkFollowStatusSchema = z.object({
+  mode: z.enum(['single', 'multi']).default('multi'),
+  sessions: z.array(WorkFollowSessionSchema).default([]),
+  /** 最近 20 条只读事件（source/kind/tool/model，无正文） */
+  recent: z.array(z.object({
+    source: z.string(),
+    kind: z.string(),
+    toolName: z.string().default(''),
+    at: z.number().int().nonnegative().default(0),
+  })).default([]),
+});
+export type WorkFollowStatus = z.infer<typeof WorkFollowStatusSchema>;
+
+

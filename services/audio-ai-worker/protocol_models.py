@@ -17,6 +17,7 @@ class PetRendererType(StrEnum):
     webm_alpha = 'webm-alpha'
     live2d = 'live2d'
     sprite_sheet = 'sprite-sheet'
+    pose_skin = 'pose-skin'
 
 
 class PetActionState(StrEnum):
@@ -64,6 +65,7 @@ class Renderer(StrEnum):
     webm_alpha = 'webm-alpha'
     live2d = 'live2d'
     sprite_sheet = 'sprite-sheet'
+    pose_skin = 'pose-skin'
 
 
 class LicenseScope(StrEnum):
@@ -1495,6 +1497,25 @@ class PetDesktopPrefs(BaseModel):
     sfxVolume: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.7
 
 
+class Kind(StrEnum):
+    base = 'base'
+    skin = 'skin'
+    egg = 'egg'
+
+
+class Skin(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    name: Annotated[str, Field(min_length=1)]
+    outfit: str | None = ''
+    accent: str | None = ''
+    kind: Kind
+    previewUrl: str | None = ''
+    frameCount: Annotated[int | None, Field(ge=0)] = 0
+
+
 class PetCharacter(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1512,6 +1533,7 @@ class PetCharacter(BaseModel):
     anchorRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.5
     licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
     builtin: bool | None = False
+    skins: Annotated[list[Skin] | None, Field(validate_default=True)] = []
 
 
 class GameId(StrEnum):
@@ -1748,7 +1770,7 @@ class FromRole(StrEnum):
     system = 'system'
 
 
-class Kind(StrEnum):
+class Kind1(StrEnum):
     chat = 'chat'
     proposal = 'proposal'
     plan_commit = 'plan_commit'
@@ -1787,7 +1809,7 @@ class TeamCommsMessage(BaseModel):
     fromName: Annotated[str, Field(min_length=1)]
     fromRole: FromRole
     mentions: list[str] | None = []
-    kind: Kind
+    kind: Kind1
     text: str
     planCard: PlanCard | None = None
 
@@ -1813,7 +1835,7 @@ class MemoryNodeView(BaseModel):
     instanceCount: Annotated[int | None, Field(ge=1)] = 1
 
 
-class Kind1(StrEnum):
+class Kind2(StrEnum):
     temporal = 'temporal'
     causal = 'causal'
     semantic = 'semantic'
@@ -1827,7 +1849,7 @@ class MemoryEdgeView(BaseModel):
     )
     from_: Annotated[str, Field(alias='from')]
     to: str
-    kind: Kind1
+    kind: Kind2
     weight: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -1851,7 +1873,7 @@ class Edge(BaseModel):
     )
     from_: Annotated[str, Field(alias='from')]
     to: str
-    kind: Kind1
+    kind: Kind2
     weight: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -1949,6 +1971,283 @@ class RiceBowlStatus(BaseModel):
     budget: Annotated[int, Field(gt=0)]
     consumedToday: Annotated[int, Field(ge=0)]
     level: Level
+
+
+class Pack(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    slug: Annotated[str, Field(min_length=1)]
+    catalogId: Annotated[str, Field(min_length=1)]
+    displayName: Annotated[str, Field(min_length=1)]
+    installed: bool | None = False
+    actionCount: Annotated[int | None, Field(ge=0)] = 0
+    audioClipCount: Annotated[int | None, Field(ge=0)] = 0
+    idleClipId: str | None = ''
+
+
+class Action1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    slug: Annotated[str, Field(min_length=1)]
+    packId: Annotated[str, Field(min_length=1)]
+    displayName: str | None = ''
+    clipId: Annotated[str, Field(min_length=1)]
+    category: str | None = '小动作'
+    frameCount: Annotated[int | None, Field(ge=0)] = 0
+    columns: Annotated[int | None, Field(ge=0)] = 0
+    rows: Annotated[int | None, Field(ge=0)] = 0
+    frameWidth: Annotated[int | None, Field(gt=0)] = 640
+    frameHeight: Annotated[int | None, Field(gt=0)] = 360
+    sampleFps: Annotated[float | None, Field(gt=0.0)] = 12
+    hasAudio: bool | None = False
+    spriteUrl: str | None = ''
+    audioUrl: str | None = ''
+
+
+class Slot1(StrEnum):
+    idle = 'idle'
+    walk = 'walk'
+    eat_rice = 'eat_rice'
+    happy_maid = 'happy_maid'
+    thinking_tail_wag = 'thinking_tail_wag'
+    rage_spray = 'rage_spray'
+    clumsy_panic = 'clumsy_panic'
+    game_focus = 'game_focus'
+    sing_stage = 'sing_stage'
+    hungry_lazy = 'hungry_lazy'
+    sleep_mute = 'sleep_mute'
+
+
+class Slot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    packId: Annotated[str, Field(min_length=1)]
+    slot: Slot1
+    clipIds: list[str] | None = []
+
+
+class Kind4(StrEnum):
+    base = 'base'
+    skin = 'skin'
+    egg = 'egg'
+
+
+class Skin1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    name: Annotated[str, Field(min_length=1)]
+    outfit: str | None = ''
+    accent: str | None = ''
+    kind: Kind4
+    previewUrl: str | None = ''
+    frameCount: Annotated[int | None, Field(ge=0)] = 0
+
+
+class Font(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    label: Annotated[str, Field(min_length=1)]
+    file: Annotated[str, Field(min_length=1)]
+    url: Annotated[str, Field(min_length=1)]
+
+
+class PetStudioCatalog(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    generatedAt: str | None = ''
+    packs: Annotated[list[Pack] | None, Field(validate_default=True)] = []
+    actions: Annotated[list[Action1] | None, Field(validate_default=True)] = []
+    slots: Annotated[list[Slot] | None, Field(validate_default=True)] = []
+    skins: Annotated[list[Skin1] | None, Field(validate_default=True)] = []
+    fonts: Annotated[list[Font] | None, Field(validate_default=True)] = []
+    errors: list[str] | None = []
+
+
+class Glyph(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    fill: str | None = ''
+    text: str | None = ''
+
+
+class LongThink(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    after: Annotated[int | None, Field(ge=1, le=600)] = 20
+    pose: Annotated[str | None, Field(min_length=1)] = 'deepthink'
+
+
+class Milestone(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    at: Annotated[float | None, Field(ge=0.0)] = 0
+    text: str | None = ''
+    pose: str | None = ''
+
+
+class Notebook(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    title: str | None = ''
+    font: str | None = ''
+    entries: list[str] | None = []
+
+
+class PetCustomCharacter(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    schemaVersion: int | None = 1
+    name: Annotated[str, Field(min_length=1)]
+    accent: str | None = '#0a84ff'
+    apps: list[str] | None = []
+    reactTo: Literal['*'] | list[str] | None = '*'
+    greeting: str | None = ''
+    lines: dict[str, list[str]] | None = {}
+    glyph: Annotated[Glyph | None, Field(validate_default=True)] = cast(
+        'Glyph | None', {'fill': '', 'text': ''}
+    )
+    idleActions: list[str] | None = []
+    pokePose: str | None = 'pout'
+    correctedPose: str | None = 'sorry'
+    longThink: Annotated[LongThink | None, Field(validate_default=True)] = cast(
+        'LongThink | None', {'after': 20, 'pose': 'deepthink'}
+    )
+    fx: dict[str, str] | None = {}
+    milestones: Annotated[list[Milestone] | None, Field(validate_default=True)] = []
+    notebook: Annotated[Notebook | None, Field(validate_default=True)] = cast(
+        'Notebook | None', {'title': '', 'font': '', 'entries': []}
+    )
+    outfit: str | None = ''
+    aura: str | None = ''
+    caption: str | None = ''
+    lowBalance: float | None = 5
+    host: str | None = ''
+    hostSkin: str | None = ''
+    skinName: str | None = ''
+    skinOf: str | None = ''
+    egg: bool | None = False
+
+
+class Scene(StrEnum):
+    normal = 'normal'
+    inner = 'inner'
+    p0 = 'p0'
+
+
+class PetApiSayRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    text: Annotated[str, Field(max_length=500, min_length=1)]
+    scene: Scene | None = 'normal'
+    wake: bool | None = False
+
+
+class PetApiActionRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    actionState: ActionState
+    durationMs: Annotated[int | None, Field(ge=500, le=60000)] = 6000
+
+
+class PetApiState(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    agentId: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str, Field(min_length=1)]
+    displayName: str | None = ''
+    skinId: str | None = ''
+    sleeping: bool | None = False
+    speaking: bool | None = False
+    visible: bool | None = False
+    bounds: Bounds
+
+
+class Source2(StrEnum):
+    acp = 'acp'
+    claude = 'claude'
+    codex = 'codex'
+    deepseek = 'deepseek'
+    gemini = 'gemini'
+    cursor = 'cursor'
+    qwen = 'qwen'
+    kimi = 'kimi'
+    grok = 'grok'
+
+
+class Kind5(StrEnum):
+    start = 'start'
+    tool = 'tool'
+    stop = 'stop'
+
+
+class WorkFollowEvent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    source: Source2
+    sessionId: Annotated[str, Field(max_length=128, min_length=1)]
+    kind: Kind5
+    toolName: Annotated[str | None, Field(max_length=120)] = ''
+    modelName: Annotated[str | None, Field(max_length=120)] = ''
+    taskTitle: Annotated[str | None, Field(max_length=120)] = ''
+    ts: Annotated[int | None, Field(ge=0)] = 0
+
+
+class Mode1(StrEnum):
+    single = 'single'
+    multi = 'multi'
+
+
+class Session(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    source: Annotated[str, Field(min_length=1)]
+    sessionId: Annotated[str, Field(min_length=1)]
+    characterId: str | None = ''
+    toolCalls: Annotated[int | None, Field(ge=0)] = 0
+    startedAt: Annotated[int | None, Field(ge=0)] = 0
+    lastEventAt: Annotated[int | None, Field(ge=0)] = 0
+    taskTitle: str | None = ''
+    modelName: str | None = ''
+    crowned: bool | None = False
+    active: bool | None = False
+
+
+class RecentItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    source: str
+    kind: str
+    toolName: str | None = ''
+    at: Annotated[int | None, Field(ge=0)] = 0
+
+
+class WorkFollowStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    mode: Mode1 | None = 'multi'
+    sessions: Annotated[list[Session] | None, Field(validate_default=True)] = []
+    recent: Annotated[list[RecentItem] | None, Field(validate_default=True)] = []
 
 
 class AIWorkbenchContracts(BaseModel):
@@ -2074,3 +2373,14 @@ class AIWorkbenchContracts(BaseModel):
         BrainRuntimeConfig, Field(alias='BrainRuntimeConfig')
     ]
     RiceBowlStatus_1: Annotated[RiceBowlStatus, Field(alias='RiceBowlStatus')]
+    PetStudioCatalog_1: Annotated[PetStudioCatalog, Field(alias='PetStudioCatalog')]
+    PetCustomCharacter_1: Annotated[
+        PetCustomCharacter, Field(alias='PetCustomCharacter')
+    ]
+    PetApiSayRequest_1: Annotated[PetApiSayRequest, Field(alias='PetApiSayRequest')]
+    PetApiActionRequest_1: Annotated[
+        PetApiActionRequest, Field(alias='PetApiActionRequest')
+    ]
+    PetApiState_1: Annotated[PetApiState, Field(alias='PetApiState')]
+    WorkFollowEvent_1: Annotated[WorkFollowEvent, Field(alias='WorkFollowEvent')]
+    WorkFollowStatus_1: Annotated[WorkFollowStatus, Field(alias='WorkFollowStatus')]

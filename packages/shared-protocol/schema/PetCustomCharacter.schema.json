@@ -1,0 +1,224 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PetCustomCharacter",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/PetCustomCharacter",
+  "$defs": {
+    "PetCustomCharacter": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "default": 1,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent": {
+          "default": "#0a84ff",
+          "type": "string"
+        },
+        "apps": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reactTo": {
+          "default": "*",
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "*"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "greeting": {
+          "default": "",
+          "type": "string"
+        },
+        "lines": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "glyph": {
+          "default": {
+            "fill": "",
+            "text": ""
+          },
+          "type": "object",
+          "properties": {
+            "fill": {
+              "default": "",
+              "type": "string"
+            },
+            "text": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "idleActions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pokePose": {
+          "default": "pout",
+          "type": "string"
+        },
+        "correctedPose": {
+          "default": "sorry",
+          "type": "string"
+        },
+        "longThink": {
+          "default": {
+            "after": 20,
+            "pose": "deepthink"
+          },
+          "type": "object",
+          "properties": {
+            "after": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600
+            },
+            "pose": {
+              "default": "deepthink",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "fx": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "milestones": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "at": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "text": {
+                "default": "",
+                "type": "string"
+              },
+              "pose": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "notebook": {
+          "default": {
+            "title": "",
+            "font": "",
+            "entries": []
+          },
+          "type": "object",
+          "properties": {
+            "title": {
+              "default": "",
+              "type": "string"
+            },
+            "font": {
+              "default": "",
+              "type": "string"
+            },
+            "entries": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "outfit": {
+          "default": "",
+          "type": "string"
+        },
+        "aura": {
+          "default": "",
+          "type": "string"
+        },
+        "caption": {
+          "default": "",
+          "type": "string"
+        },
+        "lowBalance": {
+          "default": 5,
+          "type": "number"
+        },
+        "host": {
+          "default": "",
+          "type": "string"
+        },
+        "hostSkin": {
+          "default": "",
+          "type": "string"
+        },
+        "skinName": {
+          "default": "",
+          "type": "string"
+        },
+        "skinOf": {
+          "default": "",
+          "type": "string"
+        },
+        "egg": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
