@@ -63,10 +63,20 @@ describe('[E2E-HOST] T-M6-55~59 深度迭代收口', () => {
       await director.waitForSelector('[data-creator-center]', { timeout: 15_000 });
       await director.waitForSelector('[data-image-gen-toolbar]', { timeout: 10_000 });
       const toolbarText = await director.locator('[data-image-gen-toolbar]').innerText();
-      expect(toolbarText).toContain('未检测到已配置 Key 的生图供应商');
-      expect(toolbarText).toContain('不会伪造出图结果');
-      await director.click('[data-gen-open-providers]');
-      await director.waitForFunction(() => document.querySelector('[data-tab="providers"]')?.getAttribute('data-active') === 'true', { timeout: 10_000 });
+      const hasProvider = (await director.locator('[data-image-provider]').count()) > 0;
+      if (hasProvider) {
+        // 本机有可用生图后端（如已登录的 Codex CLI）：选择器真实列出，不显示「未配置」提示
+        expect(toolbarText).toContain('生图供应商');
+        expect(toolbarText).not.toContain('未检测到已配置 Key 的生图供应商');
+      } else {
+        expect(toolbarText).toContain('未检测到已配置 Key 的生图供应商');
+        expect(toolbarText).toContain('不会伪造出图结果');
+        await director.click('[data-gen-open-providers]');
+        await director.waitForFunction(() => document.querySelector('[data-tab="providers"]')?.getAttribute('data-active') === 'true', { timeout: 10_000 });
+      }
+      // 两条分支都显式关掉创作中心弹窗，避免遮罩拦截后续侧栏点击
+      await director.click('[aria-label="关闭创作中心"]');
+      await director.waitForSelector('[data-creator-center]', { state: 'detached', timeout: 10_000 });
 
       // ② 切到真实 pose-skin 角色后打开验收台：轮播必须真实驱动桌宠窗参考线层
       await director.click('[data-tab="pet"]');
@@ -119,12 +129,49 @@ describe('[E2E-HOST] T-M6-55~59 深度迭代收口', () => {
       const state = await (await fetch(`http://127.0.0.1:${info.port}/api/state?token=${encodeURIComponent(info.token)}`)).json() as { characterName?: string };
       expect((state.characterName ?? '').length).toBeGreaterThan(0);
 
+      // ④.5 T-M6-62：创作中心「星露谷像素表」页签 + 游戏共玩「同步桌宠形象」开关（真实 IPC，不伪造）
+      await director.click('[data-tab="pet"]');
+      await director.click('[data-open-creator]');
+      await director.waitForSelector('[data-creator-center]', { timeout: 15_000 });
+      await director.click('[data-creator-tab="pixel"]');
+      await director.waitForSelector('[data-creator-pane="pixel"]', { timeout: 10_000 });
+      const pixelOptions = await director.locator('[data-pixel-character] option').count();
+      expect(pixelOptions).toBeGreaterThan(0);
+      expect(await director.locator('[data-pixel-generate]').count()).toBe(1);
+      expect(await director.locator('[data-pixel-apply]').count()).toBe(1);
+      await director.click('[aria-label="关闭创作中心"]');
+      await director.click('[data-tab="stardew"]');
+      await director.waitForSelector('[data-game-panel]', { timeout: 15_000 });
+      // 共享 E2E profile 可能停在别的游戏/子页：显式切回星露谷共玩监控
+      await director.click('[data-game-select="stardew"]');
+      const monitorTab = director.locator('[data-game-subtab="monitor"]');
+      if (await monitorTab.count() > 0) await monitorTab.click();
+      await director.waitForSelector('[data-avatar-sync]', { timeout: 15_000 });
+      const before = await director.locator('[data-avatar-sync]').getAttribute('data-avatar-sync');
+      await director.click('[data-avatar-sync]');
+      await director.waitForFunction(
+        (expected) => document.querySelector('[data-avatar-sync]')?.getAttribute('data-avatar-sync') === expected,
+        before === 'on' ? 'off' : 'on',
+        { timeout: 10_000 },
+      );
+      // 还原关闭，避免污染共享 E2E profile
+      await director.click('[data-avatar-sync]');
+      await director.waitForFunction(
+        (expected) => document.querySelector('[data-avatar-sync]')?.getAttribute('data-avatar-sync') === expected,
+        before ?? 'off',
+        { timeout: 10_000 },
+      );
+
       // ⑤ OBS 页布局/主题选择器真实存在；游戏共玩无活跃目标时不显示目标条
       await director.click('[data-tab="obs"]');
       await director.waitForSelector('[data-obs-layout]', { timeout: 10_000 });
       expect(await director.locator('[data-obs-theme]').count()).toBe(1);
       await director.click('[data-tab="stardew"]');
       await director.waitForSelector('[data-game-panel]', { timeout: 15_000 });
+      await director.click('[data-game-select="stardew"]');
+      const monitorTab2 = director.locator('[data-game-subtab="monitor"]');
+      if (await monitorTab2.count() > 0) await monitorTab2.click();
+      await director.waitForSelector('[data-avatar-sync]', { timeout: 15_000 });
       expect(await director.locator('[data-objective-bar]').count()).toBe(0);
     } finally {
       // 恢复默认角色：E2E profile 是跨 spec 共享的，绝不把 crosspet-claude 留给后续用例

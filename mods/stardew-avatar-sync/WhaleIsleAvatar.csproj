@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>WhaleIsleAvatar</AssemblyName>
+    <RootNamespace>WhaleIsleAvatar</RootNamespace>
+    <!-- 构建机通常没有游戏：禁止 ModBuildConfig 自动部署到 Mods 目录 -->
+    <EnableModDeploy>false</EnableModDeploy>
+    <DeployModToGame>false</DeployModToGame>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.2.0" />
+    <!-- 仅编译期引用：运行时由 SMAPI 自带 Harmony 提供，不随 Mod 分发 -->
+    <PackageReference Include="Lib.Harmony" Version="2.3.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

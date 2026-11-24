@@ -313,12 +313,23 @@ export interface DirectorBridge {
   creatorPickFolder(): Promise<{ ok: boolean; folder?: string }>;
   creatorImport(input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; avatar?: string; portrait?: string; warnings?: string[]; error?: string }>;
   creatorGenerateEggLines(input: unknown): Promise<{ ok: boolean; lines?: Record<string, string[]>; error?: string }>;
-  creatorImageGenProviders(descriptors: unknown): Promise<{ ok: boolean; detected?: number; configured?: number; providers?: Array<{ id: string; name: string; protocol: 'openai' | 'gemini'; baseUrl: string; models: string[] }> }>;
+  creatorImageGenProviders(descriptors: unknown): Promise<{ ok: boolean; detected?: number; configured?: number; codex?: { detected: boolean; backend: 'codex-imagegen' | 'codex-exec' | null; loggedIn: boolean; installHint: string; loginHint: string }; providers?: Array<{ id: string; name: string; protocol: 'openai' | 'gemini' | 'codex-cli'; baseUrl: string; models: string[] }> }>;
   creatorGenerateBatch(input: unknown): Promise<{ ok: boolean; jobId?: string; items?: Array<{ pose: string; status: string; file?: string; error?: string }>; error?: string }>;
   creatorRegenerateOne(input: unknown): Promise<{ ok: boolean; jobId?: string; item?: { pose: string; status: string; file?: string; error?: string }; error?: string }>;
   creatorCommitDraft(input: unknown): Promise<{ ok: boolean; id?: string; poses?: string[]; warnings?: string[]; error?: string }>;
   onCreatorGenProgress(handler: (progress: { jobId: string; pose: string; status: 'queued' | 'generating' | 'done' | 'failed'; index: number; total: number; dataUrl?: string; file?: string; error?: string }) => void): () => void;
   creatorListCustom(): Promise<Array<{ id: string; name: string; poses: string[] }>>;
+  /** T-M6-62：星露谷像素表生成与外观同步 */
+  creatorCompileStardewSprite(input: { name: string; traits?: string }): Promise<{ ok: boolean; prompt: string }>;
+  creatorGenerateStardewSprite(input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; error?: string }>;
+  creatorStardewSpriteGet(characterId: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
+  stardewAvatarState(): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }>;
+  stardewAvatarSetEnabled(next: boolean): Promise<{ enabled: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean }>;
+  onStardewAvatarChanged(handler: () => void): () => void;
+  stardewAvatarInstall(): Promise<{ ok: boolean; error?: string; compiled?: boolean }>;
+  stardewAvatarUninstall(): Promise<{ ok: boolean; error?: string }>;
+  stardewAvatarSyncNow(): Promise<{ ok: boolean; error?: string; sprite?: boolean }>;
+  stardewAvatarApplyCharacter(characterId: string): Promise<{ ok: boolean; error?: string; sprite?: boolean }>;
   customList(): Promise<{ entries: Array<{ id: string; characterId: string; name: string; poses: string[]; reactTo: string | string[]; outfit: string; actionCount: number }>; errors: string[] }>;
   customGet(id: string): Promise<{ ok: boolean; id?: string; name?: string; poses?: string[]; data?: unknown; error?: string }>;
   customSave(id: string, input: unknown): Promise<{ ok: boolean; error?: string }>;

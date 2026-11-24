@@ -32,6 +32,7 @@ import { customCharacterPairs, invalidateCustomCharacters, linesForPose, matchCh
 import { resolvePose } from './pose-resolver';
 import { createWorkFollowHost } from './work-follow-host';
 import { createWorkFollowInstaller } from './work-follow-installer';
+import { createStardewAvatarHost, isSafeCharacterId } from './stardew-avatar-host';
 import { createFrontAppWatcher } from './front-app-watcher';
 import { PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
@@ -325,6 +326,9 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   /**
    * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
    * 工作跟随「单宠换装」复用此函数，绝不关闭 default（T-M6-51 P0）。
+   * 注意：这里**不**写星露谷外观——启动恢复/召唤/前台应用/工作跟随等后台路径都可能走它，
+   * 静默写会让游戏形象在启动时被过期会话覆盖。游戏同步只由用户显式动作触发
+   *（共玩页开关/同步当前/一键应用、工作台切角），见 stardew-avatar:* IPC 与 App.selectCharacter。
    */
   function switchDefaultCharacter(id: string): void {
     prefs.patch({ characterId: id });
@@ -479,6 +483,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     userDataDir: app.getPath('userData'),
     getDirectorWindow: () => directorWindow,
     vaultPath,
+    homeDir: homedir(),
     chat: async (system, user) => {
       const result = await autodrive.completeForCoop('STARDEW_GAME_PLANNER' as never, system, user, 600);
       return result === null ? null : result.content;
@@ -771,6 +776,48 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     },
   });
 
+  // T-M6-62：星露谷桌宠像素外观同步（安装 Mod / 开关 / 原子写 active-avatar.json）
+  const stardewAvatar = createStardewAvatarHost({
+    userDataDir: app.getPath('userData'),
+    homeDir: homedir(),
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    repoRoot: join(here, '../../../..'),
+    // E2E 绝不能写到用户真实星露谷 Mods 目录：测试开关/切角只落在 e2e-profile 下的空 Mods 槽位
+    ...(process.env.PET_STAGE_E2E === '1'
+      ? { modsDirOverride: join(app.getPath('userData'), 'e2e-mods') }
+      : {}),
+    // 任何写入/安装/开关变化都广播给渲染层，避免共玩页的「游戏内当前角色」显示过期状态
+    onChange: () => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('stardew-avatar:changed');
+      }
+    },
+  });
+  ipcMain.handle('stardew-avatar:state', () => stardewAvatar.state());
+  ipcMain.handle('stardew-avatar:set-enabled', (_event, next: boolean) => {
+    const state = stardewAvatar.setEnabled(Boolean(next));
+    if (state.enabled) {
+      const current = characters.selected();
+      stardewAvatar.syncCharacter({ characterId: current.id, displayName: current.displayName });
+    }
+    return stardewAvatar.state();
+  });
+  ipcMain.handle('stardew-avatar:install', () => stardewAvatar.installMod());
+  ipcMain.handle('stardew-avatar:uninstall', () => stardewAvatar.uninstallMod());
+  ipcMain.handle('stardew-avatar:sync-now', () => {
+    const current = characters.selected();
+    return stardewAvatar.syncCharacter({ characterId: current.id, displayName: current.displayName });
+  });
+  ipcMain.handle('stardew-avatar:apply-character', (_event, characterId: unknown) => {
+    const id = typeof characterId === 'string' ? characterId : '';
+    if (!isSafeCharacterId(id)) return { ok: false, error: '角色 id 非法（只允许小写字母/数字/连字符）' };
+    const known = characters.list().find((character) => character.id === id);
+    if (known === undefined) return { ok: false, error: `未知角色：${id.slice(0, 64)}` };
+    return stardewAvatar.syncCharacter({ characterId: id, displayName: known.displayName });
+  });
+
   // 联机启动器宿主（T-M6-51 拆分）：探测/隔离 profile/参数数组 spawn 全部在此
   const coopLaunch = createCoopLaunchHost({
     userDataDir: app.getPath('userData'),
@@ -784,6 +831,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       characterId: item.characterId,
       endpoint: item.endpoint,
     })),
+    avatarSync: stardewAvatar,
+    characterName: (id) => characters.list().find((character) => character.id === id)?.displayName ?? id,
   });
   coopLaunch.registerIpc();
   // T-M6-37：直播最小链路（弹幕回放 → 护栏 → 注意力 → 中控台/插件总线/语音）

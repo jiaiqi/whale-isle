@@ -2147,6 +2147,29 @@ class PetCustomCharacter(BaseModel):
     egg: bool | None = False
 
 
+class Preset(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    hair: Annotated[int | None, Field(ge=0, le=300)] = 0
+    hairColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = '#8a5a2b'
+    shirt: Annotated[int | None, Field(ge=0, le=300)] = 0
+    pantsColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = '#3b5bdb'
+    skin: Annotated[int | None, Field(ge=0, le=30)] = 0
+    hatId: Annotated[int | None, Field(ge=-1, le=300)] = -1
+
+
+class StardewAvatarSync(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    version: Literal[1]
+    characterId: Annotated[str, Field(max_length=80, min_length=1)]
+    displayName: Annotated[str, Field(max_length=40, min_length=1)]
+    preset: Preset
+    spriteSheetPath: Annotated[str | None, Field(max_length=260)] = None
+
+
 class Scene(StrEnum):
     normal = 'normal'
     inner = 'inner'
@@ -2382,6 +2405,7 @@ class AIWorkbenchContracts(BaseModel):
     PetCustomCharacter_1: Annotated[
         PetCustomCharacter, Field(alias='PetCustomCharacter')
     ]
+    StardewAvatarSync_1: Annotated[StardewAvatarSync, Field(alias='StardewAvatarSync')]
     PetApiSayRequest_1: Annotated[PetApiSayRequest, Field(alias='PetApiSayRequest')]
     PetApiActionRequest_1: Annotated[
         PetApiActionRequest, Field(alias='PetApiActionRequest')

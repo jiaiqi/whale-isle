@@ -2,7 +2,7 @@
  * 工作台 Shell v4「曜石 · 演进版」：分组插件导航 + 顶栏 ⌘K/主题/三开关 + 饭碗 footer。
  * 交互全部走真实 IPC（autodrive/memory/mods/voice/harness/providers）；页面按设计稿分区。
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Toaster, toast } from 'sonner';
@@ -184,6 +184,48 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   // 桌宠工坊 / 语音中心的分页签状态由各自面板内聚（T-M6-46）
   // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
+  // T-M6-62：桌宠形象同步进星露谷（开关 + Mod 安装状态 + 游戏内当前同步角色，全部真实 IPC）
+  const [avatarSync, setAvatarSync] = useState<{
+    enabled: boolean;
+    modInstalled: boolean;
+    modCompiled: boolean;
+    syncedCharacterId: string | null;
+    syncedDisplayName: string | null;
+    syncedSpriteReady: boolean;
+  } | null>(null);
+  const refreshAvatarSync = useCallback(async (): Promise<void> => {
+    try { setAvatarSync(await window.directorBridge.stardewAvatarState()); } catch { setAvatarSync(null); }
+  }, []);
+  useEffect(() => { void refreshAvatarSync(); }, [refreshAvatarSync]);
+  // 创建中心生成/应用、切角色、安装/卸载/开关都会广播；共玩页状态不再过期
+  useEffect(() => window.directorBridge.onStardewAvatarChanged(() => { void refreshAvatarSync(); }), [refreshAvatarSync]);
+  const toggleAvatarSync = async (): Promise<void> => {
+    const next = !(avatarSync?.enabled ?? false);
+    const state = await window.directorBridge.stardewAvatarSetEnabled(next);
+    setAvatarSync(state);
+    if (next && !state.modInstalled) toast('已开启同步：还需要点「安装 Mod」把 WhaleIsleAvatar 装进星露谷 Mods 目录');
+    else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内保持当前外观，不再随桌宠切换');
+  };
+  const installAvatarMod = async (): Promise<void> => {
+    const result = await window.directorBridge.stardewAvatarInstall();
+    if (!result.ok) { toast.error(result.error ?? '安装失败'); return; }
+    if (result.compiled === false) toast.error(result.error ?? 'Mod 文件已复制但 DLL 未编译');
+    else toast.success('WhaleIsleAvatar Mod 已安装到星露谷 Mods 目录（重启游戏后生效）');
+    await refreshAvatarSync();
+  };
+  const uninstallAvatarMod = async (): Promise<void> => {
+    if (!window.confirm('从星露谷 Mods 目录移除 WhaleIsleAvatar？游戏内会恢复原版外观，需重启游戏后完全生效。')) return;
+    const result = await window.directorBridge.stardewAvatarUninstall();
+    if (!result.ok) { toast.error(result.error ?? '卸载失败'); return; }
+    toast.success('已移除 WhaleIsleAvatar（重启星露谷后恢复原版外观）');
+    await refreshAvatarSync();
+  };
+  const syncAvatarNow = async (): Promise<void> => {
+    const result = await window.directorBridge.stardewAvatarSyncNow();
+    if (!result.ok) { toast.error(result.error ?? '同步失败'); return; }
+    toast.success(result.sprite === true ? '已把当前角色像素表写入星露谷（热切换）' : '已写入当前角色原版外观预设');
+    await refreshAvatarSync();
+  };
   const flowRef = useRef<HTMLDivElement | null>(null);
   // T-M6-27 会话归属：只消费当前 autodrive 会话的事件。
   //  - 联机端点事件（带 agentId）不进单机会话页
@@ -427,6 +469,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       return;
     }
     setCharacterId(id);
+    // 用户主动切角 → 游戏跟随（后台恢复/召唤不写，避免启动覆盖已应用的像素表）
+    if (avatarSync?.enabled === true && avatarSync.modInstalled) {
+      void window.directorBridge.stardewAvatarSyncNow()
+        .then((sync) => { if (sync.ok) void refreshAvatarSync(); })
+        .catch(() => undefined);
+    }
     const selected = characters.find((character) => character.id === id);
     toast.success(`已切换陪伴角色：${selected?.displayName ?? id}`);
   };
@@ -814,6 +862,49 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               >
                 <Monitor size={11} />游戏内提示 {bwfHud ? '开' : '关'}
               </button>
+              <button
+                data-avatar-sync={avatarSync?.enabled === true ? 'on' : 'off'}
+                onClick={() => void toggleAvatarSync()}
+                title="开启后：当前桌宠角色/皮肤会实时同步成星露谷玩家像素外观（原版预设兜底 + 像素表覆盖）"
+                className={`pill cursor-pointer${avatarSync?.enabled === true ? ' pill-green' : ''}`}
+              >
+                <Monitor size={11} />同步桌宠形象进游戏 {avatarSync?.enabled === true ? '开' : '关'}
+              </button>
+              {avatarSync !== null && !avatarSync.modInstalled && (
+                <button data-avatar-install onClick={() => void installAvatarMod()} className="pill cursor-pointer" title="把 WhaleIsleAvatar SMAPI Mod 复制进星露谷 Mods 目录">
+                  安装 Mod
+                </button>
+              )}
+              {avatarSync !== null && avatarSync.modInstalled && (
+                <span
+                  data-avatar-mod-status
+                  className={`pill${avatarSync.modCompiled ? '' : ' pill-amber'}`}
+                  style={{ fontSize: 9.5 }}
+                  title={avatarSync.modCompiled
+                    ? 'WhaleIsleAvatar 已安装到星露谷 Mods 目录（游戏启动时加载）'
+                    : 'Mod 文件已复制但 WhaleIsleAvatar.dll 未编译：重新打包或运行 dotnet build 后再安装'}
+                >
+                  {avatarSync.modCompiled ? 'Mod 已安装' : 'Mod 未编译'}
+                </span>
+              )}
+              {avatarSync !== null && avatarSync.modInstalled && (
+                <button data-avatar-uninstall onClick={() => void uninstallAvatarMod()} className="pill cursor-pointer" title="从星露谷 Mods 目录移除 WhaleIsleAvatar（需重启游戏后完全生效）">
+                  卸载 Mod
+                </button>
+              )}
+              {avatarSync?.enabled === true && avatarSync.modInstalled && avatarSync.syncedCharacterId !== null && (
+                <span data-avatar-synced className="pill" style={{ fontSize: 9.5 }} title="星露谷 Mod 目录 active-avatar.json 当前生效的角色">
+                  游戏内：{avatarSync.syncedDisplayName ?? avatarSync.syncedCharacterId} · {avatarSync.syncedSpriteReady ? '像素表' : '原版预设'}
+                </span>
+              )}
+              {avatarSync?.enabled === true && avatarSync.modInstalled && avatarSync.syncedCharacterId === null && (
+                <span data-avatar-synced className="pill" style={{ fontSize: 9.5 }} title="还没有写入过 active-avatar.json：切换一次桌宠或点「同步当前」">等待首次同步</span>
+              )}
+              {avatarSync?.enabled === true && avatarSync.modInstalled && (
+                <button data-avatar-sync-now onClick={() => void syncAvatarNow()} className="pill cursor-pointer" title="把当前桌宠角色立即写入星露谷 Mod 目录">
+                  同步当前
+                </button>
+              )}
               <div className="flex-1" />
               <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
             </div>

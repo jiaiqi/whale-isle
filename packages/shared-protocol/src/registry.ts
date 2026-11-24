@@ -68,6 +68,7 @@ import {
   PetApiStateSchema,
   WorkFollowEventSchema,
   WorkFollowStatusSchema,
+  StardewAvatarSyncSchema,
 } from './index';
 
 /**
@@ -143,6 +144,7 @@ export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
   RiceBowlStatus: RiceBowlStatusSchema,
   PetStudioCatalog: PetStudioCatalogSchema,
   PetCustomCharacter: PetCustomCharacterSchema,
+  StardewAvatarSync: StardewAvatarSyncSchema,
   PetApiSayRequest: PetApiSayRequestSchema,
   PetApiActionRequest: PetApiActionRequestSchema,
   PetApiState: PetApiStateSchema,

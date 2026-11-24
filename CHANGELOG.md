@@ -5,6 +5,29 @@
 
 ## [Unreleased] — 2026-11-24
 
+### Added（T-M6-61 / T-M6-62：本机 Codex CLI 生图 + 星露谷像素角色同步）
+
+- **T-M6-61 免 API Key 生图后端**：新增 `codex-image-backend.ts`，优先探测 `codex-imagegen`（uv 安装，Apache-2.0）、缺失时回退官方 `codex exec`；只检查 `~/.codex/auth.json` 是否存在，绝不读取/回传 token；`execFile` 参数数组、150s 超时（后端上限 180s）、输出脱敏与 PNG/WebP/JPEG 魔数校验；`image-gen-client` 新增 `codex-cli` 协议；创作中心供应商列表自动出现「本机 Codex CLI（免 API Key）」并标注快速/慢速后端。
+- **T-M6-62 星露谷外观同步 Mod**：`mods/stardew-avatar-sync`（SMAPI 4.x / Stardew 1.6，C#/Harmony）读取主进程原子写入的 `active-avatar.json`，FileSystemWatcher 200ms 去抖后主线程重载；Harmony 挂 `FarmerRenderer.draw` **12 参主实现**（9 参重载会被 JIT 内联，拦不到），复用原版 position/origin/layerDepth/逐帧偏移，只替换 base 身体帧；`FacingDirection` 0上/1右/2下/3左 映射像素表行，walk/run 用原版动画索引驱动 4 相位步态；工具/鱼竿/手持物/表情仍由原版独立绘制；洗澡/坐下/骑马/木筏/游泳/睡觉/弹弓回落原版，坏图自动回落预设。`stardew-avatar-host` 提供 9 角色预设、一键安装/卸载、开关持久化、联机隔离 profile 写入；贴图按**内容哈希**命名（`stardew-sprite-<hash>.png`）绕开 SMAPI 的 ModContent 贴图缓存，运行中应用新图可真正热切换并清理旧版本。
+- **像素表流水线升级 96×128 / 4×6**：行=下/右/上/左，列=待机/左脚在前/右脚在前/过渡/动作/表情；切格改为「行投影定位 4 条角色带 + 逐行列投影聚类 6 个角色」，不再按画布/内容包围盒硬切（修复 AI 出图列距 235px 时第一列被切半只）；整表共用同一缩放系数并脚底对齐（修复逐帧独立缩放导致走路时头忽大忽小/上下跳）；新增轮廓外白晕清理与 median-cut 24 色收敛（保留蓝发/肤色，避免抗锯齿近似色挤占色板）；仍为最近邻采样，输出颜色是输入颜色子集。
+- **动作帧空手规则（真机修复）**：AI 会把「鱼竿/法杖」直接画进动作帧，游戏里原版又单独绘制鱼竿/工具，出现两根竿错位、手与竿割裂。提示词改为**所有帧必须空手**（待机/行走/动作/表情都禁止画鱼竿、斧头、法杖、木棍等），动作列只画向前伸出的手臂，工具与手持物统一由游戏引擎绘制；重新出图后真机验证持竿手部与鱼竿贴合。
+- **创作中心「星露谷像素表」页签**：6 列提示词（逐列描述步态与动作）、目标角色选择、供应商/模型选择、96×128 单帧与整表 pixelated 预览、一键应用；游戏共玩页新增「同步桌宠形象进游戏」开关与「安装 Mod」。
+- **回归证据**：`codex-image-backend` 12、`image-gen-client` 新增 2、`pixel-sprite-pipeline` **13/13**、`stardew-avatar-host` **13/13**、契约 1；`dotnet build` 0 警告；macOS 真机经创作中心真实出图（1536×1024，codex-imagegen），并在星露谷内 computer-use 验证四朝向、向右行走、钓鱼抛竿/鱼线/浮漂与 IPC 应用后的热切换。
+
+### Changed / Fixed（T-M6-61/62 复盘：UI 真实性、安全边界与状态同步）
+
+- **共玩页状态不再过期**：`stardew-avatar:state` 改为读取 Mod 目录 `active-avatar.json` 的真实同步角色，新增 `syncedCharacterId/syncedDisplayName/syncedSpriteReady`；开关/安装/卸载/切角色/应用后主进程广播 `stardew-avatar:changed`，渲染层实时刷新，展示「游戏内：X · 像素表/原版预设」「Mod 已安装/未编译」。
+- **补齐缺失操作**：共玩页新增「同步当前」与「卸载 Mod」（带确认）；安装成功提示改为「重启游戏后生效」，不再暗示热加载 DLL。
+- **像素表页签真实化**：共享「参考图」按钮不再是摆设——`StardewSpriteGenRequestSchema` 新增 `referenceImagePath`，主进程复核存在性/扩展名/大小后随请求发送（OpenAI edits / Gemini inlineData / codex-imagegen `--image`）；生成后提示「点一键应用生效」，应用后自动重读角色目录刷新预览；目标角色默认优先游戏内已同步角色，并显示「游戏内当前」。
+- **超时与文案**：Codex CLI 生图超时 90s→150s（真实出图常见 60–120s，避免误杀），UI 文案同步并显示「约 30–90 秒」。
+- **安全边界**：`stardew-avatar:apply-character` 只接受已注册角色且 id 必须匹配 `^[a-z0-9-]+$`，宿主 `spritePathFor` 再做一次路径包含校验（防 `custom-../../` 越界）；旧哈希贴图清理改为逐文件容错（Windows 上被游戏占用的旧图删不掉时不影响新图同步）。
+- **联机文案纠偏**：Mod 只替换本端玩家（多开时每个实例各读自己的 active-avatar.json），删除未被消费的 `SendMessage` 广播与 `_peers` 死代码；README/manifest/ROADMAP/VERIFY 不再声称「同局队友各自形象」。
+- **后台切角不再偷改游戏外观**：`switchDefaultCharacter` 不再写星露谷外观；只有用户显式动作才同步（共玩页开关/同步当前、创作中心一键应用、工作台或托盘手动切角）。启动恢复、召唤、前台应用、工作跟随等后台路径只换桌面桌宠，不会用过期会话覆盖用户已应用的像素表；真机验证启动后 `active-avatar.json` 保持 aboutme-gemini，而工坊手动切到小鲸/切回小芽会各自写回对应像素表。
+- **像素目标默认当前桌宠**：创作中心像素页签每次打开默认选中当前桌宠（而非上一次临时覆盖的角色），显示「游戏内当前」并给出「目标不是当前桌宠」琥珀提示；应用后同步刷新「游戏内当前」与预览，避免状态自相矛盾。
+- **E2E 去抖**：三游戏连接引导断言改为轮询等待 `data-game-conn` 从 `unknown` 落到 online/reachable/offline，消除探测未完成就读取导致的偶发失败。
+- **E2E 与真实游戏隔离**：`PET_STAGE_E2E=1` 时星露谷外观宿主改用 `e2e-profile/e2e-mods` 空槽位；E2E 里的「同步开关」不再写用户真实 `Mods/WhaleIsleAvatar/active-avatar.json`（复盘时发现 E2E 曾把真实游戏目标改成 crosspet-claude），测试后真实文件保持 aboutme-gemini。
+
+
 ### Added（T-M6-60：macOS + Windows 11 双端托盘常驻与 Magpie 风格快捷浮窗）
 
 - **托盘宿主 `tray-host.ts`**：macOS 18×18 `trayTemplate.png` + 36×36 `@2x`（`setTemplateImage(true)` 自动适配深浅菜单栏）；Windows 11 32×32 `tray-win-dark/light.png`，按 `nativeTheme.shouldUseDarkColors` 选取并监听 `updated` 实时切换。图标由 `scripts/generate-tray-icons.ts` 直接读取 `shared/brand.ts` 的鲸鱼路径生成（4×4 超采样 + 内置 PNG 编码，零外部图像库）；构建随 `assets/brand → dist/renderer/brand` 进入 asar。

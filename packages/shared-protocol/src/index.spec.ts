@@ -15,6 +15,7 @@ import {
   DstActionReceiptSchema,
   WorkbenchRoleSlotSchema,
   PetCustomCharacterSchema,
+  StardewAvatarSyncSchema,
   statusLabelZh,
   toolLabelZh,
   WORKBENCH_STATUS_LABELS_ZH,
@@ -388,5 +389,20 @@ describe('自定义角色新增字段默认值（T-M6-55）', () => {
     const parsed = PetCustomCharacterSchema.parse({ name: '小海豹' });
     expect(parsed.glyph).toEqual({ fill: '', stroke: '', text: '' });
     expect(parsed.notebook).toEqual({ title: '', font: '', entries: [], notes: [], sign: '' });
+  });
+});
+
+describe('星露谷外观同步契约（T-M6-62）', () => {
+  it('合法 payload 通过；颜色非法/版本不符拒绝', () => {
+    const parsed = StardewAvatarSyncSchema.parse({
+      version: 1,
+      characterId: 'aboutme-dsh',
+      displayName: '蓝蓝',
+      preset: { hair: 12, hairColor: '#3b82f6', shirt: 5, pantsColor: '#1d4ed8', skin: 0, hatId: -1 },
+    });
+    expect(parsed.spriteSheetPath).toBeUndefined();
+    expect(StardewAvatarSyncSchema.safeParse({ version: 2, characterId: 'x', displayName: 'x', preset: {} }).success).toBe(false);
+    expect(StardewAvatarSyncSchema.safeParse({ version: 1, characterId: 'x', displayName: 'x', preset: { hairColor: 'blue' } }).success).toBe(false);
+    expect(StardewAvatarSyncSchema.parse({ version: 1, characterId: 'x', displayName: 'x', preset: {} }).preset.hatId).toBe(-1);
   });
 });
