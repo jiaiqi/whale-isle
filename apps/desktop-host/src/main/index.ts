@@ -600,6 +600,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     getDirectorWindow: () => directorWindow,
     vaultPath,
     homeDir: homedir(),
+    packsRoot: petPacksRoot,
     chat: async (system, user) => {
       const result = await autodrive.completeForCoop('STARDEW_GAME_PLANNER' as never, system, user, 600);
       return result === null ? null : result.content;

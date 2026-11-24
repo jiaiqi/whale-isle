@@ -225,32 +225,36 @@ function cropCell(source: RawImage, cellRect: Bounds): { image: RawImage; bounds
 }
 
 /**
- * 把一个格子的内容按「整表基准高度」缩放后放进目标格：
- * 底边贴格底、水平居中；宽度超出单格宽时居中裁两侧。
+ * 把一个格子的内容按「整表统一缩放系数」放进目标格：
+ * 底边贴格底、水平居中；同时受全表最大高度与最大宽度双重约束，绝不左右裁切头发/耳朵/手臂。
  */
 function placeCell(
   cell: { image: RawImage; bounds: Bounds | null },
   referenceHeight: number,
+  referenceWidth: number,
   spec: SpriteTierSpec,
 ): RawImage {
   const out = makeImage(spec.cellWidth, spec.cellHeight);
   const bounds = cell.bounds;
   if (bounds === null) return out;
-  // 全局同一缩放系数：最高的一帧刚好占满单格高度，其余帧按真实比例变矮，不逐帧拉伸
-  const scale = spec.cellHeight / Math.max(1, referenceHeight);
-  const destW = Math.max(1, Math.round(bounds.width * scale));
+  // 2x/4x 留出 1-2px 安全水平边距，防止蓬松长发/发饰贴紧格子边缘
+  const padX = spec.scale >= 4 ? 2 : spec.scale >= 2 ? 1 : 0;
+  const maxContentW = Math.max(1, spec.cellWidth - padX * 2);
+  // 全局同一缩放系数：同时确保最高帧不超格高、最宽帧不超格宽，零裁切且全表等比例不上下跳
+  const scale = Math.min(
+    spec.cellHeight / Math.max(1, referenceHeight),
+    maxContentW / Math.max(1, referenceWidth),
+  );
+  const destW = Math.max(1, Math.min(spec.cellWidth, Math.round(bounds.width * scale)));
   const destH = Math.max(1, Math.min(spec.cellHeight, Math.round(bounds.height * scale)));
   const sampled = spec.sampling === 'area'
     ? areaDownsample(cell.image, bounds, destW, destH)
     : nearestNeighborSample(cell.image, bounds, destW, destH);
-  const cropX = Math.max(0, Math.round((destW - spec.cellWidth) / 2));
   const offsetX = Math.max(0, Math.round((spec.cellWidth - destW) / 2));
   const offsetY = spec.cellHeight - destH; // 脚底贴格底
   for (let y = 0; y < destH; y += 1) {
-    for (let x = 0; x < spec.cellWidth; x += 1) {
-      const srcX = x + cropX;
-      if (srcX >= destW) continue;
-      const srcIndex = (y * destW + srcX) * 4;
+    for (let x = 0; x < destW; x += 1) {
+      const srcIndex = (y * destW + x) * 4;
       const destIndex = ((offsetY + y) * spec.cellWidth + (offsetX + x)) * 4;
       out.data[destIndex] = sampled.data[srcIndex]!;
       out.data[destIndex + 1] = sampled.data[srcIndex + 1]!;
@@ -261,7 +265,7 @@ function placeCell(
   return out;
 }
 
-/** 单格独立缩放（保留给外部单帧工具用；整表构建走 placeCell + 全局基准高度）。 */
+/** 单格独立缩放（保留给外部单帧工具用；整表构建走 placeCell + 全局基准宽高）。 */
 export function fitCellToSprite(
   source: RawImage,
   cellRect: Bounds,
@@ -270,7 +274,7 @@ export function fitCellToSprite(
   const spec = SPRITE_TIER_SPECS[tier];
   const cell = cropCell(source, cellRect);
   if (cell.bounds === null) return { image: makeImage(spec.cellWidth, spec.cellHeight), empty: true, contentBounds: null };
-  return { image: placeCell(cell, cell.bounds.height, spec), empty: false, contentBounds: cell.bounds };
+  return { image: placeCell(cell, cell.bounds.height, cell.bounds.width, spec), empty: false, contentBounds: cell.bounds };
 }
 
 /** 一维内容投影的连续区间（含首尾）。间隔 ≤ mergeGap 的相邻区间合并，避免头发/工具被拆碎。 */
@@ -372,9 +376,10 @@ export function buildStardewSpriteSheet(
   }
 
   const sheet = makeImage(spec.sheetWidth, spec.sheetHeight);
-  // 第一遍：逐行定位 6 个角色并裁格，找「整表最高内容」作为所有帧共用的缩放基准
+  // 第一遍：逐行定位 6 个角色并裁格，找「整表最高与最宽内容」作为所有帧共用的缩放基准
   const crops: Array<{ row: number; col: number; image: RawImage; bounds: Bounds | null }> = [];
   let referenceHeight = 1;
+  let referenceWidth = 1;
   for (let row = 0; row < SPRITE_ROWS; row += 1) {
     const band = rowBands[row]!;
     const colCounts = new Array<number>(raw.width).fill(0);
@@ -398,15 +403,18 @@ export function buildStardewSpriteSheet(
         height: Math.max(1, band.end - band.start + 1),
       };
       const cell = cropCell(raw, cellRect);
-      if (cell.bounds !== null) referenceHeight = Math.max(referenceHeight, cell.bounds.height);
+      if (cell.bounds !== null) {
+        referenceHeight = Math.max(referenceHeight, cell.bounds.height);
+        referenceWidth = Math.max(referenceWidth, cell.bounds.width);
+      }
       crops.push({ row, col, ...cell });
     }
   }
-  // 第二遍：统一缩放系数落格，脚底对齐
+  // 第二遍：统一缩放系数落格，脚底对齐且绝不裁切左右边缘
   const cells: SpriteCellReport[] = [];
   let emptyCells = 0;
   for (const cell of crops) {
-    const fitted = placeCell(cell, referenceHeight, spec);
+    const fitted = placeCell(cell, referenceHeight, referenceWidth, spec);
     const empty = cell.bounds === null;
     if (empty) emptyCells += 1;
     cells.push({ row: cell.row, col: cell.col, empty, source: cell.bounds });

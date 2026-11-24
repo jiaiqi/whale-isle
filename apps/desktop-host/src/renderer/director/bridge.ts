@@ -325,8 +325,9 @@ export interface DirectorBridge {
   onCreatorGenProgress(handler: (progress: { jobId: string; pose: string; status: 'queued' | 'generating' | 'done' | 'failed'; index: number; total: number; dataUrl?: string; file?: string; error?: string }) => void): () => void;
   creatorListCustom(): Promise<Array<{ id: string; name: string; poses: string[] }>>;
   /** T-M6-62：星露谷精灵表多清晰度生成、原图秒切与外观同步 */
-  creatorCompileStardewSprite(input: { name: string; traits?: string; tier?: '1x' | '2x' | '4x' }): Promise<{ ok: boolean; prompt: string }>;
-  creatorGenerateStardewSprite(input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; error?: string }>;
+  creatorCompileStardewSprite(input: { name: string; characterId?: string; traits?: string; tier?: '1x' | '2x' | '4x' }): Promise<{ ok: boolean; prompt: string }>;
+  creatorCharacterReference(characterId: string): Promise<{ ok: boolean; path?: string; dataUrl?: string; label?: string }>;
+  creatorGenerateStardewSprite(input: unknown): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; usedReference?: string; error?: string }>;
   creatorReprocessStardewSprite(input: { characterId: string; tier: '1x' | '2x' | '4x' }): Promise<{ ok: boolean; dataUrl?: string; emptyCells?: number; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; error?: string }>;
   creatorStardewSpriteGet(characterId: string): Promise<{ ok: boolean; dataUrl?: string; tier?: '1x' | '2x' | '4x'; width?: number; height?: number; hasRaw?: boolean; error?: string }>;
   stardewAvatarState(): Promise<{ enabled: boolean; liveliness: boolean; modsDir: string | null; modInstalled: boolean; modCompiled: boolean; modNeedsUpdate: boolean; syncedCharacterId: string | null; syncedDisplayName: string | null; syncedSpriteReady: boolean; syncedSpriteTier: '1x' | '2x' | '4x' | null; syncedSpriteSize: { width: number; height: number } | null }>;

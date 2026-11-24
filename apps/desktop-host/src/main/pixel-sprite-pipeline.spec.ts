@@ -21,7 +21,7 @@ function pixelAt(image: RawImage, x: number, y: number): [number, number, number
   return [image.data[index]!, image.data[index + 1]!, image.data[index + 2]!, image.data[index + 3]!];
 }
 
-/** 造一张 384×256 白底 4×6 网格图：每格中心一个 32×32 纯色块（行=方向色，列=帧色变体）。 */
+/** 造一张 384×256 白底 4×6 网格图：每格中心一个 16×32 瘦高纯色块（贴合 1:2 角色比例；行=方向色，列=帧色变体）。 */
 function gridImage(): RawImage {
   const image = makeImage(384, 256, [255, 255, 255, 255]);
   const rowColors: Array<[number, number, number, number]> = [
@@ -32,8 +32,8 @@ function gridImage(): RawImage {
       const base = rowColors[row]!;
       const color: [number, number, number, number] = [base[0], base[1], Math.min(255, base[2] + col * 10), 255];
       for (let y = 0; y < 32; y += 1) {
-        for (let x = 0; x < 32; x += 1) {
-          setPixel(image, col * 64 + 16 + x, row * 64 + 16 + y, color);
+        for (let x = 0; x < 16; x += 1) {
+          setPixel(image, col * 64 + 24 + x, row * 64 + 16 + y, color);
         }
       }
     }
@@ -67,15 +67,21 @@ describe('nearestNeighborSample', () => {
 });
 
 describe('fitCellToSprite', () => {
-  it('内容脚底贴格底、水平居中；空格子全透明', () => {
+  it('宽内容按宽度等比缩入绝不裁切左右边缘；脚底贴格底；空格子全透明', () => {
     const source = makeImage(64, 64);
-    // 内容在格子上半部：32×16 块
-    for (let y = 8; y < 24; y += 1) for (let x = 16; x < 48; x += 1) setPixel(source, x, y, [255, 0, 0, 255]);
+    // 宽内容：32×16 块（左右两侧标记独特颜色验证绝不被裁切）
+    for (let y = 8; y < 24; y += 1) {
+      for (let x = 16; x < 48; x += 1) {
+        const edge = x === 16 || x === 47;
+        setPixel(source, x, y, edge ? [0, 255, 255, 255] : [255, 0, 0, 255]);
+      }
+    }
     const fitted = fitCellToSprite(source, { x: 0, y: 0, width: 64, height: 64 });
     expect(fitted.empty).toBe(false);
-    // 高度撑满：底边与顶行中心都不透明（角色与原版帧同高 32px）
+    // 脚底贴底
     expect(pixelAt(fitted.image, SPRITE_CELL_W / 2, SPRITE_CELL_H - 1)[3]).toBe(255);
-    expect(pixelAt(fitted.image, SPRITE_CELL_W / 2, 0)[3]).toBe(255);
+    // 左右边缘特标记颜色必须完整保留，绝不裁切
+    expect(colorSet(fitted.image).has('0,255,255')).toBe(true);
     // 瘦高内容（8×32）宽度不足 16 → 居中留透明边，不拉伸变形
     const thin = makeImage(64, 64);
     for (let y = 16; y < 48; y += 1) for (let x = 28; x < 36; x += 1) setPixel(thin, x, y, [0, 200, 0, 255]);
@@ -110,13 +116,13 @@ describe('buildStardewSpriteSheet', () => {
 
   it('不同高度的帧共用整表缩放：矮帧不会被单独拉高（走路不上下跳）', () => {
     const image = makeImage(384, 256, [255, 255, 255, 255]);
-    // 每个格子都铺满整格宽度，保证 contentBounds 覆盖整张图（行/列切割不偏移）
+    // 每格宽度 24px（<= 64/2=32），确保由高度主导缩放且列间有间隔
     const heights = [64, 32, 16, 4, 4, 4];
     for (let row = 0; row < 4; row += 1) {
       for (let col = 0; col < 6; col += 1) {
         const h = row === 0 ? heights[col]! : 4;
         for (let y = 64 - h; y < 64; y += 1) {
-          for (let x = 0; x < 64; x += 1) setPixel(image, col * 64 + x, row * 64 + y, [60, 60, 200, 255]);
+          for (let x = 20; x < 44; x += 1) setPixel(image, col * 64 + x, row * 64 + y, [60, 60, 200, 255]);
         }
       }
     }

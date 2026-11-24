@@ -140,6 +140,7 @@ export function CreatorCenter(props: {
   const [pixelReprocessing, setPixelReprocessing] = useState(false);
   const [pixelSpriteReady, setPixelSpriteReady] = useState(false);
   const [pixelPreviewMode, setPixelPreviewMode] = useState<SpritePreviewMode>('walk');
+  const [pixelAutoRef, setPixelAutoRef] = useState<{ dataUrl: string; label: string } | null>(null);
   const [renameTarget, setRenameTarget] = useState('');
   const [renameName, setRenameName] = useState('');
   const [imageProviders, setImageProviders] = useState<ImageProviderView[]>([]);
@@ -267,11 +268,19 @@ export function CreatorCenter(props: {
   useEffect(() => {
     if (!open || tab !== 'pixel' || pixelCharacterId === '') return;
     const name = pixelCharacters.find((entry) => entry.id === pixelCharacterId)?.displayName ?? pixelCharacterId;
-    void window.directorBridge.creatorCompileStardewSprite({ name, tier: pixelTier }).then((result) => setPixelPrompt(result.prompt)).catch(() => undefined);
+    void window.directorBridge.creatorCompileStardewSprite({ name, characterId: pixelCharacterId, tier: pixelTier })
+      .then((result) => setPixelPrompt(result.prompt))
+      .catch(() => undefined);
   }, [open, tab, pixelCharacterId, pixelCharacters, pixelTier]);
 
   useEffect(() => {
     if (!open || tab !== 'pixel' || pixelCharacterId === '') return;
+    void window.directorBridge.creatorCharacterReference(pixelCharacterId)
+      .then((result) => {
+        if (result.ok && result.dataUrl !== undefined) setPixelAutoRef({ dataUrl: result.dataUrl, label: result.label ?? '角色默认立绘' });
+        else setPixelAutoRef(null);
+      })
+      .catch(() => setPixelAutoRef(null));
     void window.directorBridge.creatorStardewSpriteGet(pixelCharacterId).then((result) => {
       setPixelDataUrl(result.ok && result.dataUrl !== undefined ? result.dataUrl : '');
       setPixelSpriteReady(result.ok === true);
@@ -830,12 +839,29 @@ export function CreatorCenter(props: {
                   </span>
                 )}
               </label>
-              <div className="rounded-lg px-3 py-2 text-[11px]" style={{ ...inputStyle, color: 'var(--text-2)' }}>
-                <div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--text-1)' }}>
-                  <Layers size={12} style={{ color: 'var(--blue)' }} />4 行（下/右/上/左）× 6 列（待机 + 3 行走 + 动作 + 表情）
-                </div>
-                <div className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
-                  生成时自动保留原始大图，后续可在 1× / 2× / 4× 清晰度之间秒切，无需重新花额度生图。
+              <div className="flex items-center gap-3 rounded-lg px-3 py-2 text-[11px]" style={{ ...inputStyle, color: 'var(--text-2)' }}>
+                {referenceImage === '' && pixelAutoRef !== null && (
+                  <img
+                    src={pixelAutoRef.dataUrl}
+                    alt={pixelAutoRef.label}
+                    className="h-12 w-12 shrink-0 rounded-md object-contain"
+                    style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 font-medium" style={{ color: 'var(--text-1)' }}>
+                    <Layers size={12} style={{ color: 'var(--blue)' }} />
+                    {referenceImage !== ''
+                      ? '已指定自定义参考图'
+                      : pixelAutoRef !== null
+                        ? `已自动锁定角色立绘（${pixelAutoRef.label}）`
+                        : '4 行 × 6 列（待机 + 3 行走 + 动作 + 表情）'}
+                  </div>
+                  <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    {referenceImage !== ''
+                      ? `将使用「${referenceImage.split('/').slice(-1)[0]}」锁定外观（WebP 自动转 PNG）`
+                      : '生成时自动携带该角色全身立绘（WebP 自动转 PNG）+ 精准外观锁定词，并防左右裁切。'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -903,7 +929,7 @@ export function CreatorCenter(props: {
               <textarea data-pixel-prompt value={pixelPrompt} onChange={(event) => setPixelPrompt(event.target.value)} rows={6} className="mt-1 w-full px-3 py-2 text-[10.5px] mono" style={{ ...inputStyle, resize: 'vertical' }} />
             </label>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {pixelMeta.hasRaw === true && pixelMeta.tier !== pixelTier && (
+              {pixelMeta.hasRaw === true && (
                 <button
                   type="button"
                   className="btn-pill violet"
@@ -911,7 +937,7 @@ export function CreatorCenter(props: {
                   disabled={pixelReprocessing || pixelBusy}
                   onClick={() => void reprocessPixelSprite(pixelTier)}
                 >
-                  <Zap size={12} />{pixelReprocessing ? '正在重切…' : `从原图秒切至 ${pixelTier}（免重新生图）`}
+                  <Zap size={12} />{pixelReprocessing ? '正在重切…' : pixelMeta.tier !== pixelTier ? `从原图秒切至 ${pixelTier}（免重新生图）` : `用防裁切算法重切 ${pixelTier}`}
                 </button>
               )}
               <button className="btn-pill primary" data-pixel-generate disabled={pixelBusy || pixelReprocessing} onClick={() => void generatePixelSprite()}>

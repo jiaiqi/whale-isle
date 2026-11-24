@@ -79,12 +79,66 @@ export interface BuiltinLock {
 }
 
 export const BUILTIN_LOCKS: BuiltinLock[] = [
-  { id: 'deepseek', label: 'DeepSeek · 蓝鲸女仆', reference: 'crosspet/characters/deepseek/portrait-card.webp', traits: '深蓝长发、鲸鱼尾鳍、蓝白女仆裙、深海配色' },
-  { id: 'claude', label: 'Claude · 橘发书卷娘', reference: 'crosspet/characters/claude/portrait-card.webp', traits: '橘棕长发、橙色花朵发饰、书卷与学院裙' },
-  { id: 'gpt', label: 'GPT · 御姐白龙', reference: 'crosspet/characters/gpt/portrait-card.webp', traits: '白色龙角、御姐体型、绿白配色礼服' },
-  { id: 'gemini', label: 'Gemini · 星空异瞳猫娘', reference: 'crosspet/characters/gemini/portrait-card.webp', traits: '猫耳、异色瞳、四芒星发饰、紫蓝星空配色' },
-  { id: 'glm', label: 'GLM · 黑狐女仆', reference: 'crosspet/characters/glm/portrait-card.webp', traits: '黑狐耳与狐尾、黑金女仆装、眼罩配饰' },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek · 蓝鲸女仆',
+    reference: 'crosspet/characters/deepseek/idle.webp',
+    traits: '深蓝渐变浅蓝蓬松长卷发、头顶呆毛、两侧蓝白鲸鳍耳、左侧浅蓝蝴蝶结、白色蕾丝女仆发箍、蓝色大眼；深蓝白领女仆裙、白色蕾丝小围裙（带小鲸鱼刺绣）、深蓝鲸鱼尾鳍、深蓝小皮鞋',
+  },
+  {
+    id: 'claude',
+    label: 'Claude · 橘发书卷娘',
+    reference: 'crosspet/characters/claude/idle.webp',
+    traits: '蓬松橘棕色微卷长发、琥珀橙色大眼、右侧向日葵发饰配黑色蝴蝶结与米白流苏（无兽耳、无尾巴、无呆毛）；奶白色蕾丝荷叶边洋装长裙、黑色缎带腰带、橙红色布片点缀、胸前向日葵徽章、深棕色小皮鞋',
+  },
+  {
+    id: 'gpt',
+    label: 'GPT · 银发白龙',
+    reference: 'crosspet/characters/gpt/idle.webp',
+    traits: '银白色长卷发、头顶呆毛、尖精灵耳、一对白色弯曲龙角、淡紫色大眼、左侧白色中国结流苏发饰；纯白修身长裙配银灰菱格纹与中国结流苏、背后淡紫白小龙翼与白色鳞片龙尾、白色小皮鞋',
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini · 星空异瞳猫娘',
+    reference: 'crosspet/characters/gemini/idle.webp',
+    traits: '紫蓝渐变蓬松长卷发、头顶单根呆毛、两侧低丸子头、双侧紫毛白绒猫耳、左红粉右琥珀金异色大瞳、猫嘴、右侧大号彩虹四芒星发饰；深蓝紫星空露肩短裙配白色灯笼袖与白色荷叶裙边、白色堆堆袜、深蓝紫厚底鞋、右腿星形腿环、紫蓝渐变毛绒猫尾（禁止女仆发箍或围裙）',
+  },
+  {
+    id: 'glm',
+    label: 'GLM · 黑狐女仆',
+    reference: 'crosspet/characters/glm/idle.webp',
+    traits: '黑发渐变深蓝发尾、一对黑灰白绒毛大狐耳、白色蕾丝发箍配黑色闭眼图案睡眠眼罩、左侧 Z 字蝴蝶结与双银铃铛、深灰紫大眼；黑白女仆连衣裙配蓝色菱形挂饰、黑底白尖蓬松大狐尾、白色系带短靴',
+  },
+  {
+    id: 'grok',
+    label: 'Grok · 金发哥特少女',
+    reference: 'crosspet/characters/grok/idle.webp',
+    traits: '金色波浪长双马尾、头顶大呆毛、尖耳、蓝色大眼、小虎牙、头顶黑金小王冠、黑色蝴蝶结配小蝙蝠翼发饰；黑红金哥特洛丽塔连衣裙（黑底金纹、红色内衬）、黑色长袜、黑金小皮鞋（无女仆发箍或围裙）',
+  },
+  {
+    id: 'kimi',
+    label: 'Kimi · 银发月光女仆',
+    reference: 'crosspet/characters/kimi/idle.webp',
+    traits: '银白渐变冰蓝发尾长卷发、紫罗兰大眼、白色蕾丝女仆发箍配银色弯月与音符及深蓝 K 字蝴蝶结；深蓝白领女仆连衣裙、白色音符刺绣蕾丝围裙、深蓝带蝴蝶结小皮鞋',
+  },
+  {
+    id: 'qwen',
+    label: 'Qwen · 蓝紫国风少女',
+    reference: 'crosspet/characters/qwen/idle.webp',
+    traits: '蓝紫色波浪长发配左侧麻花辫、紫蓝大眼、头顶深蓝白边贝雷帽配蓝白徽章与流苏；蓝白金国风立领连衣裙（深蓝金纹广袖、白色盘扣裙身、蓝色流苏挂饰）、深蓝小皮鞋（无兽耳、无尾巴、无女仆装）',
+  },
 ];
+
+/** 角色 id → BUILTIN_LOCKS id 映射（用于自动锁定当前桌宠外观，避免生成跑偏）。 */
+export function resolveBuiltinLockForCharacter(characterId?: string): BuiltinLock | undefined {
+  if (characterId === undefined || characterId === '') return undefined;
+  const normalized = characterId.toLowerCase();
+  if (normalized === 'blue-whale-maid' || normalized === 'aboutme-dsh' || normalized === 'aboutme-dsh1') {
+    return BUILTIN_LOCKS.find((item) => item.id === 'deepseek');
+  }
+  const stripped = normalized.replace(/^(?:aboutme|crosspet)-/, '').split('-')[0] ?? '';
+  return BUILTIN_LOCKS.find((item) => item.id === stripped);
+}
 
 export interface CharacterPromptInput {
   /** 内置锁定 id 或 'custom' */
@@ -224,45 +278,59 @@ export function parseEggLines(content: string): Record<'pop' | 'pretend' | 'caug
 }
 
 /**
- * 星露谷精灵表提示词（T-M6-62 升级：支持 1x / 2x / 4x 清晰度档位）。
+ * 星露谷精灵表提示词（融合 CrossPet 角色锁定 + aboutme-pets 10% 安全缓冲红线，支持 1x / 2x / 4x 清晰度档位）。
  * 输出约定与 pixel-sprite-pipeline 的切格规则一一对应（行=下/右/上/左；
  * 列=待机/左脚在前/右脚在前/过渡/动作/表情）。
  */
-export function compileStardewSpritePrompt(input: { name: string; traits?: string; tier?: '1x' | '2x' | '4x' }): string {
+export function compileStardewSpritePrompt(input: {
+  name: string;
+  characterId?: string;
+  traits?: string;
+  tier?: '1x' | '2x' | '4x';
+}): string {
   const tier = input.tier ?? '2x';
+  const lock = resolveBuiltinLockForCharacter(input.characterId);
+  const resolvedTraits = (input.traits ?? '').trim() !== ''
+    ? input.traits!.trim()
+    : (lock?.traits ?? '');
   const styleBlock = tier === '4x'
     ? [
-      '- 画幅精度（4× 高清 Q 版）：每格目标是 64×128 高清 Q 版 2D 角色精灵，清晰细腻的二次元手绘深色外描边与干净赛璐珞上色；',
-      '- 完整保留角色的标志性细节：异瞳/高光大眼、发饰（星星发卡/猫耳/鲸尾等）、裙摆层次与精致配饰，不要刻意马赛克化或压缩色板；',
-      '- 角色比例约 2.5 头身 Q 版，在每格内高约 116-124 像素、宽约 44-56 像素（接近 1:2），左右留少许透明边；',
+      '- 画幅精度（4× 高清 Q 版）：每格目标是 64×128 高清 Q 版 2D 角色精灵，清晰细腻的二次元手绘深色外描边与干净平涂两阶阴影；',
+      '- 完整忠实保留该角色的标志性发型、瞳色、发饰、服装与尾巴细节，不要刻意马赛克化或压缩色板；',
+      '- 角色约 2.3-2.5 头身 Q 版，在每格内占据约 78%-84% 格高、水平居中且左右各留 10%-15% 透明安全边；',
     ]
     : tier === '2x'
       ? [
         '- 画幅精度（2× 精致像素，推荐）：每格目标是 32×64 高精度 2× 像素风（HD Pixel Art），像素边缘利落干净、1 像素深色轮廓描边；',
-        '- 比星露谷原版 16×32 精细一倍：眼睛高光/异瞳、标志性发饰、耳朵/尾巴与服装褶皱必须清晰可辨，色板 16-24 色，层次柔和干净、无噪点模糊；',
-        '- 角色比例约 2.2-2.5 头身，在每格内高约 56-62 像素、宽约 22-28 像素（接近 1:2），左右各留 2-4 像素透明边；',
+        '- 比星露谷原版 16×32 精细一倍：该角色的瞳色、发饰、耳朵/尾巴与服装层次必须清晰可辨，色板 16-24 色，层次干净、无噪点模糊；',
+        '- 角色约 2.2-2.5 头身，在每格内占据约 80%-86% 格高、水平居中且左右各留 10%-15% 透明安全边；',
       ]
       : [
         '- 画幅精度（1× 原版像素）：每格目标是 16×32 复古像素，硬边像素、有限色板（约 8-12 色）、无抗锯齿、无渐变模糊、无抖动噪点；',
         '- 画风像星露谷原版农夫：干净清晰的 1 像素深色描边、简洁的 2-3 阶明暗、五官只占 2-3 像素，头发最多 3 个同色系层次；',
-        '- 角色比例瘦高：在每格内高约 28-32 像素、宽约 10-14 像素（接近 1:2），左右各留 1-2 像素透明边；',
+        '- 角色在每格内瘦高比例、水平居中且左右各留 10% 透明安全边；',
       ];
   return [
     `为角色「${input.name}」生成一张星露谷（Stardew Valley）${tier === '4x' ? '高清 Q 版' : tier === '2x' ? '2× 精致像素风' : '原版像素风'}角色精灵表（sprite sheet）。`,
-    input.traits !== undefined && input.traits.trim() !== '' ? `角色外观锁定：${input.traits.trim()}。` : '',
-    '硬性规格：',
-    '- 整张图是 6 列 × 4 行的网格，每格宽高比严格为 1:2，网格之间不留间距、不画格线、不写编号文字或水印；',
-    '- 行序固定：第 1 行朝下（正面）、第 2 行朝右、第 3 行朝上（背面）、第 4 行朝左；',
+    '',
+    '[CHARACTER LOCK · 角色外观唯一基准（强制）]',
+    resolvedTraits !== ''
+      ? `- 本角色固定外观：${resolvedTraits}。`
+      : '- 严格以附带参考图中的角色外观为唯一权威基准，完整还原其发型、发色、瞳色、头饰、服装款式与配色。',
+    '- 若提供了参考图：必须 100% 锁定参考图的同一角色（发型/发色/瞳色/耳朵或发饰/服装配色/鞋袜/尾巴完全一致），严禁擅自更换服装风格或添加参考图里没有的女仆发箍、围裙、帽子等元素；',
+    '- 必须重新绘制四个朝向与行走/动作/表情姿态，严禁把参考图的正面站姿原样复制 24 次。',
+    '',
+    '[GRID & SAFE MARGIN · 网格与防裁切安全缓冲（强制）]',
+    '- 整张图是 6 列 × 4 行的均匀网格，网格之间不画格线、不写编号文字、不加水印；',
+    '- **防裁切安全红线**：每个格子的上下左右四周必须留出 10%-15% 的纯透明缓冲边；角色的蓬松长发、耳朵、发饰、尾巴、裙摆以及动作/表情帧张开的手臂在任何角度都**绝对不能触碰或超出格子边界**，相邻两列角色之间必须有清晰的透明间隙、绝不粘连重叠；',
+    '- 行序固定：第 1 行朝下（正面）、第 2 行朝右（右侧面）、第 3 行朝上（背面）、第 4 行朝左（左侧面）；',
     '- 列序固定：第 1 列站立待机（双脚并拢）；第 2 列左脚向前迈出、右臂前摆；第 3 列右脚向前迈出、左臂前摆；',
-    '  第 4 列是双脚交错的过渡帧（两脚靠近、身体略过中线）；第 5 列是动作帧（双臂向前伸出作握持/挥动状，手臂明显变化）；',
-    '  第 6 列是表情帧（开心/惊讶，头部微扬、表情生动、手臂张开）；',
-    '- **所有帧都必须是空手**：待机/行走/动作/表情都禁止画鱼竿、斧头、锄头、镐子、法杖、木棍、提灯、武器或任何手持道具；',
-    '  工具与手持物由游戏引擎单独绘制，动作帧只画空手伸出的手臂（这是硬性要求，画了道具会导致游戏里出现两根竿/两把工具）；',
-    '- 若提供了参考图：只沿用其外观特征（五官/发型/发色/服装配色/标志性配饰），必须重新绘制四个朝向与行走/动作/表情姿态；',
-    '  严禁逐格复制参考图的站立姿势，行走列必须画出明显的腿脚前后差；',
-    '- 第 2/3/4 列必须能看出明显的腿脚迈步变化，但四列头顶高度一致、脚底基线一致，严禁一帧高瘦一帧矮胖；',
-    '- 每格角色脚底贴合格子底边、水平居中；轮廓收窄可读，侧面时头发总宽不超过躯干宽的 1.5 倍，四肢清晰可辨；',
+    '  第 4 列双脚交错过渡帧；第 5 列空手动作帧（双臂向前伸出作握持/挥动状）；第 6 列表情帧（开心微笑或惊讶，双臂轻抬、神态生动）；',
+    '- 四行 24 格的角色头顶高度一致、脚底基线一致、比例完全统一；走路列（第 2/3/4 列）必须有清晰的迈步前后差；',
+    '- **所有 24 格必须空手**：待机/行走/动作/表情都严禁在手中画任何道具（鱼竿、斧头、锄头、书本、折扇、手包、武器等），手持工具由游戏引擎单独绘制。',
+    '',
+    '[STYLE & RENDER]',
     ...styleBlock,
-    '- 纯透明背景（不要白底、不要阴影、不要地面），四行必须是同一个角色的同一套服装配色，只是朝向与步伐不同。',
-  ].filter((line) => line !== '').join('\n');
+    '- 纯透明背景（不要白底、不要地面、不要投影、不要边框）。',
+  ].join('\n');
 }

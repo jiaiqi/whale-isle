@@ -1,6 +1,15 @@
-/** 创作中心提示词编译器（T-M6-53）：锁定模板、姿态批次、彩蛋双参考图、台词解析。 */
+/** 创作中心提示词编译器（T-M6-53 / T-M6-62）：锁定模板、姿态批次、彩蛋双参考图、星露谷精灵表角色锁定、台词解析。 */
 import { describe, expect, it } from 'vitest';
-import { BUILTIN_LOCKS, compileCharacterPrompt, compileEggLinesPrompt, compileEggPrompt, EGG_POSES, parseEggLines, POSE_TIERS } from './prompt-compiler';
+import {
+  BUILTIN_LOCKS,
+  compileCharacterPrompt,
+  compileEggLinesPrompt,
+  compileEggPrompt,
+  compileStardewSpritePrompt,
+  EGG_POSES,
+  parseEggLines,
+  POSE_TIERS,
+} from './prompt-compiler';
 
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
 
@@ -8,7 +17,7 @@ describe('compileCharacterPrompt', () => {
   it('内置锁定附带随包参考图与角色特征，A+MEME 姿态去重', () => {
     const prompt = compileCharacterPrompt({ lock: 'deepseek', tiers: ['A', 'MEME'] });
     expect(prompt).toContain('[CHARACTER LOCK: DEEPSEEK]');
-    expect(prompt).toContain('crosspet/characters/deepseek/portrait-card.webp');
+    expect(prompt).toContain('crosspet/characters/deepseek/idle.webp');
     expect(prompt).toContain('鲸鱼尾鳍');
     expect(prompt).toContain('[POSES (A+MEME)]');
     expect(prompt).toContain('- idle-blink: 与 idle 完全同构图');
@@ -32,7 +41,7 @@ describe('compileCharacterPrompt', () => {
     for (const lock of BUILTIN_LOCKS) {
       expect(lock.reference.startsWith('crosspet/characters/')).toBe(true);
     }
-    expect(BUILTIN_LOCKS.map((item) => item.id)).toEqual(['deepseek', 'claude', 'gpt', 'gemini', 'glm']);
+    expect(BUILTIN_LOCKS.map((item) => item.id)).toEqual(['deepseek', 'claude', 'gpt', 'gemini', 'glm', 'grok', 'kimi', 'qwen']);
     expect(POSE_TIERS.find((tier) => tier.id === 'A')?.poses).toHaveLength(11); // 含 idle-blink 仅改眼
   });
 });
@@ -41,8 +50,8 @@ describe('compileEggPrompt', () => {
   it('Cosplay 与串门两种模式都生成双参考图 + 5 态', () => {
     const cosplay = compileEggPrompt({ mode: 'cosplay', guest: 'deepseek', host: 'claude' });
     expect(cosplay).toContain('[EGG MODE: COSPLAY]');
-    expect(cosplay).toContain('crosspet/characters/deepseek/portrait-card.webp');
-    expect(cosplay).toContain('crosspet/characters/claude/portrait-card.webp');
+    expect(cosplay).toContain('crosspet/characters/deepseek/idle.webp');
+    expect(cosplay).toContain('crosspet/characters/claude/idle.webp');
     for (const pose of EGG_POSES) expect(cosplay).toContain(`- ${pose.id}:`);
     expect(cosplay.match(/^- (pop|pretend|caught|bye|escape):/gm)).toHaveLength(5);
 
@@ -50,6 +59,19 @@ describe('compileEggPrompt', () => {
     expect(prank).toContain('[EGG MODE: PRANK]');
     expect(prank).toContain('caught pose must show both characters');
     expect(EMOJI.test(prank)).toBe(false);
+  });
+});
+
+describe('compileStardewSpritePrompt', () => {
+  it('按 characterId 自动注入精准角色外观锁定与防裁切安全缓冲，绝不串台女仆装', () => {
+    const gemini = compileStardewSpritePrompt({ name: '小星', characterId: 'aboutme-gemini', tier: '4x' });
+    expect(gemini).toContain('[CHARACTER LOCK');
+    expect(gemini).toContain('紫蓝渐变蓬松长卷发');
+    expect(gemini).toContain('左红粉右琥珀金异色大瞳');
+    expect(gemini).toContain('禁止女仆发箍或围裙');
+    expect(gemini).toContain('10%-15%');
+    expect(gemini).toContain('所有 24 格必须空手');
+    expect(EMOJI.test(gemini)).toBe(false);
   });
 });
 

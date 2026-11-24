@@ -106,6 +106,8 @@ export function createCreatorHost(options: {
   vaultPath?: string;
   /** 本机 Codex CLI 探测用 home（T-M6-61；缺省 process.env.HOME） */
   homeDir?: string;
+  /** 随包桌宠素材根目录（用于自动锁定当前角色全身立绘作为参考图） */
+  packsRoot?: string;
 }): { registerIpc(): void } {
   const encodeWebp = async (raw: RawImage): Promise<Buffer> => {
     const window = options.getDirectorWindow();
@@ -537,10 +539,76 @@ export function createCreatorHost(options: {
       if (!resolve(outDir).startsWith(`${resolve(options.userDataDir)}${sep}`)) return null;
       return outDir;
     };
-    ipcMain.handle('creator:compile-stardew-sprite', (_event, input: { name?: string; traits?: string; tier?: StardewSpriteTier }) => ({
+    /** 为指定角色自动定位最高清的全身立绘作为默认参考图（优先 CrossPet idle.webp → aboutme avatar.webp / custom idle.webp）。 */
+    const resolveCharacterReference = (characterId: string): { path: string; label: string } | null => {
+      if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(characterId)) return null;
+      const candidates: Array<{ path: string; label: string }> = [];
+      if (characterId.startsWith('custom-')) {
+        const slug = characterId.slice('custom-'.length);
+        const dir = join(customCharactersRoot(options.userDataDir), slug);
+        candidates.push(
+          { path: join(dir, 'idle.webp'), label: `${slug}/idle.webp` },
+          { path: join(dir, 'portrait-card.webp'), label: `${slug}/portrait-card.webp` },
+          { path: join(dir, 'avatar.webp'), label: `${slug}/avatar.webp` },
+        );
+      } else if (options.packsRoot !== undefined) {
+        const crosspetMap: Record<string, string> = {
+          'blue-whale-maid': 'deepseek',
+          'aboutme-dsh': 'deepseek',
+          'aboutme-dsh1': 'deepseek',
+        };
+        const crosspetName = crosspetMap[characterId]
+          ?? (characterId.startsWith('aboutme-') ? characterId.slice('aboutme-'.length)
+            : characterId.startsWith('crosspet-') ? characterId.slice('crosspet-'.length) : '');
+        if (crosspetName !== '') {
+          const cpDir = join(options.packsRoot, 'crosspet', 'characters', crosspetName);
+          candidates.push(
+            { path: join(cpDir, 'idle.webp'), label: `${crosspetName} 全身立绘` },
+            { path: join(cpDir, 'portrait-card.webp'), label: `${crosspetName} 角色立绘` },
+          );
+        }
+        if (characterId.startsWith('aboutme-')) {
+          const slug = characterId.slice('aboutme-'.length);
+          candidates.push({
+            path: join(options.packsRoot, 'aboutme-pets', 'pets', slug, 'avatar.webp'),
+            label: `${slug} 角色头像`,
+          });
+        }
+      }
+      return candidates.find((item) => existsSync(item.path)) ?? null;
+    };
+    /** WebP 参考图转存临时 PNG：部分 OpenAI 兼容端点与 Codex CLI 对 .webp 参考图支持不稳，转 PNG 可确保 100% 生效。 */
+    const ensurePngReference = async (refPath: string): Promise<string> => {
+      if (!/\.webp$/i.test(refPath)) return refPath;
+      const native = await decodeToNative(refPath);
+      const refTmpDir = join(options.userDataDir, 'creator-drafts', 'ref-png');
+      mkdirSync(refTmpDir, { recursive: true });
+      const pngPath = join(refTmpDir, `ref-${Date.now().toString(36)}-${randomUUID().slice(0, 6)}.png`);
+      writeFileSync(pngPath, native.toPNG());
+      return pngPath;
+    };
+    ipcMain.handle('creator:character-reference', (_event, characterId: string) => {
+      const found = resolveCharacterReference(String(characterId ?? ''));
+      if (found === null) return { ok: false };
+      try {
+        const buffer = readFileSync(found.path);
+        const ext = (found.path.split('.').pop() ?? 'png').toLowerCase();
+        const mime = ext === 'webp' ? 'image/webp' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+        return {
+          ok: true,
+          path: found.path,
+          label: found.label,
+          dataUrl: `data:${mime};base64,${buffer.toString('base64')}`,
+        };
+      } catch {
+        return { ok: false };
+      }
+    });
+    ipcMain.handle('creator:compile-stardew-sprite', (_event, input: { name?: string; characterId?: string; traits?: string; tier?: StardewSpriteTier }) => ({
       ok: true,
       prompt: compileStardewSpritePrompt({
         name: String(input?.name ?? '桌宠'),
+        ...(input?.characterId === undefined ? {} : { characterId: String(input.characterId) }),
         ...(input?.traits === undefined ? {} : { traits: String(input.traits) }),
         ...(input?.tier === undefined ? {} : { tier: input.tier }),
       }),
@@ -565,10 +633,14 @@ export function createCreatorHost(options: {
       try {
         const prompt = request.prompt !== undefined && request.prompt.trim() !== ''
           ? request.prompt
-          : compileStardewSpritePrompt({ name: request.characterId, tier: request.tier });
-        const referenceImagePath = request.referenceImagePath === undefined
+          : compileStardewSpritePrompt({ name: request.characterId, characterId: request.characterId, tier: request.tier });
+        // 用户未手动选参考图时，自动锁定当前角色的全身立绘；WebP 自动转 PNG 保证各生图后端 100% 识别
+        const explicitRef = request.referenceImagePath === undefined
           ? undefined
           : resolveDraftReference(request.referenceImagePath);
+        const autoRef = explicitRef === undefined ? resolveCharacterReference(request.characterId) : null;
+        const rawRefPath = explicitRef ?? autoRef?.path;
+        const referenceImagePath = rawRefPath === undefined ? undefined : await ensurePngReference(rawRefPath);
         const image = await generateImage({
           protocol: request.provider.protocol,
           baseUrl: request.provider.baseUrl,
@@ -610,6 +682,7 @@ export function createCreatorHost(options: {
           width: result.sheet.width,
           height: result.sheet.height,
           hasRaw: true,
+          ...(autoRef !== null ? { usedReference: autoRef.label } : explicitRef !== undefined ? { usedReference: explicitRef.split('/').slice(-1)[0] } : {}),
           dataUrl: `data:image/png;base64,${png.toString('base64')}`,
         };
       } catch (error) {
