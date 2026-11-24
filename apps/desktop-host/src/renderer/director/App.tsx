@@ -28,12 +28,14 @@ import {
   GAME_STATUS_COLOR,
   GameConnectionBanner,
   GameCurrentActionCard,
+  GameDecisionTimeline,
   GameDiagnostics,
   GameGoalChain,
   GameMetricsCard,
   GameQualityCard,
   GameQuickCommands,
   GameReceiptTimeline,
+  decisionBadgeOf,
   statusLabel,
   toolLabel,
   useGameHealth,
@@ -838,6 +840,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                   ]}
                   idleHint="等待自动驾驶启动…"
                 />
+                <GameDecisionTimeline decisions={decisions} objectiveActive={objective !== null} />
                 <GameGoalChain goals={STARDEW_GOALS} activeIndex={0} />
               </section>
 
@@ -981,19 +984,11 @@ function EventCard({ event, objectiveActive = false }: { event: AutodriveEventVi
     );
   }
   if (event.type === 'decision') {
-    const fallback = (event.intent ?? '').startsWith('规则兜底：');
-    const remote = event.planner === 'remote';
-    const badge = remote
-      ? { label: '主人插队', color: 'var(--amber)', bg: 'var(--amber-dim)' }
-      : fallback
-        ? { label: '规则兜底', color: 'var(--red)', bg: 'var(--red-dim)' }
-        : objectiveActive
-          ? { label: '目标推进中', color: 'var(--violet)', bg: 'var(--violet-dim)' }
-          : { label: '大脑决策', color: 'var(--blue)', bg: 'var(--blue-dim)' };
+    const badge = decisionBadgeOf(event, objectiveActive);
     return (
       <div data-event="decision" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--blue-line)', background: 'var(--blue-dim)' }}>
         <div className="mono flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: 'var(--blue)' }}>
-          <span data-decision-badge={badge.label} className="rounded px-1.5 py-px text-[9.5px] font-semibold" style={{ color: badge.color, background: badge.bg, border: `1px solid ${badge.color}` }}>{badge.label}</span>
+          <span data-decision-badge={badge.kind} className="rounded px-1.5 py-px text-[9.5px] font-semibold" style={{ color: badge.color, background: badge.bg, border: `1px solid ${badge.color}` }}>{badge.label}</span>
           <span>{event.planner ?? 'planner'}</span>
         </div>
         <div className="mono mt-1 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{toolLabel(event.tool)}</div>

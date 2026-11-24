@@ -187,6 +187,57 @@ export function GameConnectionBanner({
   );
 }
 
+export type DecisionBadgeKind = 'brain' | 'fallback' | 'remote' | 'objective';
+
+/** T-M6-57：决策来源 4 种徽标（大脑决策 / 规则兜底 / 主人插队 / 目标推进中）。 */
+export function decisionBadgeOf(
+  decision: { planner?: string; intent?: string } | undefined,
+  objectiveActive: boolean,
+): { kind: DecisionBadgeKind; label: string; color: string; bg: string } {
+  if (decision?.planner === 'remote') return { kind: 'remote', label: '主人插队', color: 'var(--amber)', bg: 'var(--amber-dim)' };
+  if ((decision?.intent ?? '').startsWith('规则兜底：')) return { kind: 'fallback', label: '规则兜底', color: 'var(--red)', bg: 'var(--red-dim)' };
+  if (objectiveActive) return { kind: 'objective', label: '目标推进中', color: 'var(--violet)', bg: 'var(--violet-dim)' };
+  return { kind: 'brain', label: '大脑决策', color: 'var(--blue)', bg: 'var(--blue-dim)' };
+}
+
+/** 决策流（游戏共玩页）：最近 N 条决策，每条带来源徽标，真实 intent 不做改写。 */
+export function GameDecisionTimeline({
+  decisions,
+  objectiveActive,
+  limit = 10,
+}: {
+  decisions: AutodriveEventView[];
+  objectiveActive: boolean;
+  limit?: number;
+}): React.JSX.Element {
+  const recent = decisions.slice(-limit).reverse();
+  return (
+    <section className="card px-4 py-3.5" data-decision-timeline>
+      <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
+        <span>决策流</span>
+        <span className="text-[9.5px]" style={{ color: 'var(--text-3)' }}>{decisions.length} 条</span>
+      </div>
+      <div className="flex max-h-[200px] flex-col gap-1 overflow-y-auto">
+        {recent.map((decision, index) => {
+          const badge = decisionBadgeOf(decision, objectiveActive);
+          return (
+            <div key={`${decision.seq ?? index}:${decision.tool ?? ''}`} data-decision-badge={badge.kind} className="rounded-lg px-2 py-1" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className="rounded px-1 py-px text-[9px] font-semibold" style={{ color: badge.color, background: badge.bg, border: `1px solid ${badge.color}` }}>{badge.label}</span>
+                <span className="mono" style={{ color: 'var(--text-1)' }}>{toolLabel(decision.tool)}</span>
+              </div>
+              {decision.intent !== undefined && decision.intent !== '' && (
+                <div className="mt-0.5 line-clamp-2 text-[9.5px]" style={{ color: 'var(--text-3)' }}>{decision.intent}</div>
+              )}
+            </div>
+          );
+        })}
+        {recent.length === 0 && <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>尚无决策：启动自动驾驶后这里会显示大脑每一步来源。</span>}
+      </div>
+    </section>
+  );
+}
+
 /** 当前动作卡：工具名 + planner 来源 + 三格指标 */
 export function GameCurrentActionCard({
   decision,
