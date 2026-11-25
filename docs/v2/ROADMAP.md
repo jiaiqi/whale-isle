@@ -2,7 +2,7 @@
 
 > **工单状态机（7 态唯一流转）**：  
 > `PENDING` → `NEXT`（全局唯一激活待办）→ `DOING` → `IMPLEMENTED_UNVERIFIED`（代码与单测/仿真通过，待真机/真实平台验证） / `BLOCKED`（依赖或外部阻塞） → `DONE`（全部验收标准 + 真实验证证据齐全） | `REOPENED`（复测退回重开）  
-> **铁律**：每完成一个工单必须同步更新本文件、[REQUIREMENTS-MATRIX.md](./REQUIREMENTS-MATRIX.md) 与 [PROGRESS.md](./PROGRESS.md)；不得用 Mock/仿真通过冒充真机/真实平台 `DONE`。
+> **铁律**：每完成一个工单必须同步更新本文件、[TRACEABILITY.md](./TRACEABILITY.md)、[CURRENT.md](./CURRENT.md) 与 [EVALUATION.md](./EVALUATION.md)；不得用 Mock/仿真通过冒充真机/真实平台 `DONE`。
 
 ---
 
@@ -12,7 +12,7 @@
 - **状态**：`DONE`
 - **目标**：盘清 V1 代码资产、技术债、CrossPet/开源许可证边界，输出审计与基线架构。
 - **依赖**：无
-- **实现方案**：产出 [TAKEOVER-AUDIT.md](./TAKEOVER-AUDIT.md) 与 [ADR-001](./ADR-001-v2-foundation.md)。
+- **实现方案**：产出 [TAKEOVER-AUDIT.md](./TAKEOVER-AUDIT.md) 与 [ADR-001](./adr/ADR-001-v2-foundation.md)。
 - **验收标准**：所有现状数据有代码行号与命令实测支撑，区分真实可用与 Stub。
 - **测试方案**：`pnpm verify:gate` 全绿。
 - **预计风险**：旧文档口径失真 → 已以源码实读校验。
@@ -31,7 +31,7 @@
 - **状态**：`DONE`（本轮完成）
 - **目标**：对齐 Blueprint 01–17 与第一轮审查 15 项指令，补全 `LifeRuntime`、12 域 `CharacterCore`、AI-first 游戏智能、`CoopRuntime`、完整 `Creative Studio`、多轨声音表演、直播与社区 L1–L3、类人记忆、额度矩阵、Evolution Lite 与插件真隔离。
 - **依赖**：`V2-P0-02`
-- **实现方案**：新建 [REQUIREMENTS-MATRIX.md](./REQUIREMENTS-MATRIX.md)、[ADR-002](./ADR-002-v2-architecture-revision.md)、[PROGRESS.md](./PROGRESS.md)，修订 `ARCHITECTURE.md`、`ROADMAP.md` 与 `AGENTS.md` §5。
+- **实现方案**：构建完整 `docs/v2/` 文档真源（[PRODUCT.md](./PRODUCT.md)、[REQUIREMENTS.md](./REQUIREMENTS.md)、[TRACEABILITY.md](./TRACEABILITY.md)、[CURRENT.md](./CURRENT.md)、[OPEN-SOURCE.md](./OPEN-SOURCE.md)、[DESIGN-SYSTEM.md](./DESIGN-SYSTEM.md)、[EVALUATION.md](./EVALUATION.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)、[blueprint/](./blueprint/README.md) 与 [evidence/](./evidence/README.md)），修订 `ARCHITECTURE.md`、`ROADMAP.md` 与 `AGENTS.md` §5。
 - **验收标准**：Blueprint 全部领域无遗漏映射，每项工单包含完整验收与回滚约束。
 - **测试方案**：文档交叉审查 + 门禁校验。
 - **预计风险**：需求范围大 → 通过 P0–P5 清晰分期与单角色先闭环管控复杂度。

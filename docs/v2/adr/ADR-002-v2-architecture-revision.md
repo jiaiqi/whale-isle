@@ -1,7 +1,7 @@
 # ADR-002：Whale Isle V2 第一轮架构审查增补与产品纠偏决策
 
 - **状态**：Accepted（响应用户 2026-11-25 第一轮架构审查反馈，立即生效）
-- **关联文档**：[ARCHITECTURE.md](./ARCHITECTURE.md) · [REQUIREMENTS-MATRIX.md](./REQUIREMENTS-MATRIX.md) · [ROADMAP.md](./ROADMAP.md) · [ADR-001](./ADR-001-v2-foundation.md)
+- **关联文档**：[ARCHITECTURE.md](../ARCHITECTURE.md) · [REQUIREMENTS.md](../REQUIREMENTS.md) · [TRACEABILITY.md](../TRACEABILITY.md) · [ROADMAP.md](../ROADMAP.md) · [ADR-001](./ADR-001-v2-foundation.md)
 
 ---
 

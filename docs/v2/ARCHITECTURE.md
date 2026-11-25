@@ -1,6 +1,6 @@
 # Whale Isle V2 总体技术架构（修订版 · v2.1）
 
-> **上游依据**：`docs/Whale-Isle-V2-Blueprint/`（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-001](./ADR-001-v2-foundation.md)、[ADR-002](./ADR-002-v2-architecture-revision.md)。  
+> **上游依据**：[blueprint/](./blueprint/README.md)（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-001](./adr/ADR-001-v2-foundation.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)。  
 > **核心理念**：AI 不只是聊天机器人，而是一个拥有统一数字身份、人格、记忆、情绪、声音、身体和自主生活能力的数字生命平台。  
 > **架构原则**：Modular Monolith + 独立 Worker 起步；**先用一个主 AI 角色（小鲸）跑通全量产品闭环**；生产运行平面与 Evolution 研发平面严格物理隔离。
 

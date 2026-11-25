@@ -157,7 +157,11 @@ AI 只能在开发期修改仓库代码；软件编译运行后，线上环境�
    - 工单状态统一为 `PENDING | NEXT | DOING | IMPLEMENTED_UNVERIFIED | BLOCKED | DONE | REOPENED`。
    - 凡涉及真实游戏客户端、真实直播平台、真实硬件语音或跨设备联机的工单，若仅完成代码、单测、Replay 或 Electron E2E，**最高只能标记为 `IMPLEMENTED_UNVERIFIED`**（或在依赖缺失时标 `BLOCKED`），并写明阻塞条件，严禁标为 `DONE`。
 2. **跨会话进度与需求同步铁律**：
-   - 每个工单完成后（或遇到阻塞停止时），必须同步更新：`docs/v2/ROADMAP.md`、`docs/v2/REQUIREMENTS-MATRIX.md`、`docs/v2/PROGRESS.md` 及相关架构文档，确保任意新 Agent 不依赖聊天历史即可接手。
+   - 每个工单完成后（或遇到阻塞停止时），必须同步更新：`docs/v2/ROADMAP.md`、`docs/v2/TRACEABILITY.md`、`docs/v2/CURRENT.md`、`docs/v2/EVALUATION.md`（及对应 `docs/v2/evidence/` 记录），确保任意新 Agent 不依赖聊天历史即可接手。
+   - `docs/v2/` 标准文档真源目录：
+     - 产品与需求：`PRODUCT.md`（产品定义）、`REQUIREMENTS.md`（全量原始需求）、`TRACEABILITY.md`（需求工单矩阵）
+     - 架构与规范：`ARCHITECTURE.md`（有效架构）、`adr/`（决策记录）、`OPEN-SOURCE.md`（开源与许可证）、`DESIGN-SYSTEM.md`（曜石设计规范）、`TAKEOVER-AUDIT.md`（V1 基线）、`blueprint/`（蓝图归档）
+     - 执行与验收：`ROADMAP.md`（唯一工单来源）、`CURRENT.md`（当前交接上下文）、`EVALUATION.md`（质量评估）、`evidence/`（实测证据归档）
 3. **AI-First 游戏智能红线（ADR-002 D-103）**：
    - 严禁把游戏情景策略写死为固定 if/else 规则树；程序只做观察、前置条件、互斥执行、超时取消与真实回执验证。
    - 模型不可用或异常时，默认安全暂停高级自主决策并告知用户，**严禁未经用户选择静默退化为规则机器人**。

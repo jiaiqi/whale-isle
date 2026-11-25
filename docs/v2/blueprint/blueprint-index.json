@@ -1,0 +1,52 @@
+{
+  "project": "Whale Isle V2",
+  "blueprint_version": "2.1",
+  "date": "2026-11-25",
+  "principles": [
+    "single_primary_character_first",
+    "character_identity_decoupled_from_model_harness_voice_embodiment_device",
+    "reuse_mature_projects_through_adapters",
+    "progressive_refactor_not_blind_rewrite",
+    "development_plane_separate_from_runtime_plane",
+    "authorization_and_license_first",
+    "autonomous_game_decision_not_brittle_rule_stacks",
+    "guide_knowledge_is_evidence_not_mandatory_script",
+    "collaborative_chat_with_explicit_user_override"
+  ],
+  "master": "Whale-Isle-V2-MASTER.md",
+  "documents": [
+    "01-产品愿景与完整PRD.md",
+    "02-总体技术架构.md",
+    "03-领域模型与数据契约.md",
+    "04-Agent-Harness-MCP-Skills-插件系统.md",
+    "05-角色人格声音与表演系统.md",
+    "06-AI创作工坊与资产流水线.md",
+    "07-游戏化身与星露谷协作.md",
+    "08-Digital-Life社交浏览与记忆.md",
+    "09-直播舞台音乐与互动.md",
+    "10-Evolution-Engine自主研发系统.md",
+    "11-安全隐私权限与治理.md",
+    "12-技术选型与开源项目复用.md",
+    "13-现有Whale-Isle仓库审计与迁移.md",
+    "14-实施路线图与验收标准.md",
+    "15-Agent开发宪章与任务模板.md",
+    "16-决策记录与风险清单.md",
+    "17-自主游戏智能与人机共玩系统.md",
+    "README.md",
+    "Whale-Isle-V2-MASTER.md"
+  ],
+  "new_in_v2_1": "17-自主游戏智能与人机共玩系统.md",
+  "roadmap": [
+    "V2-00-repository-audit-and-architecture-freeze",
+    "V2-01-evolution-engine-minimum-loop",
+    "V2-02-single-character-identity",
+    "V2-03-voice-and-performance",
+    "V2-04-stardew-game-embodiment-autonomous-decision-and-coop",
+    "V2-05-creative-studio-and-asset-pipeline",
+    "V2-06-mcp-skills-harness-browser-computer",
+    "V2-07-live-stage-singing",
+    "V2-08-digital-life-social-memory",
+    "V2-09-multiple-desktop-pets",
+    "V2-10-multi-agent-autonomous-life"
+  ]
+}

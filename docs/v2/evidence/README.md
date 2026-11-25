@@ -1,0 +1,15 @@
+# Whale Isle V2 验证证据归档索引（Evidence Archive）
+
+本目录按里程碑或关键工单归档**真实可执行、可复现的验证证据**（命令、退出码、Commit Hash、覆盖率摘要、打包产物与尚未验收的真机/外部平台缺口）。
+
+## 归档规范
+
+1. 必须严格区分 `[REAL-DEVICE]`、`[E2E-HOST]`、`[SIMULATION]` 与 `UNVERIFIED / STUB`。
+2. 禁止伪造、补写或外推未实际打印的测试数量、覆盖率、耗时与余额结果。
+3. 每次里程碑或高风险工单完成后，新增或更新对应证据文档，并在 [EVALUATION.md](../EVALUATION.md) 与 [TRACEABILITY.md](../TRACEABILITY.md) 中引用。
+
+## 当前证据清单
+
+| 证据文件 | 覆盖范围 | 结论口径 |
+| --- | --- | --- |
+| [P0-foundation-verification.md](./P0-foundation-verification.md) | `V2-P0-01` ~ `V2-P0-05` | 自动化门禁、单测覆盖率、`node:sqlite` 迁移恢复、`electron-builder` 打包与 Electron 45 E2E 实测通过；外部 CLI 自动调用与 V1 旧库真机抽检诚实标注待验 |

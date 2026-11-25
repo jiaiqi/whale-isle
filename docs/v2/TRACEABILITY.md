@@ -1,13 +1,13 @@
 # Whale Isle V2 需求追踪矩阵（Requirements Traceability Matrix）
 
-> **上游依据**：`docs/Whale-Isle-V2-Blueprint/`（`MASTER` + `01`–`17`）及用户第一轮架构审查反馈（2026-11-25）。  
+> **上游依据**：[blueprint/](./blueprint/README.md)（`MASTER` + `01`–`17`）、[REQUIREMENTS.md](./REQUIREMENTS.md) 及用户第一轮架构审查反馈（2026-11-25）。  
 > **原则**：完整覆盖 V2 全量产品需求，**不允许因未实现或实现困难而删减需求**；状态诚实区分 `DONE`（代码+门禁+对应验证全部完成）、`IMPLEMENTED_UNVERIFIED`（代码/单测完成但缺真机/真实平台验证）、`PARTIAL`（部分实现或骨架）、`STUB`（仅有桩实现）、`PENDING`（未开始）。
 
 | Requirement ID | 原始需求描述 | 所属领域 | 实现模块 | 对应工单 | 依赖 | 验收场景 | 当前实现状态 | 真实验证证据 | 未解决限制 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **REQ-CORE-01** | 鲸屿 V2 微内核：统一生命周期、Typed 事件总线、分级脱敏日志、配置与凭据接口 | Platform Core | `@workbench/runtime-core`、`v2-kernel-host.ts` | `V2-P0-02` | 无 | Electron 启动内核进入 `running`，脱敏日志无明文，急停可触发 | **DONE** | `[E2E-HOST]` `v2-kernel.e2e.spec.ts` 通过；单包分支 90.25% | V1 宿主的零散事件与定时仍待逐批迁移 |
 | **REQ-CORE-02** | 本地 SQLite 统一收敛至 `node:sqlite`，消除原生 ABI 冲突并验证迁移/事务/恢复 | Platform Core / Storage | `@workbench/local-store` | `V2-P0-03` | `V2-P0-02` | 旧版 DB 自动备份升级、事务回滚、损坏 DB 隔离恢复、Electron 打包可运行 | **DONE** | `[E2E-HOST]` `v2StorageCheck()` 在 Electron 45 实测通过；`local-store` 26/26 单测（分支 92.06%）；`electron-builder --mac dir` 打包通过 | 需后续真机用户旧库升级抽检 |
-| **REQ-CORE-03** | 跨会话进度恢复与唯一工单状态机（含 `IMPLEMENTED_UNVERIFIED` / `BLOCKED` / `REOPENED`） | Platform Governance | `docs/v2/ROADMAP.md`、`PROGRESS.md`、`AGENTS.md` | `V2-P0-04` | `V2-P0-01` | 任意新 Agent 仅读仓库文档即可续接开发，不依赖聊天历史 | **DONE** | 文档落盘并纳入 `AGENTS.md` §5 | 需每次工单收尾同步更新 |
+| **REQ-CORE-03** | 跨会话进度恢复与唯一工单状态机（含 `IMPLEMENTED_UNVERIFIED` / `BLOCKED` / `REOPENED`） | Platform Governance | `docs/v2/ROADMAP.md`、`CURRENT.md`、`EVALUATION.md`、`AGENTS.md` | `V2-P0-04` | `V2-P0-01` | 任意新 Agent 仅读仓库文档即可续接开发，不依赖聊天历史 | **DONE** | 文档体系重构入库并纳入 `AGENTS.md` §5 | 需每次工单收尾同步更新 |
 | **REQ-CHAR-01** | 12 域模块化 `CharacterCore`（Identity/Personality/Preferences/Emotion/Motivation/Goals/Commitments/Relationships/Memory/Voice/Embodiment/Activity） | Character Core | `@workbench/runtime-core`、`character-core`（待拆分扩展） | `V2-P0-02`、`V2-P1-01` | `V2-P0-02` | 同一个 `characterId` 贯穿桌宠/游戏/直播/社区/声音，换模型不丢身份 | **PARTIAL** | `CharacterRegistryCore` 已涵盖基础身份/情绪/控制模式/急停 | 12 域分权存储与经历驱动人格成长待 `V2-P1-01` |
 | **REQ-CHAR-02** | 人格、兴趣与偏好随真实经历逐渐成长（非静态 Prompt 与固定情绪数值） | Character Core | `character-core` + `memory-graph` | `V2-P1-01`、`V2-P1-04` | `V2-P1-01` | 游戏/聊天经历沉淀为偏好演化记录，保留来源与变化历史 | **PENDING** | 无 | V1 为静态 `personaPrompt` + 短期情绪标签 |
 | **REQ-LIFE-01** | 独立 `LifeRuntime` 协调自主活动、目标、兴趣、日程、注意力、承诺与预算 | Digital Life Runtime | `life-runtime`（新域模块） | `V2-P1-01`、`V2-P3-04` | `V2-P0-02` | 游戏、直播、社区、创作、陪伴共享统一大脑，不出现互相打架的多脑 | **PENDING** | 无 | 目前各活动（自驾/工作跟随/随机彩蛋）由主进程定时器各自触发 |
