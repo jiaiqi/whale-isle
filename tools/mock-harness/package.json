@@ -2,7 +2,7 @@
   "name": "@workbench/mock-harness",
   "version": "0.1.0",
   "private": true,
-  "description": "[SIMULATION] AI 自测沙盒：星露谷 MCP 模拟器（5 剧本）/ 抖音弹幕风暴回放器 / 许可证扫描器",
+  "description": "[SIMULATION] AI 自测沙盒：星露谷 MCP 模拟器（5 剧本）/ 抖音弹幕风暴回放器 / 许可证扫描器 / BWF 同构卡死回放（T-M6-68）",
   "type": "module",
   "scripts": {
     "build": "tsc -b"
@@ -13,6 +13,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.2"
+    "@types/ws": "^8.18.2",
+    "@workbench/game-bridge-mcp": "workspace:*",
+    "@workbench/soak-real": "workspace:*"
   }
 }

@@ -1,0 +1,25 @@
+{
+  "id": "S03-story-choice-multiline",
+  "signature": "dialogue|失败 这是选择题 需要 choice|Farm",
+  "source": "T-M6-10（第一轮）真机：剧情多选题 dialogue 无 choice 无限 FAILED；state 片段取自 autodrive.spec.ts「剧情选择题」用例（多行「选项」块）",
+  "initialState": "## 基本状态\n时间：第1年春16日 07:30（Tue），天气：晴，明天天气：晴\n金钱：640g  体力：98/270  生命：100/100\n## 当前界面\n正在播放剧情/节日事件。对话框：你打算收养这只猫吗？\n选项（用 dialogue 并传 choice 序号回答）：\n  0: 是\n  1: 否\n## 位置\n地点：Farm（泡泡湾农场），室外\n你站在 (64,15)，面朝右\n## 背包（序号: 物品）\n0: 斧头（手持）\n1: 竹鱼竿（手持）\n背包空位：20 个（共 24 格）\n",
+  "rules": [
+    { "tool": "dialogue", "receipt": { "text": "OK dialogue: 成功：对话已推进，界面关闭" }, "advanceMinutes": 5 },
+    { "tool": "skip_event", "receipt": { "text": "失败：现在没在放剧情", "isError": true } },
+    { "tool": "close_menu", "receipt": { "text": "失败：现在没有打开的界面", "isError": true } },
+    { "tool": "travel_to", "receipt": { "text": "OK travel_to: 已到达" }, "advanceMinutes": 30 },
+    { "tool": "fish", "receipt": { "text": "OK fish: 钓到 1 条沙丁鱼" }, "advanceMinutes": 60 },
+    { "tool": "forage", "receipt": { "text": "OK forage: 采集到 1 个韭葱" }, "advanceMinutes": 30 },
+    { "tool": "wait", "receipt": { "text": "OK wait: 等待了 1 分钟" }, "advanceMinutes": 10 },
+    { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
+  ],
+  "expect": {
+    "maxCycles": 8,
+    "maxSameFailure": 0,
+    "mustCallOneOf": ["dialogue", "travel_to"],
+    "mustCallWithArgs": [
+      { "tool": "dialogue", "args": { "choice": 0 } }
+    ],
+    "clockMustAdvance": true
+  }
+}

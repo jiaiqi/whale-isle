@@ -6,6 +6,17 @@
  *   - 远程指令信箱：人工插队 P0（Shell 聊天/WebUI）
  * 行为须匹配桌宠人格：决策结果附 intent（用于台词/情绪联动，persona-brain 消费）。
  */
+import {
+  inProgressGuard,
+  scheduleDecision,
+  shopBuyDecision,
+  survivalDecision,
+  type ScheduleContext,
+  type ScheduleFacts,
+  type ScheduleOptions,
+  type ScheduleStep,
+} from './rule-schedule';
+import { hasToolInBag, parseFarmSummary, parseSeedInventory, parseWeekday, seedShopStatus, type FarmSummary } from './state-hints';
 
 export interface GameStateSnapshot {
   raw: string;
@@ -89,13 +100,13 @@ export function parseGameState(raw: string): GameStateSnapshot {
  */
 const KEEP_TAG_RE = /【(?:留着|保留)[^】]*】/;
 const NON_SELLABLE_RE = new RegExp(
-  `${KEEP_TAG_RE.source}|种子|肥料|鱼饵|鱼钩|浮标|炸弹|花束|吊坠|^(?:斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)|窗户|椅子|桌子|床|灯|地毯|壁纸|地板|柜|架子|机器|熔炉|洒水器|稻草人|箱子|酒桶|罐头|火炉|壁炉|电视|沙发|盆栽`,
+  `${KEEP_TAG_RE.source}|种子|肥料|鱼饵|鱼钩|浮标|炸弹|花束|吊坠|^(?:斧头|锄头|喷壶|水壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)|窗户|椅子|桌子|床|灯|地毯|壁纸|地板|柜|架子|机器|熔炉|洒水器|稻草人|箱子|酒桶|罐头|火炉|壁炉|电视|沙发|盆栽`,
 );
 /** 值钱/可卖线索（真机教训：家具类 ship 会被 BWF 拒绝，优先挑鱼/采集/矿物） */
 const SELLABLE_HINT_RE =
   /鱼|虾|蟹|蛤|牡蛎|海草|珊瑚|贝|鲤|鲈|鲱|鲷|鳗|沙丁|鳟|鲑|鳅|花|莓|韭|蕨|蘑菇|矿石|宝石|钻石|石英|水晶|煤|铜|铁|金/;
 /** 工具/消耗品识别（最后手段垃圾化时保护） */
-const ESSENTIAL_RE = /种子|肥料|鱼饵|鱼钩|浮标|炸弹|花束|吊坠|^(?:斧头|锄头|喷壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)/;
+const ESSENTIAL_RE = /种子|肥料|鱼饵|鱼钩|浮标|炸弹|花束|吊坠|^(?:斧头|锄头|喷壶|水壶|十字镐|镐子|镰刀|鱼竿|竹鱼竿|剑|刀)/;
 
 /** 从状态行提取干净物品名：剥标签、去数量（「沙丁鱼 x3 金星」→「沙丁鱼」） */
 export function cleanItemName(text: string): string {
@@ -368,6 +379,11 @@ export interface Planner {
   restoreObjectiveDone?(): void;
   /** 可选：编排器回执反馈（规则兜底据此做失败升级，避免离线模式死循环） */
   observeReceipt?(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void;
+  /**
+   * 可选：只读调试快照（冷却表 / rescueTried / avoidTools / objective）。
+   * 供 soak:real 卡死现场包落盘；实现必须无副作用、不改变任何内部状态。
+   */
+  debugSnapshot?(): Record<string, unknown>;
 }
 
 /** 满包救援工具集合：只有这些工具的回执会推进规则模式的救援阶梯 */
@@ -415,23 +431,35 @@ function handleMenu(state: GameStateSnapshot): PlannerDecision | null {
   }
   if (/剧情|节日事件/.test(menu)) return { kind: 'act', tool: 'dialogue', args: {}, intent: '推进剧情对话' };
   if (/商店|Shop/.test(menu)) return { kind: 'act', tool: 'close_menu', args: {}, intent: '关掉误开的商店界面' };
+  // 每日出货结算界面（2026-11-25 真机夏7 06:00）：这是「确认提示」不是对话，`dialogue` 会报
+  // 「现在没有对话框」连败三次并触发 watchdog；BWF 的 close_menu 语义就是关闭/确认提示。
+  if (/出货结算|结算界面|结算画面/.test(menu)) {
+    return { kind: 'act', tool: 'close_menu', args: {}, intent: '确认每日出货结算界面' };
+  }
   return { kind: 'act', tool: 'dialogue', args: {}, intent: '推进当前界面' };
 }
 
 /**
- * RulePlanner：确定性日程（摸鱼/认真双态的规则化表达，人格化台词由 intent 承载）。
- * 日程（按游戏时钟）：
- *   06:00-07:00  读信（有未读）→ 出门
- *   07:00-11:00  农活：浇水（有作物）→ 收获 → 种植
- *   11:00-17:30  海边钓鱼（赚米）
- *   17:30-18:30  采集/翻垃圾桶（小鲸摸鱼时刻）
- *   >=18:30      回家 → 睡觉（防晕倒——历史教训：Joja 医疗费 50g）
- * 体力 <12% → 吃东西；体力 <8% 且无食物 → 直接睡觉。
+ * RulePlanner：确定性日程（T-M6-69：无 LLM 也能独立完成每日闭环）。
+ *
+ * 决策顺序（RUNBOOK-M8-STARDEW §3.4）：
+ *   1. 我们主动打开的商店界面 → 先买种（BWF 语义：buy 必须在已打开的商店里）
+ *   2. 菜单/剧情/过场 → handleMenu
+ *   3. 生存护栏：体力 <15% 回家、<8% 原地睡、≥24:00 强制回家睡、生命 <30%（沿用）
+ *   4. 背包空位 0 → 有界救援阶梯（ship → donate → place/trash → tidy 一次 → wait 求助）
+ *   5. 日程（rule-schedule.ts）：读信 → 浇水（雨天跳过）→ 收获 → 出货 → 购种 →
+ *      播种/开垦 → 22:00 收工 → 钓鱼/采集填充（都被避开则 wait 求助）
+ *
+ * 与 RUNBOOK 的唯一次序差异：**有界面时先处理界面**。BWF 在界面打开时会拒绝其他动作，
+ * 先走生存/日程只会连续 FAILED（真机 S03 教训）；无界面时生存护栏仍严格优先于日程。
+ *
+ * 体力 <8% → 原地睡（BWF sleep 自己走回农舍）；8%~15% → 回家再睡；22:00 收工可配置。
  */
 export class RulePlanner implements Planner {
   readonly name = 'rule-schedule';
-  private phase: 'morning-mail' | 'farm-work' | 'fishing' | 'forage' = 'farm-work';
-  private lastPhaseDay = -1;
+  private phase = 'farm-work';
+  /** 日键（季节+日）：BWF 的 day 换季会回到 1，只比 day 会把春28→夏1 当成同一天 */
+  private lastDayKey = '';
   /** 上次解析到的背包空位（BWF get_state 会省掉未变化段落，不能把「省略」当「有空位」） */
   private lastFreeSlots: number | null = null;
   private furniturePlaceTried = false;
@@ -445,6 +473,15 @@ export class RulePlanner implements Planner {
   private readonly failStreak = new Map<string, number>();
   /** 当天避开不再尝试的工具（环境级失败一次即避开，普通失败连续两次避开；成功一次解除） */
   private readonly avoidTools = new Set<string>();
+  /** 当天已完成的日程步骤（跨日重置；只认 COMPLETED 回执，N/A 不在此集合里） */
+  private readonly dayDone = new Set<ScheduleStep>();
+  /**
+   * 最近一次在农场解析到的作物概况。BWF 的「作物」段只报当前地点，
+   * 离开农场后（海滩/商店）必须沿用这份缓存才能决定要不要回去播种/开垦。
+   */
+  private lastFarm: FarmSummary | null = null;
+
+  constructor(private readonly scheduleOptions: ScheduleOptions = {}) {}
 
   observeReceipt(tool: string, status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' | 'TIMEOUT' | 'ERROR', summary: string): void {
     // T-M6-52：先记工具级失败——规则兜底也必须换做法，不能只记住满包救援工具。
@@ -453,7 +490,14 @@ export class RulePlanner implements Planner {
     if (status === 'COMPLETED') {
       this.failStreak.delete(tool);
       this.avoidTools.delete(tool);
-    } else if ((status === 'FAILED' || status === 'ERROR' || status === 'TIMEOUT') && !SURVIVAL_TOOLS.has(tool)) {
+      const step = COMPLETED_STEP_BY_TOOL[tool];
+      if (step !== undefined) this.dayDone.add(step);
+    } else {
+      // 决策时乐观记的日程步骤遇到失败要撤销，允许当天换个时机重试
+      const step = COMPLETED_STEP_BY_TOOL[tool];
+      if (step !== undefined) this.dayDone.delete(step);
+    }
+    if ((status === 'FAILED' || status === 'ERROR' || status === 'TIMEOUT') && !SURVIVAL_TOOLS.has(tool)) {
       const streak = (this.failStreak.get(tool) ?? 0) + 1;
       this.failStreak.set(tool, streak);
       if (streak >= 2 || ENV_FAIL_RE.test(summary)) this.avoidTools.add(tool);
@@ -468,43 +512,75 @@ export class RulePlanner implements Planner {
     this.rescueTried.add(tool);
   }
 
-  async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
-    const menu = handleMenu(state);
-    if (menu) return menu;
+  /**
+   * 只读调试快照（T-M6-67）：冷却表 / rescueTried / avoidTools / objective。
+   * 现场包在卡死瞬间落盘，绝不改状态。RulePlanner 不消费 objective，固定为 null。
+   */
+  debugSnapshot(): Record<string, unknown> {
+    const sortedObject = (map: Map<string, number>): Record<string, number> =>
+      Object.fromEntries([...map.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    return {
+      planner: this.name,
+      phase: this.phase,
+      dayKey: this.lastDayKey,
+      objective: null,
+      avoidTools: [...this.avoidTools].sort(),
+      failStreak: sortedObject(this.failStreak),
+      rescueTried: [...this.rescueTried].sort(),
+      lastRescueFail: this.lastRescueFail,
+      lastFreeSlots: this.lastFreeSlots,
+      furniturePlaceTried: this.furniturePlaceTried,
+      doneSteps: [...this.dayDone].sort(),
+      lastFarm: this.lastFarm === null ? null : { ...this.lastFarm },
+    };
+  }
 
-    // 跨日重置日程
+  async decide(state: GameStateSnapshot): Promise<PlannerDecision> {
+    // 跨日（含换季）重置日程与失败记忆
     const dayKey = `${state.season}${state.day}`;
-    if (this.lastPhaseDay !== state.day) {
-      this.lastPhaseDay = state.day;
-      this.phase = 'morning-mail';
+    if (this.lastDayKey !== dayKey) {
+      this.lastDayKey = dayKey;
+      this.phase = 'farm-work';
+      this.dayDone.clear();
       this.rescueTried.clear();
       this.lastRescueFail = '';
       this.failStreak.clear();
       this.avoidTools.clear();
+      this.furniturePlaceTried = false;
     }
-    void dayKey;
 
-    const staminaRatio = state.stamina / state.staminaMax;
-    if (staminaRatio < 0.08) {
-      return { kind: 'act', tool: 'sleep', args: {}, intent: '体力见底，回家睡觉（再也不收 50g 医疗费！）' };
+    const context = this.buildContext(state);
+
+    // 0) BWF 有长动作在执行（sleep 最长 7 分钟）：期间发什么都被拒，连发会把失败签名刷成卡死
+    //    （2026-11-25 真机夏6 22:40：sleep 执行中连发 travel_to → repeat-failure）。等它做完再决策。
+    const busy = inProgressGuard(state);
+    if (busy !== null) {
+      this.phase = 'wait';
+      return busy;
     }
-    if (staminaRatio < 0.12 && state.clockMinutes < 18 * 60) {
-      return { kind: 'act', tool: 'eat', args: {}, intent: '体力不足先吃点东西垫垫' };
+
+    // 1) 我们主动开的商店界面：先买种，别当误开界面 close_menu 掉
+    const shopBuy = shopBuyDecision(context);
+    if (shopBuy !== null) {
+      this.phase = 'buy';
+      return shopBuy;
     }
-    // 生命护栏（T-M6-14）：矿洞/战斗后血线 <30% 先回血或回家（真机提示词第 7 条的确定性兜底）
-    const healthRatio = state.healthMax > 0 ? state.health / state.healthMax : 1;
-    if (healthRatio < 0.3) {
-      const food = pickEdible(state.raw);
-      if (food !== null) return { kind: 'act', tool: 'eat', args: { item: food }, intent: `血量见底了，先吃个${food}回回血` };
-      if (state.location !== 'FarmHouse') {
-        return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '血量危险又没吃的，先回家躲一躲' };
-      }
-      return { kind: 'act', tool: 'sleep', args: {}, intent: '血量见底，睡觉回血（明天又是好鲸）' };
+
+    // 2) 菜单/剧情/过场：BWF 有界面时拒绝其他动作，必须先处理
+    const menu = handleMenu(state);
+    if (menu !== null) {
+      this.phase = 'menu';
+      return menu;
     }
-    if (state.clockMinutes >= 18 * 60 + 30) {
-      return this.goSleep(state);
+
+    // 3) 生存护栏（无界面时优先级最高）
+    const survival = survivalDecision(state, context.edible, this.scheduleOptions);
+    if (survival !== null) {
+      this.phase = 'survival';
+      return survival;
     }
-    // 背包塞满：任何采集/钓鱼都会失败（真机 2026-11-22 连续 FAILED fish 教训）。
+
+    // 4) 背包塞满：任何采集/钓鱼都会失败（真机 2026-11-22 连续 FAILED fish 教训）。
     // 规则模式无回执上下文：优先出货（不依赖农场箱子，还能赚钱），没可卖的才整理。
     const rawHasSlots = /背包空位：\d+\s*个/.test(state.raw);
     if (rawHasSlots) this.lastFreeSlots = state.freeSlots;
@@ -515,146 +591,141 @@ export class RulePlanner implements Planner {
       this.lastRescueFail = '';
     }
     if (effectiveSlots <= 0) {
-      // 最高优先：钱够且游戏提示可扩容 → 去皮埃尔买背包（一次性解决满包，真机 2026-11-23 实测）。
-      const upgrade = parseBackpackUpgrade(state.raw);
-      if (upgrade !== null && state.money >= upgrade.cost && !this.rescueTried.has('backpack_upgrade')) {
-        if (state.location !== 'SeedShop') {
-          return {
-            kind: 'act',
-            tool: 'travel_to',
-            args: { location: 'SeedShop' },
-            intent: `背包满了，钱够扩容（${upgrade.cost}g → ${upgrade.capacity} 格），去皮埃尔杂货店`,
-          };
-        }
-        const spot = findBuyBackpackSpot(state.raw);
-        if (spot !== null) {
-          this.rescueTried.add('backpack_upgrade');
-          return {
-            kind: 'act',
-            tool: 'interact',
-            args: { x: spot.x, y: spot.y },
-            intent: `买背包扩容（${upgrade.cost}g → ${upgrade.capacity} 格）`,
-          };
-        }
-      }
-      // 有可卖物优先出货（不依赖农场箱子，还能赚钱）。
-      const item = pickShippableItem(state.raw);
-      if (item !== null && !this.rescueTried.has('ship_items')) {
-        return { kind: 'act', tool: 'ship_items', args: { item }, intent: `背包满了，先把${item}出货换米腾位置` };
-      }
-      // 只剩【留着】的收集包材料：donate_bundles 是唯一无损腾格途径（只试一次）。
-      const hasReserved = /【留着/.test(state.raw);
-      if (hasReserved && !this.rescueTried.has('donate_bundles')) {
-        return { kind: 'act', tool: 'donate_bundles', args: {}, intent: '背包只剩收集包材料，去社区中心捐掉腾格（不卖不扔）' };
-      }
-      const furniture = pickFurnitureToPlace(state.raw);
-      if (furniture !== null && (!this.rescueTried.has('place_item') || !this.rescueTried.has('trash_item'))) {
-        if (!this.furniturePlaceTried && !this.rescueTried.has('place_item')) {
-          this.furniturePlaceTried = true;
-          if (state.location !== 'Farm') {
-            return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把家具摆出来腾个背包格' };
-          }
-          if (state.posX >= 0) {
-            return { kind: 'act', tool: 'place_item', args: { item: furniture, x: state.posX + 1, y: state.posY, force: true }, intent: `把${furniture}摆到农场上腾位置` };
-          }
-        }
-        if (!this.rescueTried.has('trash_item')) {
-          return { kind: 'act', tool: 'trash_item', args: { item: furniture, force: true }, intent: `家具摆不下，只好忍痛丢掉${furniture}换一格` };
-        }
-      }
-      // tidy 只试一次：BWF 在「农场没有箱子」时会直接失败，但世界箱子未必能从状态文本可靠判定，
-      // 所以保留一次尝试；失败后由 rescueTried 记住，绝不重复空转。
-      if (!this.rescueTried.has('tidy_backpack')) {
-        return { kind: 'act', tool: 'tidy_backpack', args: { purpose: 'fish' }, intent: '背包塞得满满当当，先整理出空位再干活' };
-      }
-      // 无可出货 / 无可捐 / 无箱子：停止空转，明确求助（wait 不产生游戏动作）。
-      return {
-        kind: 'wait',
-        seconds: 60,
-        reason: `满包且农场无箱子、无可出货/可捐物品（${this.lastRescueFail || '首次判断'}）——需要主人造箱或手动腾格；规则模式暂停动作，不空转`,
-      };
+      const rescue = this.rescueDecision(state);
+      if (rescue !== null) return rescue;
     }
 
-    switch (this.phase) {
-      case 'morning-mail': {
-        if (/(\d+) 封未读信件/.test(state.raw)) {
-          const tool = { kind: 'act' as const, tool: 'read_mail', args: {}, intent: '读信啦——说不定有鱼竿！（7 封未读）' };
-          this.phase = 'farm-work';
-          return tool;
-        }
-        this.phase = 'farm-work';
-        return this.farmWork(state);
+    // 到达农场：今天的「看一眼作物」算完成，后续浇水/收获/播种按实际状态决定
+    if (state.location === 'Farm') this.dayDone.add('visit');
+
+    // 5) 日程
+    const decision = scheduleDecision(context, this.scheduleOptions);
+    if (decision !== null) {
+      this.phase = decision.kind === 'act' ? decision.tool : 'wait';
+      // 日程动作「决策即记一次」：规则模式不再靠内部 phase 推进，避免同一状态文本反复读信/浇水。
+      // 真失败（FAILED/ERROR/TIMEOUT）由 observeReceipt 撤销，允许当天重试；出货故意不记（多批物品要多次出）。
+      if (decision.kind === 'act') {
+        const step = COMPLETED_STEP_BY_TOOL[decision.tool];
+        if (step !== undefined && step !== 'ship') this.dayDone.add(step);
       }
-      case 'farm-work':
-        return this.farmWork(state);
-      case 'fishing':
-        if (state.clockMinutes >= 17 * 60 + 30) {
-          this.phase = 'forage';
-          return this.forage(state);
-        }
-        // 没鱼竿 / fish 已连败冷却：重试 fish 毫无意义，转采集（规则兜底的安全替代，不空转）
-        if (this.fishingUnavailable(state)) {
-          this.phase = 'forage';
-          return this.forage(state);
-        }
-        return { kind: 'act', tool: 'fish', args: { casts: 5 }, intent: '钓鱼赚米！这可是正经的生产活动（傲娇）' };
-      case 'forage':
-        // 18:30 后的睡觉切换由上方全局规则统一处理，这里只做傍晚采集
-        return this.forage(state);
+      return decision;
     }
+    this.phase = 'wait';
+    return {
+      kind: 'wait',
+      seconds: 60,
+      reason: '今天的日程都做完了：没有可浇/可收的作物，种子与空地也不满足条件，钓鱼采集都不可行——规则模式待命，不空转',
+    };
   }
 
-  /** 今天还能不能钓鱼：明确没鱼竿（背包段存在且无鱼竿）或 fish 已在失败冷却 → 不能 */
-  private fishingUnavailable(state: GameStateSnapshot): boolean {
-    return this.avoidTools.has('fish') || hasFishingRod(state.raw) === false;
+  /** 组装日程上下文（解析 + 农场概况缓存 + 商店营业时间） */
+  private buildContext(state: GameStateSnapshot): ScheduleContext {
+    const summary = parseFarmSummary(state.raw);
+    if (state.location === 'Farm') this.lastFarm = summary;
+    const farm = state.location === 'Farm' ? summary : (this.lastFarm ?? summary);
+    const weekday = parseWeekday(state.raw);
+    const shop = seedShopStatus(state.clockMinutes, weekday, state.festival);
+    const facts: ScheduleFacts = {
+      unreadMail: parseUnreadMail(state.raw),
+      cropCount: farm.cropCount,
+      needsWater: farm.needsWater,
+      harvestable: farm.harvestable,
+      emptyTilled: farm.emptyTilled,
+      seeds: parseSeedInventory(state.raw),
+      hasRod: hasFishingRod(state.raw),
+      hasWateringCan: hasToolInBag(state.raw, /水壶|喷壶|Watering ?Can/i),
+      hasHoe: hasToolInBag(state.raw, /锄头|Hoe/i),
+      weekday,
+      shopOpen: shop.open,
+      festival: state.festival,
+    };
+    return {
+      state,
+      facts,
+      avoidTools: this.avoidTools,
+      done: this.dayDone,
+      shippable: pickShippableItem(state.raw),
+      edible: pickEdible(state.raw),
+    };
   }
 
-  private farmWork(state: GameStateSnapshot): PlannerDecision {
-    if (state.clockMinutes >= 11 * 60) {
-      this.phase = 'fishing';
-      // 今天钓鱼已不可行（没鱼竿）：直接转采集，别白跑海滩
-      if (this.fishingUnavailable(state)) return this.forage(state);
-      return { kind: 'act', tool: 'travel_to', args: { location: 'Beach' }, intent: '上午农活干完，去海滩钓鱼！' };
-    }
-    if (!isRaining(state) && /剩 \d+ 株没浇|需要浇水/.test(state.raw)) {
-      return { kind: 'act', tool: 'water_crops', args: {}, intent: '给作物浇水——今天浇了才算长一天' };
-    }
-    if (/成熟的作物/.test(state.raw)) {
-      return { kind: 'act', tool: 'harvest_crops', args: {}, intent: '收获成熟的作物！' };
-    }
-    if (/防风草种子|种子 x\d+/.test(state.raw)) {
-      return { kind: 'act', tool: 'plant_seeds', args: { seed: '防风草种子' }, intent: '播种防风草（海滩农场沙地注意洒水器无效）' };
-    }
-    if (state.location !== 'Farm' && state.location !== 'FarmHouse') {
-      return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场继续干活' };
-    }
-    // 没有明确农活 → 直接进入钓鱼阶段（没鱼竿则转采集）
-    this.phase = 'fishing';
-    if (this.fishingUnavailable(state)) return this.forage(state);
-    return { kind: 'act', tool: 'travel_to', args: { location: 'Beach' }, intent: '农活告一段落，海滩钓鱼去～' };
-  }
-
-  private forage(state: GameStateSnapshot): PlannerDecision {
-    // 采集也失败（背包满/地点不对）：回农场干徒手活；clear_area 也失败就明确求助，绝不空转
-    if (this.avoidTools.has('forage')) {
-      if (state.location !== 'Farm' && state.location !== 'FarmHouse') {
-        return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '采集也不顺利，先回农场看看有什么能干' };
+  /** 满包有界救援阶梯（T-M6-10 真机回归；行为与拆分前逐字一致） */
+  private rescueDecision(state: GameStateSnapshot): PlannerDecision | null {
+    // 最高优先：钱够且游戏提示可扩容 → 去皮埃尔买背包（一次性解决满包，真机 2026-11-23 实测）。
+    const upgrade = parseBackpackUpgrade(state.raw);
+    if (upgrade !== null && state.money >= upgrade.cost && !this.rescueTried.has('backpack_upgrade')) {
+      if (state.location !== 'SeedShop') {
+        return {
+          kind: 'act',
+          tool: 'travel_to',
+          args: { location: 'SeedShop' },
+          intent: `背包满了，钱够扩容（${upgrade.cost}g → ${upgrade.capacity} 格），去皮埃尔杂货店`,
+        };
       }
-      if (!this.avoidTools.has('clear_area')) {
-        return { kind: 'act', tool: 'clear_area', args: {}, intent: '钓鱼采集都干不了，先把农场清一清' };
+      const spot = findBuyBackpackSpot(state.raw);
+      if (spot !== null) {
+        this.rescueTried.add('backpack_upgrade');
+        return {
+          kind: 'act',
+          tool: 'interact',
+          args: { x: spot.x, y: spot.y },
+          intent: `买背包扩容（${upgrade.cost}g → ${upgrade.capacity} 格）`,
+        };
       }
-      return { kind: 'wait', seconds: 60, reason: '钓鱼/采集/清地都失败了——需要主人看看是不是缺工具（鱼竿/斧头）或背包满了' };
     }
-    if (state.location !== 'Town') {
-      return { kind: 'act', tool: 'travel_to', args: { location: 'Town' }, intent: '傍晚去镇上翻垃圾桶（侦察！才不是摸鱼）' };
+    // 有可卖物优先出货（不依赖农场箱子，还能赚钱）。
+    const item = pickShippableItem(state.raw);
+    if (item !== null && !this.rescueTried.has('ship_items')) {
+      return { kind: 'act', tool: 'ship_items', args: { item }, intent: `背包满了，先把${item}出货换米腾位置` };
     }
-    return { kind: 'act', tool: 'forage', args: {}, intent: '采集时间～顺便翻翻垃圾桶（小鲸的侦察行动）' };
+    // 只剩【留着】的收集包材料：donate_bundles 是唯一无损腾格途径（只试一次）。
+    const hasReserved = /【留着/.test(state.raw);
+    if (hasReserved && !this.rescueTried.has('donate_bundles')) {
+      return { kind: 'act', tool: 'donate_bundles', args: {}, intent: '背包只剩收集包材料，去社区中心捐掉腾格（不卖不扔）' };
+    }
+    const furniture = pickFurnitureToPlace(state.raw);
+    if (furniture !== null && (!this.rescueTried.has('place_item') || !this.rescueTried.has('trash_item'))) {
+      if (!this.furniturePlaceTried && !this.rescueTried.has('place_item')) {
+        this.furniturePlaceTried = true;
+        if (state.location !== 'Farm') {
+          return { kind: 'act', tool: 'travel_to', args: { location: 'Farm' }, intent: '回农场把家具摆出来腾个背包格' };
+        }
+        if (state.posX >= 0) {
+          return { kind: 'act', tool: 'place_item', args: { item: furniture, x: state.posX + 1, y: state.posY, force: true }, intent: `把${furniture}摆到农场上腾位置` };
+        }
+      }
+      if (!this.rescueTried.has('trash_item')) {
+        return { kind: 'act', tool: 'trash_item', args: { item: furniture, force: true }, intent: `家具摆不下，只好忍痛丢掉${furniture}换一格` };
+      }
+    }
+    // tidy 只试一次：BWF 在「农场没有箱子」时会直接失败，但世界箱子未必能从状态文本可靠判定，
+    // 所以保留一次尝试；失败后由 rescueTried 记住，绝不重复空转。
+    if (!this.rescueTried.has('tidy_backpack')) {
+      return { kind: 'act', tool: 'tidy_backpack', args: { purpose: 'fish' }, intent: '背包塞得满满当当，先整理出空位再干活' };
+    }
+    // 无可出货 / 无可捐 / 无箱子：停止空转，明确求助（wait 不产生游戏动作）。
+    return {
+      kind: 'wait',
+      seconds: 60,
+      reason: `满包且农场无箱子、无可出货/可捐物品（${this.lastRescueFail || '首次判断'}）——需要主人造箱或手动腾格；规则模式暂停动作，不空转`,
+    };
   }
+}
 
-  private goSleep(_state: GameStateSnapshot): PlannerDecision {
-    if (_state.location !== 'FarmHouse') {
-      return { kind: 'act', tool: 'travel_to', args: { location: 'FarmHouse' }, intent: '回家！绝不晕倒（Joja 医疗费 50g 的教训）' };
-    }
-    return { kind: 'act', tool: 'sleep', args: {}, intent: '睡觉～晚安主人（自动结算）' };
-  }
+/** COMPLETED 回执 → 当天日程步骤（只有这些工具算「闭环项完成」） */
+const COMPLETED_STEP_BY_TOOL: Readonly<Record<string, ScheduleStep>> = {
+  read_mail: 'mail',
+  water_crops: 'water',
+  harvest_crops: 'harvest',
+  ship_items: 'ship',
+  buy: 'buy',
+  plant_seeds: 'plant',
+  till_area: 'till',
+  take_items: 'tool',
+};
+
+/** 未读信件数：`邮箱里有 7 封未读信件` → 7；没有该行视为 0（不读空信） */
+function parseUnreadMail(raw: string): number {
+  const match = /(\d+)\s*封未读信件/.exec(raw);
+  return match?.[1] === undefined ? 0 : Number(match[1]);
 }

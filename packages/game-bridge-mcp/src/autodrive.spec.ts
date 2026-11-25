@@ -20,7 +20,8 @@ const STATE_OK = `【你的长期笔记】x
 邮箱里有 7 封未读信件
 ## 背包
 5: 防风草种子 x15
-6: 竹鱼竿（手持）`;
+6: 竹鱼竿（手持）
+7: 水壶（手持）`;
 
 function okClient(text: string, delayMs = 0): BwfMcpClient {
   const response = { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text }] }, isError: false }) } as unknown as Response;
@@ -170,28 +171,63 @@ describe('RulePlanner 确定性日程', () => {
   };
   const planner = new RulePlanner();
 
-  it('清晨有未读信 → read_mail；无未读 → 浇水/种植', async () => {
+  it('清晨有未读信 → read_mail；无未读且有空地 → 播种（T-M6-69 闭环）', async () => {
     const d1 = await planner.decide(at('06:30'));
     expect(d1.kind === 'act' && d1.tool).toBe('read_mail');
-    const noMail = { ...base, raw: STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读') };
-    const d2 = await planner.decide(noMail);
-    expect(d2.kind === 'act' && d2.tool).toBe('plant_seeds'); // 背包有防风草种子 → 播种
+    // 农场作物段：0 株作物、15 格已开垦空地；背包有 15 份防风草种子
+    const withFarm = STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读')
+      .replace('## 背包', '## 作物（本地点全部）\n无\n（农场概况：共 0 株作物，需浇水 0，可收获 0）\n农田：共 15 格耕地：作物 0，空 15\n## 背包');
+    const d2 = await planner.decide(parseGameState(withFarm));
+    expect(d2.kind === 'act' && d2.tool).toBe('plant_seeds');
+    expect(d2.kind === 'act' && d2.args).toMatchObject({ seed: '防风草种子' });
+  });
+
+  it('站在农场用明细格式报「需要浇水 N 株」→ 先浇水（2026-11-25 真机：种完不浇水的回归）', async () => {
+    const p = new RulePlanner();
+    const farmDetail = STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读')
+      .replace('## 背包', `## 作物（本地点全部）
+需要浇水 2 株：(48,19) (45,19)
+生长中：辣椒 x2（最快约 5 天后成熟）
+农田：还没有成片的田；零散耕地 2 格（其中 2 株作物，收完别再往这里种）
+## 背包`);
+    const d = await p.decide(parseGameState(farmDetail));
+    expect(d.kind === 'act' && d.tool).toBe('water_crops');
+  });
+
+  it('BWF 正在执行 sleep 时 → 只 wait，不再发动作（2026-11-25 真机：连发 travel_to 被判卡死）', async () => {
+    const p = new RulePlanner();
+    const busy = `【正在执行】sleep 已经执行 0 分 6 秒（做完前别的动作会被拒绝；做完的结果会出现在 get_state 最前面）\n${STATE_OK}`;
+    const d = await p.decide(parseGameState(busy));
+    expect(d.kind).toBe('wait');
+    expect(d.kind === 'wait' ? d.reason : '').toContain('sleep');
   });
 
   it('11 点后 → 去海滩钓鱼', async () => {
-    const d = await planner.decide(at('11:30'));
-    expect(d.kind === 'act' && d1_tool(d)).toBe('travel_to');
-    function d1_tool(d: Awaited<ReturnType<RulePlanner['decide']>>) { return d.kind === 'act' ? d.tool : ''; }
+    const p = new RulePlanner();
+    const d = await p.decide(at('11:30', { raw: STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读') }));
+    expect(d.kind === 'act' && d.tool).toBe('travel_to');
+    expect(d.kind === 'act' && d.args).toMatchObject({ location: 'Beach' });
     expect(d.kind === 'act' && d.intent).toContain('钓鱼');
   });
 
-  it('体力 <8% → 直接睡觉；≥18:30 → 回家/睡觉（防晕倒）', async () => {
+  it('体力 <8% → 直接睡觉；22:00 收工 → 回家/睡觉（T-M6-69 bedtime）', async () => {
     const low = await planner.decide(at('10:00', { stamina: 20, staminaMax: 270 }));
     expect(low.kind === 'act' && low.tool).toBe('sleep');
-    const evening = await planner.decide(at('18:40', { location: 'Beach' }));
+    const evening = await planner.decide(at('22:10', { location: 'Beach' }));
     expect(evening.kind === 'act' && evening.tool).toBe('travel_to');
-    const eveningHome = await planner.decide(at('18:40', { location: 'FarmHouse' }));
+    expect(evening.kind === 'act' && evening.args).toMatchObject({ location: 'FarmHouse' });
+    const eveningHome = await planner.decide(at('22:10', { location: 'FarmHouse' }));
     expect(eveningHome.kind === 'act' && eveningHome.tool).toBe('sleep');
+  });
+
+  it('中途接手：14:00 在农舍 → 先去农场续上当天日程（T-M6-70 LLM 故障代驾）', async () => {
+    const p = new RulePlanner();
+    const d = await p.decide(at('14:00', {
+      location: 'FarmHouse',
+      raw: STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读'),
+    }));
+    expect(d.kind === 'act' && d.tool).toBe('travel_to');
+    expect(d.kind === 'act' && d.args).toMatchObject({ location: 'Farm' });
   });
 
   it('有界面时优先处理界面（剧情 → dialogue）', async () => {
@@ -238,6 +274,15 @@ describe('RulePlanner 确定性日程', () => {
     });
     expect(d.kind === 'act' && d.tool).toBe('place_item');
     expect(d.kind === 'act' && d.args).toMatchObject({ item: '普通窗户', x: 13, y: 8 });
+    // 不在农场时先回家再摆（建筑只能放在农场）
+    const away = await new RulePlanner().decide({
+      ...base,
+      freeSlots: 0,
+      location: 'Beach',
+      raw: `${STATE_OK}\n## 背包（序号: 物品）\n0: 斧头\n6: 普通窗户\n背包空位：0 个（共 12 格）`,
+    });
+    expect(away.kind === 'act' && away.tool).toBe('travel_to');
+    expect(away.kind === 'act' && away.args).toMatchObject({ location: 'Farm' });
   });
 
   it('起名界面 → set_name 小鲸；剧情过场无对话框 → LlmPlanner skip_event', async () => {
@@ -271,14 +316,32 @@ describe('RulePlanner 确定性日程', () => {
     expect(choice.kind === 'act' && choice.args).toEqual({ choice: 0 });
   });
 
-  it('钓鱼阶段 17:30 后转傍晚采集（去镇上）', async () => {
+  it('每日出货结算界面 → close_menu（回归：2026-11-25 真机夏7 06:00 被当对话连败 3 次触发 watchdog）', async () => {
     const p = new RulePlanner();
-    await p.decide(at('11:30')); // 首轮先读信（7 封未读）→ 阶段进入 farm-work
-    const goFish = await p.decide(at('11:30'));
-    expect(goFish.kind === 'act' && goFish.tool).toBe('travel_to'); // 阶段切到 fishing
-    const dusk = await p.decide(at('17:45', { location: 'Beach' }));
-    expect(dusk.kind === 'act' && dusk.tool).toBe('travel_to'); // 去镇上采集
-    expect(dusk.kind === 'act' && dusk.intent).toContain('镇上');
+    const summary = await p.decide({
+      ...base,
+      menu: '每日出货结算界面（会自动确认；如果没有，用 menu_click 点 OK 按钮）',
+    });
+    expect(summary.kind === 'act' && summary.tool).toBe('close_menu');
+  });
+
+  it('填充分支：有鱼竿去海滩钓鱼；明确没鱼竿 → 去镇上采集', async () => {
+    const noMail = (raw: string): GameStateSnapshot => parseGameState(raw.replace('邮箱里有 7 封未读信件', '邮箱已读'));
+    const p = new RulePlanner();
+    const goFish = await p.decide(noMail(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 11:30')));
+    expect(goFish.kind === 'act' && goFish.tool).toBe('travel_to'); // 去海滩
+    expect(goFish.kind === 'act' && goFish.args).toMatchObject({ location: 'Beach' });
+    const fish = await p.decide(noMail(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 11:35').replace('地点：Farm（泡泡湾农场）', '地点：Beach（沙滩）')));
+    expect(fish.kind === 'act' && fish.tool).toBe('fish');
+
+    // 背包明确没有鱼竿（有背包段但无「鱼竿」）→ 不白跑海滩，直接去镇上采集
+    const noRod = new RulePlanner();
+    const noRodState = noMail(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 11:30').replace('6: 竹鱼竿（手持）', '6: 锄头'));
+    const goTown = await noRod.decide(noRodState);
+    expect(goTown.kind === 'act' && goTown.tool).toBe('travel_to');
+    expect(goTown.kind === 'act' && goTown.args).toMatchObject({ location: 'Town' });
+    const forage = await noRod.decide(parseGameState(noRodState.raw.replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）')));
+    expect(forage.kind === 'act' && forage.tool).toBe('forage');
 
     const sleepy = new RulePlanner();
     const nap = await sleepy.decide(at('10:00', { stamina: 10, staminaMax: 270, location: 'FarmHouse' })); // 体力<8% → 直接睡
@@ -357,9 +420,9 @@ describe('分支覆盖补强（T-M5-02）', () => {
     // 在 Town → forage
     const town = s(STATE_OK, { location: 'Town' });
     void town;
-    // 18:40 在 FarmHouse → sleep（phase 状态机跨实例重置）
+    // 22:10 在 FarmHouse → sleep（T-M6-69 默认收工 22:00）
     const fresh = new RulePlanner();
-    const night = s('时间：第1年春16日 18:40（Tue）', { location: 'FarmHouse' });
+    const night = s('时间：第1年春16日 22:10（Tue）', { location: 'FarmHouse' });
     const d = await fresh.decide(night);
     expect(d.kind === 'act' && d.tool).toBe('sleep');
   });
@@ -466,35 +529,32 @@ describe('autodrive/planner/lock 分支补强', () => {
   });
 
   it('RulePlanner：浇水/收获/回农场/forage 分支', async () => {
-    const p = new RulePlanner();
     const mk = (patch: Record<string, string>): GameStateSnapshot => {
       let raw = STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读').replace('防风草种子 x15', 'x0');
       for (const [k, v] of Object.entries(patch)) raw = raw.replace(k, v);
       return parseGameState(raw);
     };
-    // 浇水分支
-    const water = mk({ '金钱：640g': '金钱：640g\n剩 3 株没浇' });
-    const dw = await p.decide(water);
+    // 浇水分支（在农场 → water_crops）
+    const dw = await new RulePlanner().decide(mk({ '金钱：640g': '金钱：640g\n剩 3 株没浇' }));
     expect(dw.kind === 'act' && dw.tool).toBe('water_crops');
-    // 收获分支
-    const harvest = mk({ '金钱：640g': '金钱：640g\n有 2 株成熟的作物' });
-    const dh = await p.decide(harvest);
+    // 收获分支（在农场 → harvest_crops）
+    const dh = await new RulePlanner().decide(mk({ '金钱：640g': '金钱：640g\n有 2 株成熟的作物' }));
     expect(dh.kind === 'act' && dh.tool).toBe('harvest_crops');
-    // 非农场 → travel 回 Farm
-    const elsewhere = mk({ '地点：Farm（泡泡湾农场）': '地点：Beach（棕榈镇海滩）' });
-    const dt = await p.decide(elsewhere);
+    // 非农场且作物需要浇水 → 先 travel 回 Farm（作物概况只报当前地点）
+    const dt = await new RulePlanner().decide(mk({
+      '地点：Farm（泡泡湾农场）': '地点：Beach（棕榈镇海滩）',
+      '金钱：640g': '金钱：640g\n剩 3 株没浇',
+    }));
     expect(dt.kind === 'act' && dt.tool).toBe('travel_to');
-    // forage：状态机序列（morning→farm→fishing→forage）后在 Town → forage 动作
+    expect(dt.kind === 'act' && dt.args).toMatchObject({ location: 'Farm' });
+    // 没有鱼竿 → 填充转采集：不在 Town 先 travel，到了 Town 就 forage
+    const noRod = { '6: 竹鱼竿（手持）': '6: 锄头', '时间：第1年春16日 07:30（Tue）': '时间：第1年春16日 11:00（Tue）' };
     const p2 = new RulePlanner();
-    const noon = mk({ '时间：第1年春16日 07:30（Tue）': '时间：第1年春16日 11:00（Tue）' });
-    await p2.decide(noon); // fishing：travel_to Beach
-    const evening = mk({ '时间：第1年春16日 07:30（Tue）': '时间：第1年春16日 17:40（Tue）' });
-    const dToTown = await p2.decide(evening); // fishing → forage：不在 Town → travel_to Town
+    const dToTown = await p2.decide(mk(noRod));
     expect(dToTown.kind === 'act' && dToTown.tool).toBe('travel_to');
-    const townEvening = mk({ '时间：第1年春16日 07:30（Tue）': '时间：第1年春16日 17:50（Tue）', '地点：Farm（泡泡湾农场）': '地点：Town（鹈鹕镇）' });
-    const df = await p2.decide(townEvening);
+    expect(dToTown.kind === 'act' && dToTown.args).toMatchObject({ location: 'Town' });
+    const df = await p2.decide(mk({ ...noRod, '地点：Farm（泡泡湾农场）': '地点：Town（鹈鹕镇）' }));
     expect(df.kind === 'act' && df.tool).toBe('forage');
-
   });
 });
 
@@ -634,15 +694,18 @@ describe('收尾分支：不可解析状态 / sleeping / 异常输入', () => {
     expect(events.some((e) => e.type === 'decision')).toBe(false); // 不盲跑
   });
 
-  it('RulePlanner：sleeping 阶段 → wait；morning-mail 无未读后同实例连续推进', async () => {
+  it('RulePlanner：收工时间到 → sleep；无未读后同实例连续推进', async () => {
     const p = new RulePlanner();
     const base = parseGameState(STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读'));
-    // 手动把实例推进到 sleeping：直接构造 18:40 FarmHouse 连续两次
-    const night = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 18:45').replace('地点：Farm（泡泡湾农场）', '地点：FarmHouse（泡泡湾农场）'));
+    void base;
+    // 22:45 FarmHouse：日程（读信/浇水/播种）都无触发 → 收工 sleep
+    const night = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 22:45')
+      .replace('邮箱里有 7 封未读信件', '邮箱已读')
+      .replace('地点：Farm（泡泡湾农场）', '地点：FarmHouse（泡泡湾农场）'));
     const d1 = await p.decide(night);
     expect(d1.kind === 'act' && d1.tool).toBe('sleep');
     const d2 = await p.decide(night);
-    // 18:30 后幂等重试睡觉（防呆：sleep 失败自动再试，直到结算到第二天）
+    // 收工后幂等重试睡觉（防呆：sleep 失败自动再试，直到结算到第二天）
     expect(d2.kind === 'act' && d2.tool).toBe('sleep');
     // parseGameState 异常输入兜底
     const junk = parseGameState('什么都不是');
@@ -678,11 +741,12 @@ describe('时钟注入 stuck / planner fallback / JSON 前缀边界', () => {
 
   it('RulePlanner：农活全无 → 直接进钓鱼阶段（fallback travel Beach）', async () => {
     const p = new RulePlanner();
-    let raw = STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读').replace('防风草种子 x15', '');
+    const raw = STATE_OK.replace('邮箱里有 7 封未读信件', '邮箱已读').replace('防风草种子 x15', '');
     const s = { ...parseGameState(raw) };
     const d = await p.decide(s);
     expect(d.kind === 'act' && d.tool).toBe('travel_to');
-    expect(d.kind === 'act' && d.intent).toContain('农活告一段落');
+    expect(d.kind === 'act' && d.args).toMatchObject({ location: 'Beach' });
+    expect(d.kind === 'act' && d.intent).toContain('钓鱼');
   });
 
   it('mcp-client：括号不平衡的 JSON → 不可解析', async () => {
@@ -693,11 +757,17 @@ describe('时钟注入 stuck / planner fallback / JSON 前缀边界', () => {
 });
 
 describe('终极分支收口', () => {
-  it('体力 12% 阈值 → eat；UNCERTAIN 回执分类；未闭合字符串 JSON', async () => {
-    const p = new RulePlanner();
+  it('体力 11% → 收工回家；生命 <30% 有吃的 → eat；UNCERTAIN 回执分类；未闭合字符串 JSON', async () => {
+    // T-M6-69：体力 8%–15% 区间 → 停止干活回家（不再 12% 就吃饭）
     const mid = parseGameState(STATE_OK.replace('体力：98/270', '体力：30/270'));
-    const d = await p.decide(mid);
-    expect(d.kind === 'act' && d.tool).toBe('eat');
+    const d = await new RulePlanner().decide(mid);
+    expect(d.kind === 'act' && d.tool).toBe('travel_to');
+    expect(d.kind === 'act' && d.args).toMatchObject({ location: 'FarmHouse' });
+    // 生命 <30% 且有可食用物品 → eat
+    const hurt = parseGameState(STATE_OK.replace('生命：100/100', '生命：20/100')
+      .replace('## 背包', '## 背包\n7: 香蒲 [可食用 +10 体力]'));
+    const eat = await new RulePlanner().decide(hurt);
+    expect(eat.kind === 'act' && eat.tool).toBe('eat');
     // UNCERTAIN 分类：isError 文本含「不确定」
     const uncertain = new BwfMcpClient('http://mock/mcp', (async () => ({
       text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text: '寻路不确定：卡在石头边（UNCERTAIN）' }], isError: true } }),
@@ -719,15 +789,20 @@ describe('终极分支收口', () => {
     expect(runner.isRunning()).toBe(false);
   });
 
-  it('forage 阶段 18:30 后 → goSleep；defaultAction 缺失回落 actions[0]', async () => {
+  it('22:00 收工后 → 回家/睡觉；defaultAction 缺失回落 actions[0]', async () => {
     const p = new RulePlanner();
-    const noon = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 11:00').replace('邮箱里有 7 封未读信件', '邮箱已读'));
-    await p.decide(noon); // fishing
-    const evening = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 17:40').replace('邮箱里有 7 封未读信件', '邮箱已读').replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）'));
-    await p.decide(evening); // travel_to Town
-    const late = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 18:35').replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）'));
-    const d = await p.decide(late); // forage 阶段 ≥18:30 → goSleep
+    // 收工时间到（22:10）→ 在 Town 就回家，在农舍就睡
+    const late = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 22:10')
+      .replace('邮箱里有 7 封未读信件', '邮箱已读')
+      .replace('地点：Farm（泡泡湾农场）', '地点：Town（鹈鹕镇）'));
+    const d = await p.decide(late);
     expect(d.kind === 'act' && d.tool).toBe('travel_to');
+    expect(d.kind === 'act' && d.args).toMatchObject({ location: 'FarmHouse' });
+    // 24:00 强制回家（生存护栏最高优先级，即使有未读信）
+    const midnight = parseGameState(STATE_OK.replace(/第1年春16日 \d{2}:\d{2}/, '第1年春16日 00:30'));
+    const forced = await p.decide(midnight);
+    expect(forced.kind === 'act' && forced.tool).toBe('travel_to');
+    expect(forced.kind === 'act' && forced.args).toMatchObject({ location: 'FarmHouse' });
   });
 });
 

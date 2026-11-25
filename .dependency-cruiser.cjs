@@ -88,8 +88,10 @@ module.exports = {
     {
       name: 'mock-harness-only-protocol',
       severity: 'error',
-      comment: 'AI 自测沙盒只允许依赖 shared-protocol 与测试库，严禁引入业务实现',
-      from: { path: '^tools/mock-harness/src' },
+      comment: 'AI 自测沙盒只允许依赖 shared-protocol 与测试库，严禁引入业务实现。'
+        + '例外：*.spec.ts 可驱动真实 AutodriveRunner 跑卡死回归剧本（T-M6-68 回放真机现场）；'
+        + '回放服务等运行期仿真源码仍只依赖协议层。',
+      from: { path: '^tools/mock-harness/src', pathNot: '\\.spec\\.ts$' },
       to: { path: '^packages/(?!shared-protocol)' },
     },
   ],

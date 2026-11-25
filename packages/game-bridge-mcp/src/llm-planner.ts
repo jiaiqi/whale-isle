@@ -434,6 +434,49 @@ export class LlmPlanner implements Planner {
     this.fallback.observeReceipt?.(tool, status, summary);
   }
 
+  /**
+   * 只读调试快照（T-M6-67）：冷却表（cooledTools/dayFails）、rescueStage、objective、
+   * 被拒单品与节日状态机等内部字段。现场包在卡死瞬间落盘，绝不改状态。
+   */
+  debugSnapshot(): Record<string, unknown> {
+    const sortedObject = (map: Map<string, number>): Record<string, number> =>
+      Object.fromEntries([...map.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    return {
+      planner: this.name,
+      slot: this.deps.slot ?? null,
+      objective: this.objective,
+      objectiveRounds: this.objectiveRounds,
+      objectiveDonePending: this.objectiveDonePending,
+      askCount: this.askCount,
+      rescueStage: this.rescueStage,
+      lastRescueFail: this.lastRescueFail,
+      lastFreeSlots: this.lastFreeSlots,
+      planDay: this.planDay,
+      cooledTools: [...this.cooledTools].sort(),
+      dayFails: sortedObject(this.dayFails),
+      dayInfoDone: [...this.dayInfoDone].sort(),
+      rejected: {
+        ship: [...this.rejectedShip].sort(),
+        eat: [...this.rejectedEat].sort(),
+        trash: [...this.rejectedTrash].sort(),
+        place: [...this.rejectedPlace].sort(),
+      },
+      craftTried: this.craftTried,
+      chestPlaced: this.chestPlaced,
+      chestGathering: this.chestGathering,
+      forestGatherTried: this.forestGatherTried,
+      farmClearEmpty: this.farmClearEmpty,
+      festival: {
+        enterTried: this.festivalEnterTried,
+        greeted: this.festivalGreeted,
+        startTried: this.festivalStartTried,
+      },
+      dialogueStreak: this.dialogueStreak,
+      lastIssued: this.lastIssued,
+      fallback: this.fallback.debugSnapshot?.() ?? { planner: this.fallback.name },
+    };
+  }
+
   setSlot(slot: string): void {
     this.deps.slot = slot;
   }

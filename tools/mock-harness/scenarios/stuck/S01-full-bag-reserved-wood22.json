@@ -1,0 +1,34 @@
+{
+  "id": "S01-full-bag-reserved-wood22",
+  "signature": "tidy_backpack|农场上没有箱子 先 craft Chest 木材|Farm",
+  "source": "VERIFY「满包造箱自救·现场二」（2026-11-22 用户复测仍卡死）；state 片段取自 planner-rescue.spec.ts FULL_RESERVED（春21 08:30 Farm，木材 x22<50，非工具物品全带【留着】）",
+  "initialState": "## 基本状态\n时间：第1年春21日 08:30（Sun），天气：晴，明天天气：晴\n金钱：2890g  体力：270/270  生命：100/100\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Farm（泡泡湾农场），室外\n你站在 (64,15)，面朝右\n## 背包（序号: 物品）\n0: 斧头（手持）\n1: 锄头\n2: 喷壶\n5: 木材 x22【留着：社区中心“建筑”要交】\n7: 石头 x14【留着：社区中心“建筑”要交】\n10: 太阳鱼 金星 [可食用 +23体力]【留着：社区中心“河鱼”要交】\n背包空位：0 个（共 12 格）\n## 附近物体\n- 出货箱：(3,4)\n",
+  "rules": [
+    { "tool": "tidy_backpack", "receipt": { "text": "失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上", "isError": true } },
+    { "tool": "store_items", "receipt": { "text": "失败：这里没有箱子", "isError": true } },
+    { "tool": "donate_bundles", "receipt": { "text": "失败：背包里没有能交给已解锁收集包的材料（用 bundle_info 看看缺什么）", "isError": true } },
+    { "tool": "bundle_info", "receipt": { "text": "OK bundle_info: 已解锁收集包：春季作物（防风草）、建筑（木材/石头/硬木）、河鱼（太阳鱼/鲷鱼）" }, "advanceMinutes": 5 },
+    { "tool": "eat", "receipt": { "text": "OK eat: 吃掉了太阳鱼，恢复 23 体力，空出 1 格" }, "advanceMinutes": 10 },
+    { "tool": "trash_item", "receipt": { "text": "OK trash_item: 已丢弃，空出 1 格" }, "advanceMinutes": 10 },
+    { "tool": "ship_items", "receipt": { "text": "失败：背包里没有可以出货的东西", "isError": true } },
+    { "tool": "craft", "receipt": { "text": "失败：材料不够或背包满了", "isError": true } },
+    { "tool": "clear_area", "receipt": { "text": "OK clear_area: 清理了 4 格，获得木材 x3" }, "advanceMinutes": 60 },
+    { "tool": "use_tool", "receipt": { "text": "OK use_tool: 砍倒一棵树，获得木材 x12" }, "advanceMinutes": 30 },
+    { "tool": "travel_to", "receipt": { "text": "OK travel_to: 已到达" }, "advanceMinutes": 30 },
+    { "tool": "wait", "receipt": { "text": "OK wait: 等待了 1 分钟" }, "advanceMinutes": 10 },
+    { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
+  ],
+  "llmScript": [
+    "（现场录制：大脑不可用，未产出可解析决策）"
+  ],
+  "planner": "llm",
+  "expect": {
+    "maxCycles": 20,
+    "maxSameFailure": 2,
+    "mustCallOneOf": ["eat"],
+    "mustCallWithArgs": [
+      { "tool": "eat", "args": { "item": "太阳鱼", "force": true } }
+    ],
+    "clockMustAdvance": true
+  }
+}

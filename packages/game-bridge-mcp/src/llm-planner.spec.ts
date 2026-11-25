@@ -1544,13 +1544,12 @@ describe('连续失败换做法（2026-11-24 真机「没鱼竿 → fish 无限�
       recentReceipts: [],
     });
     const beach = parseGameState(BEACH_NOON);
-    const first = await planner.decide(beach); // 规则：农活收尾 → 去海滩
-    expect(first.kind === 'act' && first.tool).toBe('travel_to');
-    const second = await planner.decide(beach); // 规则：钓鱼阶段 → fish
-    expect(second.kind === 'act' && second.tool).toBe('fish');
+    const first = await planner.decide(beach); // 规则：已在海滩 → 钓鱼
+    expect(first.kind === 'act' && first.tool).toBe('fish');
     planner.observeReceipt('fish', 'FAILED', '失败：背包里没有鱼竿');
-    const third = await planner.decide(beach); // 规则已学到失败 → 转采集
-    expect(third.kind === 'act' && third.tool).not.toBe('fish');
+    const third = await planner.decide(beach); // 规则已学到失败 → 转采集（先去镇上）
+    expect(third.kind === 'act' && third.tool).toBe('travel_to');
+    expect(third.kind === 'act' && third.args).toMatchObject({ location: 'Town' });
   });
 });
 
@@ -1597,11 +1596,9 @@ describe('规则兜底冷却拦截（2026-11-24）', () => {
       chat: async () => { throw new Error('brain offline'); },
       recentReceipts: ['FAILED fish: 失败：背包里没有鱼竿', 'FAILED fish: 失败：背包里没有鱼竿'],
     });
-    const first = await planner.decide(beach); // 规则：农活收尾 → 去海滩
-    expect(first.kind === 'act' && first.tool).toBe('travel_to');
-    const second = await planner.decide(beach); // 钓鱼阶段 → fish 已冷却 → wait
-    expect(second.kind).toBe('wait');
-    expect(second.kind === 'wait' ? second.reason : '').toContain('已冷却');
+    const first = await planner.decide(beach); // 规则想 fish，但今天已冷却 → wait 求助
+    expect(first.kind).toBe('wait');
+    expect(first.kind === 'wait' ? first.reason : '').toContain('已冷却');
   });
 });
 

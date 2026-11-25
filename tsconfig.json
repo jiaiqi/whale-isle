@@ -21,6 +21,9 @@
       "path": "tools/mock-harness"
     },
     {
+      "path": "tools/soak-real"
+    },
+    {
       "path": "apps/desktop-host"
     },
     {

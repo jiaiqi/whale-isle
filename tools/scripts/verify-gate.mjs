@@ -210,6 +210,12 @@ if (gate3Ok && existsSync(PY_MODEL) && !(uvProbe.error || uvProbe.status !== 0))
 } else if (gate3Ok) {
   gate3Notes.push('Python 侧契约测试跳过（protocol_models.py 未生成或 uv 缺失）');
 }
+// T-M6-68：卡死回归剧本数量（每个剧本一条 it，跑真实 AutodriveRunner + BWF 同构回放服务）
+const stuckScenarioDir = join(ROOT, 'tools', 'mock-harness', 'scenarios', 'stuck');
+const stuckScenarioCount = existsSync(stuckScenarioDir)
+  ? readdirSync(stuckScenarioDir).filter((file) => file.endsWith('.json')).length
+  : 0;
+gate3Notes.push(`卡死回归剧本：${stuckScenarioCount} 个（tools/mock-harness/scenarios/stuck/*.json）`);
 gate(
   'Gate 3 确定性单测',
   gate3Ok ? 'PASS' : 'FAIL',

@@ -243,6 +243,24 @@ importers:
       '@types/ws':
         specifier: ^8.18.2
         version: 8.18.2
+      '@workbench/game-bridge-mcp':
+        specifier: workspace:*
+        version: link:../../packages/game-bridge-mcp
+      '@workbench/soak-real':
+        specifier: workspace:*
+        version: link:../soak-real
+
+  tools/soak-real:
+    dependencies:
+      '@workbench/game-bridge-mcp':
+        specifier: workspace:*
+        version: link:../../packages/game-bridge-mcp
+      '@workbench/model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../../packages/shared-protocol
 
 packages:
 

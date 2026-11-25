@@ -1,0 +1,25 @@
+{
+  "name": "@workbench/soak-real",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[REAL-DEVICE] 星露谷真机浸泡工具（T-M6-67）：连真实 BWF 18080 无人值守跑 N 个游戏日，卡死判定 + 现场包 + report.md",
+  "type": "module",
+  "exports": {
+    "./stuck-detector": {
+      "types": "./dist/stuck-detector.d.ts",
+      "default": "./dist/stuck-detector.js"
+    },
+    "./evidence": {
+      "types": "./dist/evidence.d.ts",
+      "default": "./dist/evidence.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/game-bridge-mcp": "workspace:*",
+    "@workbench/model-gateway": "workspace:*",
+    "@workbench/shared-protocol": "workspace:*"
+  }
+}

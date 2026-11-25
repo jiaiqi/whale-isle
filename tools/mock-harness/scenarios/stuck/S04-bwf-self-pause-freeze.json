@@ -1,0 +1,23 @@
+{
+  "id": "S04-bwf-self-pause-freeze",
+  "signature": "clock-stall|第1年春24日 06:00|FarmHouse",
+  "source": "VERIFY「T-M6-10 春24 冻结死锁」（2026-11-23 真机日志：BWF「MCP 客户端 120 秒没有动作，已暂停游戏」，get_state 连续多分钟停在第1年春24日 06:00 FarmHouse；手动 wait {minutes:1} 后恢复推进）",
+  "initialState": "## 基本状态\n时间：第1年春24日 06:00（Tue），天气：晴，明天天气：多云\n金钱：2890g  体力：270/270  生命：100/100\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：FarmHouse（农舍），室内\n## 背包（序号: 物品）\n0: 斧头（手持）\n背包空位：20 个（共 24 格）\n",
+  "freezeUntilMutation": true,
+  "rules": [
+    { "tool": "wait", "receipt": { "text": "OK wait: 等待了 1 分钟，游戏时间恢复推进" }, "advanceMinutes": 10 },
+    { "tool": "travel_to", "receipt": { "text": "OK travel_to: 已到达" }, "advanceMinutes": 30 },
+    { "tool": "read_mail", "receipt": { "text": "OK read_mail: 读了 0 封信" }, "advanceMinutes": 10 },
+    { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
+  ],
+  "planner": "idle",
+  "expect": {
+    "maxCycles": 40,
+    "maxSameFailure": 0,
+    "mustCallOneOf": ["wait"],
+    "mustCallWithArgs": [
+      { "tool": "wait", "args": { "minutes": 1 } }
+    ],
+    "clockMustAdvance": true
+  }
+}

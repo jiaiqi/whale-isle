@@ -1,0 +1,28 @@
+{
+  "id": "S02-no-rod-fish-loop",
+  "signature": "fish|背包里没有鱼竿|Beach",
+  "source": "T-M6-10 2026-11-24 真机：第1年夏2日 07:10 Beach 反复「决策 llm-xiaojing → 钓鱼(fish) → 失败：背包里没有鱼竿」（VERIFY「连败换做法」条目）；state 片段取自 llm-planner.spec.ts BEACH_NOON（夏2 11:10，背包有竹鱼竿但游戏侧报无鱼竿）",
+  "initialState": "## 基本状态\n时间：第1年夏2日 07:10（Mon），天气：晴，明天天气：晴\n金钱：19519g  体力：270/270  生命：100/100\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Beach（沙滩），室外\n## 背包（序号: 物品）\n0: 斧头（手持）\n1: 竹鱼竿（手持）\n背包空位：20 个（共 24 格）\n",
+  "rules": [
+    { "tool": "fish", "receipt": { "text": "失败：背包里没有鱼竿（第二天早上上海边找威利 Willy 会送你一根，或者在鱼店 FishShop 买）", "isError": true } },
+    { "tool": "travel_to", "receipt": { "text": "OK travel_to: 已到达" }, "advanceMinutes": 30 },
+    { "tool": "forage", "receipt": { "text": "OK forage: 采集到 2 个海草" }, "advanceMinutes": 30 },
+    { "tool": "wait", "receipt": { "text": "OK wait: 等待了 1 分钟" }, "advanceMinutes": 10 },
+    { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
+  ],
+  "llmScript": [
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"去钓鱼\"}",
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"再钓一次看看\"}",
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"我不信钓不上来\"}",
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"继续钓鱼\"}",
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"钓鱼赚米\"}",
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"再试最后一次\"}"
+  ],
+  "planner": "llm",
+  "expect": {
+    "maxCycles": 12,
+    "maxSameFailure": 2,
+    "mustCallOneOf": ["travel_to", "forage", "wait"],
+    "clockMustAdvance": true
+  }
+}

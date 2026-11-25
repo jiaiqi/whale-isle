@@ -19,6 +19,7 @@
     "verify:gate": "node tools/scripts/verify-gate.mjs",
     "audit:high": "pnpm audit --audit-level high",
     "soak:autodrive": "node tools/scripts/soak-autodrive.mjs",
+    "soak:real": "tsc -b tools/soak-real && tsx tools/soak-real/src/cli.ts",
     "prepare": "git config core.hooksPath .githooks || true",
     "gen:pet-manifest": "tsx tools/scripts/gen-pet-manifest.mjs",
     "sync:pet-packs": "node tools/scripts/sync-pet-packs.mjs",

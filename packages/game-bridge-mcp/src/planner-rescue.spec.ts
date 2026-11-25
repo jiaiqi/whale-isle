@@ -195,20 +195,19 @@ describe('工具级失败记忆（2026-11-24 真机「没鱼竿 → fish 无限�
   it('环境级失败（没鱼竿）一次即绕开 fish：规则日程转采集，不再重复空转', async () => {
     const planner = new RulePlanner();
     const state = parseGameState(BEACH_NOON);
-    const goBeach = await planner.decide(state); // 11:00 后农活收尾 → 去海滩
-    expect(goBeach.kind === 'act' && goBeach.tool).toBe('travel_to');
-    const fish = await planner.decide(state); // 到海滩进入钓鱼阶段
+    const fish = await planner.decide(state); // 已在海滩 → 钓鱼
     expect(fish.kind === 'act' && fish.tool).toBe('fish');
     planner.observeReceipt('fish', 'FAILED', '失败：背包里没有鱼竿（第二天早上上海边找威利 Willy 会送你一根，或者在鱼店 FishShop 买）');
     const next = await planner.decide(state);
     expect(next.kind === 'act' && next.tool).not.toBe('fish');
     expect(next.kind === 'act' && next.tool).toBe('travel_to'); // 转采集：先去镇上
+    expect(next.kind === 'act' && next.args).toMatchObject({ location: 'Town' });
   });
 
   it('普通失败连续两次才绕开 fish（一次失败仍按日程继续）', async () => {
     const planner = new RulePlanner();
     const state = parseGameState(BEACH_NOON);
-    await planner.decide(state); // 11:00 后农活收尾 → 去海滩，phase=fishing
+    await planner.decide(state); // 已在海滩 → fish
     planner.observeReceipt('fish', 'FAILED', '失败：鱼跑掉了');
     const stillFish = await planner.decide(state);
     expect(stillFish.kind === 'act' && stillFish.tool).toBe('fish');
@@ -232,23 +231,18 @@ describe('采集/清地兜底不空转（失败记忆链）', () => {
 背包空位：20 个（共 24 格）
 `;
 
-  it('采集也连败 → 回农场清地；清地也连败 → 明确求助（wait 不空转）', async () => {
+  it('钓鱼+采集都不可行 → 明确求助（wait 不空转，不再下发 clear_area）', async () => {
     const planner = new RulePlanner();
     const beach = parseGameState(BEACH_NOON);
-    await planner.decide(beach); // 热身：首轮 decide 会触发跨日重置，先让它过去
+    await planner.decide(beach); // 已在海滩 → fish（首轮触发跨日重置）
     planner.observeReceipt('fish', 'FAILED', '失败：背包里没有鱼竿');
     planner.observeReceipt('forage', 'FAILED', '失败：这里没有可以采集的东西');
     planner.observeReceipt('forage', 'FAILED', '失败：这里没有可以采集的东西');
-    const toFarm = await planner.decide(beach);
-    expect(toFarm.kind === 'act' && toFarm.tool).toBe('travel_to');
-    expect(toFarm.kind === 'act' && toFarm.args).toMatchObject({ location: 'Farm' });
-    const atFarm = parseGameState(BEACH_NOON.replace('地点：Beach（沙滩），室外', '地点：Farm（泡泡湾农场），室外'));
-    const clear = await planner.decide(atFarm);
-    expect(clear.kind === 'act' && clear.tool).toBe('clear_area');
-    planner.observeReceipt('clear_area', 'FAILED', '失败：这里没有可以清理的东西');
-    planner.observeReceipt('clear_area', 'FAILED', '失败：这里没有可以清理的东西');
-    const giveUp = await planner.decide(atFarm);
+    const giveUp = await planner.decide(beach);
     expect(giveUp.kind).toBe('wait');
+    expect(giveUp.kind === 'wait' ? giveUp.reason : '').toContain('钓鱼和采集');
+    // 规则日程不产生 clear_area（那是 LlmPlanner 的攒木计划分支）
+    expect(giveUp.kind === 'act' ? giveUp.tool : '').not.toBe('clear_area');
   });
 });
 

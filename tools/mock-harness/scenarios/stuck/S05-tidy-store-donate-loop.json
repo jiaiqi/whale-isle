@@ -1,0 +1,18 @@
+{
+  "id": "S05-tidy-store-donate-loop",
+  "signature": "tidy_backpack|农场上没有箱子|Farm",
+  "source": "VERIFY「满包死锁→造箱自救」（transcript-20261122-182601：春21日 06:10 起 tidy↔store↔donate 无箱死循环，BWF 两次提示「先 craft Chest（50 木材）」）；state 片段取自 planner-rescue.spec.ts FULL_RESERVED",
+  "initialState": "## 基本状态\n时间：第1年春21日 08:30（Sun），天气：晴，明天天气：晴\n金钱：2890g  体力：270/270  生命：100/100\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Farm（泡泡湾农场），室外\n你站在 (64,15)，面朝右\n## 背包（序号: 物品）\n0: 斧头（手持）\n1: 锄头\n2: 喷壶\n5: 木材 x22【留着：社区中心“建筑”要交】\n7: 石头 x14【留着：社区中心“建筑”要交】\n10: 太阳鱼 金星 [可食用 +23体力]【留着：社区中心“河鱼”要交】\n背包空位：0 个（共 12 格）\n## 附近物体\n- 出货箱：(3,4)\n",
+  "rules": [
+    { "tool": "donate_bundles", "receipt": { "text": "失败：背包里没有能交给已解锁收集包的材料（用 bundle_info 看看缺什么）", "isError": true } },
+    { "tool": "tidy_backpack", "receipt": { "text": "失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上", "isError": true } },
+    { "tool": "store_items", "receipt": { "text": "失败：这里没有箱子", "isError": true } },
+    { "tool": "wait", "receipt": { "text": "OK wait: 等待了 1 分钟" }, "advanceMinutes": 10 },
+    { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
+  ],
+  "expect": {
+    "maxCycles": 15,
+    "maxSameFailure": 1,
+    "mustCallOneOf": ["wait"]
+  }
+}
