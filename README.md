@@ -4,6 +4,12 @@
 > 支持 macOS（Apple Silicon / `mps`）与 Windows（x64 / `cuda`）。
 > GitHub 仓库：`whale-isle`（https://github.com/jiaiqi/whale-isle）。
 
+## 许可证
+
+- **源代码**：[MIT](./LICENSE) © 2026 jiaiqi —— 可自由使用、修改、分发，包括商用，保留版权声明即可。
+- **第三方素材不在此列**：`assets/`、`packages/pet-renderer/assets/` 与各 `pet-packs` 目录下的角色形象、立绘、精灵图与动画（含「小鲸 / 大肥鱼」）为 **CC BY-NC-SA 4.0**，**禁止商用**；改编与再分发须署名并以相同方式共享。商用前必须整包替换为自制素材。
+- 逐项来源、署名与条款见 [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md)。
+
 ## 当前能力边界（2026-11-23 审计后如实口径）
 
 | 能力 | 状态 |

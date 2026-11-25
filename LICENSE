@@ -1,0 +1,38 @@
+MIT License
+
+Copyright (c) 2026 jiaiqi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Note on third-party assets / 第三方素材说明
+
+This MIT license covers the source code of Whale Isle only. Character
+artwork, sprites, animation clips and audio bundled under `assets/`,
+`packages/pet-renderer/assets/` and any `pet-packs` directory are third-party
+works and remain under their own licenses — predominantly
+CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike), which forbids
+commercial use. See docs/THIRD_PARTY_NOTICES.md for per-asset attribution
+and terms.
+
+本 MIT 许可证仅覆盖鲸屿的源代码。`assets/`、`packages/pet-renderer/assets/`
+与各 `pet-packs` 目录下的角色形象、精灵图、动作片段与音频属于第三方作品，
+沿用其各自的许可证（主要为 CC BY-NC-SA 4.0，禁止商用）。逐项署名与条款见
+docs/THIRD_PARTY_NOTICES.md。
