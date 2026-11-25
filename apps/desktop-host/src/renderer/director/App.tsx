@@ -1195,8 +1195,8 @@ function EventCard({ event, objectiveActive = false }: { event: AutodriveEventVi
       </div>
     );
   }
-  if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray')) {
-    const isReflex = event.tool === 'reflex_spray';
+  if (event.type === 'receipt' && (event.tool === 'chat_reply' || (typeof event.tool === 'string' && event.tool.startsWith('reflex_')))) {
+    const isReflex = typeof event.tool === 'string' && event.tool.startsWith('reflex_');
     return (
       <div data-event="chat" className="mb-3 flex items-start gap-2.5">
         <div

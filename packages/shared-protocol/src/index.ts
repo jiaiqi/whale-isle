@@ -1338,7 +1338,11 @@ export const WORKBENCH_STATUS_LABELS_ZH: Readonly<Record<string, string>> = {
 
 export function toolLabelZh(tool: string | undefined | null): string {
   if (tool === undefined || tool === null || tool === '') return '待命';
-  return WORKBENCH_TOOL_LABELS_ZH[tool] ?? tool;
+  const labeled = WORKBENCH_TOOL_LABELS_ZH[tool];
+  if (labeled !== undefined) return labeled;
+  // 雷区反射的工具名是 reflex_<actionState>（T-A2 2026-11-24）：任何动作状态都标为「雷区反射」
+  if (tool.startsWith('reflex_')) return '雷区反射';
+  return tool;
 }
 
 export function statusLabelZh(status: string | undefined | null): string {

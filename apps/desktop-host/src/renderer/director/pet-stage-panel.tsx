@@ -124,7 +124,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
 
   const latestState = [...events].reverse().find((e) => e.type === 'state');
   const latestThink = [...events].reverse().find((e) => e.type === 'decision');
-  const latestTalk = [...events].reverse().find((e) => e.tool === 'chat_reply' || e.tool === 'reflex_spray' || (e.type === 'receipt' && e.tool === 'fish'));
+  const latestTalk = [...events].reverse().find((e) => e.tool === 'chat_reply' || (typeof e.tool === 'string' && e.tool.startsWith('reflex_')) || (e.type === 'receipt' && e.tool === 'fish'));
   const goals = useMemo(() => goalOf(latestState?.clock ?? ''), [latestState?.clock]);
   const staminaPct = latestState?.stamina != null && latestState.staminaMax ? Math.round((latestState.stamina / latestState.staminaMax) * 100) : 0;
   const peakCharacters = characters.filter((character) => /deepseek|glm/i.test(character.id));

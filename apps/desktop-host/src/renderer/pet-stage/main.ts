@@ -831,7 +831,7 @@ if (window.directorBridge?.onAutodriveEvent) {
       clearTimeout(thoughtTimer);
       thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
     }
-    if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'reflex_spray' || event.tool === 'chat_order') && event.summary) {
+    if (event.type === 'receipt' && (event.tool === 'chat_reply' || (typeof event.tool === 'string' && event.tool.startsWith('reflex_')) || event.tool === 'chat_order') && event.summary) {
       const voiceBridge = (window as unknown as { directorBridge?: { voiceConfigGet?: () => Promise<{ enabled: boolean }> } }).directorBridge;
       void voiceBridge?.voiceConfigGet?.().then((config) => { bubbleVoiceEnabled = config.enabled; }).catch(() => undefined);
       const effect = showBubble(bubbleState, event.summary, Date.now(), bubbleVoiceEnabled);

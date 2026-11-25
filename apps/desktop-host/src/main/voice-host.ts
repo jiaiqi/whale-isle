@@ -4,7 +4,9 @@
  *   - 正式台词（chat_reply/回执播报）→ 正常音量+语速
  *   - 内心戏心声 → 音量 45% + 语速 0.82（低语感）
  *   - P0 雷区反射 → 立即打断当前播报（单端不变式）
- *   - 同文本 8s 节流；队列串行（active≤1）
+ *   - 同文本 8s 节流；节流命中补发 completed 终态（T-A 2026-11-24：气泡不挂 60s TTL）
+ *   - 终态闭合不变式：凡气泡在等待语音收口，必有且仅有一个 speech-result 终态；
+ *     空台词/内心戏关闭不广播等待气泡，故不发回执（见 speak 内注释）。队列串行（active≤1）
  * 后续：Windows SAPI（PowerShell Add-Type）在 T-M6-05 打包工单做平台适配。
  */
 import { ipcMain } from 'electron';
@@ -352,7 +354,13 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
     const now = Date.now();
     const key = `${agentId}:${resolvedVoiceId}:${scene}:${text}`;
     const last = lastTextAt.get(key) ?? 0;
-    if (now - last < 8_000) return { ok: true };
+    if (now - last < 8_000) {
+      // T-A 语音终态闭合：节流吞掉的台词不会建立租约，租约回执永不到来，
+      // 渲染层气泡会停在 waiting 挂满 60s TTL。这句台词刚刚说过（已交付语义），
+      // 按 completed 收泡而不是 failed/muted 挂字。
+      options.onSpeechResult?.({ agentId, speakerName: voice.speakerName ?? '小鲸', status: 'completed' });
+      return { ok: true };
+    }
     lastTextAt.set(key, now);
     if (lastTextAt.size > 200) lastTextAt.clear();
 

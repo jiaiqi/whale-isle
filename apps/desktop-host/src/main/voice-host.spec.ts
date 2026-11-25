@@ -87,4 +87,40 @@ describe('createVoiceHost（T-M6-38 全局串行抢麦）', () => {
     host.speak({ agentId: 'agent-b', speakerName: '泡芙', text: 'P0 抢麦', scene: 'p0' });
     await vi.waitFor(() => expect(results.some((item) => item.status === 'interrupted')).toBe(true));
   });
+
+  it('8s 节流命中时补发 completed 终态，气泡不挂 60s TTL（T-A）', async () => {
+    const results: Array<{ status: string }> = [];
+    const gates: Array<ReturnType<typeof deferred>> = [];
+    const host = createVoiceHost('darwin', {
+      onSpeechResult: (event) => results.push({ status: event.status }),
+      play: () => {
+        const gate = deferred();
+        gates.push(gate);
+        return { done: gate.promise, abort: () => gate.resolve() };
+      },
+    });
+    host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '同一句话' });
+    await vi.waitFor(() => expect(gates).toHaveLength(1));
+
+    const second = host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '同一句话' });
+    expect(second.ok).toBe(true);
+    expect(second.queued).toBeUndefined();
+    await vi.waitFor(() => expect(results.at(-1)).toEqual({ status: 'completed' }));
+    expect(gates).toHaveLength(1); // 节流不建立第二个租约
+  });
+
+  it('空台词与内心戏关闭不产生回执，不污染正在等待的气泡（T-A）', () => {
+    const results: Array<{ status: string }> = [];
+    const host = createVoiceHost('darwin', {
+      onSpeechResult: (event) => results.push({ status: event.status }),
+      play: () => {
+        const gate = deferred();
+        return { done: gate.promise, abort: () => gate.resolve() };
+      },
+    });
+    host.setConfig({ innerVoice: false });
+    expect(host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '心声', scene: 'inner' }).ok).toBe(false);
+    expect(host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '   ' }).ok).toBe(false);
+    expect(results).toEqual([]);
+  });
 });

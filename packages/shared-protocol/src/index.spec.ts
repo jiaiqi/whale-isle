@@ -373,6 +373,8 @@ describe('中文化工具/状态词表（T-M6-59）', () => {
     expect(WORKBENCH_STATUS_LABELS_ZH.COMPLETED).toBe('已完成');
     expect(toolLabelZh('fish')).toBe('钓鱼');
     expect(toolLabelZh('new_tool')).toBe('new_tool');
+    expect(toolLabelZh('reflex_rage_spray')).toBe('雷区反射');
+    expect(toolLabelZh('reflex_happy_maid')).toBe('雷区反射');
     expect(toolLabelZh('')).toBe('待命');
     expect(toolLabelZh(undefined)).toBe('待命');
     expect(toolLabelZh(null)).toBe('待命');
