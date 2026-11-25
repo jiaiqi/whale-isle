@@ -3,7 +3,54 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] — 2026-11-25
+
+### Added（T-M6-69：规则规划器每日闭环底线）
+
+- **日程状态机** `packages/game-bridge-mcp/src/rule-schedule.ts`（新，零依赖纯决策层）：`survivalDecision`（体力 <8% 原地睡 / <15% 回家 / ≥24:00 强制回家睡 / 生命 <30% 先吃）→ `scheduleDecision`（读信 → 农舍出门看作物 → 雨天跳过的浇水 → 收获 → 出货 → 购种（营业/季末成熟/预算/空地前置检查）→ 播种 → 开垦（体力 >40% 且明确没有空地，默认 ≤15 格）→ 22:00 可配置收工 → 钓鱼/采集填充，两者都被避开则 wait 求助）。日程步骤「决策即记、失败回执撤销」，避免同一状态文本反复动作；收工前任何时刻人在农舍都会补一次「去农场看作物」，保证 T-M6-70 中途接手能续上当天日程。
+- **种子表与季末判断** `seed-table.ts`（新）：春防风草 20g/4d、夏辣椒 40g/5d（重复收获）、秋小白菜 50g/4d，冬季不种；季内剩余天数 ≥ 成熟天数才买/种；买种预算同时受「保留 100g」「单次 ≤ 金币 60%」「不超过空地数」约束；数值标注以游戏内商店为准。
+- **状态解析补强** `state-hints.ts`：`parseSeedInventory`（背包种子堆，跳过【留着】）、`parseFarmSummary`（真机「农场概况 + 农田」格式，兼容旧措辞；缺字段为 null 不猜 0）、`parseWeekday`（Tue/周二）、`seedShopStatus`（9:00–17:00、周三/节日休息）。
+- **RulePlanner 改造** `planner.ts`：拆成「主动商店买种 → 菜单 → 生存护栏 → 满包救援阶梯（行为不变）→ 日程状态机」；跨日（含换季）重置日程与失败记忆；最近一次农场概况缓存供离开农场后的决策使用；商店界面若是自己开的先买种再处理界面。
+- **多日活农场仿真** `tools/mock-harness/src/bwf-farm-sim.ts`（新）：日期/时钟/金币/体力/背包/农田/天气随工具调用真实变化，`get_state` 与真机 BWF 1.1.27 同段落同措辞；支持换日结算出货、作物过夜生长、雨天自动浇水、换季枯萎、周三/打烊商店、02:00 遣返与累晕扣钱；复用 `bwf-replay-server.ts` 抽出的 `startBwfHttpServer`（JSON/SSE 双形态），S01–S06 剧本保持全绿。
+- **7 日纯规则闭环** `tools/mock-harness/src/rule-7day.spec.ts`（新）：真实 `RulePlanner` 在仿真里从春 16 跑 7 天——每日闭环项完成（当天无机会的项记 N/A）、7 项各至少完成一次、0 累晕、0 次 2:00 遣返、第 7 天金币 5890g > 第 1 天 1370g、`chat()` 0 次；跨季（春 26 → 夏 4）断言春季季末不买种、夏季自动改买辣椒种子。另有 `seed-table.spec.ts`、`rule-schedule.spec.ts`、`bwf-farm-sim.spec.ts` 与 `state-hints.spec.ts` 扩展覆盖每条优先级分支（周三/17:00 后不去商店、雨天不浇水、24:00 强制回家、中途接手）。
+- **验证**：`pnpm typecheck` 通过；`pnpm test` 124 文件 / **1481 用例全绿**（含并行工单在 `apps/desktop-host` 新增的 13 例；本工单相关 `game-bridge-mcp` 14 文件 294 例）、分支 **90.47%**；`pnpm verify:gate` **7 过 / 0 跳过**。真机：REAL_DEVICE_PLACEHOLDER
+
 ## [Unreleased] — 2026-11-24
+
+### Added（T-M6-68：卡死现场 → 永久回归剧本）
+
+- **BWF 同构 HTTP 回放服务** `tools/mock-harness/src/bwf-replay-server.ts`：按剧本 JSON 应答 `tools/call`（JSON 与 SSE 双形态），维护 `get_state` 状态文本并按时钟锚点 `/时间：第\d+年[春夏秋冬]\d+日 \d{2}:\d{2}/` 推进；支持跨 24:00 换日、跨 28 日换季、跨年；模拟 BWF 选择题闸门（缺 `choice` 显性报错）、`freezeUntilMutation`（120s 自暂停文案 + 冻结时钟，变更动作解冻）、未覆盖工具显性报错。不复用 `stardew-simulator.ts`（WebSocket、工具面不同构）。
+- **剧本 schema 与加载器** `stuck-scenario.ts`：Zod 校验 `id/signature/source/initialState/rules/freezeUntilMutation/llmScript/planner/expect`，重复 id、空目录、坏 JSON 全部报错；`planner` 支持 `rule|llm|idle`，`expect` 支持 `maxCycles/maxSameFailure/mustCallOneOf/clockMustAdvance/mustCallWithArgs`。
+- **首批 6 个永久回归剧本** `tools/mock-harness/scenarios/stuck/`：S01 满包无箱木材 22、S02 海滩无鱼竿连败、S03 剧情多行选择题、S04 BWF 120s 自暂停冻结、S05 tidy↔store↔donate 无箱循环、S06 LLM 连败后 fallback 不知失败。`stuck-regressions.spec.ts` 每个剧本一条 `it`，驱动**真实** `AutodriveRunner` + 真实 `RulePlanner`/`LlmPlanner`，接入 Gate 3（Gate 输出打印剧本数量）。
+- **现场包 → 剧本草稿转换器** `pack-to-scenario.ts`（`pnpm tsx tools/mock-harness/src/pack-to-scenario.ts artifacts/soak/<run>/stuck/<id>`）：复用 `soak-real` 的 `failureSignature()` 与现场包三件（`verdict.json`/`last50.jsonl`/`state.txt`）；`expect` 为占位值必须人工补全，缺 verdict 直接报错、缺 state 用占位说明，绝不编造现场。
+- **卡死台账** `docs/STARDEW-STUCK-LEDGER.md`：签名｜首次出现｜频次（累计浸泡）｜剧本｜修复工单｜状态，与 6 个剧本一一对应；记录每个剧本「删一行修复 → 红 → 还原 → 绿」证据。
+- **验证**：`pnpm typecheck` 通过；`pnpm test` 119 文件 / **1405 用例全绿**，分支覆盖率 **90.27%**；`pnpm verify:gate` **7 过 / 0 跳过**，Gate 3 输出「卡死回归剧本：6 个」。六条回退实验均确认变红（详见 ROADMAP T-M6-68 决策声明）。**真机现场包 → 转换 → 红 → 修 → 绿链路未执行**：当前无真机现场包（BWF 18080 未监听），VERIFY 登记待真机。
+
+### Added（T-M6-67：`soak:real` 真机浸泡工具）
+
+- **新 workspace 包 `tools/soak-real/`**：`pnpm soak:real -- --days N` 连真实 BWF（`McpPort=18088`）无人值守跑 N 个游戏日；支持 `--no-llm`、`--on-stuck=continue|stop`、`--max-hours`、`--observer-ms`、`--endpoint`、`--out`、`--save-dir`。LLM Key 只从 `WHALE_SOAK_PROVIDER / WHALE_SOAK_API_KEY / WHALE_SOAK_MODEL / WHALE_SOAK_BASE_URL` 读，缺项自动降级并在报告注明；Key 仅内存使用，不落盘不进日志。Ctrl+C 先 `stopAndWait()` 再写报告；退出码 `0` 达标 / `1` 卡死或闭环不达标 / `2` 连接或参数错误。
+- **四条卡死判定**（纯状态机，`now` 由调用方注入）：游戏时钟现实 180s 未推进（睡觉决策后 10 分钟、过场/存档文案、02:00–06:00 换日窗口白名单）、同一失败签名最近 30 条回执内 ≥3 次且游戏时间推进 ≤1h、BWF 自暂停文案、runner `watchdog kind=stuck`；同签名 5 分钟冷却去重；失败签名归一化为 `工具｜原因模板｜地点`（抹掉坐标/引号物品/星级/数字/`<think>`）。
+- **现场包** `artifacts/soak/<runId>/stuck/<序号>-<kind>/`：`verdict.json / last50.jsonl / state.txt / planner.json / screen.png / save/`（`screencapture -x` 与存档递归拷贝失败只写 `.err`，绝不抛异常）+ 全量 `events.jsonl`、`meta.json`（参数、LLM 模式、git HEAD、BWF `/settings` 快照）、`summary.json`、`report.md`。
+- **每日闭环与报告**：跨日切分、雨天自动记浇水、冬季/季末买种播种记 `N/A`、累晕、2:00 遣返、金币曲线；报告含总览、每日闭环表、失败签名 Top10、卡死清单（链接现场目录）、金币表 + 内联 SVG；复用 `metrics.ts` 的 `summarizeAutodriveQuality` 输出成功率/失败率/重复动作/最长同工具/看门狗。
+- **planner 只读快照**：`RulePlanner.debugSnapshot()`（阶段/冷却表/`avoidTools`/`rescueTried`）与 `LlmPlanner.debugSnapshot()`（objective/冷却/拒绝集合/fallback），卡死现场包直接落盘。
+- **验证**：`pnpm typecheck` 通过；`pnpm test` 119 文件 / **1405 用例全绿**，分支 **90.23%**（同日另一次 90.33%）；`pnpm verify:gate` **7 过 / 0 跳过**（Gates 1–4 全绿，`卡死回归剧本：6 个`）。**真机 3 次**（AI 操作本机：SMAPI 拉起游戏 → BWF `McpPort=18088` → `load_save 泡泡湾`）：① `artifacts/soak/20261125-085545`（夏2，14.2 min，41 完成 / 1 超时，0 卡死）暴露累晕误判（见下方 Fixed）；② 修复后 `artifacts/soak/20261125-091123`（夏3，14.9 min，52 完成 / 2 失败，成功率 96%，**0 卡死 / 累晕 0 / 遣返 0 / 2:00 前睡觉 ✅**，金币 21174→21174，次日到账 24036；闭环 3/7，报告如实判「闭环不完整」、退出码 1）；③ 人造卡死 `artifacts/soak/20261125-092647`（`--on-stuck=stop` + `kill -STOP` 190s 后 `-CONT`）→ 恢复瞬间判 **`clock-stall`（06:40 停 197s）**，现场包 `stuck/01-clock-stall/` **7 件齐全**（verdict / last50（50 行）/ state（5.5KB）/ planner / **screen.png 1.7MB 3840×2160** / save（5 文件）），随即收尾退出 1。**限制**：游戏窗口不在前台时 `screen.png` 抓到整屏桌面（屏幕录制权限已就绪，非 `.err`）；LLM 模式未跑（无 Key，已自动降级并在报告注明）。
+
+### Fixed（T-M6-67：真机浸泡发现「累晕」误判）
+
+- **日记里的「晕倒过一次」被判成当天累晕**：`day-tracker.ts` 原先用 `/累晕|晕倒/` 匹配 `get_state` 原文，BWF 的长期笔记里写着「…晕倒过一次，睡前必须回家！」，导致真机第一次运行（`20261125-085545`，夏2）整天被记为 `passedOut`，报告结论与退出码随之出错。现改为 `PASSED_OUT_TEXT_RE = /累晕了|累晕过去|晕倒了|晕了过去|体力耗尽[^。\n]{0,6}(晕|倒)|passed out/i`（只认真实累晕事件），并补回归用例「日记/建议里的『晕倒过一次』不算当天累晕」；修复后真机 `20261125-091123` 累晕 0 天。
+
+### Fixed（T-A：陪伴主循环·语音终态闭合）
+
+- **节流命中补发语音终态**：`voice-host.speak()` 同文本 8s 节流命中时此前直接返回 `ok:true`，租约从未建立、`pet:speech-result` 永不到来，渲染层气泡停在 `waiting` 挂满 60s TTL（`BUBBLE_TTL_MS`）。现在节流命中按「已交付」补发 `completed` 终态，气泡立即干净收起；确立不变式「凡气泡等待语音收口，必有且仅有一个终态」。
+- **空台词/内心戏关闭不发回执（经消费端核实）**：`showBubble(text='')` 本就隐藏（无等待气泡）；生产代码无 `scene:'inner'` 调用方，内心戏云朵泡不走对话泡生命周期。盲发回执反而可能在多宠排队场景污染同 agent 正在等待的另一条气泡（回执仅带 agentId 无 bubbleId），故保持不发并用用例锁定。
+- **回归证据**：`voice-host.spec.ts` **8/8**（新增「8s 节流命中补发 completed 终态，气泡不挂 60s TTL」「空台词与内心戏关闭不产生回执」）；全仓 `pnpm test` 109 文件 / **1281 用例全绿**；`pnpm typecheck` 通过。
+
+### Fixed（T-A2：雷区反射气泡在桌宠上从未显示——真机插桩发现）
+
+- **`reflex_<actionState>` 工具名错位**：主进程反射回执 `tool` 为 `reflex_<actionState>`（autodrive-host），而 4 个消费点硬编码字面量 `reflex_spray`（桌宠气泡 pet-stage/main.ts、导演台事件区 App.tsx、桌宠工坊最新发言 pet-stage-panel、shared-protocol `toolLabelZh`）。`PetActionState` 枚举无 `spray` 值 → **所有角色的雷区反射气泡在桌宠上从未显示**（此前单测/E2E 均未覆盖此 DOM 行为）。统一改为 `reflex_` 前缀匹配；`toolLabelZh` 对 `reflex_*` 回退「雷区反射」（spec 新增 2 例）。
+- **真机验证（AI 操作本机；宿主无屏幕录制权限，改用 CDP 插桩读渲染层 DOM + `pgrep say/afplay` 进程采样，不改应用行为）**：真实 userData 启动 → 雷区消息 → 气泡 0.3s 内出现 → `say` 2s 合成 + `afplay` 5.5s 播放 → **afplay 退出同一拍气泡收起**（租约回执收泡，非 60s TTL/静音挂字，全程无静音徽标）；冷却过期后第二句雷区再次闭环；`pet:say` 同句两连发第二次无发声（T-A 节流真机生效）。证据：`artifacts/real-device/`（CDP 截图 ×3 + 进程采样日志）。
+- **限制如实记录**：终端上下文 safeStorage 解密失败（opencode-go/minimax，Keychain 访问受限）→ LLM `chat_reply` 气泡未能真机复验（与 ROADMAP T-M6-66① 症状一致）；反射冷却遮蔽下的节流场景未直接观测（由单测覆盖）。
+- **回归**：`pnpm typecheck` 通过；`pnpm test` 109 文件 / **1283 用例全绿**；license-scanner 0 违规。
 
 ### Added（T-M6-63 ~ T-M6-65：桌宠深度体验三阶段）
 

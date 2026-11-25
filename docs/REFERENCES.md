@@ -72,4 +72,4 @@
 | **pingdotgg/t3code** | **coding agents 开源控制平面**（MIT，68.5k★，2026-11-21 补档） | **ACP（Agent Client Protocol）v1/v2 统一接入** Claude Code/Codex/Cursor/OpenCode/dsh（`dsh --profile acp`）；Provider 实例模型（Registry 搜索/本地命令/凭据自管）；线程/中途换 agent/checkpoint/任务委派；桌面↔手机远程审批；monorepo 多端（desktop/server/web/mobile）+ libghostty-vt 终端渲染 | 无 |
 | Junimo-MCP | OCaml 手写星露谷 MCP 桥（41 工具，MIT，3.3.1 / HEAD 717218b，2026-11-23 补档） | **mock 与真机同源测试纪律**（`mock_smoke` 157 项免游戏断言驱动待发布二进制，仅换 `STARDEW_API_URL`；mock 复刻 `/move` race 与 `/use` 校验）、**效果核验式动作**（`/use` ok 后回读地块终态，固定 sleep 会丢中间格）、**sleep 以 `SaveGameInfo` mtime 为准**、**`live_soak` 长时压测**（不可达单列不计错 + 子进程泄漏检查）、**菜单/剧情盲区处理**（无选项自动按掉、带选项绝不代答、NamingMenu 坐标兜底）；只读源码级复核，未执行 | 无素材（纯代码仓库） |
 
-> 12 个新仓库的第一轮档案尚未单独建 `REFERENCE-*.md`，按工单开工必查原则：各工单开工前以本表结论为索引、深读对应仓库源码复核。
+> 12 个新仓库中 **crosspet / aboutme-pets 已建档案**（2026-11-24，见 `REFERENCE-crosspet.md` / `REFERENCE-aboutme-pets.md`；crosspet 已复核至 v1.4.1，aboutme-pets 许可口径已修正）；其余仍按工单开工必查原则，以本表结论为索引、深读对应仓库源码复核。

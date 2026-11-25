@@ -35,3 +35,4 @@
 | 日期 | 工单 | 结论变化 | 原因 |
 | --- | --- | --- | --- |
 | 2026-11-15 | 预置 | 初版档案建立；许可证由"MIT（素材待核实）"细化为"代码 MIT + 大肥鱼形象/素材 CC BY-NC-SA 4.0" | GitHub API + LICENSE 原文核实 |
+| 2026-11-24 | 融合分析（recon/07） | 复核：11-15 后仅 1 提交（fb38ce6 记忆素材修复），§2/§3/§4 结论全部维持；补充 **DIY 素材链（prompts/ 3 配方 + chroma_step02 HSV 自动抠像 + 睡觉三段帧连续规则）为 MIT 直移蓝本**，与 Transparent-Video-Maker（MIT）共同构成 T-F 自制素材管线 | 本地克隆 HEAD fb38ce6 + FEATURES/MAKE-YOUR-OWN-PET 全文 |
