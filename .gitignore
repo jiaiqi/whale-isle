@@ -52,3 +52,8 @@ mods/stardew-avatar-sync/bin/
 mods/stardew-avatar-sync/obj/
 mods/stardew-avatar-sync/publish/*.dll
 mods/stardew-avatar-sync/publish/*.pdb
+
+# 代理一次性调查与编辑备份（正式报告见 recon/，已入库）
+.recon/
+.zwork/
+docs/*.bak-*
