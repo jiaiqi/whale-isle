@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Fixed（T-M6-74：`localhost` 被解析到 IPv6 导致「游戏开着却报 MCP 不可达」）
+
+- **现象**：中控台点「启动自动驾驶」返回 `BWF MCP 不可达（http://localhost:18088/mcp）——确认游戏已启动`，但同一时刻 `curl http://127.0.0.1:18088/settings` 是 200、游戏也确实开着。
+- **根因**：macOS 上 `localhost` 优先解析到 IPv6 `::1`，而 BWF 的 HttpListener 只注册了 `http://127.0.0.1:<port>/` 前缀——`::1` 能建立连接但路由一律 404，宿主把 404 当成「连不上」，提示语又引导用户去重开游戏，等于把人带偏。
+- **修复**：`StardewAdapter` 构造时用新增的 `normalizeBwfEndpoint()` 把 `//localhost` 换成 `//127.0.0.1`（不可达文案也用规范化后的地址，便于排查）；`bwf-settings` 的 `bwfBaseUrl` / `bwfMcpEndpoint` 默认改用 `127.0.0.1`。
+- **验证**：单测 2 例（三种主机名输入、适配器报错文案不含 localhost）；`[REAL-DEVICE]` 修复前同一操作返回「不可达」，修复后返回 `{ok:true}` 并成功驱动游戏（`decision: fish` 进事件流）。
+
 ### Added（T-M6-73：BWF `playerInControl` 补丁，接管开关打通到游戏内）
 
 - **补丁** `mods/bwf-patches/2026-11-25-player-in-control-settings.patch`：BWF 上游本来就有 `SetPlayerInControl(bool)`（取消在跑动作 + 停下内置 AI + 解冻时间 + 恢复玩家移动 + HUD 提示），但只有 F7 能触发。补丁把它接进 `/settings` 远程设置——`ApplyRemoteSettings` 收到 `playerInControl` 时切主线程调用（`Game1.player` 必须主线程；未进存档则记日志忽略），`SettingsSnapshot` 上报 `playerInControl` 供宿主回读。
@@ -37,7 +44,7 @@
 - **RulePlanner 改造** `planner.ts`：拆成「主动商店买种 → 菜单 → 生存护栏 → 满包救援阶梯（行为不变）→ 日程状态机」；跨日（含换季）重置日程与失败记忆；最近一次农场概况缓存供离开农场后的决策使用；商店界面若是自己开的先买种再处理界面。
 - **多日活农场仿真** `tools/mock-harness/src/bwf-farm-sim.ts`（新）：日期/时钟/金币/体力/背包/农田/天气随工具调用真实变化，`get_state` 与真机 BWF 1.1.27 同段落同措辞；支持换日结算出货、作物过夜生长、雨天自动浇水、换季枯萎、周三/打烊商店、02:00 遣返与累晕扣钱；复用 `bwf-replay-server.ts` 抽出的 `startBwfHttpServer`（JSON/SSE 双形态），S01–S06 剧本保持全绿。
 - **7 日纯规则闭环** `tools/mock-harness/src/rule-7day.spec.ts`（新）：真实 `RulePlanner` 在仿真里从春 16 跑 7 天——每日闭环项完成（当天无机会的项记 N/A）、7 项各至少完成一次、0 累晕、0 次 2:00 遣返、第 7 天金币 5890g > 第 1 天 1370g、`chat()` 0 次；跨季（春 26 → 夏 4）断言春季季末不买种、夏季自动改买辣椒种子。另有 `seed-table.spec.ts`、`rule-schedule.spec.ts`、`bwf-farm-sim.spec.ts` 与 `state-hints.spec.ts` 扩展覆盖每条优先级分支（周三/17:00 后不去商店、雨天不浇水、24:00 强制回家、中途接手）。
-- **验证**：`pnpm typecheck` 通过；`pnpm test` 124 文件 / **1481 用例全绿**（含并行工单在 `apps/desktop-host` 新增的 13 例；本工单相关 `game-bridge-mcp` 14 文件 294 例）、分支 **90.47%**；`pnpm verify:gate` **7 过 / 0 跳过**。真机（本机 SMAPI → BWF `McpPort=18088`，`--no-llm`）4 轮：① `artifacts/soak/20261125-105149`（夏5 09:50 **中途接手**）`take_items 喷壶` → `water_crops` 2 株 → 出货 → 钓鱼，25/25 回执成功，证明「任意时刻接手能续上当天日程」；② `artifacts/soak/20261125-114409`（夏8–夏9，**2/2 游戏日**）**0 卡死 / 0 累晕 / 0 次 2:00 遣返**，49 条回执 0 失败（成功率 100%），金币 35448g → 40202g（+4754g），夏8 浇水+出货+22:00 睡觉、夏9 浇水+出货完成；③ `20261125-121556`（夏9 21:20 接手 → 夏10 06:00）读信 1 封 + 收获 2 株 + 浇水 + 出货全完成，21 分钟后 SMAPI 本体崩溃（`recursive_mutex lock failed`）；④ `20261125-122237`（夏10 06:00）复现完整晨间闭环后玩家按 F7 接管（`human-control active`），按「键鼠接管停手」停止。报告里「闭环完整 0/2」是 `day-tracker` 的 N/A 口径所致（只覆盖冬季/季末买种播种；无未读信、无可收作物记「—」），当天的读写/收获/浇水/出货/睡觉回执均在事件流里，已由并行修复「soak:real 每日闭环口径」补上机会型 N/A。
+- **验证**：`pnpm typecheck` 通过；`pnpm test` 124 文件 / **1481 用例全绿**（含并行工单新增用例；本工单新增 `seed-table`/`rule-schedule`/`bwf-farm-sim`/`rule-7day` 四个 spec 与 `state-hints`/`autodrive` 扩展）、分支 **90.47%**；`pnpm verify:gate` **7 过 / 0 跳过**。真机（本机 SMAPI → BWF `McpPort=18088`，`--no-llm`）4 轮：① `artifacts/soak/20261125-105149`（夏5 09:50 **中途接手**）`take_items 喷壶` → `water_crops` 2 株 → 出货 → 钓鱼，25/25 回执成功，证明「任意时刻接手能续上当天日程」；② `artifacts/soak/20261125-114409`（夏8–夏9，**2/2 游戏日**）**0 卡死 / 0 累晕 / 0 次 2:00 遣返**，49 条回执 0 失败（成功率 100%），金币 35448g → 40202g（+4754g），夏8 浇水+出货+22:00 睡觉、夏9 浇水+出货完成；③ `20261125-121556`（夏9 21:20 接手 → 夏10 06:00）读信 1 封 + 收获 2 株 + 浇水 + 出货全完成，21 分钟后 SMAPI 本体崩溃（`recursive_mutex lock failed`）；④ `20261125-122237`（夏10 06:00）复现完整晨间闭环后玩家按 F7 接管（`human-control active`），按「键鼠接管停手」停止。报告里「闭环完整 0/2」是 `day-tracker` 的 N/A 口径所致（只覆盖冬季/季末买种播种；无未读信、无可收作物记「—」），当天的读写/收获/浇水/出货/睡觉回执均在事件流里，已由并行修复「soak:real 每日闭环口径」补上机会型 N/A。
 
 ### Fixed（T-M6-69：真机浸泡发现）
 
