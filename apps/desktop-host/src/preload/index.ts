@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('providers:save-key', providerId, plainKey),
   providerKeyMask: (providerId: string): Promise<{ ok: boolean; error?: string; mask?: string }> =>
     ipcRenderer.invoke('providers:key-mask', providerId),
+  // T-M6-66①：Key 来源与可用性（已加载 / 解密失败需重填 / 系统加密不可用 / mock 隔离库）
+  providerVaultStatus: (providerIds: string[]): Promise<unknown> =>
+    ipcRenderer.invoke('providers:vault-status', providerIds),
   copyProviderKey: (providerId: string): Promise<{ ok: boolean; error?: string; mask?: string }> =>
     ipcRenderer.invoke('providers:copy-key', providerId),
   checkProviderBalance: (providerId: string): Promise<{ ok: boolean; error?: string; text?: string; raw?: string }> =>

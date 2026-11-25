@@ -12,14 +12,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Download, Server, SlidersHorizontal } from 'lucide-react';
+import { CheckCircle2, Download, Info, Server, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import {
   type DiningProfilePreset,
   type ModelProviderConfig,
   type WorkbenchRoleSlot,
 } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
-import type { ImportApplyView, ImportScanView } from './bridge';
+import type { ImportApplyView, ImportScanView, VaultStatusView } from './bridge';
 import { KEY_URL, SLOT_META, parsePastedEndpoint, shortError } from './providers/catalog';
 import { CustomProviderDialog, ImportDialog } from './providers/dialogs';
 import { ModelList } from './providers/model-list';
@@ -44,6 +44,68 @@ interface Props {
   store: DirectorStore;
 }
 
+/**
+ * T-M6-66①：把主进程上报的凭据状态翻成一句人话（零明文）。
+ * 顺序按严重度：系统加密不可用 > mock 隔离 > 解密失败需重填 > 正常已加载。
+ */
+function describeVaultStatus(
+  status: VaultStatusView,
+  nameOf: (id: string) => string,
+): { kind: 'ok' | 'err' | 'info'; text: string } {
+  const failed = status.providers.filter((p) => p.state === 'decrypt-failed' || p.state === 'identity-mismatch');
+  const fromEnv = status.providers.filter((p) => p.state === 'env');
+  const loaded = status.providers.filter((p) => p.state === 'loaded');
+  const failedNames = failed
+    .map((p) => `${nameOf(p.providerId)}${p.savedBy !== undefined ? `（由 ${p.savedBy} 写入）` : ''}`)
+    .join('、');
+  if (!status.encryptionAvailable) {
+    return {
+      kind: 'err',
+      text: `系统加密不可用（safeStorage）：API Key 无法保存或读取${failed.length > 0 ? `；已有 ${failed.length} 个 Key 解密失败需重填：${failedNames}` : ''}`,
+    };
+  }
+  if (status.backend === 'mock-keychain') {
+    return {
+      kind: 'err',
+      text: `凭据后端：mock keychain（--use-mock-keychain）· 已隔离到 ${status.vaultFile}，正常凭据库不受影响；本模式保存的 Key 与正常启动不通用`,
+    };
+  }
+  const parts: string[] = [];
+  if (loaded.length > 0) parts.push(`已从 macOS 钥匙串加载 ${loaded.length} 个（身份 ${status.identity}）`);
+  if (fromEnv.length > 0) parts.push(`${fromEnv.length} 个来自本机环境变量（不落盘）`);
+  if (failed.length > 0) parts.push(`${failed.length} 个解密失败需重填：${failedNames}`);
+  if (parts.length === 0) {
+    return { kind: 'info', text: `凭据后端：macOS 钥匙串（身份 ${status.identity}）· 尚未保存任何 API Key` };
+  }
+  return {
+    kind: failed.length > 0 ? 'err' : fromEnv.length > 0 ? 'info' : 'ok',
+    text: `Key 来源与可用性：${parts.join(' · ')}`,
+  };
+}
+
+/** 常驻状态条（与临时操作提示 NoticeBar 分开，避免保存结果把它覆盖掉） */
+function VaultStatusBar({ status, nameOf }: { status: VaultStatusView; nameOf: (id: string) => string }): React.JSX.Element {
+  const banner = describeVaultStatus(status, nameOf);
+  const failed = status.providers.filter((p) => p.state === 'decrypt-failed' || p.state === 'identity-mismatch').length;
+  const Icon = banner.kind === 'ok' ? CheckCircle2 : banner.kind === 'err' ? TriangleAlert : Info;
+  return (
+    <div
+      data-provider-vault-status={status.backend}
+      data-vault-failed={failed}
+      data-vault-encryption={status.encryptionAvailable ? 'available' : 'unavailable'}
+      className="mono mx-6 mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px]"
+      style={{
+        background: banner.kind === 'ok' ? 'var(--green-dim)' : banner.kind === 'err' ? 'var(--red-dim)' : 'var(--blue-dim)',
+        border: `1px solid ${banner.kind === 'ok' ? 'var(--green-line)' : banner.kind === 'err' ? 'var(--red-line)' : 'var(--blue-line)'}`,
+        color: banner.kind === 'ok' ? 'var(--green)' : banner.kind === 'err' ? 'var(--red)' : 'var(--blue)',
+      }}
+    >
+      <Icon size={12} />
+      {banner.text}
+    </div>
+  );
+}
+
 export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props): React.JSX.Element {
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<'providers' | 'defaults'>('providers');
@@ -64,6 +126,8 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
   const overridesRef = useRef<ProviderOverrides>({});
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  /** T-M6-66①：主进程如实上报的 Key 来源与可用性（only masks/states，never plaintext） */
+  const [vaultStatus, setVaultStatus] = useState<VaultStatusView | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err' | 'info'; text: string } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -105,6 +169,8 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
       const masks = await Promise.all(
         ids.map(async (id) => ({ id, mask: (await window.directorBridge.providerKeyMask(id)).mask ?? '' })),
       );
+      // Key 来源与可用性（T-M6-66①）：解密失败/系统加密不可用必须让用户看见，不能只显示「未配置」
+      void window.directorBridge.providerVaultStatus(ids).then(setVaultStatus).catch(() => setVaultStatus(null));
       const reconciled = { ...(storedOverrides ?? {}) };
       let changed = false;
       for (const { id, mask } of masks) {
@@ -161,6 +227,17 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
     setOverrides(next);
     void store.setConfig(OVERRIDES_KEY, next);
   }, [store]);
+
+  /** T-M6-66①：保存 Key 后立刻刷新该服务商的真实可用性（解密失败 → 已加载） */
+  const refreshVaultProvider = useCallback((providerId: string): void => {
+    void window.directorBridge.providerVaultStatus([providerId]).then((next) => {
+      setVaultStatus((prev) => {
+        if (prev === null) return next;
+        const rest = prev.providers.filter((p) => p.providerId !== providerId);
+        return { ...prev, ...next, providers: [...rest, ...next.providers] };
+      });
+    }).catch(() => undefined);
+  }, []);
 
   /** 逐模型测试结果落 override.tested（跨会话持久，自动挑选的依据）；不触发主脑热更新——批量 58 次也不打主进程 */
   const persistTested = useCallback((providerId: string, modelId: string, entry: ModelTestEntry): void => {
@@ -528,6 +605,7 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
         }
         keyMask = saved.mask ?? '';
         setKeyDrafts((d) => ({ ...d, [active.id]: '' }));
+        refreshVaultProvider(active.id);
       }
       if (keyMask === '') {
         setNotice({ kind: 'err', text: '尚未保存凭据：先粘贴 Key 再点「保存并检测」' });
@@ -810,6 +888,10 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
           </div>
         </div>
       </div>
+
+      {vaultStatus !== null && (
+        <VaultStatusBar status={vaultStatus} nameOf={(id) => merged.find((p) => p.id === id)?.name ?? id} />
+      )}
 
       {notice !== null && <NoticeBar notice={notice} />}
 

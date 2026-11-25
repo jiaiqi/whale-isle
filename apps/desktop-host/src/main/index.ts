@@ -11,7 +11,7 @@ import { registerStageIpc } from './passthrough';
 import { createPetPacksProtocolHandler, PET_PACKS_SCHEME, readBundledAboutmePacks, readCrossPetCharacters, readCrossPetEggScripts, registerPetPacksIpc, resolvePetPacksDir } from './pet-packs';
 import { createEggTheater } from './egg-theater';
 import { decidePeakOutfit, isPeakOutfitFamily, resolvePeakPeriod, type PeakOutfitState } from './peak-schedule';
-import { registerProviderVaultIpc } from './provider-vault';
+import { isMockKeychainLaunch, logVaultStartup, registerProviderVaultIpc, resolveVaultPath } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { bwfMcpEndpoint } from './bwf-settings';
 import { createPetPrefsStore } from './pet-prefs';
@@ -308,9 +308,12 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   if (!existsSync(petPacksRoot)) {
     console.warn(`[pet-packs] 素材目录不存在：${petPacksRoot}（先跑 pnpm sync:pet-packs；随包角色将只剩内置小鲸）`);
   }
-  // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）
-  const vaultPath = join(app.getPath('userData'), 'provider-vault.json');
+  // 供应商凭据库：key 经 safeStorage 加密落盘 userData/provider-vault.json（渲染进程只见掩码）。
+  // T-M6-66①：--use-mock-keychain（E2E/调试）的密钥与真实 Keychain 不兼容，强制写隔离文件，
+  // 绝不再覆盖正常凭据库；启动时如实打印 Key 来源与可用性（零明文）。
+  const vaultPath = resolveVaultPath(app.getPath('userData'), { mockKeychain: isMockKeychainLaunch() });
   registerProviderVaultIpc(vaultPath);
+  logVaultStartup(vaultPath);
   // Magpie / CC Switch 只读导入（T-M6-09）：扫描只回掩码，导入时主进程直接加密写 vault
   createProviderImportHost(vaultPath);
   // 星露谷 Mod 管理（T-M6-06）：只读写玩家 Mods 目录，配置落 userData
@@ -928,7 +931,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const mainGameEndpoint = (): string => bwfMcpEndpoint(modsHost.bwfMcpPort);
   const autodrive = createAutodriveHost(
     mainGameEndpoint(),
-    join(app.getPath('userData'), 'provider-vault.json'),
+    vaultPath,
     voice,
     memory,
     'stardew',

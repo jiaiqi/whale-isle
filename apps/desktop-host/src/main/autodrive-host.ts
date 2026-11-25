@@ -3,7 +3,7 @@
  * 事件单源多播到 director + pet-stage 两窗（webContents.send，preload 桥中继）。
  * 启停由 Shell 显式触发（用户不在游戏时不自动跑）。
  */
-import { app, ipcMain, safeStorage, type WebContents } from 'electron';
+import { app, ipcMain, type WebContents } from 'electron';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -273,11 +273,13 @@ export function createAutodriveHost(
     activeProfile = nextProfile;
     brainProviders = Object.keys(keys);
     brainMissingKeys = missingKeys;
-    if (Object.keys(keys).length === 0 || !safeStorage.isEncryptionAvailable()) {
+    // Key 可用性只看实际解析结果：开发态环境变量兜底在 safeStorage 不可用时仍可支撑 LLM；
+    // 解密失败会由 provider-vault 启动日志与服务商页状态如实上报，这里不再用 safeStorage 二次拦截。
+    if (Object.keys(keys).length === 0) {
       gateway = null;
       llmPlanner = null;
       brainMode = 'rule';
-      return { ok: false, mode: 'rule', llmReady: false, providers: [], missingKeys, error: '没有可用的供应商 Key（先在供应商页保存 Key）' };
+      return { ok: false, mode: 'rule', llmReady: false, providers: [], missingKeys, error: '没有可用的供应商 Key（未配置，或钥匙串解密失败需重填）' };
     }
     gateway = new ModelGateway({
       profile: nextProfile,

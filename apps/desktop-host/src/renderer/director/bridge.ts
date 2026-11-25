@@ -171,6 +171,32 @@ export interface BrainApplyView {
   error?: string;
 }
 
+/** T-M6-66①：凭据库来源与逐服务商可用性（零明文；只含状态与掩码） */
+export type VaultKeyState =
+  | 'loaded'
+  | 'env'
+  | 'missing'
+  | 'decrypt-failed'
+  | 'identity-mismatch'
+  | 'encryption-unavailable';
+
+export interface VaultProviderStatusView {
+  providerId: string;
+  state: VaultKeyState;
+  source: 'keychain' | 'env' | 'none';
+  mask?: string;
+  /** v2 条目写入时的应用身份（Electron / 鲸屿） */
+  savedBy?: string;
+}
+
+export interface VaultStatusView {
+  backend: 'keychain' | 'mock-keychain' | 'unavailable';
+  encryptionAvailable: boolean;
+  identity: string;
+  vaultFile: string;
+  providers: VaultProviderStatusView[];
+}
+
 export interface HarnessPresetInfo {
   id: string; label: string; command: string | null; authHint: string;
 }
@@ -229,6 +255,7 @@ export interface AutodriveEventView {
 export interface DirectorBridge {
   saveProviderKey(providerId: string, plainKey: string): Promise<ProviderVaultResponse>;
   providerKeyMask(providerId: string): Promise<ProviderVaultResponse>;
+  providerVaultStatus(providerIds: string[]): Promise<VaultStatusView>;
   copyProviderKey(providerId: string): Promise<ProviderVaultResponse>;
   checkProviderBalance(providerId: string): Promise<ProviderVaultResponse>;
   openKeyConsole(url: string): Promise<{ ok: boolean; error?: string }>;
