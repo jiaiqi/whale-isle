@@ -21,7 +21,11 @@ import {
   LlmPlanner,
   RulePlanner,
   StardewAdapter,
+  parseFarmSummary,
   parseGameState,
+  parseSeedInventory,
+  parseWeekday,
+  seedShopStatus,
   type AutodriveEvent,
   type AutodriveOptions,
   type GameAdapter,
@@ -323,6 +327,31 @@ export function createPlanner(resolution: LlmResolution, deps: PlannerDeps = {})
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * 从真实 `get_state` 原文解析「当天每个闭环项是否真的有机会可做」。
+ * 只做证据判断，不猜：状态里没写的字段一律当作「没有机会」（不算失败），
+ * 但账本侧的 N/A 只会在观察者确实拿到过状态时启用（见 day-tracker 的 sawFacts）。
+ */
+export function parseDayOpportunity(
+  raw: string,
+  snapshot: { clockMinutes: number; money: number; festival: string | null },
+): { mail: boolean; water: boolean; harvest: boolean; buySeeds: boolean; plant: boolean } {
+  const farm = parseFarmSummary(raw);
+  const seeds = parseSeedInventory(raw);
+  const unread = /(\d+)\s*封未读信件/.exec(raw);
+  const shop = seedShopStatus(snapshot.clockMinutes, parseWeekday(raw), snapshot.festival);
+  const emptyTilled = farm.emptyTilled ?? 0;
+  return {
+    mail: unread !== null && Number(unread[1]) > 0,
+    water: (farm.needsWater ?? 0) > 0,
+    harvest: (farm.harvestable ?? 0) > 0,
+    // 买种：有可播种空地 + 钱够最便宜的种子（防风草 20g）+ 商店营业中
+    buySeeds: emptyTilled > 0 && snapshot.money >= 20 && shop.open,
+    // 播种：有可播种空地 + 背包里已有当季种子
+    plant: emptyTilled > 0 && seeds.length > 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -674,6 +703,7 @@ export class SoakSession {
       weather: snapshot.weather,
       location: snapshot.location,
       raw: result.text,
+      opportunity: parseDayOpportunity(result.text, snapshot),
     }, ts);
     if (finalized !== null) this.onDayFinalized(finalized);
     if (verdict !== null) this.handleStuck(verdict, ts);

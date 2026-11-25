@@ -181,6 +181,62 @@ describe('DayTracker 日切分', () => {
     expect(seasonEnd.finish(1)?.na).toEqual({ buySeeds: true, plant: true });
   });
 
+  it('状态证明全天没有机会 → 五项记 N/A，只做过的出货与睡觉仍算达标', () => {
+    const tracker = new DayTracker();
+    tracker.observe({
+      clock: DAY16,
+      money: 500,
+      raw: '（农场概况：共 0 株作物，需浇水 0，可收获 0）',
+      opportunity: { mail: false, water: false, harvest: false, buySeeds: false, plant: false },
+    }, 0);
+    tracker.ingest(receipt('ship_items', 'COMPLETED', '已把 海草 放进出货箱'), 1);
+    tracker.ingest(receipt('sleep', 'COMPLETED', '晚安主人'), 2);
+    const day = tracker.finish(3);
+    expect(day?.na).toMatchObject({ mail: true, water: true, harvest: true, buySeeds: true, plant: true });
+    expect(isDayLoopComplete(day!)).toBe(true);
+  });
+
+  it('没有观测到状态时不做机会型 N/A（避免空绿）', () => {
+    const tracker = new DayTracker();
+    tracker.observe({ clock: DAY16, money: 500 }, 0);
+    tracker.ingest(receipt('ship_items', 'COMPLETED', '已把 海草 放进出货箱'), 1);
+    tracker.ingest(receipt('sleep', 'COMPLETED', '晚安主人'), 2);
+    const day = tracker.finish(3);
+    expect(day?.na.mail).toBeUndefined();
+    expect(day?.na.water).toBeUndefined();
+    expect(day?.na.harvest).toBeUndefined();
+    expect(isDayLoopComplete(day!)).toBe(false);
+  });
+
+  it('当天只要出现过一次机会就不记 N/A', () => {
+    const tracker = new DayTracker();
+    tracker.observe({
+      clock: DAY16,
+      money: 500,
+      opportunity: { mail: false, water: false, harvest: false, buySeeds: false, plant: false },
+    }, 0);
+    tracker.observe({ clock: '第1年春16日 12:00', money: 500, opportunity: { harvest: true } }, 1);
+    tracker.ingest(receipt('sleep', 'COMPLETED', '晚安主人'), 2);
+    const day = tracker.finish(3);
+    expect(day?.na.harvest).toBeUndefined();
+    expect(day?.na.mail).toBe(true);
+    expect(day?.loop.harvest).toBe(false);
+    expect(isDayLoopComplete(day!)).toBe(false);
+  });
+
+  it('雨天 water 不记 N/A（自动记为完成）', () => {
+    const tracker = new DayTracker();
+    tracker.observe({
+      clock: DAY16,
+      money: 0,
+      weather: '下雨',
+      opportunity: { water: false },
+    }, 0);
+    const day = tracker.finish(1);
+    expect(day?.na.water).toBeUndefined();
+    expect(day?.loop.water).toBe(true);
+  });
+
   it('回执计数区分完成/失败/超时/不确定/错误；autodrive 汇总不计', () => {
     const tracker = new DayTracker();
     tracker.observe({ clock: DAY16, money: 0 }, 0);

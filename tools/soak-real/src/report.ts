@@ -269,9 +269,9 @@ export function renderReport(summary: SoakSummary): string {
       day.dayKey,
       day.weather === '' ? '—' : day.weather,
       `${money(day.moneyStart)} → ${money(day.moneyEnd)}`,
-      check(day.loop.mail),
-      check(day.loop.water),
-      check(day.loop.harvest),
+      check(day.loop.mail, day.na.mail === true),
+      check(day.loop.water, day.na.water === true),
+      check(day.loop.harvest, day.na.harvest === true),
       check(day.loop.ship),
       check(day.loop.buySeeds, day.na.buySeeds),
       check(day.loop.plant, day.na.plant),
@@ -285,7 +285,7 @@ export function renderReport(summary: SoakSummary): string {
   }
   if (summary.days.length === 0) lines.push('| （无游戏日记录） | — | — | — | — | — | — | — | — | — | — | — | — | — |');
   lines.push('');
-  lines.push('> `N/A` = 该日不适用（冬季或季末不买种不播种），不算失败；`—` = 当天没有该动作的成功回执。', '');
+  lines.push('> `N/A` = 该日不适用（冬季/季末不买种不播种；或当天 get_state 证明没有未读信/需浇水/可收获/空地/种子），不算失败；`—` = 当天有机会但没有该动作的成功回执。', '');
 
   lines.push('## 失败签名 Top 10', '');
   if (summary.failureSignatures.length === 0) {

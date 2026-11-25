@@ -23,6 +23,7 @@ import {
   formatRunId,
   main,
   parseArgs,
+  parseDayOpportunity,
   readGitHead,
   resolveLlm,
   SoakSession,
@@ -139,6 +140,57 @@ function makeSession(overrides: Partial<SoakSessionDeps> & { options: SoakOption
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// 每日闭环机会解析
+// ---------------------------------------------------------------------------
+
+describe('parseDayOpportunity', () => {
+  const snapshot = (over: { clockMinutes?: number; money?: number; festival?: string | null } = {}) => ({
+    clockMinutes: over.clockMinutes ?? 12 * 60,
+    money: over.money ?? 1000,
+    festival: over.festival ?? null,
+  });
+
+  it('农场概况全 0、无未读信、无空地 → 五项全无机会', () => {
+    const raw = '（农场概况：共 0 株作物，需浇水 0，可收获 0）\n## 背包\n22: 稻苗 x3 [种子]';
+    expect(parseDayOpportunity(raw, snapshot())).toEqual({
+      mail: false, water: false, harvest: false, buySeeds: false, plant: false,
+    });
+  });
+
+  it('需浇水/可收获/未读信/空地/种子各自触发对应机会', () => {
+    const raw = [
+      '（农场概况：共 1 株作物，需浇水 1，可收获 1）',
+      '空耕地 3 格（可播种）：(1,1) (2,1) (3,1)',
+      '你还有 2 封未读信件',
+      '## 背包',
+      '22: 稻苗 x3 [种子]',
+    ].join('\n');
+    expect(parseDayOpportunity(raw, snapshot())).toEqual({
+      mail: true, water: true, harvest: true, buySeeds: true, plant: true,
+    });
+  });
+
+  it('没有空地时不买种不播种，哪怕钱够且背包有种子', () => {
+    const raw = '（农场概况：共 2 株作物，需浇水 0，可收获 0）\n## 背包\n22: 稻苗 x3 [种子]';
+    const opp = parseDayOpportunity(raw, snapshot());
+    expect(opp.buySeeds).toBe(false);
+    expect(opp.plant).toBe(false);
+  });
+
+  it('商店打烊（17:00 后）不买种，但播种不受营业时间影响', () => {
+    const raw = [
+      '（农场概况：共 1 株作物，需浇水 0，可收获 0）',
+      '空耕地 2 格（可播种）：(1,1) (2,1)',
+      '## 背包',
+      '22: 稻苗 x3 [种子]',
+    ].join('\n');
+    const evening = parseDayOpportunity(raw, snapshot({ clockMinutes: 18 * 60 }));
+    expect(evening.buySeeds).toBe(false);
+    expect(evening.plant).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

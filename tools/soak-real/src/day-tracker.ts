@@ -88,6 +88,19 @@ export interface DayReceipts {
   error: number;
 }
 
+/**
+ * 当天各闭环项「是否真的出现过可做的机会」。
+ * 由调用方从 `get_state` 原文解析后传入（本模块保持纯状态机，不读文本、不猜）。
+ * 全部为 false 且 sawFacts=true 时，说明当天状态确实没有该动作的机会 → 报告记 N/A，不算失败。
+ */
+export interface DayOpportunity {
+  mail: boolean;
+  water: boolean;
+  harvest: boolean;
+  buySeeds: boolean;
+  plant: boolean;
+}
+
 export interface DayRecord {
   dayKey: string;
   season: string;
@@ -96,8 +109,12 @@ export interface DayRecord {
   moneyStart: number;
   moneyEnd: number;
   loop: DayLoop;
-  /** 不适用项：报告里显示 N/A，不算失败（冬季与季末不买种不播种） */
-  na: { buySeeds: boolean; plant: boolean };
+  /**
+   * 不适用项：报告里显示 N/A，不算失败。
+   * buySeeds/plant 的两类来源：① 冬季或季末（与机会无关，直接 N/A）；② 当天状态证明没有空地/没钱/没种子。
+   * mail/water/harvest 只在「观察者拿到过状态且全天没有机会」时置位，观察者关闭时保持 undefined。
+   */
+  na: { buySeeds: boolean; plant: boolean; mail?: boolean; water?: boolean; harvest?: boolean };
   passedOut: boolean;
   forcedHome2am: boolean;
   stuckCount: number;
@@ -114,12 +131,22 @@ export interface StatePatch {
   location?: string;
   /** get_state 原文（用于「累晕」等非结构化线索） */
   raw?: string;
+  /**
+   * 当天该动作的机会（由调用方从 get_state 解析）。
+   * 传 undefined 表示这次没拿到可解析的状态（观察者关闭或解析失败），不计入机会统计，
+   * 避免「观察者关闭 → 全部 N/A → 空绿」。
+   */
+  opportunity?: Partial<DayOpportunity>;
 }
 
 interface MutableDay extends DayRecord {
   sawRain: boolean;
   slept: boolean;
   lastDayMinutes: number | null;
+  /** 全天累计的机会（多次观测取并集） */
+  opp: DayOpportunity;
+  /** 是否至少拿到过一次可解析的状态；false 时不启用机会型 N/A */
+  sawFacts: boolean;
 }
 
 function emptyLoop(): DayLoop {
@@ -146,6 +173,8 @@ function newDay(clock: GameClock, money: number, weather: string): MutableDay {
     sawRain: false,
     slept: false,
     lastDayMinutes: null,
+    opp: { mail: false, water: false, harvest: false, buySeeds: false, plant: false },
+    sawFacts: false,
   };
 }
 
@@ -156,9 +185,9 @@ export function isPlantingNA(season: string, day: number): boolean {
 
 /** 当天闭环是否完整（N/A 项视为通过；供报告与退出码使用） */
 export function isDayLoopComplete(record: DayRecord): boolean {
-  if (!record.loop.mail) return false;
-  if (!record.loop.water) return false;
-  if (!record.loop.harvest) return false;
+  if (!record.loop.mail && record.na.mail !== true) return false;
+  if (!record.loop.water && record.na.water !== true) return false;
+  if (!record.loop.harvest && record.na.harvest !== true) return false;
   if (!record.loop.ship) return false;
   if (!record.loop.sleptBefore2am) return false;
   if (!record.na.buySeeds && !record.loop.buySeeds) return false;
@@ -206,6 +235,16 @@ export class DayTracker {
     }
     if (patch.stamina !== undefined && Number.isFinite(patch.stamina) && patch.stamina <= 0) day.passedOut = true;
     if (patch.raw !== undefined && PASSED_OUT_TEXT_RE.test(patch.raw)) day.passedOut = true;
+    if (patch.opportunity !== undefined) {
+      // 只有真正拿到可解析状态时才累计机会；多次观测取并集（一天里只要出现过一次机会就算有）
+      day.sawFacts = true;
+      const opp = patch.opportunity;
+      if (opp.mail === true) day.opp.mail = true;
+      if (opp.water === true) day.opp.water = true;
+      if (opp.harvest === true) day.opp.harvest = true;
+      if (opp.buySeeds === true) day.opp.buySeeds = true;
+      if (opp.plant === true) day.opp.plant = true;
+    }
     day.lastDayMinutes = clock.dayMinutes;
     return finalized;
   }
@@ -300,8 +339,17 @@ export class DayTracker {
   private finalize(day: MutableDay): DayRecord {
     const dayNumber = Number(day.dayKey.split('-').pop() ?? '1');
     const plantingNA = isPlantingNA(day.season, Number.isFinite(dayNumber) ? dayNumber : 1);
-    day.na = { buySeeds: plantingNA, plant: plantingNA };
     if (day.sawRain) day.loop.water = true; // 雨天作物自动喝饱，不浇也算完成
+    // 机会型 N/A：只在「拿到过状态」且「全天从未出现机会」时成立，观察者关闭时保持 undefined，
+    // 避免把「没观测到」当成「没事可做」而刷出空绿。
+    const noOpportunity = (had: boolean): boolean => day.sawFacts && !had;
+    day.na = {
+      buySeeds: plantingNA || noOpportunity(day.opp.buySeeds),
+      plant: plantingNA || noOpportunity(day.opp.plant),
+      ...(noOpportunity(day.opp.mail) ? { mail: true } : {}),
+      ...(!day.sawRain && noOpportunity(day.opp.water) ? { water: true } : {}),
+      ...(noOpportunity(day.opp.harvest) ? { harvest: true } : {}),
+    };
     day.forcedHome2am = !day.slept && day.lastDayMinutes !== null && day.lastDayMinutes >= 23 * 60 + 50;
     return this.snapshot(day);
   }
