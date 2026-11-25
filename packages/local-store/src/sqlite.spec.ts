@@ -1,10 +1,16 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SqliteStore } from './sqlite';
+import {
+  CURRENT_SQLITE_SCHEMA_VERSION,
+  openSqliteStoreWithRecovery,
+  rollbackDatabaseFile,
+  SqliteStore,
+} from './sqlite';
 
-/** T-M0-03 门禁断言：常客记仇标签读写、记忆一键删除（隐私合规）、Token 流水、点歌缓存 */
+/** T-M0-03 & V2-P0-03 门禁断言：node:sqlite 账本读写、事务与 Savepoint、旧库迁移与回滚、损坏恢复 */
 
 let store: SqliteStore;
 
@@ -70,10 +76,8 @@ describe('常客记仇/好感账本', () => {
     const rawDb = (
       store as unknown as { db: { prepare: (sql: string) => { run: (...args: unknown[]) => void } } }
     ).db;
-    // 直接写坏数据模拟历史脏数据
     rawDb.prepare('UPDATE grudge_ledger SET grudge_tags = ? WHERE uid = ?').run('not-json', 'u-5');
     expect(store.getViewer('douyin', 'u-5')?.grudgeTags).toEqual([]);
-    // 合法 JSON 但不是数组
     rawDb.prepare('UPDATE grudge_ledger SET grudge_tags = ? WHERE uid = ?').run('"str"', 'u-5');
     expect(store.getViewer('douyin', 'u-5')?.grudgeTags).toEqual([]);
     rawDb.prepare('UPDATE grudge_ledger SET grudge_tags = ? WHERE uid = ?').run('null', 'u-5');
@@ -140,7 +144,6 @@ describe('点歌缓存索引', () => {
     expect(first?.songTitle).toBe('晴天');
     expect(store.hitSongCache(key)?.hitCount).toBe(2);
     expect(store.hitSongCache('missing')).toBeNull();
-    // 同 key upsert 更新元数据、保留命中计数
     store.putSongCache({ cacheKey: key, songTitle: '晴天 (Live)', filePath: 'cache/songs/b.ogg', sizeBytes: 4_000_000 });
     const updated = store.hitSongCache(key);
     expect(updated?.filePath).toBe('cache/songs/b.ogg');
@@ -170,19 +173,132 @@ describe('隐私合规总开关与持久化', () => {
     expect(store.getMeta('absent')).toBeNull();
   });
 
-  it('文件库 WAL 持久化：关库重开数据仍在', () => {
+  it('文件库 WAL 持久化：关库重开数据仍在且完整性检查通过', () => {
     const dir = mkdtempSync(join(tmpdir(), 'local-store-'));
     const dbPath = join(dir, 'workbench.db');
     try {
       const fileStore = new SqliteStore(dbPath);
       fileStore.upsertViewer({ platform: 'douyin', uid: 'persist-1', nickname: '常客' });
       fileStore.setMeta('lastBoot', '1');
+      expect(fileStore.checkIntegrity()).toEqual({ ok: true, detail: 'ok' });
       fileStore.close();
 
       const reopened = new SqliteStore(dbPath);
       expect(reopened.getViewer('douyin', 'persist-1')?.nickname).toBe('常客');
       expect(reopened.getMeta('lastBoot')).toBe('1');
+      expect(reopened.migrationInfo.migratedFromLegacy).toBe(false);
       reopened.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('V2-P0-03：事务、旧版迁移、回滚与异常恢复', () => {
+  it('runInTransaction 支持提交、异常回滚与嵌套 Savepoint 回滚', () => {
+    store.upsertViewer({ platform: 'douyin', uid: 'tx-1', nickname: '初始' });
+
+    expect(() =>
+      store.runInTransaction(() => {
+        store.bumpIntimacy('douyin', 'tx-1', 10);
+        throw new Error('force rollback');
+      }),
+    ).toThrow('force rollback');
+    expect(store.getViewer('douyin', 'tx-1')?.intimacyScore).toBe(0);
+
+    store.runInTransaction(() => {
+      store.bumpIntimacy('douyin', 'tx-1', 5);
+      expect(() =>
+        store.runInTransaction(() => {
+          store.bumpIntimacy('douyin', 'tx-1', 99);
+          throw new Error('inner rollback');
+        }),
+      ).toThrow('inner rollback');
+    });
+    expect(store.getViewer('douyin', 'tx-1')?.intimacyScore).toBe(5);
+  });
+
+  it('真实旧版 v1 数据库自动备份迁移、数据零丢失并支持回滚还原', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'local-store-mig-'));
+    const dbPath = join(dir, 'legacy-workbench.db');
+    try {
+      // 构造真实的 V1 旧版库（无 schema_version=2）
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE grudge_ledger (
+          platform TEXT NOT NULL, uid TEXT NOT NULL, nickname TEXT NOT NULL DEFAULT '',
+          intimacy_score INTEGER NOT NULL DEFAULT 0, grudge_tags TEXT NOT NULL DEFAULT '[]',
+          notes TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY (platform, uid)
+        );
+        CREATE TABLE token_ledger (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, slot TEXT NOT NULL,
+          provider_id TEXT NOT NULL, model_id TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
+          cached_input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
+          rice_grains INTEGER NOT NULL DEFAULT 0, purpose TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE song_cache_index (
+          cache_key TEXT PRIMARY KEY, song_title TEXT NOT NULL, file_path TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
+          last_hit_at INTEGER NOT NULL, hit_count INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+      legacyDb.prepare('INSERT INTO grudge_ledger VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+        'douyin', 'legacy-u1', '旧版常客', 33, '["旧标签"]', '来自 V1', 1700000000000,
+      );
+      legacyDb.prepare('INSERT INTO token_ledger (ts, slot, provider_id, model_id, input_tokens, cached_input_tokens, output_tokens, rice_grains, purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        1700000000000, 'MAIN_PERSONA_BRAIN', 'deepseek', 'deepseek-chat', 100, 0, 50, 150, 'chat',
+      );
+      legacyDb.close();
+      const legacyBytes = readFileSync(dbPath);
+
+      // 用 V2 SqliteStore 打开并迁移
+      const migrated = new SqliteStore(dbPath);
+      expect(migrated.migrationInfo.migratedFromLegacy).toBe(true);
+      expect(migrated.migrationInfo.fromVersion).toBe(1);
+      expect(migrated.migrationInfo.toVersion).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      expect(migrated.migrationInfo.backupPath).toBeTruthy();
+      expect(existsSync(migrated.migrationInfo.backupPath!)).toBe(true);
+      expect(migrated.getMeta('schema_version')).toBe(String(CURRENT_SQLITE_SCHEMA_VERSION));
+      expect(migrated.getViewer('douyin', 'legacy-u1')?.nickname).toBe('旧版常客');
+      expect(migrated.getTokenSummary().riceGrains).toBe(150);
+      expect(migrated.checkIntegrity().ok).toBe(true);
+      const backupPath = migrated.migrationInfo.backupPath!;
+      migrated.close();
+
+      // 验证回滚恢复与原字节完全一致
+      rollbackDatabaseFile(dbPath, backupPath);
+      expect(readFileSync(dbPath)).toEqual(legacyBytes);
+      expect(() => rollbackDatabaseFile(dbPath, join(dir, 'nonexistent.bak'))).toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('损坏数据库文件自动隔离备份并重建可用实例', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'local-store-corrupt-'));
+    const dbPath = join(dir, 'corrupt.db');
+    try {
+      const mem = openSqliteStoreWithRecovery(':memory:');
+      expect(mem.recovered).toBe(false);
+      mem.store.close();
+
+      writeFileSync(dbPath, 'NOT A VALID SQLITE FILE 00000000000000', 'utf8');
+      writeFileSync(`${dbPath}-wal`, 'stale wal', 'utf8');
+      const result = openSqliteStoreWithRecovery(dbPath);
+      expect(result.recovered).toBe(true);
+      expect(result.backupPath).toBeTruthy();
+      expect(existsSync(result.backupPath!)).toBe(true);
+      expect(result.store.checkIntegrity().ok).toBe(true);
+      result.store.upsertViewer({ platform: 'douyin', uid: 'after-recovery', nickname: '新生' });
+      expect(result.store.getViewer('douyin', 'after-recovery')?.nickname).toBe('新生');
+      result.store.close();
+
+      // 健康库再次打开不应触发恢复
+      const second = openSqliteStoreWithRecovery(dbPath);
+      expect(second.recovered).toBe(false);
+      expect(second.store.getViewer('douyin', 'after-recovery')?.nickname).toBe('新生');
+      second.store.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

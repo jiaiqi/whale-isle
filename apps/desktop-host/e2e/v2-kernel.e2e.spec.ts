@@ -21,6 +21,7 @@ interface DirectorV2Window {
     v2CharacterState(): Promise<{ identity: { characterId: string; displayName: string }; halted: boolean }>;
     v2EmergencyHalt(reason?: string): Promise<{ halted: boolean; controlMode: string; expression: string }>;
     v2Resume(mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover'): Promise<{ halted: boolean; controlMode: string }>;
+    v2StorageCheck(): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }>;
   };
 }
 
@@ -74,6 +75,14 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       );
       expect(resumed.halted).toBe(false);
       expect(resumed.controlMode).toBe('autonomous');
+
+      const storage = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2StorageCheck(),
+      );
+      expect(storage.ok).toBe(true);
+      expect(storage.engine).toBe('node:sqlite');
+      expect(storage.schemaVersion).toBe('2');
+      expect(storage.integrity).toBe('ok');
     } finally {
       await app.close();
     }

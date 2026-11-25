@@ -37,7 +37,7 @@
 - **预计风险**：需求范围大 → 通过 P0–P5 清晰分期与单角色先闭环管控复杂度。
 
 ### `V2-P0-03`：SQLite 存储收敛至内置 `node:sqlite`（含迁移/事务/恢复/打包验证）
-- **状态**：`NEXT`
+- **状态**：`DONE`（2026-11-25 完成）
 - **目标**：将 `@workbench/local-store` 从 `better-sqlite3` 迁移至 Node/Electron 内置 `node:sqlite`，彻底消除原生模块 ABI 冲突。
 - **依赖**：`V2-P0-02`、`V2-P0-04`
 - **实现方案**：重写 `packages/local-store/src/sqlite.ts` 使用 `DatabaseSync`；自动检测旧版 v1 库并备份后事务性升级 Schema；提供 `runInTransaction`、`checkIntegrity`、`openSqliteStoreWithRecovery` 与 `rollbackDatabaseFile`；移除 `better-sqlite3` 依赖与构建钩子。
@@ -47,7 +47,7 @@
 - **预计风险**：`node:sqlite` 与 `better-sqlite3` 返回数值类型（如 `bigint` changes）差异 → 显式 `Number()` 转换并在单测覆盖。
 
 ### `V2-P0-05`：Evolution Engine Lite 隔离研发闭环落地
-- **状态**：`PENDING`
+- **状态**：`NEXT`
 - **目标**：在 P0 即落地轻量级隔离研发引擎，支持唯一工单调度、生产目录外独立 Git Worktree、Coding Agent CLI 适配、自动化门禁、独立 Diff/安全审查、PR 草案生成、失败报告与跨会话状态恢复。
 - **依赖**：`V2-P0-03`
 - **实现方案**：新建 `tools/evolution-lite`（Zero external deps beyond `zod`），实现 `EvolutionStateStore`、`GitWorktreeManager`（严格校验路径在生产仓外且禁止动 `main`）、`CliCodingAgentAdapter`、`IndependentReviewer`、`EvolutionLiteOrchestrator` 与 `pnpm evolution:lite` CLI。

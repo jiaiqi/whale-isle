@@ -33,9 +33,9 @@ module.exports = {
     {
       name: 'renderer-no-sqlite',
       severity: 'error',
-      comment: '渲染进程严禁直接依赖 better-sqlite3（SQLite 只在主进程，经网关访问）',
+      comment: '渲染进程严禁直接依赖 SQLite（node:sqlite / better-sqlite3 只在主进程，经网关访问）',
       from: { path: '^apps/desktop-host/src/renderer' },
-      to: { dependencyTypes: ['npm', 'npm-dev'], path: '^better-sqlite3' },
+      to: { path: '^(?:node:)?sqlite$|^better-sqlite3' },
     },
     {
       name: 'pet-renderer-no-cross-layer',
@@ -73,12 +73,11 @@ module.exports = {
     {
       name: 'local-store-runtime-only-storage',
       severity: 'error',
-      comment: '存储层运行时依赖只允许 better-sqlite3 / dexie（*.spec.ts 额外允许测试库）',
+      comment: '存储层运行时 npm 依赖只允许 dexie（SQLite 用内置 node:sqlite；*.spec.ts 额外允许测试库）',
       from: { path: '^packages/local-store', pathNot: '\\.spec\\.(ts|tsx)$' },
       to: {
         dependencyTypes: ['npm', 'npm-dev'],
         pathNot: [
-          '^better-sqlite3($|/)', '/node_modules/better-sqlite3/',
           '^dexie($|/)', '/node_modules/dexie/',
           '^fake-indexeddb($|/)', '/node_modules/fake-indexeddb/',
           '^vitest($|/)', '/node_modules/vitest/',

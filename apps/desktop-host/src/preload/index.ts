@@ -334,6 +334,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2EmergencyHalt: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:emergency-halt', reason),
   v2Resume: (mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover'): Promise<unknown> =>
     ipcRenderer.invoke('v2:resume', mode),
+  v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
+    ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE
     ? {
         trayPopoverTest: (action: 'open' | 'hide' | 'bounds'): Promise<{ ok: boolean; bounds?: unknown; visible?: boolean }> =>

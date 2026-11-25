@@ -1,14 +1,23 @@
 /**
- * 主进程 SQLite 单点事实源（T-M0-03）。
+ * 主进程 SQLite 单点事实源（T-M0-03 → V2-P0-03 统一迁移至内置 node:sqlite）：
  *
  * 表：grudge_ledger（常客记仇/好感账本）、token_ledger（Token 消耗流水，1 粒米 = 1 Token）、
  *     song_cache_index（点歌缓存索引）、meta（契约/Schema 版本）。
  * 隐私合规：观众侧数据提供一键擦除（wipeAllViewers）；开发期重置用 wipeAllData。
+ * V2-P0-03 增强：
+ *   - 零原生依赖 ABI 冲突（Electron 45 / Node 24 内置 node:sqlite DatabaseSync）；
+ *   - 旧版库检测与自动备份迁移（schema_version 1 → 2，事务性升级）；
+ *   - 显式事务与嵌套 Savepoint（runInTransaction）；
+ *   - 完整性检查（checkIntegrity）与损坏库隔离重建（openSqliteStoreWithRecovery）及回滚（rollbackDatabaseFile）。
  *
  * 边界：只允许被 apps/desktop-host 主进程组装；渲染进程严禁 import 本文件
  * （dependency-cruiser: renderer-no-sqlite），渲染侧一律走 './dexie' 子路径 + IPC 网关。
  */
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
+import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+export const CURRENT_SQLITE_SCHEMA_VERSION = 2;
 
 export type Platform = 'douyin' | 'bilibili' | 'local-host-input';
 
@@ -59,6 +68,13 @@ export interface SongCacheEntry {
   sizeBytes?: number;
 }
 
+export interface SqliteMigrationInfo {
+  migratedFromLegacy: boolean;
+  fromVersion: number;
+  toVersion: number;
+  backupPath?: string;
+}
+
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
@@ -98,14 +114,112 @@ CREATE TABLE IF NOT EXISTS song_cache_index (
 `;
 
 export class SqliteStore {
-  private db: Database.Database;
+  private readonly db: DatabaseSync;
+  private readonly dbPath: string;
+  private txDepth = 0;
+  private readonly _migrationInfo: SqliteMigrationInfo;
 
   constructor(dbPath = ':memory:') {
-    this.db = new Database(dbPath);
-    // WAL 只对文件库有意义（内存库开启无效且产生噪音）
-    if (dbPath !== ':memory:') this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.dbPath = dbPath;
+    if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
+    const existedBeforeOpen = dbPath !== ':memory:' && existsSync(dbPath);
+    this.db = new DatabaseSync(dbPath);
+    this._migrationInfo = this.initializeAndMigrate(existedBeforeOpen);
+  }
+
+  get migrationInfo(): SqliteMigrationInfo {
+    return { ...this._migrationInfo };
+  }
+
+  private initializeAndMigrate(existedBeforeOpen: boolean): SqliteMigrationInfo {
+    const existingTables = new Set(
+      (this.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>)
+        .map((row) => row.name),
+    );
+    const hasLegacyTables =
+      existedBeforeOpen
+      && (existingTables.has('grudge_ledger') || existingTables.has('token_ledger') || existingTables.has('song_cache_index'));
+
+    const hasMeta = existingTables.has('meta');
+    const versionRow = hasMeta
+      ? (this.db.prepare('SELECT value FROM meta WHERE key = ?').get('schema_version') as { value: string } | undefined)
+      : undefined;
+    const parsedVersion = versionRow ? Number.parseInt(versionRow.value, 10) : Number.NaN;
+    const currentVersion = Number.isFinite(parsedVersion) ? parsedVersion : (hasLegacyTables ? 1 : 0);
+
+    let backupPath: string | undefined;
+    if (currentVersion < CURRENT_SQLITE_SCHEMA_VERSION && hasLegacyTables && this.dbPath !== ':memory:') {
+      // 在任何写操作与 WAL 切换之前先对旧版库落盘物理快照，保证可字节级回滚
+      backupPath = `${this.dbPath}.v${currentVersion}-backup.${Date.now()}.bak`;
+      copyFileSync(this.dbPath, backupPath);
+    }
+
+    if (this.dbPath !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec(SCHEMA_SQL);
+
+    if (currentVersion >= CURRENT_SQLITE_SCHEMA_VERSION) {
+      return {
+        migratedFromLegacy: false,
+        fromVersion: currentVersion,
+        toVersion: currentVersion,
+      };
+    }
+
+    this.runInTransaction(() => {
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_token_ledger_slot_ts ON token_ledger(slot, ts)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_grudge_ledger_score ON grudge_ledger(intimacy_score DESC, updated_at DESC)');
+      this.setMeta('schema_version', String(CURRENT_SQLITE_SCHEMA_VERSION));
+      if (hasLegacyTables) {
+        this.setMeta('migrated_from_version', String(currentVersion));
+        this.setMeta('migrated_at', new Date().toISOString());
+      }
+      this.db.exec(`PRAGMA user_version = ${CURRENT_SQLITE_SCHEMA_VERSION}`);
+    });
+
+    return {
+      migratedFromLegacy: hasLegacyTables,
+      fromVersion: currentVersion,
+      toVersion: CURRENT_SQLITE_SCHEMA_VERSION,
+      ...(backupPath === undefined ? {} : { backupPath }),
+    };
+  }
+
+  /** 显式原子事务（支持嵌套 Savepoint）：异常自动回滚 */
+  runInTransaction<T>(fn: () => T): T {
+    if (this.txDepth === 0) {
+      this.db.exec('BEGIN IMMEDIATE');
+    } else {
+      this.db.exec(`SAVEPOINT sp_${this.txDepth}`);
+    }
+    const level = this.txDepth;
+    this.txDepth += 1;
+    try {
+      const result = fn();
+      if (level === 0) {
+        this.db.exec('COMMIT');
+      } else {
+        this.db.exec(`RELEASE SAVEPOINT sp_${level}`);
+      }
+      return result;
+    } catch (error) {
+      if (level === 0) {
+        this.db.exec('ROLLBACK');
+      } else {
+        this.db.exec(`ROLLBACK TO SAVEPOINT sp_${level}`);
+        this.db.exec(`RELEASE SAVEPOINT sp_${level}`);
+      }
+      throw error;
+    } finally {
+      this.txDepth -= 1;
+    }
+  }
+
+  /** 数据库物理完整性校验 */
+  checkIntegrity(): { ok: boolean; detail: string } {
+    const row = this.db.prepare('PRAGMA integrity_check').get() as { integrity_check?: string } | undefined;
+    const detail = row?.integrity_check ?? 'unknown';
+    return { ok: detail.toLowerCase() === 'ok', detail };
   }
 
   // ---- meta ----
@@ -116,7 +230,7 @@ export class SqliteStore {
   }
 
   getMeta(key: string): string | null {
-    const row = this.db.prepare<string, { value: string }>('SELECT value FROM meta WHERE key = ?').get(key);
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined;
     return row?.value ?? null;
   }
 
@@ -162,10 +276,8 @@ export class SqliteStore {
 
   getViewer(platform: Platform, uid: string): GrudgeView | null {
     const row = this.db
-      .prepare<[string, string], Record<string, unknown>>(
-        'SELECT * FROM grudge_ledger WHERE platform = ? AND uid = ?',
-      )
-      .get(platform, uid);
+      .prepare('SELECT * FROM grudge_ledger WHERE platform = ? AND uid = ?')
+      .get(platform, uid) as Record<string, unknown> | undefined;
     if (!row) return null;
     return this.rowToViewer(row);
   }
@@ -178,12 +290,12 @@ export class SqliteStore {
   /** 隐私合规：擦除单个观众的全部记忆 */
   deleteViewer(platform: Platform, uid: string): boolean {
     const info = this.db.prepare('DELETE FROM grudge_ledger WHERE platform = ? AND uid = ?').run(platform, uid);
-    return info.changes > 0;
+    return Number(info.changes) > 0;
   }
 
   /** 隐私合规：一键擦除全部观众记忆（下播后可选执行） */
   wipeAllViewers(): number {
-    return this.db.prepare('DELETE FROM grudge_ledger').run().changes;
+    return Number(this.db.prepare('DELETE FROM grudge_ledger').run().changes);
   }
 
   // ---- Token 消耗流水（赛博饭碗） ----
@@ -222,7 +334,7 @@ export class SqliteStore {
   }
 
   wipeTokenLedger(): number {
-    return this.db.prepare('DELETE FROM token_ledger').run().changes;
+    return Number(this.db.prepare('DELETE FROM token_ledger').run().changes);
   }
 
   // ---- 点歌缓存索引 ----
@@ -241,10 +353,10 @@ export class SqliteStore {
   }
 
   /** 命中即计时（二次点歌 <50ms 命中的统计口径，见 T-M2-03） */
-  hitSongCache(cacheKey: string): SongCacheEntry & { hitCount: number } | null {
+  hitSongCache(cacheKey: string): (SongCacheEntry & { hitCount: number }) | null {
     const row = this.db
-      .prepare<string, Record<string, unknown>>('SELECT * FROM song_cache_index WHERE cache_key = ?')
-      .get(cacheKey);
+      .prepare('SELECT * FROM song_cache_index WHERE cache_key = ?')
+      .get(cacheKey) as Record<string, unknown> | undefined;
     if (!row) return null;
     this.db
       .prepare('UPDATE song_cache_index SET hit_count = hit_count + 1, last_hit_at = ? WHERE cache_key = ?')
@@ -259,16 +371,18 @@ export class SqliteStore {
   }
 
   deleteSongCache(cacheKey: string): boolean {
-    return this.db.prepare('DELETE FROM song_cache_index WHERE cache_key = ?').run(cacheKey).changes > 0;
+    return Number(this.db.prepare('DELETE FROM song_cache_index WHERE cache_key = ?').run(cacheKey).changes) > 0;
   }
 
   wipeSongCache(): number {
-    return this.db.prepare('DELETE FROM song_cache_index').run().changes;
+    return Number(this.db.prepare('DELETE FROM song_cache_index').run().changes);
   }
 
   // ---- 全量重置（开发期隐私合规总开关） ----
   wipeAllData(): void {
-    this.db.exec('DELETE FROM grudge_ledger; DELETE FROM token_ledger; DELETE FROM song_cache_index;');
+    this.runInTransaction(() => {
+      this.db.exec('DELETE FROM grudge_ledger; DELETE FROM token_ledger; DELETE FROM song_cache_index;');
+    });
   }
 
   close(): void {
@@ -308,4 +422,60 @@ export class SqliteStore {
       updatedAt: Number(row.updated_at),
     };
   }
+}
+
+export interface OpenedSqliteStoreResult {
+  store: SqliteStore;
+  recovered: boolean;
+  backupPath?: string;
+  migration: SqliteMigrationInfo;
+}
+
+/**
+ * 异常恢复式打开数据库：
+ * - 若文件损坏（无法打开或 PRAGMA integrity_check 失败），自动隔离旧文件（含 -wal/-shm）到 .corrupt.<ts>.bak
+ * - 再创建干净健康的 SqliteStore，绝不静默丢弃而不留证
+ */
+export function openSqliteStoreWithRecovery(dbPath: string): OpenedSqliteStoreResult {
+  if (dbPath === ':memory:') {
+    const store = new SqliteStore(':memory:');
+    return { store, recovered: false, migration: store.migrationInfo };
+  }
+  try {
+    const store = new SqliteStore(dbPath);
+    const integrity = store.checkIntegrity();
+    if (integrity.ok) {
+      return { store, recovered: false, migration: store.migrationInfo };
+    }
+    store.close();
+    throw new Error(`SQLite integrity check failed: ${integrity.detail}`);
+  } catch {
+    const ts = Date.now();
+    const backupPath = `${dbPath}.corrupt.${ts}.bak`;
+    if (existsSync(dbPath)) renameSync(dbPath, backupPath);
+    for (const suffix of ['-wal', '-shm']) {
+      if (existsSync(`${dbPath}${suffix}`)) rmSync(`${dbPath}${suffix}`, { force: true });
+    }
+    const fresh = new SqliteStore(dbPath);
+    return {
+      store: fresh,
+      recovered: true,
+      backupPath,
+      migration: fresh.migrationInfo,
+    };
+  }
+}
+
+/** 从迁移前备份恢复数据库文件（回滚操作），同时清理残留 WAL/SHM 旁路文件 */
+export function rollbackDatabaseFile(dbPath: string, backupPath: string): void {
+  if (!existsSync(backupPath)) {
+    throw new Error(`回滚备份文件不存在：${backupPath}`);
+  }
+  mkdirSync(dirname(dbPath), { recursive: true });
+  for (const suffix of ['-wal', '-shm']) {
+    if (existsSync(`${dbPath}${suffix}`)) rmSync(`${dbPath}${suffix}`, { force: true });
+  }
+  const tmpRestore = `${dbPath}.rollback.tmp`;
+  copyFileSync(backupPath, tmpRestore);
+  renameSync(tmpRestore, dbPath);
 }

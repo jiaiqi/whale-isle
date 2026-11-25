@@ -22,8 +22,8 @@ await build({
   entryPoints: [join(appRoot, 'src/main/index.ts')],
   platform: 'node',
   format: 'esm',
-  // electron 框架本体 + better-sqlite3 原生模块运行时 require（打进 ESM bundle 会炸 Dynamic require）
-  external: ['electron', 'better-sqlite3'],
+  // electron 框架本体由运行时注入；node:sqlite 为 Electron/Node 内置模块，platform: 'node' 自动 external
+  external: ['electron'],
   outfile: join(appRoot, 'dist/main/index.js'),
 });
 

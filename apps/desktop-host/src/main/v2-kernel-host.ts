@@ -15,6 +15,7 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
+import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
 import type { VoiceHost } from './voice-host';
 import {
@@ -112,6 +113,26 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') =>
     kernel.characters.resume(mode ?? 'autonomous'),
   );
+  // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
+  ipcMain.handle('v2:storage-check', () => {
+    const dbPath = join(options.userDataDir, 'workbench.db');
+    const opened = openSqliteStoreWithRecovery(dbPath);
+    try {
+      opened.store.runInTransaction(() => {
+        opened.store.setMeta('v2_last_storage_check', new Date().toISOString());
+      });
+      const integrity = opened.store.checkIntegrity();
+      return {
+        ok: integrity.ok,
+        engine: 'node:sqlite',
+        schemaVersion: opened.store.getMeta('schema_version'),
+        recovered: opened.recovered,
+        integrity: integrity.detail,
+      };
+    } finally {
+      opened.store.close();
+    }
+  });
 
   return {
     kernel,

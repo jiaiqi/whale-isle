@@ -24,7 +24,7 @@
 | esbuild | 0.25 | MIT | devDependencies | main/preload/renderer 打包 | ✅ 已登记 |
 | playwright-core | 1.65 | Apache-2.0 | devDependencies | Electron E2E | ✅ 已登记 |
 | ws | 8.23 | MIT | 依赖 | WebUI HTTP/WS 回环网关 | ✅ 已登记 |
-| better-sqlite3 | 12.x | MIT | 依赖（local-store） | 常客账本/Token 流水/点歌缓存 | ✅ 已登记 |
+| better-sqlite3 | 12.x | MIT | 已退役（V2-P0-03 迁移至 Node 内置 `node:sqlite`） | 原常客账本/Token 流水/点歌缓存，现由零原生依赖内置 SQLite 承接 | ✅ 已退役 |
 | fastapi / uvicorn | 0.115 / 0.34 | MIT / BSD-3-Clause | 依赖（audio-ai-worker） | 本地音频 Sidecar | ✅ 已登记 |
 | cmdk | 1.1.1 | MIT | 依赖（desktop-host UI） | ⌘K 命令面板（含 Radix Dialog 传递依赖，MIT） | ✅ 已登记 |
 | sonner | 2.0.8 | MIT | 依赖（desktop-host UI） | Toast 通知 | ✅ 已登记 |
