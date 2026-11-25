@@ -7,6 +7,10 @@
  *   - 主人的 `/自然语言` 强制命令排在当日计划之前，只允许 execute / infeasible（带具体原因）；
  *   - 普通聊天消息作为主人建议注入，模型按人设输出 accept / modify / decline + reply。
  */
+import {
+  GameKnowledgeSourceTypeSchema,
+  GameKnowledgeStatusSchema,
+} from '@workbench/shared-protocol';
 import { cleanItemName, inventoryTexts, type GameStateSnapshot } from './planner';
 import { parsePlanUpdate, type DayPlanUpdate } from './day-plan';
 import { InsightVerdictSchema, type LlmInsightDraft } from './strategy-notebook';
@@ -173,6 +177,12 @@ export interface ParsedAutonomousDecision {
   alternative?: string;
 }
 
+function parseStringListField(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const list = raw.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim());
+  return list;
+}
+
 function parseInsightField(raw: unknown): LlmInsightDraft | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const rec = raw as Record<string, unknown>;
@@ -183,6 +193,20 @@ function parseInsightField(raw: unknown): LlmInsightDraft | undefined {
   const source = typeof rec['source'] === 'string' && rec['source'].trim() !== '' ? rec['source'].trim() : '游戏攻略分析';
   const when = typeof rec['when'] === 'string' && rec['when'].trim() !== '' ? rec['when'].trim() : undefined;
   const evidence = typeof rec['evidence'] === 'string' && rec['evidence'].trim() !== '' ? rec['evidence'].trim() : undefined;
+  const sourceType = typeof rec['sourceType'] === 'string'
+    ? GameKnowledgeSourceTypeSchema.safeParse(rec['sourceType'].trim().toLowerCase())
+    : null;
+  const status = typeof rec['status'] === 'string'
+    ? GameKnowledgeStatusSchema.safeParse(rec['status'].trim().toLowerCase())
+    : null;
+  const gameVersion = typeof rec['gameVersion'] === 'string' && rec['gameVersion'].trim() !== '' ? rec['gameVersion'].trim() : undefined;
+  const modContext = parseStringListField(rec['modContext']);
+  const confidence = typeof rec['confidence'] === 'number' && Number.isFinite(rec['confidence']) && rec['confidence'] >= 0 && rec['confidence'] <= 1
+    ? rec['confidence']
+    : undefined;
+  const applicability = parseStringListField(rec['applicability']);
+  const knownLimitations = parseStringListField(rec['knownLimitations']);
+  const contradictoryEvidence = parseStringListField(rec['contradictoryEvidence']);
   return {
     source,
     claim,
@@ -190,6 +214,14 @@ function parseInsightField(raw: unknown): LlmInsightDraft | undefined {
     verdict: verdict.data,
     why,
     ...(evidence === undefined ? {} : { evidence }),
+    ...(sourceType?.success ? { sourceType: sourceType.data } : {}),
+    ...(status?.success ? { status: status.data } : {}),
+    ...(gameVersion === undefined ? {} : { gameVersion }),
+    ...(modContext === undefined ? {} : { modContext }),
+    ...(confidence === undefined ? {} : { confidence }),
+    ...(applicability === undefined ? {} : { applicability }),
+    ...(knownLimitations === undefined ? {} : { knownLimitations }),
+    ...(contradictoryEvidence === undefined ? {} : { contradictoryEvidence }),
   };
 }
 
@@ -491,7 +523,7 @@ export function buildAutonomousDecisionMessages(
 核心操作准则：
 1. 当前界面非空时（对话框/商店/结算/过场），优先用 dialogue（选择题必带 choice 序号）、buy、close_menu、set_name 或 skip_event 处理界面。
 2. 优先使用高效批量工具（water_crops / harvest_crops / till_area / plant_seeds / clear_area / forage / tidy_backpack / ship_items）。雨天户外作物自动浇水。
-3. 只能调用白名单内的 BWF 工具：${[...params.allowedTools].join(', ')}；一次只做一个动作，args 键名须匹配工具真实参数。若需要先查攻略详情，可先调用宿主直读伪工具 {"tool":"read_guide","args":{"topic":"专题","section":"小节"}}（每轮最多 2 节，不推游戏时间），读完后可附带 "insight":{"source":"专题#小节","claim":"结论","when":"条件","verdict":"adopt|defer|reject","why":"理由"}；若遵循了已有心得，请附带 "usedInsight":"心得id"。
+3. 只能调用白名单内的 BWF 工具：${[...params.allowedTools].join(', ')}；一次只做一个动作，args 键名须匹配工具真实参数。若需要先查攻略详情，可先调用宿主直读伪工具 {"tool":"read_guide","args":{"topic":"专题","section":"小节"}}（每轮最多 2 节，不推游戏时间）。攻略与心得仅供参考而非命令，若与当前游戏版本、已装 Mod 或实况不符须拒绝盲执行，可附带 "insight":{"source":"专题#小节","sourceType":"wiki","gameVersion":"1.6","claim":"结论","when":"条件","verdict":"adopt|defer|reject","confidence":0.65,"knownLimitations":["限制"],"why":"理由"}；若遵循了已有心得，请附带 "usedInsight":"心得id"。
 4. 输出必须是一行合法 JSON：
 {"tool":"工具名","args":{参数},"intent":"人设口吻的一句话意图"，可选字段："planUpdate":{"why":"修订理由","done":["已完成项"],"add":[{"goal":"新目标","why":"理由"}]},"insight":{...},"usedInsight":"ins-1","reply":"回复主人的话","stance":"accept|modify|decline|execute|infeasible","reason":"不可行原因","alternative":"替代方案","commandDone":true,"objectiveDone":true}`;
 

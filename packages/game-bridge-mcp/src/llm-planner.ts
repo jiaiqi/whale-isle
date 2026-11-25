@@ -4,11 +4,12 @@
  *   - 晨间自拟计划 + 步中 planUpdate 修订；T-M6-72 攻略索引 + read_guide 伪工具（≤2 节/轮）+ 心得本（insight/usedInsight）+ 每晚幂等复盘；
  *   - 普通聊天建议 vs `/` 强制命令；网关异常或连续失范切 RulePlanner 代驾并每 2 分钟探测恢复。
  */
+import type { GameRuntimeContext } from '@workbench/shared-protocol';
 import { RulePlanner, type GameStateSnapshot, type Planner, type PlannerDecision } from './planner';
 import { extractEnvironmentHints } from './state-hints';
 import { BrainSwitch, type BrainMode } from './brain-switch';
 import { DayPlanStore, parseMorningPlanObject, type DayPlanSnapshot } from './day-plan';
-import { formatReadGuideReply, GuideLibrary } from './guide-library';
+import { detectRuntimeContextFromState, formatReadGuideReply, GuideLibrary } from './guide-library';
 import { extractSaveNameFromState, StrategyNotebook, type StrategyInsight } from './strategy-notebook';
 import { runNightlyReflection, summarizeReceiptsForReflection, type ReceiptRecord } from './reflection';
 import {
@@ -44,7 +45,7 @@ export interface LlmPlannerDeps {
   slot?: string; guides?: Record<string, string>; recentReceipts?: string[]; toolWhitelist?: readonly string[];
   allowRuleStandin?: boolean; fallbackPlanner?: Planner; systemPrompt?: string | (() => string); personaPrompt?: string | (() => string);
   contextProvider?: () => string; isKeyAvailable?: () => boolean; probeIntervalMs?: number; now?: () => number;
-  notesDir?: string; saveName?: string; notebook?: StrategyNotebook;
+  notesDir?: string; saveName?: string; notebook?: StrategyNotebook; runtimeContext?: GameRuntimeContext;
   onPlan?: (event: PlanEmission) => void; onBrainChange?: (mode: BrainMode, reason: string) => void;
   onChatStance?: (event: ChatStanceEmission) => void; onInsight?: (event: InsightEmission) => void; rng?: () => number;
 }
@@ -82,6 +83,8 @@ export class LlmPlanner implements Planner {
   private lastObservedClock = '';
   private lastClockChangedAt = 0;
   private fallbackSyncedDay = '';
+  private runtimeContext?: GameRuntimeContext;
+  private pendingInsightVerify: { id: string; tool: string; dayKey: string } | null = null;
   private readonly todayReceipts: ReceiptRecord[] = [];
   private onPlan?: (event: PlanEmission) => void;
   private onChatStance?: (event: ChatStanceEmission) => void;
@@ -97,6 +100,7 @@ export class LlmPlanner implements Planner {
       ...(deps.saveName === undefined ? {} : { saveName: deps.saveName }),
     });
     if (deps.guides !== undefined) this.guideLibrary.setGuides(deps.guides);
+    if (deps.runtimeContext !== undefined) this.runtimeContext = deps.runtimeContext;
     if (deps.onPlan !== undefined) this.onPlan = deps.onPlan;
     if (deps.onChatStance !== undefined) this.onChatStance = deps.onChatStance;
     if (deps.onInsight !== undefined) this.onInsight = deps.onInsight;
@@ -125,6 +129,7 @@ export class LlmPlanner implements Planner {
   isUnavailable(): boolean { return this.brainSwitch.isUnavailable(); }
   get asks(): number { return this.askCount; }
   setGuides(guides: Record<string, string>): void { this.deps.guides = guides; this.guideLibrary.setGuides(guides); }
+  setRuntimeContext(ctx: GameRuntimeContext): void { this.runtimeContext = ctx; this.notebook.auditVersionCompatibility(ctx, this.planDay || '当前'); }
   setSaveName(saveName: string): void { this.notebook.bindSave(saveName); }
   setRecentReceipts(recentReceipts: string[]): void { this.deps.recentReceipts = [...recentReceipts]; }
   setSlot(slot: string): void { this.deps.slot = slot; }
@@ -146,10 +151,7 @@ export class LlmPlanner implements Planner {
     const prev = this.activeCommand.text; this.activeCommand = null; return prev;
   }
   setHandoverSummary(summary: string | null): void { this.handoverSummary = summary?.trim() ? summary.trim().slice(0, 400) : null; }
-  setObjective(objective: string | null): void {
-    this.objective = objective?.trim() ? objective.trim().slice(0, 300) : null;
-    this.objectiveRounds = 0; this.objectiveDonePending = null;
-  }
+  setObjective(objective: string | null): void { this.objective = objective?.trim() ? objective.trim().slice(0, 300) : null; this.objectiveRounds = 0; this.objectiveDonePending = null; }
   consumeObjectiveDone(): string | null {
     if (this.activeCommand?.pendingDone === true) { const done = `/${this.activeCommand.text}`; this.activeCommand = null; return done; }
     const done = this.objectiveDonePending; this.objectiveDonePending = null; return done;
@@ -163,6 +165,16 @@ export class LlmPlanner implements Planner {
     this.fallback.observeReceipt?.(tool, status, summary);
     this.todayReceipts.push({ tool, status, summary });
     if (this.todayReceipts.length > 60) this.todayReceipts.splice(0, this.todayReceipts.length - 60);
+    if (this.pendingInsightVerify !== null && this.pendingInsightVerify.tool === tool) {
+      const { id, dayKey } = this.pendingInsightVerify;
+      this.pendingInsightVerify = null;
+      const updated = this.notebook.recordVerificationOutcome({
+        id, dayKey, succeeded: status === 'COMPLETED', evidence: `${tool}:${status} ${summary}`.slice(0, 200),
+        ...(status === 'COMPLETED' ? {} : { failureCondition: summary.slice(0, 140) || `${tool} ${status}` }),
+        ...(this.runtimeContext === undefined ? {} : { runtimeContext: this.runtimeContext }),
+      });
+      if (updated !== null) this.onInsight?.({ action: 'reflected', dayKey, insight: updated, notebookCount: this.notebook.size(), insights: this.notebook.list() });
+    }
     if (status === 'COMPLETED') { this.lastFailSignature = null; this.lastFailSummary = ''; this.failStreak = 0; return; }
     const sig = normalizeFailureSignature(tool, summary, this.lastLocation);
     this.failStreak = sig === this.lastFailSignature ? this.failStreak + 1 : 1;
@@ -192,15 +204,9 @@ export class LlmPlanner implements Planner {
     this.lastLocation = state.location;
     const now = this.now();
     if (state.gameClock !== '' && state.gameClock !== '未知' && state.gameClock !== this.lastObservedClock) {
-      this.lastObservedClock = state.gameClock;
-      this.lastClockChangedAt = now;
-    } else if (this.lastClockChangedAt === 0) {
-      this.lastClockChangedAt = now;
-    }
-    if (this.objective !== null && ++this.objectiveRounds > MAX_OBJECTIVE_ROUNDS) {
-      this.objective = null;
-      this.objectiveRounds = 0;
-    }
+      this.lastObservedClock = state.gameClock; this.lastClockChangedAt = now;
+    } else if (this.lastClockChangedAt === 0) this.lastClockChangedAt = now;
+    if (this.objective !== null && ++this.objectiveRounds > MAX_OBJECTIVE_ROUNDS) { this.objective = null; this.objectiveRounds = 0; }
     const adapterPrompt = typeof this.deps.systemPrompt === 'function' ? this.deps.systemPrompt() : this.deps.systemPrompt;
     return adapterPrompt !== undefined ? this.decideForAdapter(state, adapterPrompt) : this.decideAutonomous(state);
   }
@@ -227,23 +233,23 @@ export class LlmPlanner implements Planner {
       const save = extractSaveNameFromState(state.raw);
       if (save !== null) this.notebook.bindSave(save);
     }
+    if (this.runtimeContext === undefined) {
+      const detected = detectRuntimeContextFromState(state.raw);
+      if (detected.gameVersion !== undefined || detected.installedMods !== undefined) {
+        this.setRuntimeContext({ gameId: detected.gameId ?? 'stardew', installedMods: detected.installedMods ?? [], ...(detected.gameVersion === undefined ? {} : { gameVersion: detected.gameVersion }) });
+      }
+    }
     const hasClock = /时间：第\d+年[春夏秋冬]\d+日/.test(state.raw);
     const dayKey = hasClock ? `${state.season}${state.day}` : (this.planDay || `${state.season}${state.day}`);
     if (dayKey !== this.planDay) {
       const crossedDay = this.planDay !== '';
-      this.planDay = dayKey;
-      this.dayStartMoney = state.money;
-      this.dayPlanStore.rollover(dayKey);
+      this.planDay = dayKey; this.dayStartMoney = state.money; this.dayPlanStore.rollover(dayKey);
       if (crossedDay) { this.objective = null; this.objectiveRounds = 0; this.todayReceipts.length = 0; }
-    } else if (this.dayStartMoney === null) {
-      this.dayStartMoney = state.money;
-    }
+    } else if (this.dayStartMoney === null) this.dayStartMoney = state.money;
     this.lastMoney = state.money;
     if (this.pendingSuggestion !== null) {
       if (this.pendingSuggestion.stampedDayKey === null || this.pendingSuggestion.stampedMinutes === null) {
-        this.pendingSuggestion.stampedDayKey = dayKey;
-        this.pendingSuggestion.stampedMinutes = state.clockMinutes;
-        this.pendingSuggestion.stampedClock = state.gameClock;
+        this.pendingSuggestion.stampedDayKey = dayKey; this.pendingSuggestion.stampedMinutes = state.clockMinutes; this.pendingSuggestion.stampedClock = state.gameClock;
       } else {
         const elapsed = this.pendingSuggestion.stampedDayKey === dayKey
           ? state.clockMinutes - this.pendingSuggestion.stampedMinutes
@@ -267,15 +273,15 @@ export class LlmPlanner implements Planner {
 
   private guidesHintForState(state: GameStateSnapshot): string {
     if (this.guideLibrary.allSections().length > 0) {
-      return this.guideLibrary.buildIndexForState({ season: state.season, location: state.location, raw: state.raw, dayPlanText: this.dayPlanStore.formatForPrompt() });
+      return this.guideLibrary.buildIndexForState({ season: state.season, location: state.location, raw: state.raw, dayPlanText: this.dayPlanStore.formatForPrompt(), ...(this.runtimeContext === undefined ? {} : { runtimeContext: this.runtimeContext }) });
     }
     return pickGuideContext(state, this.deps.guides);
   }
 
   private insightsTextForState(state: GameStateSnapshot, limit = 5): string {
     return this.notebook.formatForPrompt(this.notebook.retrieve({
-      season: state.season, location: state.location, dayPlanText: this.dayPlanStore.formatForPrompt(), stateRaw: state.raw, limit,
-    }));
+      season: state.season, location: state.location, dayPlanText: this.dayPlanStore.formatForPrompt(), stateRaw: state.raw, limit, ...(this.runtimeContext === undefined ? {} : { runtimeContext: this.runtimeContext }),
+    }), this.runtimeContext);
   }
 
   private async maybeReflectNight(state: GameStateSnapshot, dayKey: string, personaPrompt: string | undefined): Promise<void> {
@@ -377,7 +383,7 @@ export class LlmPlanner implements Planner {
           guideReads += 1;
           const topic = String(parsed.args['topic'] ?? '');
           const section = parsed.args['section'] === undefined ? undefined : String(parsed.args['section']);
-          messages.push({ role: 'user', content: formatReadGuideReply(topic, section ?? '', this.guideLibrary.readSection(topic, section)) });
+          messages.push({ role: 'user', content: formatReadGuideReply(topic, section ?? '', this.guideLibrary.readSection(topic, section), this.runtimeContext) });
           continue;
         }
         parseAttempts += 1;
@@ -435,38 +441,29 @@ export class LlmPlanner implements Planner {
     if (parsed.planUpdate !== undefined) {
       const updated = this.dayPlanStore.applyUpdate(dayKey, parsed.planUpdate);
       if (updated !== null) {
-        this.onPlan?.({
-          dayKey, plan: updated.items,
-          ...(updated.mood === undefined ? {} : { mood: updated.mood }),
-          ...(updated.updateWhy === undefined ? {} : { updateWhy: updated.updateWhy }),
-          reason: 'update',
-        });
+        this.onPlan?.({ dayKey, plan: updated.items, ...(updated.mood === undefined ? {} : { mood: updated.mood }), ...(updated.updateWhy === undefined ? {} : { updateWhy: updated.updateWhy }), reason: 'update' });
       }
     }
+    let verifyId: string | undefined;
     if (parsed.insight !== undefined) {
       const saved = this.notebook.upsert(dayKey, parsed.insight);
+      if (saved.verdict === 'adopt') verifyId = saved.id;
       this.onInsight?.({ action: 'learned', dayKey, insight: saved, notebookCount: this.notebook.size(), insights: this.notebook.list() });
     }
     if (parsed.usedInsight !== undefined) {
       const hit = this.notebook.recordHit(parsed.usedInsight, dayKey);
       if (hit !== null) {
-        this.onInsight?.({
-          action: 'used', dayKey, insight: hit, usedInsight: hit.id,
-          ...(parsed.tool === undefined ? {} : { tool: parsed.tool }),
-          notebookCount: this.notebook.size(), insights: this.notebook.list(),
-        });
+        verifyId = hit.id;
+        this.onInsight?.({ action: 'used', dayKey, insight: hit, usedInsight: hit.id, ...(parsed.tool === undefined ? {} : { tool: parsed.tool }), notebookCount: this.notebook.size(), insights: this.notebook.list() });
       }
     }
+    this.pendingInsightVerify = verifyId !== undefined && parsed.tool !== undefined && parsed.tool !== 'sleep' && parsed.tool !== 'wait'
+      ? { id: verifyId, tool: parsed.tool, dayKey } : null;
     if (this.pendingSuggestion !== null && parsed.stance !== undefined && SUGGESTION_STANCES.has(parsed.stance)) {
-      const suggestion = this.pendingSuggestion;
-      this.pendingSuggestion = null;
+      const suggestion = this.pendingSuggestion; this.pendingSuggestion = null;
       this.onChatStance?.({ kind: 'suggestion', text: suggestion.text, stance: parsed.stance as 'accept' | 'modify' | 'decline', reply: parsed.reply ?? parsed.intent });
     }
-    if (parsed.objectiveDone === true && this.objective !== null) {
-      this.objectiveDonePending = this.objective;
-      this.objective = null;
-      this.objectiveRounds = 0;
-    }
+    if (parsed.objectiveDone === true && this.objective !== null) { this.objectiveDonePending = this.objective; this.objective = null; this.objectiveRounds = 0; }
   }
 
   private async decideForAdapter(state: GameStateSnapshot, systemPrompt: string): Promise<PlannerDecision> {
@@ -480,9 +477,7 @@ export class LlmPlanner implements Planner {
         const res = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 1200 });
         const decision = extractDecisionJson(res.content);
         if (decision !== null && this.allowedTools.has(decision.tool)) {
-          if (decision.objectiveDone === true && this.objective !== null) {
-            this.objectiveDonePending = this.objective; this.objective = null; this.objectiveRounds = 0;
-          }
+          if (decision.objectiveDone === true && this.objective !== null) { this.objectiveDonePending = this.objective; this.objective = null; this.objectiveRounds = 0; }
           return { kind: 'act', tool: decision.tool, args: decision.args, intent: decision.intent };
         }
         const reason = decision === null ? '上一条输出里没有解析出 {"tool":...} 一行 JSON' : `"${decision.tool}" 不在当前游戏白名单里`;

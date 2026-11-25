@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-01`：攻略学习闭环增强 — `IMPLEMENTED_UNVERIFIED`）
+
+- **攻略知识与兼容契约** `packages/shared-protocol/src/{knowledge.ts,knowledge.spec.ts,index.ts}`：定义 `GameKnowledgeItem`、`GuideProvenance`、`GameRuntimeContext` 与 `GuideCompatibilityReport` Zod 契约。
+- **版本/Mod 兼容检查与溯源索引** `packages/game-bridge-mcp/src/guide-library.ts`、`tools/guide-forager/src/forage.ts`：`parseGuideProvenance` 解析来源类型/URI/版本/Mod，`detectRuntimeContextFromState` 提取运行期环境，`evaluateGuideCompatibility` 检测跨版本（`outdated`）与缺 Mod（`mod-mismatch`）并降权警告；`renderGuideMarkdown` 输出完整 `gameId / sourceType / gameVersion / modContext` 元数据头。
+- **实玩置信度演进、反例积累与复盘闭环** `packages/game-bridge-mcp/src/{strategy-notebook.ts,reflection.ts,llm-prompt.ts,llm-planner.ts,guide-learning-v2.spec.ts}`：`StrategyNotebook` 向后兼容加载 v1 存档并支持 `recordVerificationOutcome`（成败升降置信度与反例积累）、`auditVersionCompatibility` 与 `toGameKnowledgeItem`；`LlmPlanner` 将真实动作回执联动至心得本且维持 ≤500 行预算（493 行）。64 专项单测、`pnpm verify:gate` 7/7 与 4 个 Electron 45 E2E 套件全绿。
+
 ### Added / Changed（`V2-P1-06`：星露谷 AI-First 自主游玩与控制权执行闭环 — `IMPLEMENTED_UNVERIFIED`）
 
 - **三方控制权租约与 13 项控制指令** `packages/game-bridge-mcp/src/control-lease.ts`：新增 `GameCharacterControlLease`（`ai | human | paused | halted` 与 TTL 租约）、`PausedBrainPlanner`（AI 安全暂停等待器）及 `parseControlCommand`（覆盖 `Stop / Pause AI / Resume AI / Take Over / Release Control / Follow Me / Stay Here / Do This / Go Fish / Go Mine / Cancel Task / What Are You Doing? / Show Plan` 13 项控制语义）。

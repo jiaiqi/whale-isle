@@ -30,6 +30,8 @@ export interface ForagedGuide {
   pageId: number;
   markdown: string;
   sha1: string;
+  gameVersion?: string;
+  modContext?: string[];
 }
 
 /** MediaWiki parse 响应（prop=wikitext）的最小面 */
@@ -81,13 +83,20 @@ export function wikitextToMarkdown(wikitext: string): string {
   return md;
 }
 
-/** 归档文件格式（BWF get_guide 兼容：正文 + 头部来源注释——Guide.cs 全文读入提示词） */
+/** 归档文件格式（BWF get_guide & V2-P2-01 GuideProvenance 兼容：正文 + 头部来源/版本/Mod 元数据） */
 export function renderGuideMarkdown(guide: ForagedGuide): string {
+  const pageUrl = `https://stardewvalleywiki.com/wiki/${encodeURIComponent(guide.pageTitle.replace(/ /g, '_'))}`;
+  const modText = guide.modContext && guide.modContext.length > 0 ? guide.modContext.join(', ') : 'vanilla';
   const header = [
     `<!-- guide-forager 归档`,
     `  topic: ${guide.topic}`,
-    `  source: Stardew Valley Wiki（https://stardewvalleywiki.com/wiki/${encodeURIComponent(guide.pageTitle.replace(/ /g, '_'))}）`,
+    `  gameId: stardew`,
+    `  sourceType: wiki`,
+    `  source: Stardew Valley Wiki（${pageUrl}）`,
+    `  sourceUri: ${pageUrl}`,
     `  pageTitle: ${guide.pageTitle}（pageid=${guide.pageId}）`,
+    `  gameVersion: ${guide.gameVersion ?? '1.6'}`,
+    `  modContext: ${modText}`,
     `  fetchedAt: ${new Date().toISOString()}`,
     `  contentSha1: ${guide.sha1}`,
     `  许可：wiki 内容 CC BY-NC-SA 3.0（随 wiki 声明）——本地自用缓存（D5），公开分发前须清除或获授权`,
@@ -113,6 +122,8 @@ export interface ForageOptions {
   /** 抓取间隔（对 wiki 的礼貌限速） */
   courtesyDelayMs?: number;
   fetchImpl?: typeof fetch;
+  gameVersion?: string;
+  modContext?: string[];
 }
 
 export interface ForageReport {
@@ -157,6 +168,8 @@ export async function forageTopic(
     pageId: 0,
     markdown: sections.join('\n\n'),
     sha1: contentHash(mergedHash),
+    gameVersion: options.gameVersion ?? '1.6',
+    modContext: options.modContext ?? [],
   };
   const outPath = join(options.outDir, `${topic}.md`);
   if (existsSync(outPath)) {

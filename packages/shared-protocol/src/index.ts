@@ -1503,3 +1503,4 @@ export * from './character';
 export * from './voice';
 export * from './quota';
 export * from './memory';
+export * from './knowledge';

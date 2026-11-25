@@ -5,6 +5,10 @@
  *   - 让 LLM 审视并新增或修订心得（如 defer→adopt / refuted）与明日打算（喂给次日晨间计划）；
  *   - 复盘期 LLM 故障或输出乱码时静默跳过，绝不阻断睡觉或游戏推进。
  */
+import {
+  GameKnowledgeSourceTypeSchema,
+  GameKnowledgeStatusSchema,
+} from '@workbench/shared-protocol';
 import type { DayPlanSnapshot } from './day-plan';
 import { extractJsonObject, normalizeFailureSignature } from './llm-prompt';
 import {
@@ -86,13 +90,17 @@ export function buildNightlyReflectionMessages(params: {
     : s.topFailures.map((f) => `- ${f.signature}（${f.count} 次）`).join('\n');
   const insightLines = s.relatedInsights.length === 0
     ? '（当前心得本为空，若今天发现了实战规律也可新增 1～2 条）'
-    : s.relatedInsights.map((ins) => `- ${ins.id} [${ins.verdict}] ${ins.claim}（条件：${ins.when}；理由：${ins.why}）`).join('\n');
+    : s.relatedInsights.map((ins) => {
+      const contra = ins.contradictoryEvidence.length > 0 ? `；反例：${ins.contradictoryEvidence[ins.contradictoryEvidence.length - 1]}` : '';
+      const ver = ins.gameVersion === undefined ? '' : ` v${ins.gameVersion}`;
+      return `- ${ins.id} [${ins.verdict}/${ins.status} 置信度${Math.round(ins.confidence * 100)}%${ver}] ${ins.claim}（条件：${ins.when}；理由：${ins.why}${contra}）`;
+    }).join('\n');
 
   const system = `${persona}，今天准备休息收工了，请简短复盘今天的《星露谷》游玩实绩：
-1. 判断现有心得今天是否被实测验证或推翻（可以把 defer 改为 adopt，或改为 refuted 并写明实测数据），也可总结新的经验条目。
+1. 判断现有心得今天是否被实测验证、受版本/Mod 限制或被推翻（可以把 defer 改为 adopt 并提升 confidence/status，或因失败改为 refuted/rejected 并写入 knownLimitations 与 contradictoryEvidence），也可总结新的经验条目。
 2. 给出 1 句明天的首要打算（tomorrowHint），供明早起床定计划时参考。
 只输出一行合法 JSON：
-{"updates":[{"id":"已有心得id(新增则省略)","source":"复盘或专题名","claim":"结论","when":"适用条件","verdict":"adopt|defer|reject|refuted","why":"判断理由","evidence":"今日实测数据"}],"tomorrowHint":"明天的打算"}`;
+{"updates":[{"id":"已有心得id(新增则省略)","source":"复盘或专题名","sourceType":"experience|wiki|community|user|official|video","gameVersion":"1.6","modContext":[],"claim":"结论","when":"适用条件","verdict":"adopt|defer|reject|refuted","status":"verified|partially-verified|unverified|outdated|rejected","confidence":0.75,"why":"判断理由","evidence":"今日实测数据","knownLimitations":["局限条件"],"contradictoryEvidence":["失败反例"]}],"tomorrowHint":"明天的打算"}`;
 
   const user = [
     `日期：${s.dayKey}`,
@@ -127,6 +135,25 @@ export function parseReflectionResult(content: string): ParsedReflectionResult |
       const source = typeof rec['source'] === 'string' && rec['source'].trim() !== '' ? rec['source'].trim() : '每晚复盘';
       const when = typeof rec['when'] === 'string' && rec['when'].trim() !== '' ? rec['when'].trim() : undefined;
       const evidence = typeof rec['evidence'] === 'string' && rec['evidence'].trim() !== '' ? rec['evidence'].trim() : undefined;
+      const sourceTypeRes = typeof rec['sourceType'] === 'string'
+        ? GameKnowledgeSourceTypeSchema.safeParse(rec['sourceType'].trim().toLowerCase())
+        : null;
+      const statusRes = typeof rec['status'] === 'string'
+        ? GameKnowledgeStatusSchema.safeParse(rec['status'].trim().toLowerCase())
+        : null;
+      const gameVersion = typeof rec['gameVersion'] === 'string' && rec['gameVersion'].trim() !== '' ? rec['gameVersion'].trim() : undefined;
+      const modContext = Array.isArray(rec['modContext'])
+        ? rec['modContext'].filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim())
+        : undefined;
+      const confidence = typeof rec['confidence'] === 'number' && Number.isFinite(rec['confidence']) && rec['confidence'] >= 0 && rec['confidence'] <= 1
+        ? rec['confidence']
+        : undefined;
+      const knownLimitations = Array.isArray(rec['knownLimitations'])
+        ? rec['knownLimitations'].filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim())
+        : undefined;
+      const contradictoryEvidence = Array.isArray(rec['contradictoryEvidence'])
+        ? rec['contradictoryEvidence'].filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => x.trim())
+        : undefined;
       updates.push({
         ...(id === undefined ? {} : { id }),
         source,
@@ -135,6 +162,13 @@ export function parseReflectionResult(content: string): ParsedReflectionResult |
         verdict: verdictRes.data,
         why,
         ...(evidence === undefined ? {} : { evidence }),
+        ...(sourceTypeRes?.success ? { sourceType: sourceTypeRes.data } : {}),
+        ...(statusRes?.success ? { status: statusRes.data } : {}),
+        ...(gameVersion === undefined ? {} : { gameVersion }),
+        ...(modContext === undefined ? {} : { modContext }),
+        ...(confidence === undefined ? {} : { confidence }),
+        ...(knownLimitations === undefined ? {} : { knownLimitations }),
+        ...(contradictoryEvidence === undefined ? {} : { contradictoryEvidence }),
       });
     }
   }

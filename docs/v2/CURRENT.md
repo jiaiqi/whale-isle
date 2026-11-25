@@ -3,9 +3,9 @@
 > 本文件是面向任何新接手 Coding Agent 的跨会话单点进度恢复文件（不依赖聊天上下文）。每次完成或阻塞工单必须更新本文件。
 
 - **当前开发分支**：`feat/whale-isle-v2`（上游基线 `main` @ `f1ce271`）
-- **当前唯一激活工单**：`V2-P2-01`（攻略学习闭环增强）
-- **刚完成待真机补验工单**：`V2-P1-06`（`IMPLEMENTED_UNVERIFIED` — 缺真实《星露谷》+ SMAPI 客户端联调）
-- **下一排队工单**：`V2-P2-02`（开放生态与插件进程隔离）
+- **当前唯一激活工单**：`V2-P2-02`（开放生态与插件进程隔离）
+- **刚完成待真机补验工单**：`V2-P1-06` / `V2-P2-01`（`IMPLEMENTED_UNVERIFIED` — 缺真实《星露谷》+ SMAPI 客户端联调与多日实测）
+- **下一排队工单**：`V2-P2-03`（`MediaGenerationGateway` 与图片生成流水线）
 
 ## 1. 工单状态快照
 
@@ -21,8 +21,9 @@
 | `V2-P1-03` | `IMPLEMENTED_UNVERIFIED` | 四级诚实额度契约与探针矩阵（DeepSeek / Kimi / OpenRouter / SiliconFlow / OpenCode Go / MiniMax Coding Plan / Ollama / CLI）接入主进程 IPC（commit `b2348b0`）；`quota-probes.ts` 90.86% 分支覆盖、`verify:gate` 7/7 + Electron 45 E2E 2/2 通过，待 Kimi / MiniMax Coding Plan 真实 Key 实测，详见 [P1-provider-quota-verification.md](./evidence/P1-provider-quota-verification.md) |
 | `V2-P1-04` | `DONE` | `@workbench/memory-graph` 五类记忆、情绪加权回忆、模糊印象归纳、手动纠正与级联真删除（覆盖 SQLite `deleteViewerByUid` + 磁盘 JSONL 重写 + 无明文审计）及宿主 IPC 完成（commit `319c350`）；37 单测、`verify:gate` 7/7 与 Electron 45 E2E 2/2 通过，详见 [P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md) |
 | `V2-P1-05` | `DONE` | Obsidian Tide 中控台重构、`App.tsx` Strangler 拆解（1,466→914 行）、四大签名组件、`system/dark/light` 三态主题、`F8/F9/F10/⌘K` 与「V2 生命中枢」面板完成（commit `a9a5786`）；`verify:gate` 7/7 + 4 个 Electron 45 E2E 套件全绿，详见 [P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md) |
-| `V2-P1-06` | `IMPLEMENTED_UNVERIFIED` | AI-First 纠偏（`GameCharacterControlLease`、`PausedBrainPlanner` 清除默认静默规则代驾、13 项控制指令与 12 项 Blueprint 17 §12 仿真验收）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》+ SMAPI 真机联调与浸泡，详见 [P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) |
-| `V2-P2-01` | `NEXT` | 攻略学习闭环增强（来源 / 游戏版本 / Mod 条件 / 置信度 / 实玩验证 / 反例更新，不把攻略当命令） |
+| `V2-P1-06` | `IMPLEMENTED_UNVERIFIED` | AI-First 纠偏（`GameCharacterControlLease`、`PausedBrainPlanner` 清除默认静默规则代驾、13 项控制指令与 12 项 Blueprint 17 §12 仿真验收，commit `833bd0c`）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》+ SMAPI 真机联调与浸泡，详见 [P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) |
+| `V2-P2-01` | `IMPLEMENTED_UNVERIFIED` | 攻略学习闭环增强（`@workbench/shared-protocol/knowledge`、版本/Mod 兼容检查、实玩置信度演进与反例积累、复盘与 `LlmPlanner` 回执闭环）、64 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》多日实测，详见 [P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) |
+| `V2-P2-02` | `NEXT` | 开放生态与插件进程隔离（双向 MCP Client/Server + Skills 注册表 + 多 Harness 执行级适配 + 不可信插件独立进程沙箱） |
 
 ## 2. 新会话接手必查项
 

@@ -80,6 +80,10 @@ describe('renderGuideMarkdown / contentHash', () => {
     const guide = { topic: '钓鱼', pageTitle: 'Fishing', pageId: 1517, markdown: '正文', sha1: contentHash('正文') };
     const md = renderGuideMarkdown(guide);
     expect(md).toContain('guide-forager 归档');
+    expect(md).toContain('gameId: stardew');
+    expect(md).toContain('sourceType: wiki');
+    expect(md).toContain('gameVersion: 1.6');
+    expect(md).toContain('modContext: vanilla');
     expect(md).toContain('source: Stardew Valley Wiki');
     expect(md).toContain(`contentSha1: ${guide.sha1}`);
     expect(md).toContain('# Fishing');

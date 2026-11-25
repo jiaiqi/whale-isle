@@ -1,13 +1,23 @@
 /**
- * 经验心得本（T-M6-72 §4B.3 #5）：
- *   - 按存档分文件：<notesDir>/<saveName>.json，Zod 校验；
- *   - 字段：id, source, claim, when, verdict(adopt|defer|reject|refuted), why, evidence[], createdDay, updatedDay, hits；
+ * 经验心得本与个人游戏知识库（T-M6-72 §4B.3 #5 + V2-P2-01 攻略学习闭环增强）：
+ *   - 按存档分文件：<notesDir>/<saveName>.json，Zod 校验并向后兼容 v1 存档文件；
+ *   - 支持来源类型、游戏版本、Mod 条件、置信度（0..1）、验证状态（unverified..rejected）、已知局限与反例；
  *   - 容量上限 200 条：优先淘汰 refuted 且久未引用，其次淘汰 hits 最低；
- *   - 支持按季节、地点、当日计划检索 Top 5 注入 prompt，引用 usedInsight 时 hits+1 并持久化。
+ *   - 支持实玩验证升置信度 / 失败反例衰减置信度 + 版本兼容性批量审计 + Top N 检索注入 prompt。
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import {
+  GameKnowledgeItemSchema,
+  GameKnowledgeSourceTypeSchema,
+  GameKnowledgeStatusSchema,
+  type GameKnowledgeItem,
+  type GameKnowledgeSourceType,
+  type GameKnowledgeStatus,
+  type GameRuntimeContext,
+} from '@workbench/shared-protocol';
 import { z } from 'zod';
+import { evaluateGuideCompatibility } from './guide-library';
 
 export const MAX_NOTEBOOK_INSIGHTS = 200;
 
@@ -26,6 +36,21 @@ export const StrategyInsightSchema = z.object({
   updatedDay: z.string().min(1),
   hits: z.number().int().min(0).default(0),
   lastHitDay: z.string().optional(),
+  // V2-P2-01（Blueprint 17 §7.3 对齐扩展，全部带默认值/optional 保持 v1 文件兼容）
+  gameId: z.string().min(1).default('stardew'),
+  gameVersion: z.string().min(1).max(32).optional(),
+  modContext: z.array(z.string().min(1).max(60)).max(12).default([]),
+  sourceType: GameKnowledgeSourceTypeSchema.default('experience'),
+  sourceUri: z.string().min(1).max(300).optional(),
+  sourceTitle: z.string().min(1).max(120).optional(),
+  retrievedAt: z.string().min(1).optional(),
+  confidence: z.number().min(0).max(1).default(0.55),
+  applicability: z.array(z.string().min(1).max(120)).max(12).default([]),
+  knownLimitations: z.array(z.string().min(1).max(160)).max(12).default([]),
+  contradictoryEvidence: z.array(z.string().min(1).max(200)).max(12).default([]),
+  status: GameKnowledgeStatusSchema.default('unverified'),
+  verifiedCount: z.number().int().min(0).default(0),
+  refutedCount: z.number().int().min(0).default(0),
 });
 
 export type StrategyInsight = z.infer<typeof StrategyInsightSchema>;
@@ -48,6 +73,18 @@ export interface LlmInsightDraft {
   verdict: InsightVerdict;
   why: string;
   evidence?: string;
+  gameId?: string;
+  gameVersion?: string;
+  modContext?: string[];
+  sourceType?: GameKnowledgeSourceType;
+  sourceUri?: string;
+  sourceTitle?: string;
+  retrievedAt?: string;
+  confidence?: number;
+  applicability?: string[];
+  knownLimitations?: string[];
+  contradictoryEvidence?: string[];
+  status?: GameKnowledgeStatus;
 }
 
 export function extractSaveNameFromState(raw: string): string | null {
@@ -89,6 +126,68 @@ function dayRank(dayKey: string): number {
   return (sIdx >= 0 ? sIdx * 100 : 0) + Number(m[2]);
 }
 
+function round2(val: number): number {
+  return Math.round(Math.max(0, Math.min(1, val)) * 100) / 100;
+}
+
+function defaultConfidenceForVerdict(verdict: InsightVerdict): number {
+  if (verdict === 'adopt') return 0.7;
+  if (verdict === 'defer') return 0.5;
+  return 0.2;
+}
+
+function defaultStatusForVerdict(verdict: InsightVerdict): GameKnowledgeStatus {
+  if (verdict === 'adopt') return 'partially-verified';
+  if (verdict === 'defer') return 'unverified';
+  return 'rejected';
+}
+
+function pushUniqueBounded(target: string[], additions: readonly string[], maxLen: number, cap = 12): void {
+  for (const raw of additions) {
+    const clean = raw.trim().slice(0, maxLen);
+    if (clean === '' || target.includes(clean)) continue;
+    target.push(clean);
+    if (target.length > cap) target.shift();
+  }
+}
+
+function cloneInsight(item: StrategyInsight): StrategyInsight {
+  return {
+    ...item,
+    evidence: [...item.evidence],
+    modContext: [...item.modContext],
+    applicability: [...item.applicability],
+    knownLimitations: [...item.knownLimitations],
+    contradictoryEvidence: [...item.contradictoryEvidence],
+  };
+}
+
+/** 转换为 Blueprint 17 §7.3 标准 `GameKnowledgeItem` 结构 */
+export function toGameKnowledgeItem(insight: StrategyInsight): GameKnowledgeItem {
+  const latestEvidence = insight.evidence[insight.evidence.length - 1];
+  const applicability = insight.applicability.length > 0
+    ? [...insight.applicability]
+    : (insight.when !== '' ? [insight.when] : []);
+  return GameKnowledgeItemSchema.parse({
+    knowledgeId: insight.id,
+    gameId: insight.gameId,
+    ...(insight.gameVersion === undefined ? {} : { gameVersion: insight.gameVersion }),
+    modContext: [...insight.modContext],
+    topic: insight.source,
+    claim: insight.claim,
+    sourceType: insight.sourceType,
+    ...(insight.sourceUri === undefined ? {} : { sourceUri: insight.sourceUri }),
+    ...(insight.sourceTitle === undefined ? {} : { sourceTitle: insight.sourceTitle }),
+    retrievedAt: insight.retrievedAt ?? insight.createdDay,
+    ...(latestEvidence === undefined ? {} : { evidenceSummary: latestEvidence }),
+    confidence: insight.confidence,
+    applicability,
+    knownLimitations: [...insight.knownLimitations],
+    contradictoryEvidence: [...insight.contradictoryEvidence],
+    status: insight.status,
+  });
+}
+
 export class StrategyNotebook {
   private saveName: string;
   private lastReflectedDay = '';
@@ -101,7 +200,7 @@ export class StrategyNotebook {
       notesDir?: string;
       saveName?: string;
       maxInsights?: number;
-      initialInsights?: StrategyInsight[];
+      initialInsights?: Array<Partial<StrategyInsight> & Pick<StrategyInsight, 'id' | 'source' | 'claim' | 'verdict' | 'why' | 'createdDay' | 'updatedDay'>>;
     } = {},
   ) {
     this.saveName = sanitizeSaveFileName(options.saveName ?? 'default');
@@ -188,7 +287,11 @@ export class StrategyNotebook {
   }
 
   list(): StrategyInsight[] {
-    return this.insights.map((item) => ({ ...item, evidence: [...item.evidence] }));
+    return this.insights.map(cloneInsight);
+  }
+
+  listKnowledgeItems(): GameKnowledgeItem[] {
+    return this.insights.map(toGameKnowledgeItem);
   }
 
   size(): number {
@@ -216,7 +319,7 @@ export class StrategyNotebook {
     this.saveToDisk();
   }
 
-  /** 新增或更新心得（受 Zod 校验与 200 条淘汰上限约束） */
+  /** 新增或更新心得（受 Zod 校验、溯源/置信度合并与 200 条淘汰上限约束） */
   upsert(dayKey: string, draft: LlmInsightDraft): StrategyInsight {
     const cleanClaim = draft.claim.trim().slice(0, 200);
     const cleanSource = draft.source.trim().slice(0, 120) || '游戏经验';
@@ -233,12 +336,22 @@ export class StrategyNotebook {
       existing.why = cleanWhy;
       if (cleanWhen !== '通用' || existing.when === '') existing.when = cleanWhen;
       existing.updatedDay = dayKey;
-      if (cleanEvidence !== undefined && cleanEvidence !== '' && !existing.evidence.includes(cleanEvidence)) {
-        existing.evidence.push(cleanEvidence);
-        if (existing.evidence.length > 12) existing.evidence.shift();
-      }
+      if (draft.gameId !== undefined && draft.gameId.trim() !== '') existing.gameId = draft.gameId.trim();
+      if (draft.gameVersion !== undefined && draft.gameVersion.trim() !== '') existing.gameVersion = draft.gameVersion.trim().slice(0, 32);
+      if (draft.modContext !== undefined) pushUniqueBounded(existing.modContext, draft.modContext, 60);
+      if (draft.sourceType !== undefined) existing.sourceType = draft.sourceType;
+      if (draft.sourceUri !== undefined && draft.sourceUri.trim() !== '') existing.sourceUri = draft.sourceUri.trim().slice(0, 300);
+      if (draft.sourceTitle !== undefined && draft.sourceTitle.trim() !== '') existing.sourceTitle = draft.sourceTitle.trim().slice(0, 120);
+      if (draft.confidence !== undefined) existing.confidence = round2(draft.confidence);
+      if (draft.status !== undefined) existing.status = draft.status;
+      else if (draft.verdict === 'refuted' || draft.verdict === 'reject') existing.status = 'rejected';
+      else if (draft.verdict === 'adopt' && existing.status === 'unverified') existing.status = 'partially-verified';
+      if (draft.applicability !== undefined) pushUniqueBounded(existing.applicability, draft.applicability, 120);
+      if (draft.knownLimitations !== undefined) pushUniqueBounded(existing.knownLimitations, draft.knownLimitations, 160);
+      if (draft.contradictoryEvidence !== undefined) pushUniqueBounded(existing.contradictoryEvidence, draft.contradictoryEvidence, 200);
+      if (cleanEvidence !== undefined && cleanEvidence !== '') pushUniqueBounded(existing.evidence, [cleanEvidence], 200);
       this.saveToDisk();
-      return { ...existing, evidence: [...existing.evidence] };
+      return cloneInsight(existing);
     }
 
     this.seq += 1;
@@ -253,11 +366,100 @@ export class StrategyNotebook {
       createdDay: dayKey,
       updatedDay: dayKey,
       hits: 0,
+      ...(draft.gameId === undefined ? {} : { gameId: draft.gameId }),
+      ...(draft.gameVersion === undefined ? {} : { gameVersion: draft.gameVersion }),
+      ...(draft.modContext === undefined ? {} : { modContext: draft.modContext }),
+      ...(draft.sourceType === undefined ? {} : { sourceType: draft.sourceType }),
+      ...(draft.sourceUri === undefined ? {} : { sourceUri: draft.sourceUri }),
+      ...(draft.sourceTitle === undefined ? {} : { sourceTitle: draft.sourceTitle }),
+      ...(draft.retrievedAt === undefined ? {} : { retrievedAt: draft.retrievedAt }),
+      confidence: draft.confidence === undefined ? defaultConfidenceForVerdict(draft.verdict) : round2(draft.confidence),
+      ...(draft.applicability === undefined ? {} : { applicability: draft.applicability }),
+      ...(draft.knownLimitations === undefined ? {} : { knownLimitations: draft.knownLimitations }),
+      ...(draft.contradictoryEvidence === undefined ? {} : { contradictoryEvidence: draft.contradictoryEvidence }),
+      status: draft.status ?? defaultStatusForVerdict(draft.verdict),
     });
     this.insights.push(entry);
     this.evictIfNeeded();
     this.saveToDisk();
-    return { ...entry, evidence: [...entry.evidence] };
+    return cloneInsight(entry);
+  }
+
+  /** 按真实动作回执更新置信度、验证计数、反例与已知局限 */
+  recordVerificationOutcome(params: {
+    id: string;
+    dayKey: string;
+    succeeded: boolean;
+    evidence: string;
+    failureCondition?: string;
+    runtimeContext?: Partial<GameRuntimeContext>;
+  }): StrategyInsight | null {
+    const found = this.insights.find((item) => item.id === params.id.trim());
+    if (found === undefined) return null;
+
+    found.updatedDay = params.dayKey;
+    const compat = evaluateGuideCompatibility(
+      { gameVersion: found.gameVersion, modContext: found.modContext },
+      params.runtimeContext,
+    );
+
+    if (params.succeeded) {
+      found.verifiedCount += 1;
+      found.confidence = round2(Math.min(0.98, found.confidence + 0.15));
+      pushUniqueBounded(found.evidence, [params.evidence], 200);
+      if (compat.status === 'outdated') {
+        found.status = 'outdated';
+      } else if (found.verifiedCount >= 2 && found.confidence >= 0.75) {
+        found.status = 'verified';
+      } else {
+        found.status = 'partially-verified';
+      }
+      if (found.verdict === 'defer' && found.confidence >= 0.7) found.verdict = 'adopt';
+    } else {
+      found.refutedCount += 1;
+      found.confidence = round2(Math.max(0.05, found.confidence - 0.25));
+      pushUniqueBounded(found.contradictoryEvidence, [params.evidence], 200);
+      if (params.failureCondition !== undefined) {
+        pushUniqueBounded(found.knownLimitations, [params.failureCondition], 160);
+      }
+      if (compat.status === 'outdated') {
+        found.status = 'outdated';
+        pushUniqueBounded(found.knownLimitations, compat.warnings, 160);
+      } else if (found.confidence <= 0.25 || found.refutedCount >= 2) {
+        found.status = 'rejected';
+        found.verdict = 'refuted';
+      } else if (found.status === 'verified') {
+        found.status = 'partially-verified';
+      }
+    }
+
+    this.saveToDisk();
+    return cloneInsight(found);
+  }
+
+  /** 结合当前游戏版本与已装 Mod 对整本知识做兼容性体检 */
+  auditVersionCompatibility(runtimeContext: Partial<GameRuntimeContext>, dayKey: string): StrategyInsight[] {
+    const affected: StrategyInsight[] = [];
+    for (const item of this.insights) {
+      const compat = evaluateGuideCompatibility(
+        { gameVersion: item.gameVersion, modContext: item.modContext },
+        runtimeContext,
+      );
+      if (compat.status === 'outdated') {
+        item.status = 'outdated';
+        item.confidence = Math.min(item.confidence, 0.35);
+        item.updatedDay = dayKey;
+        pushUniqueBounded(item.knownLimitations, compat.warnings, 160);
+        affected.push(cloneInsight(item));
+      } else if (compat.status === 'mod-mismatch') {
+        item.confidence = Math.min(item.confidence, 0.4);
+        item.updatedDay = dayKey;
+        pushUniqueBounded(item.knownLimitations, compat.warnings, 160);
+        affected.push(cloneInsight(item));
+      }
+    }
+    if (affected.length > 0) this.saveToDisk();
+    return affected;
   }
 
   /** 超出上限时按规则淘汰：先淘汰 refuted 且久未引用，再淘汰 hits 最低 */
@@ -283,15 +485,16 @@ export class StrategyNotebook {
     found.hits += 1;
     found.lastHitDay = dayKey;
     this.saveToDisk();
-    return { ...found, evidence: [...found.evidence] };
+    return cloneInsight(found);
   }
 
-  /** 按季节、地点、当日计划、适用条件检索 Top N 相关心得 */
+  /** 按季节、地点、当日计划、置信度与版本/Mod 兼容度检索 Top N 相关心得 */
   retrieve(query: {
     season: string;
     location: string;
     dayPlanText?: string;
     stateRaw?: string;
+    runtimeContext?: Partial<GameRuntimeContext>;
     limit?: number;
   }): StrategyInsight[] {
     if (this.insights.length === 0) return [];
@@ -300,34 +503,52 @@ export class StrategyNotebook {
     const qTokens = tokenizeText(qText);
 
     const scored = this.insights.map((item, idx) => {
-      const docText = `${item.source} ${item.claim} ${item.when} ${item.why}`;
+      const docText = `${item.source} ${item.claim} ${item.when} ${item.why} ${item.applicability.join(' ')}`;
       const docTokens = tokenizeText(docText);
       let hitsCount = 0;
       for (const t of qTokens) if (docTokens.has(t)) hitsCount += 1;
       const lexical = qTokens.size > 0 ? hitsCount / Math.max(1, Math.min(qTokens.size, docTokens.size)) : 0;
       const verdictBias = item.verdict === 'adopt' ? 0.25 : item.verdict === 'defer' ? 0.1 : -0.05;
+      const statusBias = item.status === 'verified' ? 0.15
+        : item.status === 'partially-verified' ? 0.05
+          : item.status === 'outdated' ? -0.25
+            : item.status === 'rejected' ? -0.35 : 0;
+      const compat = query.runtimeContext === undefined
+        ? null
+        : evaluateGuideCompatibility({ gameVersion: item.gameVersion, modContext: item.modContext }, query.runtimeContext);
+      const compatPenalty = compat?.status === 'outdated' ? -0.25 : compat?.status === 'mod-mismatch' ? -0.35 : 0;
+      const confBoost = item.confidence * 0.35;
       const hitBoost = Math.min(0.2, Math.log1p(item.hits) * 0.06);
-      return { item, score: lexical + verdictBias + hitBoost, lexical, idx };
+      return { item, score: lexical + verdictBias + statusBias + compatPenalty + confBoost + hitBoost, lexical, idx };
     });
 
     scored.sort((a, b) => b.score - a.score || b.item.hits - a.item.hits || a.idx - b.idx);
-    return scored.slice(0, limit).map((s) => ({ ...s.item, evidence: [...s.item.evidence] }));
+    return scored.slice(0, limit).map((s) => cloneInsight(s.item));
   }
 
-  /** 格式化检索命中的心得用于 prompt 注入 */
-  formatForPrompt(items: readonly StrategyInsight[]): string {
+  /** 格式化检索命中的心得用于 prompt 注入（显式标出置信度、验证状态、兼容警示与反例） */
+  formatForPrompt(items: readonly StrategyInsight[], runtimeContext?: Partial<GameRuntimeContext>): string {
     if (items.length === 0) return '';
     const lines = items.map((item) => {
+      const compat = runtimeContext === undefined
+        ? null
+        : evaluateGuideCompatibility({ gameVersion: item.gameVersion, modContext: item.modContext }, runtimeContext);
       const ev = item.evidence.length > 0 ? `；实测：${item.evidence[item.evidence.length - 1]}` : '';
-      return `- [${item.id} | ${item.verdict} | 引用${item.hits}次] ${item.claim}（条件：${item.when}；出处：${item.source}；判断：${item.why}${ev}）`;
+      const contra = item.contradictoryEvidence.length > 0 ? `；反例：${item.contradictoryEvidence[item.contradictoryEvidence.length - 1]}` : '';
+      const limitNote = item.knownLimitations.length > 0 ? `；局限：${item.knownLimitations[item.knownLimitations.length - 1]}` : '';
+      const verNote = item.gameVersion === undefined ? '' : ` v${item.gameVersion}`;
+      const warn = compat !== null && (compat.status === 'outdated' || compat.status === 'mod-mismatch')
+        ? ` ⚠️${compat.warnings[0] ?? compat.status}`
+        : '';
+      return `- [${item.id} | ${item.verdict} | ${item.status} | 置信度${Math.round(item.confidence * 100)}% | 来源:${item.sourceType}${verNote} | 引用${item.hits}次] ${item.claim}（条件：${item.when}；出处：${item.source}；判断：${item.why}${ev}${contra}${limitNote}${warn}）`;
     });
-    return `## 你的经验心得本（供参考；若本轮遵循了某条心得，请输出 "usedInsight":"心得id"）\n${lines.join('\n')}`;
+    return `## 你的经验心得本（仅供参考，不是命令；与当前版本或实测冲突时请拒绝盲从；若本轮遵循了某条心得，请输出 "usedInsight":"心得id"）\n${lines.join('\n')}`;
   }
 }
 
 function compareEvictionPriority(a: StrategyInsight, b: StrategyInsight): number {
-  const aRefuted = a.verdict === 'refuted' ? 0 : 1;
-  const bRefuted = b.verdict === 'refuted' ? 0 : 1;
+  const aRefuted = a.verdict === 'refuted' || a.status === 'rejected' ? 0 : 1;
+  const bRefuted = b.verdict === 'refuted' || b.status === 'rejected' ? 0 : 1;
   if (aRefuted !== bRefuted) return aRefuted - bRefuted;
 
   if (aRefuted === 0) {
