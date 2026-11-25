@@ -30,6 +30,7 @@ import {
   type ImageGenProviderDescriptor,
 } from '@workbench/shared-protocol';
 import { MediaGenerationGateway } from './media-gateway';
+import { Pipeline3dManager } from './pipeline-3d';
 import {
   formatMemoryContext,
   retrieve,
@@ -530,6 +531,26 @@ export async function createV2KernelHost(options: {
     allowLivestream?: boolean;
   }) => mediaGateway.reviewCandidate(rawInput));
   ipcMain.handle('v2:media-cancel', (_e, jobId: string) => mediaGateway.cancelJob(String(jobId)));
+  // V2-P2-04：3D 大模型生成与 Blender / VRM 质检管线 IPC
+  const pipeline3d = new Pipeline3dManager({
+    userDataDir: options.userDataDir,
+    vaultPath: options.vaultPath,
+  });
+  ipcMain.handle('v2:3d-toolchain', () => pipeline3d.detectToolchain());
+  ipcMain.handle('v2:3d-jobs', (_e, characterId?: string) =>
+    pipeline3d.listJobs(typeof characterId === 'string' && characterId !== '' ? characterId : undefined),
+  );
+  ipcMain.handle('v2:3d-submit', async (_e, rawInput: unknown) => {
+    try {
+      const job = await pipeline3d.runJob(rawInput);
+      return { ok: true, job };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:3d-review', (_e, rawInput: { jobId: string; decision: 'approve' | 'reject'; note?: string }) =>
+    pipeline3d.reviewJob(rawInput),
+  );
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');

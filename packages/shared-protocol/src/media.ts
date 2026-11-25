@@ -146,3 +146,82 @@ export const MediaJobSubmitRequestSchema = z.object({
   referenceImagePaths: z.array(z.string().min(1)).max(8).optional(),
 });
 export type MediaJobSubmitRequest = z.infer<typeof MediaJobSubmitRequestSchema>;
+
+// ───────────────────────── 3D 生成与 Blender/VRM 管线（V2-P2-04 / Blueprint 06 §3 & §7） ─────────────────────────
+export const Mesh3dProviderProtocolSchema = z.enum([
+  'hunyuan3d-http',
+  'tripo-http',
+  'meshy-http',
+  'custom-3d-http',
+]);
+export type Mesh3dProviderProtocol = z.infer<typeof Mesh3dProviderProtocolSchema>;
+
+export const BlenderToolchainStatusSchema = z.object({
+  available: z.boolean(),
+  binary: z.string().nullable(),
+  version: z.string().optional(),
+  vrmAddonDetected: z.boolean().default(false),
+  installHint: z.string(),
+});
+export type BlenderToolchainStatus = z.infer<typeof BlenderToolchainStatusSchema>;
+
+export const VrmInspectionReportSchema = z.object({
+  valid: z.boolean(),
+  format: z.enum(['vrm-0.x', 'vrm-1.0', 'glb', 'invalid']),
+  meshCount: z.number().int().nonnegative(),
+  materialCount: z.number().int().nonnegative(),
+  skinCount: z.number().int().nonnegative(),
+  hasHumanoidRig: z.boolean(),
+  missingCoreBones: z.array(z.string()).default([]),
+  blendShapeNames: z.array(z.string()).default([]),
+  hasLipSyncVisemes: z.boolean(),
+  vrmVersion: z.string().optional(),
+  licenseNote: z.string().optional(),
+  sha256: z.string().min(1),
+  errors: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type VrmInspectionReport = z.infer<typeof VrmInspectionReportSchema>;
+
+export const Pipeline3dStageSchema = z.enum([
+  'queued',
+  'generating_mesh',
+  'blender_postprocess',
+  'qa_inspecting',
+  'review_required',
+  'approved',
+  'published',
+  'validation_failed',
+  'failed',
+]);
+export type Pipeline3dStage = z.infer<typeof Pipeline3dStageSchema>;
+
+export const Pipeline3dRequestSchema = z.object({
+  characterId: z.string().min(1),
+  providerId: z.string().min(1),
+  protocol: Mesh3dProviderProtocolSchema,
+  endpoint: z.string().url(),
+  modelId: z.string().min(1).default('hunyuan3d-2'),
+  inputImagePaths: z.array(z.string().min(1)).min(1).max(4),
+  prompt: z.string().default(''),
+  targetPolycount: z.number().int().min(1000).max(200000).default(25000),
+  exportVrm: z.boolean().default(true),
+  runBlenderPostprocess: z.boolean().default(true),
+});
+export type Pipeline3dRequest = z.infer<typeof Pipeline3dRequestSchema>;
+
+export const Pipeline3dJobSnapshotSchema = z.object({
+  jobId: z.string().min(1),
+  characterId: z.string().min(1),
+  providerId: z.string().min(1),
+  stage: Pipeline3dStageSchema,
+  rawMeshPath: z.string().optional(),
+  processedVrmPath: z.string().optional(),
+  inspection: VrmInspectionReportSchema.optional(),
+  provenance: AssetProvenanceSchema.optional(),
+  blenderLog: z.string().optional(),
+  error: z.string().optional(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+export type Pipeline3dJobSnapshot = z.infer<typeof Pipeline3dJobSnapshotSchema>;

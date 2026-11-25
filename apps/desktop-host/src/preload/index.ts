@@ -361,6 +361,10 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2MediaSubmit: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:media-submit', input),
   v2MediaReview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:media-review', input),
   v2MediaCancel: (jobId: string): Promise<unknown> => ipcRenderer.invoke('v2:media-cancel', jobId),
+  v23dToolchain: (): Promise<unknown> => ipcRenderer.invoke('v2:3d-toolchain'),
+  v23dJobs: (characterId?: string): Promise<unknown[]> => ipcRenderer.invoke('v2:3d-jobs', characterId),
+  v23dSubmit: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:3d-submit', input),
+  v23dReview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:3d-review', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

@@ -63,6 +63,8 @@ interface DirectorV2Window {
     v2MemoryDeletionAudits(): Promise<Array<{ targetNodeId: string; targetCategory: string; deletedNodeIds: string[] }>>;
     v2MediaProviders(descriptors?: unknown[]): Promise<Array<{ providerId: string; kind: string; supportsImageGen: boolean; requiresOnlineBilling: boolean }>>;
     v2MediaJobs(characterId?: string): Promise<Array<{ jobId: string; status: string }>>;
+    v23dToolchain(): Promise<{ available: boolean; binary: string | null; installHint: string }>;
+    v23dJobs(characterId?: string): Promise<Array<{ jobId: string; stage: string }>>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -295,6 +297,15 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(mediaCaps.providers.some((p) => p.providerId === 'codex-cli' && p.requiresOnlineBilling === true)).toBe(true);
       expect(mediaCaps.providers.some((p) => p.providerId === 'gemini-cli' && p.supportsImageGen === false)).toBe(true);
       expect(Array.isArray(mediaCaps.jobs)).toBe(true);
+
+      // V2-P2-04：验证 Blender 工具链探测与 3D 候选任务列表
+      const res3d = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        return { toolchain: await bridge.v23dToolchain(), jobs3d: await bridge.v23dJobs() };
+      });
+      expect(typeof res3d.toolchain.available).toBe('boolean');
+      expect(typeof res3d.toolchain.installHint).toBe('string');
+      expect(Array.isArray(res3d.jobs3d)).toBe(true);
     } finally {
       await app.close();
     }

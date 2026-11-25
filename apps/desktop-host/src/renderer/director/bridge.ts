@@ -6,6 +6,7 @@ import type {
   AudioMixerSnapshot,
   AudioTrackKind,
   AudioTrackState,
+  BlenderToolchainStatus,
   CharacterCommitment,
   CharacterControlMode,
   CharacterCoreSnapshot,
@@ -26,6 +27,8 @@ import type {
   MemoryUncertaintyLevel,
   PetDesktopPrefs,
   PetWindowView,
+  Pipeline3dJobSnapshot,
+  Pipeline3dRequest,
   PreferenceCategory,
   ProviderQuotaMatrix,
   ProviderQuotaReport,
@@ -660,6 +663,10 @@ export interface DirectorBridge {
     allowLivestream?: boolean;
   }): Promise<{ ok: boolean; error?: string; job?: MediaJobSnapshot }>;
   v2MediaCancel(jobId: string): Promise<{ ok: boolean; error?: string }>;
+  v23dToolchain(): Promise<BlenderToolchainStatus>;
+  v23dJobs(characterId?: string): Promise<Pipeline3dJobSnapshot[]>;
+  v23dSubmit(input: Pipeline3dRequest): Promise<{ ok: boolean; error?: string; job?: Pipeline3dJobSnapshot }>;
+  v23dReview(input: { jobId: string; decision: 'approve' | 'reject'; note?: string }): Promise<{ ok: boolean; error?: string; job?: Pipeline3dJobSnapshot }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

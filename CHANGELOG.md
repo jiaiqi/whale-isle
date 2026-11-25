@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-04`：3D 大模型生成与 Blender 自动化后处理流水线 — `IMPLEMENTED_UNVERIFIED`）
+
+- **3D / VRM 质检契约** `packages/shared-protocol/src/{media.ts,media.spec.ts}`：新增 `Mesh3dProviderProtocol`、`BlenderToolchainStatus`、`VrmInspectionReport`、`Pipeline3dRequest` 与 `Pipeline3dJobSnapshot` Zod 契约。
+- **GLB/VRM 二进制质检与无头 Blender 后处理编排** `apps/desktop-host/src/main/{pipeline-3d.ts,pipeline-3d.spec.ts,v2-kernel-host.ts}` & `apps/desktop-host/src/{preload/index.ts,renderer/director/bridge.ts}`：实现 `inspectGlbOrVrm`（真实解析 glTF 2.0 / VRM 0.x / 1.0 二进制块，校验网格/Humanoid 核心骨/BlendShapes/口型 Viseme，裸 GLB 在要求 VRM 时拒绝通过）、`detectBlenderToolchain`、headless Python 后处理脚本生成器与 `Pipeline3dManager`，挂载 `v2:3d-*` 4 路 IPC 并通过 `verify:gate` 7/7 与 Electron 45 E2E（本机缺 Blender 与 Hunyuan3D 服务待真机补验）。
+
 ### Added / Changed（`V2-P2-03`：`MediaGenerationGateway` 与图片生成流水线 — `IMPLEMENTED_UNVERIFIED`）
 
 - **媒体生成与十态资产契约** `packages/shared-protocol/src/{media.ts,media.spec.ts,index.ts}`：定义 Blueprint 06 十态管线、`MediaProviderCapability`、`CharacterBible`（含三视图参考图与 `forbiddenChanges`）、`AssetProvenance`、`MediaCandidateItem` 与 `MediaJobSnapshot` Zod 契约。

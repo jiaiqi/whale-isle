@@ -7,6 +7,10 @@ import {
   MediaJobSnapshotSchema,
   MediaJobSubmitRequestSchema,
   MediaProviderCapabilitySchema,
+  BlenderToolchainStatusSchema,
+  Pipeline3dJobSnapshotSchema,
+  Pipeline3dRequestSchema,
+  VrmInspectionReportSchema,
 } from './media';
 
 describe('shared-protocol V2-P2-03 media & provenance contracts', () => {
@@ -85,5 +89,40 @@ describe('shared-protocol V2-P2-03 media & provenance contracts', () => {
       poses: ['idle'],
     });
     expect(req.size).toBe('1024x1024');
+
+    const tc = BlenderToolchainStatusSchema.parse({
+      available: false,
+      binary: null,
+      installHint: '安装 Blender',
+    });
+    expect(tc.vrmAddonDetected).toBe(false);
+    const vrm = VrmInspectionReportSchema.parse({
+      valid: true,
+      format: 'vrm-1.0',
+      meshCount: 1,
+      materialCount: 1,
+      skinCount: 1,
+      hasHumanoidRig: true,
+      hasLipSyncVisemes: true,
+      sha256: 'abc',
+    });
+    expect(vrm.hasHumanoidRig).toBe(true);
+    const p3d = Pipeline3dRequestSchema.parse({
+      characterId: 'char_xiaojing',
+      providerId: 'hunyuan',
+      protocol: 'hunyuan3d-http',
+      endpoint: 'https://3d.example/gen',
+      inputImagePaths: ['/tmp/front.png'],
+    });
+    expect(p3d.targetPolycount).toBe(25000);
+    const snap3d = Pipeline3dJobSnapshotSchema.parse({
+      jobId: 'job3d-1',
+      characterId: 'char_xiaojing',
+      providerId: 'hunyuan',
+      stage: 'review_required',
+      createdAt: '2026-11-26',
+      updatedAt: '2026-11-26',
+    });
+    expect(snap3d.stage).toBe('review_required');
   });
 });
