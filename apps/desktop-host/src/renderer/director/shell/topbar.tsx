@@ -4,12 +4,14 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-  Brain, ChevronDown, ChevronRight, Flame, Moon, Play, Search, Sprout, Square, Sun, Swords,
+  Brain, ChevronDown, ChevronRight, Flame, Monitor, Moon, Play, Search, Sprout, Square, Sun, Swords,
   Volume2, VolumeX, type LucideIcon,
 } from 'lucide-react';
 import { GAME_OPTIONS, type GameId } from '../bridge';
 
 const GAME_ICON: Record<GameId, LucideIcon> = { stardew: Sprout, terraria: Swords, dst: Flame };
+
+export type ThemeMode = 'system' | 'dark' | 'light';
 
 export interface TopbarProps {
   group: string;
@@ -24,17 +26,19 @@ export interface TopbarProps {
   gameEnabled: Record<GameId, boolean>;
   running: boolean;
   theme: 'dark' | 'light';
+  themeMode?: ThemeMode;
   onOpenCommandPalette: () => void;
   onToggleVoice: () => void;
   onSwitchBrain: () => void;
   onSelectGame: (gameId: GameId) => void;
   onToggleDrive: () => void;
   onToggleTheme: () => void;
+  onSelectSystemTheme?: () => void;
 }
 
 export function Topbar({
-  group, title, voiceOn, voiceBackend, brainMode, llmReady, mainModelId, gameId, gameEnabled, running, theme,
-  onOpenCommandPalette, onToggleVoice, onSwitchBrain, onSelectGame, onToggleDrive, onToggleTheme,
+  group, title, voiceOn, voiceBackend, brainMode, llmReady, mainModelId, gameId, gameEnabled, running, theme, themeMode = theme,
+  onOpenCommandPalette, onToggleVoice, onSwitchBrain, onSelectGame, onToggleDrive, onToggleTheme, onSelectSystemTheme,
 }: TopbarProps): React.JSX.Element {
   const isLlm = brainMode === 'llm';
   const needsKeyFallback = !llmReady && !isLlm;
@@ -179,9 +183,27 @@ export function Topbar({
           </div>
         )}
       </div>
-      <button data-theme-toggle className="icon-btn" onClick={onToggleTheme} title="切换深浅主题">
+      <button
+        data-theme-toggle
+        className="icon-btn"
+        onClick={onToggleTheme}
+        title={theme === 'dark' ? '切到晨汐浅色主题' : '切到曜石深海主题'}
+      >
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
+      {onSelectSystemTheme && (
+        <button
+          data-theme-system
+          type="button"
+          aria-pressed={themeMode === 'system'}
+          className={`icon-btn${themeMode === 'system' ? ' on-blue' : ''}`}
+          style={themeMode === 'system' ? { background: 'var(--blue-dim)', color: 'var(--blue)' } : undefined}
+          onClick={onSelectSystemTheme}
+          title={themeMode === 'system' ? '当前：跟随系统浅深色' : '切换到跟随系统浅深色'}
+        >
+          <Monitor size={15} />
+        </button>
+      )}
     </header>
   );
 }

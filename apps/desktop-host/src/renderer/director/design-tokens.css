@@ -303,19 +303,50 @@ input[type='range'].wb-range.violet::-webkit-slider-thumb { border-color: var(--
 .wb-shell {
   display: grid;
   grid-template-columns: 244px 1fr;
-  grid-template-rows: 50px 1fr;
-  grid-template-areas: "side top" "side main";
+  grid-template-rows: 50px auto 1fr;
+  grid-template-areas: "side top" "side hud" "side main";
   overflow: hidden;
   position: relative;
 }
 .wb-shell.has-aside {
   grid-template-columns: 244px 1fr 304px;
-  grid-template-areas: "side top top" "side main aside";
+  grid-template-areas: "side top top" "side hud hud" "side main aside";
 }
-.wb-shell > .wb-side,
-body.wb-shell > .wb-top,
-body.wb-shell > .wb-main,
-body.wb-shell > .wb-aside { position: relative; z-index: 1; }
+.wb-shell > .wb-side { position: relative; z-index: 15; }
+.wb-shell > .wb-top { position: relative; z-index: 20; }
+.wb-shell > .wb-hud,
+.wb-hud { grid-area: hud; position: relative; z-index: 5; }
+.wb-shell > .wb-main,
+.wb-shell > .wb-aside { position: relative; z-index: 1; }
+
+/* ── Obsidian Tide Sonar Ring ── */
+.wb-sonar-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.wb-sonar-core {
+  width: 42%;
+  height: 42%;
+  border-radius: 50%;
+  background: var(--sonar-color, var(--blue));
+  box-shadow: 0 0 8px var(--sonar-color, var(--blue));
+}
+.wb-sonar-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--sonar-color, var(--blue));
+  opacity: 0.45;
+}
+.wb-sonar-ring.active .wb-sonar-halo {
+  animation: sonar-pulse 1.9s var(--ease-out) infinite;
+}
+@keyframes sonar-pulse {
+  0% { transform: scale(0.75); opacity: 0.78; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
 
 .wb-side {
   grid-area: side;

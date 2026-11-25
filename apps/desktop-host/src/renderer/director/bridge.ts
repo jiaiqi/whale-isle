@@ -3,14 +3,36 @@
  * 明文 key 只上行；渲染进程永远只见掩码（运行期安全锁）。
  */
 import type {
+  AudioMixerSnapshot,
+  AudioTrackKind,
+  AudioTrackState,
+  CharacterCommitment,
+  CharacterControlMode,
+  CharacterCoreSnapshot,
+  CharacterExpression,
+  CharacterGoal,
   CoopSpeakerEvent,
+  FuzzyImpression,
+  GoalHorizon,
+  GoalOrigin,
+  LifeActivityKind,
+  LipSyncFrame,
   McpEndpoint,
-  PetWindowView,
+  MemoryCategory,
+  MemoryDeletionAudit,
+  MemoryUncertaintyLevel,
   PetDesktopPrefs,
+  PetWindowView,
+  PreferenceCategory,
+  ProviderQuotaMatrix,
+  ProviderQuotaReport,
   TeamBlackboardSnapshot,
   TeamCommsMessage,
   TeamGoal,
   TeamPlan,
+  VoiceIdentityDomain,
+  VoiceProviderKind,
+  VoiceProviderStatus,
 } from '@workbench/shared-protocol';
 
 export const GAME_OPTIONS = [
@@ -492,6 +514,157 @@ export interface DirectorBridge {
   modsToggle(folderName: string, enabled: boolean): Promise<ModsOpView>;
   modsInstallZip(): Promise<ModsOpView & { folderName?: string }>;
   modsOpenDir(): Promise<{ ok: boolean; error?: string }>;
+  // V2-P0-02 ~ V2-P1-05：WhaleKernel / CharacterCore / VoiceRuntime / QuotaMatrix / MemoryV2
+  v2KernelHealth(): Promise<{
+    lifecycle: string;
+    startedAt: number | null;
+    uptimeMs: number;
+    activeCharacter: { characterId: string; displayName: string; expression: string; controlMode: string; halted: boolean };
+    plugins: { total: number; enabled: number; errors: number };
+    vaultBackend: string;
+    recentLogs: number;
+  }>;
+  v2KernelLogs(limit?: number): Promise<unknown[]>;
+  v2CharacterState(): Promise<{
+    identity: { characterId: string; displayName: string; personaId: string; voiceProfileId: string };
+    expression: CharacterExpression;
+    controlMode: CharacterControlMode;
+    halted: boolean;
+    haltReason?: string;
+    mood?: string;
+  }>;
+  v2CharacterSnapshot(): Promise<CharacterCoreSnapshot>;
+  v2AddGoal(input: {
+    title: string;
+    description?: string;
+    horizon?: GoalHorizon;
+    origin?: GoalOrigin;
+    priority?: number;
+    relatedActivity?: LifeActivityKind;
+  }): Promise<CharacterGoal>;
+  v2AddCommitment(input: {
+    partnerId: string;
+    partnerName?: string;
+    title: string;
+    detail?: string;
+    dueAt?: number;
+  }): Promise<CharacterCommitment>;
+  v2RecordPreference(input: {
+    category: PreferenceCategory;
+    key: string;
+    delta: number;
+    source: string;
+    reason: string;
+    confidence?: number;
+  }): Promise<unknown>;
+  v2BindModel(modelRef: string | null): Promise<{ activeModelRef: string | null }>;
+  v2SelectActivity(input: {
+    mode: LifeActivityKind;
+    reason: string;
+    source?: 'life_runtime' | 'user_command' | 'emergency_halt' | 'manual_takeover';
+    force?: boolean;
+  }): Promise<{ accepted: boolean; reason?: string; state: CharacterCoreSnapshot['activityState'] }>;
+  v2EmergencyHalt(reason?: string): Promise<{
+    identity: { characterId: string; displayName: string };
+    expression: CharacterExpression;
+    controlMode: CharacterControlMode;
+    halted: boolean;
+    haltReason?: string;
+  }>;
+  v2Resume(mode?: CharacterControlMode): Promise<{
+    identity: { characterId: string; displayName: string };
+    expression: CharacterExpression;
+    controlMode: CharacterControlMode;
+    halted: boolean;
+  }>;
+  v2VoiceProviders(): Promise<VoiceProviderStatus[]>;
+  v2VoiceIdentity(): Promise<VoiceIdentityDomain>;
+  v2VoiceIdentityUpdate(patch: Partial<Pick<VoiceIdentityDomain, 'voiceProfileId' | 'voiceDescription' | 'preferredProviderId' | 'providerVoiceRef'>>): Promise<VoiceIdentityDomain>;
+  v2VoiceMixerState(): Promise<AudioMixerSnapshot>;
+  v2VoiceTrackStart(input: {
+    trackId: string;
+    kind: AudioTrackKind;
+    label: string;
+    gain?: number;
+    muted?: boolean;
+    outputDeviceId?: string;
+  }): Promise<AudioTrackState>;
+  v2VoiceTrackStop(trackId: string): Promise<boolean>;
+  v2VoiceOutputRoute(input: { kind: AudioTrackKind; deviceId: string }): Promise<AudioMixerSnapshot>;
+  v2VoiceSynthesizePreview(input: {
+    text: string;
+    emotion?: string;
+    styleMode?: 'normal' | 'inner' | 'p0' | 'singing';
+    speed?: number;
+    preferredProvider?: VoiceProviderKind;
+  }): Promise<{
+    requestId: string;
+    providerKind: VoiceProviderKind;
+    quality: string;
+    degraded: boolean;
+    degradedFrom?: VoiceProviderKind;
+    durationMs: number;
+    lipFrames: LipSyncFrame[];
+  }>;
+  v2ProviderQuota(input: {
+    providerId: string;
+    planType?: 'PAY_AS_YOU_GO' | 'CODING_PLAN' | 'LOCAL_GPU';
+    region?: 'CN' | 'GLOBAL' | 'LOCAL';
+    baseUrl?: string;
+  }): Promise<ProviderQuotaReport>;
+  v2ProviderQuotaMatrix(input?: { providerIds?: string[]; includeCli?: boolean }): Promise<ProviderQuotaMatrix>;
+  v2MemoryAdd(input: {
+    nodeType?: 'event' | 'entity' | 'concept' | 'summary';
+    category: MemoryCategory;
+    text: string;
+    importance?: number;
+    confidence?: number;
+    emotionWeight?: number;
+    emotionValence?: number;
+    entityKey?: string;
+    entityDisplayName?: string;
+    pinned?: boolean;
+  }): Promise<{ ok: boolean; error?: string; node?: { id: string; category?: MemoryCategory; text: string } }>;
+  v2MemoryQuery(input: {
+    query: string;
+    categories?: MemoryCategory[];
+    topN?: number;
+    recordRecall?: boolean;
+  }): Promise<V2MemoryQueryResult>;
+  v2MemoryConsolidate(input?: { entityKey?: string; minInteractions?: number }): Promise<{
+    ok: boolean;
+    error?: string;
+    impressions: FuzzyImpression[];
+  }>;
+  v2MemoryCorrect(input: { nodeId: string; newText: string; reason?: string }): Promise<{ ok: boolean; error?: string; node?: unknown }>;
+  v2MemoryHardDelete(input: { nodeId: string; reason?: string }): Promise<{
+    deleted: boolean;
+    blockedReason?: string;
+    deletedNodeIds?: string[];
+    deletedDerivedIds?: string[];
+  }>;
+  v2MemoryDeletionAudits(): Promise<MemoryDeletionAudit[]>;
+  v2StorageCheck(): Promise<{
+    ok: boolean;
+    engine: string;
+    schemaVersion: string | null;
+    recovered: boolean;
+    integrity: string;
+  }>;
+}
+
+export interface V2MemoryQueryResult {
+  ok: boolean;
+  error?: string;
+  context: string;
+  hits: Array<{
+    id: string;
+    category: MemoryCategory;
+    text: string;
+    certainty: MemoryUncertaintyLevel;
+    score: number;
+    reasons: string[];
+  }>;
 }
 
 /** Mod 条目视图（契约 StardewModInfo 的渲染层镜像） */

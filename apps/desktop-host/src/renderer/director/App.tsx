@@ -1,94 +1,48 @@
 /**
- * 工作台 Shell v4「曜石 · 演进版」：分组插件导航 + 顶栏 ⌘K/主题/三开关 + 饭碗 footer。
- * 交互全部走真实 IPC（autodrive/memory/mods/voice/harness/providers）；页面按设计稿分区。
+ * 工作台 Shell v5「Obsidian Tide」（V2-P1-05 Strangler 重构版）：
+ * - 分组插件导航 + 顶栏（⌘K / 三态主题 system·dark·light / 语音·主脑·游戏驱动）
+ * - 置顶常驻 ControlOwnershipHud（实时连接 CharacterCore 急停 F8 / 接管 F9 / 睡眠 F10）
+ * - 核心域页面模块化拆出：ChatView / GameWorkspaceView / LifeConsoleView
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Toaster, toast } from 'sonner';
 import {
-  Activity, Brain, ChevronRight, Monitor, Play, Radio, RotateCcw, Send, ShieldAlert,
-  Square, Target, Volume2, VolumeX, Wheat, Zap,
+  Activity, Brain, Hand, Monitor, Moon, OctagonAlert, Play, Radio, RotateCcw,
+  ShieldAlert, Sparkles, Square, Volume2, VolumeX, Wheat,
 } from 'lucide-react';
-import { ModelProviderConfigSchema, type DiningProfilePreset, type ModelProviderConfig, type WorkbenchRoleSlot } from '@workbench/shared-protocol';
+import {
+  ModelProviderConfigSchema,
+  type CharacterCoreSnapshot,
+  type DiningProfilePreset,
+  type ModelProviderConfig,
+  type WorkbenchRoleSlot,
+} from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
-import { GAME_OPTIONS, isCurrentSessionEvent, type AutodriveEventView, type CharacterSummary, type GameId } from './bridge';
+import {
+  GAME_OPTIONS,
+  isCurrentSessionEvent,
+  type AutodriveEventView,
+  type CharacterSummary,
+  type GameId,
+} from './bridge';
 import { ProvidersPanel } from './providers-panel';
 import { HarnessPanel } from './harness-panel';
 import { VoiceCenterPanel } from './voice-center-panel';
-import { ModsPanel } from './mods-panel';
 import { MemoryPanel } from './memory-panel';
 import { ObsPanel } from './obs-panel';
 import { PluginsPanel } from './plugins-panel';
 import { PetStudioPanel } from './pet-studio';
-import { CoopPanel } from './coop-panel'; // T-M6-22 多桌宠联机端点
-import { TerrariaPanel } from './terraria-panel';
-import { DstPanel, type DstPanelEvent } from './dst-panel';
-import {
-  GAME_STATUS_COLOR,
-  GameConnectionBanner,
-  GameCurrentActionCard,
-  GameDecisionTimeline,
-  GameDiagnostics,
-  GameGoalChain,
-  GameMetricsCard,
-  GameQualityCard,
-  GameQuickCommands,
-  GameReceiptTimeline,
-  decisionBadgeOf,
-  statusLabel,
-  toolLabel,
-  useGameHealth,
-  type ReceiptFilter,
-} from './game-panel';
+import { CoopPanel } from './coop-panel';
+import { toolLabel, useGameHealth, type ReceiptFilter } from './game-panel';
 import { NAV_GROUPS, Sidebar, type Tab } from './shell/sidebar';
-import { Topbar } from './shell/topbar';
+import { Topbar, type ThemeMode } from './shell/topbar';
 import { CommandPalette, type CommandAction } from './shell/command-palette';
+import { ControlOwnershipHud } from './v2/signature-widgets';
+import { ChatAside, ChatView, parseDirective } from './views/chat-view';
+import { GameWorkspaceView, type AvatarSyncViewState } from './views/stardew-view';
+import { LifeConsoleView } from './views/life-console-view';
 
 const NAV_FLAT = NAV_GROUPS.flatMap((g) => g.items);
-const SLASH_COMMANDS = [
-  { cmd: '/goto Beach', desc: '去某地（Beach / Town / Farm / Mine）' },
-  { cmd: '/fish 5', desc: '钓鱼 5 次' },
-  { cmd: '/forage', desc: '采集 / 翻垃圾桶' },
-  { cmd: '/sleep', desc: '回家睡觉' },
-  { cmd: '/state', desc: '播报当前状态' },
-  { cmd: '/stop', desc: '停下当前动作' },
-  { cmd: '/cancel', desc: '取消当前强制命令或目标' },
-];
-
-function parseDirective(text: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
-  const t = text.trim();
-  if (!t.startsWith('/')) return null;
-  const parts = t.slice(1).trim().split(/\s+/);
-  const cmd = (parts[0] ?? '').toLowerCase();
-  const rest = parts.slice(1);
-  switch (cmd) {
-    case 'goto':
-      return { tool: 'travel_to', args: { location: rest[0] ?? 'Farm' }, intent: `主人指令：去 ${rest[0] ?? 'Farm'}` };
-    case 'stop':
-      return { tool: 'cancel_action', args: {}, intent: '主人指令：停下当前动作' };
-    case 'sleep':
-      return { tool: 'sleep', args: {}, intent: '主人指令：回家睡觉' };
-    case 'fish':
-      return { tool: 'fish', args: { casts: Number(rest[0] ?? 5) || 5 }, intent: '主人指令：钓鱼' };
-    case 'state':
-      return { tool: 'get_state', args: {}, intent: '主人指令：播报状态' };
-    case 'forage':
-      return { tool: 'forage', args: {}, intent: '主人指令：去采集' };
-    default:
-      // T-M6-70：未知 /命令（如 /cancel 或 /自然语言 强制命令）交给 chatSay 由主进程与 LLM 处理，不再误当工具名直发
-      return null;
-  }
-}
-
-/** 星露谷目标链与快捷指令（三游戏共玩页共用区块的数据源） */
-const STARDEW_GOALS = ['读信 / 浇水 / 播种', '11:00 海滩钓鱼', '17:30 镇上采集', '18:30 前回家', '睡觉防晕倒'] as const;
-const STARDEW_QUICK: ReadonlyArray<readonly [string, string]> = [
-  ['钓鱼', '/fish 5'],
-  ['去海滩', '/goto Beach'],
-  ['睡觉', '/sleep'],
-  ['汇报状态', '/state'],
-];
 
 interface AppProps {
   profiles: DiningProfilePreset[];
@@ -134,8 +88,7 @@ function isGameId(value: string | null): value is GameId {
 }
 
 function isTabEnabled(tab: Tab, enabledPlugins: Set<string>): boolean {
-  // 联机协作是核心内置页：旧 localStorage 插件集合没有 coop 时也必须可见
-  if (tab === 'coop') return true;
+  if (tab === 'coop' || tab === 'life') return true;
   if (tab === 'stardew') return GAME_OPTIONS.some((game) => enabledPlugins.has(game.id)) || enabledPlugins.has('mods');
   return enabledPlugins.has(tab);
 }
@@ -144,6 +97,12 @@ function initialTab(): Tab {
   const saved = localStorage.getItem('wb-tab');
   if (saved === 'terraria' || saved === 'dst' || saved === 'mods') return 'stardew';
   return saved !== null && NAV_FLAT.some((item) => item.id === saved) ? saved as Tab : 'chat';
+}
+
+function initialThemeMode(): ThemeMode {
+  const saved = localStorage.getItem('wb-theme');
+  if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+  return 'dark';
 }
 
 export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {
@@ -162,7 +121,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   });
   const [events, setEvents] = useState<AutodriveEventView[]>([]);
   const [running, setRunning] = useState(false);
-  /** T-M6-73：主人临时接管中（AI 只读状态、不发动作） */
   const [humanControl, setHumanControl] = useState(false);
   const [brain, setBrain] = useState<{ mode: string; llmReady: boolean }>({ mode: 'rule', llmReady: false });
   const [dayPlan, setDayPlan] = useState<{ dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null>(null);
@@ -170,116 +128,86 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [mainModelId, setMainModelId] = useState('');
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
   const [characterId, setCharacterId] = useState('blue-whale-maid');
-  // 桌宠右键「小本子」→ 每次自增，切到桌宠工坊 Tab 3
   const [notebookSignal, setNotebookSignal] = useState(0);
   const [creatorSignal, setCreatorSignal] = useState(0);
   const [creatorTab, setCreatorTab] = useState<'char' | 'egg' | 'import' | 'pixel' | undefined>(undefined);
   const [benchSignal, setBenchSignal] = useState(0);
   const [voiceOn, setVoiceOn] = useState(true);
-  // T-M6-33：实际语音后端（mcode / say / unsupported），顶栏如实展示，避免把 say 当角色 TTS
   const [voiceBackend, setVoiceBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [cmdkOpen, setCmdkOpen] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('wb-theme') === 'light' ? 'light' : 'dark'));
+  const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
+  const [systemDark, setSystemDark] = useState<boolean>(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : true,
+  );
   const [plugins, setPlugins] = useState<Set<string>>(readPlugins);
   const [rice, setRice] = useState(0);
   const [riceCap, setRiceCap] = useState(500_000);
   const [memoryStats, setMemoryStats] = useState<{ nodes: number; edges: number; lastDay: string | null } | null>(null);
   const [guides, setGuides] = useState<string[]>([]);
   const [chatFilter, setChatFilter] = useState<ReceiptFilter>('all');
-  // 桌宠工坊 / 语音中心的分页签状态由各自面板内聚（T-M6-46）
-  // BWF 游戏内左上角 MCP 提示 HUD（T-M6-16 用户指令）：默认关闭；契约 StardewModsConfig.bwfShowHud
   const [bwfHud, setBwfHud] = useState(false);
-  // BWF MCP 端口（默认 18088，避开 Amazon Quick 等工具写死的 18080；同步写 Mods/BlindWhaleFarmer/config.json）
   const [bwfPort, setBwfPort] = useState(18088);
   const [editingBwfPort, setEditingBwfPort] = useState(false);
   const [bwfPortDraft, setBwfPortDraft] = useState('18088');
-  // T-M6-62：桌宠形象同步进星露谷（开关 + 灵动动画 + Mod 安装/版本状态 + 游戏内当前同步角色与清晰度，全部真实 IPC）
-  const [avatarSync, setAvatarSync] = useState<{
-    enabled: boolean;
-    liveliness: boolean;
-    modInstalled: boolean;
-    modCompiled: boolean;
-    modNeedsUpdate: boolean;
-    syncedCharacterId: string | null;
-    syncedDisplayName: string | null;
-    syncedSpriteReady: boolean;
-    syncedSpriteTier: '1x' | '2x' | '4x' | null;
-    syncedSpriteSize: { width: number; height: number } | null;
-  } | null>(null);
+  const [avatarSync, setAvatarSync] = useState<AvatarSyncViewState | null>(null);
+  const [objective, setObjective] = useState<string | null>(null);
+
+  // V2 内核与 CharacterCore 实时快照（ControlOwnershipHud & V2 生命中枢单点数据源）
+  const [v2Snapshot, setV2Snapshot] = useState<CharacterCoreSnapshot | null>(null);
+  const [asleep, setAsleep] = useState(false);
+  const [hudBusy, setHudBusy] = useState(false);
+
+  const refreshV2Snapshot = useCallback(async (): Promise<void> => {
+    try {
+      const snap = await window.directorBridge.v2CharacterSnapshot();
+      setV2Snapshot(snap);
+    } catch {
+      // 主进程未就绪时保持上次状态，绝不伪造默认值
+    }
+  }, []);
+
   const refreshAvatarSync = useCallback(async (): Promise<void> => {
     try { setAvatarSync(await window.directorBridge.stardewAvatarState()); } catch { setAvatarSync(null); }
   }, []);
-  useEffect(() => { void refreshAvatarSync(); }, [refreshAvatarSync]);
-  // 创建中心生成/应用、切角色、安装/卸载/开关都会广播；共玩页状态不再过期
-  useEffect(() => window.directorBridge.onStardewAvatarChanged(() => { void refreshAvatarSync(); }), [refreshAvatarSync]);
-  const toggleAvatarSync = async (): Promise<void> => {
-    const next = !(avatarSync?.enabled ?? false);
-    const state = await window.directorBridge.stardewAvatarSetEnabled(next);
-    setAvatarSync(state);
-    if (next && !state.modInstalled) toast('已开启同步：还需要点「安装 Mod」把 WhaleIsleAvatar 装进星露谷 Mods 目录');
-    else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内保持当前外观，不再随桌宠切换');
-  };
-  const toggleAvatarLiveliness = async (): Promise<void> => {
-    const next = !(avatarSync?.liveliness ?? true);
-    const state = await window.directorBridge.stardewAvatarSetLiveliness(next);
-    setAvatarSync(state);
-    toast(next ? '已开启角色灵动动画（脚底阴影、待机微呼吸、走路轻弹跳）' : '已关闭角色灵动动画（恢复静态帧绘制）');
-  };
-  const installAvatarMod = async (): Promise<void> => {
-    const wasUpdate = avatarSync?.modNeedsUpdate === true;
-    const result = await window.directorBridge.stardewAvatarInstall();
-    if (!result.ok) { toast.error(result.error ?? '安装失败'); return; }
-    if (result.compiled === false) toast.error(result.error ?? 'Mod 文件已复制但 DLL 未编译');
-    else toast.success(wasUpdate ? 'WhaleIsleAvatar Mod 已升级到最新版（重启星露谷后生效）' : 'WhaleIsleAvatar Mod 已安装到星露谷 Mods 目录（重启游戏后生效）');
-    await refreshAvatarSync();
-  };
-  const uninstallAvatarMod = async (): Promise<void> => {
-    if (!window.confirm('从星露谷 Mods 目录移除 WhaleIsleAvatar？游戏内会恢复原版外观，需重启游戏后完全生效。')) return;
-    const result = await window.directorBridge.stardewAvatarUninstall();
-    if (!result.ok) { toast.error(result.error ?? '卸载失败'); return; }
-    toast.success('已移除 WhaleIsleAvatar（重启星露谷后恢复原版外观）');
-    await refreshAvatarSync();
-  };
-  const syncAvatarNow = async (): Promise<void> => {
-    const result = await window.directorBridge.stardewAvatarSyncNow();
-    if (!result.ok) { toast.error(result.error ?? '同步失败'); return; }
-    const tierText = result.tier === '4x' ? '4× 高清 Q 版' : result.tier === '2x' ? '2× 精致像素' : '1× 像素表';
-    toast.success(result.sprite === true ? `已把当前角色 ${tierText} 写入星露谷（热切换）` : '已写入当前角色原版外观预设');
-    await refreshAvatarSync();
-  };
-  const openPixelCreator = (): void => {
-    setCreatorTab('pixel');
-    setTab('pet');
-    setCreatorSignal((value) => value + 1);
-  };
+
   const flowRef = useRef<HTMLDivElement | null>(null);
-  // T-M6-27 会话归属：只消费当前 autodrive 会话的事件。
-  //  - 联机端点事件（带 agentId）不进单机会话页
-  //  - 旧 generation / 异 sessionId / 异 gameId 的迟到事件一律丢弃
   const sessionRef = useRef<{ sessionId?: string; gameId?: GameId; generation: number }>({ generation: -1 });
   const activeGameRef = useRef<GameId>(activeGame);
   useEffect(() => { activeGameRef.current = activeGame; }, [activeGame]);
   const acceptEvent = (event: AutodriveEventView): boolean =>
     isCurrentSessionEvent(event, sessionRef.current, activeGameRef.current);
-  // 三游戏桥接探活（T-M6-25）：星露谷页的连接引导条（只读探活，不触发任何游戏动作；页签不可见时停轮询）
+
   const stardewHealth = useGameHealth('stardew', undefined, 15_000, tab === 'stardew' && activeGame === 'stardew');
+
+  useEffect(() => { void refreshAvatarSync(); }, [refreshAvatarSync]);
+  useEffect(() => window.directorBridge.onStardewAvatarChanged(() => { void refreshAvatarSync(); }), [refreshAvatarSync]);
+
+  useEffect(() => {
+    void refreshV2Snapshot();
+    void window.directorBridge.petSleepStatus().then((s) => setAsleep(s.asleep)).catch(() => undefined);
+    const timer = setInterval(() => {
+      void refreshV2Snapshot();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [refreshV2Snapshot]);
 
   useEffect(() => {
     window.directorBridge.onAutodriveEvent((event) => {
       if (!acceptEvent(event)) return;
       setEvents((prev) => (prev.length >= 500 ? [...prev.slice(-499), event] : [...prev, event]));
-      // 事件即代表正在跑（外部启动/重启后 UI 不落后）
       if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt') setRunning(true);
-      // T-M6-73：游戏内键鼠接管会在 BWF 侧上报，事件流与宿主开关双向同步
-      if (event.type === 'human-control') setHumanControl(event.active === true);
-      // T-M6-70：大脑开/关/临时代驾状态实时同步（rule-standin 显示「规则代驾中」）
+      if (event.type === 'human-control') {
+        setHumanControl(event.active === true);
+        void refreshV2Snapshot();
+      }
       if ((event as { type: string }).type === 'brain') {
         const nextMode = (event as unknown as { mode?: string }).mode;
         if (typeof nextMode === 'string') setBrain((prev) => ({ ...prev, mode: nextMode }));
       }
-      // T-M6-72：当日计划与心得本只读同步
       if ((event as { type: string }).type === 'plan') {
         const p = event as unknown as { dayKey?: string; plan?: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string };
         if (typeof p.dayKey === 'string' && Array.isArray(p.plan)) {
@@ -292,7 +220,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       }
     });
     void window.directorBridge.autodriveStatus().then((s) => {
-      // 先记录会话再水合：历史事件同样按当前会话过滤
       sessionRef.current = { sessionId: s.sessionId, gameId: s.gameId, generation: s.generation ?? -1 };
       setRunning(s.running);
       setHumanControl(s.humanControl === true);
@@ -309,7 +236,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       if (ext.dayPlan !== undefined && ext.dayPlan !== null) setDayPlan(ext.dayPlan);
       if (Array.isArray(ext.insights)) setInsights(ext.insights);
     });
-    // T-M6-48：主条只展示 9 角色（+内置小鲸）；CrossPet 的 30 个角色由召唤/彩蛋/跨 AI 跟随单独使用
     const refreshCharacters = (): void => {
       void window.directorBridge.characterList()
         .then((list) => setCharacters(list.filter((character) => !(character.packId ?? '').startsWith('crosspet-'))))
@@ -317,25 +243,15 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     };
     refreshCharacters();
     window.addEventListener('pet:characters-changed', refreshCharacters);
-    window.directorBridge.onOpenPetNotebook(() => {
-      setTab('pet');
-      setNotebookSignal((value) => value + 1);
-    });
-    window.directorBridge.onOpenCreator(() => {
-      setTab('pet');
-      setCreatorSignal((value) => value + 1);
-    });
-    window.directorBridge.onOpenBench(() => {
-      setTab('pet');
-      setBenchSignal((value) => value + 1);
-    });
+    window.directorBridge.onOpenPetNotebook(() => { setTab('pet'); setNotebookSignal((v) => v + 1); });
+    window.directorBridge.onOpenCreator(() => { setTab('pet'); setCreatorSignal((v) => v + 1); });
+    window.directorBridge.onOpenBench(() => { setTab('pet'); setBenchSignal((v) => v + 1); });
     void window.directorBridge.prefsGet().then((p) => {
       if (typeof p.characterId === 'string') setCharacterId(p.characterId);
     }).catch(() => undefined);
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
     void window.directorBridge.voiceBackend().then(setVoiceBackend).catch(() => setVoiceBackend(null));
     void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
-    // BWF HUD 与端口偏好水合：主进程 mods:state 顺带触发一次自愈同步
     void window.directorBridge.modsState().then((s) => {
       if (s.bwfShowHud === true) setBwfHud(true);
       if (typeof s.bwfMcpPort === 'number') {
@@ -343,7 +259,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         setBwfPortDraft(String(s.bwfMcpPort));
       }
     });
-    // 启动即把 Dexie 里的单一配置 + 服务商清单/模型启停同步给主进程
     void Promise.all([
       store.getConfig<DiningProfilePreset[]>('diningProfiles'),
       store.getConfig<string>('activeDiningProfile'),
@@ -371,7 +286,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           ...provider,
           variants,
           protocol: activeVariant?.protocol ?? provider.protocol,
-          // 冷启动也还原选中变体的 Region/Plan（否则同协议不同胶囊的供应商会退回默认项）
           activeRegion: activeVariant?.region ?? provider.activeRegion,
           activePlanType: activeVariant?.planType ?? provider.activePlanType,
           discoveredModels,
@@ -405,7 +319,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     });
     void window.directorBridge.memoryStats().then((m) => setMemoryStats(m));
     void window.directorBridge.guidesLoad().then((g) => { if (g.ok) setGuides(g.topics ?? []); });
-  }, []);
+    void window.directorBridge.autodriveObjectiveStatus().then((status) => setObjective(status.objective)).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshV2Snapshot]);
 
   useEffect(() => {
     if (!running) return;
@@ -429,7 +345,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     if (el) el.scrollTop = el.scrollHeight;
   }, [events.length, tab]);
 
-  // 侧栏碗/记忆 badge 低频轮询（回执扣米与换日写日记不是推送式，15s 足够）
   useEffect(() => {
     const refresh = (): void => {
       void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
@@ -445,11 +360,22 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     localStorage.setItem('wb-game-subtab', gameSubtab);
   }, [tab, activeGame, gameSubtab]);
 
+  // 三态主题监听与根节点同步
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('wb-theme', theme);
-  }, [theme]);
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setSystemDark(mq.matches);
+    const listener = (ev: MediaQueryListEvent): void => setSystemDark(ev.matches);
+    mq.addEventListener('change', listener);
+    return () => mq.removeEventListener('change', listener);
+  }, []);
+
+  const resolvedTheme: 'dark' | 'light' = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+    localStorage.setItem('wb-theme', themeMode);
+  }, [resolvedTheme, themeMode]);
 
   useEffect(() => {
     localStorage.setItem('wb-plugins-v4', JSON.stringify([...plugins]));
@@ -479,27 +405,127 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   }, []);
 
   useEffect(() => {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type === 'objective') {
+        setObjective(event.objective ?? null);
+        break;
+      }
+    }
+  }, [events]);
+
+  // 控制权真实操作（ControlOwnershipHud + F8/F9/F10）
+  const emergencyHalt = useCallback(async (reason = '控制台紧急停止 F8'): Promise<void> => {
+    setHudBusy(true);
+    try {
+      await window.directorBridge.v2EmergencyHalt(reason);
+      if (running) {
+        await window.directorBridge.autodriveStop();
+        setRunning(false);
+        setHumanControl(false);
+      }
+      await refreshV2Snapshot();
+      toast.error('P0 急停已触发：所有动作、音频混音与自主决策已锁定');
+    } finally {
+      setHudBusy(false);
+    }
+  }, [running, refreshV2Snapshot]);
+
+  const resumeAutonomous = useCallback(async (): Promise<void> => {
+    setHudBusy(true);
+    try {
+      if (running && humanControl) {
+        const res = await window.directorBridge.autodriveSetHumanControl(false);
+        setHumanControl(res.humanControl);
+      }
+      await window.directorBridge.v2Resume('autonomous');
+      await refreshV2Snapshot();
+      toast.success('已恢复 AI 自主托管模式');
+    } finally {
+      setHudBusy(false);
+    }
+  }, [running, humanControl, refreshV2Snapshot]);
+
+  const toggleTakeover = useCallback(async (): Promise<void> => {
+    setHudBusy(true);
+    try {
+      const currentlyTakeover =
+        v2Snapshot?.activityState.halted !== true &&
+        (humanControl || v2Snapshot?.activityState.controlMode === 'manual_takeover');
+      const wantTakeover = !currentlyTakeover;
+      if (running) {
+        const res = await window.directorBridge.autodriveSetHumanControl(wantTakeover);
+        if (!res.ok) {
+          toast.error('接管开关失败，请查看主进程日志');
+          return;
+        }
+        setHumanControl(res.humanControl);
+      }
+      await window.directorBridge.v2Resume(wantTakeover ? 'manual_takeover' : 'autonomous');
+      await refreshV2Snapshot();
+      toast(wantTakeover ? '人类已接管控制权（F9）：AI 停止写入动作' : '已交还控制权给 AI（F9）');
+    } finally {
+      setHudBusy(false);
+    }
+  }, [humanControl, running, v2Snapshot?.activityState.controlMode, refreshV2Snapshot]);
+
+  const toggleSleep = useCallback(async (): Promise<void> => {
+    setHudBusy(true);
+    try {
+      const next = !asleep;
+      const res = await window.directorBridge.petSleepAll(next);
+      setAsleep(res.asleep);
+      await window.directorBridge.v2SelectActivity({
+        mode: next ? 'resting' : 'companion',
+        reason: next ? 'F10 切换睡眠安静模式' : 'F10 唤醒小鲸',
+        source: 'user_command',
+      }).catch(() => undefined);
+      await refreshV2Snapshot();
+      toast(next ? '已进入睡眠安静模式（F10）' : '已唤醒小鲸（F10）');
+    } finally {
+      setHudBusy(false);
+    }
+  }, [asleep, refreshV2Snapshot]);
+
+  // 全局快捷键：⌘K / F8 / F9 / F10
+  useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setCmdkOpen((v) => !v);
+        return;
+      }
+      if (e.key === 'F8') {
+        e.preventDefault();
+        void emergencyHalt('快捷键 F8 急停');
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      const inInput = target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+      if (inInput) return;
+      if (e.key === 'F9') {
+        e.preventDefault();
+        void toggleTakeover();
+      } else if (e.key === 'F10') {
+        e.preventDefault();
+        void toggleSleep();
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, []);
+  }, [emergencyHalt, toggleTakeover, toggleSleep]);
 
   const start = async (): Promise<void> => {
     setDriveError(null);
     const res = await window.directorBridge.autodriveStart(activeGame);
     if (res.ok) {
       setRunning(true);
-      // T-M6-27：启动后立刻同步新会话标识，后续 P0 指令才带上正确的 expectedSessionId
       void window.directorBridge.autodriveStatus().then((status) => {
         if (status.sessionId !== undefined) {
           sessionRef.current = { sessionId: status.sessionId, gameId: status.gameId ?? activeGame, generation: status.generation ?? -1 };
         }
       }).catch(() => undefined);
+      await refreshV2Snapshot();
       const gameName = GAME_OPTIONS.find((game) => game.id === activeGame)?.label ?? '当前游戏';
       toast.success(`自动驾驶已启动：接管${gameName}`);
     } else {
@@ -512,26 +538,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     await window.directorBridge.autodriveStop();
     setRunning(false);
     setHumanControl(false);
+    await refreshV2Snapshot();
     toast('自动驾驶已停止：控制权交还主人');
-  };
-
-  /**
-   * T-M6-73 临时接管开关：不动 running（AI 仍在会话里，只是不出手），
-   * 交还时把主进程算出的「接管期间发生了什么」摘要念给主人听。
-   */
-  const toggleHumanControl = async (): Promise<void> => {
-    const want = !humanControl;
-    const res = await window.directorBridge.autodriveSetHumanControl(want);
-    if (!res.ok) {
-      toast.error('接管开关失败，请查看主进程日志');
-      return;
-    }
-    setHumanControl(res.humanControl);
-    if (want) {
-      toast(res.warning ?? 'AI 已停手，现在由你操作');
-    } else {
-      toast(res.summary ?? '已交还给 AI');
-    }
   };
 
   const selectGame = (gameId: GameId): void => {
@@ -539,24 +547,20 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     setActiveGame(gameId);
     setGameSubtab('monitor');
     setEvents([]);
-    // T-M6-27：游戏切换后旧会话的迟到事件不再进入本页（主进程 generation 也会随之推进）
     sessionRef.current = { ...sessionRef.current, gameId };
   };
 
   const selectCharacter = async (id: string): Promise<void> => {
     if (id === characterId) return;
     const result = await window.directorBridge.characterSelect(id);
-    if (!result.ok) {
-      toast.error(result.error ?? '角色切换失败');
-      return;
-    }
+    if (!result.ok) { toast.error(result.error ?? '角色切换失败'); return; }
     setCharacterId(id);
-    // 用户主动切角 → 游戏跟随（后台恢复/召唤不写，避免启动覆盖已应用的像素表）
     if (avatarSync?.enabled === true && avatarSync.modInstalled) {
       void window.directorBridge.stardewAvatarSyncNow()
         .then((sync) => { if (sync.ok) void refreshAvatarSync(); })
         .catch(() => undefined);
     }
+    await refreshV2Snapshot();
     const selected = characters.find((character) => character.id === id);
     toast.success(`已切换陪伴角色：${selected?.displayName ?? id}`);
   };
@@ -579,16 +583,11 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     toast(next.enabled ? '语音已开启' : '已静音：仅字幕与云朵气泡');
   };
 
-  /** BWF 游戏内左上角 MCP 提示 HUD（T-M6-16）：默认关闭；主进程持久化 + /settings 运行时下发 */
   const toggleBwfHud = async (): Promise<void> => {
     const next = !bwfHud;
     setBwfHud(next);
     const res = await window.directorBridge.modsSetBwfHud(next);
-    if (!res.ok) {
-      setBwfHud(!next);
-      toast.error(res.error ?? 'HUD 开关保存失败');
-      return;
-    }
+    if (!res.ok) { setBwfHud(!next); toast.error(res.error ?? 'HUD 开关保存失败'); return; }
     if (res.gameOffline === true) toast(`已保存：HUD ${next ? '显示' : '关闭'}（游戏没在跑，开游戏后自动生效）`);
     else if (res.needsGameRestart === true) toast.warning('已保存，但游戏内还是旧版 Mod——重启一次游戏后生效');
     else toast.success(`游戏内 MCP 提示已${next ? '打开' : '关闭'}（即时生效）`);
@@ -601,18 +600,58 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       return;
     }
     const res = await window.directorBridge.modsSetBwfPort(nextPort);
-    if (!res.ok) {
-      toast.error(res.error ?? '端口保存失败');
-      return;
-    }
+    if (!res.ok) { toast.error(res.error ?? '端口保存失败'); return; }
     setBwfPort(nextPort);
     setEditingBwfPort(false);
     stardewHealth.reprobe();
-    if (res.configSynced === true) {
-      toast.success(`已将工作台与 BWF Mod 端口改为 :${nextPort}（重启星露谷后生效）`);
-    } else {
-      toast.warning(`已保存工作台端口 :${nextPort}（${res.warning ?? '请手动核对 BWF config.json'}）`);
-    }
+    if (res.configSynced === true) toast.success(`已将工作台与 BWF Mod 端口改为 :${nextPort}（重启星露谷后生效）`);
+    else toast.warning(`已保存工作台端口 :${nextPort}（${res.warning ?? '请手动核对 BWF config.json'}）`);
+  };
+
+  const toggleAvatarSync = async (): Promise<void> => {
+    const next = !(avatarSync?.enabled ?? false);
+    const state = await window.directorBridge.stardewAvatarSetEnabled(next);
+    setAvatarSync(state);
+    if (next && !state.modInstalled) toast('已开启同步：还需要点「安装 Mod」把 WhaleIsleAvatar 装进星露谷 Mods 目录');
+    else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内保持当前外观，不再随桌宠切换');
+  };
+
+  const toggleAvatarLiveliness = async (): Promise<void> => {
+    const next = !(avatarSync?.liveliness ?? true);
+    const state = await window.directorBridge.stardewAvatarSetLiveliness(next);
+    setAvatarSync(state);
+    toast(next ? '已开启角色灵动动画' : '已关闭角色灵动动画');
+  };
+
+  const installAvatarMod = async (): Promise<void> => {
+    const wasUpdate = avatarSync?.modNeedsUpdate === true;
+    const result = await window.directorBridge.stardewAvatarInstall();
+    if (!result.ok) { toast.error(result.error ?? '安装失败'); return; }
+    if (result.compiled === false) toast.error(result.error ?? 'Mod 文件已复制但 DLL 未编译');
+    else toast.success(wasUpdate ? 'WhaleIsleAvatar Mod 已升级到最新版' : 'WhaleIsleAvatar Mod 已安装到星露谷 Mods 目录');
+    await refreshAvatarSync();
+  };
+
+  const uninstallAvatarMod = async (): Promise<void> => {
+    if (!window.confirm('从星露谷 Mods 目录移除 WhaleIsleAvatar？游戏内会恢复原版外观，需重启游戏后完全生效。')) return;
+    const result = await window.directorBridge.stardewAvatarUninstall();
+    if (!result.ok) { toast.error(result.error ?? '卸载失败'); return; }
+    toast.success('已移除 WhaleIsleAvatar');
+    await refreshAvatarSync();
+  };
+
+  const syncAvatarNow = async (): Promise<void> => {
+    const result = await window.directorBridge.stardewAvatarSyncNow();
+    if (!result.ok) { toast.error(result.error ?? '同步失败'); return; }
+    toast.success(result.sprite === true ? '已把当前角色精灵表写入星露谷' : '已写入当前角色原版外观预设');
+    await refreshAvatarSync();
+  };
+
+  const cancelObjective = async (): Promise<void> => {
+    const result = await window.directorBridge.autodriveClearObjective();
+    if (!result.ok) { toast.error('取消失败：主进程未响应'); return; }
+    if (result.had === false) toast('当前没有正在推进的多步目标');
+    else toast.success('已取消多步目标，大脑回到日常节奏');
   };
 
   const feedRice = async (): Promise<void> => {
@@ -626,7 +665,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     if (t === '') return;
     const directive = parseDirective(t);
     if (directive) {
-      // T-M6-27：带上当前会话；若 UI 在等待期间被切走，主进程会拒绝而不是误发到新游戏
       void window.directorBridge.autodriveDirective(directive.tool, directive.args, directive.intent, sessionRef.current.sessionId)
         .then((res) => { if (!res.ok) toast.error(res.error ?? '插队失败'); });
       setEvents((prev) => [...prev, { type: 'decision', tool: directive.tool, intent: directive.intent, planner: 'remote' }]);
@@ -641,36 +679,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     });
   };
 
-  const send = (): void => {
-    sendText(input);
-    setInput('');
-  };
+  const send = (): void => { sendText(input); setInput(''); };
 
   const latestState = [...events].reverse().find((e) => e.type === 'state');
-  const receipts = events.filter((e) => e.type === 'receipt');
   const decisions = events.filter((e) => e.type === 'decision');
-  const watchdog = events.filter((e) => e.type === 'watchdog');
-  const lastDecision = decisions[decisions.length - 1];
-  // T-M6-57：当前多步目标（objective 事件是单点事实源；启动时向主进程水合一次）
-  const [objective, setObjective] = useState<string | null>(null);
-  useEffect(() => {
-    void window.directorBridge.autodriveObjectiveStatus().then((status) => setObjective(status.objective)).catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (event?.type === 'objective') {
-        setObjective(event.objective ?? null);
-        break;
-      }
-    }
-  }, [events]);
-  const cancelObjective = async (): Promise<void> => {
-    const result = await window.directorBridge.autodriveClearObjective();
-    if (!result.ok) { toast.error('取消失败：主进程未响应'); return; }
-    if (result.had === false) toast('当前没有正在推进的多步目标');
-    else toast.success('已取消多步目标，大脑回到日常节奏');
-  };
   const currentNav = NAV_FLAT.find((item) => item.id === tab);
   const currentGame = GAME_OPTIONS.find((game) => game.id === activeGame) ?? GAME_OPTIONS[0]!;
   const currentTitle = tab === 'stardew'
@@ -684,22 +696,31 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       .filter((item) => isTabEnabled(item.id, plugins))
       .map((item) => ({ id: `page:${item.id}`, label: item.label, group: '页面', icon: item.icon, run: () => setTab(item.id) }));
     const actions: CommandAction[] = [
+      { id: 'act:halt', label: '急停全部动作与混音', group: '控制权', icon: OctagonAlert, hint: 'F8', run: () => void emergencyHalt('命令面板急停') },
+      { id: 'act:takeover', label: humanControl || v2Snapshot?.activityState.controlMode === 'manual_takeover' ? '交还控制权给 AI' : '人工接管控制权', group: '控制权', icon: Hand, hint: 'F9', run: () => void toggleTakeover() },
+      { id: 'act:sleep', label: asleep ? '唤醒小鲸' : '进入睡眠安静模式', group: '控制权', icon: Moon, hint: 'F10', run: () => void toggleSleep() },
+      { id: 'act:life', label: '打开 V2 生命中枢', group: '页面', icon: Sparkles, hint: '12域', run: () => setTab('life') },
       { id: 'act:drive', label: running ? '停止自动驾驶' : '启动自动驾驶', group: '全局动作', icon: running ? Square : Play, hint: '当前游戏', run: () => void (running ? stop() : start()) },
       { id: 'act:brain', label: brain.mode === 'llm' ? '切换规则日程' : '切换 LLM 大脑', group: '全局动作', icon: Brain, hint: brain.mode, run: () => void switchBrain() },
       { id: 'act:voice', label: voiceOn ? '静音语音' : '开启语音', group: '全局动作', icon: voiceOn ? VolumeX : Volume2, run: () => void toggleVoice() },
       { id: 'act:feed', label: '投喂 5,000 粒米', group: '全局动作', icon: Wheat, hint: '饭碗', run: () => void feedRice() },
-      { id: 'act:theme', label: theme === 'dark' ? '切到浅色主题' : '切到深色主题', group: '全局动作', icon: RotateCcw, run: () => setTheme(theme === 'dark' ? 'light' : 'dark') },
+      { id: 'act:theme', label: resolvedTheme === 'dark' ? '切到浅色主题' : '切到深色主题', group: '主题', icon: RotateCcw, run: () => setThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark') },
+      { id: 'act:theme-sys', label: '主题跟随系统浅深色', group: '主题', icon: Monitor, hint: 'system', run: () => setThemeMode('system') },
       { id: 'act:fish', label: '插队：钓鱼', group: '快捷指令', icon: Radio, hint: '/fish 5', run: () => sendText('/fish 5') },
-      { id: 'act:sleep', label: '插队：回家睡觉', group: '快捷指令', icon: Radio, hint: '/sleep', run: () => sendText('/sleep') },
+      { id: 'act:sleep-game', label: '插队：回家睡觉', group: '快捷指令', icon: Radio, hint: '/sleep', run: () => sendText('/sleep') },
       { id: 'act:state', label: '播报当前状态', group: '快捷指令', icon: Activity, hint: '/state', run: () => sendText('/state') },
       { id: 'act:spray', label: '测试雷区反射（大肥鱼）', group: '快捷指令', icon: ShieldAlert, hint: '0 token', run: () => sendText('大肥鱼') },
     ];
     return [...pages, ...actions];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plugins, running, brain.mode, voiceOn, theme]);
+  }, [plugins, running, humanControl, asleep, v2Snapshot?.activityState.controlMode, brain.mode, voiceOn, resolvedTheme]);
 
   return (
-    <div className={`wb-shell${tab === 'chat' ? ' has-aside' : ''} h-screen w-screen`} data-theme={theme}>
+    <div
+      className={`wb-shell${tab === 'chat' ? ' has-aside' : ''} h-screen w-screen`}
+      data-theme={resolvedTheme}
+      data-theme-mode={themeMode}
+    >
       <div className="ambient" />
       <Sidebar
         tab={tab}
@@ -713,7 +734,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         characters={characters}
         characterId={characterId}
         onSelectCharacter={(id) => void selectCharacter(id)}
-        badges={{ memory: memoryStats !== null ? `${memoryStats.nodes} 节点` : undefined }}
+        badges={{
+          memory: memoryStats !== null ? `${memoryStats.nodes} 节点` : undefined,
+          life: v2Snapshot?.activityState.halted ? '急停' : undefined,
+        }}
       />
       <Topbar
         group={currentNav?.group ?? '工作台'}
@@ -726,7 +750,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         gameId={activeGame}
         gameEnabled={gameEnabled}
         running={running}
-        theme={theme}
+        theme={resolvedTheme}
+        themeMode={themeMode}
         onOpenCommandPalette={() => setCmdkOpen(true)}
         onToggleVoice={() => void toggleVoice()}
         onSwitchBrain={() => {
@@ -735,155 +760,60 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         }}
         onSelectGame={selectGame}
         onToggleDrive={() => void (running ? stop() : start())}
-        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        onToggleTheme={() => setThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark')}
+        onSelectSystemTheme={() => setThemeMode('system')}
       />
 
-      {/* T-M6-73 临时接管条：AI 在跑时常驻，一键在「我来操作 / 交还给 AI」之间切换 */}
-      {running && (
-        <div
-          data-testid="human-control-bar"
-          className="flex items-center gap-3 border-b px-6 py-1.5 text-[11px]"
-          style={{
-            borderColor: 'var(--line)',
-            background: humanControl ? 'color-mix(in oklab, var(--warn, #d97706) 12%, transparent)' : 'transparent',
-            color: 'var(--text-2)',
-          }}
-        >
-          <span>{humanControl ? '你正在操作：AI 只读状态，不发动作' : brain.mode === 'rule-standin' ? 'AI 正在驾驶（规则代驾中）' : 'AI 正在驾驶'}</span>
-          {brain.mode === 'rule-standin' && !humanControl && (
-            <span className="pill" style={{ fontSize: 10, color: 'var(--amber)', borderColor: 'var(--amber-line)', background: 'var(--amber-dim)' }}>
-              规则代驾中
-            </span>
-          )}
-          <button
-            type="button"
-            className="pill"
-            style={{ fontSize: 10, cursor: 'pointer' }}
-            onClick={() => void toggleHumanControl()}
-          >
-            {humanControl ? '交还给 AI' : '我来操作'}
-          </button>
-          {humanControl && <span style={{ color: 'var(--text-3)' }}>在游戏里动键鼠会自动进入此状态；松手后点「交还给 AI」</span>}
-        </div>
-      )}
+      <ControlOwnershipHud
+        displayName={v2Snapshot?.identity.displayName ?? '小鲸'}
+        characterId={v2Snapshot?.identity.characterId ?? 'char_xiaojing'}
+        expression={v2Snapshot?.activityState.expression ?? 'idle'}
+        activityMode={v2Snapshot?.activityState.mode ?? 'companion'}
+        controlMode={v2Snapshot?.activityState.controlMode ?? 'autonomous'}
+        halted={v2Snapshot?.activityState.halted ?? false}
+        running={running}
+        humanControl={humanControl}
+        brainMode={brain.mode}
+        asleep={asleep}
+        busy={hudBusy}
+        onEmergencyHalt={() => void emergencyHalt('ControlOwnershipHud 急停')}
+        onToggleTakeover={() => void toggleTakeover()}
+        onResumeAutonomous={() => void resumeAutonomous()}
+        onToggleSleep={() => void toggleSleep()}
+        onOpenLifeConsole={() => setTab('life')}
+      />
 
       {tab === 'chat' && (
-        <aside className="wb-aside">
-          <div className="card mb-3 px-3.5 py-3">
-            <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
-              <span>get_state 摘要</span>
-              <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 9 }}>{running ? '运行中' : '待命'}</span>
-            </div>
-            <div className="mono space-y-1 text-[10.5px]" style={{ color: 'var(--text-2)' }}>
-              <div>时间 · {latestState?.clock ?? '—'}</div>
-              <div>地点 · {latestState?.location ?? '—'}</div>
-              <div>金钱 · {latestState?.money != null ? `${latestState.money}g` : '—'}</div>
-            </div>
-            {latestState?.stamina != null && latestState.staminaMax != null && (
-              <div className="mt-2">
-                <div className="mono mb-1 flex justify-between text-[9.5px]" style={{ color: 'var(--text-3)' }}>
-                  <span>体力</span><span>{latestState.stamina}/{latestState.staminaMax}</span>
-                </div>
-                <div className="h-1 overflow-hidden rounded-full" style={{ background: 'var(--inset)' }}>
-                  <i className="block h-full" style={{ width: `${Math.round((latestState.stamina / latestState.staminaMax) * 100)}%`, background: 'linear-gradient(90deg,var(--green),var(--blue))' }} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="card mb-3 px-3.5 py-3">
-            <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>动作时间线</div>
-            <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
-              {decisions.slice(-5).reverse().map((d, i) => (
-                <div key={i} className="mono rounded px-1.5 py-1 text-[10px]" style={{ background: 'var(--inset)', color: 'var(--text-2)' }}>
-                  <span style={{ color: d.planner === 'remote' ? 'var(--amber)' : 'var(--blue)' }}>{toolLabel(d.tool)}</span>
-                  <span className="ml-1" style={{ color: 'var(--text-3)' }}>{(d.intent ?? '').slice(0, 26)}</span>
-                </div>
-              ))}
-              {decisions.length === 0 && <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>尚无决策</span>}
-            </div>
-          </div>
-
-          <div className="card mb-3 px-3.5 py-3">
-            <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>快捷 P0</div>
-            <div className="grid grid-cols-2 gap-1">
-              {([['钓鱼', '/fish 5'], ['回农场', '/goto Farm'], ['睡觉', '/sleep'], ['停下', '/stop']] as const).map(([label, cmd]) => (
-                <button key={cmd} className="pill justify-center" style={{ fontSize: 10 }} onClick={() => sendText(cmd)}>{label}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="card px-3.5 py-3">
-            <div className="mb-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>上下文</div>
-            <button className="mb-1 flex w-full items-center justify-between text-[10.5px]" style={{ color: 'var(--text-2)' }} onClick={() => setTab('memory')}>
-              <span>记忆节点</span><span className="mono" style={{ color: 'var(--violet)' }}>{memoryStats?.nodes ?? 0}</span>
-            </button>
-            <button className="flex w-full items-center justify-between text-[10.5px]" style={{ color: 'var(--text-2)' }} onClick={() => setTab('providers')}>
-              <span>攻略专题</span><span className="mono" style={{ color: 'var(--green)' }}>{guides.length}</span>
-            </button>
-          </div>
-        </aside>
+        <ChatAside
+          running={running}
+          latestState={latestState}
+          decisions={decisions}
+          memoryStats={memoryStats}
+          guidesCount={guides.length}
+          onSendCommand={sendText}
+          onSelectTab={setTab}
+        />
       )}
 
       <main className="wb-main">
         {tab === 'chat' && (
-          <div className="flex h-full flex-col">
-            <div className="flex items-center gap-1.5 px-5 py-2.5" style={{ borderBottom: '1px solid var(--stroke)' }}>
-              <span className="pill pill-blue"><span className="pulse-dot" />星露谷共玩</span>
-              <span className="pill" style={{ opacity: 0.55 }}>弹幕陪聊</span>
-              <span className="pill" style={{ opacity: 0.55 }}>点歌台</span>
-              <div className="flex-1" />
-              <button className="pill pill-red" onClick={() => sendText('大肥鱼')} title="0 token 雷区反射">
-                <ShieldAlert size={11} /> 测试雷区
-              </button>
-            </div>
-            <div ref={flowRef} className="flex-1 overflow-y-auto px-6 py-4">
-              <div className="stagger mx-auto max-w-3xl">
-                {events.length === 0 && (
-                  <div className="card mt-10 px-6 py-8 text-center">
-                    <Radio size={22} className="floaty mx-auto mb-3" style={{ color: 'var(--blue)' }} />
-                    <p className="text-sm font-semibold">小鲸待命中</p>
-                    <p className="mt-1.5 text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                      点右上「启动自动驾驶」接管星露谷（需游戏 + BWF Mod MCP 就绪）<br />
-                      直接说中文也行：<span className="mono" style={{ color: 'var(--blue)' }}>先去海滩钓鱼吧</span>
-                    </p>
-                  </div>
-                )}
-                {events.map((e, i) => <EventCard key={i} event={e} objectiveActive={objective !== null} />)}
-              </div>
-            </div>
-            {driveError !== null && <div className="px-6 pb-1 text-xs" style={{ color: 'var(--red)' }} data-drive-error>{driveError}</div>}
-            <div className="relative px-6 pb-4">
-              {input.startsWith('/') && (
-                <div className="absolute bottom-full left-6 right-6 mb-2 overflow-hidden rounded-xl" style={{ background: 'var(--bg-elev)', border: '1px solid var(--stroke-2)', boxShadow: 'var(--shadow-2)' }}>
-                  {SLASH_COMMANDS.filter((c) => c.cmd.toLowerCase().startsWith(input.toLowerCase().split(' ')[0] ?? '')).map((c) => (
-                    <button key={c.cmd} className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[11px] hover:bg-[var(--surface-2)]" onClick={() => { setInput(c.cmd); }}>
-                      <span className="mono" style={{ color: 'var(--blue)' }}>{c.cmd}</span>
-                      <span style={{ color: 'var(--text-3)' }}>{c.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="mx-auto flex max-w-3xl gap-2">
-                <input
-                  data-chat-input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
-                  placeholder="和 小鲸 说话，或 /goto Beach、/fish 5、/sleep 指令插队……"
-                  className="flex-1 px-4 py-2.5 text-sm outline-none transition"
-                  style={{ borderRadius: 18, border: '1px solid var(--stroke-2)', background: 'var(--surface)', color: 'var(--text-1)' }}
-                />
-                <button data-chat-send onClick={send} className="btn-pill primary px-5">
-                  <Send size={12} />发送
-                </button>
-              </div>
-            </div>
+          <ChatView
+            events={events}
+            objective={objective}
+            driveError={driveError}
+            input={input}
+            flowRef={flowRef}
+            onInputChange={setInput}
+            onSend={send}
+            onSendText={sendText}
+          />
+        )}
+        {tab === 'life' && (
+          <div className="h-full overflow-y-auto">
+            <LifeConsoleView snapshot={v2Snapshot} onSnapshotChanged={refreshV2Snapshot} />
           </div>
         )}
-
         {tab === 'memory' && <div className="h-full overflow-y-auto"><MemoryPanel /></div>}
-
         {tab === 'voice' && (
           <div className="h-full overflow-y-auto px-6 py-5">
             <VoiceCenterPanel
@@ -893,7 +823,6 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             />
           </div>
         )}
-
         {tab === 'pet' && (
           <div className="h-full overflow-y-auto px-6 py-5">
             <PetStudioPanel
@@ -912,313 +841,44 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             />
           </div>
         )}
-
         {tab === 'coop' && <CoopPanel />}
-
         {tab === 'stardew' && (
-          <section data-game-panel data-active-game={activeGame} data-active-subtab={gameSubtab} className="h-full overflow-y-auto">
-            <header className="mx-auto flex max-w-[1320px] flex-wrap items-center justify-between gap-2 px-6 pb-2 pt-4">
-              <div className="seg-tabs" role="tablist" aria-label="选择共玩游戏">
-                {GAME_OPTIONS.map((game) => (
-                  <button
-                    key={game.id}
-                    type="button"
-                    role="tab"
-                    data-game-select={game.id}
-                    data-selected={activeGame === game.id ? 'true' : 'false'}
-                    aria-selected={activeGame === game.id}
-                    disabled={!gameEnabled[game.id]}
-                    title={gameEnabled[game.id] ? game.label : `请先在「插件与权限」启用${game.label}`}
-                    className={`seg-tab${activeGame === game.id ? ' on' : ''}`}
-                    onClick={() => selectGame(game.id)}
-                  >
-                    {game.shortLabel}
-                  </button>
-                ))}
-              </div>
-              {activeGame === 'stardew' && plugins.has('mods') && (
-                <div className="seg-tabs" role="tablist" aria-label="星露谷页面">
-                  <button
-                    type="button"
-                    role="tab"
-                    data-game-subtab="monitor"
-                    aria-selected={gameSubtab === 'monitor'}
-                    className={`seg-tab${gameSubtab === 'monitor' ? ' on' : ''}`}
-                    onClick={() => setGameSubtab('monitor')}
-                  >共玩监控</button>
-                  <button
-                    type="button"
-                    role="tab"
-                    data-game-subtab="mods"
-                    aria-selected={gameSubtab === 'mods'}
-                    className={`seg-tab${gameSubtab === 'mods' ? ' on' : ''}`}
-                    onClick={() => setGameSubtab('mods')}
-                  >Mod 管理</button>
-                </div>
-              )}
-            </header>
-            {gameSubtab === 'mods' && activeGame === 'stardew' && plugins.has('mods') && (
-              <div data-mods-page className="mx-auto max-w-[1320px] px-6 pb-6"><ModsPanel /></div>
-            )}
-            {gameSubtab === 'monitor' && activeGame === 'terraria' && plugins.has('terraria') && (
-              <div className="mx-auto max-w-[1320px] px-6 py-3"><TerrariaPanel events={events} running={running} /></div>
-            )}
-            {gameSubtab === 'monitor' && activeGame === 'dst' && plugins.has('dst') && (
-              <div className="mx-auto max-w-[1320px] px-6 py-3">
-                <DstPanel
-                  bridge={{
-                    dstState: () => window.directorBridge.gameDstState(),
-                    dstStart: () => window.directorBridge.autodriveStart('dst'),
-                    dstStop: () => window.directorBridge.autodriveStop(),
-                    dstDirective: (tool, args, intent) => window.directorBridge.autodriveDirective(tool, args, intent, sessionRef.current.sessionId),
-                    onDstEvent: (handler) => window.directorBridge.onAutodriveEvent((event) => {
-                      if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt' || event.type === 'watchdog') handler(event as DstPanelEvent);
-                    }),
-                  }}
-                  endpoint="http://127.0.0.1:18100"
-                />
-              </div>
-            )}
-            {gameSubtab === 'monitor' && activeGame === 'stardew' && plugins.has('stardew') && (
-              <div className="mx-auto max-w-[1320px] px-6 py-3">
-            <GameConnectionBanner gameId="stardew" report={stardewHealth.report} probing={stardewHealth.probing} onReprobe={stardewHealth.reprobe} />
-            <div className="card mb-4 flex flex-wrap items-center gap-2 px-4 py-2.5">
-              <span className="pill pill-violet"><Brain size={11} />{brain.mode === 'llm' ? '智能决策' : '本地规则兜底'}</span>
-              <span className="pill">78 个可用动作</span>
-              <span className="pill pill-amber">30 粒米 / 回执</span>
-              <span className="pill pill-green">攻略 {guides.length} 专题</span>
-              <button
-                data-bwf-hud={bwfHud ? 'on' : 'off'}
-                onClick={() => void toggleBwfHud()}
-                title="游戏画面左上角的 MCP 提示信息（连接/思考/执行状态）——默认关闭不显示"
-                className={`pill cursor-pointer${bwfHud ? ' pill-green' : ''}`}
-              >
-                <Monitor size={11} />游戏内提示 {bwfHud ? '开' : '关'}
-              </button>
-              {editingBwfPort ? (
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px]" style={{ border: '1px solid var(--blue-line)', background: 'var(--inset)' }} data-bwf-port-editor>
-                  <span style={{ color: 'var(--text-3)' }}>MCP :</span>
-                  <input
-                    type="number"
-                    min={1024}
-                    max={65535}
-                    value={bwfPortDraft}
-                    onChange={(event) => setBwfPortDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void saveBwfPort();
-                      if (event.key === 'Escape') { setEditingBwfPort(false); setBwfPortDraft(String(bwfPort)); }
-                    }}
-                    className="mono w-16 bg-transparent text-[11px] outline-none"
-                    style={{ color: 'var(--text-1)' }}
-                    autoFocus
-                  />
-                  <button type="button" className="cursor-pointer font-semibold" style={{ color: 'var(--blue)' }} onClick={() => void saveBwfPort()}>保存</button>
-                  <button type="button" className="cursor-pointer" style={{ color: 'var(--text-3)' }} onClick={() => { setEditingBwfPort(false); setBwfPortDraft(String(bwfPort)); }}>取消</button>
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  data-bwf-port={bwfPort}
-                  onClick={() => { setBwfPortDraft(String(bwfPort)); setEditingBwfPort(true); }}
-                  title="点击修改星露谷 BWF MCP 端口（默认 18088，避开 Amazon Quick 等占用的 18080；保存时自动同步写入 BWF config.json）"
-                  className="pill mono cursor-pointer"
-                >
-                  MCP :{bwfPort}
-                </button>
-              )}
-              <button
-                data-avatar-sync={avatarSync?.enabled === true ? 'on' : 'off'}
-                onClick={() => void toggleAvatarSync()}
-                title="开启后：当前桌宠角色/皮肤会实时同步成星露谷玩家外观（原版预设兜底 + 1×/2×/4× 精灵表覆盖）"
-                className={`pill cursor-pointer${avatarSync?.enabled === true ? ' pill-green' : ''}`}
-              >
-                <Monitor size={11} />同步桌宠形象进游戏 {avatarSync?.enabled === true ? '开' : '关'}
-              </button>
-              {avatarSync !== null && !avatarSync.modInstalled && (
-                <button data-avatar-install onClick={() => void installAvatarMod()} className="pill cursor-pointer" title="把 WhaleIsleAvatar SMAPI Mod 复制进星露谷 Mods 目录">
-                  安装 Mod
-                </button>
-              )}
-              {avatarSync !== null && avatarSync.modInstalled && avatarSync.modNeedsUpdate && (
-                <button data-avatar-upgrade onClick={() => void installAvatarMod()} className="pill pill-amber cursor-pointer" title="仓库已有新版 WhaleIsleAvatar（支持 2×/4× 高清与灵动动画），点击覆盖升级">
-                  升级 Mod
-                </button>
-              )}
-              {avatarSync !== null && avatarSync.modInstalled && !avatarSync.modNeedsUpdate && (
-                <span
-                  data-avatar-mod-status
-                  className={`pill${avatarSync.modCompiled ? '' : ' pill-amber'}`}
-                  style={{ fontSize: 9.5 }}
-                  title={avatarSync.modCompiled
-                    ? 'WhaleIsleAvatar 已安装到星露谷 Mods 目录（游戏启动时加载）'
-                    : 'Mod 文件已复制但 WhaleIsleAvatar.dll 未编译：重新打包或运行 dotnet build 后再安装'}
-                >
-                  {avatarSync.modCompiled ? 'Mod 已安装' : 'Mod 未编译'}
-                </span>
-              )}
-              {avatarSync !== null && avatarSync.modInstalled && (
-                <button data-avatar-uninstall onClick={() => void uninstallAvatarMod()} className="pill cursor-pointer" title="从星露谷 Mods 目录移除 WhaleIsleAvatar（需重启游戏后完全生效）">
-                  卸载 Mod
-                </button>
-              )}
-              {avatarSync?.enabled === true && avatarSync.modInstalled && (
-                <button
-                  data-avatar-liveliness={avatarSync.liveliness ? 'on' : 'off'}
-                  onClick={() => void toggleAvatarLiveliness()}
-                  className={`pill cursor-pointer${avatarSync.liveliness ? ' pill-violet' : ''}`}
-                  title="脚底柔和投影 + 待机微呼吸 + 行走轻弹跳与微倾 + 动作弹性（实时热切换）"
-                >
-                  <Zap size={10} />灵动动画 {avatarSync.liveliness ? '开' : '关'}
-                </button>
-              )}
-              {avatarSync?.enabled === true && avatarSync.modInstalled && avatarSync.syncedCharacterId !== null && (
-                <span
-                  data-avatar-synced
-                  className="pill"
-                  style={{ fontSize: 9.5 }}
-                  title={avatarSync.syncedSpriteSize !== null
-                    ? `星露谷 Mod 目录当前生效：${avatarSync.syncedSpriteSize.width}×${avatarSync.syncedSpriteSize.height}`
-                    : '星露谷 Mod 目录 active-avatar.json 当前生效的角色'}
-                >
-                  游戏内：{avatarSync.syncedDisplayName ?? avatarSync.syncedCharacterId} · {avatarSync.syncedSpriteReady
-                    ? (avatarSync.syncedSpriteTier === '4x' ? '4× 高清 Q 版' : avatarSync.syncedSpriteTier === '2x' ? '2× 精致像素' : '1× 像素表')
-                    : '原版预设'}
-                </span>
-              )}
-              {avatarSync?.enabled === true && avatarSync.modInstalled && avatarSync.syncedCharacterId === null && (
-                <span data-avatar-synced className="pill" style={{ fontSize: 9.5 }} title="还没有写入过 active-avatar.json：切换一次桌宠或点「同步当前」">等待首次同步</span>
-              )}
-              {avatarSync?.enabled === true && avatarSync.modInstalled && (
-                <button data-avatar-sync-now onClick={() => void syncAvatarNow()} className="pill cursor-pointer" title="把当前桌宠角色立即写入星露谷 Mod 目录">
-                  同步当前
-                </button>
-              )}
-              <button data-avatar-resolution onClick={openPixelCreator} className="pill cursor-pointer" title="打开创作中心调整星露谷精灵表清晰度（1× / 2× / 4×）">
-                调清晰度
-              </button>
-              <div className="flex-1" />
-              <span className={`pill ${running ? 'pill-green' : ''}`} style={{ fontSize: 10 }}>{running ? '自动驾驶中' : '待命'}</span>
-            </div>
-
-            {objective !== null && (
-              <div data-objective-bar className="mb-4 flex flex-wrap items-center gap-2 rounded-xl px-4 py-2.5" style={{ border: '1px solid var(--violet-line)', background: 'var(--violet-dim)' }}>
-                <span className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: 'var(--violet)' }}>
-                  <Target size={12} />当前多步目标
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[11.5px]" style={{ color: 'var(--text-1)' }}>{objective}</span>
-                <button type="button" className="btn-pill ghost" data-objective-cancel onClick={() => void cancelObjective()}>
-                  取消目标
-                </button>
-              </div>
-            )}
-            <div className="grid grid-cols-[1.18fr_0.98fr_0.84fr] gap-4">
-              <section className="flex flex-col gap-3">
-                <GameCurrentActionCard
-                  decision={lastDecision}
-                  metrics={[
-                    ['时间', latestState?.clock ?? '—'],
-                    ['体力', latestState?.stamina != null ? `${latestState.stamina}/${latestState.staminaMax ?? '—'}` : '—'],
-                    ['金钱', latestState?.money != null ? `${latestState.money}g` : '—'],
-                  ]}
-                  idleHint="等待自动驾驶启动…"
-                />
-                <GameDecisionTimeline decisions={decisions} objectiveActive={objective !== null} />
-                <div className="card px-4 py-3.5" data-day-plan-panel>
-                  <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
-                    <span>当日计划（只读 · {dayPlan?.dayKey ?? '未生成'}）</span>
-                    {dayPlan?.mood !== undefined && <span className="text-[9.5px]" style={{ color: 'var(--violet)' }}>{dayPlan.mood}</span>}
-                  </div>
-                  {dayPlan?.updateWhy !== undefined && (
-                    <div className="mb-1.5 text-[10px]" style={{ color: 'var(--amber)' }}>调整原因：{dayPlan.updateWhy}</div>
-                  )}
-                  {dayPlan !== null && dayPlan.items.length > 0 ? (
-                    <div className="flex flex-col gap-1.5">
-                      {dayPlan.items.map((item, idx) => (
-                        <div key={`${item.goal}:${idx}`} className="rounded-lg px-2 py-1 text-[10.5px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
-                          <div className="flex items-center gap-1.5">
-                            <span className="rounded px-1 py-px text-[9px]" style={{
-                              color: item.status === 'done' ? 'var(--green)' : item.status === 'in_progress' ? 'var(--blue)' : 'var(--text-3)',
-                              background: 'var(--inset)',
-                            }}>{item.status === 'done' ? '已完成' : item.status === 'in_progress' ? '进行中' : '待办'}</span>
-                            <span style={{ color: 'var(--text-1)' }}>{item.goal}</span>
-                          </div>
-                          {item.why !== '' && <div className="mt-0.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>{item.why}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>开启 LLM 大脑启动后，小鲸起床会自动拟定今日计划。</span>
-                  )}
-                </div>
-                <GameGoalChain goals={STARDEW_GOALS} activeIndex={0} />
-              </section>
-
-              <GameReceiptTimeline
-                receipts={receipts}
-                filter={chatFilter}
-                onFilter={(next) => setChatFilter(next)}
-                emptyHint="游戏连接后，这里会按时间线记录每一步动作与结果。"
-              />
-
-              <section className="flex flex-col gap-3">
-                <div className="card px-4 py-3.5" data-strategy-notebook-panel>
-                  <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
-                    <span>心得本（只读 · 攻略与复盘）</span>
-                    <span className="mono text-[9.5px]" style={{ color: 'var(--green)' }}>{insights.length} 条</span>
-                  </div>
-                  {insights.length > 0 ? (
-                    <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
-                      {insights.slice(-8).reverse().map((ins) => (
-                        <div key={ins.id} className="rounded-lg px-2 py-1.5 text-[10px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
-                          <div className="flex items-center gap-1.5">
-                            <span className="mono font-semibold" style={{
-                              color: ins.verdict === 'adopt' ? 'var(--green)' : ins.verdict === 'defer' ? 'var(--amber)' : ins.verdict === 'refuted' ? 'var(--red)' : 'var(--text-3)',
-                            }}>[{ins.verdict}]</span>
-                            <span style={{ color: 'var(--text-1)' }}>{ins.claim}</span>
-                            <span className="ml-auto text-[9px]" style={{ color: 'var(--text-3)' }}>引用{ins.hits}</span>
-                          </div>
-                          <div className="mt-0.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
-                            条件：{ins.when} · {ins.source} · {ins.why}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>暂无心得：小鲸阅读攻略或夜间复盘后会记在这里。</span>
-                  )}
-                </div>
-                <GameMetricsCard
-                  rows={[
-                    ['回执总数', receipts.length],
-                    ['决策次数', decisions.length],
-                    ['看门狗事件', watchdog.length],
-                    ['攻略专题', guides.length],
-                  ]}
-                />
-                <GameQualityCard events={events} />
-                <GameQuickCommands
-                  commands={STARDEW_QUICK}
-                  onCommand={(key) => sendText(key)}
-                  stopKey="/stop"
-                />
-                <GameDiagnostics
-                  title="高级诊断"
-                  rows={[
-                    ['桥接方式', `BWF Mod 本机服务 (:${bwfPort})`],
-                    ['可用动作', '78 个白名单动作'],
-                    ['卡死策略', '大脑救援问询 + 离线阶梯兜底'],
-                    ['直写工具', '默认关闭（运行期安全锁）'],
-                  ]}
-                  notes={[
-                    '所有动作走 BWF MCP 回执，超时不重发、卡死由看门狗接管；审计写 JSONL。',
-                    '结论与许可证见 docs/REFERENCE-dsh-stardew-blind-whale-farmer.md。',
-                  ]}
-                />
-              </section>
-            </div>
-              </div>
-            )}
-          </section>
+          <GameWorkspaceView
+            activeGame={activeGame}
+            gameSubtab={gameSubtab}
+            gameEnabled={gameEnabled}
+            modsEnabled={plugins.has('mods')}
+            events={events}
+            running={running}
+            brainMode={brain.mode}
+            guidesCount={guides.length}
+            objective={objective}
+            chatFilter={chatFilter}
+            bwfHud={bwfHud}
+            bwfPort={bwfPort}
+            editingBwfPort={editingBwfPort}
+            bwfPortDraft={bwfPortDraft}
+            avatarSync={avatarSync}
+            dayPlan={dayPlan}
+            insights={insights}
+            stardewHealth={stardewHealth}
+            sessionId={sessionRef.current.sessionId}
+            onSelectGame={selectGame}
+            onSetGameSubtab={setGameSubtab}
+            onSetChatFilter={setChatFilter}
+            onToggleBwfHud={() => void toggleBwfHud()}
+            onSetEditingBwfPort={setEditingBwfPort}
+            onSetBwfPortDraft={setBwfPortDraft}
+            onSaveBwfPort={() => void saveBwfPort()}
+            onToggleAvatarSync={() => void toggleAvatarSync()}
+            onToggleAvatarLiveliness={() => void toggleAvatarLiveliness()}
+            onInstallAvatarMod={() => void installAvatarMod()}
+            onUninstallAvatarMod={() => void uninstallAvatarMod()}
+            onSyncAvatarNow={() => void syncAvatarNow()}
+            onOpenPixelCreator={() => { setCreatorTab('pixel'); setTab('pet'); setCreatorSignal((v) => v + 1); }}
+            onCancelObjective={() => void cancelObjective()}
+            onSendText={sendText}
+          />
         )}
         {tab === 'obs' && <div className="h-full overflow-y-auto"><ObsPanel rice={rice} riceCap={riceCap} events={events} /></div>}
         {tab === 'harness' && <div className="h-full overflow-y-auto"><HarnessPanel /></div>}
@@ -1247,220 +907,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
       <CommandPalette open={cmdkOpen} onOpenChange={setCmdkOpen} actions={paletteActions} />
       <Toaster
-        theme={theme}
+        theme={resolvedTheme}
         position="bottom-right"
         toastOptions={{ style: { background: 'var(--surface-solid)', color: 'var(--text-1)', border: '1px solid var(--stroke-2)' } }}
       />
     </div>
   );
-}
-
-function KV({ k, v }: { k: string; v: string }): React.JSX.Element {
-  return (
-    <div className="flex justify-between py-1 text-xs">
-      <span style={{ color: 'var(--text-3)' }}>{k}</span>
-      <span className="mono" style={{ color: 'var(--text-1)' }}>{v}</span>
-    </div>
-  );
-}
-
-function EventCard({ event, objectiveActive = false }: { event: AutodriveEventView; objectiveActive?: boolean }): React.JSX.Element {
-  if (event.type === 'user') {
-    return (
-      <div data-event="user" className="mb-3 flex justify-end">
-        <div
-          className="max-w-[72%] px-4 py-2.5 text-[13px]"
-          style={{
-            borderRadius: 18,
-            background: 'linear-gradient(135deg, rgba(10,132,255,0.20), rgba(10,132,255,0.10))',
-            border: '1px solid var(--blue-line)',
-            color: 'var(--text-1)',
-          }}
-        >
-          {event.summary}
-        </div>
-      </div>
-    );
-  }
-  if (event.type === 'decision' && event.tool === 'think') {
-    return (
-      <div
-        data-event="think"
-        className="mb-3 rounded-[18px] p-3"
-        style={{
-          background: 'linear-gradient(135deg, rgba(191,90,242,0.14), rgba(191,90,242,0.05))',
-          border: '1.5px dashed rgba(191,90,242,0.42)',
-          backdropFilter: 'blur(16px)',
-        }}
-      >
-        <div className="mono flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--violet)' }}>
-          <Brain size={11} />内心戏 · {event.intent?.slice(0, 80)}
-        </div>
-      </div>
-    );
-  }
-  if (event.type === 'objective') {
-    const meta: Record<'set' | 'replaced' | 'cancel' | 'done', { label: string; color: string; bg: string }> = {
-      set: { label: '目标已开始', color: 'var(--violet)', bg: 'var(--violet-dim)' },
-      replaced: { label: '目标被新指令替换', color: 'var(--amber)', bg: 'var(--amber-dim)' },
-      cancel: { label: '目标已取消', color: 'var(--text-2)', bg: 'var(--surface-2)' },
-      done: { label: '目标已完成', color: 'var(--green)', bg: 'var(--green-dim)' },
-    };
-    // T-M6-73 起 reason 联合还包含接管的 switch/in-game/resume，这里只认目标生命周期的四态
-    const reasonKey = event.reason === 'replaced' || event.reason === 'cancel' || event.reason === 'done' ? event.reason : 'set';
-    const view = meta[reasonKey];
-    return (
-      <div data-event="objective" data-objective-reason={event.reason} className="mb-3 rounded-2xl px-3.5 py-2.5" style={{ border: `1px solid ${view.color}`, background: view.bg }}>
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: view.color }}>
-          <Target size={12} />{view.label}
-        </div>
-        {event.objective !== null && event.objective !== undefined && (
-          <div className="mt-1 text-[11.5px]" style={{ color: 'var(--text-2)' }}>{event.objective}</div>
-        )}
-      </div>
-    );
-  }
-  if (event.type === 'decision') {
-    const badge = decisionBadgeOf(event, objectiveActive);
-    return (
-      <div data-event="decision" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--blue-line)', background: 'var(--blue-dim)' }}>
-        <div className="mono flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: 'var(--blue)' }}>
-          <span data-decision-badge={badge.kind} className="rounded px-1.5 py-px text-[9.5px] font-semibold" style={{ color: badge.color, background: badge.bg, border: `1px solid ${badge.color}` }}>{badge.label}</span>
-          <span>{event.planner ?? 'planner'}</span>
-        </div>
-        <div className="mono mt-1 text-sm font-semibold" style={{ color: 'var(--text-1)' }}>{toolLabel(event.tool)}</div>
-        <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{event.intent}</div>
-      </div>
-    );
-  }
-  if (event.type === 'receipt' && (event.tool === 'chat_reply' || (typeof event.tool === 'string' && event.tool.startsWith('reflex_')))) {
-    const isReflex = typeof event.tool === 'string' && event.tool.startsWith('reflex_');
-    return (
-      <div data-event="chat" className="mb-3 flex items-start gap-2.5">
-        <div
-          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-          style={{
-            background: 'linear-gradient(135deg, rgba(120,170,255,0.95), rgba(90,110,240,0.85))',
-            color: '#fff',
-            boxShadow: '0 2px 8px rgba(60,110,255,0.35)',
-          }}
-        >
-          鲸
-        </div>
-        <div className="max-w-[78%]">
-          <div className="mono mb-1 flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--text-3)' }}>
-            <span style={{ color: 'var(--text-2)' }}>小鲸</span>
-            {isReflex && (
-              <span className="rounded px-1 py-px text-[9px]" style={{ background: 'var(--red-dim)', color: 'var(--red)' }}>
-                炸毛反射 · 0 token
-              </span>
-            )}
-          </div>
-          <div
-            className="wb-md px-3.5 py-2.5 text-[13px] leading-relaxed"
-            style={{
-              borderRadius: '4px 16px 16px 16px',
-              background: isReflex ? 'var(--red-dim)' : 'var(--surface)',
-              border: `1px solid ${isReflex ? 'var(--red-line)' : 'var(--stroke-2)'}`,
-              backdropFilter: 'blur(14px)',
-              color: 'var(--text-1)',
-            }}
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.summary ?? ''}</ReactMarkdown>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (event.type === 'receipt') {
-    // T-M6-17 接单卡：聊天下单成功 → 琥珀卡展示「接单 → 工具｜意图」，与她的回话气泡紧邻
-    if (event.tool === 'chat_order') {
-      const summaryText = event.summary ?? '';
-      // T-M6-57：目标完成/取消/替换是生命周期收尾，不再显示成「接单」卡（不报假状态）
-      if (summaryText.startsWith('目标已完成')) {
-        return (
-          <div data-event="chat-order" data-order-done className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--green-line)', background: 'var(--green-dim)' }}>
-            <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--green)' }}><Target size={12} />目标已完成</div>
-            <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{summaryText.replace(/^目标已完成[:：]\s*/, '')}</div>
-          </div>
-        );
-      }
-      if (summaryText.startsWith('已取消多步目标') || summaryText.startsWith('收到新的单步指令')) {
-        return (
-          <div data-event="chat-order" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--stroke-2)', background: 'var(--surface-2)' }}>
-            <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--text-2)' }}><Target size={12} />目标已收尾</div>
-            <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{summaryText}</div>
-          </div>
-        );
-      }
-      const [tool, ...rest] = summaryText.split('｜');
-      return (
-        <div data-event="chat-order" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)' }}>
-          <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--amber)' }}>
-            <Zap size={12} />接单——马上就去做
-            <span style={{ color: 'var(--text-3)' }}>{toolLabel(tool)}</span>
-          </div>
-          <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{rest.join('｜') || event.summary}</div>
-        </div>
-      );
-    }
-    const c = GAME_STATUS_COLOR[event.status ?? 'ERROR'] ?? GAME_STATUS_COLOR.ERROR!;
-    return (
-      <div data-event="receipt" className="mb-3 rounded-2xl p-3" style={{ border: `1px solid ${c.line}`, background: c.bg }}>
-        <div className="mono flex items-center gap-2 text-xs font-semibold" style={{ color: c.text }}>
-          <span>{statusLabel(event.status)}</span>
-          <span style={{ color: 'var(--text-3)' }}>{toolLabel(event.tool)}</span>
-        </div>
-        <div className="mt-1 line-clamp-3 text-xs" style={{ color: 'var(--text-2)' }}>{event.summary}</div>
-      </div>
-    );
-  }
-  if (event.type === 'state') {
-    return (
-      <div data-event="state" className="mono mb-2 text-center text-[10px]" style={{ color: 'var(--text-3)' }}>
-        {event.clock} · {event.location} · {event.stamina}/{event.staminaMax} · {event.money}g
-      </div>
-    );
-  }
-  if ((event as { type: string }).type === 'brain') {
-    const b = event as unknown as { mode?: string; reason?: string };
-    return (
-      <div data-event="brain" className="mono mb-2 text-center text-[10px]" style={{ color: b.mode === 'rule-standin' ? 'var(--amber)' : 'var(--green)' }}>
-        — {b.mode === 'rule-standin' ? '规则代驾中' : 'LLM 大脑已接管'}{b.reason ? `（${b.reason}）` : ''} —
-      </div>
-    );
-  }
-  if ((event as { type: string }).type === 'plan') {
-    const p = event as unknown as { dayKey?: string; reason?: string; plan?: Array<{ goal: string }> };
-    const goals = (p.plan ?? []).slice(0, 3).map((x) => x.goal).join('、');
-    return (
-      <div data-event="plan" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--violet-line)', background: 'var(--violet-dim)' }}>
-        <div className="mono text-[10px] font-semibold" style={{ color: 'var(--violet)' }}>
-          {p.reason === 'update' ? '计划修订' : '今日计划'} · {p.dayKey ?? ''}
-        </div>
-        <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{goals || '已更新计划'}</div>
-      </div>
-    );
-  }
-  if ((event as { type: string }).type === 'insight') {
-    const insEv = event as unknown as { action?: string; usedInsight?: string; insight?: { id?: string; claim?: string; verdict?: string } };
-    const label = insEv.action === 'used' ? `遵循心得 ${insEv.usedInsight ?? ''}` : insEv.action === 'reflected' ? '夜间复盘更新心得' : '记录攻略心得';
-    return (
-      <div data-event="insight" className="mb-3 rounded-2xl p-2.5" style={{ border: '1px solid var(--green-line)', background: 'var(--green-dim)' }}>
-        <div className="mono text-[10px] font-semibold" style={{ color: 'var(--green)' }}>
-          {label} [{insEv.insight?.verdict ?? ''}]
-        </div>
-        <div className="mt-0.5 text-xs" style={{ color: 'var(--text-2)' }}>{insEv.insight?.claim ?? ''}</div>
-      </div>
-    );
-  }
-  if (event.type === 'watchdog') {
-    return (
-      <div data-event="watchdog" className="mb-3 rounded-2xl p-2.5" style={{ border: '1px solid var(--amber-line)', background: 'var(--amber-dim)' }}>
-        <div className="mono text-[10px]" style={{ color: 'var(--amber)' }}>{event.kind === 'stuck' ? '卡死哨兵' : '心跳'}</div>
-        <div className="mt-0.5 text-xs" style={{ color: 'var(--text-2)' }}>{event.detail}</div>
-      </div>
-    );
-  }
-  return <div data-event="cycle-end" className="mono mb-1 text-center text-[10px]" style={{ color: 'var(--text-3)' }}>— 间步 {Math.round((event.delayMs ?? 0) / 1000)}s —</div>;
 }

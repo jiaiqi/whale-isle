@@ -5,14 +5,14 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AudioLines, Blocks, Brain, ChevronDown, Cpu, Fish, Gamepad2, MessageSquare, MonitorPlay, Plus,
-  Search, Terminal, Users, Wheat,
+  Search, Sparkles, Terminal, Users, Wheat,
   type LucideIcon,
 } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE, whaleMarkPaths } from '../../../shared/brand';
 import type { CharacterSummary } from '../bridge';
 
 export type Tab =
-  | 'chat' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'coop' | 'obs' | 'harness' | 'providers' | 'plugins';
+  | 'chat' | 'life' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'coop' | 'obs' | 'harness' | 'providers' | 'plugins';
 
 export interface NavItem {
   id: Tab;
@@ -27,6 +27,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: '交互中枢',
     items: [
       { id: 'chat', label: '聊天 · 小鲸', icon: MessageSquare, group: '交互中枢' },
+      { id: 'life', label: 'V2 生命中枢', icon: Sparkles, group: '交互中枢' },
       { id: 'memory', label: '记忆图谱与日记', icon: Brain, group: '交互中枢' },
     ],
   },

@@ -3,6 +3,14 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased] — 2026-11-26
+
+### Added / Changed（`V2-P1-05`：Obsidian Tide 中控台重构与核心工作流界面）
+
+- **Obsidian Tide 四大签名组件与真实阶段标注** `apps/desktop-host/src/renderer/director/v2/signature-widgets.tsx`：实现 `SonarRing`（投射 9 态 CharacterCore 呼吸/游戏/说话/急停态）、`ReceiptChip`（严格 `PENDING | COMPLETED | FAILED | UNCERTAIN` 四态）、`LicenseBadge`（非商用/GPL/商源清晰区分）、`StageBadge`（P2/P3/P4 未接线能力诚实标注）与置顶常驻 `ControlOwnershipHud`（支持 `F8` 急停、`F9` 接管/交还、`F10` 安静睡眠）。
+- **`App.tsx` Strangler 模块化拆解** `apps/desktop-host/src/renderer/director/{App.tsx,views/*,shell/*,bridge.ts,styles.css,design-tokens.css}`：将 `App.tsx` 从 1,466 行拆减至 914 行，拆出 `ChatView`/`ChatAside`（`views/chat-view.tsx`）、`GameWorkspaceView`（`views/stardew-view.tsx`）及全新「V2 生命中枢」控制台（`views/life-console-view.tsx`，直连 12 域快照、多轨混音与口型预览、四级诚实额度矩阵、五类记忆与级联真删除）；补齐 `system/dark/light` 三态主题、`F8/F9/F10/⌘K` 全局控制并修复 `.wb-top` 下拉菜单层叠上下文。
+- **全量 Electron 45 E2E 回归**：新增 `apps/desktop-host/e2e/v2-obsidian-ui.e2e.spec.ts`，联合 `ui.e2e.spec.ts`（8/8）、`desktop.e2e.spec.ts`、`v2-kernel.e2e.spec.ts` 及 `pnpm verify:gate`（7/7）全部通过。
+
 ## [Unreleased] — 2026-11-25
 
 ### Added（`V2-P1-04`：类人五类记忆与经验成长）

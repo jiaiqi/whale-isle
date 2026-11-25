@@ -17,3 +17,4 @@
 | [P1-voice-mixer-verification.md](./P1-voice-mixer-verification.md) | `V2-P1-02` | `IMPLEMENTED_UNVERIFIED`：`@workbench/voice-runtime` 单测、`verify:gate` 7/7 与 Electron 45 E2E 通过；真实音频听感、云端 TTS Key 与 Windows SAPI 实机待验 |
 | [P1-provider-quota-verification.md](./P1-provider-quota-verification.md) | `V2-P1-03` | `IMPLEMENTED_UNVERIFIED`：四级诚实额度契约与探针（`90.86%` 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 通过；Kimi / MiniMax Coding Plan 真实 Key 待验 |
 | [P1-memory-growth-verification.md](./P1-memory-growth-verification.md) | `V2-P1-04` | 类人五类记忆、模糊印象、情绪召回与级联真删除（37 单测 + `verify:gate` 7/7 + Electron 45 E2E 2/2 全绿） |
+| [P1-obsidian-ui-verification.md](./P1-obsidian-ui-verification.md) | `V2-P1-05` | Obsidian Tide 中控台重构、`App.tsx` Strangler 拆解、四大签名组件与 V2 生命中枢（`verify:gate` 7/7 + 全部 4 个 Electron 45 E2E 套件全绿） |

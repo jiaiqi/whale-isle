@@ -1,7 +1,7 @@
 # Whale Isle V2 — 质量评估与真实验收规范（Evaluation & Verification）
 
 > **铁律**：严禁把静态代码阅读、单元测试、Mock Replay 或无头 E2E 冒充为真机/真实平台验收通过；每完成一个工单，必须在此体系下如实归档证据。  
-> **证据归档目录**：[evidence/README.md](./evidence/README.md) · **P0 实测证据**：[evidence/P0-foundation-verification.md](./evidence/P0-foundation-verification.md) · **P1 实测证据**：[evidence/P1-character-life-verification.md](./evidence/P1-character-life-verification.md) · [evidence/P1-voice-mixer-verification.md](./evidence/P1-voice-mixer-verification.md) · [evidence/P1-provider-quota-verification.md](./evidence/P1-provider-quota-verification.md) · [evidence/P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md)
+> **证据归档目录**：[evidence/README.md](./evidence/README.md) · **P0 实测证据**：[evidence/P0-foundation-verification.md](./evidence/P0-foundation-verification.md) · **P1 实测证据**：[evidence/P1-character-life-verification.md](./evidence/P1-character-life-verification.md) · [evidence/P1-voice-mixer-verification.md](./evidence/P1-voice-mixer-verification.md) · [evidence/P1-provider-quota-verification.md](./evidence/P1-provider-quota-verification.md) · [evidence/P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md) · [evidence/P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md)
 
 ---
 
