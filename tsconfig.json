@@ -36,6 +36,9 @@
       "path": "tools/guide-forager"
     },
     {
+      "path": "tools/evolution-lite"
+    },
+    {
       "path": "packages/memory-graph"
     },
     {

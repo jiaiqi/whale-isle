@@ -30,6 +30,7 @@ export default defineConfig({
         '**/runtime-core/src/index.ts', // 纯 re-export 桶
         '**/live-stream-hub/src/index.ts', // 纯 re-export 桶
         '**/stardew-mods/src/index.ts', // 纯 re-export 桶
+        '**/evolution-lite/src/index.ts', // 纯 re-export 桶
         '**/desktop-host/src/preload/**',
         '**/desktop-host/src/renderer/pet-stage/main.ts',
         '**/desktop-host/src/renderer/pet-stage/widgets/bubbles.ts',

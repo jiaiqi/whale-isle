@@ -1,0 +1,22 @@
+{
+  "name": "@workbench/evolution-lite",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[V2-P0-05] Whale Isle Evolution Engine Lite：生产平面外隔离 Worktree 调度、Coding Agent 适配、自动门禁、独立审查、PR 草案与跨会话恢复",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

@@ -100,6 +100,13 @@ module.exports = {
       from: { path: '^packages/runtime-core' },
       to: { path: '^(apps|services)/|^packages/(?!shared-protocol|plugin-kit|runtime-core)' },
     },
+    {
+      name: 'evolution-lite-isolated-plane',
+      severity: 'error',
+      comment: 'Evolution Plane 与 Runtime Plane 物理隔离：tools/evolution-lite 严禁引入运行期宿主或业务包',
+      from: { path: '^tools/evolution-lite' },
+      to: { path: '^(apps|services|packages)/' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },

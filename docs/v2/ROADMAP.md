@@ -47,7 +47,7 @@
 - **预计风险**：`node:sqlite` 与 `better-sqlite3` 返回数值类型（如 `bigint` changes）差异 → 显式 `Number()` 转换并在单测覆盖。
 
 ### `V2-P0-05`：Evolution Engine Lite 隔离研发闭环落地
-- **状态**：`NEXT`
+- **状态**：`DONE`（2026-11-25 完成）
 - **目标**：在 P0 即落地轻量级隔离研发引擎，支持唯一工单调度、生产目录外独立 Git Worktree、Coding Agent CLI 适配、自动化门禁、独立 Diff/安全审查、PR 草案生成、失败报告与跨会话状态恢复。
 - **依赖**：`V2-P0-03`
 - **实现方案**：新建 `tools/evolution-lite`（Zero external deps beyond `zod`），实现 `EvolutionStateStore`、`GitWorktreeManager`（严格校验路径在生产仓外且禁止动 `main`）、`CliCodingAgentAdapter`、`IndependentReviewer`、`EvolutionLiteOrchestrator` 与 `pnpm evolution:lite` CLI。
@@ -61,7 +61,7 @@
 ## P1：单角色核心闭环（身份、真实语音、桌宠、记忆、供应商与星露谷 AI 自主共玩）
 
 ### `V2-P1-01`：模块化 `CharacterCore`（12 域）与最小 `LifeRuntime`
-- **状态**：`PENDING`
+- **状态**：`NEXT`
 - **目标**：落盘 12 域分权存储与 `LifeRuntime` 最小活动协调器，让小鲸拥有统一身份、目标、承诺、日程与偏好成长模型。
 - **依赖**：`V2-P0-03`、`V2-P0-05`
 - **实现方案**：拆出 `CharacterProfile`、`GoalManager`、`CommitmentLedger` 与 `LifeRuntime` 活动状态仲裁器；迁移 V1 `character-registry` / `character-persona` 至同一权威源，消除主进程双写。

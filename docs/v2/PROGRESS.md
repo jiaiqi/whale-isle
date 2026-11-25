@@ -3,8 +3,8 @@
 > 本文件是面向任何新接手 Coding Agent 的跨会话单点进度恢复文件（不依赖聊天上下文）。每次完成或阻塞工单必须更新本文件。
 
 - **当前开发分支**：`feat/whale-isle-v2`（上游基线 `main` @ `f1ce271`）
-- **当前唯一激活工单**：`V2-P0-05`（Evolution Engine Lite 隔离研发闭环落地）
-- **下一排队工单**：`V2-P1-01`（模块化 `CharacterCore` 12 域 + 最小 `LifeRuntime`）
+- **当前唯一激活工单**：`V2-P1-01`（模块化 `CharacterCore` 12 域与最小 `LifeRuntime`）
+- **下一排队工单**：`V2-P1-02`（真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`）
 
 ## 1. 工单状态快照
 
@@ -13,8 +13,9 @@
 | `V2-P0-01` | `DONE` | 全仓审计与参考审查完成，产物 [TAKEOVER-AUDIT.md](./TAKEOVER-AUDIT.md) |
 | `V2-P0-02` | `DONE` | `@workbench/runtime-core` 落地并接入 Electron 主进程，commit `8369185`，`verify:gate` 7/7 + `v2-kernel.e2e.spec.ts` 通过 |
 | `V2-P0-04` | `DONE` | 完成 Blueprint 01–17 全量需求追踪矩阵、[ADR-002](./ADR-002-v2-architecture-revision.md)、修订架构/路线图与 `AGENTS.md` §5（commit `801394f`） |
-| `V2-P0-03` | `DONE` | `@workbench/local-store` 全量迁移至 `node:sqlite` 并移除 `better-sqlite3`；旧库迁移/回滚/事务/损坏恢复 26/26 通过（分支 92.06%）；Electron 45 `v2StorageCheck()` + `electron-builder --mac dir` 通过 |
-| `V2-P0-05` | `NEXT` | Evolution Engine Lite（隔离 Worktree、Agent 适配、自动门禁、独立审查、PR 草案） |
+| `V2-P0-03` | `DONE` | `@workbench/local-store` 全量迁移至 `node:sqlite` 并移除 `better-sqlite3`（commit `fabf298`）；26/26 单测 + Electron 45 `v2StorageCheck()` + `electron-builder --mac dir` 通过 |
+| `V2-P0-05` | `DONE` | `tools/evolution-lite` 落地：唯一工单队列、隔离 Git Worktree、CLI 适配、门禁、独立审查、PR 草案与跨会话恢复；真实临时 Git 仓库与单测全绿 |
+| `V2-P1-01` | `NEXT` | 模块化 `CharacterCore`（12 域）与最小 `LifeRuntime` |
 
 ## 2. 新会话接手必查项
 
