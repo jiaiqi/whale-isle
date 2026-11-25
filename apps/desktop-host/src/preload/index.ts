@@ -350,6 +350,12 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2VoiceSynthesizePreview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-synthesize-preview', input),
   v2ProviderQuota: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota', input),
   v2ProviderQuotaMatrix: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota-matrix', input),
+  v2MemoryAdd: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-add', input),
+  v2MemoryQuery: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-query', input),
+  v2MemoryConsolidate: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-consolidate', input),
+  v2MemoryCorrect: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-correct', input),
+  v2MemoryHardDelete: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-hard-delete', input),
+  v2MemoryDeletionAudits: (): Promise<unknown[]> => ipcRenderer.invoke('v2:memory-deletion-audits'),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

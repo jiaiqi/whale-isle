@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added（`V2-P1-04`：类人五类记忆与经验成长）
+
+- **五类记忆与审计契约** `packages/shared-protocol/src/{memory.ts,memory.spec.ts,index.ts}`：定义 `MemoryCategory`（`working | episodic | semantic | relational | self`）、`MemoryRetentionPolicy`、`MemoryUncertaintyLevel`、`MemoryCorrectionEntry`、`FuzzyImpression` 与无明文 `MemoryDeletionAudit`。
+- **类人记忆图谱与级联真删除** `packages/memory-graph/src/{store.ts,retrieve.ts,memory-v2.spec.ts}` & `packages/local-store/src/sqlite.ts`：实现情绪半衰期加权与同向召回、模糊印象归纳（`consolidateRelationalImpressions`）、不确定性提示、用户纠正（`correctNode`）、`Self` 保护域与级联真删除（`hardDelete` 清除衍生摘要、原子重写磁盘 JSONL 抹除原文、联动 SQLite `deleteViewerByUid` 并留存无明文审计）。
+- **Electron 宿主接线** `apps/desktop-host/src/{main/v2-kernel-host.ts,main/index.ts,preload/index.ts}`：暴露 `v2:memory-*` IPC 通道，同步更新 `CharacterCore.profile.updateMemoryRef`；扩展 `v2-kernel.e2e.spec.ts` Electron 45 E2E 校验。
+
 ### Added（`V2-P1-03`：模型供应商与四级诚实额度矩阵 — `IMPLEMENTED_UNVERIFIED`）
 
 - **额度矩阵契约** `packages/shared-protocol/src/{quota.ts,quota.spec.ts,index.ts}`：定义 `ProviderQuotaReport`（`official_api` | `verifiable_third_party` | `cli_status` | `unknown` 四级来源、余额、5h/日/周/月窗口、认证状态、错误详情与脱敏摘要）与 `ProviderQuotaMatrix`。

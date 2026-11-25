@@ -23,10 +23,15 @@ import {
   GoalHorizonSchema,
   GoalOriginSchema,
   LifeActivityKindSchema,
+  MemoryCategorySchema,
   PreferenceCategorySchema,
   VoiceProviderKindSchema,
   type CharacterCoreSnapshot,
 } from '@workbench/shared-protocol';
+import {
+  formatMemoryContext,
+  retrieve,
+} from '@workbench/memory-graph';
 import {
   AudioMixer,
   CloudOpenAiTtsProvider,
@@ -43,6 +48,7 @@ import {
 } from '@workbench/model-gateway';
 import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
+import type { MemoryHost } from './memory-host';
 import type { VoiceHost } from './voice-host';
 import {
   hasVaultKey,
@@ -80,7 +86,7 @@ export interface V2KernelHost {
   readonly characterCore: CharacterCore;
   readonly audioMixer: AudioMixer;
   readonly voiceRouter: VoiceProviderRouter;
-  attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost }): void;
+  attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost; memory?: MemoryHost }): void;
   stop(): Promise<void>;
 }
 
@@ -158,6 +164,42 @@ const ProviderQuotaMatrixQuerySchema = z.object({
   includeCli: z.boolean().default(true),
 }).default({ includeCli: true });
 
+const MemoryAddInputSchema = z.object({
+  nodeType: z.enum(['event', 'entity', 'concept', 'summary']).default('event'),
+  category: MemoryCategorySchema,
+  text: z.string().min(1),
+  importance: z.number().min(0).max(1).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  emotionWeight: z.number().min(0).max(1).optional(),
+  emotionValence: z.number().min(-1).max(1).optional(),
+  entityKey: z.string().min(1).optional(),
+  entityDisplayName: z.string().min(1).optional(),
+  pinned: z.boolean().optional(),
+});
+
+const MemoryQueryInputSchema = z.object({
+  query: z.string().min(1),
+  categories: z.array(MemoryCategorySchema).optional(),
+  topN: z.number().int().min(1).max(30).default(8),
+  recordRecall: z.boolean().default(true),
+});
+
+const MemoryConsolidateInputSchema = z.object({
+  entityKey: z.string().min(1).optional(),
+  minInteractions: z.number().int().min(1).max(20).optional(),
+}).default({});
+
+const MemoryCorrectInputSchema = z.object({
+  nodeId: z.string().min(1),
+  newText: z.string().min(1),
+  reason: z.string().min(1).optional(),
+});
+
+const MemoryHardDeleteInputSchema = z.object({
+  nodeId: z.string().min(1),
+  reason: z.string().min(1).optional(),
+});
+
 function hasCliBinary(binary: string): boolean {
   try {
     execFileSync(process.platform === 'win32' ? 'where' : 'which', [binary], {
@@ -230,6 +272,7 @@ export async function createV2KernelHost(options: {
   });
 
   let stopFn: (() => void) | null = null;
+  let memoryHostRef: MemoryHost | null = null;
   const unsubscribers: Array<() => void> = [];
 
   ipcMain.handle('v2:kernel-health', () => kernel.health());
@@ -371,6 +414,90 @@ export async function createV2KernelHost(options: {
     });
     return probeQuotaMatrix(entries, { probeCli: hasCliBinary, timeoutMs: 8_000 });
   });
+  // V2-P1-04：类人五类记忆、模糊印象归纳、纠正与级联真删除
+  ipcMain.handle('v2:memory-add', (_e, rawInput: unknown) => {
+    if (!memoryHostRef) return { ok: false, error: '记忆宿主尚未就绪' };
+    const parsed = MemoryAddInputSchema.parse(rawInput);
+    const node = memoryHostRef.store.addNode({
+      nodeType: parsed.nodeType,
+      category: parsed.category,
+      characterId: characterCore.profile.identity().characterId,
+      text: parsed.text,
+      ...(parsed.importance === undefined ? {} : { importance: parsed.importance }),
+      ...(parsed.confidence === undefined ? {} : { confidence: parsed.confidence }),
+      ...(parsed.emotionWeight === undefined ? {} : { emotionWeight: parsed.emotionWeight }),
+      ...(parsed.emotionValence === undefined ? {} : { emotionValence: parsed.emotionValence }),
+      ...(parsed.entityKey === undefined ? {} : { entityKey: parsed.entityKey }),
+      ...(parsed.entityDisplayName === undefined ? {} : { entityDisplayName: parsed.entityDisplayName }),
+      ...(parsed.pinned === undefined ? {} : { pinned: parsed.pinned }),
+    });
+    characterCore.profile.updateMemoryRef({
+      pinnedCount: memoryHostRef.store.allNodes().filter((n) => n.pinned).length,
+    });
+    return { ok: true, node };
+  });
+  ipcMain.handle('v2:memory-query', (_e, rawInput: unknown) => {
+    if (!memoryHostRef) return { ok: false, error: '记忆宿主尚未就绪', hits: [], context: '' };
+    const parsed = MemoryQueryInputSchema.parse(rawInput);
+    const hits = retrieve(memoryHostRef.store, parsed.query, {
+      topN: parsed.topN,
+      currentEmotionValence: characterCore.emotion.current().valence,
+      recordRecall: parsed.recordRecall,
+      ...(parsed.categories === undefined ? {} : { categories: parsed.categories }),
+    });
+    return {
+      ok: true,
+      context: formatMemoryContext(hits),
+      hits: hits.map((h) => ({
+        id: h.node.id,
+        category: h.node.category ?? 'episodic',
+        text: h.node.text,
+        certainty: h.certainty,
+        score: Number(h.score.toFixed(3)),
+        reasons: h.reasons,
+      })),
+    };
+  });
+  ipcMain.handle('v2:memory-consolidate', (_e, rawInput?: unknown) => {
+    if (!memoryHostRef) return { ok: false, error: '记忆宿主尚未就绪', impressions: [] };
+    const parsed = MemoryConsolidateInputSchema.parse(rawInput ?? {});
+    const impressions = memoryHostRef.store.consolidateRelationalImpressions({
+      ...(parsed.entityKey === undefined ? {} : { entityKey: parsed.entityKey }),
+      ...(parsed.minInteractions === undefined ? {} : { minInteractions: parsed.minInteractions }),
+    });
+    characterCore.profile.updateMemoryRef({
+      lastConsolidatedAt: Date.now(),
+      recentHighlights: impressions.slice(0, 5).map((i) => i.summary),
+    });
+    return { ok: true, impressions };
+  });
+  ipcMain.handle('v2:memory-correct', (_e, rawInput: unknown) => {
+    if (!memoryHostRef) return { ok: false, error: '记忆宿主尚未就绪' };
+    const parsed = MemoryCorrectInputSchema.parse(rawInput);
+    const node = memoryHostRef.store.correctNode(parsed.nodeId, parsed.newText, parsed.reason);
+    return { ok: true, node };
+  });
+  ipcMain.handle('v2:memory-hard-delete', (_e, rawInput: unknown) => {
+    if (!memoryHostRef) return { deleted: false, blockedReason: 'MEMORY_NOT_READY' };
+    const parsed = MemoryHardDeleteInputSchema.parse(rawInput);
+    const result = memoryHostRef.store.hardDelete(parsed.nodeId, {
+      ...(parsed.reason === undefined ? {} : { reason: parsed.reason }),
+      onDeleteLedgerRef: (entityKey) => {
+        const uid = entityKey.replace(/^(viewer|person|user):/, '');
+        const dbPath = join(options.userDataDir, 'workbench.db');
+        const opened = openSqliteStoreWithRecovery(dbPath);
+        try {
+          return opened.store.deleteViewerByUid(uid) > 0;
+        } finally {
+          opened.store.close();
+        }
+      },
+    });
+    return result;
+  });
+  ipcMain.handle('v2:memory-deletion-audits', () =>
+    memoryHostRef ? memoryHostRef.store.deletionAudits() : [],
+  );
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');
@@ -397,7 +524,8 @@ export async function createV2KernelHost(options: {
     characterCore,
     audioMixer,
     voiceRouter,
-    attachV1Bridges({ autodrive, voice }) {
+    attachV1Bridges({ autodrive, voice, memory }) {
+      memoryHostRef = memory ?? null;
       stopFn = () => {
         if (autodrive.runner.isRunning()) autodrive.runner.stop();
         voice.stopAll();

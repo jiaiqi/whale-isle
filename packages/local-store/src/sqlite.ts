@@ -293,6 +293,13 @@ export class SqliteStore {
     return Number(info.changes) > 0;
   }
 
+  /** V2-P1-04 级联真删除：按 uid 清除跨平台常客记仇/好感账本 */
+  deleteViewerByUid(uid: string): number {
+    if (uid.trim() === '') return 0;
+    const info = this.db.prepare('DELETE FROM grudge_ledger WHERE uid = ?').run(uid.trim());
+    return Number(info.changes);
+  }
+
   /** 隐私合规：一键擦除全部观众记忆（下播后可选执行） */
   wipeAllViewers(): number {
     return Number(this.db.prepare('DELETE FROM grudge_ledger').run().changes);

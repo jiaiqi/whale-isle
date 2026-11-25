@@ -56,6 +56,11 @@ interface DirectorV2Window {
       generatedAt: number;
       reports: Array<{ providerId: string; source: string; queryable: boolean }>;
     }>;
+    v2MemoryAdd(input: { category: string; text: string; nodeType?: string; entityKey?: string; entityDisplayName?: string }): Promise<{ ok: boolean; node?: { id: string } }>;
+    v2MemoryQuery(input: { query: string }): Promise<{ ok: boolean; hits: Array<{ id: string; text: string; certainty: string }> }>;
+    v2MemoryConsolidate(input?: { entityKey?: string; minInteractions?: number }): Promise<{ ok: boolean; impressions: Array<{ nodeId: string; interactionCount: number }> }>;
+    v2MemoryHardDelete(input: { nodeId: string; reason?: string }): Promise<{ deleted: boolean; blockedReason?: string }>;
+    v2MemoryDeletionAudits(): Promise<Array<{ targetNodeId: string; targetCategory: string; deletedNodeIds: string[] }>>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -231,6 +236,50 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(matrix.generatedAt).toBeGreaterThan(0);
       expect(matrix.reports.length).toBe(9);
       expect(matrix.reports.some((r) => r.providerId === 'codex-cli' && r.source === 'cli_status')).toBe(true);
+
+      // V2-P1-04：验证五类记忆、Self 保护、模糊印象归纳与级联真删除
+      const memFlow = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const selfMem = await bridge.v2MemoryAdd({
+          nodeType: 'concept',
+          category: 'self',
+          text: 'E2E_SELF_IDENTITY_CORE',
+        });
+        const selfDel = await bridge.v2MemoryHardDelete({ nodeId: selfMem.node!.id, reason: '尝试删 Self' });
+
+        await bridge.v2MemoryAdd({
+          nodeType: 'event',
+          category: 'relational',
+          text: 'E2E常客小明第一次来串门',
+          entityKey: 'viewer:e2e-u1',
+          entityDisplayName: '小明',
+        });
+        await bridge.v2MemoryAdd({
+          nodeType: 'event',
+          category: 'relational',
+          text: 'E2E常客小明第二次送鱼干',
+          entityKey: 'viewer:e2e-u1',
+          entityDisplayName: '小明',
+        });
+        const consolidated = await bridge.v2MemoryConsolidate({ entityKey: 'viewer:e2e-u1', minInteractions: 2 });
+
+        const ephemeral = await bridge.v2MemoryAdd({
+          nodeType: 'event',
+          category: 'episodic',
+          text: 'E2E_SECRET_DELETE_TOKEN_9876',
+        });
+        const delRes = await bridge.v2MemoryHardDelete({ nodeId: ephemeral.node!.id, reason: 'E2E 真删除' });
+        const afterQuery = await bridge.v2MemoryQuery({ query: 'E2E_SECRET_DELETE_TOKEN_9876' });
+        const audits = await bridge.v2MemoryDeletionAudits();
+        return { selfDel, consolidated, delRes, afterQuery, audits, deletedId: ephemeral.node!.id };
+      });
+
+      expect(memFlow.selfDel.deleted).toBe(false);
+      expect(memFlow.selfDel.blockedReason).toBe('PROTECTED_SELF_MEMORY');
+      expect(memFlow.consolidated.impressions.length).toBeGreaterThanOrEqual(1);
+      expect(memFlow.delRes.deleted).toBe(true);
+      expect(memFlow.afterQuery.hits).toHaveLength(0);
+      expect(memFlow.audits.some((a) => a.targetNodeId === memFlow.deletedId)).toBe(true);
     } finally {
       await app.close();
     }

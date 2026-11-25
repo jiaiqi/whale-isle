@@ -303,4 +303,21 @@ describe('V2-P0-03：事务、旧版迁移、回滚与异常恢复', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('deleteViewerByUid 按 uid 级联清理跨平台常客账本且不影响他人', () => {
+    const store = openSqliteStoreWithRecovery(':memory:').store;
+    try {
+      store.upsertViewer({ platform: 'douyin', uid: 'u-del', nickname: '被删常客' });
+      store.upsertViewer({ platform: 'bilibili', uid: 'u-del', nickname: '同ID跨平台' });
+      store.upsertViewer({ platform: 'douyin', uid: 'u-keep', nickname: '保留常客' });
+
+      expect(store.deleteViewerByUid('')).toBe(0);
+      expect(store.deleteViewerByUid('u-del')).toBe(2);
+      expect(store.getViewer('douyin', 'u-del')).toBeNull();
+      expect(store.getViewer('bilibili', 'u-del')).toBeNull();
+      expect(store.getViewer('douyin', 'u-keep')?.nickname).toBe('保留常客');
+    } finally {
+      store.close();
+    }
+  });
 });

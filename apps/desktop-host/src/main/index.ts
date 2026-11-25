@@ -987,7 +987,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       : null,
     characters,
   );
-  v2KernelHost.attachV1Bridges({ autodrive, voice });
+  v2KernelHost.attachV1Bridges({ autodrive, voice, memory });
   modsHost.onBwfPortChange((port) => {
     void autodrive.setEndpoint(bwfMcpEndpoint(port));
   });
