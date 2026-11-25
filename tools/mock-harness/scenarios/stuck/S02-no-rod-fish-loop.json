@@ -15,6 +15,7 @@
     "{\"tool\":\"fish\",\"args\":{},\"intent\":\"再钓一次看看\"}",
     "{\"tool\":\"fish\",\"args\":{},\"intent\":\"再试最后一次\"}"
   ],
+  "allowRuleStandin": true,
   "planner": "llm",
   "expect": {
     "maxCycles": 8,

@@ -65,6 +65,7 @@ export const StuckScenarioSchema = z
     initialState: z.string().min(1),
     rules: z.array(StuckScenarioRuleSchema).min(1),
     freezeUntilMutation: z.boolean().optional(),
+    allowRuleStandin: z.boolean().optional(),
     llmScript: z.array(z.string()).min(1).optional(),
     planner: StuckScenarioPlannerSchema.optional(),
     expect: StuckScenarioExpectSchema,

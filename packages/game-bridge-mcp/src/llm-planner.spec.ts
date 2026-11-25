@@ -222,8 +222,8 @@ describe('DayPlanStore 与计划修订（§4.2）', () => {
   });
 });
 
-describe('BrainSwitch 代驾与恢复探测状态机（§4.7）', () => {
-  it('缺 Key → rule-standin → 配好 Key 后立即恢复 llm，发出双向事件', () => {
+describe('BrainSwitch 安全暂停与显式规则代驾状态机（V2-P1-06 / ADR-002 D-103）', () => {
+  it('默认 allowRuleStandin=false：缺 Key → paused（安全暂停不调用规则）→ 配好 Key 后立即恢复 llm', () => {
     let keyReady = false;
     const events: Array<{ mode: BrainMode; reason: string }> = [];
     const sw = new BrainSwitch({
@@ -231,18 +231,21 @@ describe('BrainSwitch 代驾与恢复探测状态机（§4.7）', () => {
       onModeChange: (mode, reason) => events.push({ mode, reason }),
     });
     expect(sw.shouldTryLlm()).toBe(false);
-    expect(sw.mode).toBe('rule-standin');
+    expect(sw.mode).toBe('paused');
+    expect(sw.isPaused()).toBe(true);
+    expect(sw.isUnavailable()).toBe(true);
     keyReady = true;
     expect(sw.shouldTryLlm()).toBe(true);
     sw.recordSuccess();
     expect(sw.mode).toBe('llm');
-    expect(events.map((e) => e.mode)).toEqual(['rule-standin', 'llm']);
+    expect(events.map((e) => e.mode)).toEqual(['paused', 'llm']);
   });
 
-  it('连续 3 次解析失败 → rule-standin → 满 2 分钟才允许探测恢复 → 成功后交回', () => {
+  it('显式 allowRuleStandin=true：连续 3 次解析失败 → rule-standin → 2 分钟后探测成功恢复', () => {
     let now = 1_000;
     const modes: BrainMode[] = [];
     const sw = new BrainSwitch({
+      allowRuleStandin: true,
       now: () => now,
       probeIntervalMs: 120_000,
       onModeChange: (m) => modes.push(m),
@@ -253,10 +256,9 @@ describe('BrainSwitch 代驾与恢复探测状态机（§4.7）', () => {
     expect(sw.mode).toBe('rule-standin');
 
     now += 60_000;
-    expect(sw.shouldTryLlm()).toBe(false); // 未满 2 分钟继续代驾
+    expect(sw.shouldTryLlm()).toBe(false);
     now += 60_000;
-    expect(sw.shouldTryLlm()).toBe(true); // 满 2 分钟发起探测
-    // 探测再次失败：保持代驾并刷新计时
+    expect(sw.shouldTryLlm()).toBe(true);
     expect(sw.recordParseFailure('探测仍坏')).toBe(true);
     now += 60_000;
     expect(sw.shouldTryLlm()).toBe(false);
@@ -267,7 +269,7 @@ describe('BrainSwitch 代驾与恢复探测状态机（§4.7）', () => {
     expect(modes).toEqual(['rule-standin', 'llm']);
   });
 
-  it('手动 setUserMode(rule ↔ llm) 与单次网关超时代驾', () => {
+  it('手动 setUserMode(rule ↔ llm) 与单次网关超时默认进入 paused（未启用代驾）', () => {
     const sw = new BrainSwitch();
     sw.setUserMode('rule');
     expect(sw.mode).toBe('rule');
@@ -277,7 +279,8 @@ describe('BrainSwitch 代驾与恢复探测状态机（§4.7）', () => {
     sw.setUserMode('llm');
     expect(sw.mode).toBe('llm');
     sw.recordGatewayFailure('ETIMEDOUT');
-    expect(sw.mode).toBe('rule-standin');
+    expect(sw.mode).toBe('paused');
+    expect(sw.isStandin()).toBe(false);
   });
 });
 
@@ -447,8 +450,9 @@ describe('LlmPlanner 全权自主决策核心契约（§4.1–§4.9）', () => {
     expect(d).toMatchObject({ kind: 'act', tool: 'travel_to', args: { location: 'SeedShop' } });
     expect(planner.isStandin()).toBe(false);
 
-    // 连续 2 次不合规 → 进入 rule-standin 代驾
+    // 连续 2 次不合规 → 默认安全暂停；显式 allowRuleStandin=true 时才进入 rule-standin 代驾
     const stubborn = new LlmPlanner({
+      allowRuleStandin: true,
       onBrainChange: (m) => brainModes.push(m),
       chat: async () => ({ content: '{"stance":"decline","reply":"就不去","tool":"fish","args":{}}' }),
     });
@@ -516,11 +520,12 @@ describe('LlmPlanner 全权自主决策核心契约（§4.1–§4.9）', () => {
     expect(planner.hasCommand()).toBe(false);
   });
 
-  it('LlmPlanner 集成代驾恢复：连续 3 次乱码 → rule-standin → 2 分钟后探测成功恢复 llm', async () => {
+  it('LlmPlanner 集成恢复（显式 allowRuleStandin=true 兼容探测恢复；默认则安全暂停）', async () => {
     let now = 0;
     let healthy = false;
     const modes: BrainMode[] = [];
     const planner = new LlmPlanner({
+      allowRuleStandin: true,
       now: () => now,
       probeIntervalMs: 120_000,
       onBrainChange: (m) => modes.push(m),
@@ -529,19 +534,17 @@ describe('LlmPlanner 全权自主决策核心契约（§4.1–§4.9）', () => {
         return { content: '{"tool":"forage","args":{},"intent":"大脑恢复啦，去采集！"}' };
       },
     });
-    // 首轮：晨间计划乱码(#1) + 步决策乱码(#2, #3) → 进入 rule-standin
+    // 首轮：晨间计划乱码(#1) + 步决策乱码(#2, #3) → 显式代驾进入 rule-standin
     const standin1 = await planner.decide(state());
     expect(planner.isStandin()).toBe(true);
     expect(standin1.kind === 'act' ? standin1.intent : '').toContain('规则代驾：');
 
-    // 60s 后仍在代驾期内，不调 LLM
     healthy = true;
     now += 60_000;
     const standin2 = await planner.decide(state());
     expect(planner.isStandin()).toBe(true);
     expect(standin2.kind === 'act' ? standin2.intent : '').toContain('规则代驾：');
 
-    // 满 120s 触发探测：LLM 返回合法 JSON → 立即切回 llm 模式
     now += 60_000;
     const recovered = await planner.decide(state());
     expect(planner.isStandin()).toBe(false);
@@ -568,13 +571,22 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
     await planner.decide(state());
     expect(systems).toEqual(['你是蓝蓝，正在替主人游玩《泰拉瑞亚》。', '你是小克，正在替主人游玩《泰拉瑞亚》。']);
 
-    const offline = new LlmPlanner({
+    const offlinePaused = new LlmPlanner({
       systemPrompt: 'DST 专属提示',
       toolWhitelist: ['gather'],
       fallbackPlanner: { name: 'dst-offline', decide: async () => ({ kind: 'act', tool: 'gather', args: {}, intent: '离线规则' }) },
       chat: async () => { throw new Error('gateway offline'); },
     });
-    expect(await offline.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: '规则兜底：离线规则' });
+    expect(await offlinePaused.decide(state())).toMatchObject({ kind: 'wait' });
+
+    const offlineOptIn = new LlmPlanner({
+      systemPrompt: 'DST 专属提示',
+      toolWhitelist: ['gather'],
+      allowRuleStandin: true,
+      fallbackPlanner: { name: 'dst-offline', decide: async () => ({ kind: 'act', tool: 'gather', args: {}, intent: '离线规则' }) },
+      chat: async () => { throw new Error('gateway offline'); },
+    });
+    expect(await offlineOptIn.decide(state())).toMatchObject({ kind: 'act', tool: 'gather', intent: '规则兜底：离线规则' });
   });
 
   it(`多步目标 objectiveDone 确认/恢复、超过 ${MAX_OBJECTIVE_ROUNDS} 轮清空与跨日清空`, async () => {
@@ -622,13 +634,13 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
     const fromItemsKey = parsePlanUpdate({ items: [{ goal: '备选计划', status: 'invalid' as 'pending' }] });
     expect(fromItemsKey?.replace?.[0]?.status).toBe('pending');
 
-    // 2) BrainSwitch initialMode=rule / 缺 Key 时手动切 llm / 代驾期重复 command 不合规
+    // 2) BrainSwitch initialMode=rule / 缺 Key 时手动切 llm 默认安全暂停 / 代驾期重复 command 不合规
     const ruleSw = new BrainSwitch({ initialMode: 'rule', isKeyAvailable: () => false });
     expect(ruleSw.userMode).toBe('rule');
     ruleSw.setUserMode('llm');
-    expect(ruleSw.mode).toBe('rule-standin');
+    expect(ruleSw.mode).toBe('paused');
     expect(ruleSw.reason).toContain('Key');
-    expect(ruleSw.recordCommandNonCompliance('代驾中仍不合规')).toBe(true);
+    expect(ruleSw.recordCommandNonCompliance('暂停中仍不合规')).toBe(true);
 
     // 3) normalizeToolArgs / pickPrematureReservedEdible / extractDecisionJson 细粒度分支
     expect(normalizeToolArgs({ items: [null, '石头'] }, 'ship_items')).toEqual({ item: '石头' });
@@ -637,14 +649,19 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
     expect(pickPrematureReservedEdible('7: 石头【留着：社区中心“未开包”要交】', '【工艺室】春季采集')).toBe('石头');
     expect(pickPrematureReservedEdible('7: 石头【留着：社区中心“建筑”要交】', '建筑')).toBeNull();
 
-    // 4) 晨间计划抛错直接代驾；晨间计划同条携带 tool 直接复用；步决策越权纠错与网关抛错
-    const errPlanner = new LlmPlanner({ chat: async () => { throw new Error('morning timeout'); } });
+    // 4) 晨间计划抛错默认安全暂停（wait, RulePlanner 0 调用）；晨间计划同条携带 tool 直接复用；步决策越权纠错与网关抛错
+    const ruleSpy = vi.fn(async () => ({ kind: 'act' as const, tool: 'wait', args: {}, intent: 'should not run' }));
+    const errPlanner = new LlmPlanner({
+      fallbackPlanner: { name: 'spy-rule', decide: ruleSpy },
+      chat: async () => { throw new Error('morning timeout'); },
+    });
     errPlanner.setSlot('STARDEW_GAME_PLANNER');
     errPlanner.setGuides({ 钓鱼: 'test' });
     errPlanner.setRecentReceipts(['FAILED fish: 没竿']);
     const errRes = await errPlanner.decide(state());
-    expect(errRes.kind).toBe('act');
-    expect(errPlanner.isStandin()).toBe(true);
+    expect(errRes.kind).toBe('wait');
+    expect(errPlanner.isPaused()).toBe(true);
+    expect(ruleSpy).toHaveBeenCalledTimes(0);
 
     let oneShotCalls = 0;
     const oneShot = new LlmPlanner({
@@ -677,7 +694,7 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
       },
     });
     await stepThrow.decide(state());
-    expect(stepThrow.isStandin()).toBe(true);
+    expect(stepThrow.isPaused()).toBe(true);
 
     // 5) 强制命令：缺表态 / execute 缺合法 tool / infeasible 同时带合法替代 tool
     let cmdIdx = 0;
@@ -695,7 +712,7 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
     });
     badToolCmd.submitCommand('乱来');
     await badToolCmd.decide(state());
-    expect(badToolCmd.isStandin()).toBe(true);
+    expect(badToolCmd.isPaused()).toBe(true);
 
     // 6) asks / 空输入过滤 / todayReceipts>60 裁剪 / 晨间计划返回纯动作或乱码 / 跨日建议过期 / decideForAdapter 重试与 objectiveDone
     badToolCmd.submitSuggestion('   ');
@@ -732,6 +749,7 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
     const adpPlanner = new LlmPlanner({
       systemPrompt: 'Adapter prompt',
       toolWhitelist: ['mine'],
+      allowRuleStandin: true,
       fallbackPlanner: { name: 'wait-fb', decide: async () => ({ kind: 'wait', seconds: 3, reason: 'rest' }) },
       chat: async () => {
         adpIdx += 1;
@@ -820,10 +838,12 @@ describe('S01–S07 卡死回归剧本内存同构验证（免端口绑定验证
       const receipts: string[] = [];
       let scriptIdx = 0;
       const mode = scenario.planner ?? 'rule';
+      const allowStandin = (scenario as { allowRuleStandin?: boolean }).allowRuleStandin === true;
       const llm = mode === 'llm'
         ? new LlmPlanner({
           chat: async () => ({ content: scenario.llmScript?.[scriptIdx++] ?? '（无输出）' }),
           recentReceipts: [],
+          allowRuleStandin: allowStandin,
           fallbackPlanner: new RulePlanner(),
         })
         : null;

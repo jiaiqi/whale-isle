@@ -18,3 +18,4 @@
 | [P1-provider-quota-verification.md](./P1-provider-quota-verification.md) | `V2-P1-03` | `IMPLEMENTED_UNVERIFIED`：四级诚实额度契约与探针（`90.86%` 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 通过；Kimi / MiniMax Coding Plan 真实 Key 待验 |
 | [P1-memory-growth-verification.md](./P1-memory-growth-verification.md) | `V2-P1-04` | 类人五类记忆、模糊印象、情绪召回与级联真删除（37 单测 + `verify:gate` 7/7 + Electron 45 E2E 2/2 全绿） |
 | [P1-obsidian-ui-verification.md](./P1-obsidian-ui-verification.md) | `V2-P1-05` | Obsidian Tide 中控台重构、`App.tsx` Strangler 拆解、四大签名组件与 V2 生命中枢（`verify:gate` 7/7 + 全部 4 个 Electron 45 E2E 套件全绿） |
+| [P1-stardew-ai-first-verification.md](./P1-stardew-ai-first-verification.md) | `V2-P1-06` | `IMPLEMENTED_UNVERIFIED`：清除默认静默规则代驾、三方控制权租约、13 项控制指令与 12 项验收场景仿真（`verify:gate` 7/7 + Electron 45 E2E 全绿；待真实《星露谷》+ SMAPI 实机联调与浸泡） |

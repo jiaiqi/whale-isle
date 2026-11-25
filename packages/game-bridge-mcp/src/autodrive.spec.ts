@@ -364,7 +364,7 @@ describe('RulePlanner 确定性日程', () => {
     expect(events.some((e) => e.type === 'chat-stance' && e.kind === 'command' && e.stance === 'execute')).toBe(true);
     expect(events.some((e) => e.type === 'plan' && e.reason === 'morning')).toBe(true);
     expect(events.some((e) => e.type === 'chat-stance' && e.kind === 'suggestion' && e.stance === 'accept')).toBe(true);
-    expect(events.some((e) => e.type === 'brain' && e.mode === 'rule-standin')).toBe(true);
+    expect(events.some((e) => e.type === 'brain' && e.mode === 'paused')).toBe(true);
     expect(seenPrompts[0]).toContain('主人接管了');
   });
 

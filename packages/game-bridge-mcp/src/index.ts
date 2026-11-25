@@ -1,6 +1,7 @@
 export * from './mcp-client';
 export * from './adapter';
 export * from './action-lock';
+export * from './control-lease';
 export * from './planner';
 export * from './rule-schedule';
 export * from './seed-table';

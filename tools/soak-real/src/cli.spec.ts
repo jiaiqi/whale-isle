@@ -750,7 +750,7 @@ describe('SoakSession', () => {
     ];
     const planner = new LlmPlanner({
       notesDir,
-      chat: async () => ({ content: chatReplies[Math.min(step++, chatReplies.length - 1)] ?? '{"tool":"wait","args":{},"intent":"等待"}' }),
+      chat: async () => ({ content: chatReplies[step++] ?? '{"tool":"wait","args":{},"intent":"等待"}' }),
       slot: 'STARDEW_GAME_PLANNER',
     });
     const adapter = new StardewAdapter(options.endpoint, fakeBwf((tool) => {

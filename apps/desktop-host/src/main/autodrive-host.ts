@@ -11,8 +11,10 @@ import {
   AutodriveRunner,
   gameAdapters,
   LlmPlanner,
+  PausedBrainPlanner,
   RulePlanner,
   type AutodriveEvent,
+  type BrainMode,
   type DayPlanSnapshot,
   type GameAdapter,
   type GameId,
@@ -56,7 +58,7 @@ export interface AutodriveHost {
   /** 外部订阅总线事件（WebUI WS 推送）；订阅即回放最近 100 条，返回退订函数 */
   subscribe(listener: (event: AutodriveEvent & { seq: number }) => void): () => void;
   /** 当前大脑模式（WebUI 快照用） */
-  getBrainMode(): { mode: 'rule' | 'llm'; llmReady: boolean };
+  getBrainMode(): { mode: BrainMode; llmReady: boolean };
   /** 当前接管的游戏（M7 多游戏；默认 stardew） */
   getGameId(): GameId;
   /** T-M6-39：联机 Agent 复用同一 Gateway/key/饭碗，但各自独立 LlmPlanner 实例 */
@@ -255,7 +257,7 @@ export function createAutodriveHost(
 
   interface BrainApplyResult {
     ok: boolean;
-    mode: 'rule' | 'llm';
+    mode: BrainMode;
     llmReady: boolean;
     providers: string[];
     missingKeys: string[];
@@ -299,8 +301,7 @@ export function createAutodriveHost(
     if (Object.keys(keys).length === 0) {
       gateway = null;
       llmPlanner = null;
-      brainMode = 'rule';
-      return { ok: false, mode: 'rule', llmReady: false, providers: [], missingKeys, error: '没有可用的供应商 Key（未配置，或钥匙串解密失败需重填）' };
+      return { ok: false, mode: 'paused', llmReady: false, providers: [], missingKeys, error: '没有可用的供应商 Key（已安全暂停高级自主决策，未启用规则代驾）' };
     }
     gateway = new ModelGateway({
       profile: nextProfile,
@@ -359,19 +360,23 @@ export function createAutodriveHost(
     brainMode = 'llm';
     return { ok: true, mode: brainMode, llmReady: true, providers: brainProviders, missingKeys };
   };
-  const effectiveBrainMode = (): 'llm' | 'rule' | 'rule-standin' =>
-    brainMode === 'llm' && llmPlanner?.isStandin() ? 'rule-standin' : brainMode;
+  const effectiveBrainMode = (): BrainMode => {
+    if (brainMode === 'rule') return 'rule';
+    if (llmPlanner === null || llmPlanner.isPaused()) return 'paused';
+    if (llmPlanner.isStandin()) return 'rule-standin';
+    return 'llm';
+  };
   ipcMain.handle('planner:switch', (_e, mode: string) => {
     if (mode === 'llm' && !llmPlanner) {
       return { ok: false, error: 'LLM 大脑未就绪（供应商 key 未配置或未重启工作台）' };
     }
     brainMode = mode === 'llm' ? 'llm' : 'rule';
     llmPlanner?.brainSwitch.setUserMode(brainMode);
-    runner.setPlanner(brainMode === 'llm' && llmPlanner ? llmPlanner : adapter.createRulePlanner?.() ?? new RulePlanner());
+    applyPlanner();
     return { ok: true, mode: effectiveBrainMode() };
   });
   ipcMain.handle('planner:status', (): {
-    mode: 'llm' | 'rule' | 'rule-standin';
+    mode: BrainMode;
     userMode: 'llm' | 'rule';
     llmReady: boolean;
     providers: string[];
@@ -457,7 +462,7 @@ export function createAutodriveHost(
       return { ok: true, reply: cancelReply };
     }
 
-    const llmOnline = gateway !== null && brainMode === 'llm' && llmPlanner !== null && !llmPlanner.isStandin();
+    const llmOnline = gateway !== null && brainMode === 'llm' && llmPlanner !== null && !llmPlanner.isUnavailable();
 
     // 3) `/自然语言` 强制命令（T-M6-70 §4.3：LLM 在线时只允许 execute/infeasible；离线时走关键词或如实告知）
     if (classified.kind === 'command') {
@@ -773,6 +778,12 @@ export function createAutodriveHost(
         }
       }
     };
+  const pausedPlanner = new PausedBrainPlanner('未配置可用供应商 Key，已安全暂停高级自主决策（可在右上角显式切为规则模式）');
+  const selectConfiguredPlanner = () =>
+    brainMode === 'rule'
+      ? (adapter.createRulePlanner?.() ?? new RulePlanner())
+      : (llmPlanner ?? pausedPlanner);
+
   const createRunner = (): AutodriveRunner => {
     // T-M6-27：每次重建 runner 都开启新会话代次；旧 runner 若仍有迟到事件，generation 不匹配会被丢弃
     const runnerGeneration = ++generation;
@@ -784,12 +795,16 @@ export function createAutodriveHost(
         gameId: runnerGameId,
         generation: runnerGeneration,
       })),
-      endpoint === undefined ? {} : { endpoint },
+      {
+        ...(endpoint === undefined ? {} : { endpoint }),
+        generation: runnerGeneration,
+        gameId: runnerGameId,
+      },
       adapter,
     );
     created = next;
     activeSessionId = next.sessionId;
-    next.setPlanner(brainMode === 'llm' && llmPlanner ? llmPlanner : adapter.createRulePlanner?.() ?? new RulePlanner());
+    next.setPlanner(selectConfiguredPlanner());
     return next;
   };
   runner = createRunner();
@@ -828,9 +843,9 @@ export function createAutodriveHost(
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
-  ipcMain.handle('autodrive:stop', () => {
-    runner.stop();
-    return { ok: true };
+  ipcMain.handle('autodrive:stop', async () => {
+    const cancelled = await runner.emergencyStop('用户停止自动驾驶');
+    return { ok: true, cancelled };
   });
   // T-M6-73 临时接管：进入时取消在飞动作并停掉决策/keepalive，只留 get_state 只读轮询；
   // 退出时把「主人接管期间发生了什么」的摘要交回 UI 与事件流。同时把开关同步到游戏侧
@@ -863,13 +878,17 @@ export function createAutodriveHost(
       ...(warning === undefined ? {} : { warning }),
     };
   });
-  ipcMain.handle('autodrive:directive', (_e, tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string) => {
-    // T-M6-27：渲染层带上它认为的会话；不匹配说明 UI 已切走（旧面板/迟到点击）→ 拒绝，绝不误发到新游戏
-    if (typeof expectedSessionId === 'string' && expectedSessionId !== '' && expectedSessionId !== activeSessionId) {
-      return { ok: false, error: `会话已切换（期望 ${expectedSessionId.slice(0, 8)}，当前 ${activeSessionId.slice(0, 8)}），指令未执行` };
-    }
-    runner.submitDirective(tool, args ?? {}, typeof intent === 'string' ? intent : '远程指令');
-    return { ok: true };
+  ipcMain.handle('autodrive:directive', (_e, tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string, expectedGeneration?: number) => {
+    // T-M6-27 / V2-P1-06：校验会话与世代以及控制权租约，拒绝过期点击与接管期写入
+    return runner.submitScopedDirective(
+      tool,
+      args ?? {},
+      typeof intent === 'string' ? intent : '远程指令',
+      {
+        ...(expectedSessionId === undefined ? {} : { sessionId: expectedSessionId }),
+        ...(typeof expectedGeneration === 'number' ? { generation: expectedGeneration } : {}),
+      },
+    );
   });
   ipcMain.handle('autodrive:status', () => ({
     running: runner.isRunning(),
@@ -880,15 +899,15 @@ export function createAutodriveHost(
     events: [...eventHistory],
   }));
 
-  // 初始/热切换后统一应用 planner（runner 已就绪）
+  // 初始/热切换后统一应用 planner（runner 已就绪；缺 Key 时挂载 PausedBrainPlanner，绝不静默切 RulePlanner）
   const applyPlanner = (): void => {
-    runner.setPlanner(brainMode === 'llm' && llmPlanner ? llmPlanner : adapter.createRulePlanner?.() ?? new RulePlanner());
+    runner.setPlanner(selectConfiguredPlanner());
   };
   applyPlanner();
   // 渲染层同步真实套餐/槽位（Dexie → 主进程）；key 只在主进程 vault 解密
   ipcMain.handle('brain:apply-config', (_e, payload: unknown) => {
     const parsed = BrainRuntimeConfigSchema.safeParse(payload);
-    if (!parsed.success) return { ok: false, error: '配置不合法（Schema 校验失败）', mode: brainMode, llmReady: llmPlanner !== null, providers: brainProviders, missingKeys: brainMissingKeys };
+    if (!parsed.success) return { ok: false, error: '配置不合法（Schema 校验失败）', mode: effectiveBrainMode(), llmReady: llmPlanner !== null, providers: brainProviders, missingKeys: brainMissingKeys };
     const result = buildBrain(parsed.data);
     applyPlanner();
     return result;
@@ -912,7 +931,7 @@ export function createAutodriveHost(
       };
     },
     getBrainMode() {
-      return { mode: brainMode, llmReady: llmPlanner !== null };
+      return { mode: effectiveBrainMode(), llmReady: llmPlanner !== null };
     },
     getGameId() {
       return gameId;

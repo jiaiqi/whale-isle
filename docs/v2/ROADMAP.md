@@ -109,20 +109,20 @@
 - **预计风险**：状态订阅与层叠上下文遮挡 → 已修正 `.wb-top > .wb-hud > .wb-main` 层叠与按需轮询。
 
 ### `V2-P1-06`：星露谷 AI-First 自主游玩与控制权执行闭环（纠偏核心）
-- **状态**：`NEXT`
+- **状态**：`IMPLEMENTED_UNVERIFIED`（代码、租约与 12 项仿真验收通过，`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；详见 [P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md)。因缺真实《星露谷》+ SMAPI 客户端，真机 `F7` 接管与连续浸泡待 `[REAL-DEVICE]` 验证后方可转为 `DONE`）
 - **目标**：彻底清除星露谷默认流程中的静默规则代驾与硬编码情景决策，跑通“自主决策 → 真实执行 → 桌宠同步 → 朋友协商/强制指令/急停/接管/取消 → 经验进记忆”完整真实闭环。
 - **依赖**：`V2-P1-01`、`V2-P1-05`
-- **实现方案**：修改 `BrainSwitch` 与 `LlmPlanner`：缺 Key 或 LLM 异常默认安全暂停并告知主人（`RulePlanner` 仅作用户显式开启或测试模式）；完善在飞动作取消、过期指令拒绝（`generation/sessionId`）与控制权租约。
-- **退役与回滚**：`RulePlanner` 保留作 `opt-in` 测试与离线手动模式。
+- **实现方案**：修改 `BrainSwitch` 与 `LlmPlanner`：缺 Key 或 LLM 异常默认安全暂停并告知主人（`RulePlanner` 仅作用户显式开启或测试模式）；新增 `GameCharacterControlLease` / `PausedBrainPlanner` 完善在飞动作取消、过期指令拒绝（`generation/sessionId`）与 13 项控制权租约语义。
+- **退役与回滚**：`RulePlanner` 保留作 `opt-in`（`allowRuleStandin`）测试与离线手动模式。
 - **验收标准**：通过 Blueprint 17 §12 全部 12 个验收场景（满包自决、自主改变计划、建议协商、强制命令、Stop/Pause/Takeover 真游戏生效）与真机连续浸泡验证。
-- **测试方案**：仿真剧本 `S01–S07` + 新增 LLM 安全停机单测 + 真机星露谷验证（未跑真机前最多标 `IMPLEMENTED_UNVERIFIED`）。
+- **测试方案**：仿真剧本 `S01–S07` + `ai-first-v2.spec.ts` + Electron E2E（已过）+ 真机星露谷验证（待跑真机）。
 - **预计风险**：大模型输出偶发不稳定 → 通过结构化输出校验与动作前置条件拦截兜底。
 
 ---
 
 ## P2：攻略增强、开放生态、完整创作工坊与真实人机联机
 
-- **`V2-P2-01`：攻略学习闭环增强**（来源/版本/Mod 条件/置信度/实玩验证/反例更新，不把攻略当命令）
+- **`V2-P2-01`（`NEXT`）：攻略学习闭环增强**（来源/版本/Mod 条件/置信度/实玩验证/反例更新，不把攻略当命令）
 - **`V2-P2-02`：开放生态与插件进程隔离**（双向 MCP Client/Server + Skills 注册表 + 多 Harness 执行级适配 + 不可信插件独立进程沙箱）
 - **`V2-P2-03`：`MediaGenerationGateway` 与图片生成流水线**（本地生图 Agent + 在线图片 API，候选区审查隔离）
 - **`V2-P2-04`：3D 大模型生成与 Blender 自动化后处理流水线**（Hunyuan3D 等网格生成 + Blender UV/骨骼/BlendShapes/VRM 导出与 QA）

@@ -13,6 +13,7 @@
   "llmScript": [
     "（现场录制：大脑连续超时，未产出可解析决策）"
   ],
+  "allowRuleStandin": true,
   "planner": "llm",
   "expect": {
     "maxCycles": 12,

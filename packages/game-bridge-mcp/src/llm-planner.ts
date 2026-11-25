@@ -42,7 +42,7 @@ export interface InsightEmission {
 export interface LlmPlannerDeps {
   chat(slot: string, messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, opts?: { maxTokens?: number }): Promise<{ content: string }>;
   slot?: string; guides?: Record<string, string>; recentReceipts?: string[]; toolWhitelist?: readonly string[];
-  fallbackPlanner?: Planner; systemPrompt?: string | (() => string); personaPrompt?: string | (() => string);
+  allowRuleStandin?: boolean; fallbackPlanner?: Planner; systemPrompt?: string | (() => string); personaPrompt?: string | (() => string);
   contextProvider?: () => string; isKeyAvailable?: () => boolean; probeIntervalMs?: number; now?: () => number;
   notesDir?: string; saveName?: string; notebook?: StrategyNotebook;
   onPlan?: (event: PlanEmission) => void; onBrainChange?: (mode: BrainMode, reason: string) => void;
@@ -102,6 +102,7 @@ export class LlmPlanner implements Planner {
     if (deps.onInsight !== undefined) this.onInsight = deps.onInsight;
     this.brainSwitch = new BrainSwitch({
       initialMode: 'llm',
+      ...(deps.allowRuleStandin === undefined ? {} : { allowRuleStandin: deps.allowRuleStandin }),
       ...(deps.isKeyAvailable === undefined ? {} : { isKeyAvailable: deps.isKeyAvailable }),
       ...(deps.probeIntervalMs === undefined ? {} : { probeIntervalMs: deps.probeIntervalMs }),
       now: this.now,
@@ -119,7 +120,9 @@ export class LlmPlanner implements Planner {
     if (cb.onBrainChange !== undefined) this.brainSwitch.setModeChangeListener(cb.onBrainChange);
   }
 
+  isPaused(): boolean { return this.brainSwitch.isPaused(); }
   isStandin(): boolean { return this.brainSwitch.isStandin(); }
+  isUnavailable(): boolean { return this.brainSwitch.isUnavailable(); }
   get asks(): number { return this.askCount; }
   setGuides(guides: Record<string, string>): void { this.deps.guides = guides; this.guideLibrary.setGuides(guides); }
   setSaveName(saveName: string): void { this.notebook.bindSave(saveName); }
@@ -203,6 +206,9 @@ export class LlmPlanner implements Planner {
   }
 
   private async standinDecision(state: GameStateSnapshot): Promise<PlannerDecision> {
+    if (this.brainSwitch.isPaused()) {
+      return { kind: 'wait', seconds: 15, reason: `AI 安全暂停：${this.brainSwitch.reason || 'LLM 暂不可用，等待用户处理（未启用规则代驾）'}` };
+    }
     const dayKey = this.planDay || `${state.season}${state.day}`;
     if (this.fallbackSyncedDay !== dayKey) {
       this.fallbackSyncedDay = dayKey;
@@ -481,7 +487,10 @@ export class LlmPlanner implements Planner {
         }
         const reason = decision === null ? '上一条输出里没有解析出 {"tool":...} 一行 JSON' : `"${decision.tool}" 不在当前游戏白名单里`;
         messages.push({ role: 'assistant', content: res.content }, { role: 'user', content: `${reason}。只可调用这些工具：${[...this.allowedTools].join(', ')}。重新选择一个动作，只输出一行 JSON。` });
-      } catch { /* 网关错误重试一次后回落当前游戏规则规划器 */ }
+      } catch { /* 网关错误重试一次后按安全策略停机或显式兜底 */ }
+    }
+    if (this.deps.allowRuleStandin !== true) {
+      return { kind: 'wait', seconds: 15, reason: 'AI 适配器规划异常，已安全暂停高级自主决策（未启用规则兜底）' };
     }
     const fallback = await this.fallback.decide(state);
     return fallback.kind === 'act' ? { ...fallback, intent: `规则兜底：${fallback.intent}` } : fallback;

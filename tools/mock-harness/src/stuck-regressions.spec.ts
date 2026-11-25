@@ -101,6 +101,7 @@ async function runScenario(scenario: StuckScenario, responseMode: 'json' | 'sse'
     llm = new LlmPlanner({
       chat: scriptedChat(scenario.llmScript ?? []),
       recentReceipts: [],
+      allowRuleStandin: scenario.allowRuleStandin === true,
       fallbackPlanner: new RulePlanner(),
     });
     inner = llm;

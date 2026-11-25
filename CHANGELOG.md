@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P1-06`：星露谷 AI-First 自主游玩与控制权执行闭环 — `IMPLEMENTED_UNVERIFIED`）
+
+- **三方控制权租约与 13 项控制指令** `packages/game-bridge-mcp/src/control-lease.ts`：新增 `GameCharacterControlLease`（`ai | human | paused | halted` 与 TTL 租约）、`PausedBrainPlanner`（AI 安全暂停等待器）及 `parseControlCommand`（覆盖 `Stop / Pause AI / Resume AI / Take Over / Release Control / Follow Me / Stay Here / Do This / Go Fish / Go Mine / Cancel Task / What Are You Doing? / Show Plan` 13 项控制语义）。
+- **清除默认静默规则代驾** `packages/game-bridge-mcp/src/{brain-switch.ts,llm-planner.ts}` & `apps/desktop-host/src/main/autodrive-host.ts`：缺 Key 或 LLM 连续异常默认切换 `'paused'` 安全暂停并提示主人，不再静默落入 `RulePlanner`（仅保留 `allowRuleStandin` 显式 opt-in 手动/测试模式）。
+- **世代隔离、急停联动与 HUD 状态** `packages/game-bridge-mcp/src/autodrive.ts`、`apps/desktop-host/src/{main/v2-kernel-host.ts,renderer/director/v2/signature-widgets.tsx}`：接入 `submitScopedDirective`（`expectedSessionId` + `expectedGeneration` 过期拒收）、动作前置控制租约门禁、V2 急停触发 `runner.emergencyStop` 与 HUD `'paused'` / `'rule'` 诚实徽章。
+- **全量门禁与 E2E 回归**：新增 `ai-first-v2.spec.ts` 覆盖 Blueprint 17 §12 12 项场景，修正 `tools/soak-real/src/cli.spec.ts` `chatReplies` 索引越界夹紧问题；`pnpm verify:gate`（7/7）与 4 个 Electron 45 E2E 套件全绿，待真实《星露谷》+ SMAPI 客户端实机联调与浸泡。
+
 ### Added / Changed（`V2-P1-05`：Obsidian Tide 中控台重构与核心工作流界面）
 
 - **Obsidian Tide 四大签名组件与真实阶段标注** `apps/desktop-host/src/renderer/director/v2/signature-widgets.tsx`：实现 `SonarRing`（投射 9 态 CharacterCore 呼吸/游戏/说话/急停态）、`ReceiptChip`（严格 `PENDING | COMPLETED | FAILED | UNCERTAIN` 四态）、`LicenseBadge`（非商用/GPL/商源清晰区分）、`StageBadge`（P2/P3/P4 未接线能力诚实标注）与置顶常驻 `ControlOwnershipHud`（支持 `F8` 急停、`F9` 接管/交还、`F10` 安静睡眠）。

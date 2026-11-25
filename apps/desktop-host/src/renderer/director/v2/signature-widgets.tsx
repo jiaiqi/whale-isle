@@ -332,7 +332,7 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
       {running && (
         <span className="pill pill-blue" style={{ fontSize: 10 }}>
           <Brain size={10} />
-          <span>{brainMode === 'rule-standin' ? '规则代驾中' : '游戏接管中'}</span>
+          <span>{brainMode === 'paused' ? 'AI 安全暂停' : brainMode === 'rule-standin' ? '规则代驾中' : brainMode === 'rule' ? '手动规则模式' : '游戏接管中'}</span>
         </span>
       )}
 

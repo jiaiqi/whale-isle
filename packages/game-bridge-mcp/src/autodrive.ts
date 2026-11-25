@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { ActionLock, StuckSentinel } from './action-lock';
 import { StardewAdapter, type GameAdapter, type GameBridgeTransport } from './adapter';
 import type { BrainMode } from './brain-switch';
+import { GameCharacterControlLease, type GameCharacterControlLeaseState } from './control-lease';
 import type { DayPlanItem } from './day-plan';
 import type { ChatStanceEmission, PlanEmission } from './llm-planner';
 import { parseGameState, RulePlanner, type Planner, type PlannerDecision } from './planner';
@@ -77,6 +78,12 @@ export function describeHumanSession(
 
 export interface AutodriveOptions {
   endpoint?: string;
+  /** 宿主会话代次（T-M6-27 / V2-P1-06：隔离旧会话在途指令） */
+  generation?: number;
+  /** 关联主角色身份标识 */
+  characterId?: string;
+  /** 关联游戏 ID */
+  gameId?: string;
   /** 死循环防护：单次 start() 内最大循环数（0/undefined = 无限——生产默认无限，测试设上限） */
   maxCycles?: number;
   /** 步间延迟（真实游戏节奏：BWF 动作耗时按游戏时间推进，间步不用太久） */
@@ -99,6 +106,8 @@ export const PLAYER_IN_CONTROL_MARKER = '【玩家接管中】';
 export class AutodriveRunner {
   /** 会话标识：宿主事件出站与 P0 指令入站都以它为归属键（T-M6-27） */
   readonly sessionId: string = randomUUID();
+  readonly generation: number;
+  readonly controlLease: GameCharacterControlLease;
   private running = false;
   /** start() 重入锁：并发的两次 start（双击/外部+UI）只能启动一个循环 */
   private starting = false;
@@ -148,6 +157,14 @@ export class AutodriveRunner {
       (text) => this.adapter.extractClock(text),
     );
     this.planner = new RulePlanner();
+    this.generation = options.generation ?? 0;
+    this.controlLease = new GameCharacterControlLease({
+      characterId: options.characterId ?? 'char_xiaojing',
+      gameId: options.gameId ?? 'stardew',
+      sessionId: this.sessionId,
+      generation: this.generation,
+      ...(options.now === undefined ? {} : { now: options.now }),
+    });
     this.lastMutationAt = (options.now ?? Date.now)();
   }
 
@@ -158,6 +175,68 @@ export class AutodriveRunner {
       onBrainChange: (mode, reason) => this.onEvent({ type: 'brain', mode, reason }),
       onChatStance: (ev) => this.onEvent({ type: 'chat-stance', ...ev }),
     });
+  }
+
+  /** P0 带作用域与控制权租约校验的插队指令（V2-P1-06：拒绝过期世代/跨会话/急停/接管期写入） */
+  submitScopedDirective(
+    tool: string,
+    args: Record<string, unknown>,
+    intent: string,
+    scope?: { sessionId?: string; generation?: number },
+  ): { ok: boolean; error?: string } {
+    const check = this.controlLease.validateDirective(scope);
+    if (!check.ok) {
+      return { ok: false, ...(check.error === undefined ? {} : { error: check.error }) };
+    }
+    this.pendingDirective = { tool, args, intent };
+    return { ok: true };
+  }
+
+  /** P0 紧急停止：立即停循环、锁租约并向游戏侧发送 cancel_action 中止在飞动作 */
+  async emergencyStop(reason = '用户触发紧急停止 Stop'): Promise<boolean> {
+    this.running = false;
+    this.pendingDirective = null;
+    this.controlLease.emergencyStop(reason);
+    this.onEvent({ type: 'watchdog', kind: 'stuck', detail: `紧急停止已触发：${reason}` });
+    return this.lock.cancel(reason).catch(() => false);
+  }
+
+  /** 安全暂停 AI 高级自主决策，保留宿主观测与快速恢复能力 */
+  async pauseAi(reason = 'AI 安全暂停，等待主人确认或恢复'): Promise<void> {
+    this.controlLease.pauseAi(reason);
+    this.pendingDirective = null;
+    await this.lock.cancel('pause-ai').catch(() => false);
+    this.onEvent({ type: 'watchdog', kind: 'heartbeat', detail: reason });
+  }
+
+  /** 从安全暂停或急停恢复到 AI 协同自主 */
+  resumeAi(reason = '主人恢复 AI 协同控制'): boolean {
+    return this.controlLease.resumeAi(reason);
+  }
+
+  /** 当前完整观测与控制状态快照（响应 What Are You Doing? / Show Plan） */
+  inspectStatus(): {
+    sessionId: string;
+    generation: number;
+    running: boolean;
+    humanControl: boolean;
+    lease: GameCharacterControlLeaseState;
+    objective: string | null;
+    planner: string;
+    lastState: HumanSessionSnapshot | null;
+    plannerDebug: Record<string, unknown> | null;
+  } {
+    return {
+      sessionId: this.sessionId,
+      generation: this.generation,
+      running: this.running,
+      humanControl: this.humanControl,
+      lease: this.controlLease.snapshot(),
+      objective: this.pendingObjective,
+      planner: this.planner.name,
+      lastState: this.lastStateSnapshot,
+      plannerDebug: this.planner.debugSnapshot?.() ?? null,
+    };
   }
 
   /** 人工/远程 P0 插队：下一次循环优先执行（不重发语义——插队的是新动作） */
@@ -233,6 +312,7 @@ export class AutodriveRunner {
       this.humanSource = reason;
       this.humanSince = clock();
       this.humanStartSnapshot = this.lastStateSnapshot;
+      this.controlLease.takeOverByHuman(reason === 'in-game' ? '游戏内键鼠接管' : '控制台接管');
       // 接管期间旧的卡死/熔断计数不再有意义
       this.sentinel.reset();
       this.stallCount = 0;
@@ -256,6 +336,7 @@ export class AutodriveRunner {
     this.humanSource = null;
     this.humanSince = null;
     this.humanStartSnapshot = null;
+    this.controlLease.releaseHumanControl('主人交还控制权给 AI');
     // 交还后从「现在」重新计 keepalive，避免刚松手就补一条无谓 keepalive；同时把介入差异摘要交给 planner
     this.lastMutationAt = clock();
     this.sentinel.reset();
@@ -271,6 +352,9 @@ export class AutodriveRunner {
       const alive = await this.adapter.ping();
       if (!alive) throw new Error(this.adapter.unreachableMessage);
       if (this.running) return; // ping 期间可能被另一路 start 抢先
+      if (this.controlLease.owner === 'halted' || this.controlLease.owner === 'paused') {
+        this.controlLease.resumeAi('重新启动自动驾驶');
+      }
       this.running = true;
       const task = this.loop();
       this.loopTask = task;
@@ -414,7 +498,11 @@ export class AutodriveRunner {
           // 不 continue：让 planner 尝试其他能解除暂停的动作（如 travel_to/节日）。
         }
 
-        // 3. 决策（P0 插队 > Planner）；团队目标只注入 planner 上下文，不直接变成工具调用
+        // 3. 决策（P0 插队 > Planner）；租约未授权（暂停/急停/接管）期间严禁调用 Planner 或发游戏写入
+        if (!this.controlLease.canAiAct()) {
+          await sleep(pollDelay);
+          continue;
+        }
         if (this.pendingObjective !== null) {
           this.planner.setObjective?.(this.pendingObjective);
           this.pendingObjective = null;
@@ -428,6 +516,10 @@ export class AutodriveRunner {
           fromDirective = true;
         } else {
           decision = await this.planner.decide(state);
+        }
+
+        if (!this.running || !this.controlLease.canAiAct()) {
+          continue;
         }
 
         // 4. 执行

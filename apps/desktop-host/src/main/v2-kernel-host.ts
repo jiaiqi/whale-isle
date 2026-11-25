@@ -527,7 +527,7 @@ export async function createV2KernelHost(options: {
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
       stopFn = () => {
-        if (autodrive.runner.isRunning()) autodrive.runner.stop();
+        void autodrive.runner.emergencyStop('V2 紧急停止');
         voice.stopAll();
       };
       const unsub = autodrive.subscribe((event) => {
