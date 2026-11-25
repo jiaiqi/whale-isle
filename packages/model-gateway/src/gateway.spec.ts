@@ -686,4 +686,45 @@ describe('ModelGateway · Anthropic 协议', () => {
     expect(receipt.route).toEqual({ providerId: 'siliconflow', modelId: 'deepseek-v3', attempt: 1 });
     expect(receipt.content).toContain('本鱼');
   });
+
+  it('reasoningEffort 透传 reasoning_effort；prompt_tokens_details.cached_tokens 计入缓存用量', async () => {
+    const bodies: string[] = [];
+    const minimax = BUILTIN_PROVIDER_PRESETS.find((preset) => preset.id === 'minimax')!;
+    const gateway = new ModelGateway({
+      profile: {
+        ...ANTHROPIC_PROFILE,
+        roleBindings: { STARDEW_GAME_PLANNER: 'minimax/MiniMax-M3.1-Flash' },
+      },
+      providers: [minimax],
+      keys: { minimax: 'sk-mm-test' },
+      fetchImpl: async (_url, init) => {
+        bodies.push(init.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { content: '{"tool":"wait"}' } }],
+            usage: {
+              prompt_tokens: 265,
+              completion_tokens: 70,
+              prompt_tokens_details: { cached_tokens: 128 },
+            },
+          }),
+        };
+      },
+    });
+
+    const withEffort = await gateway.chat('STARDEW_GAME_PLANNER', [{ role: 'user', content: 'x' }], {
+      maxTokens: 1600,
+      reasoningEffort: 'low',
+    });
+    const bodyWith = JSON.parse(bodies[0] ?? '{}') as Record<string, unknown>;
+    expect(bodyWith['reasoning_effort']).toBe('low');
+    expect(bodyWith['max_tokens']).toBe(1600);
+    expect(withEffort.usage).toEqual({ inputTokens: 265, cachedInputTokens: 128, outputTokens: 70 });
+
+    await gateway.chat('STARDEW_GAME_PLANNER', [{ role: 'user', content: 'y' }]);
+    const bodyWithout = JSON.parse(bodies[1] ?? '{}') as Record<string, unknown>;
+    expect('reasoning_effort' in bodyWithout).toBe(false);
+  });
 });

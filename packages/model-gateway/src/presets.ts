@@ -210,7 +210,10 @@ export const BUILTIN_PROVIDER_PRESETS: ModelProviderConfig[] = [
     category: 'OFFICIAL_LLM',
     variants: [{ region: 'CN', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://api.minimaxi.com/v1', isFullUrl: false, protocol: 'openai' }],
     apiKeyMaskedOrRef: '',
-    discoveredModels: [model('MiniMax-M2.5')],
+    discoveredModels: [
+      model('MiniMax-M3.1-Flash', { reasoning: true }),
+      model('MiniMax-M2.5'),
+    ],
   }),
   preset({
     id: 'local-ollama',

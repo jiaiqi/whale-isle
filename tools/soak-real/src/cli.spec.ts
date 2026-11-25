@@ -444,6 +444,72 @@ describe('resolveLlm / createPlanner', () => {
     });
     expect(usageSeen).toBe(42);
   });
+
+  it('resolveLlm 解析 WHALE_SOAK_REASONING_EFFORT（合法保留/非法忽略）；minimax 默认注入 reasoning_effort=low', async () => {
+    const valid = resolveLlm({
+      WHALE_SOAK_PROVIDER: 'deepseek-official',
+      WHALE_SOAK_API_KEY: 'sk-test',
+      WHALE_SOAK_MODEL: 'deepseek-reasoner',
+      WHALE_SOAK_REASONING_EFFORT: 'MINIMAL',
+    }, { noLlm: false });
+    expect(valid.config?.reasoningEffort).toBe('minimal');
+
+    const invalid = resolveLlm({
+      WHALE_SOAK_PROVIDER: 'deepseek-official',
+      WHALE_SOAK_API_KEY: 'sk-test',
+      WHALE_SOAK_MODEL: 'deepseek-chat',
+      WHALE_SOAK_REASONING_EFFORT: 'bogus',
+    }, { noLlm: false });
+    expect(invalid.config?.reasoningEffort).toBeUndefined();
+
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = (async (_url: string, init?: { body?: string }) => {
+      capturedBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: '{"plan":[{"goal":"钓鱼","why":"赚钱"}],"mood":"平静","tool":"wait","args":{},"intent":"等"}' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 10 },
+        }),
+      };
+    }) as unknown as NonNullable<Parameters<typeof createPlanner>[1]>['fetchImpl'];
+
+    const sampleState = {
+      raw: `## 基本状态\n时间：${DAY16}\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Farm（测试农场），室外`,
+      gameClock: DAY16,
+      clockMinutes: 7 * 60,
+      stamina: 270,
+      staminaMax: 270,
+      money: 640,
+      location: 'Farm',
+      menu: '',
+      season: '春',
+      day: 16,
+      freeSlots: 10,
+      posX: 1,
+      posY: 1,
+      weather: '晴',
+      health: 100,
+      healthMax: 100,
+      birthday: null,
+      festival: null,
+    };
+
+    const minimaxBundle = createPlanner(
+      { mode: 'llm', config: { provider: 'minimax', apiKey: 'sk-mm', model: 'MiniMax-M3.1-Flash' } },
+      { fetchImpl },
+    );
+    await minimaxBundle.planner.decide(sampleState);
+    expect(capturedBodies[0]?.['reasoning_effort']).toBe('low');
+
+    const deepseekBundle = createPlanner(
+      { mode: 'llm', config: { provider: 'deepseek-official', apiKey: 'sk-ds', model: 'deepseek-chat' } },
+      { fetchImpl },
+    );
+    await deepseekBundle.planner.decide(sampleState);
+    expect('reasoning_effort' in (capturedBodies[1] ?? {})).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

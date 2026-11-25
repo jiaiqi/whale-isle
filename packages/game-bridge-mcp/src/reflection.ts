@@ -173,7 +173,7 @@ export async function runNightlyReflection(params: {
   });
   try {
     params.onCountAsk?.();
-    const res = await params.chat(params.slot, messages, { maxTokens: 400 });
+    const res = await params.chat(params.slot, messages, { maxTokens: 1600 });
     const parsed = parseReflectionResult(res.content);
     if (parsed === null) {
       params.notebook.markReflectedDay(params.dayKey);

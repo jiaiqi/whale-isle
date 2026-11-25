@@ -56,6 +56,8 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+
 export interface ChatReceipt {
   content: string;
   reasoningContent: string | null;
@@ -97,6 +99,7 @@ interface ChatCompletionResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     prompt_cache_hit_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
     /** Anthropic */
     input_tokens?: number;
     output_tokens?: number;
@@ -163,7 +166,13 @@ export class ModelGateway {
   async chat(
     slot: WorkbenchRoleSlot,
     messages: ChatMessage[],
-    opts?: { sessionId?: string; temperature?: number; maxTokens?: number; signal?: AbortSignal },
+    opts?: {
+      sessionId?: string;
+      temperature?: number;
+      maxTokens?: number;
+      reasoningEffort?: ReasoningEffort;
+      signal?: AbortSignal;
+    },
   ): Promise<ChatReceipt> {
     const sessionId = opts?.sessionId ?? 'default';
     const binding = this.options.profile.roleBindings[slot];
@@ -240,6 +249,7 @@ export class ModelGateway {
           messages: outbound,
           ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
           ...(opts?.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
+          ...(opts?.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
         });
       }
       const t0 = Date.now();
@@ -297,7 +307,7 @@ export class ModelGateway {
         reasoningContent = body.choices?.[0]?.message?.reasoning_content ?? null;
         usage = {
           inputTokens: body.usage?.prompt_tokens ?? 0,
-          cachedInputTokens: body.usage?.prompt_cache_hit_tokens ?? 0,
+          cachedInputTokens: body.usage?.prompt_cache_hit_tokens ?? body.usage?.prompt_tokens_details?.cached_tokens ?? 0,
           outputTokens: body.usage?.completion_tokens ?? 0,
         };
       }

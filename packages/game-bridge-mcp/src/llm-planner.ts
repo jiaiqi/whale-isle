@@ -300,7 +300,7 @@ export class LlmPlanner implements Planner {
     });
     try {
       this.askCount += 1;
-      const res = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 350 });
+      const res = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 1600 });
       const obj = extractJsonObject(res.content);
       const parsedPlan = obj !== null ? parseMorningPlanObject(obj) : null;
       if (parsedPlan !== null) {
@@ -357,7 +357,7 @@ export class LlmPlanner implements Planner {
       } else {
         try {
           this.askCount += 1;
-          rawContent = (await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 450 })).content;
+          rawContent = (await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 1600 })).content;
         } catch (error) {
           this.brainSwitch.recordGatewayFailure(error instanceof Error ? error.message : String(error));
           return this.standinDecision(state);
@@ -471,7 +471,7 @@ export class LlmPlanner implements Planner {
     });
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const res = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 400 });
+        const res = await this.deps.chat(this.deps.slot ?? 'STARDEW_GAME_PLANNER', messages, { maxTokens: 1200 });
         const decision = extractDecisionJson(res.content);
         if (decision !== null && this.allowedTools.has(decision.tool)) {
           if (decision.objectiveDone === true && this.objective !== null) {

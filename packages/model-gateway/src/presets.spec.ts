@@ -306,7 +306,7 @@ describe('内置展示模型清单', () => {
     'volcano-ark': ['doubao-1-5-pro-32k'],
     openai: ['gpt-4.1-mini'],
     anthropic: ['claude-3-7-sonnet'],
-    minimax: ['MiniMax-M2.5'],
+    minimax: ['MiniMax-M3.1-Flash', 'MiniMax-M2.5'],
     'opencode-go': ['deepseek-v4.1-flash', 'glm-5.3-flash', 'kimi-k3.1-pro', 'mimo-v2.6-flash', 'minimax-m3.1-flash', 'hy4-flash-free'],
     'opencode-zen': [
       'jev-1.13-free', 'jev-1.13', 'big-pickle', 'deepseek-v4.1-flash-free', 'mimo-v2.6-flash-free',

@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Fixed（推理模型 `reasoning_effort` 与输出令牌预算适配）
+
+- **`ModelGateway.chat()` 透传 `reasoning_effort` 与 `cached_tokens`** `packages/model-gateway/src/{gateway.ts,presets.ts}`：OpenAI 兼容请求支持可选 `reasoningEffort`（`'minimal' | 'low' | 'medium' | 'high'`）并兼容读取 `usage.prompt_tokens_details.cached_tokens` 计入 `cachedInputTokens`；`minimax` 预设新增 `MiniMax-M3.1-Flash`（`reasoning: true`）。
+- **提高星露谷规划器与夜间复盘 `maxTokens` 上限** `packages/game-bridge-mcp/src/{llm-planner.ts,reflection.ts}`：将晨间计划（350→1600）、每步自主决策（450→1600）、adapter 决策（400→1200）及夜间复盘（400→1600）预算放大，避免强制自适应思考模型在 350–450 令牌内将配额全部耗尽于 `reasoning_content` 导致 `content` 为空而误触发 3 连解析失败代驾；`llm-planner.ts` 保持 489 行（≤500 行）。
+- **`soak:real` 支持 `WHALE_SOAK_REASONING_EFFORT`** `tools/soak-real/src/cli.ts`：合法环境变量透传给 `ModelGateway`，未显式指定时对 `minimax` 默认注入 `reasoning_effort: 'low'`（DeepSeek 等普通供应商不注入）。
+
 ### Added / Changed（T-M6-72b：`soak:real` 同步 LLM 自主验收口径与 `human` 态防误判）
 
 - **攻略、心得本与 Token 实装进 `tools/soak-real/src/cli.ts`**：新增 `loadGuideFiles()` 自动载入 `guide-forager/*.md` 全部 **12 专题**，为 `LlmPlanner` 传入 `<runDir>/notes/` 持久化心得本并绑定 `onInsight` 写入 `events.jsonl`（同时检查 `notebook.hasReflectedDay` 捕获只更新 `tomorrowHint` 的复盘）；接入 `ModelGateway.onUsage` 真实累加 `input/cachedInput/output/total` Token。

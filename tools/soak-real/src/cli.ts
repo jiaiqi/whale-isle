@@ -205,11 +205,16 @@ export function parseArgs(argv: readonly string[]): SoakOptions {
 // LLM 组装（Key 只在内存里；报告只写 provider/model）
 // ---------------------------------------------------------------------------
 
+export type ReasoningEffortLevel = 'minimal' | 'low' | 'medium' | 'high';
+
+const REASONING_EFFORT_LEVELS = new Set<string>(['minimal', 'low', 'medium', 'high']);
+
 export interface LlmConfig {
   provider: string;
   apiKey: string;
   model: string;
   baseUrl?: string;
+  reasoningEffort?: ReasoningEffortLevel;
 }
 
 export interface LlmResolution {
@@ -227,6 +232,10 @@ export function resolveLlm(
   const apiKey = (env.WHALE_SOAK_API_KEY ?? '').trim();
   const model = (env.WHALE_SOAK_MODEL ?? '').trim();
   const baseUrl = (env.WHALE_SOAK_BASE_URL ?? '').trim();
+  const rawEffort = (env.WHALE_SOAK_REASONING_EFFORT ?? '').trim().toLowerCase();
+  const reasoningEffort = REASONING_EFFORT_LEVELS.has(rawEffort)
+    ? (rawEffort as ReasoningEffortLevel)
+    : undefined;
   const missing: string[] = [];
   if (provider === '') missing.push('WHALE_SOAK_PROVIDER');
   if (apiKey === '') missing.push('WHALE_SOAK_API_KEY');
@@ -236,7 +245,13 @@ export function resolveLlm(
   }
   return {
     mode: 'llm',
-    config: { provider, apiKey, model, ...(baseUrl === '' ? {} : { baseUrl }) },
+    config: {
+      provider,
+      apiKey,
+      model,
+      ...(baseUrl === '' ? {} : { baseUrl }),
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+    },
   };
 }
 
@@ -331,10 +346,14 @@ export function createPlanner(resolution: LlmResolution, deps: PlannerDeps = {})
       ...(deps.onUsage === undefined ? {} : { onUsage: deps.onUsage }),
     });
     const guides = loadGuideFiles(deps.guidesDir ?? join(repoRoot(), 'guide-forager'));
+    const reasoningEffort = config.reasoningEffort ?? (provider.id === 'minimax' ? 'low' : undefined);
     const planner = new LlmPlanner({
       chat: (slot, messages, opts) =>
         gateway
-          .chat(slot as WorkbenchRoleSlot, messages, opts?.maxTokens === undefined ? {} : { maxTokens: opts.maxTokens })
+          .chat(slot as WorkbenchRoleSlot, messages, {
+            ...(opts?.maxTokens === undefined ? {} : { maxTokens: opts.maxTokens }),
+            ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+          })
           .then((receipt) => ({ content: receipt.content })),
       slot: 'STARDEW_GAME_PLANNER',
       fallbackPlanner: new RulePlanner(),
