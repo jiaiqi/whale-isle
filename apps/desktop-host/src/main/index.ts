@@ -44,6 +44,7 @@ import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/abou
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
+import { createV2KernelHost, type V2KernelHost } from './v2-kernel-host';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
@@ -314,6 +315,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const vaultPath = resolveVaultPath(app.getPath('userData'), { mockKeychain: isMockKeychainLaunch() });
   registerProviderVaultIpc(vaultPath);
   logVaultStartup(vaultPath);
+  const v2KernelHost: V2KernelHost = await createV2KernelHost({
+    userDataDir: app.getPath('userData'),
+    vaultPath,
+  });
+  app.on('will-quit', () => { void v2KernelHost.stop(); });
   // Magpie / CC Switch 只读导入（T-M6-09）：扫描只回掩码，导入时主进程直接加密写 vault
   createProviderImportHost(vaultPath);
   // 星露谷 Mod 管理（T-M6-06）：只读写玩家 Mods 目录，配置落 userData
@@ -941,6 +947,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       : null,
     characters,
   );
+  v2KernelHost.attachV1Bridges({ autodrive, voice });
   modsHost.onBwfPortChange((port) => {
     void autodrive.setEndpoint(bwfMcpEndpoint(port));
   });

@@ -80,6 +80,7 @@
     "@workbench/persona-brain": "workspace:*",
     "@workbench/pet-renderer": "workspace:*",
     "@workbench/plugin-kit": "workspace:*",
+    "@workbench/runtime-core": "workspace:*",
     "@workbench/shared-protocol": "workspace:*",
     "@workbench/stardew-mods": "workspace:*",
     "ws": "^8.18.0",

@@ -94,6 +94,13 @@ module.exports = {
       from: { path: '^tools/mock-harness/src', pathNot: '\\.spec\\.ts$' },
       to: { path: '^packages/(?!shared-protocol)' },
     },
+    {
+      name: 'runtime-core-boundary',
+      severity: 'error',
+      comment: 'V2 运行时微内核仅允许依赖 shared-protocol 与 plugin-kit，严禁反向依赖业务领域包或宿主应用',
+      from: { path: '^packages/runtime-core' },
+      to: { path: '^(apps|services)/|^packages/(?!shared-protocol|plugin-kit|runtime-core)' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },

@@ -327,6 +327,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
   acceptanceReport: (): Promise<{ ok: boolean; markdown?: string }> => ipcRenderer.invoke('acceptance:report'),
   onOpenCreator: (handler: () => void): void => { ipcRenderer.on('ui:open-creator', () => handler()); },
   onOpenBench: (handler: () => void): void => { ipcRenderer.on('ui:open-bench', () => handler()); },
+  // V2-P0-02：V2 微内核健康、角色状态与紧急停止通道
+  v2KernelHealth: (): Promise<unknown> => ipcRenderer.invoke('v2:kernel-health'),
+  v2KernelLogs: (limit?: number): Promise<unknown[]> => ipcRenderer.invoke('v2:kernel-logs', limit),
+  v2CharacterState: (): Promise<unknown> => ipcRenderer.invoke('v2:character-state'),
+  v2EmergencyHalt: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:emergency-halt', reason),
+  v2Resume: (mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover'): Promise<unknown> =>
+    ipcRenderer.invoke('v2:resume', mode),
   ...(TEST_MODE
     ? {
         trayPopoverTest: (action: 'open' | 'hide' | 'bounds'): Promise<{ ok: boolean; bounds?: unknown; visible?: boolean }> =>

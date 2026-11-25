@@ -27,6 +27,7 @@ export default defineConfig({
         '**/agent-harness/src/index.ts', // 纯 re-export 桶
         '**/memory-graph/src/index.ts', // 纯 re-export 桶
         '**/plugin-kit/src/index.ts', // 纯 re-export 桶
+        '**/runtime-core/src/index.ts', // 纯 re-export 桶
         '**/live-stream-hub/src/index.ts', // 纯 re-export 桶
         '**/stardew-mods/src/index.ts', // 纯 re-export 桶
         '**/desktop-host/src/preload/**',

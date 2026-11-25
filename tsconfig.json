@@ -42,6 +42,9 @@
       "path": "packages/plugin-kit"
     },
     {
+      "path": "packages/runtime-core"
+    },
+    {
       "path": "packages/live-stream-hub"
     },
     {

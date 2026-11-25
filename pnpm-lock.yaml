@@ -59,6 +59,9 @@ importers:
       '@workbench/plugin-kit':
         specifier: workspace:*
         version: link:../../packages/plugin-kit
+      '@workbench/runtime-core':
+        specifier: workspace:*
+        version: link:../../packages/runtime-core
       '@workbench/shared-protocol':
         specifier: workspace:*
         version: link:../../packages/shared-protocol
@@ -187,6 +190,18 @@ importers:
 
   packages/plugin-kit:
     dependencies:
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../shared-protocol
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
+  packages/runtime-core:
+    dependencies:
+      '@workbench/plugin-kit':
+        specifier: workspace:*
+        version: link:../plugin-kit
       '@workbench/shared-protocol':
         specifier: workspace:*
         version: link:../shared-protocol

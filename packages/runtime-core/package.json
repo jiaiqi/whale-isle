@@ -1,0 +1,24 @@
+{
+  "name": "@workbench/runtime-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[V2-P0-02] Whale Isle V2 运行时微内核：统一生命周期、Typed 事件总线、分级脱敏日志、配置与凭据接口、角色状态内核与插件门控",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/plugin-kit": "workspace:*",
+    "@workbench/shared-protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}
