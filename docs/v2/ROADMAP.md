@@ -71,7 +71,7 @@
 - **预计风险**：V1 `character-registry` 多宠字段兼容 → 通过映射适配器平顺过渡。
 
 ### `V2-P1-02`：真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`
-- **状态**：`NEXT`
+- **状态**：`IMPLEMENTED_UNVERIFIED`（2026-11-25 代码/单测/门禁 7/7/Electron 45 E2E 完成；待真机人工听感、云端 TTS Key 实测与 Windows SAPI 硬件验收）
 - **目标**：P1 即交付真实可用角色语音与口型联动（不捆绑重型本地模型），改造 `AudioLeaseManager` 解除单音轨对伴奏/音效的阻塞。
 - **依赖**：`V2-P1-01`
 - **实现方案**：抽象 `VoiceProvider`（真实云端情绪 TTS API + 本地 Worker 接入，macOS `say`/Win SAPI 仅标为降级方案）；拆分发言权（Speech Floor）与 `AudioMixer` 多轨播放；输出音量包络/Viseme 驱动桌宠嘴型。
@@ -81,7 +81,7 @@
 - **预计风险**：云端 TTS 首包延迟波动 → 流式分句预取与超时取消。
 
 ### `V2-P1-03`：模型供应商与四级诚实额度矩阵（DeepSeek / MiniMax / Kimi / OpenCode 等）
-- **状态**：`PENDING`
+- **状态**：`NEXT`
 - **目标**：完善供应商网关与精细化额度中心，覆盖平衡/5h/周/月/Token/次数/套餐/重置时间，并如实记录来源、更新时间与不可查标记。
 - **依赖**：`V2-P0-02`
 - **实现方案**：参考 Magpie / Pi / 成熟 Harness，在 `shared-protocol` 新增 `ProviderQuotaReport` Schema，在主进程实现各主流厂商实测探针（DeepSeek/OpenRouter/OpenCode/MiniMax/Kimi/本地 CLI 状态），未实测字段强制标记 `unknown`。

@@ -340,6 +340,14 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2EmergencyHalt: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:emergency-halt', reason),
   v2Resume: (mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover'): Promise<unknown> =>
     ipcRenderer.invoke('v2:resume', mode),
+  v2VoiceProviders: (): Promise<unknown[]> => ipcRenderer.invoke('v2:voice-providers'),
+  v2VoiceIdentity: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-identity'),
+  v2VoiceIdentityUpdate: (patch: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-identity-update', patch),
+  v2VoiceMixerState: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-mixer-state'),
+  v2VoiceTrackStart: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-track-start', input),
+  v2VoiceTrackStop: (trackId: string): Promise<boolean> => ipcRenderer.invoke('v2:voice-track-stop', trackId),
+  v2VoiceOutputRoute: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-output-route', input),
+  v2VoiceSynthesizePreview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-synthesize-preview', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE
@@ -386,6 +394,11 @@ contextBridge.exposeInMainWorld('petStage', {
     const listener = (_e: unknown, event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }): void => handler(event);
     ipcRenderer.on('pet:speech-result', listener);
     return () => ipcRenderer.removeListener('pet:speech-result', listener);
+  },
+  onLipSync: (handler: (event: { agentId: string; frame: { viseme: string; amplitude: number; rmsDb: number; timestampMs: number; durationMs: number } }) => void): () => void => {
+    const listener = (_e: unknown, event: { agentId: string; frame: { viseme: string; amplitude: number; rmsDb: number; timestampMs: number; durationMs: number } }): void => handler(event);
+    ipcRenderer.on('pet:lip-sync', listener);
+    return () => ipcRenderer.removeListener('pet:lip-sync', listener);
   },
   onPetAction: (handler: (event: { agentId: string; action: string }) => void): void => {
     ipcRenderer.on('pet:action', (_e, event) => handler(event));

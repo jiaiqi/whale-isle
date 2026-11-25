@@ -53,6 +53,9 @@
     },
     {
       "path": "../../packages/character-core"
+    },
+    {
+      "path": "../../packages/voice-runtime"
     }
   ]
 }

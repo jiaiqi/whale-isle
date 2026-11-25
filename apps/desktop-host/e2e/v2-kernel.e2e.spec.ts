@@ -37,6 +37,12 @@ interface DirectorV2Window {
     v2EmergencyHalt(reason?: string): Promise<{ halted: boolean; controlMode: string; expression: string }>;
     v2Resume(mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover'): Promise<{ halted: boolean; controlMode: string }>;
     v2StorageCheck(): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }>;
+    v2VoiceProviders(): Promise<Array<{ kind: string; quality: string; available: boolean; degraded: boolean }>>;
+    v2VoiceIdentity(): Promise<{ voiceProfileId: string; characterId: string }>;
+    v2VoiceMixerState(): Promise<{ tracks: Array<{ trackId: string; kind: string; outputDeviceId: string }>; outputRoutes: Record<string, string> }>;
+    v2VoiceTrackStart(input: { trackId: string; kind: string; label: string }): Promise<{ trackId: string; playing: boolean }>;
+    v2VoiceOutputRoute(input: { kind: string; deviceId: string }): Promise<{ outputRoutes: Record<string, string> }>;
+    v2VoiceSynthesizePreview(input: { text: string }): Promise<{ providerKind: string; lipFrames: Array<{ viseme: string }> }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -144,6 +150,43 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(storage.engine).toBe('node:sqlite');
       expect(storage.schemaVersion).toBe('2');
       expect(storage.integrity).toBe('ok');
+
+      // V2-P1-02：验证真实 VoiceProvider 探测、独立 VoiceIdentity、多轨 AudioMixer 与口型预览
+      const voiceProviders = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2VoiceProviders(),
+      );
+      expect(voiceProviders.length).toBeGreaterThanOrEqual(4);
+      expect(voiceProviders.some((p) => p.kind === 'macos-say' && p.quality === 'system_fallback')).toBe(true);
+
+      const voiceIdentity = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2VoiceIdentity(),
+      );
+      expect(voiceIdentity.characterId).toBe('char_xiaojing');
+      expect(voiceIdentity.voiceProfileId).toBe('qiaopi_mengmei');
+
+      const mixerAfterTrack = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        await bridge.v2VoiceTrackStart({ trackId: 'bgm-e2e', kind: 'bgm', label: 'E2E BGM' });
+        await bridge.v2VoiceOutputRoute({ kind: 'bgm', deviceId: 'obs-virtual' });
+        return bridge.v2VoiceMixerState();
+      });
+      expect(mixerAfterTrack.tracks.some((t) => t.trackId === 'bgm-e2e')).toBe(true);
+      expect(mixerAfterTrack.outputRoutes.bgm).toBe('obs-virtual');
+
+      const preview = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2VoiceSynthesizePreview({
+          text: '主人，测试语音口型包络！',
+        }),
+      );
+      expect(preview.lipFrames.length).toBeGreaterThan(0);
+
+      await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2EmergencyHalt('V2-P1-02 停播验证'),
+      );
+      const mixerAfterHalt = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2VoiceMixerState(),
+      );
+      expect(mixerAfterHalt.tracks).toHaveLength(0);
     } finally {
       await app.close();
     }

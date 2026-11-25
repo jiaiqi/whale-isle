@@ -29,6 +29,7 @@ export default defineConfig({
         '**/plugin-kit/src/index.ts', // 纯 re-export 桶
         '**/runtime-core/src/index.ts', // 纯 re-export 桶
         '**/character-core/src/index.ts', // 纯 re-export 桶
+        '**/voice-runtime/src/index.ts', // 纯 re-export 桶
         '**/live-stream-hub/src/index.ts', // 纯 re-export 桶
         '**/stardew-mods/src/index.ts', // 纯 re-export 桶
         '**/evolution-lite/src/index.ts', // 纯 re-export 桶

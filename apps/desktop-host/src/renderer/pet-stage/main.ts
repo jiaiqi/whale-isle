@@ -42,6 +42,7 @@ interface PetStageBridge {
   onGlobalPrefsChanged?(handler: (prefs: PetDesktopPrefs) => void): () => void;
   onCoopSpeaker?(handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void;
   onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }) => void): () => void;
+  onLipSync?(handler: (event: { agentId: string; frame: { viseme: string; amplitude: number } }) => void): () => void;
   onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
   onPetBubble?(handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void;
   onPetState?(handler: (event: { agentId: string; state?: unknown }) => void): void;
@@ -886,6 +887,13 @@ bridge.onSpeechResult?.((event) => {
   bubbleState = effect.state;
   if (effect.hide) widgets.hideDialog();
   widgets.setDialogMuted(effect.muted);
+  document.documentElement.dataset.viseme = 'closed';
+  document.documentElement.style.setProperty('--pet-lip-amplitude', '0');
+});
+bridge.onLipSync?.((event) => {
+  if (!isEventForThisPet(event.agentId)) return;
+  document.documentElement.dataset.viseme = event.frame.viseme;
+  document.documentElement.style.setProperty('--pet-lip-amplitude', String(event.frame.amplitude));
 });
 bridge.onPetAction?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;

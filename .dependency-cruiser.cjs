@@ -108,6 +108,13 @@ module.exports = {
       to: { path: '^(apps|services)/|^packages/(?!shared-protocol|runtime-core|character-core)' },
     },
     {
+      name: 'voice-runtime-boundary',
+      severity: 'error',
+      comment: '语音路由、口型同步与多轨混音器仅允许依赖 shared-protocol 与 runtime-core',
+      from: { path: '^packages/voice-runtime' },
+      to: { path: '^(apps|services)/|^packages/(?!shared-protocol|runtime-core|voice-runtime)' },
+    },
+    {
       name: 'evolution-lite-isolated-plane',
       severity: 'error',
       comment: 'Evolution Plane 与 Runtime Plane 物理隔离：tools/evolution-lite 严禁引入运行期宿主或业务包',

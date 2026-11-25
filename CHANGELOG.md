@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added（`V2-P1-02`：真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer` — `IMPLEMENTED_UNVERIFIED`）
+
+- **语音与混音契约** `packages/shared-protocol/src/{voice.ts,voice.spec.ts,index.ts}`：定义 `VoiceProviderStatus`、`LipSyncFrame`、`VoiceSynthesisRequest` / `Output`、`AudioTrackState`、`SpeechFloorHolder` 与 `AudioMixerSnapshot`。
+- **独立语音运行时 `@workbench/voice-runtime`** `packages/voice-runtime/src/`：实现 `CloudOpenAiTtsProvider`、`MiniMaxTtsProvider`、`LocalAudioWorkerProvider` 与诚实降级 `SystemFallbackVoiceProvider`（macOS `say` / Windows 注入安全 PowerShell SAPI）；实现 `VoiceProviderRouter`（`VoiceIdentity` 解耦路由、LRU 缓存、分句预取、降级标明）；实现 RIFF/PCM16 WAV 能量+过零率口型提取与 `LipSyncTimelinePlayer`；拆分 `SpeechFloorArbiter` 与非阻塞多轨 `AudioMixer`（BGM 自动压低/恢复 + 按轨输出设备路由）。
+- **Electron 宿主与桌宠口型接线** `apps/desktop-host/src/{main/v2-kernel-host.ts,main/index.ts,preload/index.ts,renderer/pet-stage/main.ts}`：暴露 `v2:voice-*` IPC、接入 `AudioMixer` 鸭降与 `pet:lip-sync` 桌宠 Viseme/幅度联动；扩展 `v2-kernel.e2e.spec.ts` Electron 45 E2E 校验。待补真实云端 Key 联调、人工听感与 Windows SAPI 硬件验收。
+
 ### Added（`V2-P1-01`：模块化 12 域 `CharacterCore` 与最小 `LifeRuntime`）
 
 - **12 域共享契约** `packages/shared-protocol/src/{character.ts,character.spec.ts,index.ts}`：定义 `Identity` / `Personality` / `Preferences` / `Emotion` / `Motivation` / `Goals` / `Commitments` / `Relationships` 引用 / `Memory` 引用 / `VoiceIdentity` / `Embodiment` / `ActivityState` 与 `CharacterCoreSnapshotSchema`。

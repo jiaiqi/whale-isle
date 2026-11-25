@@ -1500,3 +1500,4 @@ export const WorkFollowStatusSchema = z.object({
 export type WorkFollowStatus = z.infer<typeof WorkFollowStatusSchema>;
 
 export * from './character';
+export * from './voice';

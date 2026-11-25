@@ -4,6 +4,7 @@
  * - 复用 provider-vault.ts 的 safeStorage 凭据库作为 SecretVaultPort，绝不重复造钥匙串逻辑
  * - 注册内置诊断插件 core-diagnostics，并将 V1 autodrive/voice 关键状态事件同步到 CharacterCore & LifeRuntime
  */
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { ipcMain } from 'electron';
 import { z } from 'zod';
@@ -17,12 +18,22 @@ import {
 } from '@workbench/runtime-core';
 import { CharacterCore, type SelectActivityInput } from '@workbench/character-core';
 import {
+  AudioTrackKindSchema,
   GoalHorizonSchema,
   GoalOriginSchema,
   LifeActivityKindSchema,
   PreferenceCategorySchema,
+  VoiceProviderKindSchema,
   type CharacterCoreSnapshot,
 } from '@workbench/shared-protocol';
+import {
+  AudioMixer,
+  CloudOpenAiTtsProvider,
+  LocalAudioWorkerProvider,
+  MiniMaxTtsProvider,
+  SystemFallbackVoiceProvider,
+  VoiceProviderRouter,
+} from '@workbench/voice-runtime';
 import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
 import type { VoiceHost } from './voice-host';
@@ -60,6 +71,8 @@ function createElectronVaultPort(vaultPath: string): SecretVaultPort {
 export interface V2KernelHost {
   readonly kernel: WhaleKernel;
   readonly characterCore: CharacterCore;
+  readonly audioMixer: AudioMixer;
+  readonly voiceRouter: VoiceProviderRouter;
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost }): void;
   stop(): Promise<void>;
 }
@@ -95,6 +108,35 @@ const SelectActivityInputSchema = z.object({
   reason: z.string().min(1),
   source: z.enum(['life_runtime', 'user_command', 'emergency_halt', 'manual_takeover']).optional(),
   force: z.boolean().optional(),
+});
+
+const TrackStartInputSchema = z.object({
+  trackId: z.string().min(1),
+  kind: AudioTrackKindSchema,
+  label: z.string().min(1),
+  gain: z.number().min(0).max(2).optional(),
+  muted: z.boolean().optional(),
+  outputDeviceId: z.string().min(1).optional(),
+});
+
+const OutputRouteInputSchema = z.object({
+  kind: AudioTrackKindSchema,
+  deviceId: z.string(),
+});
+
+const VoiceSynthesizePreviewSchema = z.object({
+  text: z.string().min(1).max(4000),
+  emotion: z.string().min(1).optional(),
+  styleMode: z.enum(['normal', 'inner', 'p0', 'singing']).optional(),
+  speed: z.number().min(0.5).max(2.0).optional(),
+  preferredProvider: VoiceProviderKindSchema.optional(),
+});
+
+const VoiceIdentityPatchSchema = z.object({
+  voiceProfileId: z.string().min(1).optional(),
+  voiceDescription: z.string().min(1).optional(),
+  preferredProviderId: z.string().min(1).optional(),
+  providerVoiceRef: z.string().min(1).optional(),
 });
 
 export async function createV2KernelHost(options: {
@@ -144,6 +186,16 @@ export async function createV2KernelHost(options: {
     events: kernel.events,
     registryCore: kernel.characters,
     filePath: join(options.userDataDir, 'v2-character-core.json'),
+  });
+
+  const audioMixer = new AudioMixer({ events: kernel.events });
+  const voiceRouter = new VoiceProviderRouter({
+    providers: [
+      new MiniMaxTtsProvider({ resolveApiKey: () => kernel.secrets.resolve('minimax') }),
+      new CloudOpenAiTtsProvider({ resolveApiKey: () => kernel.secrets.resolve('openai-tts') }),
+      new LocalAudioWorkerProvider(),
+      new SystemFallbackVoiceProvider(process.platform),
+    ],
   });
 
   let stopFn: (() => void) | null = null;
@@ -200,6 +252,7 @@ export async function createV2KernelHost(options: {
   });
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     stopFn?.();
+    audioMixer.stopAll();
     characterCore.life.emergencyHalt(
       typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止',
     );
@@ -208,6 +261,51 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
     characterCore.life.resume(mode ?? 'autonomous');
     return kernel.characters.primaryState();
+  });
+  // V2-P1-02：VoiceProvider 探测、独立 VoiceIdentity、多轨 AudioMixer 与口型预览
+  ipcMain.handle('v2:voice-providers', () => voiceRouter.listStatuses());
+  ipcMain.handle('v2:voice-identity', () => characterCore.profile.voiceIdentity());
+  ipcMain.handle('v2:voice-identity-update', (_e, rawPatch: unknown) => {
+    const patch = VoiceIdentityPatchSchema.parse(rawPatch);
+    return characterCore.profile.updateVoiceIdentity({
+      ...(patch.voiceProfileId === undefined ? {} : { voiceProfileId: patch.voiceProfileId }),
+      ...(patch.voiceDescription === undefined ? {} : { voiceDescription: patch.voiceDescription }),
+      ...(patch.preferredProviderId === undefined ? {} : { preferredProviderId: patch.preferredProviderId }),
+      ...(patch.providerVoiceRef === undefined ? {} : { providerVoiceRef: patch.providerVoiceRef }),
+    });
+  });
+  ipcMain.handle('v2:voice-mixer-state', () => audioMixer.snapshot());
+  ipcMain.handle('v2:voice-track-start', (_e, rawInput: unknown) => {
+    const parsed = TrackStartInputSchema.parse(rawInput);
+    return audioMixer.startTrack({
+      trackId: parsed.trackId,
+      kind: parsed.kind,
+      label: parsed.label,
+      ...(parsed.gain === undefined ? {} : { gain: parsed.gain }),
+      ...(parsed.muted === undefined ? {} : { muted: parsed.muted }),
+      ...(parsed.outputDeviceId === undefined ? {} : { outputDeviceId: parsed.outputDeviceId }),
+    });
+  });
+  ipcMain.handle('v2:voice-track-stop', (_e, trackId: string) => audioMixer.stopTrack(String(trackId ?? '')));
+  ipcMain.handle('v2:voice-output-route', (_e, rawInput: unknown) => {
+    const parsed = OutputRouteInputSchema.parse(rawInput);
+    return audioMixer.setOutputRoute(parsed.kind, parsed.deviceId);
+  });
+  ipcMain.handle('v2:voice-synthesize-preview', (_e, rawInput: unknown) => {
+    const parsed = VoiceSynthesizePreviewSchema.parse(rawInput);
+    const identity = characterCore.profile.voiceIdentity();
+    return voiceRouter.synthesize(
+      {
+        requestId: randomUUID(),
+        characterId: identity.characterId,
+        voiceRef: voiceRouter.resolveVoiceRef(identity),
+        text: parsed.text,
+        ...(parsed.emotion === undefined ? {} : { emotion: parsed.emotion }),
+        ...(parsed.styleMode === undefined ? {} : { styleMode: parsed.styleMode }),
+        ...(parsed.speed === undefined ? {} : { speed: parsed.speed }),
+      },
+      parsed.preferredProvider === undefined ? {} : { preferredProvider: parsed.preferredProvider },
+    );
   });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
@@ -233,6 +331,8 @@ export async function createV2KernelHost(options: {
   return {
     kernel,
     characterCore,
+    audioMixer,
+    voiceRouter,
     attachV1Bridges({ autodrive, voice }) {
       stopFn = () => {
         if (autodrive.runner.isRunning()) autodrive.runner.stop();
@@ -267,6 +367,7 @@ export async function createV2KernelHost(options: {
     async stop() {
       for (const unsub of unsubscribers) unsub();
       unsubscribers.length = 0;
+      audioMixer.stopAll();
       characterCore.save();
       await kernel.stop();
     },

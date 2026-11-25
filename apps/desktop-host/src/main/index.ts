@@ -45,6 +45,7 @@ import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
 import { createV2KernelHost, type V2KernelHost } from './v2-kernel-host';
+import { LipSyncTimelinePlayer, synthesizeTextLipSyncFrames } from '@workbench/voice-runtime';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
@@ -865,16 +866,42 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   app.on('will-quit', () => { altMonitor.stop(); globalShortcut.unregisterAll(); });
 
   // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
+  let activeLipPlayer: LipSyncTimelinePlayer | null = null;
   const voice = createVoiceHost(process.platform, {
     resolveVoiceId: (characterId) => voiceBindings.resolve(characterId) ?? null,
     onSpeakerChange: (event) => {
+      v2KernelHost.audioMixer.setSpeechDucking(event.state === 'speaking');
+      activeLipPlayer?.stop(true);
+      activeLipPlayer = null;
+      if (event.state === 'speaking' && event.activeAgentId !== null) {
+        const agentId = event.activeAgentId;
+        const frames = synthesizeTextLipSyncFrames(event.speakerName || '小鲸', 1800, 60);
+        activeLipPlayer = new LipSyncTimelinePlayer({
+          frames,
+          onFrame: (frame) => {
+            petWindowManager?.broadcast('pet:lip-sync', { agentId, frame });
+          },
+        });
+        activeLipPlayer.start();
+      } else {
+        petWindowManager?.broadcast('pet:lip-sync', {
+          agentId: 'default',
+          frame: { timestampMs: 0, durationMs: 0, viseme: 'closed', amplitude: 0, rmsDb: -80 },
+        });
+      }
       petWindowManager?.broadcast('coop:speaker', { ...event });
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('coop:speaker', event);
     },
     onSpeechResult: (event) => {
+      activeLipPlayer?.stop(true);
+      activeLipPlayer = null;
       petWindowManager?.broadcast('pet:speech-result', { ...event });
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:speech-result', event);
     },
+  });
+  app.on('will-quit', () => {
+    activeLipPlayer?.stop(false);
+    activeLipPlayer = null;
   });
   registerVoiceHostIpc(voice);
   // 记忆图谱（T-M5-04）：回执入图谱 + 聊天检索

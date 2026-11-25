@@ -51,6 +51,9 @@
       "path": "packages/character-core"
     },
     {
+      "path": "packages/voice-runtime"
+    },
+    {
       "path": "packages/live-stream-hub"
     },
     {

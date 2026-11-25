@@ -71,6 +71,9 @@ importers:
       '@workbench/stardew-mods':
         specifier: workspace:*
         version: link:../../packages/stardew-mods
+      '@workbench/voice-runtime':
+        specifier: workspace:*
+        version: link:../../packages/voice-runtime
       ws:
         specifier: ^8.18.0
         version: 8.23.0
@@ -229,6 +232,18 @@ importers:
       '@workbench/shared-protocol':
         specifier: workspace:*
         version: link:../shared-protocol
+
+  packages/voice-runtime:
+    dependencies:
+      '@workbench/runtime-core':
+        specifier: workspace:*
+        version: link:../runtime-core
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../shared-protocol
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   services/dst-bridge-sidecar:
     dependencies:

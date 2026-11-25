@@ -84,6 +84,7 @@
     "@workbench/runtime-core": "workspace:*",
     "@workbench/shared-protocol": "workspace:*",
     "@workbench/stardew-mods": "workspace:*",
+    "@workbench/voice-runtime": "workspace:*",
     "ws": "^8.18.0",
     "zod": "^4.6.7"
   },

@@ -1,0 +1,24 @@
+{
+  "name": "@workbench/voice-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[V2-P1-02] Whale Isle V2 真实 VoiceProvider 路由、口型包络提取与多轨 AudioMixer",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/runtime-core": "workspace:*",
+    "@workbench/shared-protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}
