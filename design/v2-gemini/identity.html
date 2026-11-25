@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ② 角色本体、情绪与声音身份</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <style>
+    .ch-trait { padding: 5px 0; }
+    .ch-trait .n { font: 650 11px var(--font-mono); color: var(--tide); }
+    .ch-layer { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--stroke); margin-bottom: 7px; }
+    .ch-layer .lv { font: 700 10px var(--font-mono); width: 26px; text-align: center; padding: 2px 0; border-radius: 6px; border: 1px solid var(--stroke); }
+    .ch-layer .bar { flex: 1; height: 5px; border-radius: 980px; background: var(--bg-elev); overflow: hidden; }
+    .ch-layer .bar i { display: block; height: 100%; border-radius: 980px; }
+  </style>
+</head>
+<body data-v2-page="identity">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">CHARACTER IDENTITY · PERSONA, MOOD &amp; VOICE</div>
+      <h1 class="v2-page-title">角色本体、人格情绪与声音身份</h1>
+      <p class="v2-page-sub">Doc 03 / 05：换模型不换 `char_wh001` 锚点 · 6 维特质与行为红线 · V/A 情绪轨迹 + 主动沉默三原则 · TTS vs SVS 解耦与 3 句声纹校准。</p>
+    </div>
+    <div class="seg-tabs" id="char-tabs">
+      <button type="button" class="seg-tab active" data-ct="id">人格档案与边界</button>
+      <button type="button" class="seg-tab" data-ct="layers">情绪地图与安静策略</button>
+      <button type="button" class="seg-tab" data-ct="voice">声音身份与表达计划</button>
+    </div>
+  </div>
+
+  <!-- Identity Anchor -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="row" style="gap:16px; align-items:flex-start;">
+      <div class="avatar" style="width:54px;height:54px;font-size:19px;">鲸</div>
+      <div class="stack" style="gap:8px; flex:1; min-width:0;">
+        <div class="row">
+          <strong style="font-size:17px;">小鲸</strong>
+          <span class="pill pill-tide"><span class="v2-dot" style="width:5px;height:5px;"></span>主身份 · Primary First</span>
+          <span class="receipt ok">lifecycle: ACTIVE</span>
+          <span class="pill">创生 2026-08-12 · 105 天</span>
+        </div>
+        <div class="grid-3" style="gap:4px 16px;">
+          <div class="kv-row"><span class="kv-k">characterId</span><span class="kv-v mono" style="color:var(--tide)">char_wh001</span></div>
+          <div class="kv-row"><span class="kv-k">personaProfileId</span><span class="kv-v mono">pers_xj_v27</span></div>
+          <div class="kv-row"><span class="kv-k">voiceProfileId</span><span class="kv-v mono">voice_2b7q · v12</span></div>
+          <div class="kv-row"><span class="kv-k">assetSetId</span><span class="kv-v mono">aset_2e8v · v41</span></div>
+          <div class="kv-row"><span class="kv-k">记忆与账本归属</span><span class="kv-v mono">ledger_wh001 · SQLite</span></div>
+          <div class="kv-row"><span class="kv-k">当前大脑引擎</span><span class="kv-v mono">MiniMax / DeepSeek (可换)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="why" style="margin-bottom:14px;"><i data-lucide="user" class="ico-sm"></i><span><b>换模型不换身份：</b>`characterId` 是唯一锚点。模型只是可替换的推理引擎，无论底层换成 MiniMax、DeepSeek 或本地权重，记忆图谱、常客记仇账本与音色身份永不重置。</span></div>
+
+  <!-- Tab 1: PersonaProfile + Passive Slots + Preference Evolution -->
+  <section class="char-panel" data-cp="id">
+    <div class="grid-3" style="margin-bottom:14px;">
+      <div class="card" style="border-color:var(--tide-line);background:linear-gradient(165deg, var(--tide-dim), var(--surface) 46%);">
+        <div class="row-between" style="margin-bottom:7px;"><div class="row"><div class="avatar">鲸</div><div><strong>小鲸</strong><div class="mono k" style="font-size:9.5px;">char_wh001 · 独立 Runtime</div></div></div><span class="receipt ok">PRIMARY</span></div>
+        <div style="font-size:11px;color:var(--text-2);">傲娇干饭深海领航员 · 独占对话预算、游戏控制权与浏览器独立档案。</div>
+      </div>
+      <div class="card" style="border-style:dashed;">
+        <div class="row-between" style="margin-bottom:7px;"><div class="row"><div class="avatar" style="background:linear-gradient(140deg, var(--violet), var(--blue));">泡</div><div><strong>泡芙</strong><div class="mono k" style="font-size:9.5px;">passive · token 0</div></div></div><span class="pill pill-violet">PASSIVE</span></div>
+        <div style="font-size:11px;color:var(--text-2);">Phase 1 随行水母挂件：仅镜像表现动画，无独立对话与决策。</div>
+      </div>
+      <div class="card" style="border-style:dashed;">
+        <div class="row-between" style="margin-bottom:7px;"><div class="row"><div class="avatar" style="background:linear-gradient(140deg, var(--blue), var(--tide));">澈</div><div><strong>阿澈</strong><div class="mono k" style="font-size:9.5px;">passive · token 0</div></div></div><span class="pill pill-violet">PASSIVE</span></div>
+        <div style="font-size:11px;color:var(--text-2);">冷静鲸猫侍从：等待 Phase 1 收敛后按路线图再解锁多智能体协商。</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">stableTraits · 稳定人格特质 (`pers_xj_v27`)</h2><span class="pill mono">Zod 校验</span></div>
+        <div class="ch-trait"><div class="row-between"><span>好奇心 <span class="mono k">curiosity</span></span><span class="n" id="val-curiosity">0.82</span></div><input type="range" class="tide-range" min="0" max="100" value="82" data-out="val-curiosity" /></div>
+        <div class="ch-trait"><div class="row-between"><span>外向性 <span class="mono k">extraversion</span></span><span class="n" id="val-extraversion">0.55</span></div><input type="range" class="tide-range" min="0" max="100" value="55" data-out="val-extraversion" /></div>
+        <div class="ch-trait"><div class="row-between"><span>幽默感 <span class="mono k">humor</span></span><span class="n" id="val-humor">0.70</span></div><input type="range" class="tide-range" min="0" max="100" value="70" data-out="val-humor" /></div>
+        <div class="ch-trait"><div class="row-between"><span>耐心 <span class="mono k">patience</span></span><span class="n" id="val-patience">0.60</span></div><input type="range" class="tide-range" min="0" max="100" value="60" data-out="val-patience" /></div>
+        <div class="ch-trait"><div class="row-between"><span>冒险倾向 <span class="mono k">adventurousness</span></span><span class="n" id="val-adv">0.75</span></div><input type="range" class="tide-range" min="0" max="100" value="75" data-out="val-adv" /></div>
+        <div class="ch-trait"><div class="row-between"><span>社交意愿 <span class="mono k">socialDrive</span></span><span class="n" id="val-soc">0.48</span></div><input type="range" class="tide-range" min="0" max="100" value="48" data-out="val-soc" /></div>
+        <div style="height:1px;background:var(--stroke);margin:10px 0;"></div>
+        <div class="row"><strong style="font-size:11.5px;">values 价值锚:</strong><span class="pill pill-tide">陪伴优先</span><span class="pill pill-green">诚实不装懂</span><span class="pill pill-red">绝不冒充真人</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">preferences (带证据来源) &amp; boundaries 红线</h2><span class="pill">v27</span></div>
+        <div class="itemrow"><div class="itemico"><i data-lucide="message-square" class="ico-sm"></i></div><div class="iteminfo"><strong>话题偏好 · 星露谷规划 / 深海生物冷知识</strong><p>来源：对话 #4821 · 弹幕互动 ×12</p></div></div>
+        <div class="itemrow"><div class="itemico"><i data-lucide="gamepad-2" class="ico-sm"></i></div><div class="iteminfo"><strong>游戏偏好 · 星露谷物语 (41.5h 真实共玩)</strong><p>BR-01 规则：观众提问优先级 &gt; 自主碎碎念</p></div></div>
+        <div class="sv-banner" style="margin-top:8px;margin-bottom:8px;"><b>BD-01 不冒充真人：</b>被问“你是 AI 吗”必须如实承认，禁止欺骗感情。</div>
+        <div class="sv-banner"><b>BD-02 拒绝越界：</b>政治敏感 / 医疗诊断 / 删库破坏指令 → 立即拒答并写审计。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">30 天长期偏好演化轨迹 (保留旧值快照，禁止静默篡改红线)</h2><span class="pill">3 条演化</span></div>
+      <div class="timeline">
+        <div class="tlrow"><span class="time">11-02</span>音乐偏好权重上升：Lo-fi (0.42 → 0.71) · 来源：点歌记录 ×3</div>
+        <div class="tlrow"><span class="time">11-14</span>话题偏好上升：深海生物冷知识 (0.68 → 0.77) · 来源：弹幕 ×12</div>
+        <div class="tlrow run"><span class="time">11-21</span>表达习惯调整：减少感叹号密度 · 触发 persona v26 → v27</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 2: MoodState + 4 Layers + Quiet Companion -->
+  <section class="char-panel" data-cp="layers" style="display:none;">
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">短期情绪 MoodState · V/A 平面</h2><span class="pill pill-tide">confidence 0.82 · 半衰期 45m</span></div>
+        <div class="row" style="gap:18px; align-items:flex-start; margin-bottom:10px;">
+          <div class="mood-map"><span class="axis v"></span><span class="axis h"></span><span class="trail" style="left:65%;top:32%"></span><span class="trail" style="left:58%;top:50%"></span><span class="pt"></span><span class="lb" style="left:8px;top:6px;">高唤醒</span><span class="lb" style="right:8px;bottom:6px;">valence → 愉悦</span></div>
+          <div class="stack" style="gap:4px; flex:1;">
+            <div class="kv-row"><span class="kv-k">valence / arousal</span><span class="kv-v mono" style="color:var(--tide)">+0.62 / +0.55</span></div>
+            <div class="kv-row"><span class="kv-k">expiresAt</span><span class="kv-v mono">14:35 (T−18m)</span></div>
+            <div class="kv-row"><span class="kv-k">触发来源</span><span class="kv-v">挖到铜矿 ×3 · 夸夸弹幕 ×5</span></div>
+          </div>
+        </div>
+        <div class="why"><i data-lucide="shield" class="ico-sm"></i><span><b>情绪不提升工具权限：</b>MoodState 只映射至语气与动作幅度，再兴奋也不能越过 P0–P5 治理边界。</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">四层状态变化速率 (自上而下单向消费)</h2><span class="pill">05 §4</span></div>
+        <div class="ch-layer"><span class="lv" style="color:var(--violet)">L1</span><span style="width:92px;"><b>稳定人格</b></span><span class="bar"><i style="width:18%;background:var(--violet)"></i></span><span class="mono k">月级</span></div>
+        <div class="ch-layer"><span class="lv" style="color:var(--blue)">L2</span><span style="width:92px;"><b>长期偏好</b></span><span class="bar"><i style="width:40%;background:var(--blue)"></i></span><span class="mono k">周级</span></div>
+        <div class="ch-layer"><span class="lv" style="color:var(--amber)">L3</span><span style="width:92px;"><b>短期情绪</b></span><span class="bar"><i style="width:68%;background:var(--amber)"></i></span><span class="mono k">分钟级</span></div>
+        <div class="ch-layer"><span class="lv" style="color:var(--tide)">L4</span><span style="width:92px;"><b>表现计划</b></span><span class="bar"><i style="width:92%;background:var(--tide)"></i></span><span class="mono k">秒级</span></div>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card"><div class="row" style="margin-bottom:6px;"><i data-lucide="volume-x" class="ico-sm" style="color:var(--blue)"></i><strong>规则一 · 专注守护</strong></div><div style="font-size:11.5px;color:var(--text-2);">用户开启专注或高强度操作时只留气泡不发声，陪伴在场但不打扰。</div></div>
+      <div class="card"><div class="row" style="margin-bottom:6px;"><i data-lucide="layers" class="ico-sm" style="color:var(--green)"></i><strong>规则二 · 能量低于 20%</strong></div><div style="font-size:11.5px;color:var(--text-2);">社交能量偏低时自然降频收声，随场景待机播放温和动画。</div></div>
+      <div class="card"><div class="row" style="margin-bottom:6px;"><i data-lucide="clock" class="ico-sm" style="color:var(--amber)"></i><strong>规则三 · 勿扰窗口 22:30–08:00</strong></div><div style="font-size:11.5px;color:var(--text-2);">同类提议连拒 2 次则 24h 内静默；DND 期间仅紧急告警弹气泡。</div></div>
+    </div>
+  </section>
+
+  <!-- Tab 3: Voice Identity + Speech Style Sliders + SpeechPerformancePlan -->
+  <section class="char-panel" data-cp="voice" style="display:none;">
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Voice Identity · 清爽少女音 (`voice_2b7q · v12`)</h2><span class="lic mit">LIC-2026-0087 已授权</span></div>
+        <div class="kv-row"><span class="kv-k">说话引擎 (`voice-host.ts`)</span><span class="kv-v"><span class="receipt ok">已接线 · CosyVoice2 / GPT-SoVITS</span></span></div>
+        <div class="kv-row"><span class="kv-k">唱歌专用管线 (SVS/SVC)</span><span class="kv-v"><span class="pill pill-amber">V2-08 规划 · 禁拿说话 TTS 硬唱</span></span></div>
+        <div class="kv-row"><span class="kv-k">音域 / 移调适配</span><span class="kv-v mono">F3–D5 · ±3 semitones</span></div>
+        <div class="kv-row"><span class="kv-k">3 句校准集门禁</span><span class="kv-v">换 Provider 前校验相似度 ≥ 0.90 (实测 0.94)</span></div>
+        <div class="row" style="margin-top:10px;">
+          <button type="button" class="btn btn-sm btn-primary" onclick="window.wiV2.toast('已申请 VoiceLock 向独立桌宠窗试听说话声线')">试听 TTS 声线</button>
+          <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('触发 SVS 唱歌声线预览（目标态）')">试听 SVS 唱歌</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">speechStyle · 五参数控制 (仅描述怎么读)</h2><span class="pill mono">v12</span></div>
+        <div class="ch-trait"><div class="row-between"><span>语速 pace</span><span class="n" id="val-pace">0.55</span></div><input type="range" class="tide-range" min="0" max="100" value="55" data-out="val-pace" /></div>
+        <div class="ch-trait"><div class="row-between"><span>抑扬 prosody</span><span class="n" id="val-pros">0.62</span></div><input type="range" class="tide-range" min="0" max="100" value="62" data-out="val-pros" /></div>
+        <div class="ch-trait"><div class="row-between"><span>咬字 articulation</span><span class="n" id="val-art">0.78</span></div><input type="range" class="tide-range" min="0" max="100" value="78" data-out="val-art" /></div>
+        <div class="ch-trait"><div class="row-between"><span>气声 breathiness</span><span class="n" id="val-br">0.30</span></div><input type="range" class="tide-range" min="0" max="100" value="30" data-out="val-br" /></div>
+        <div class="ch-trait"><div class="row-between"><span>表现力 expressiveness</span><span class="n" id="val-exp">0.66</span></div><input type="range" class="tide-range" min="0" max="100" value="66" data-out="val-exp" /></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">表达计划 `SpeechPerformancePlan` (`spp_a6d2`)</h2><span class="receipt run">QUEUED → voice-host</span></div>
+      <div class="grid-2">
+        <div class="inset">
+          <div class="kv-row"><span class="kv-k">text / intent</span><span class="kv-v">「箱子放好啦～继续挖矿！」(`inform_progress`)</span></div>
+          <div class="kv-row"><span class="kv-k">pauseHints</span><span class="kv-v mono">["放好啦 +180ms", "继续 +240ms"]</span></div>
+          <div class="kv-row"><span class="kv-k">interruptible / barge-in</span><span class="kv-v mono" style="color:var(--tide)">true · 0.3s 打断 · TTL 4s</span></div>
+        </div>
+        <div class="inset">
+          <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>换模型人格不丢 <span style="margin-left:auto" class="receipt ok">VERIFIED</span></div>
+          <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>barge-in 0.3s 可打断 <span style="margin-left:auto" class="receipt ok">VERIFIED</span></div>
+          <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--amber)"></i>换 Provider 3 句声纹校准 <span style="margin-left:auto" class="receipt warn">待真机</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('#char-tabs .seg-tab').forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            var k = tab.getAttribute('data-ct');
+            document.querySelectorAll('#char-tabs .seg-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+            document.querySelectorAll('.char-panel').forEach(function (p) { p.style.display = p.getAttribute('data-cp') === k ? 'block' : 'none'; });
+          });
+        });
+        document.querySelectorAll('input[data-out]').forEach(function (rng) {
+          rng.addEventListener('input', function () {
+            var out = document.getElementById(rng.getAttribute('data-out'));
+            if (out) out.textContent = (Number(rng.value) / 100).toFixed(2);
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

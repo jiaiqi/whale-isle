@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — 系统托盘控制卡 (Tray Popover)</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <style>
+    .tray-stage { min-height: 100vh; display: flex; flex-direction: column; position: relative; z-index: 1; }
+    .macos-menubar { height: 30px; background: var(--surface-solid); border-bottom: 1px solid var(--stroke); padding: 0 14px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-2); }
+    .tray-popover { width: 344px; background: var(--surface); backdrop-filter: blur(28px) saturate(1.4); border: 1px solid var(--stroke-2); border-radius: 18px; box-shadow: var(--shadow-2), inset 0 1px 0 var(--hi); padding: 14px; }
+  </style>
+</head>
+<body>
+  <div class="tray-stage">
+    <div class="macos-menubar">
+      <div class="row" style="gap:12px;"><strong>WHALE ISLE V2</strong><span>macOS / Win11 Menu Bar Tray (T-M6-60 已真机落地)</span></div>
+      <div class="row" style="gap:10px;"><span class="pill pill-tide" style="padding:1px 7px;">小鲸 · LIVE</span><span class="mono">10:34</span></div>
+    </div>
+
+    <div style="max-width: 1020px; width:100%; margin: 28px auto; padding: 0 20px; display:flex; align-items:flex-start; justify-content:space-between; gap:28px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:300px;">
+        <div class="row" style="margin-bottom:14px;">
+          <a class="btn btn-sm" href="index.html">← 返回总览</a>
+          <a class="btn btn-sm btn-primary" href="chat.html">进入主工作台</a>
+          <a class="btn btn-sm" href="pet-stage.html">预览独立桌宠窗</a>
+          <button type="button" class="btn btn-sm" id="tray-theme-btn"><i data-lucide="monitor" class="ico-sm" id="v2-theme-icon"></i><span id="v2-theme-label">系统</span></button>
+        </div>
+        <div class="kicker">SURFACE 2 · TRAY POPOVER</div>
+        <h1 style="margin:0 0 8px; font-size:21px;">系统托盘随手控制卡</h1>
+        <p style="margin:0 0 16px; color:var(--text-2); font-size:12px; line-height:1.7;">
+          无需切离全屏游戏，从系统菜单栏 0.3 秒即可执行：<strong>紧急 Stop (F8) / 控制仲裁 / 独立桌宠窗显隐 / 饭碗投喂 / 撤销活跃租约 / 一句话下发 `/指令`</strong>。
+        </p>
+        <div class="card">
+          <div class="card-head"><h3 class="card-title">多窗同步状态</h3><span class="receipt ok">localStorage 跨页同步</span></div>
+          <div class="kv-row"><span class="kv-k">独立透明桌宠窗</span><span class="kv-v" id="tray-pet-stat">运行中</span></div>
+          <div class="kv-row"><span class="kv-k">当前控制权</span><span class="kv-v mono" id="tray-mode-stat">coop</span></div>
+          <div class="kv-row"><span class="kv-k">小鲸的饭碗</span><span class="kv-v mono" id="tray-rice-stat">12,480 粒</span></div>
+        </div>
+      </div>
+
+      <div class="tray-popover">
+        <div class="row-between" style="margin-bottom:10px;">
+          <div class="row" style="gap:8px;">
+            <span class="v2-dot" id="tray-dot"></span>
+            <div>
+              <div style="font-size:13px;font-weight:700;">小鲸 · Primary (`char_wh001`)</div>
+              <div style="font-size:11px;color:var(--text-3);" id="tray-sub">春 16 · Beach (38,36) · fish 2/3</div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-danger" id="tray-stop-btn"><i data-lucide="square" class="ico-sm"></i>Stop</button>
+        </div>
+
+        <div class="seg-tabs" style="width:100%; justify-content:space-between; margin-bottom:10px;">
+          <button type="button" class="seg-tab" data-v2-mode="autonomous">自主</button>
+          <button type="button" class="seg-tab active" data-v2-mode="coop">协作</button>
+          <button type="button" class="seg-tab" data-v2-mode="command">指令</button>
+          <button type="button" class="seg-tab" data-v2-mode="takeover">接管</button>
+        </div>
+
+        <div class="inset" style="margin-bottom:10px;">
+          <div class="kv-row"><span class="kv-k"><i data-lucide="sparkles" class="ico-sm"></i> 独立透明桌宠窗</span><label class="sw"><input type="checkbox" id="tray-pet-toggle" checked /><span class="sw-slider"></span></label></div>
+          <div class="kv-row"><span class="kv-k"><i data-lucide="volume-2" class="ico-sm"></i> 语音与单端锁</span><label class="sw"><input type="checkbox" id="tray-voice-toggle" checked /><span class="sw-slider"></span></label></div>
+          <div class="kv-row"><span class="kv-k"><i data-lucide="radio" class="ico-sm"></i> OBS 舞台音轨隔离</span><span class="pill pill-green">已隔离</span></div>
+        </div>
+
+        <div class="inset" style="margin-bottom:10px;">
+          <div class="row-between" style="margin-bottom:5px;"><span style="font-size:11px;font-weight:650;">活跃 ControlLease</span><span class="pill pill-tide mono">2 Active</span></div>
+          <div class="kv-row"><span class="kv-k">ControlLease · Stardew</span><button type="button" class="btn btn-sm btn-ghost" style="color:var(--red);padding:2px 6px;" onclick="window.wiV2.toast('已撤销游戏控制租约', 'warn')">撤销</button></div>
+          <div class="kv-row"><span class="kv-k">VoiceLock · PetStage</span><span class="mono" style="color:var(--text-3)">TTL 18s</span></div>
+        </div>
+
+        <div class="row" style="gap:6px; margin-bottom:10px;">
+          <input class="input" id="tray-quick-input" placeholder="随手发一句或 /指令，如 /fish 5" />
+          <button type="button" class="btn btn-sm btn-primary" id="tray-send-btn">发送</button>
+        </div>
+
+        <div style="padding-top:8px; border-top:1px solid var(--stroke);">
+          <div class="rice-head"><span>小鲸的饭碗</span><strong id="tray-rice-num">12,480 粒</strong></div>
+          <div class="rice-bar"><i id="tray-rice-bar" style="width:50%"></i></div>
+          <div class="row-between">
+            <button type="button" class="btn btn-sm" id="tray-feed-btn">+ 投喂 5k</button>
+            <div class="row" style="gap:6px;"><a class="btn btn-sm" href="pet-stage.html">桌宠窗</a><a class="btn btn-sm btn-primary" href="chat.html">主工作台</a></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function syncTray() {
+        var st = window.wiV2.get();
+        document.querySelectorAll('[data-v2-mode]').forEach(function (el) { el.classList.toggle('active', el.getAttribute('data-v2-mode') === st.controlMode); });
+        document.getElementById('tray-pet-toggle').checked = !!st.petWindowOpen;
+        document.getElementById('tray-voice-toggle').checked = !st.voiceQuiet;
+        document.getElementById('tray-pet-stat').textContent = st.petWindowOpen ? '运行中（独立透明窗）' : '已隐藏（后台会话不断连）';
+        document.getElementById('tray-mode-stat').textContent = st.controlMode;
+        var gText = Number(st.riceGrains || 12480).toLocaleString() + ' 粒';
+        document.getElementById('tray-rice-stat').textContent = gText;
+        document.getElementById('tray-rice-num').textContent = gText;
+        document.getElementById('tray-rice-bar').style.width = Math.max(6, Math.min(100, Math.round((st.riceGrains / (st.riceCap || 25000)) * 100))) + '%';
+        document.getElementById('tray-dot').className = 'v2-dot' + (st.controlMode === 'stop' ? ' danger' : '');
+      }
+      document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('tray-theme-btn').addEventListener('click', window.wiV2.cycleTheme);
+        document.querySelectorAll('[data-v2-mode]').forEach(function (btn) {
+          btn.addEventListener('click', function () { window.wiV2.setControlMode(btn.getAttribute('data-v2-mode')); });
+        });
+        document.getElementById('tray-stop-btn').addEventListener('click', function () { window.wiV2.setControlMode('stop'); });
+        document.getElementById('tray-feed-btn').addEventListener('click', function () { window.wiV2.feedRice(5000); });
+        document.getElementById('tray-pet-toggle').addEventListener('change', function (e) {
+          window.wiV2.patch({ petWindowOpen: e.target.checked });
+          window.wiV2.toast(e.target.checked ? '已显示独立透明桌宠窗' : '已隐藏桌宠窗');
+        });
+        document.getElementById('tray-voice-toggle').addEventListener('change', function (e) {
+          window.wiV2.patch({ voiceQuiet: !e.target.checked });
+          window.wiV2.toast(e.target.checked ? '全局语音已恢复' : '已进入安静陪伴模式');
+        });
+        document.getElementById('tray-send-btn').addEventListener('click', function () {
+          var inp = document.getElementById('tray-quick-input');
+          var val = (inp.value || '').trim();
+          if (!val) return;
+          document.getElementById('tray-sub').textContent = '已送达：' + val;
+          inp.value = '';
+          window.wiV2.toast('已送达小鲸运行时：' + val);
+        });
+        syncTray();
+      });
+      document.addEventListener('wi-v2-state', syncTray);
+    })();
+  </script>
+</body>
+</html>

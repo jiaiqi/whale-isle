@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — 独立透明桌宠窗 (Pet Stage)</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <style>
+    body { overflow: hidden; height: 100vh; }
+    .desktop-sim {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background:
+        radial-gradient(640px 360px at 18% 24%, rgba(62, 224, 205, 0.14), transparent 60%),
+        radial-gradient(620px 340px at 84% 72%, rgba(78, 168, 255, 0.12), transparent 60%),
+        linear-gradient(160deg, #04070d 0%, #0b1322 55%, #05080f 100%);
+      transition: background 240ms ease;
+      user-select: none;
+    }
+    .desktop-sim.light-wall {
+      background:
+        radial-gradient(640px 360px at 20% 24%, rgba(10, 163, 146, 0.13), transparent 60%),
+        radial-gradient(620px 340px at 84% 70%, rgba(14, 119, 221, 0.10), transparent 60%),
+        linear-gradient(155deg, #e7eff4 0%, #eef3f6 55%, #dce7ee 100%);
+    }
+    .fake-app-win {
+      position: absolute;
+      left: 5.5vw;
+      top: 14vh;
+      width: min(590px, 53vw);
+      height: min(390px, 56vh);
+      border-radius: 18px;
+      background: var(--surface);
+      backdrop-filter: blur(26px) saturate(1.4);
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow-2), inset 0 1px 0 var(--hi);
+      padding: 16px 20px;
+      color: var(--text-2);
+      pointer-events: none;
+    }
+    .sim-hud {
+      position: fixed;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      z-index: 40;
+      flex-wrap: wrap;
+    }
+    .sim-pill {
+      background: var(--surface-solid);
+      border: 1px solid var(--stroke-2);
+      border-radius: 980px;
+      padding: 5px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: var(--shadow-2);
+    }
+    .pet-actor {
+      position: absolute;
+      width: 248px;
+      cursor: grab;
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .pet-actor:active { cursor: grabbing; }
+    .pet-bubbles { display: flex; flex-direction: column; gap: 6px; width: 254px; margin-bottom: 10px; pointer-events: none; }
+    .bubble-think {
+      align-self: flex-start;
+      background: var(--violet-dim);
+      border: 1px dashed var(--violet-line);
+      color: var(--violet);
+      padding: 7px 11px;
+      border-radius: 13px 13px 13px 4px;
+      font-size: 11px;
+      line-height: 1.6;
+      backdrop-filter: blur(14px);
+    }
+    .bubble-say {
+      background: var(--surface-solid);
+      border: 1px solid var(--tide-line);
+      color: var(--text-1);
+      padding: 9px 12px;
+      border-radius: 14px 14px 14px 4px;
+      font-size: 12px;
+      line-height: 1.65;
+      box-shadow: var(--glow-tide);
+    }
+    .pet-figure { position: relative; width: 158px; height: 158px; display: grid; place-items: center; filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.48)); }
+    .pet-figure.float { animation: whaleFloat 3.5s ease-in-out infinite; }
+    .pet-figure.rage { animation: whaleShake 220ms linear infinite; }
+    @keyframes whaleFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+    @keyframes whaleShake { 0%, 100% { transform: translateX(0) rotate(0deg); } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
+    .pet-mini-bar {
+      margin-top: 7px;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 150ms ease, transform 150ms ease;
+      background: var(--surface-solid);
+      border: 1px solid var(--stroke-2);
+      border-radius: 980px;
+      padding: 4px 7px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      box-shadow: var(--shadow-2);
+    }
+    .pet-actor:hover .pet-mini-bar { opacity: 1; transform: translateY(0); }
+    .pet-secondary { position: absolute; right: 5vw; bottom: 12vh; opacity: 0.88; z-index: 15; }
+    .ctx-menu {
+      position: fixed;
+      width: 214px;
+      background: var(--surface-solid);
+      border: 1px solid var(--stroke-2);
+      border-radius: 13px;
+      padding: 6px;
+      box-shadow: var(--shadow-2);
+      display: none;
+      z-index: 60;
+    }
+    .ctx-menu.open { display: block; }
+    .ctx-item { width: 100%; border: none; background: transparent; color: var(--text-1); padding: 7px 10px; border-radius: 8px; font-size: 11.5px; display: flex; align-items: center; justify-content: space-between; text-align: left; }
+    .ctx-item:hover { background: var(--tide-dim); color: var(--tide); }
+  </style>
+</head>
+<body>
+  <div class="desktop-sim" id="pet-desktop">
+    <div class="fake-app-win">
+      <div class="row-between" style="margin-bottom:12px;">
+        <div class="row">
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--red);"></span>
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--amber);"></span>
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--green);"></span>
+          <span style="font-size:11.5px;font-weight:650;margin-left:6px;color:var(--text-1);">Stardew Valley 1.6 · 桌面透明底层视窗</span>
+        </div>
+        <span class="pill pill-tide mono">ignoreMouseEvents 穿透</span>
+      </div>
+      <div style="font-size:12px;line-height:1.8;">
+        独立透明桌宠窗 (`apps/desktop-host`) 与主工作台保持物理双窗：<br />
+        • 透明像素区点击直穿底层游戏与编辑器，完全不挡手；<br />
+        • 双 `&lt;video&gt;` VP9-Alpha 零黑帧交叉淡入 + 脚底对齐 + Live2D 插槽；<br />
+        • 单端 `VoiceLock` 保证任何时刻只有 1 个音频出口播报（回执 `PLAYED`）；<br />
+        • 「内心戏」紫色云朵支持 D11 一键开关外放；Hover 显示迷你控栏，右键快捷操作。
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <span class="receipt ok">VoiceLock: PLAYED · 2.8s</span>
+        <span class="lic nc">114 WebM · CC BY-NC-SA 4.0 (DEV_ONLY)</span>
+      </div>
+    </div>
+
+    <div class="sim-hud">
+      <div class="sim-pill">
+        <a class="btn btn-sm btn-ghost" href="index.html">← 总览</a>
+        <a class="btn btn-sm btn-primary" href="chat.html">进入主工作台</a>
+        <a class="btn btn-sm" href="embodiment.html">化身星座</a>
+        <a class="btn btn-sm" href="tray-popover.html">托盘卡</a>
+      </div>
+      <div class="sim-pill">
+        <span style="font-size:11px;color:var(--text-3);">表现态:</span>
+        <button type="button" class="btn btn-sm" data-pet-mood="idle">待机</button>
+        <button type="button" class="btn btn-sm" data-pet-mood="speak">播报</button>
+        <button type="button" class="btn btn-sm" data-pet-mood="coop">共玩</button>
+        <button type="button" class="btn btn-sm btn-danger" data-pet-mood="rage">“大肥鱼”0 Token 喷水</button>
+        <button type="button" class="btn btn-sm" data-pet-mood="quiet">安静沉默</button>
+      </div>
+      <div class="sim-pill">
+        <button type="button" class="btn btn-sm" id="pet-wall-btn"><i data-lucide="sun" class="ico-sm"></i>壁纸明暗</button>
+        <button type="button" class="btn btn-sm" id="pet-theme-btn"><i data-lucide="monitor" class="ico-sm" id="v2-theme-icon"></i><span id="v2-theme-label">系统</span></button>
+      </div>
+    </div>
+
+    <div class="pet-actor" id="pet-actor" style="left: 56vw; top: 30vh;" title="拖拽移动，右键快捷菜单">
+      <div class="pet-bubbles">
+        <div class="bubble-think" id="pet-think"><b>内心戏 · 思考中 (D11 可关)</b><br />背包好像快满了……我就在矿洞建个木箱放杂物吧！</div>
+        <div class="bubble-say" id="pet-say">春 16 日海滩风好舒服！竹鱼竿我拿到啦，你先忙你的～</div>
+      </div>
+
+      <div class="pet-figure float" id="pet-figure">
+        <svg width="150" height="150" viewBox="0 0 160 160" fill="none">
+          <defs>
+            <linearGradient id="whaleBodyGrad" x1="25" y1="30" x2="135" y2="128" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#82d7e3"/><stop offset="55%" stop-color="#3385a9"/><stop offset="100%" stop-color="#285b83"/>
+            </linearGradient>
+          </defs>
+          <g id="pet-spray" style="display:none;">
+            <path d="M80 34 C66 10, 50 12, 42 26" stroke="#3ee0cd" stroke-width="4" stroke-linecap="round"/>
+            <path d="M84 34 C98 10, 114 12, 122 26" stroke="#4ea8ff" stroke-width="4" stroke-linecap="round"/>
+          </g>
+          <ellipse cx="80" cy="142" rx="44" ry="8" fill="rgba(0,0,0,0.34)"/>
+          <path d="M126 88 C142 74, 154 72, 152 84 C150 93, 140 97, 132 98 C142 104, 150 112, 144 118 C136 123, 126 112, 120 102 Z" fill="#2b6f99"/>
+          <path d="M22 92 C22 58, 50 38, 86 38 C118 38, 136 58, 136 86 C136 114, 110 126, 74 126 C40 126, 22 114, 22 92 Z" fill="url(#whaleBodyGrad)" stroke="rgba(192,240,255,0.45)" stroke-width="1.5"/>
+          <path d="M28 98 C34 118, 56 125, 86 124 C106 123, 120 115, 124 103 C106 106, 52 106, 28 98 Z" fill="#c8f2eb" opacity="0.92"/>
+          <path d="M76 96 C68 114, 82 122, 94 112 C98 106, 92 94, 76 96 Z" fill="#4c9db7"/>
+          <g id="pet-eyes-normal"><circle cx="54" cy="78" r="5.2" fill="#183b54"/><circle cx="52.6" cy="76.4" r="1.7" fill="#fff"/><ellipse cx="44" cy="87" rx="5.5" ry="2.8" fill="#ffc247" opacity="0.55"/></g>
+          <g id="pet-eyes-rage" style="display:none;"><path d="M46 72 L60 79 M60 72 L46 79" stroke="#183b54" stroke-width="3" stroke-linecap="round"/><path d="M40 66 L62 72" stroke="#ff6b6b" stroke-width="3" stroke-linecap="round"/></g>
+          <g id="pet-eyes-sleep" style="display:none;"><path d="M46 79 Q54 85 62 79" stroke="#183b54" stroke-width="2.8" stroke-linecap="round"/></g>
+          <circle cx="80" cy="40" r="3.8" fill="#b48cff"/>
+        </svg>
+      </div>
+
+      <div class="row" style="gap:6px;margin-top:-6px;">
+        <span class="pill pill-tide">char_wh001 · 小鲸</span>
+        <span class="pill mono" id="pet-lock-badge">Audio: idle</span>
+      </div>
+
+      <div class="pet-mini-bar">
+        <button type="button" class="btn btn-sm btn-ghost" title="对话" onclick="window.location.href='chat.html'"><i data-lucide="message-square" class="ico-sm"></i></button>
+        <button type="button" class="btn btn-sm btn-ghost" id="mini-quiet" title="安静"><i data-lucide="volume-2" class="ico-sm"></i></button>
+        <button type="button" class="btn btn-sm btn-ghost" title="共玩" onclick="window.location.href='game-coop.html'"><i data-lucide="gamepad-2" class="ico-sm"></i></button>
+        <button type="button" class="btn btn-sm btn-ghost" style="color:var(--red)" title="Stop (F8)" onclick="window.wiV2.setControlMode('stop')"><i data-lucide="square" class="ico-sm"></i></button>
+      </div>
+    </div>
+
+    <div class="pet-secondary">
+      <div class="card card-tight">
+        <div class="row" style="gap:6px;"><span class="v2-dot warn"></span><span style="font-size:11.5px;font-weight:650;">泡芙 (PASSIVE · 0 Token)</span></div>
+        <div style="font-size:10.5px;color:var(--text-3);margin-top:2px;">Phase 1 被动随行位 · 由小鲸 Runtime 下发脚本</div>
+      </div>
+    </div>
+
+    <div class="ctx-menu" id="pet-ctx">
+      <button type="button" class="ctx-item" onclick="window.location.href='chat.html'"><span>打开主工作台</span><i data-lucide="compass" class="ico-sm"></i></button>
+      <button type="button" class="ctx-item" onclick="window.location.href='embodiment.html'"><span>查看化身星座图</span><i data-lucide="shapes" class="ico-sm"></i></button>
+      <button type="button" class="ctx-item" onclick="window.location.href='tray-popover.html'"><span>托盘控制卡</span><i data-lucide="layers" class="ico-sm"></i></button>
+      <button type="button" class="ctx-item" onclick="window.wiV2.feedRice(5000)"><span>投喂饭碗 +5,000 粒</span><span class="pill pill-amber">+5k</span></button>
+      <button type="button" class="ctx-item" style="color:var(--red)" onclick="window.wiV2.setControlMode('stop')"><span>紧急 Stop (F8)</span><i data-lucide="square" class="ico-sm"></i></button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var MOODS = {
+        idle: { think: '待机中：先观察搭档工作，45s 无新事件保持自然沉默。', say: '桌面随系统配色切换，拖拽我可随时调整站位~', lock: 'Audio: idle', mode: 'float', eyes: 'normal' },
+        speak: { think: '已申请单端 VoiceLock (TTL 18s)，播报后回执 PLAYED 才算完成。', say: 'B站有 3 位新朋友关注啦，礼物连击我已合并感谢过一次！', lock: 'VoiceLock: PLAYED', mode: 'float', eyes: 'normal' },
+        coop: { think: '人类玩家在沙滩收杆，我去东区矿脉附近清理石堆不挡他路。', say: '你专心钓鱼！我刚拿到威利的竹鱼竿，现在在整理背包空间~', lock: 'Co-op: active', mode: 'float', eyes: 'normal' },
+        rage: { think: '[0-Token Reflex] 正则直击“大肥鱼”雷区！结构性不耗费主脑 Token。', say: '谁是“大肥鱼”啊！！本鲸这叫流体力学完美流线型！！', lock: 'Reflex: 0.08s', mode: 'rage', eyes: 'rage' },
+        quiet: { think: '已切换安静陪伴模式，沉默也是一种主动选择，仅保留气泡文字。', say: 'zzZ…（安静陪伴中）', lock: 'Audio: muted', mode: 'float', eyes: 'sleep' }
+      };
+      function setPetMood(k) {
+        var m = MOODS[k] || MOODS.idle;
+        document.getElementById('pet-think').innerHTML = '<b>内心戏 · 思考中 (D11 可关)</b><br />' + window.wiV2.escapeHtml(m.think);
+        document.getElementById('pet-say').textContent = m.say;
+        document.getElementById('pet-lock-badge').textContent = m.lock;
+        document.getElementById('pet-figure').className = 'pet-figure ' + m.mode;
+        document.getElementById('pet-spray').style.display = k === 'rage' ? 'block' : 'none';
+        document.getElementById('pet-eyes-normal').style.display = m.eyes === 'normal' ? 'block' : 'none';
+        document.getElementById('pet-eyes-rage').style.display = m.eyes === 'rage' ? 'block' : 'none';
+        document.getElementById('pet-eyes-sleep').style.display = m.eyes === 'sleep' ? 'block' : 'none';
+      }
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-pet-mood]').forEach(function (btn) {
+          btn.addEventListener('click', function () { setPetMood(btn.getAttribute('data-pet-mood')); });
+        });
+        document.getElementById('pet-theme-btn').addEventListener('click', window.wiV2.cycleTheme);
+        document.getElementById('pet-wall-btn').addEventListener('click', function () {
+          document.getElementById('pet-desktop').classList.toggle('light-wall');
+        });
+        document.getElementById('mini-quiet').addEventListener('click', function () {
+          setPetMood('quiet');
+          window.wiV2.toast('桌宠已切为安静沉默陪伴');
+        });
+        var actor = document.getElementById('pet-actor');
+        var ctx = document.getElementById('pet-ctx');
+        var dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
+        actor.addEventListener('pointerdown', function (e) {
+          if (e.button === 2 || e.target.closest('button')) return;
+          dragging = true; sx = e.clientX; sy = e.clientY;
+          var r = actor.getBoundingClientRect(); ox = r.left; oy = r.top;
+          actor.setPointerCapture(e.pointerId);
+        });
+        actor.addEventListener('pointermove', function (e) {
+          if (!dragging) return;
+          actor.style.left = Math.max(12, Math.min(window.innerWidth - 245, ox + (e.clientX - sx))) + 'px';
+          actor.style.top = Math.max(60, Math.min(window.innerHeight - 250, oy + (e.clientY - sy))) + 'px';
+        });
+        actor.addEventListener('pointerup', function () { dragging = false; });
+        actor.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          ctx.style.left = Math.min(window.innerWidth - 220, e.clientX) + 'px';
+          ctx.style.top = Math.min(window.innerHeight - 220, e.clientY) + 'px';
+          ctx.classList.add('open');
+        });
+        document.addEventListener('click', function (e) { if (!e.target.closest('#pet-ctx')) ctx.classList.remove('open'); });
+      });
+    })();
+  </script>
+</body>
+</html>

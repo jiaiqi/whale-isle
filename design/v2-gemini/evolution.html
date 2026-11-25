@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ⑩ 进化引擎与 V2 渐进迁移</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+</head>
+<body data-v2-page="evolution">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">EVOLUTION ENGINE · ISOLATED DEV PLANE &amp; RELEASE TRAIN</div>
+      <h1 class="v2-page-title">进化引擎、6 列研发看板与 S1–S5 迁移控制台</h1>
+      <p class="v2-page-sub">Doc 10 &amp; SPEC §9：`whale-isle-dev` 物理隔离 · 4 卡脱敏遥测（含 Topbar 一键标记）· Issue #212 深度剖析 + L4 人工审批 · L1–L5 阶梯 · 灰度回滚 &amp; 8 条禁令。</p>
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" onclick="window.wiV2.openBugModal()"><i data-lucide="bug" class="ico-sm"></i>提交脱敏问题单</button>
+  </div>
+
+  <!-- ① Dev Plane Isolation Banner -->
+  <div class="card" style="border-left: 3px solid var(--violet); margin-bottom:14px;">
+    <div class="row-between" style="flex-wrap:wrap; gap:12px;">
+      <div style="flex:1;min-width:260px;">
+        <div class="row" style="margin-bottom:5px;"><strong style="font-size:14px;">研发平面声明 · Evolution Plane (`whale-isle-dev`)</strong><span class="pill pill-violet">物理隔离 · 不挂载真实密钥</span></div>
+        <div style="font-size:11.5px;color:var(--text-2);">本页是<strong>只读观察窗，不提供“跳过人工审批”按钮</strong>；直播中冻结热更发布（下一维护窗口 `03:00–05:00`），仅经 Zod 校验的安全配置可热生效。</div>
+      </div>
+      <div class="row" style="gap:8px;">
+        <span class="receipt ok">可分析 · 可写隔离分支</span>
+        <span class="receipt warn">发布 → 维护窗口</span>
+        <span class="receipt ok">SEC-0 (30d 安全零失误)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 6-Column Dev Board -->
+  <div class="sec-h"><i data-lucide="git-branch" class="ico-sm"></i><span>6 阶段隔离研发看板 (`Triage → Plan → Coding → Test → Review → PR·RC`)</span><span class="ln"></span></div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="kb-scroll">
+      <div class="kb-col"><div style="font-size:11px;font-weight:700;">Triage (3)</div><div class="kb-card"><strong>#213 用户「标记问题」聚类</strong></div><div class="kb-card"><strong>#214 audio stub 误调</strong></div></div>
+      <div class="kb-col"><div style="font-size:11px;font-weight:700;">Plan (2)</div><div class="kb-card"><strong>#216 雷区热更方案</strong></div></div>
+      <div class="kb-col"><div style="font-size:11px;font-weight:700;">Worktree · Coding (2)</div><div class="kb-card" style="border-color:var(--tide-line)"><strong>T-M6-71 星露谷浸泡稳态</strong><div class="mono k"><=8 文件/单</div></div></div>
+      <div class="kb-col"><div style="font-size:11px;font-weight:700;">Test (1)</div><div class="kb-card"><strong>#220 回放回归 #r-902</strong></div></div>
+      <div class="kb-col"><div style="font-size:11px;font-weight:700;">Review (1)</div><div class="kb-card"><strong>#221 reviewer-2 独立复核</strong></div></div>
+      <div class="kb-col"><div style="font-size:11px;font-weight:700;color:var(--amber);">PR · RC (2)</div><div class="kb-card" style="border-color:var(--amber-line);background:var(--amber-dim)"><strong>PR #88 · 矿洞丝血撤退</strong><div class="receipt warn" style="margin-top:4px;">L4-HOLD 等人工审批</div></div></div>
+    </div>
+  </div>
+
+  <!-- ③ Deep Issue #212 Anatomy (8 steps ending in .step.gate) -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-head"><h2 class="card-title">工单解剖 · Issue `#212`「矿洞丝血不撤退」</h2><span class="receipt warn">L4-HOLD · AI 无自批权限</span></div>
+    <div class="steps" style="margin-bottom:12px;">
+      <div class="step done"><div class="node"><span class="b">1</span><span class="lb">复现 #r-881</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">2</span><span class="lb">方案声明</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">3</span><span class="lb">worktree</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">4</span><span class="lb">coding</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">5</span><span class="lb">verify:gate</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">6</span><span class="lb">独立 Review</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">7</span><span class="lb">PR #88</span></div><span class="link"></span></div>
+      <div class="step gate"><div class="node"><span class="b">8</span><span class="lb">人工审批 L4</span></div></div>
+    </div>
+    <div class="grid-3">
+      <div class="inset"><strong>方案决策声明</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">改「HP&lt;25% 或 体力&lt;20% + 0.5s 滞回」；不直接弃层退出；保留 `retreat_v2` 回退开关。</div></div>
+      <div class="inset"><strong>门禁校验实证</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">单测 42/42 · 分支覆盖 93% (≥90%) · 回放 `#r-881` [SIMULATION] 通过。</div></div>
+      <div class="inset"><strong>独立 Review &amp; diff</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">`reviewer-2` 独立复核（严禁自写自审）· `+214 −66 / 6 files`。</div></div>
+    </div>
+  </div>
+
+  <!-- ④ Autonomy Ladder (L1-L5), Release Train & Synced Bug Reports -->
+  <div class="grid-2" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">自主等级 L1–L5 &amp; 灰度发布列车</h2><span class="pill pill-tide">当前 L3</span></div>
+      <div class="ladder-item"><span class="lv">L1–2</span><div>异常聚类上报与建议草案，不碰源码</div></div>
+      <div class="ladder-item on"><span class="lv" style="color:var(--tide)">L3</span><div><strong>`whale-isle-dev` 内独立修复+Review</strong> · 当前停此层</div></div>
+      <div class="ladder-item" style="border-left-color:var(--amber)"><span class="lv" style="color:var(--amber)">L4–5</span><div>合入主干 / 维护窗口发布 RC · 须人工审批，一键回滚 `v2.3.1` (RTO 3m42s)</div></div>
+      <div class="row" style="margin-top:10px;">
+        <button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.toast('实机回滚须在维护窗口经人类二次确认执行', 'warn')">一键回滚 v2.3.1 (预案演示)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="bug" class="ico-sm" style="color:var(--amber)"></i>运行期脱敏 Bug 队列 (来自 Topbar)</h2><span class="pill pill-green">PII / Key 已过滤</span></div>
+      <div class="stack" id="evo-bug-list"></div>
+    </div>
+  </div>
+
+  <!-- ⑤ 8 Absolute Prohibitions + S1-S5 Incremental Migration -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title" style="color:var(--red)">8 条绝对禁止红线 (`10 §11`)</h2></div>
+      <div style="font-size:11px;color:var(--text-2);line-height:1.85;">
+        1. 不得伪造「通过」或用 Mock 冒充真机 · 2. 不得自改安全策略并自审 · 3. 不得删改审计记录 · 4. 不得在运行期自我改码 · 5. 不得接触生产密钥 · 6. 回放绝不执行真实支付/私信/发帖 · 7. 不得越过 L4 人工审批合并 · 8. 不得把模拟指标当真机数据。
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="layers" class="ico-sm" style="color:var(--blue)"></i>S1–S5 V2 渐进实施迁移表 (SPEC §9)</h2><span class="pill pill-amber">V2-00 待确认</span></div>
+      <div class="kv-row"><span class="kv-k">S1 壳层 (六世界侧栏 + 顶栏 + ⌘K)</span><span class="pill pill-blue">设计待审 → 首期落地</span></div>
+      <div class="kv-row"><span class="kv-k">S2 语义层 (`.sonar/.receipt/.lic` + `token-meter`)</span><span class="pill">接真实账本</span></div>
+      <div class="kv-row"><span class="kv-k">S3–S5 世界页重组 + 治理遥测 + A11y</span><span class="pill">≤8 文件/单 · 串行 NEXT</span></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function renderBugQueue() {
+        var st = window.wiV2.get();
+        document.getElementById('evo-bug-list').innerHTML = st.bugReports.map(function (b) {
+          return '<div class="inset">' +
+            '<div class="row-between" style="margin-bottom:4px;"><span class="mono" style="font-weight:700;color:var(--tide)">' + window.wiV2.escapeHtml(b.id) + '</span>' +
+            '<span class="pill pill-blue">' + window.wiV2.escapeHtml(b.status) + '</span></div>' +
+            '<div style="font-size:11.5px;margin-bottom:4px;">' + window.wiV2.escapeHtml(b.summary) + '</div>' +
+            '<div class="row-between" style="font-size:10px;color:var(--text-3);"><span>来源：' + window.wiV2.escapeHtml(b.page) + ' · ' + window.wiV2.escapeHtml(b.time) + '</span><span class="pill pill-green">已脱敏</span></div></div>';
+        }).join('');
+      }
+      document.addEventListener('DOMContentLoaded', renderBugQueue);
+      document.addEventListener('wi-v2-state', renderBugQueue);
+    })();
+  </script>
+</body>
+</html>

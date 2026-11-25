@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ⑥ 直播舞台、弹幕漏斗与点歌导演</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <style>
+    .lyric-line { display: flex; align-items: baseline; gap: 12px; padding: 7px 12px; border-radius: 9px; font-size: 12px; color: var(--text-3); }
+    .lyric-line.past { opacity: 0.52; }
+    .lyric-line.now { background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); font-weight: 700; }
+    .lyric-line .en { margin-left: auto; font-size: 10.5px; color: var(--text-3); }
+  </style>
+</head>
+<body data-v2-page="live">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">LIVE CONTROL · 10-STAGE PIPELINE, SONG RIGHTS &amp; AUDIO ISOLATION</div>
+      <h1 class="v2-page-title">直播舞台、弹幕注意力收件箱与 4 重版权点歌</h1>
+      <p class="v2-page-sub">Doc 09：会话控制与降级横幅 · 30s 弹幕合并（不逐条调模型）· 10 步回应管线 · P0/P1/P2 语音队列 · 5/5 版权检查 · `audio_clock` 对齐歌词 · 双声道隔离。</p>
+    </div>
+    <div class="row">
+      <span class="pill pill-amber">[SIMULATION / V2-08 规划占位]</span>
+      <span class="pill pill-green">OBS Overlay · 18765</span>
+    </div>
+  </div>
+
+  <!-- ① Session Control Bar + Degraded Notice -->
+  <div class="card" style="margin-bottom:10px;">
+    <div class="row-between" style="flex-wrap:wrap; gap:16px;">
+      <div class="stack" style="gap:8px;">
+        <div class="row">
+          <div class="seg-tabs" id="live-plat-tabs">
+            <button type="button" class="seg-tab active">抖音 room 701234</button>
+            <button type="button" class="seg-tab">B站 直播间</button>
+          </div>
+          <span class="pill"><i data-lucide="shield" class="ico-sm"></i>官方 API 逐项验证，非授权逆向不入生产</span>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('开启本地预演模式（不出网）')">预演 · 不出网</button>
+          <button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.toast('停止直播推流并释放 OBS 舞台锁', 'warn')">结束直播</button>
+          <span class="pill pill-amber">租约至 24:00 · 自动下播</span>
+        </div>
+      </div>
+
+      <div class="row" style="gap:24px;">
+        <div>
+          <div class="row" style="gap:7px;"><span class="v2-dot danger"></span><span class="mono" style="font-size:24px;font-weight:750;">02:14:37</span></div>
+          <div class="k mono" style="font-size:9.5px;">LIVE DURATION (SIM)</div>
+        </div>
+        <div><div class="mono" style="font-size:18px;font-weight:700;">1,208</div><div class="k" style="font-size:10px;">在线 · 峰值 1,342</div></div>
+        <div><div class="mono" style="font-size:18px;font-weight:700;">23/min</div><div class="k" style="font-size:10px;">累计 4,318 条弹幕</div></div>
+        <div><div class="mono" style="font-size:18px;font-weight:700;">¥86</div><div class="k" style="font-size:10px;">礼物合并感谢 4 起</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="sv-banner amber" style="margin-bottom:14px;">
+    <i data-lucide="alert-triangle" class="ico-sm"></i>
+    <div><b>降级运行 DEGRADED：</b>抖音 ws 10 分钟内重连失败 ×2 → 已切 `dyhub` 备用通道（延迟 +1.4s）；恢复直连后自动升回，全程有真实状态回执。</div>
+  </div>
+
+  <!-- ② Attention Inbox + 10-Step Pipeline & Voice Queue -->
+  <div class="grid-2" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="activity" class="ico-sm" style="color:var(--tide)"></i>弹幕注意力收件箱 (`Attention Inbox`)</h2><span class="pill pill-tide">30s 同问合并省 2 次模型</span></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>观众 / 时间</th><th>弹幕内容</th><th>优先级</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td><strong>鲲鹏</strong><br /><span class="k mono">22:14:02</span></td><td>「小鲸！抬头看贴纸」</td><td><span class="pill pill-red">点名 P0</span></td><td><span class="receipt ok">已回应</span></td></tr>
+            <tr><td><strong>海风 ×3 合并</strong><br /><span class="k mono">22:13:47</span></td><td>同问「什么时候唱《起风了》」</td><td><span class="pill pill-amber">点歌 P1</span></td><td><span class="receipt run">合并 1 次</span></td></tr>
+            <tr><td><strong>浪里白条</strong><br /><span class="k mono">22:09:41</span></td><td>「大肥鱼游得好慢～」</td><td><span class="pill pill-red">雷区 P0</span></td><td><span class="receipt ok">0.08s 0 Token</span></td></tr>
+            <tr><td><strong>路过的咸鱼</strong><br /><span class="k mono">22:11:40</span></td><td style="color:var(--text-3)">「加微信低价代练…」</td><td><span class="pill">垃圾 P2</span></td><td><span class="receipt fail">已拦截</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="layers" class="ico-sm" style="color:var(--violet)"></i>10 步弹幕回应管线与语音队列</h2><span class="pill">端到端 1.2s</span></div>
+      <div class="steps" style="margin-bottom:11px;">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">去重</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">风险检测</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">合并</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">草稿</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">5</span><span class="lb">语音队列</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">6</span><span class="lb">记账归档</span></div></div>
+      </div>
+      <div class="stack" style="gap:7px;">
+        <div class="inset" style="border-color:var(--red-line);"><span class="pill pill-red">P0 不可打断</span> 「哼！本鲸才不是大肥鱼！」(模板 `t-07` · 0 Token)</div>
+        <div class="inset"><span class="pill pill-amber">P1 可打断</span> 「矿洞 55 层推荐先清蝙蝠再开箱子～」(`draft #d-093`)</div>
+        <div class="inset"><span class="pill pill-blue">P2 礼物合并</span> 感谢「海风」「小岛主」等 5 位朋友 (`MERGED ×5 · 90s限频`)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Song Request 5/5 Rights Check + Synced Lyrics -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-head"><h2 class="card-title"><i data-lucide="audio-lines" class="ico-sm" style="color:var(--amber)"></i>点歌版权门禁 (本地 0 Token) &amp; `audio_clock` 同步歌词</h2><span class="pill pill-violet">SVC 管线 RTF 0.31</span></div>
+    <div class="grid-2">
+      <div class="stack">
+        <div class="inset">
+          <div class="row-between" style="margin-bottom:5px;"><strong>《起风了》 · 请求：海风</strong><span class="receipt ok">OK 5/5 核验</span></div>
+          <div class="row" style="gap:4px;"><span class="lic mit">词曲授权 ✓</span><span class="lic mit">平台白名单 ✓</span><span class="lic mit">音源合规 ✓</span><span class="lic mit">AI翻唱声明 ✓</span></div>
+        </div>
+        <div class="inset" style="border-color:var(--red-line);background:var(--red-dim);">
+          <div class="row-between" style="margin-bottom:5px;"><strong>《某版权限制曲》 · 请求：小章鱼</strong><span class="lic unl">UNLICENSED</span></div>
+          <div style="font-size:11px;color:var(--text-2);">本地门禁直接拦截、不进队列、不耗模型，自动发弹幕引导改点备选曲目。</div>
+        </div>
+      </div>
+      <div class="inset">
+        <div class="row-between" style="margin-bottom:6px;"><strong>歌词时间轴预览 (`qifengle.lrc ±20ms`)</strong><span class="mono" style="color:var(--tide)">01:49.2</span></div>
+        <div class="lyric-line past"><span class="mono">01:45.8</span><span>我把名字写进浪花</span><span class="en">I write my name into the sea foam</span></div>
+        <div class="lyric-line now"><span class="mono">01:49.2</span><span>起风的时候 我正好路过</span><span class="en">The wind rose as I passed by</span></div>
+        <div class="lyric-line"><span class="mono">01:53.0</span><span>深海里有一盏灯 为你亮着</span><span class="en">A lantern in the deep, lit for you</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ Stage API, Audio Device Isolation & Verification Checklist -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="tv" class="ico-sm" style="color:var(--blue)"></i>Stage API 动作面 &amp; 音频物理隔离</h2><span class="pill pill-red">开播前麦克风默认关</span></div>
+      <div class="row" style="gap:6px;margin-bottom:10px;">
+        <button type="button" class="api-chip" onclick="window.wiV2.toast('Stage API: load character')">load character</button>
+        <button type="button" class="api-chip on" onclick="window.wiV2.toast('Stage API: set expression')">set expression</button>
+        <button type="button" class="api-chip on" onclick="window.wiV2.toast('Stage API: start singing')">start singing</button>
+        <button type="button" class="api-chip on" onclick="window.wiV2.toast('Stage API: show lyrics')">show lyrics</button>
+        <button type="button" class="api-chip danger" onclick="window.wiV2.setControlMode('stop')">stop (F8)</button>
+      </div>
+      <div class="kv-row"><span class="kv-k">直播音频 → 虚拟声卡 (`Live-Virtual`)</span><label class="sw"><input type="checkbox" checked /><span class="sw-slider"></span></label></div>
+      <div class="kv-row"><span class="kv-k">桌宠语音 → 本机扬声器 (`Built-in`)</span><label class="sw"><input type="checkbox" checked /><span class="sw-slider"></span></label></div>
+      <div class="kv-row"><span class="kv-k" style="color:var(--red)">桌面麦克风 → 默认禁用 (防昨晚忘关麦泄漏 12s)</span><label class="sw"><input type="checkbox" /><span class="sw-slider"></span></label></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>直播验收清单 (09 §11 · 严禁沙盒冒充真机)</h2><span class="pill pill-green">6/7 沙盒</span></div>
+      <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>20 条/秒峰值不逐条调模型 <span style="margin-left:auto" class="receipt ok">沙盒 [SIMULATION]</span></div>
+      <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>雷区 ≤0.1s 本地反驳 · 0 Token <span style="margin-left:auto" class="receipt ok">沙盒 [SIMULATION]</span></div>
+      <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>版权未过歌曲 100% 拦截 <span style="margin-left:auto" class="receipt ok">单测 + 沙盒</span></div>
+      <div class="chk-row"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>上场复盘：45s 环形切片 + 翻车点识别 <span style="margin-left:auto" class="receipt ok">沙盒</span></div>
+      <div class="chk-row"><i data-lucide="alert-triangle" class="ico-sm" style="color:var(--amber)"></i>真机抖音开播推流 + OBS 虚拟声卡 <span style="margin-left:auto" class="receipt warn">[REAL-DEVICE] 待验</span></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('#live-plat-tabs .seg-tab').forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            document.querySelectorAll('#live-plat-tabs .seg-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+            window.wiV2.toast('已切换直播渠道视角：' + tab.textContent.trim());
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

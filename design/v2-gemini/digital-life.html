@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ④ 数字生活与五类记忆图谱</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <style>
+    .lf-gauge { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 11px; }
+    .lf-gauge .lbl { width: 66px; flex-shrink: 0; color: var(--text-2); }
+    .lf-gauge .meter { flex: 1; }
+    .lf-gauge .val { font: 10px var(--font-mono); width: 96px; text-align: right; }
+    .mem-card { border-radius: var(--r-lg); padding: 12px 14px; background: var(--inset); border: 1px solid var(--stroke); }
+    .mem-card.pinned { border-color: var(--amber-line); box-shadow: 0 0 0 1px var(--amber-line); }
+    .mem-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
+    .mem-tags span { font: 9.5px var(--font-mono); padding: 2px 7px; border-radius: 6px; background: var(--surface); border: 1px solid var(--stroke); color: var(--text-2); }
+  </style>
+</head>
+<body data-v2-page="life">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">DIGITAL LIFE · SCHEDULER, DISCOVERY, MATRIX &amp; 5-TYPE MEMORY</div>
+      <h1 class="v2-page-title">数字生活、内容发现流与五类记忆图谱</h1>
+      <p class="v2-page-sub">Doc 08 / 11：生活三重预算门 · B站/小红书/抖音内容理解 · 3×7 平台能力矩阵 &amp; 防 CAPTCHA 红线 · 9 步社交决策与 P4 审批 · 五类记忆彻底遗忘。</p>
+    </div>
+    <div class="seg-tabs" id="life-tabs">
+      <button type="button" class="seg-tab active" data-lt="memory">五类记忆与 2 跳图谱</button>
+      <button type="button" class="seg-tab" data-lt="schedule">生活调度与内容发现流</button>
+      <button type="button" class="seg-tab" data-lt="social">社交矩阵、决策链与 P4 审批</button>
+    </div>
+  </div>
+
+  <!-- Tab 1: 5-Type Memory Browser + 2-Hop Graph + Daily Diary -->
+  <section class="life-panel" data-lp="memory">
+    <div class="statstrip">
+      <div class="card statbox"><div class="lbl">记忆图谱节点</div><div class="val">92</div><div class="delta">已接线 memory-graph</div></div>
+      <div class="card statbox"><div class="lbl">2-Hop 关联边</div><div class="val">202</div><div class="delta">30 天半衰期衰减</div></div>
+      <div class="card statbox"><div class="lbl">Pinned 长期记忆</div><div class="val">18</div><div class="delta">支持纠正与彻底遗忘</div></div>
+      <div class="card statbox"><div class="lbl">换日自动日记</div><div class="val">47</div><div class="delta">换日幂等归纳事件</div></div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title"><i data-lucide="brain" class="ico-sm" style="color:var(--violet)"></i>小鲸换日日记 (`Episodic Diary`)</h2><span class="receipt ok">已接线真实归档</span></div>
+        <div class="feedcard">
+          <strong>春 16 日 · 海滩领竹鱼竿 &amp; 保护五彩碎片</strong>
+          <p style="font-size:11px;color:var(--text-2);margin:4px 0 7px;">读完 7 封信后与威利汇合拿到鱼竿，途中背包满靠木箱自愈；记仇榜登记「阿哲」喊大肥鱼 7 天。</p>
+          <span class="pill pill-violet">7 事件</span> <span class="pill pill-green">重要度 0.88</span>
+        </div>
+        <div class="feedcard" style="margin-bottom:0;">
+          <strong>春 15 日 · 矿洞体力耗尽反思</strong>
+          <p style="font-size:11px;color:var(--text-2);margin:4px 0 7px;">23:30 忘记返程导致晕倒扣金币，教训已钉住为永久提醒规则。</p>
+          <span class="pill pill-amber">经验教训</span> <span class="pill pill-tide">userPinned</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title"><i data-lucide="globe" class="ico-sm" style="color:var(--tide)"></i>关联记忆图谱 · 2 跳召回</h2><span class="pill pill-blue">Top-5 加权</span></div>
+        <svg viewBox="0 0 520 220" style="width:100%;height:220px;background:var(--inset);border:1px solid var(--stroke);border-radius:12px;">
+          <g stroke="var(--stroke-2)" stroke-width="1.5"><path d="M255 108 120 52 55 108M255 108 390 46 455 104M255 108 130 172 55 108M255 108 390 168 455 104M120 52 390 46"/></g>
+          <circle cx="255" cy="108" r="22" fill="#3ee0cd"/><circle cx="120" cy="52" r="14" fill="#b48cff"/><circle cx="390" cy="46" r="16" fill="#35d49a"/><circle cx="130" cy="172" r="13" fill="#ffc247"/><circle cx="390" cy="168" r="12" fill="#4ea8ff"/><circle cx="55" cy="108" r="9" fill="#b48cff"/><circle cx="455" cy="104" r="10" fill="#35d49a"/>
+          <g fill="var(--text-2)" font-size="10.5"><text x="255" y="146" text-anchor="middle" fill="var(--text-1)" font-weight="700">小鲸</text><text x="120" y="30" text-anchor="middle">钓鱼</text><text x="390" y="24" text-anchor="middle">威利</text><text x="130" y="198" text-anchor="middle">矿洞教训</text><text x="390" y="195" text-anchor="middle">攻略证据</text><text x="55" y="131" text-anchor="middle">竹鱼竿</text><text x="455" y="128" text-anchor="middle">春16日</text></g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- 5-Type Memory Browser Cards -->
+    <div class="card">
+      <div class="card-head">
+        <h2 class="card-title"><i data-lucide="trash-2" class="ico-sm" style="color:var(--red)"></i>五类记忆分区 (`Working / Episodic / Semantic / Relational / Self`)</h2>
+        <div class="seg-tabs" id="mem-part-tabs">
+          <button type="button" class="seg-tab active" data-mp="ALL">全部 5 类</button>
+          <button type="button" class="seg-tab" data-mp="WORKING">Working</button>
+          <button type="button" class="seg-tab" data-mp="EPISODIC">Episodic</button>
+          <button type="button" class="seg-tab" data-mp="SEMANTIC">Semantic</button>
+          <button type="button" class="seg-tab" data-mp="RELATIONAL">Relational</button>
+          <button type="button" class="seg-tab" data-mp="SELF">Self</button>
+        </div>
+      </div>
+      <div class="banner warn" style="margin-bottom:12px;"><i data-lucide="shield" class="ico-sm"></i><div><b>彻底删除门禁 (Doc 08/11)：</b>「彻底删除」同步清理 SQLite 原事件、向量索引、图边与摘要引用（72h SLA），并在审计日志保留不可删的脱敏轨迹锚点。</div></div>
+      <div class="grid-2" id="mem-card-grid">
+        <div class="mem-card pinned" data-mcat="WORKING">
+          <div class="row-between"><span class="mono" style="color:var(--tide);font-weight:700;">WORKING · #mem_w03</span><span class="pill pill-amber">Pinned · conf 0.97</span></div>
+          <p style="margin:7px 0;font-size:12px;">宿主约定：五彩碎片与硬木×10 锁定不可出售；18:00 前先整理东区上古水果。</p>
+          <div class="mem-tags"><span>五彩碎片</span><span>对话 #4833</span><span>retention: user_pinned</span></div>
+          <div class="row" style="padding-top:7px;border-top:1px solid var(--stroke);">
+            <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('纠正 #mem_w03：保留修订历史 diff')">纠正</button>
+            <button type="button" class="btn btn-sm btn-danger mem-remove">彻底删除</button>
+          </div>
+        </div>
+        <div class="mem-card" data-mcat="EPISODIC">
+          <div class="row-between"><span class="mono" style="color:var(--violet);font-weight:700;">EPISODIC · #mem_e4821</span><span class="pill">conf 0.86 · 11-23</span></div>
+          <p style="margin:7px 0;font-size:12px;">和宿主在矿洞 45 层协同清理紫史莱姆，约定「升级工具优先于买装饰」。</p>
+          <div class="mem-tags"><span>矿洞 45 层</span><span>upgrade_tools</span><span>retention: summary_1y</span></div>
+          <div class="row" style="padding-top:7px;border-top:1px solid var(--stroke);">
+            <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('已钉住 #mem_e4821')">固定</button>
+            <button type="button" class="btn btn-sm btn-danger mem-remove">彻底删除</button>
+          </div>
+        </div>
+        <div class="mem-card" data-mcat="SEMANTIC">
+          <div class="row-between"><span class="mono" style="color:var(--blue);font-weight:700;">SEMANTIC · #mem_a7d3</span><span class="pill pill-green">conf 0.92 · 已实测</span></div>
+          <p style="margin:7px 0;font-size:12px;">雨天河流鱼种会替换为冬季鱼与鲶鱼（星露谷 1.6 验证 ×2）；洒水器最优 4 格待复测（0.55）。</p>
+          <div class="mem-tags"><span>BV1rx421D7fk</span><span>雨天鲶鱼</span><span>xhslink 低置信标明</span></div>
+          <div class="row" style="padding-top:7px;border-top:1px solid var(--stroke);">
+            <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('查看语义记忆原文与置信度曲线')">查看</button>
+            <button type="button" class="btn btn-sm btn-danger mem-remove">彻底删除</button>
+          </div>
+        </div>
+        <div class="mem-card" data-mcat="RELATIONAL">
+          <div class="row-between"><span class="mono" style="color:var(--green);font-weight:700;">RELATIONAL · #mem_r0218</span><span class="pill pill-amber">conf 0.74 · 记仇7d</span></div>
+          <p style="margin:7px 0;font-size:12px;">常客「海风」爱点歌、「阿哲」在弹幕喊过大肥鱼——仅基于公开互动，零私密画像。</p>
+          <div class="mem-tags"><span>观众最小化</span><span>海风</span><span>阿哲</span></div>
+          <div class="row" style="padding-top:7px;border-top:1px solid var(--stroke);">
+            <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('已取消「阿哲」7天记仇标记')">哄好消气</button>
+            <button type="button" class="btn btn-sm btn-danger mem-remove">彻底删除</button>
+          </div>
+        </div>
+        <div class="mem-card pinned" data-mcat="SELF">
+          <div class="row-between"><span class="mono" style="color:var(--amber);font-weight:700;">SELF · #mem_s0031</span><span class="pill pill-tide">conf 0.89</span></div>
+          <p style="margin:7px 0;font-size:12px;">我容易低估矿洞返程耗时，夜晚 22:40 起强制预留 20 分钟回床缓冲避免晕倒。</p>
+          <div class="mem-tags"><span>自我反思</span><span>夜间守卫</span></div>
+          <div class="row" style="padding-top:7px;border-top:1px solid var(--stroke);">
+            <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('已打开 Self 模型对比 diff')">历史 diff</button>
+            <button type="button" class="btn btn-sm btn-danger mem-remove">彻底删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 2: Life Scheduler + Triple Budget + Content Discovery Feed -->
+  <section class="life-panel" data-lp="schedule" style="display:none;">
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Life Scheduler v2 · 今日生活调度与停止条件</h2><span class="pill pill-amber">V2-07 规划</span></div>
+        <div class="timeline">
+          <div class="tlrow"><span class="time">08:30</span>晨间内容发现 · 停：连拒 3 条即收束 · <span class="receipt ok">COMPLETED</span></div>
+          <div class="tlrow"><span class="time">09:47</span>理解 B站《星露谷 1.6 钓鱼全攻略》· <span class="receipt ok">COMPLETED</span></div>
+          <div class="tlrow run"><span class="time">13:00</span>社交评论草稿过策略门 P4 · <span class="receipt run">IN_PROGRESS</span></div>
+          <div class="tlrow"><span class="time">22:30</span>复盘与夜间 DND 归档 · 23:30 硬截止不透支</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">生活三重预算门 (任一触顶自动静默)</h2><span class="pill pill-amber">耗尽即静默</span></div>
+        <div class="lf-gauge"><span class="lbl">每日成本</span><span class="meter"><i style="width:16%"></i></span><span class="val">29.4k / 500k 米</span></div>
+        <div class="lf-gauge"><span class="lbl">活跃时长</span><span class="meter"><i style="width:73%;background:var(--green)"></i></span><span class="val">4.4h / 6.0h</span></div>
+        <div class="lf-gauge"><span class="lbl">主动发言</span><span class="meter"><i style="width:37.5%;background:var(--amber)"></i></span><span class="val">9 / ≤24 次</span></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px;">单小时 ≤ 4 次发言；22:30 后外发归零；夜间只接收记忆不惊扰人类。</div>
+      </div>
+    </div>
+
+    <div class="sec-h"><i data-lucide="globe" class="ico-sm"></i><span>内容发现流 · 理解与兴趣回路</span><span class="ln"></span><span class="cnt">今日理解 12 条 · 不直接伪造确定</span></div>
+    <div class="grid-3">
+      <div class="card card-tight">
+        <div class="row-between" style="margin-bottom:6px;"><span class="pill pill-blue">Bilibili</span><span class="receipt ok">UNDERSTOOD</span></div>
+        <strong>星露谷 1.6 钓鱼全攻略 (BV1rx421D7fk)</strong>
+        <p style="font-size:11px;color:var(--text-2);margin:6px 0;">提取 16/18 要点；2 条噪声音频段挂「待游戏实证」；兴趣「钓鱼 0.72 → 0.81」。</p>
+      </div>
+      <div class="card card-tight">
+        <div class="row-between" style="margin-bottom:6px;"><span class="pill pill-red">小红书</span><span class="receipt warn">PARTIAL</span></div>
+        <strong>农场布局灵感 · 3 种流派 (xhslink)</strong>
+        <p style="font-size:11px;color:var(--text-2);margin:6px 0;">视觉提取洒水器间距 4 格，OCR 噪声导致置信 0.55，UI 明确标低置信不盲信。</p>
+      </div>
+      <div class="card card-tight">
+        <div class="row-between" style="margin-bottom:6px;"><span class="pill pill-tide">抖音</span><span class="receipt ok">UNDERSTOOD</span></div>
+        <strong>主播互动节奏学习 · 45s 复盘切片</strong>
+        <p style="font-size:11px;color:var(--text-2);margin:6px 0;">提炼读弹幕 → 抛梗节奏，仅用于事后复盘，不机械复制台词。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 3: 3x7 Platform Matrix + 9-Step Decision Chain + P4 Draft + Profile -->
+  <section class="life-panel" data-lp="social" style="display:none;">
+    <div class="sv-banner" style="margin-bottom:14px;">
+      <i data-lucide="shield" class="ico-sm"></i>
+      <div><b>绝不绕过人机校验 (`BLOCKED_CAPTCHA`)：</b> 任何平台弹出 CAPTCHA、滑块或登录风控立即停止自动脚本并交还人类；绝不共享宿主主力浏览器 Cookie。</div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-head"><h2 class="card-title">3 平台 × 7 能力可审计矩阵 (`official_api | browser_ui | block`)</h2><span class="pill">独立 Profile: `profiles/char_wh001`</span></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>平台</th><th>搜索</th><th>读公开内容</th><th>读评论</th><th>点赞/收藏</th><th>写评论 (P4)</th><th>发图文 (P4)</th><th>直播事件流</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Bilibili</strong></td><td><span class="mx-ok">official_api</span></td><td><span class="mx-ok">official_api</span></td><td><span class="mx-ok">official_api</span></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-ask">P4 审批</span></td><td><span class="mx-no">禁止自动</span></td><td><span class="mx-ok">official_api</span></td></tr>
+            <tr><td><strong>抖音</strong></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-no">—</span></td><td><span class="mx-no">—</span></td><td><span class="mx-no">—</span></td><td><span class="mx-ok">dyhub API</span></td></tr>
+            <tr><td><strong>小红书</strong></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-ui">browser_ui</span></td><td><span class="mx-no">—</span></td><td><span class="mx-no">—</span></td><td><span class="mx-no">—</span></td><td><span class="mx-no">无</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-head"><h2 class="card-title">9 步社交表达决策链 (卡在 P4 策略门)</h2><span class="pill pill-amber">策略门 P4 人工把关</span></div>
+      <div class="steps" style="margin-bottom:12px;">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">调度</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">发现</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">理解</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">兴趣</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">关系</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">6</span><span class="lb">决策</span></div><span class="link"></span></div>
+        <div class="step gate"><div class="node"><span class="b">7</span><span class="lb">P4 策略门</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">8</span><span class="lb">行动</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">9</span><span class="lb">审计</span></div></div>
+      </div>
+
+      <div class="feedcard" id="draft-c5e2" style="margin-bottom:0;">
+        <div class="row-between" style="margin-bottom:6px;">
+          <div class="row"><span class="pill pill-tide">评论草稿 `draft_c5e2`</span><span class="pill pill-green">雷区词 0 · 18字</span></div>
+          <span class="pill pill-amber">P4 单次批准生效</span>
+        </div>
+        <div style="font-size:12.5px;margin-bottom:8px;">「这条攻略讲得很清楚，感谢 UP 主整理！(目标：`BV1rx421D7fk` 公开评论区)」</div>
+        <div class="row">
+          <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('draft-c5e2').remove(); window.wiV2.toast('已单次批准 draft_c5e2，仅发此条评论')">批准发送</button>
+          <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('已打开草稿微调框')">微调文字</button>
+          <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('draft-c5e2').remove(); window.wiV2.toast('已拒绝并记入 evt_gate_* · 24h 不再生成同类草稿', 'warn')">拒绝</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('#life-tabs .seg-tab').forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            var k = tab.getAttribute('data-lt');
+            document.querySelectorAll('#life-tabs .seg-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+            document.querySelectorAll('.life-panel').forEach(function (p) { p.style.display = p.getAttribute('data-lp') === k ? 'block' : 'none'; });
+          });
+        });
+        document.querySelectorAll('#mem-part-tabs .seg-tab').forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            var k = tab.getAttribute('data-mp');
+            document.querySelectorAll('#mem-part-tabs .seg-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+            document.querySelectorAll('#mem-card-grid .mem-card').forEach(function (c) {
+              c.style.display = (k === 'ALL' || c.getAttribute('data-mcat') === k) ? '' : 'none';
+            });
+          });
+        });
+        document.querySelectorAll('.mem-remove').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var c = btn.closest('.mem-card');
+            if (c) c.remove();
+            window.wiV2.toast('已级联抹除 SQLite / 向量 / 图边，保留不可删审计锚点', 'warn');
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ① 总览与对话指挥台</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <style>
+    .state-chip { border: 1px solid var(--stroke); background: var(--inset); padding: 3.5px 10px; border-radius: 980px; font-size: 10.5px; color: var(--text-3); }
+    .state-chip.on { background: var(--tide-dim); border-color: var(--tide-line); color: var(--tide); font-weight: 650; }
+    .sub-meter { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-2); padding: 3.5px 0; }
+    .sub-meter .meter { flex: 1; }
+    .sub-meter .n { font: 10.5px var(--font-mono); width: 46px; text-align: right; color: var(--text-1); }
+  </style>
+</head>
+<body data-v2-page="home" data-v2-fullbleed="true">
+  <div class="chat-pane">
+    <!-- Sticky Mode & Channel Bar -->
+    <div class="convbar">
+      <div class="seg-tabs" id="hub-mode-tabs">
+        <button type="button" class="seg-tab active" data-hub="chat"><i data-lucide="message-square" class="ico-sm"></i>对话指挥台</button>
+        <button type="button" class="seg-tab" data-hub="dash"><i data-lucide="compass" class="ico-sm"></i>数字生命仪表盘</button>
+      </div>
+      <span class="convpill active">星露谷 · 春16日共玩</span>
+      <a class="convpill" href="live-stage.html">直播间陪聊</a>
+      <a class="convpill" href="embodiment.html">化身星座</a>
+      <span style="flex:1;"></span>
+      <button type="button" class="btn btn-sm btn-danger" id="demo-rage-btn"><i data-lucide="alert-triangle" class="ico-sm"></i>“大肥鱼”0 Token 雷区测试</button>
+      <span class="pill pill-tide">char_wh001 · 小鲸</span>
+    </div>
+
+    <!-- Mode A: Full-Height Chat Command + 304px GET_STATE Aside -->
+    <div class="split-aside" id="hub-chat-view">
+      <div class="chat-pane">
+        <div class="chatflow" id="chat-stream">
+          <div class="message">
+            <div class="mhead me"><span>09:41</span><b>你</b><div class="avatar me">Y</div></div>
+            <div class="bubble me">小鲸，先去把信读一下，然后去沙滩找威利拿鱼竿，剩下的你自己安排，记得别晕倒了。</div>
+          </div>
+
+          <div class="message">
+            <div class="mhead"><div class="avatar">鲸</div><b>小鲸</b><span>09:41</span><span class="pill pill-violet">MiniMax-M3.1-Flash · Low</span><span class="pill pill-amber">好奇 · 专注共玩</span></div>
+            <div class="context-row">
+              <span class="pill pill-violet">命中记忆 7 条 · 威利钓鱼</span>
+              <span class="pill pill-green">攻略注入 · guide-forager (VERIFIED)</span>
+            </div>
+            <details class="think" open>
+              <summary><i data-lucide="brain" class="ico-sm"></i>内心戏云朵 · 328 粒米 <span style="flex:1;"></span><span style="opacity:0.75;">点击展开 / 收起 (D11 可关外放)</span></summary>
+              <div class="think-body">哼，主人居然担心本鲸晕倒……我打算先读信，再去海滩找威利拿竹鱼竿。协作模式下人类的键鼠操作不会打断我，等拿完鱼竿看背包空位再决定继续钓还是就地做个箱子。</div>
+            </details>
+            <div class="bubble">哼，本鲸才不会晕倒呢！信马上就去读，威利那边我也记着了。主人就在旁边看着吧～</div>
+
+            <div class="toolcard">
+              <div class="toolhead"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i><span class="toolname">read_mail</span><span style="flex:1;"></span><span class="receipt ok">COMPLETED · 0.31s</span></div>
+              <div class="toolbody">读了 7 封信：威利（鱼竿线索）、罗宾（斧头悬赏）、刘易斯（复活节预告）……已写入 Episodic 记忆。</div>
+            </div>
+            <div class="toolcard">
+              <div class="toolhead"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i><span class="toolname">travel_to(Beach)</span><span style="flex:1;"></span><span class="receipt ok">COMPLETED · 3.8s</span></div>
+              <div class="toolbody">抵达 Beach，触发威利剧情，背包新增竹鱼竿 ×1。</div>
+            </div>
+            <div class="toolcard">
+              <div class="toolhead"><i data-lucide="activity" class="ico-sm" style="color:var(--blue)"></i><span class="toolname">fish(casts: 3)</span><span style="flex:1;"></span><span class="receipt run">RUNNING · 45s 心跳</span></div>
+              <div class="toolbody">已抛竿 2 / 3 · 第 2 竿咬钩中。真实执行回执校验中，严禁凭台词臆造完成态。</div>
+            </div>
+          </div>
+
+          <div class="message">
+            <div class="mhead me"><span>10:35</span><b>你</b><div class="avatar me">Y</div></div>
+            <div class="bubble me">测试用：直接把体力回满，或者发条总结去 B 站吧。</div>
+            <div class="card card-tight" id="p4-demo-card" style="margin:9px 0 0 34px;border-color:var(--amber-line);background:var(--amber-dim);">
+              <div class="row-between" style="margin-bottom:4px;">
+                <strong style="color:var(--amber);font-size:11.5px;">需要确认 · CheatBridge / P4 高影响操作</strong>
+                <span class="pill pill-amber">P4 人工审批门</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-2);margin-bottom:8px;">将体力从 98 修改为 270（或对外发送动态），操作会保存前后状态快照并强制写入不可篡改审计日志。</div>
+              <div class="row">
+                <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('p4-demo-card').remove(); window.wiV2.toast('已批准执行并记录审计快照')">执行</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('p4-demo-card').remove(); window.wiV2.toast('已拒绝操作，维持原游戏体力', 'warn')">拒绝</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composerwrap">
+          <div class="composer">
+            <input id="chat-input" placeholder="和小鲸说话、提共玩建议，或输入 / 开头下发 P0 直接指令（如 /fish 5）…" />
+            <div class="composerfoot">
+              <span class="pill pill-green"><span class="v2-dot" style="width:5px;height:5px;"></span>共玩协作中</span>
+              <span class="pill pill-violet">LLM 大脑</span>
+              <span style="flex:1;"></span>
+              <span class="mono" style="font-size:10px;color:var(--text-3);">Enter 发送 · / 指令 · F8 急停</span>
+              <button type="button" class="btn btn-sm btn-primary" id="chat-send">发送</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="chat-aside">
+        <div class="sect" style="margin-top:0;"><span>星露谷 · GET_STATE 实时</span><a href="game-coop.html" style="color:var(--tide)">进入共玩</a></div>
+        <div class="card card-tight" style="margin-bottom:13px;">
+          <div class="row-between" style="margin-bottom:7px;">
+            <strong style="color:var(--green);font-size:12px;">春 16 · 周二</strong>
+            <span class="receipt ok">已接线 MCP 18080</span>
+          </div>
+          <div class="kv-row"><span class="kv-k">游戏时间</span><span class="kv-v mono">10:34 AM</span></div>
+          <div class="kv-row"><span class="kv-k">所在位置</span><span class="kv-v mono">Beach (38,36)</span></div>
+          <div class="kv-row"><span class="kv-k">金钱</span><span class="kv-v mono">640g</span></div>
+          <div class="kv-row"><span class="kv-k">体力</span><span class="kv-v mono" style="color:var(--amber)">98 / 270</span></div>
+          <div class="rice-bar"><i style="width:36%;background:var(--amber)"></i></div>
+          <div style="font-size:10px;color:var(--green);margin-top:5px;"><span class="v2-dot" style="display:inline-block;margin-right:5px;"></span>看门狗正常 · 最近回执 12s 前</div>
+        </div>
+
+        <div class="sect">动作时间线</div>
+        <div class="card card-tight" style="margin-bottom:13px;">
+          <div class="timeline">
+            <div class="tlrow"><span class="time">09:41</span>read_mail · 7 封 (COMPLETED)</div>
+            <div class="tlrow"><span class="time">09:44</span>travel_to Beach (COMPLETED)</div>
+            <div class="tlrow"><span class="time">09:58</span>获得竹鱼竿 ×1</div>
+            <div class="tlrow"><span class="time">10:20</span>钓到完美鳀鱼</div>
+            <div class="tlrow run"><span class="time">10:32</span>fish ×3 · 进行中</div>
+          </div>
+        </div>
+
+        <div class="sect">快捷 P0 插队指令</div>
+        <div class="quickgrid" style="margin-bottom:13px;">
+          <button type="button" class="quickbtn p0-cmd" data-cmd="/goto Beach">去海滩</button>
+          <button type="button" class="quickbtn p0-cmd" data-cmd="/fish 5">钓 5 竿</button>
+          <button type="button" class="quickbtn p0-cmd" data-cmd="/forage">去采集</button>
+          <button type="button" class="quickbtn p0-cmd" data-cmd="/sleep-now">回家睡觉</button>
+          <button type="button" class="quickbtn p0-cmd" data-cmd="/state">播报状态</button>
+          <button type="button" class="quickbtn p0-cmd" data-cmd="/stop" style="color:var(--red)">停止动作</button>
+        </div>
+
+        <div class="sect"><span>独立桌面桌宠双窗</span><a href="pet-stage.html" style="color:var(--tide)">预览浮窗</a></div>
+        <div class="card card-tight">
+          <div class="itemrow"><div class="itemico"><i data-lucide="sparkles" class="ico-sm"></i></div><div class="iteminfo"><strong>独立透明桌宠窗</strong><p>x:1140 y:180 · 副角色泡芙 Passive</p></div></div>
+          <div class="itemrow"><div class="itemico"><i data-lucide="brain" class="ico-sm"></i></div><div class="iteminfo"><strong>命中记忆 7 条</strong><p>春16 · 威利 · 钓鱼 · 2 跳关联</p></div></div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Mode B: Full Digital Life Dashboard (fused from design/v2/home.html) -->
+    <div id="hub-dash-view" style="display:none; flex:1; overflow-y:auto; padding:20px 24px 36px;">
+      <div class="sec-h" style="margin-top:0;"><i data-lucide="compass" class="ico-sm"></i><span>数字生命 · 此刻</span><span class="ln"></span><span class="cnt">Character ID: char_wh001 ·「小鲸」</span></div>
+
+      <!-- Identity + 9-State Interactive Sonar + Mood Map -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="row-between" style="align-items:center; gap:20px; flex-wrap:wrap;">
+          <div class="row" style="gap:15px; flex:1; min-width:300px; align-items:flex-start;">
+            <div class="avatar" style="width:54px;height:54px;font-size:19px;">鲸</div>
+            <div class="stack" style="gap:8px; flex:1;">
+              <div class="row">
+                <strong style="font-size:17px;">小鲸</strong>
+                <span class="pill pill-tide"><span class="v2-dot" style="width:5px;height:5px;"></span>主角色 Primary</span>
+                <span class="pill">一个 AI · 四种投影</span>
+                <span class="receipt ok">化身一致性 3/3</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--text-2);">深海领航员 · 好奇心强、嘴硬心软、对钓鱼与保护稀有矿石有执念。人格 v27 · 主引擎 `MiniMax-M3.1-Flash`（可替换，不换身份）。</div>
+              <div class="why"><i data-lucide="brain" class="ico-sm"></i><span><b>正在做：</b>在矿洞 45 层挖矿 / 海滩钓鱼并兼顾东区洒水器。<br /><b>为什么：</b>「补齐铜矿」来自共同目标，五彩碎片已上稀有锁（证据：回执 #a421）。</span></div>
+              <div class="row" id="dash-state-chips" style="gap:5px;margin-top:2px;">
+                <button type="button" class="state-chip" data-st="IDLE" data-c="">idle</button>
+                <button type="button" class="state-chip" data-st="LISTENING" data-c="">listening</button>
+                <button type="button" class="state-chip" data-st="THINKING" data-c="violet">thinking</button>
+                <button type="button" class="state-chip" data-st="SPEAKING" data-c="">speaking</button>
+                <button type="button" class="state-chip" data-st="SINGING" data-c="violet">singing</button>
+                <button type="button" class="state-chip on" data-st="GAMING · 星露谷" data-c="">gaming</button>
+                <button type="button" class="state-chip" data-st="REACTING · 喷水" data-c="red">reacting</button>
+                <button type="button" class="state-chip" data-st="RESTING · 静默" data-c="amber">resting</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row" style="gap:24px; align-items:center;">
+            <div class="stack" style="align-items:center; gap:10px;">
+              <div class="sonar" id="dash-sonar"><span class="ring"></span><span class="ring"></span><span class="ring"></span><div class="core"><i data-lucide="gamepad-2"></i></div><span class="sonar-label" id="dash-sonar-lbl">GAMING · 星露谷</span></div>
+              <span class="pill"><i data-lucide="clock" class="ico-sm"></i>租约 TTL 42s</span>
+            </div>
+            <div class="stack" style="gap:6px;">
+              <span class="k mono" style="font-size:10px;">MOOD · V/A 平面</span>
+              <div class="mood-map"><span class="axis v"></span><span class="axis h"></span><span class="trail" style="left:65%;top:32%"></span><span class="pt"></span><span class="lb" style="left:7px;top:6px;">高唤醒</span><span class="lb" style="right:7px;bottom:6px;">愉悦 ↑</span></div>
+              <div class="row" style="gap:5px;"><span class="pill pill-tide">兴奋 82</span><span class="pill pill-green">专注 0.82</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Today Timeline & 6-Horizon Goals -->
+      <div class="grid-2" style="margin-bottom:14px;">
+        <div class="card">
+          <div class="card-head"><h3 class="card-title"><i data-lucide="clock" class="ico-sm" style="color:var(--tide)"></i>今日生活时间轴 (Life Scheduler)</h3><span class="pill pill-green">运行中</span></div>
+          <div class="timeline">
+            <div class="tlrow"><span class="time">08:30</span>晨间浇灌东侧农田 42 格 · <span class="receipt ok">COMPLETED</span></div>
+            <div class="tlrow"><span class="time">10:00</span>背包满 → 就地建临时箱存杂物 · <span class="receipt ok">COMPLETED</span></div>
+            <div class="tlrow run"><span class="time">11:30</span>矿洞 45 层补 40 铜矿 · <span class="receipt run">IN_PROGRESS</span></div>
+            <div class="tlrow"><span class="time">14:00</span>创作工坊 · 像素资产补帧 · <span class="pill">V2-03 规划</span></div>
+            <div class="tlrow"><span class="time">20:00</span>晚间直播 · 星露谷共玩场 · <span class="pill pill-violet">V2-08 规划</span></div>
+            <div class="tlrow"><span class="time">22:30</span>换日复盘写日记 &amp; 夜间 DND 静默开始</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3 class="card-title"><i data-lucide="layers" class="ico-sm" style="color:var(--tide)"></i>六层多时间尺度目标</h3><span class="pill">可暂停 / 重排</span></div>
+          <div class="kv-row"><span class="kv-k">当前动作 (`Action`)</span><span class="kv-v">清理 45 层东侧石堆 · <span class="receipt run">RUNNING</span></span></div>
+          <div class="kv-row"><span class="kv-k">短期目标 (`Short-Term`)</span><span class="kv-v">补齐 40 铜矿 → 升级铜镐 (26/40)</span></div>
+          <div class="kv-row"><span class="kv-k">游戏日目标 (`Daily`)</span><span class="kv-v">雨天备水：修好 2 台洒水器</span></div>
+          <div class="kv-row"><span class="kv-k">长期项目 (`Long-Term`)</span><span class="kv-v">扩建畜棚养鸭（宿主出钱 5,000g / 小鲸出力）</span></div>
+          <div class="kv-row"><span class="kv-k">自主兴趣 (`Self`)</span><span class="kv-v">雨雪天尝试钓传说级「冰川鱼」</span></div>
+          <div class="kv-row"><span class="kv-k">共同目标 (`Shared`)</span><span class="kv-v">冬季前完成温室社区中心收集包</span></div>
+        </div>
+      </div>
+
+      <!-- Filtered Event Bubble Stream + Token Sub-Meter & Plane Health -->
+      <div class="grid-2" style="margin-bottom:14px;">
+        <div class="card">
+          <div class="card-head">
+            <h3 class="card-title"><i data-lucide="activity" class="ico-sm" style="color:var(--tide)"></i>全世界事件气泡流</h3>
+            <div class="seg-tabs" id="evt-filter-tabs">
+              <button type="button" class="seg-tab active" data-ev="all">全部</button>
+              <button type="button" class="seg-tab" data-ev="game">游戏</button>
+              <button type="button" class="seg-tab" data-ev="live">直播</button>
+              <button type="button" class="seg-tab" data-ev="mem">记忆</button>
+              <button type="button" class="seg-tab" data-ev="evo">进化</button>
+            </div>
+          </div>
+          <div class="stack" id="evt-bubble-list">
+            <div class="inset evt-item" data-cat="game"><span class="pill pill-tide">小鲸内心戏</span> 背包满了但矿洞里有石头，就地建个箱子比跑回农场划算。</div>
+            <div class="inset evt-item" data-cat="game"><span class="pill pill-blue">BWF MCP 回执</span> `#a421` 放置木箱 → <span class="receipt ok">COMPLETED · 0.42s</span> · 存入 12 格</div>
+            <div class="inset evt-item" data-cat="live"><span class="pill pill-amber">直播漏斗 P1</span> 「今天钓到冰川鱼了吗？！」→ 合并 3 条同类弹幕 → 入草稿</div>
+            <div class="inset evt-item" data-cat="mem"><span class="pill pill-violet">memory-graph</span> 写入 Episodic 记忆：「升级工具优先于装饰」· 置信 0.86</div>
+            <div class="inset evt-item" data-cat="evo"><span class="pill">进化引擎</span> Issue `#212`「矿洞丝血不撤退」通过独立 Review → PR `#88` 等 L4 审批</div>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="card">
+            <div class="card-head"><h3 class="card-title"><i data-lucide="wheat" class="ico-sm" style="color:var(--amber)"></i>饭碗 · Token 分项消耗 (`token-meter.ts`)</h3><span class="mono" style="color:var(--amber)">83.2k / 500k</span></div>
+            <div class="sub-meter"><span style="width:58px">游戏决策</span><span class="meter"><i style="width:44%"></i></span><span class="n">31.4k</span></div>
+            <div class="sub-meter"><span style="width:58px">日常对话</span><span class="meter"><i style="width:28%"></i></span><span class="n">19.8k</span></div>
+            <div class="sub-meter"><span style="width:58px">攻略检索</span><span class="meter"><i style="width:14%;background:var(--blue)"></i></span><span class="n">9.6k</span></div>
+            <div class="sub-meter"><span style="width:58px">歌声/资产</span><span class="meter"><i style="width:11%;background:var(--violet)"></i></span><span class="n">9.0k</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3 class="card-title"><i data-lucide="cpu" class="ico-sm" style="color:var(--green)"></i>平面健康状态真相</h3></div>
+            <div class="kv-row"><span class="kv-k">模型网关 / 语音</span><span class="kv-v"><span class="receipt ok">已接线真链路</span> · `MiniMax` + `voice-host.ts`</span></div>
+            <div class="kv-row"><span class="kv-k">星露谷桥 / WebUI</span><span class="kv-v mono">BWF 18080 · WebUI 18780 (Token 鉴权)</span></div>
+            <div class="kv-row"><span class="kv-k">3D / 上游官方额度</span><span class="kv-v"><span class="pill pill-amber">Hunyuan3D 限流 · 额度 未知/不可查询</span></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Projections Links -->
+      <div class="sec-h"><i data-lucide="shapes" class="ico-sm"></i><span>一个 AI · 四种投影</span><span class="ln"></span><a href="embodiment.html" style="color:var(--tide);font-size:10.5px;">查看化身星座图 →</a></div>
+      <div class="grid-4">
+        <a class="card card-tight" href="pet-stage.html"><div class="row-between"><strong>独立透明桌宠窗</strong><span class="receipt ok">LIVE</span></div><div style="font-size:10.5px;color:var(--text-3);margin-top:4px;">点击预览桌面原生透明浮窗</div></a>
+        <a class="card card-tight" href="game-coop.html"><div class="row-between"><strong>星露谷化身</strong><span class="receipt run">L1 SYNC</span></div><div style="font-size:10.5px;color:var(--text-3);margin-top:4px;">BWF MCP 18080 实机驱动</div></a>
+        <a class="card card-tight" href="embodiment.html"><div class="row-between"><strong>舞台形象</strong><span class="receipt ok">READY</span></div><div style="font-size:10.5px;color:var(--text-3);margin-top:4px;">Live2D 口型绑定插槽</div></a>
+        <a class="card card-tight" href="live-stage.html"><div class="row-between"><strong>OBS 图层源</strong><span class="pill">18765</span></div><div style="font-size:10.5px;color:var(--text-3);margin-top:4px;">双声道已物理隔离</div></a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function appendMsg(role, meta, body, extraHtml) {
+        var stream = document.getElementById('chat-stream');
+        var wrap = document.createElement('div');
+        wrap.className = 'message';
+        if (role === 'user') {
+          wrap.innerHTML = '<div class="mhead me"><span>刚刚</span><b>' + window.wiV2.escapeHtml(meta) + '</b><div class="avatar me">Y</div></div>' +
+            '<div class="bubble me">' + window.wiV2.escapeHtml(body) + '</div>';
+        } else {
+          wrap.innerHTML = '<div class="mhead"><div class="avatar">鲸</div><b>' + window.wiV2.escapeHtml(meta) + '</b><span>刚刚</span></div>' +
+            '<div class="bubble">' + window.wiV2.escapeHtml(body) + '</div>' + (extraHtml || '');
+        }
+        stream.appendChild(wrap);
+        stream.scrollTop = stream.scrollHeight;
+      }
+
+      function handleSend(text) {
+        var val = (text || '').trim();
+        if (!val) return;
+        appendMsg('user', '你', val);
+        if (val.indexOf('大肥鱼') !== -1) {
+          appendMsg('ai', '小鲸 · [0-Token Reflex]', '谁是“大肥鱼”啊！！本鲸这叫深海流体力学完美流线型！',
+            '<div class="toolcard"><div class="toolhead"><span class="toolname" style="color:var(--red)">reflex_spray</span><span style="flex:1;"></span><span class="receipt fail">0 Token · 80ms</span></div><div class="toolbody">命中 Persona 雷区词，跳过 LLM 消耗；已通知独立透明桌宠窗喷水。</div></div>');
+          window.wiV2.toast('触发 0-Token 雷区反射，桌宠窗已同步喷水', 'warn');
+        } else if (val.charAt(0) === '/') {
+          appendMsg('ai', '小鲸 · 直接指令路由', '收到直接指令「' + val + '」，正在校验游戏动作锁后执行。',
+            '<div class="toolcard"><div class="toolhead"><span class="toolname">dispatch_command</span><span style="flex:1;"></span><span class="receipt run">EXECUTING</span></div><div class="toolbody">' + window.wiV2.escapeHtml(val) + '</div></div>');
+        } else {
+          appendMsg('ai', '小鲸 · 协作判断', '好呀，我把你的建议记在当前合作计划里，不会粗暴打断手头正在进行的节奏～');
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('#hub-mode-tabs .seg-tab').forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            document.querySelectorAll('#hub-mode-tabs .seg-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+            var h = tab.getAttribute('data-hub');
+            document.getElementById('hub-chat-view').style.display = h === 'chat' ? 'grid' : 'none';
+            document.getElementById('hub-dash-view').style.display = h === 'dash' ? 'block' : 'none';
+          });
+        });
+        document.querySelectorAll('#dash-state-chips .state-chip').forEach(function (c) {
+          c.addEventListener('click', function () {
+            document.querySelectorAll('#dash-state-chips .state-chip').forEach(function (x) { x.classList.toggle('on', x === c); });
+            var cls = c.getAttribute('data-c');
+            document.getElementById('dash-sonar').className = 'sonar' + (cls ? ' ' + cls : '');
+            document.getElementById('dash-sonar-lbl').textContent = c.getAttribute('data-st');
+          });
+        });
+        document.querySelectorAll('#evt-filter-tabs .seg-tab').forEach(function (t) {
+          t.addEventListener('click', function () {
+            document.querySelectorAll('#evt-filter-tabs .seg-tab').forEach(function (x) { x.classList.toggle('active', x === t); });
+            var ev = t.getAttribute('data-ev');
+            document.querySelectorAll('#evt-bubble-list .evt-item').forEach(function (el) {
+              el.style.display = (ev === 'all' || el.getAttribute('data-cat') === ev) ? '' : 'none';
+            });
+          });
+        });
+        var inp = document.getElementById('chat-input');
+        document.getElementById('chat-send').addEventListener('click', function () { handleSend(inp.value); inp.value = ''; });
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { handleSend(inp.value); inp.value = ''; } });
+        document.querySelectorAll('.p0-cmd').forEach(function (btn) {
+          btn.addEventListener('click', function () { inp.value = btn.getAttribute('data-cmd'); inp.focus(); });
+        });
+        document.getElementById('demo-rage-btn').addEventListener('click', function () { handleSend('弹幕都在叫你大肥鱼！'); });
+      });
+    })();
+  </script>
+</body>
+</html>

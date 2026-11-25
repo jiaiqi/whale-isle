@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="system">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>鲸屿 Whale Isle V2 · 曜潮设计体系 Gallery</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+    /* Gallery-scoped Obsidian Tide layout supplements */
+    .g-wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 20px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .g-hero {
+      position: relative;
+      overflow: hidden;
+      padding: 26px 28px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background:
+        radial-gradient(900px 320px at 90% -10%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+        radial-gradient(640px 280px at 10% 110%, color-mix(in srgb, var(--teal) 14%, transparent), transparent 60%),
+        var(--surface);
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .g-hero-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .g-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      padding: 4px 10px;
+      border-radius: 999px;
+      width: fit-content;
+    }
+    .g-title {
+      margin: 8px 0 6px;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .g-sub {
+      margin: 0;
+      max-width: 760px;
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text-2);
+    }
+    .g-hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .g-metrics {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 980px) {
+      .g-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      .g-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .g-metric {
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .g-metric strong {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .g-metric span {
+      font-size: 12px;
+      color: var(--text-3);
+    }
+    .g-sec-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .g-sec-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .g-sec-head p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-3);
+    }
+    .g-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .g-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 980px) {
+      .g-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 680px) {
+      .g-grid-3, .g-grid-2 { grid-template-columns: 1fr; }
+    }
+    .g-card {
+      padding: 16px 18px;
+      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 140ms ease, transform 140ms ease;
+    }
+    .g-card:hover {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    }
+    .g-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .g-card-title {
+      font-size: 14px;
+      font-weight: 650;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+    }
+    .g-card p {
+      margin: 0;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--text-2);
+    }
+    .g-layers {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 900px) {
+      .g-layers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .g-swatch {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+    }
+    .g-swatch-bar {
+      height: 54px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-family: var(--font-mono, ui-monospace, monospace);
+      border-bottom: 1px solid var(--border);
+    }
+    .g-swatch-body {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .g-swatch-body strong { font-size: 12.5px; color: var(--text); }
+    .g-swatch-body span { font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+    .g-worlds {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 900px) {
+      .g-worlds { grid-template-columns: 1fr; }
+    }
+    .g-world-card {
+      padding: 16px 18px;
+      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .g-page-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .g-page-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      text-decoration: none;
+      color: var(--text);
+      transition: border-color 140ms ease, background 140ms ease;
+    }
+    .g-page-link:hover {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+    }
+    .g-page-link-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .g-page-link-main strong {
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .g-page-link-main span {
+      font-size: 11.5px;
+      color: var(--text-3);
+    }
+    .g-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    table.g-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    table.g-table th, table.g-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    table.g-table th {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-3);
+      background: var(--surface-2);
+      white-space: nowrap;
+    }
+    table.g-table tr:last-child td { border-bottom: none; }
+    .g-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .g-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+    .g-btn:hover {
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    }
+    .g-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .g-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-2);
+      white-space: nowrap;
+    }
+    .g-tag.real {
+      color: var(--emerald);
+      border-color: color-mix(in srgb, var(--emerald) 35%, transparent);
+      background: color-mix(in srgb, var(--emerald) 10%, transparent);
+    }
+    .g-tag.sim {
+      color: var(--amber);
+      border-color: color-mix(in srgb, var(--amber) 35%, transparent);
+      background: color-mix(in srgb, var(--amber) 10%, transparent);
+    }
+    .g-tag.plan {
+      color: var(--violet);
+      border-color: color-mix(in srgb, var(--violet) 35%, transparent);
+      background: color-mix(in srgb, var(--violet) 10%, transparent);
+    }
+    .g-tag.warn {
+      color: var(--coral);
+      border-color: color-mix(in srgb, var(--coral) 35%, transparent);
+      background: color-mix(in srgb, var(--coral) 10%, transparent);
+    }
+    .g-mono {
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 11.5px;
+    }
+  </style>
+</head>
+<body>
+  <main class="g-wrap">
+    <!-- Hero -->
+    <section class="g-hero" aria-label="设计体系总览">
+      <div class="g-hero-top">
+        <div>
+          <span class="g-eyebrow">
+            <i data-lucide="sparkles" width="13" height="13"></i>
+            Whale Isle V2 · Obsidian Tide 曜潮设计体系 (16-File Suite)
+          </span>
+          <h1 class="g-title">鲸屿 Whale Isle V2 原型总览 Gallery</h1>
+          <p class="g-sub">
+            融合 <strong>Tide v5（六大世界 × 十页完整信息架构）</strong>、<strong>曜石深海 / 晨汐瓷白双色材质体系</strong>、
+            <strong>V2 蓝图 00–17 号全量规范（含 V2.1 自演进架构）</strong> 与 <strong>仓库真实接线状态</strong>。
+            默认主题自动跟随操作系统浅/深色切换；桌面透明桌宠窗与主工作台完全独立运行。
+          </p>
+        </div>
+        <div class="g-hero-actions">
+          <button type="button" class="g-btn primary" id="gal-theme-btn">
+            <i data-lucide="sun-moon" width="14" height="14"></i>
+            <span id="gal-theme-label">主题: 跟随系统</span>
+          </button>
+          <a class="g-btn" href="pet-stage.html">
+            <i data-lucide="ghost" width="14" height="14"></i>
+            打开透明桌宠窗
+          </a>
+          <a class="g-btn" href="tray-popover.html">
+            <i data-lucide="panel-top" width="14" height="14"></i>
+            打开托盘气泡
+          </a>
+          <a class="g-btn" href="chat.html">
+            <i data-lucide="layout-dashboard" width="14" height="14"></i>
+            进入主工作台
+          </a>
+        </div>
+      </div>
+
+      <div class="g-chip-row">
+        <span class="g-tag"><i data-lucide="user-check" width="12" height="12"></i> 主角色锚点: 小鲸 (char_wh001)</span>
+        <span class="g-tag"><i data-lucide="monitor" width="12" height="12"></i> <span id="gal-os-mode">正在读取系统配色...</span></span>
+        <span class="g-tag"><i data-lucide="utensils" width="12" height="12"></i> 饭碗同步余额: <strong id="gal-rice-val">32,450 tok</strong></span>
+        <span class="g-tag"><i data-lucide="keyboard" width="12" height="12"></i> 全局快捷键: ⌘K 命令面板 · F8 停手 · F9 切控 · F10 睡眠</span>
+        <span class="g-tag real"><i data-lucide="shield-check" width="12" height="12"></i> 100% 本地离线可浏览 (../vendor/lucide.min.js)</span>
+      </div>
+
+      <div class="g-metrics">
+        <div class="g-metric"><strong>16</strong><span>高保真原型文件 (含本页)</span></div>
+        <div class="g-metric"><strong>3</strong><span>独立桌面窗口/表面</span></div>
+        <div class="g-metric"><strong>6 × 10</strong><span>六大世界 × 十个功能页</span></div>
+        <div class="g-metric"><strong>00–17</strong><span>V2 蓝图全文档映射</span></div>
+        <div class="g-metric"><strong>S1–S5</strong><span>诚实增量迁移对照</span></div>
+        <div class="g-metric"><strong>0</strong><span>外部 CDN / 彩色 Emoji</span></div>
+      </div>
+    </section>
+
+    <!-- 1. Six Design Principles -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="compass" width="18" height="18"></i> 1. 六大核心设计原则</h2>
+        <p>继承 Tide v5 交互骨架，注入 Obsidian Tide 深度层级与蓝图硬边界</p>
+      </div>
+      <div class="g-grid-3">
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="sun-moon" width="15" height="15"></i> 跟随系统双色盘</h3>
+            <span class="g-tag">data-theme="system"</span>
+          </div>
+          <p>默认响应 <code>prefers-color-scheme</code>：深色呈「曜石深海 Obsidian Tide」（#080C14 底 + 汐蓝/海绿微光），浅色呈「晨汐瓷白 Morning Tide」（#F6F8FB 底），并支持一键三态循环切换。</p>
+        </article>
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="layers" width="15" height="15"></i> 桌面独立透明双窗</h3>
+            <span class="g-tag">Electron Dual-Window</span>
+          </div>
+          <p><code>pet-stage.html</code> 保持为独立无边框透明桌宠窗，绝不嵌入中控台内部；通过 <code>localStorage (wi-v2g-state)</code> 与底部「双窗状态条」实时同步控制权与语音锁。</p>
+        </article>
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="check-circle-2" width="15" height="15"></i> 真实回执与诚实标识</h3>
+            <span class="g-tag real">Truth Gate</span>
+          </div>
+          <p>所有动作强制区分 <code>COMPLETED / UNCERTAIN / FAILED</code>，严禁将模型口头台词当成完成；页面同步区分 <code>已接线真链路</code>、<code>[SIMULATION]</code> 与 <code>未知 / 不可查询</code>。</p>
+        </article>
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="shield-alert" width="15" height="15"></i> 隐私与许可证双红线</h3>
+            <span class="g-tag warn">P0–P5 + License</span>
+          </div>
+          <p>全链路密钥以 Keychain 占位符 <code>kc_*</code> 脱敏，零明文泄露；所有外部依赖与素材加挂 <code>lic:mit / lic:apache / lic:ccnc / lic:unl</code> 门禁，阻断 GPL/无证源码。</p>
+        </article>
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="git-branch" width="15" height="15"></i> 可解释决策与一点即达</h3>
+            <span class="g-tag">.why + Arbitrator</span>
+          </div>
+          <p>AI 的每次行动都有 <code>.why</code> 因果说明与多步决策链；顶部常驻「控制权仲裁条」与 <code>⌘K</code> 全局指挥面板，随时 1 秒接管（F8 紧急停手）。</p>
+        </article>
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="anchor" width="15" height="15"></i> 小鲸单一角色锚点</h3>
+            <span class="g-tag">char_wh001</span>
+          </div>
+          <p>全部 16 个文件统一以 <strong>小鲸 (char_wh001)</strong> 为第一数字生命锚点，搭配被动伴侣 <code>泡芙 (pet_puff)</code> 与 6 角色路由套餐，消除历史原型命名漂移。</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- 2. Five Material Layers -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="palette" width="18" height="18"></i> 2. 五层材质色带 (Obsidian Tide Material Strata)</h2>
+        <p>实时随当前主题动态渲染的 5 层界面深度阶梯</p>
+      </div>
+      <div class="g-layers">
+        <div class="g-swatch">
+          <div class="g-swatch-bar" style="background: var(--bg); color: var(--text);">
+            <span>L0 · Canvas</span><span>--bg</span>
+          </div>
+          <div class="g-swatch-body">
+            <strong>深渊画布 / 晨汐底色</strong>
+            <span>主窗口最底层背景，承载整个控制台纵深感与对比度基准。</span>
+          </div>
+        </div>
+        <div class="g-swatch">
+          <div class="g-swatch-bar" style="background: var(--surface); color: var(--text);">
+            <span>L1 · Card</span><span>--surface</span>
+          </div>
+          <div class="g-swatch-body">
+            <strong>主承载卡片层</strong>
+            <span>1px 发丝边框 + 柔和表面，承载看板、表格与决策流内容。</span>
+          </div>
+        </div>
+        <div class="g-swatch">
+          <div class="g-swatch-bar" style="background: var(--surface-2); color: var(--text);">
+            <span>L2 · Elevated</span><span>--surface-2</span>
+          </div>
+          <div class="g-swatch-body">
+            <strong>内嵌分组与次级容器</strong>
+            <span>用于指标块、代码块、表单分组与可交互卡片悬停反馈。</span>
+          </div>
+        </div>
+        <div class="g-swatch">
+          <div class="g-swatch-bar" style="background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: blur(12px); color: var(--text);">
+            <span>L3 · Glass</span><span>blur(16px)</span>
+          </div>
+          <div class="g-swatch-body">
+            <strong>悬浮磨砂玻璃层</strong>
+            <span>用于 Topbar 控制仲裁条、⌘K 命令面板、托盘气泡与桌宠浮条。</span>
+          </div>
+        </div>
+        <div class="g-swatch">
+          <div class="g-swatch-bar" style="background: linear-gradient(135deg, var(--accent), var(--teal)); color: #fff;">
+            <span>L4 · Tide Signal</span><span>--accent / --teal</span>
+          </div>
+          <div class="g-swatch-body">
+            <strong>语义潮汐信号光</strong>
+            <span>汐蓝主调 + 海绿成功 + 琥珀犹豫 + 珊瑚告警 + 紫罗兰推理云。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Interactive Signature Components -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="cpu" width="18" height="18"></i> 3. 四个标志性交互组件体验台</h2>
+        <p>点击下方胶囊即可实时切换状态，体验 V2 规范的核心信号语言</p>
+      </div>
+      <div class="g-grid-2">
+        <div class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="radio" width="15" height="15"></i> .sonar — 9 态声呐状态胶囊</h3>
+            <span class="g-mono" id="demo-sonar-code">SPEAKING · live-voice</span>
+          </div>
+          <p>表达小鲸当前所处的物理/认知状态，附带脉冲呼吸灯与单端语音锁提示。点击胶囊轮换状态：</p>
+          <div class="g-chip-row">
+            <button type="button" class="sonar" id="demo-sonar-btn" data-state="speaking" style="cursor:pointer;">
+              <span class="sonar-dot"></span>
+              <span id="demo-sonar-text">正在语音回应（单端锁占用 · TTS）</span>
+            </button>
+            <span class="g-tag">可切换: 待命 / 语音 / 耕作 / 直播 / 睡眠 / 思考</span>
+          </div>
+        </div>
+
+        <div class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="file-check-2" width="15" height="15"></i> .receipt — 三段式执行回执</h3>
+            <span class="g-mono" id="demo-receipt-code">COMPLETED</span>
+          </div>
+          <p>禁止仅凭 AI 对话文本判定成功，所有游戏与工具执行必须挂真实回执状态。点击体验状态流转：</p>
+          <div class="g-chip-row">
+            <button type="button" class="receipt ok" id="demo-receipt-btn" style="cursor:pointer;">
+              <i data-lucide="check-circle-2" width="13" height="13"></i>
+              <span id="demo-receipt-text">COMPLETED · 浇水 6/6 格 · 体力 244/270</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="scale" width="15" height="15"></i> .lic — 开源许可证洁癖门禁</h3>
+            <span class="g-mono">Gate 2 Compliance</span>
+          </div>
+          <p>每份素材、曲库、技能插件与外部代码均强制附带可机读许可证标签，无证或 GPL-3.0 一律阻断：</p>
+          <div class="g-chip-row">
+            <span class="lic mit">lic:mit · 可商用与移植</span>
+            <span class="lic apache">lic:apache · 保留 NOTICE</span>
+            <span class="lic ccnc">lic:ccnc · DEV_ONLY 禁商用</span>
+            <span class="lic unl">lic:unl · 硬阻断引入</span>
+          </div>
+        </div>
+
+        <div class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="gamepad-2" width="15" height="15"></i> .hud — 紧凑游戏遥测胶囊条</h3>
+            <span class="g-mono">BWF :18080 · 模拟回环</span>
+          </div>
+          <p>在直播与协玩期间以最小屏幕占用展示关键世界事实，确保 AI 决策与玩家心流对齐：</p>
+          <div class="hud" style="width:100%; justify-content:space-between;">
+            <span><strong>第 2 年 · 春 14 日</strong> · 09:40</span>
+            <span>体力 <strong>244/270</strong></span>
+            <span>金币 <strong>18,420g</strong></span>
+            <span class="g-tag real">BWF 锁: 空闲</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Three Standalone Desktop Surfaces -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="app-window" width="18" height="18"></i> 4. 三个桌面独立窗口 / 表面</h2>
+        <p>遵循「桌宠与工作台桌面独立透明双窗」约束，三者共享状态总线但互不嵌死</p>
+      </div>
+      <div class="g-grid-3">
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="ghost" width="15" height="15"></i> 独立透明桌宠窗</h3>
+            <span class="g-tag">pet-stage.html</span>
+          </div>
+          <p>无边框透明渲染小鲸（含 VP9-Alpha 交叉淡入与脚底基准对齐），支持自由拖拽、紫色虚线 <code>&lt;think&gt;</code> 气泡、<code>大肥鱼</code> 0-Token 喷水彩蛋、被动宠物 <code>泡芙</code> 与壁纸背景试看。</p>
+          <div><a class="g-btn primary" href="pet-stage.html"><i data-lucide="external-link" width="13" height="13"></i> 预览桌宠窗</a></div>
+        </article>
+
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="panel-top" width="15" height="15"></i> 菜单栏托盘气泡</h3>
+            <span class="g-tag">tray-popover.html</span>
+          </div>
+          <p>344px 紧凑磨砂浮窗：一瞥小鲸当前心情、饭碗剩余 Token 与快速投喂按钮、AI/玩家控制权一键切换、静音/睡眠模式开关，以及双窗一键唤起。</p>
+          <div><a class="g-btn" href="tray-popover.html"><i data-lucide="external-link" width="13" height="13"></i> 预览托盘气泡</a></div>
+        </article>
+
+        <article class="g-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="layout-sidebar" width="15" height="15"></i> 十页统一中控台</h3>
+            <span class="g-tag">shell.js + 10 Pages</span>
+          </div>
+          <p>macOS 风格六大世界导航侧栏 + 顶部控制仲裁条 + <code>⌘K</code> 全局指挥面板 + 底部双窗状态条与饭碗投喂器 + 一键脱敏 <code>标记问题</code> 上报弹窗。</p>
+          <div><a class="g-btn" href="chat.html"><i data-lucide="external-link" width="13" height="13"></i> 打开指挥台</a></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 5. Six Worlds x Ten Pages Matrix -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="map" width="18" height="18"></i> 5. 六大世界 × 十个功能页导航矩阵</h2>
+        <p>完整覆盖 Design/V2 全部信息架构与蓝图功能，无任何页面缺口</p>
+      </div>
+      <div class="g-worlds">
+        <!-- World 1 -->
+        <div class="g-world-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="heart-handshake" width="15" height="15"></i> 世界 1 · 伴侣与身份 (Companion &amp; Identity)</h3>
+            <span class="g-tag">3 页</span>
+          </div>
+          <div class="g-page-list">
+            <a class="g-page-link" href="chat.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="message-square" width="14" height="14"></i> 首页指挥台 &amp; 数字生命仪表盘 · chat.html</strong>
+                <span>双视图无缝切换、9 态声呐、6 维度目标、Token 五分账、P0 急停与 304px GET_STATE 侧栏</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+            <a class="g-page-link" href="identity.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="fingerprint" width="14" height="14"></i> 身份、性格、睡眠与声线 · identity.html</strong>
+                <span>char_wh001 6 维滑块、BR/BD 红线、30 天偏好演化、V/A 情绪轨迹、安静陪伴、SpeechPerformancePlan</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+            <a class="g-page-link" href="embodiment.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="sparkles" width="14" height="14"></i> 视觉具身与角色圣经 · embodiment.html</strong>
+                <span>Constellation 节点、L1-L3 进化阶梯、三视图与红锁部位、WebM/Live2D/VRM 技术栈与版本回滚</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- World 2 -->
+        <div class="g-world-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="sun" width="15" height="15"></i> 世界 2 · 自主数字生命 (Digital Life)</h3>
+            <span class="g-tag">1 页</span>
+          </div>
+          <div class="g-page-list">
+            <a class="g-page-link" href="digital-life.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="calendar-heart" width="14" height="14"></i> 作息、发现、社交草稿与五类记忆 · digital-life.html</strong>
+                <span>作息调度、3 门禁预算、3×7 平台发现矩阵、P4 社交审批、2-hop SVG 记忆图谱、日记与真删除</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+          </div>
+          <p style="font-size:12px;color:var(--text-3);margin:0;">内含强红线示例：遇到验证码即触发 <code>BLOCKED_CAPTCHA</code> 立即停止，严禁绕过。</p>
+        </div>
+
+        <!-- World 3 -->
+        <div class="g-world-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="tv" width="15" height="15"></i> 世界 3 · 舞台与协玩 (Game &amp; Live Stage)</h3>
+            <span class="g-tag">2 页</span>
+          </div>
+          <div class="g-page-list">
+            <a class="g-page-link" href="game-coop.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="gamepad-2" width="14" height="14"></i> 游戏协玩驾驶舱 · game-coop.html</strong>
+                <span>BWF :18080 互斥锁、8 步决策循环、3 候选四维评分、4 态回执流、朋友式商量、稀有物卖前确认</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+            <a class="g-page-link" href="live-stage.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="radio" width="14" height="14"></i> 直播与点歌舞台 · live-stage.html</strong>
+                <span>Attention Inbox、30s 合并、P0/P1/P2 弹幕与感谢、曲库 license 拦截、audio_clock 双语歌词、声卡隔离</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- World 4 -->
+        <div class="g-world-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="wand-2" width="15" height="15"></i> 世界 4 · 创作与资产工坊 (Creative Studio)</h3>
+            <span class="g-tag">1 页</span>
+          </div>
+          <div class="g-page-list">
+            <a class="g-page-link" href="creative-studio.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="clapperboard" width="14" height="14"></i> 五大创作工坊与资产看板 · creative-studio.html</strong>
+                <span>5 类工坊、5 列 10 态看板、AutoQA 4/4、9 项 3D VRM 检查单、11 步像素流水线、Entry A 计费、商业清源</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- World 5 -->
+        <div class="g-world-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="blocks" width="15" height="15"></i> 世界 5 · 平台与工具生态 (Platform &amp; Agent)</h3>
+            <span class="g-tag">1 页</span>
+          </div>
+          <div class="g-page-list">
+            <a class="g-page-link" href="platform.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="cpu" width="14" height="14"></i> 模型网关、ACP、MCP 与技能沙盒 · platform.html</strong>
+                <span>4 组供应商注册与真实未知态、5 任务路由、3 ACP Harness、MCP 鉴权矩阵、SKILL YAML 与 4 层沙盒</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- World 6 -->
+        <div class="g-world-card">
+          <div class="g-card-head">
+            <h3 class="g-card-title"><i data-lucide="shield-check" width="15" height="15"></i> 世界 6 · 安全治理与自演进 (Governance &amp; Evolution)</h3>
+            <span class="g-tag">2 页</span>
+          </div>
+          <div class="g-page-list">
+            <a class="g-page-link" href="governance.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="lock" width="14" height="14"></i> 权限治理、账号隔离与合规 · governance.html</strong>
+                <span>P0–P5 权限阶梯、零明文 Vault、Profile 隔离、Computer Use 锁、72h 删数 SLA、许可证台账、7 步演练</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+            <a class="g-page-link" href="evolution.html">
+              <div class="g-page-link-main">
+                <strong><i data-lucide="git-merge" width="14" height="14"></i> V2.1 自演进开发工坊 · evolution.html</strong>
+                <span>Dev Plane 分离宣言、6 列 Dev Board、Issue #212 人类 L4 审批门、Topbar 实时入队、8 条绝对禁令</span>
+              </div>
+              <i data-lucide="chevron-right" width="15" height="15"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Blueprint 00-17 Mapping -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="book-open" width="18" height="18"></i> 6. 蓝图文档 00–17 全量映射清单</h2>
+        <p>逐篇核对 <code>docs/Whale-Isle-V2-Blueprint/</code> 规范在原型中的落点</p>
+      </div>
+      <div class="g-table-wrap">
+        <table class="g-table">
+          <thead>
+            <tr>
+              <th>蓝图文档</th>
+              <th>核心规范主题</th>
+              <th>落地原型文件</th>
+              <th>关键交互与门禁表现</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="g-mono">00 / 01 / 02</td>
+              <td>总览、核心定位、数字生命体验架构</td>
+              <td><a href="chat.html">chat.html</a> · <a href="digital-life.html">digital-life.html</a></td>
+              <td>双模式指挥台 / 仪表盘、6 维度目标、作息调度与主动陪伴</td>
+            </tr>
+            <tr>
+              <td class="g-mono">03 / 04</td>
+              <td>信息架构、独立桌宠与多窗口协同</td>
+              <td><a href="pet-stage.html">pet-stage.html</a> · <a href="tray-popover.html">tray-popover.html</a> · <a href="shell.js">shell.js</a></td>
+              <td>透明独立桌宠 + 344px 托盘 + 双窗状态栏与全局仲裁条</td>
+            </tr>
+            <tr>
+              <td class="g-mono">05 / 06</td>
+              <td>人物性格核心、声线与演唱风格</td>
+              <td><a href="identity.html">identity.html</a></td>
+              <td>6 维滑块、BR/BD 边界、V/A 曲线、voice_2b7q 与 SpeechPerformancePlan</td>
+            </tr>
+            <tr>
+              <td class="g-mono">07</td>
+              <td>视觉具身、Character Bible 与动作流水线</td>
+              <td><a href="embodiment.html">embodiment.html</a></td>
+              <td>Constellation 状态图谱、三视图红锁、WebM/Live2D/VRM 与回滚链</td>
+            </tr>
+            <tr>
+              <td class="g-mono">08</td>
+              <td>游戏协玩、BWF 互斥锁与朋友式商量</td>
+              <td><a href="game-coop.html">game-coop.html</a></td>
+              <td>BWF :18080 锁、3 候选评分、4 态回执流、稀有物品卖前确认</td>
+            </tr>
+            <tr>
+              <td class="g-mono">09 / 11</td>
+              <td>抖音/B 站直播、弹幕合并与点歌舞台</td>
+              <td><a href="live-stage.html">live-stage.html</a></td>
+              <td>Attention Inbox、30s 合并、P0/P1/P2 队列、曲库 license、双声卡隔离</td>
+            </tr>
+            <tr>
+              <td class="g-mono">10 / 15 / 16</td>
+              <td>创作工坊、资产制作、商业清源与计费</td>
+              <td><a href="creative-studio.html">creative-studio.html</a></td>
+              <td>5 工坊 10 态看板、3D VRM 9 项检核、Entry A 计费与 CCNC 替换门禁</td>
+            </tr>
+            <tr>
+              <td class="g-mono">12 / 13 / 14</td>
+              <td>模型网关、ACP/MCP/Skill、P0–P5 安全隔离</td>
+              <td><a href="platform.html">platform.html</a> · <a href="governance.html">governance.html</a></td>
+              <td>kc_* 密钥脱敏、Harness 注册、SKILL 沙盒、72h 删数 SLA、仿真演练</td>
+            </tr>
+            <tr>
+              <td class="g-mono">17 (V2.1)</td>
+              <td>软件自演进开发工坊与安全护栏</td>
+              <td><a href="evolution.html">evolution.html</a> · <a href="shell.js">shell.js</a></td>
+              <td>whale-isle-dev 独立开发面、Issue #212 L4 审批门、8 条绝对禁令</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 7. S1-S5 Honest Repo->V2 Migration Table -->
+    <section>
+      <div class="g-sec-head">
+        <h2><i data-lucide="git-commit-horizontal" width="18" height="18"></i> 7. 现状 → V2 增量迁移诚实对照表 (S1–S5)</h2>
+        <p>严格依据 <code>docs/ROADMAP.md (T-M6-71)</code>，绝不虚报已上线状态</p>
+      </div>
+      <div class="g-table-wrap">
+        <table class="g-table">
+          <thead>
+            <tr>
+              <th>阶段</th>
+              <th>迁移内容与核心模块</th>
+              <th>当前仓库真实状态</th>
+              <th>验证边界</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="g-mono">S1 (基座运行中)</td>
+              <td><code>voice-host.ts</code> 语音锁、<code>BlindWhaleFarmer :18080</code>、<code>token-meter.ts</code> 饭碗、<code>memory-graph</code></td>
+              <td><span class="g-tag real">已接线真链路</span> 核心服务与协议已入仓运行</td>
+              <td>单测 + 回环验证；星露谷/抖音开播需 <span class="g-tag sim">[REAL-DEVICE]</span></td>
+            </tr>
+            <tr>
+              <td class="g-mono">S2 (UI 主题与双窗)</td>
+              <td>Obsidian Tide Tokens、系统配色跟随、独立桌宠窗与 Topbar 仲裁条整合</td>
+              <td><span class="g-tag plan">设计稿待确认</span> 位于 <code>design/v2-gemini/</code></td>
+              <td>用户审阅本原型后，以单工单 ≤8 文件切入 <code>apps/desktop-host</code></td>
+            </tr>
+            <tr>
+              <td class="g-mono">S3 (游戏与直播增强)</td>
+              <td><code>stardew-mcp-simulator</code> 5 剧本、Attention Inbox 30s 合并、点歌 <code>audio_clock</code></td>
+              <td><span class="g-tag sim">[SIMULATION]</span> 仿真器就绪，UI 面板待重构</td>
+              <td><code>tools/mock-harness</code> 确定性门禁通过后方接真直播端</td>
+            </tr>
+            <tr>
+              <td class="g-mono">S4 (数字生命与工坊)</td>
+              <td>自主调度器、3×7 发现矩阵（无验证码绕过）、Entry A 工坊计费、SVS 演唱实验</td>
+              <td><span class="g-tag plan">目标规划</span> 契约先行 + 分包拆解</td>
+              <td>必须先更新 <code>packages/shared-protocol</code> Zod Schema</td>
+            </tr>
+            <tr>
+              <td class="g-mono">S5 (V2.1 自演进开发面)</td>
+              <td><code>whale-isle-dev</code> 隔离 Dev Plane、Topbar 脱敏报错入队、Issue→PR 人类 L4 审批</td>
+              <td><span class="g-tag warn">严格运行锁隔离</span> 严禁运行时 AI 自改运行码</td>
+              <td>仅限开发者主动开启的独立工作树，强制人类审批与 Gate 1–4 门禁</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+  <script>
+    (function () {
+      const themeNames = {
+        system: '跟随系统',
+        dark: '曜石深海',
+        light: '晨汐瓷白'
+      };
+
+      function refreshThemeBadge() {
+        if (!window.wiV2) return;
+        const pref = window.wiV2.getThemePref();
+        const resolved = window.wiV2.getResolvedTheme();
+        const lbl = document.getElementById('gal-theme-label');
+        const osEl = document.getElementById('gal-os-mode');
+        const riceEl = document.getElementById('gal-rice-val');
+        if (lbl) lbl.textContent = '主题: ' + (themeNames[pref] || pref);
+        if (osEl) {
+          osEl.textContent = '系统当前解析: ' + (resolved === 'dark' ? '曜石深海 (Dark)' : '晨汐瓷白 (Light)');
+        }
+        if (riceEl) {
+          const st = window.wiV2.get();
+          riceEl.textContent = Number(st.riceTokens || 0).toLocaleString('en-US') + ' tok';
+        }
+      }
+
+      document.getElementById('gal-theme-btn')?.addEventListener('click', () => {
+        if (window.wiV2) {
+          window.wiV2.cycleTheme();
+          refreshThemeBadge();
+        }
+      });
+
+      window.addEventListener('wi:state', refreshThemeBadge);
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', refreshThemeBadge);
+      }
+
+      // Interactive .sonar signature widget
+      const sonarStates = [
+        { state: 'speaking', code: 'SPEAKING · live-voice', text: '正在语音回应（单端锁占用 · TTS）' },
+        { state: 'gaming', code: 'GAMING · stardew-bwf', text: '正在协玩星露谷（BWF 互斥锁空闲）' },
+        { state: 'live', code: 'LIVE · dyhub-stream', text: '正在直播互动（P0/P1/P2 队列运行）' },
+        { state: 'thinking', code: 'THINKING · reasoning', text: '正在深度思考（蓝色推理云生成中）' },
+        { state: 'sleeping', code: 'SLEEPING · quiet-dnd', text: '安静睡眠陪伴（仅响应 P0 召唤）' },
+        { state: 'idle', code: 'IDLE · standby', text: '闲置待命（桌面透明窗低功耗待机）' }
+      ];
+      let sIdx = 0;
+      document.getElementById('demo-sonar-btn')?.addEventListener('click', (e) => {
+        sIdx = (sIdx + 1) % sonarStates.length;
+        const item = sonarStates[sIdx];
+        const btn = e.currentTarget;
+        btn.setAttribute('data-state', item.state);
+        document.getElementById('demo-sonar-code').textContent = item.code;
+        document.getElementById('demo-sonar-text').textContent = item.text;
+      });
+
+      // Interactive .receipt signature widget
+      const receiptStates = [
+        { cls: 'receipt ok', code: 'COMPLETED', text: 'COMPLETED · 浇水 6/6 格 · 体力 244/270' },
+        { cls: 'receipt warn', code: 'UNCERTAIN', text: 'UNCERTAIN · 寻路被石头阻挡（等待复核）' },
+        { cls: 'receipt err', code: 'FAILED', text: 'FAILED · 背包已满，请玩家或 AI 先清理' }
+      ];
+      let rIdx = 0;
+      document.getElementById('demo-receipt-btn')?.addEventListener('click', (e) => {
+        rIdx = (rIdx + 1) % receiptStates.length;
+        const item = receiptStates[rIdx];
+        const btn = e.currentTarget;
+        btn.className = item.cls;
+        document.getElementById('demo-receipt-code').textContent = item.code;
+        document.getElementById('demo-receipt-text').textContent = item.text;
+      });
+
+      refreshThemeBadge();
+      if (window.lucide) window.lucide.createIcons();
+    })();
+  </script>
+</body>
+</html>

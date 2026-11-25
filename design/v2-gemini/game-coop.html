@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2.1 — ⑤ 星露谷共玩与自主决策</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+</head>
+<body data-v2-page="coop">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">GAME CO-OP · V2.1 AUTONOMOUS &amp; SHARED WORLD</div>
+      <h1 class="v2-page-title">星露谷共玩 · 控制权 HUD、决策循环与人机协商</h1>
+      <p class="v2-page-sub">Doc 07 + Doc 17：8 步决策循环 · 3 候选 4 维评分（不写死情景规则）· 人类键鼠不打断 AI · 朋友式协商对话 · 3 线并行任务板 · 稀有物门禁。</p>
+    </div>
+    <div class="row">
+      <span class="receipt ok">BWF MCP 18080 已接线</span>
+      <span class="pill pill-blue">T-M6-71 收口中 · Level 1 同步</span>
+    </div>
+  </div>
+
+  <!-- ① Control Authority HUD -->
+  <div class="hud" style="margin-bottom:16px;">
+    <div class="row-between" style="align-items:flex-start; gap:14px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:290px;">
+        <div class="row" style="margin-bottom:9px;">
+          <i data-lucide="gamepad-2" class="ico-lg" style="color:var(--tide)"></i>
+          <strong style="font-size:14.5px;">控制权仲裁台 (Control Arbitrator HUD)</strong>
+          <span class="pill pill-green"><span class="v2-dot" style="width:5px;height:5px;"></span>星露谷 1.6.15</span>
+          <span class="pill">租约 14:52 释放</span>
+        </div>
+        <div class="seg-tabs" style="margin-bottom:9px;">
+          <button type="button" class="seg-tab" data-coop-mode="autonomous">自主模式</button>
+          <button type="button" class="seg-tab active" data-coop-mode="coop">协作模式</button>
+          <button type="button" class="seg-tab" data-coop-mode="command">指令模式</button>
+          <button type="button" class="seg-tab" data-coop-mode="takeover">手动接管</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-2);line-height:1.65;">
+          <b style="color:var(--tide)">协作模式：</b>AI 围绕共同目标自主规划；<b>你的键鼠操作不会强行打断 AI 思考或长动作</b>；聊天建议会被认真评估（可协商），明确 `/指令` 立即优先插队。
+        </div>
+      </div>
+      <div class="stack" style="gap:7px;">
+        <button type="button" class="hud-emg" onclick="window.wiV2.setControlMode('stop')"><i data-lucide="octagon-x" class="ico-sm"></i>紧急停止 <span class="kbd">F8</span></button>
+        <button type="button" class="btn btn-sm" onclick="window.wiV2.setControlMode('takeover')"><i data-lucide="hand" class="ico-sm"></i>接管角色 <span class="kbd">F9</span></button>
+      </div>
+    </div>
+    <div style="height:1px;background:var(--stroke);margin:12px 0 9px;"></div>
+    <div class="row-between" style="font-size:11px;color:var(--text-3);flex-wrap:wrap;gap:8px;">
+      <span><b style="color:var(--text-1)">优先级阶梯：</b>紧急停止/接管 &gt; 强制命令 &gt; 直接任务 &gt; 共同计划 &gt; AI 自主目标 &gt; 待机</span>
+      <span><i data-lucide="shield" class="ico-sm"></i>高影响操作（卖五彩碎片/耗尽重要库存）需二次确认</span>
+    </div>
+  </div>
+
+  <!-- ② 8-Step Decision Loop + Farmview + 3 Candidates -->
+  <div class="sec-h"><i data-lucide="refresh-cw" class="ico-sm"></i><span>V2.1 八步自主决策循环 · 此刻</span><span class="ln"></span><span class="cnt">Observe → World → Retrieve → Choose → Policy → Execute → Verify → Reflect</span></div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="steps" style="margin-bottom:14px;">
+      <div class="step done"><div class="node"><span class="b">1</span><span class="lb">观察状态</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">2</span><span class="lb">世界模型</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">3</span><span class="lb">目标/知识</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">4</span><span class="lb">候选评分</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">5</span><span class="lb">控制权仲裁</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">6</span><span class="lb">执行动作</span></div><span class="link"></span></div>
+      <div class="step now"><div class="node"><span class="b">7</span><span class="lb">验证真结果</span></div><span class="link"></span></div>
+      <div class="step"><div class="node"><span class="b">8</span><span class="lb">反思更新</span></div></div>
+    </div>
+
+    <div class="grid-3">
+      <div>
+        <div class="farmview">
+          <div class="gamehud"><span>春季 16 日 · 13:40</span><span>晴 · 1,204g</span></div>
+          <div class="farmhouse"></div><div class="farmtree"></div><div class="farmer"></div>
+          <div class="cropbeds"><i class="crop"></i><i class="crop"></i><i class="crop"></i><i class="crop"></i></div>
+        </div>
+        <div class="kv-row"><span class="kv-k">位置 / 体力 / 生命</span><span class="kv-v mono">矿洞45层 · 62% / 88%</span></div>
+        <div class="kv-row"><span class="kv-k">背包余量</span><span class="kv-v mono" style="color:var(--amber)">24 / 24 满格</span></div>
+      </div>
+
+      <div class="stack" style="gap:8px; grid-column: span 2;">
+        <div class="grid-3">
+          <div class="cand chosen">
+            <div class="row-between" style="margin-bottom:5px;"><strong>就地建箱存杂物</strong><span class="receipt ok">已选择</span></div>
+            <div style="font-size:11px;color:var(--text-2);">制作木箱存 12 格杂物，省下 40 分钟往返路程不中断「升级镐」目标。</div>
+            <div class="eval"><span class="good">收益 +0.9</span><span class="risk">代价 −0.2</span><span class="good">兴趣 +0.7</span></div>
+          </div>
+          <div class="cand">
+            <div class="row-between" style="margin-bottom:5px;"><strong>回农场整理储物箱</strong><span class="pill">备选</span></div>
+            <div style="font-size:11px;color:var(--text-2);">往返 40 分钟，会打断当前共同目标进度，代价较高。</div>
+            <div class="eval"><span class="good">收益 +0.5</span><span class="risk">代价 −0.7</span><span>兴趣 +0.2</span></div>
+          </div>
+          <div class="cand">
+            <div class="row-between" style="margin-bottom:5px;"><strong>出售冗余物品腾格</strong><span class="pill pill-red">高风险</span></div>
+            <div style="font-size:11px;color:var(--text-2);">五彩碎片与硬木×10 被资源锁保护禁止出售。</div>
+            <div class="eval"><span class="risk">风险 高 · 资源锁</span><span>兴趣 0.0</span></div>
+          </div>
+        </div>
+        <div class="why"><i data-lucide="message-square" class="ico-sm"></i><span><b>17 §5 禁止写死规则：</b>不写死「背包满就必须回家」——不同处境现场评分候选动作，并把判断理由暴露给你随时追问或协商。</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Receipt Stream + GameKnowledgeItem -->
+  <div class="grid-2" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i>动作回执流 (`发出命令 ≠ 完成`)</h2></div>
+      <div class="itemrow"><div class="itemico"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i></div><div class="iteminfo"><strong>走到矿洞 45 层入口 (`#a41e`)</strong><p>pathfinding ok · 体力 −2%</p></div><span class="receipt ok">COMPLETED · 4.8s</span></div>
+      <div class="itemrow"><div class="itemico"><i data-lucide="alert-triangle" class="ico-sm" style="color:var(--amber)"></i></div><div class="iteminfo"><strong>挥镐敲击铜矿石 (`#a41f`)</strong><p>石头遮挡视线 → 旁观验证不盲击连打</p></div><span class="receipt warn">UNCERTAIN · 1/3</span></div>
+      <div class="itemrow"><div class="itemico"><i data-lucide="check" class="ico-sm" style="color:var(--green)"></i></div><div class="iteminfo"><strong>制作并放置木箱 (`#a421`)</strong><p>存入 12 格杂物 · 保留 4 格任务区</p></div><span class="receipt ok">COMPLETED · 0.42s</span></div>
+      <div class="itemrow"><div class="itemico"><i data-lucide="x" class="ico-sm" style="color:var(--red)"></i></div><div class="iteminfo"><strong>传送回家（图腾 `#a422`）</strong><p>图腾已存入箱子不在手持，如实记录失败改步行</p></div><span class="receipt fail">FAILED · 前置不满足</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="search" class="ico-sm" style="color:var(--tide)"></i>攻略知识库 · 攻略是参考，不是死命令</h2></div>
+      <div class="itemrow"><div class="itemico">V</div><div class="iteminfo"><strong>雨天河流鱼种替换为冬季鱼与鲶鱼</strong><p>official-wiki · v1.6 · 存档 S1 实证 3 次 · 置信 0.92</p></div><span class="receipt ok">VERIFIED</span></div>
+      <div class="itemrow"><div class="itemico">?</div><div class="iteminfo"><strong>「春季第 3 天必出铜矿脉」社区攻略</strong><p>版本号未知 + 第 40 层实测冲突 ×2 · 置信 0.45 · 本轮不采信</p></div><span class="receipt warn">PARTIALLY-VERIFIED</span></div>
+      <div class="itemrow"><div class="itemico">X</div><div class="iteminfo"><strong>雷雨夜海洋码头钓鱼效率极低</strong><p>11-23 抛竿 9 次无咬钩失败经验入库 · 置信 0.18</p></div><span class="receipt fail">REJECTED</span></div>
+    </div>
+  </div>
+
+  <!-- ④ Shared Task Board (3 Lines) -->
+  <div class="sec-h"><i data-lucide="users" class="ico-sm"></i><span>人机协作任务板 (Shared Goal · 资源锁)</span><span class="ln"></span><span class="cnt">WH-01 + WH-02 同步</span></div>
+  <div class="grid-3" style="margin-bottom:14px;">
+    <div class="card card-tight"><div class="row-between" style="margin-bottom:5px;"><strong>宿主 · 探索钓鱼线</strong><span class="receipt run">RUNNING</span></div><div style="font-size:11px;color:var(--text-2);margin-bottom:7px;">去河边钓鱼 8 条，顺路拜访威利。小鲸不占用背包前 4 格任务区。</div><span class="pill pill-blue">ownership: 宿主 · 鱼竿×1</span></div>
+    <div class="card card-tight"><div class="row-between" style="margin-bottom:5px;"><strong>小鲸 · 农务补给线</strong><span class="receipt run">RUNNING</span></div><div style="font-size:11px;color:var(--text-2);margin-bottom:7px;">浇水→收菜→归箱→矿洞补铜。完成自动交接，失败挂起告警。</div><span class="pill pill-tide">ownership: 小鲸 · 洒水器×2</span></div>
+    <div class="card card-tight" style="border-color:var(--green-line);"><div class="row-between" style="margin-bottom:5px;"><strong>共同 · 社区中心收集</strong><span class="receipt ok">ACCEPTED</span></div><div style="font-size:11px;color:var(--text-2);margin-bottom:7px;">冬前集齐收集包。硬木×10 与五彩碎片锁定保留（AI 绝不出售）。</div><span class="pill pill-green">共同锁定 · 铜矿 26/40</span></div>
+  </div>
+
+  <!-- ⑤ Friend-like Negotiation + 12 Quick Commands + Rare Item Test -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="message-square" class="ico-sm" style="color:var(--violet)"></i>像朋友一样协商 (`17 §8`)</h2><span class="pill pill-blue">意图分类：闲聊/建议/指令/接管</span></div>
+      <div class="stack" style="gap:7px;">
+        <div class="inset"><strong>宿主 [建议]：</strong>「今天要不要去钓鱼？天气挺好的。」</div>
+        <div class="inset" style="border-color:var(--tide-line);background:var(--tide-dim);"><strong>小鲸 [协商回应]：</strong>「我想先凑齐最后 14 块铜矿升级工具……<b style="color:var(--tide)">要不先钓 1 小时再回矿洞？</b>」</div>
+        <div class="inset"><strong>指令通道 [明确指令]：</strong>`Go Mine` → 钓鱼 1h（保持共同计划）后切换矿洞 · 租约 2h · `F8` 随时停止</div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button type="button" class="btn btn-sm btn-danger" id="test-prismatic-btn">测试稀有物二次确认：/卖掉五彩碎片</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="terminal" class="ico-sm" style="color:var(--tide)"></i>12 项快捷指令 (全可自定义)</h2></div>
+      <div class="quickgrid" style="grid-template-columns:repeat(3,1fr);">
+        <button type="button" class="quickbtn coop-cmd" data-cmd="Stop (F8)">Stop <span class="kbd">F8</span></button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/pause-ai">Pause <span class="kbd">P</span></button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="Take Over (F9)">接管 <span class="kbd">F9</span></button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="Release (R)">交还 <span class="kbd">R</span></button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/follow">跟随 <span class="kbd">F</span></button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/fish">Go Fish</button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/mine">Go Mine</button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/back-to-farm">回农场</button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/sleep-now">回家睡觉</button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/stay">原地守望</button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/help-me">紧急支援</button>
+        <button type="button" class="quickbtn coop-cmd" data-cmd="/why">解释为什么</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rare Item Confirmation Modal -->
+  <div class="wb-mask" id="rare-modal">
+    <div class="wb-dialog" style="padding:18px 20px;">
+      <div class="row-between" style="margin-bottom:10px;">
+        <h3 class="card-title" style="color:var(--red)"><i data-lucide="alert-triangle" class="ico-sm"></i>高风险不可逆操作拦截：出售五彩碎片</h3>
+        <button type="button" class="btn btn-sm btn-ghost" id="rare-close"><i data-lucide="x" class="ico-sm"></i></button>
+      </div>
+      <div class="banner danger" style="margin-bottom:12px;">
+        <i data-lucide="shield" class="ico-sm"></i>
+        <div>五彩碎片触发 V2.1 <strong>显式人类二次确认门禁</strong>，已阻止直接丢入出货箱，建议保留用于银河剑献祭或博物馆首捐。</div>
+      </div>
+      <div class="row-between">
+        <span style="font-size:11px;color:var(--text-3);">操作前后记录将写入审计追踪</span>
+        <div class="row">
+          <button type="button" class="btn btn-sm btn-primary" id="rare-reject">取消出售（保留）</button>
+          <button type="button" class="btn btn-sm btn-danger" id="rare-confirm">我确认仍要出售</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function syncMode() {
+        var m = window.wiV2.get().controlMode;
+        document.querySelectorAll('[data-coop-mode]').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-coop-mode') === m); });
+      }
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-coop-mode]').forEach(function (btn) {
+          btn.addEventListener('click', function () { window.wiV2.setControlMode(btn.getAttribute('data-coop-mode')); });
+        });
+        document.querySelectorAll('.coop-cmd').forEach(function (btn) {
+          btn.addEventListener('click', function () { window.wiV2.toast('快捷指令已触发：' + btn.getAttribute('data-cmd')); });
+        });
+        var modal = document.getElementById('rare-modal');
+        document.getElementById('test-prismatic-btn').addEventListener('click', function () { modal.classList.add('open'); });
+        document.getElementById('rare-close').addEventListener('click', function () { modal.classList.remove('open'); });
+        document.getElementById('rare-reject').addEventListener('click', function () { modal.classList.remove('open'); window.wiV2.toast('已保留稀有物品五彩碎片'); });
+        document.getElementById('rare-confirm').addEventListener('click', function () { modal.classList.remove('open'); window.wiV2.toast('已记录人类显式放行授权', 'warn'); });
+        syncMode();
+      });
+      document.addEventListener('wi-v2-state', syncMode);
+    })();
+  </script>
+</body>
+</html>

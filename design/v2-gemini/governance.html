@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ⑨ 安全治理、金库与合规台账</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+</head>
+<body data-v2-page="security">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">SECURITY, VAULT, ISOLATION &amp; COMPLIANCE</div>
+      <h1 class="v2-page-title">安全治理、金库引用、Profile 隔离与开源合规</h1>
+      <p class="v2-page-sub">Doc 11 &amp; Gate 2：P0–P5 阶梯与一键降级 · OS Keychain 零明文金库 · Browser Profile 零 Cookie 共享 · Computer Use 互斥 · 5 步删除 SLA · `.lic` 台账。</p>
+    </div>
+    <div class="row">
+      <button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.toast('已降级至 P0：全部自动写入暂停并写入审计 #aud-3f09', 'warn')">一键降级 P0</button>
+      <button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.setControlMode('stop')"><i data-lucide="octagon-x" class="ico-sm"></i>Stop 冻结全租约 (F8)</button>
+    </div>
+  </div>
+
+  <!-- ① P0-P5 Ladder & Live Posture -->
+  <div class="grid-2" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title"><i data-lucide="shield" class="ico-sm" style="color:var(--green)"></i>权限阶梯 P0 – P5 (`Policy 单咽喉`)</h2><span class="pill pill-tide">生效档位 P2</span></div>
+      <div class="ladder-item on"><span class="lv" style="color:var(--green)">P0</span><div style="flex:1"><strong>读本地非敏感状态</strong> · 时钟/窗口/配置 <span class="pill pill-tide" style="float:right">自动</span></div></div>
+      <div class="ladder-item on"><span class="lv" style="color:var(--blue)">P1</span><div style="flex:1"><strong>读公开/已授权内容</strong> · 按 `grantedScopes` <span class="pill pill-blue" style="float:right">按账号</span></div></div>
+      <div class="ladder-item on"><span class="lv" style="color:var(--green)">P2</span><div style="flex:1"><strong>生成草稿计划</strong> · 绝不直接外发 <span class="pill pill-tide" style="float:right">自动</span></div></div>
+      <div class="ladder-item" style="border-left-color:var(--amber)"><span class="lv" style="color:var(--amber)">P3</span><div style="flex:1"><strong>可撤销本地变更</strong> · 快照与回滚 <span class="pill pill-amber" style="float:right">按规则</span></div></div>
+      <div class="ladder-item" style="border-left-color:var(--amber)"><span class="lv" style="color:var(--amber)">P4</span><div style="flex:1"><strong>对外评论发布 / 卖稀有物</strong> <span class="pill pill-amber" style="float:right">人类确认</span></div></div>
+      <div class="ladder-item" style="border-left-color:var(--red);margin-bottom:0;"><span class="lv" style="color:var(--red)">P5</span><div style="flex:1"><strong>私信 / 删除 / 支付 / 源码</strong> <span class="pill pill-red" style="float:right">每次强确认</span></div></div>
+    </div>
+
+    <!-- Account Vault + Red Banner -->
+    <div class="stack">
+      <div class="sv-banner"><i data-lucide="alert-triangle" class="ico-sm"></i><div><b>Cookie / Token 零明文：</b> 金库只保存 OS Keychain 引用（<span class="mono">keychain://vault/*</span>），Gate 2 扫描命中任何明文即直接构建失败，无豁免。</div></div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">账号金库 Account Vault (`已接线 safeStorage`)</h2><span class="receipt ok">明文扫描 0 命中</span></div>
+        <div class="itemrow"><div class="itemico">D</div><div class="iteminfo"><strong>抖音主号 · `keychain://vault/douyin-main`</strong><p>Profile: `prof_dy_a1` · scopes: 读公开 / 弹幕流</p></div><button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.toast('已吊销 douyin-main 凭证引用', 'warn')">撤销</button></div>
+        <div class="itemrow"><div class="itemico">B</div><div class="iteminfo"><strong>B站测试号 · `keychain://vault/bili-test`</strong><p>Profile: `prof_bili_t2` · 只读弹幕 · TTL 2h</p></div><button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.toast('已吊销 bili-test 凭证引用', 'warn')">撤销</button></div>
+        <div class="itemrow"><div class="itemico">M</div><div class="iteminfo"><strong>MiniMax / DeepSeek Vault</strong><p>渲染进程仅见 `sk-***` 掩码，不支持 AI 自读明文</p></div><span class="receipt ok">Keychain 锁定</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② Browser Profile Isolation & Computer Use Mutex HUD -->
+  <div class="grid-2" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Browser Profile 物理隔离</h2><span class="receipt ok">与用户个人 Cookie 零共享</span></div>
+      <div class="kv-row"><span class="kv-k">自动化专用：`prof_dy_a1`</span><span class="kv-v mono">~/WhaleIsle/profiles/prof_dy_a1</span></div>
+      <div class="kv-row"><span class="kv-k">宿主日常浏览器：`user_main`</span><span class="pill pill-red">自动化硬禁入 (`no-automation`)</span></div>
+      <div class="why" style="margin-top:8px;"><i data-lucide="lock" class="ico-sm"></i><span>日志脱敏拦截：Authorization / Cookie / 手机号在落盘前统一替换为 `***`。</span></div>
+    </div>
+
+    <div class="hud">
+      <div class="row-between" style="margin-bottom:8px;"><strong>Computer Use 互斥租约 (`#ls-9c2`)</strong><span class="pill pill-green" id="lease-cnt">持有：agent_primary (剩余 54m)</span></div>
+      <div class="kv-row"><span class="kv-k">心跳校验 (丢 3 次即 6s 自动释放)</span><span class="kv-v mono">2s 正常 · 0 丢失</span></div>
+      <div class="kv-row"><span class="kv-k">互斥队列</span><span class="kv-v">`agent_primary HOLDING` → `user 可随时抢占` → `obs_overlay 只读免锁`</span></div>
+      <div class="row" style="margin-top:9px;">
+        <button type="button" class="btn btn-sm btn-danger" onclick="window.wiV2.toast('租约 #ls-9c2 已撤销，控制权归还人类 #aud-3f10', 'warn')">撤销租约</button>
+        <button type="button" class="btn btn-sm" onclick="window.wiV2.toast('租约 #ls-9c2 已延长 15 分钟')">延长 15m</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Deletion SLA + License Compliance Table + Audit Log & Drill -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-head"><h2 class="card-title">记忆删除 5 步 SLA (72h) &amp; 开源合规 `.lic` 台账 (Gate 2)</h2><span class="pill pill-green">pnpm verify:gate 受控</span></div>
+    <div class="steps" style="margin-bottom:12px;">
+      <div class="step done"><div class="node"><span class="b">1</span><span class="lb">用户请求</span></div><span class="link"></span></div>
+      <div class="step done"><div class="node"><span class="b">2</span><span class="lb">定位源事件</span></div><span class="link"></span></div>
+      <div class="step now"><div class="node"><span class="b">3</span><span class="lb">清衍生索引</span></div><span class="link"></span></div>
+      <div class="step"><div class="node"><span class="b">4</span><span class="lb">处理备份</span></div><span class="link"></span></div>
+      <div class="step"><div class="node"><span class="b">5</span><span class="lb">不可删审计</span></div></div>
+    </div>
+
+    <div class="sv-banner amber" style="margin-bottom:10px;"><i data-lucide="alert-triangle" class="ico-sm"></i><div><b>MIT 代码 ≠ 素材可商用：</b> `dsh-pet` 动画属 `CC BY-NC-SA 4.0` (`DEV_ONLY_NON_COMMERCIAL`)；无许可证仓库 (`Dsh_douyin` / `aboutme-pets`) 禁止复制任何源码行。</div></div>
+
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>资产 / 参考仓库</th><th>许可证 (`.lic`)</th><th>范围标注</th><th>处置规则</th></tr></thead>
+        <tbody>
+          <tr><td><strong>dsh-pet 代码 / webm 素材</strong></td><td><span class="lic mit">MIT 代码</span> <span class="lic nc">CC BY-NC-SA 素材</span></td><td class="mono">DEV_ONLY_NON_COMMERCIAL</td><td>商用构建前走清洗管线替换</td></tr>
+          <tr><td><strong>SAOS-3624/dsh-video-storyboard</strong></td><td><span class="lic apache">APACHE-2.0</span></td><td class="mono">NOTICE 保留</td><td>移植模块随附 NOTICE 署名</td></tr>
+          <tr><td><strong>Dsh_douyin / dsh-live / aboutme-pets</strong></td><td><span class="lic unl">UNLICENSED</span></td><td class="mono">零源码复制</td><td>仅参考思想 · 弹幕走合规 `dyhub`</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">只增不删审计日志 (SQLite 180d) &amp; 安全事件 7 步演练</h2><button type="button" class="btn btn-sm" onclick="window.wiV2.toast('已启动 7 步安全事件沙盒演练 [SIMULATION]，不触碰真实凭证')">发起演练 [SIMULATION]</button></div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr><th>时间</th><th>主体</th><th>动作</th><th>对象</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">13:58:04</td><td>`agent_primary`</td><td>发布评论 (P4)</td><td class="mono">动态 734hyz</td><td><span class="receipt ok">CONFIRMED</span></td></tr>
+          <tr><td class="mono">13:41:22</td><td>`user · jiaqi`</td><td>键鼠接管租约</td><td class="mono">#ls-9c2</td><td><span class="receipt ok">holder → user</span></td></tr>
+          <tr><td class="mono">11:12:47</td><td>`agent_primary`</td><td>记忆彻底删除</td><td class="mono">#del-112</td><td><span class="receipt ok">1 原+4 衍生清理</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

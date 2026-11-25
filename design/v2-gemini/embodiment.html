@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ③ 化身星座与多投影</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+</head>
+<body data-v2-page="embodiment">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">EMBODIMENT · ONE IDENTITY × FOUR PROJECTIONS</div>
+      <h1 class="v2-page-title">化身星座图、状态映射表与渲染技术</h1>
+      <p class="v2-page-sub">Doc 03 §7 / Doc 06 / Doc 07：一个 AI 四种投影 · 独立透明桌宠窗双 `video` 无黑闪渲染 · Character Bible 特征锁 · 资产原子回滚与 L1–L3 等级。</p>
+    </div>
+    <div class="row">
+      <a class="btn btn-sm btn-primary" href="pet-stage.html"><i data-lucide="sparkles" class="ico-sm"></i>打开独立透明桌宠窗</a>
+      <a class="btn btn-sm" href="tray-popover.html"><i data-lucide="layers" class="ico-sm"></i>系统托盘控制卡</a>
+    </div>
+  </div>
+
+  <!-- ① Constellation Topology -->
+  <div class="sec-h" style="margin-top:0;"><i data-lucide="shapes" class="ico-sm"></i><span>化身星座图 · 同一身份多投影</span><span class="ln"></span><span class="cnt">char_wh001「小鲸」</span></div>
+  <div class="card" style="padding:0; overflow:hidden; margin-bottom:12px;">
+    <div class="eb-sky">
+      <div style="position:absolute;left:14px;top:12px;font:9.5px var(--font-mono);color:var(--text-3);">LIVE TOPOLOGY · 桌面独立透明双窗</div>
+      <span class="eb-orbit o1"></span><span class="eb-orbit o2"></span>
+      <svg class="eb-web" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="50" y1="50" x2="17" y2="25" stroke="var(--tide-line)" stroke-opacity="0.7" />
+        <line x1="50" y1="50" x2="83" y2="25" stroke="var(--blue-line)" stroke-opacity="0.7" />
+        <line x1="50" y1="50" x2="18" y2="77" stroke="var(--violet-line)" stroke-opacity="0.6" />
+        <line x1="50" y1="50" x2="82" y2="77" stroke="var(--stroke-2)" stroke-opacity="0.8" />
+      </svg>
+      <div class="eb-core">
+        <div class="sonar" style="width:94px;height:94px;"><span class="ring"></span><span class="ring"></span><div class="core" style="width:66px;height:66px;font-size:22px;font-weight:800;">鲸</div></div>
+        <span class="pill pill-tide">Avatar Root · persona v27</span>
+      </div>
+      <a class="eb-node" style="left:17%;top:25%;" href="pet-stage.html"><div class="row-between" style="margin-bottom:4px;"><strong>1. 独立透明桌宠窗</strong><span class="receipt ok">LIVE</span></div><div class="mono k" style="font-size:9.5px;">desktop-2d · webm_vp9_a v41</div><div style="font-size:10.5px;color:var(--tide);margin-top:4px;">pet-window#main →</div></a>
+      <a class="eb-node" style="left:83%;top:25%;" href="game-coop.html"><div class="row-between" style="margin-bottom:4px;"><strong>2. 星露谷化身</strong><span class="receipt run">SYNCED</span></div><div class="mono k" style="font-size:9.5px;">game · sprite_16x32 v18</div><div style="font-size:10.5px;color:var(--blue);margin-top:4px;">avatar-sync L1 →</div></a>
+      <div class="eb-node" style="left:18%;top:77%;"><div class="row-between" style="margin-bottom:4px;"><strong>3. Live2D 舞台</strong><span class="receipt ok">READY</span></div><div class="mono k" style="font-size:9.5px;">stage · live2d_v3 v9</div><div style="font-size:10.5px;color:var(--text-3);margin-top:4px;">接口预留未接实机</div></div>
+      <a class="eb-node" style="left:82%;top:77%;" href="live-stage.html"><div class="row-between" style="margin-bottom:4px;"><strong>4. OBS 图层源</strong><span class="receipt warn">OFF</span></div><div class="mono k" style="font-size:9.5px;">transparent_1080p · 18765</div><div style="font-size:10.5px;color:var(--text-3);margin-top:4px;">V2-08 待推流</div></a>
+    </div>
+  </div>
+  <div class="why" style="margin-bottom:14px;"><i data-lucide="shapes" class="ico-sm"></i><span><b>换皮肤不换灵魂：</b>四个投影共享同一 Character Bible v6 特征约束与 `char_wh001` 身份；工作台不内嵌桌宠画布占屏，桌宠在原生透明窗口独立运行。</span></div>
+
+  <!-- ② Registry & State Mapping Table -->
+  <div class="grid-2" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">化身登记表 (`embodiment.zod`)</h2><span class="pill mono">4 条记录</span></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>ID / 类型</th><th>目标 / 资产版本</th><th>开关</th></tr></thead>
+          <tbody>
+            <tr><td><strong class="mono">emb_desk_01</strong><br /><span class="k">desktop-2d</span></td><td class="mono">pet-window#main · v41</td><td><label class="sw"><input type="checkbox" checked /><span class="sw-slider"></span></label></td></tr>
+            <tr><td><strong class="mono">emb_game_07</strong><br /><span class="k">game-stardew</span></td><td class="mono">stardew#sprite · v18</td><td><label class="sw"><input type="checkbox" checked /><span class="sw-slider"></span></label></td></tr>
+            <tr><td><strong class="mono">emb_stage_33</strong><br /><span class="k">stage-live2d</span></td><td class="mono">stage-canvas · v9</td><td><label class="sw"><input type="checkbox" checked /><span class="sw-slider"></span></label></td></tr>
+            <tr><td><strong class="mono">emb_obs_09</strong><br /><span class="k">obs-overlay</span></td><td class="mono">obs#18765 · v9</td><td><label class="sw"><input type="checkbox" /><span class="sw-slider"></span></label></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">跨化身统一状态映射表 (`smap_v12`)</h2><span class="pill">03 §7.2</span></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>表现态</th><th>桌宠 / 游戏 / 舞台映射</th><th>驱动触发</th></tr></thead>
+          <tbody>
+            <tr><td class="mono" style="color:var(--tide)">speaking</td><td>`talk_03.webm` + 口型 viseme 40ms</td><td>TTS `PLAYED` 回执</td></tr>
+            <tr><td class="mono" style="color:var(--blue)">gaming</td><td>`focus_loop.webm` + BWF 持工具帧</td><td>ControlLease 持有</td></tr>
+            <tr><td class="mono" style="color:var(--violet)">resting</td><td>`sleep_1 / 2 / 3` 三段帧序列</td><td>30s/120s/DND</td></tr>
+            <tr><td class="mono" style="color:var(--amber)">reacting</td><td>`splash.webm` 喷水 + 感叹跳</td><td>“大肥鱼”0.1s 命中</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Character Bible Lock & Cross-Form Consistency -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-head"><h2 class="card-title"><i data-lucide="lock" class="ico-sm" style="color:var(--red)"></i>Character Bible v6 特征锁 &amp; 一致性校验</h2><span class="receipt ok">4/4 PASS · 42 项检查</span></div>
+    <div class="grid-3" style="margin-bottom:10px;">
+      <div class="inset" style="text-align:center;"><strong>FRONT 三视图正面</strong><div class="mono k" style="font-size:10px;margin-top:3px;">front_ref_v3 · a3f2c1d8</div></div>
+      <div class="inset" style="text-align:center;"><strong>SIDE 三视图侧面</strong><div class="mono k" style="font-size:10px;margin-top:3px;">side_ref_v2 · 7b91e04c</div></div>
+      <div class="inset" style="text-align:center;"><strong>BACK 三视图背面</strong><div class="mono k" style="font-size:10px;margin-top:3px;">back_ref_v2 · d48c9a26</div></div>
+    </div>
+    <div class="row-between" style="flex-wrap:wrap; gap:10px;">
+      <div class="row" style="gap:12px;">
+        <span class="st-sw"><i style="background:#3ee0cd"></i>主色 #3EE0CD</span>
+        <span class="st-sw"><i style="background:#4ea8ff"></i>背鳍 #4EA8FF</span>
+        <span class="st-sw"><i style="background:#c8f2eb"></i>肚腹 #C8F2EB</span>
+        <span class="st-sw"><i style="background:#ffc247"></i>鳃腮 #FFC247</span>
+      </div>
+      <div class="b-lock"><span class="pill pill-red">禁止修改：左尾鳍青条纹</span> <span class="pill pill-red">头顶紫麦标</span> <span class="pill pill-red">2.5 头身比</span></div>
+    </div>
+  </div>
+
+  <!-- ④ Renderer Tech, Rollback & Ladder -->
+  <div class="grid-4" style="margin-bottom:14px;">
+    <div class="card card-tight"><strong>双 video 交叉淡入</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">A/B 双层加载 VP9-Alpha，220ms 淡出切换零黑闪。</div><div class="receipt ok" style="margin-top:7px;">已接线真链路</div></div>
+    <div class="card card-tight"><strong>像素级透明穿透</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">`alpha &lt; 8%` 放行给游戏/编辑器，16ms 节流。</div><div class="receipt ok" style="margin-top:7px;">已接线真链路</div></div>
+    <div class="card card-tight"><strong>脚底基准对齐</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">`bottom-center` 锚定工作区底 − 6px，DPI 自适应。</div><div class="receipt ok" style="margin-top:7px;">已接线真链路</div></div>
+    <div class="card card-tight"><strong>Live2D 扩展接口</strong><div style="font-size:11px;color:var(--text-2);margin-top:4px;">`Live2DRenderer` 预留 `init/frame/dispose`。</div><div class="receipt warn" style="margin-top:7px;">待 M7 / 资产接入</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">资产版本与原子回滚 (`webm_vp9_a`)</h2><span class="lic nc">114 WebM: DEV_ONLY_NON_COMMERCIAL</span></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>版本 / SHA</th><th>变更说明</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td><strong class="mono">v41</strong> <span class="receipt ok">当前</span><br /><span class="mono k">7c1f44aa</span></td><td>修正 `talk_03` 口型闭合帧 + viseme 通道</td><td><span class="pill">使用中</span></td></tr>
+            <tr><td><strong class="mono">v40</strong><br /><span class="mono k">2b9d31ef</span></td><td>新增 `splash.webm` 雷区喷水动画</td><td><button type="button" class="btn btn-sm" onclick="window.wiV2.toast('已发起原子热回滚至 v40 (双 video 无闪烁)')">回滚</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">游戏内化身等级 (`L1 → L3`) &amp; 多人兼容</h2></div>
+      <div class="ladder-item on"><span class="lv">L1</span><div><strong>外观替换 / 同步</strong><div style="font-size:10.5px;color:var(--text-3);">当前生效 · BWF + `avatar-sync` (其他玩家可同 Mod 可见)</div></div></div>
+      <div class="ladder-item"><span class="lv">L2</span><div><strong>AI 专属 NPC</strong><div style="font-size:10.5px;color:var(--text-3);">独立日程与村民记忆（V2-06 规划）</div></div></div>
+      <div class="ladder-item"><span class="lv">L3</span><div><strong>完整可控角色</strong><div style="font-size:10.5px;color:var(--text-3);">全动作集协同玩家角色（V2-06 规划）</div></div></div>
+    </div>
+  </div>
+</body>
+</html>

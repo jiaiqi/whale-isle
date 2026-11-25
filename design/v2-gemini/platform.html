@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>鲸屿 Whale Isle V2 — ⑧ 智能体网关 · MCP / Skills</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <script src="../vendor/lucide.min.js"></script>
+  <script src="shell.js"></script>
+</head>
+<body data-v2-page="platform">
+  <div class="v2-page-head">
+    <div>
+      <div class="kicker">AGENT ECOSYSTEM · PROVIDERS, ROUTING, HARNESS, MCP &amp; SKILLS</div>
+      <h1 class="v2-page-title">能力网关、任务路由、ACP Harness 与双向 MCP</h1>
+      <p class="v2-page-sub">Doc 04：4 组 Provider 注册表（`kc_*` 凭证引用 + 诚实「未知 / 不可查询」配额）· 5 类任务路由表 · 双向 MCP · `SKILL.md` ≠ 权限凭证 · 4 层插件沙盒。</p>
+    </div>
+    <div class="seg-tabs" id="plat-tabs">
+      <button type="button" class="seg-tab active" data-pt="gateway">Provider 注册与路由表</button>
+      <button type="button" class="seg-tab" data-pt="mcp">ACP Harness 与双向 MCP</button>
+      <button type="button" class="seg-tab" data-pt="skills">Skills 与四层插件沙盒</button>
+    </div>
+  </div>
+
+  <!-- Tab 1: 4-Group Provider Registry + 5-Task Routing -->
+  <section class="plat-panel" data-pp="gateway">
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">LLM · 文本推理 (`kc_*` Keychain 引用)</h2><span class="receipt ok">已接线真链路</span></div>
+        <div class="grid-2">
+          <div class="inset"><strong>MiniMax-M3.1-Flash</strong><div class="mono k" style="margin:4px 0;">凭证: kc_mm_01 · `reasoning: low`</div><span class="pill pill-amber">额度: 未知 / 不可查询</span></div>
+          <div class="inset"><strong>DeepSeek-V4 / OpenCode Go</strong><div class="mono k" style="margin:4px 0;">凭证: kc_7d2a · 首字 412ms</div><span class="receipt ok">余额接口已接线</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Image &amp; 3D 媒体生成网关</h2><span class="pill pill-amber">V2-03 规划占位</span></div>
+        <div class="grid-2">
+          <div class="inset"><strong>在线图像 API (`Seedream`)</strong><div class="mono k" style="margin:4px 0;">凭证: kc_91c3 · ¥0.20/张</div><span class="pill pill-amber">额度: 未知 / 不可查询</span></div>
+          <div class="inset"><strong>Hunyuan3D-2.1 (队列制)</strong><div class="mono k" style="margin:4px 0;">凭证: kc_5e08 · 2 req/min</div><span class="receipt warn">限流 · 降级可用</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Model Routing 任务路由表 (日上限 480k ≤ 500k 饭碗)</h2><span class="pill pill-tide">换模型不改 Persona 模板</span></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr><th>任务类型</th><th>主模型</th><th>回退链 (连续2×5xx / &gt;8s)</th><th>预算上限</th><th>7d 命中率</th></tr></thead>
+          <tbody>
+            <tr><td><strong>闲聊 (`chat`)</strong></td><td class="mono">MiniMax-M3.1-Flash / DeepSeek</td><td class="mono k">GLM-5-Flash</td><td class="mono">8k/次 · 150k/日</td><td><span class="mono">97.1%</span></td></tr>
+            <tr><td><strong>游戏决策 (`game`)</strong></td><td class="mono">MiniMax-Flash · reasoning low</td><td class="mono k">DeepSeek / Claude</td><td class="mono">12k/次 · 180k/日</td><td><span class="mono">94.8%</span></td></tr>
+            <tr><td><strong>歌声 (`song`)</strong></td><td class="mono">词曲路由 → SVS / CosyVoice</td><td class="mono k">云端兜底</td><td class="mono">25k/首 · 60k/日</td><td><span class="mono">98.6%</span></td></tr>
+            <tr><td><strong>攻略检索 (`kb`)</strong></td><td class="mono">DeepSeek + 本地 RAG</td><td class="mono k">本地摘要模型</td><td class="mono">6k/次 · 40k/日</td><td><span class="mono">91.3%</span></td></tr>
+            <tr><td><strong>视觉复盘 (`vision`)</strong></td><td class="mono">Qwen3-VL-Plus (仅事后复盘)</td><td class="mono k">MiniCPM-V 本地</td><td class="mono">10k/次 · 50k/日</td><td><span class="mono">89.4%</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 2: ACP Harness & Bidirectional MCP -->
+  <section class="plat-panel" data-pp="mcp" style="display:none;">
+    <div class="grid-3" style="margin-bottom:14px;">
+      <div class="card card-tight"><div class="row-between"><strong>Claude Code</strong><span class="pill pill-blue">协议级 · 只读审查</span></div><div style="font-size:11px;color:var(--text-2);margin-top:5px;">ACP 1.2 · stdio · 结论以建议回执入上下文，不直接写文件。</div><div class="receipt ok" style="margin-top:7px;">PASS 47/47</div></div>
+      <div class="card card-tight"><div class="row-between"><strong>Codex CLI</strong><span class="pill pill-tide">执行级 · Dev Worktree</span></div><div style="font-size:11px;color:var(--text-2);margin-top:5px;">sandbox workspace-write · 仅在独立分支开发，经人工 Review 合入。</div><div class="receipt ok" style="margin-top:7px;">已接线 T-M6-02</div></div>
+      <div class="card card-tight"><div class="row-between"><strong>OpenCode</strong><span class="pill">配置级 · 调研</span></div><div style="font-size:11px;color:var(--text-2);margin-top:5px;">adapter 0.3 只读检索，产出须人工审阅方进入知识库。</div><div class="receipt warn" style="margin-top:7px;">未实测 · 待排期</div></div>
+    </div>
+
+    <div class="why" style="margin-bottom:14px;"><i data-lucide="shield" class="ico-sm"></i><span><b>返回结果绝不接管角色身份：</b>Harness 产物仅作为「工具回执」入脑——不改写 Persona、不夺取 VoiceLock 或 ControlLease，署名永远属于「小鲸」。</span></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">MCP Client（鲸屿调外部 · `127.0.0.1`）</h2><span class="pill pill-green">17 tools</span></div>
+        <div class="itemrow"><div class="itemico">1</div><div class="iteminfo"><strong>stardew-bwf (`12 tools` · `:18080`)</strong><p>`game.get_state / game.do_action / path_to / craft / lock_status`</p></div><span class="receipt ok">已接线</span></div>
+        <div class="itemrow"><div class="itemico">2</div><div class="iteminfo"><strong>whale-memory (`5 tools`)</strong><p>`mem_search / mem_pin / ledger_read / token_flow / song_cache`</p></div><span class="receipt ok">已接线</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">MCP Server（白名单对外暴露）</h2><span class="pill pill-blue">5 tools · 默认只读</span></div>
+        <div class="itemrow"><div class="itemico">S1</div><div class="iteminfo"><strong>query_character_status / query_game_state / query_task_status</strong><p>只读摘要 · 严禁返回 `secrets.*` / 明文记忆账本</p></div><span class="pill pill-green">Schema 白名单</span></div>
+        <div class="itemrow"><div class="itemico">S2</div><div class="iteminfo"><strong>request_pet_action</strong><p>频控 1 次/10s · 需显式 capability 授予 + 写审计</p></div><span class="pill pill-amber">pet.action 需授权</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab 3: SKILL.md & 4-Layer Plugin Sandbox -->
+  <section class="plat-panel" data-pp="skills" style="display:none;">
+    <div class="grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Skills (`SKILL.md` YAML + `enabled ≠ authorized`)</h2><span class="lic apache">Apache-2.0 / MIT</span></div>
+        <div class="code-block" style="margin-bottom:9px;">---
+<b>name</b>: stardew-cooperation · v1.4.2
+<b>allowed-tools</b>: game.state.read · game.action.request · task.plan
+---
+## Guardrails: 资源锁优先 · uncertain 不盲击重试</div>
+        <div class="why"><i data-lucide="lock" class="ico-sm"></i><span><b>Skill 是操作说明不是权限凭证：</b>`allowed-tools` 只是申请单，实际放行必须以治理页 P0–P5 台账为准。</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">插件沙盒与 `plugin.manifest` 四策略</h2><span class="pill pill-green">崩溃不伤主进程</span></div>
+        <div class="code-block" style="margin-bottom:9px;">{ <b>"id"</b>: "whale.timer-ring", <b>"permissions"</b>: ["character.read"], <b>"sandbox"</b>: { "process": "isolated", "net": "deny" }, <b>"rollback"</b>: "snap_9c41" }</div>
+        <div class="kv-row"><span class="kv-k">1. 独立进程隔离 (CPU ≤10% / RSS ≤256MB)</span><span class="receipt ok">零共享内存</span></div>
+        <div class="kv-row"><span class="kv-k">2. Broker 校验 + 10m 内 3 次崩溃自动熔断</span><span class="receipt ok">可一键回滚</span></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('#plat-tabs .seg-tab').forEach(function (tab) {
+          tab.addEventListener('click', function () {
+            var k = tab.getAttribute('data-pt');
+            document.querySelectorAll('#plat-tabs .seg-tab').forEach(function (t) { t.classList.toggle('active', t === tab); });
+            document.querySelectorAll('.plat-panel').forEach(function (p) { p.style.display = p.getAttribute('data-pp') === k ? 'block' : 'none'; });
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
