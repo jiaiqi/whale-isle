@@ -11,7 +11,22 @@
 import { randomUUID } from 'node:crypto';
 import { ActionLock, StuckSentinel } from './action-lock';
 import { StardewAdapter, type GameAdapter, type GameBridgeTransport } from './adapter';
+import type { BrainMode } from './brain-switch';
+import type { DayPlanItem } from './day-plan';
+import type { ChatStanceEmission, PlanEmission } from './llm-planner';
 import { parseGameState, RulePlanner, type Planner, type PlannerDecision } from './planner';
+
+interface AutonomousPlannerHooks {
+  bindCallbacks?(callbacks: {
+    onPlan?: (event: PlanEmission) => void;
+    onBrainChange?: (mode: BrainMode, reason: string) => void;
+    onChatStance?: (event: ChatStanceEmission) => void;
+  }): void;
+  submitSuggestion?(text: string): void;
+  submitCommand?(command: string): void;
+  cancelCommand?(): string | null;
+  setHandoverSummary?(summary: string | null): void;
+}
 
 export type AutodriveEvent =
   | { type: 'state'; clock: string; stamina: number; staminaMax: number; money: number; location: string; health?: number; healthMax?: number; freeSlots?: number }
@@ -20,6 +35,12 @@ export type AutodriveEvent =
   | { type: 'watchdog'; kind: 'stuck' | 'heartbeat'; detail: string }
   /** 多步目标生命周期（T-M6-57）：set/replaced/cancel/done，供 UI 目标条与徽标使用 */
   | { type: 'objective'; objective: string | null; reason: 'set' | 'replaced' | 'cancel' | 'done' }
+  /** 当日自拟计划与步中修订（T-M6-70） */
+  | { type: 'plan'; dayKey: string; plan: DayPlanItem[]; mood?: string; updateWhy?: string; reason: 'morning' | 'update' }
+  /** 大脑开/关/临时代驾状态切换（T-M6-70） */
+  | { type: 'brain'; mode: BrainMode; reason: string }
+  /** 主人建议/强制命令的 AI 表态（T-M6-70：用于聊天气泡与采纳率统计） */
+  | { type: 'chat-stance'; kind: 'suggestion' | 'command'; text: string; stance: ChatStanceEmission['stance']; reply: string; reason?: string; alternative?: string }
   /** 主人临时接管（T-M6-73）：active=true 进入静默只读态；false 交还并带回归摘要 */
   | { type: 'human-control'; active: boolean; reason: 'switch' | 'in-game' | 'resume'; summary?: string }
   | { type: 'cycle-end'; delayMs: number };
@@ -132,11 +153,40 @@ export class AutodriveRunner {
 
   setPlanner(planner: Planner): void {
     this.planner = planner;
+    (planner as Planner & AutonomousPlannerHooks).bindCallbacks?.({
+      onPlan: (ev) => this.onEvent({ type: 'plan', ...ev }),
+      onBrainChange: (mode, reason) => this.onEvent({ type: 'brain', mode, reason }),
+      onChatStance: (ev) => this.onEvent({ type: 'chat-stance', ...ev }),
+    });
   }
 
   /** 人工/远程 P0 插队：下一次循环优先执行（不重发语义——插队的是新动作） */
   submitDirective(tool: string, args: Record<string, unknown>, intent: string): void {
     this.pendingDirective = { tool, args, intent };
+  }
+
+  /** 普通聊天建议（T-M6-70）：进入「主人说」上下文，下一轮由 LLM 输出 stance + reply */
+  submitSuggestion(text: string): void {
+    (this.planner as Planner & AutonomousPlannerHooks).submitSuggestion?.(text);
+  }
+
+  /** `/自然语言` 强制命令（T-M6-70）：优先于当日计划，只允许 execute / infeasible */
+  submitCommand(command: string): void {
+    const clean = command.replace(/^\/+/, '').trim().slice(0, 300);
+    if (clean === '') return;
+    const had = this.pendingObjective !== null || (this.planner.hasObjective?.() ?? false);
+    this.pendingObjective = null;
+    (this.planner as Planner & AutonomousPlannerHooks).submitCommand?.(clean);
+    this.onEvent({ type: 'objective', objective: `/${clean}`, reason: had ? 'replaced' : 'set' });
+  }
+
+  /** `/cancel` 结束当前强制命令 */
+  cancelCommand(): string | null {
+    const cancelled = (this.planner as Planner & AutonomousPlannerHooks).cancelCommand?.() ?? null;
+    if (cancelled !== null) {
+      this.onEvent({ type: 'objective', objective: null, reason: 'cancel' });
+    }
+    return cancelled;
   }
 
   /** 团队目标：不锁死具体工具，由当前 planner 在安全护栏内决定动作。 */
@@ -151,7 +201,8 @@ export class AutodriveRunner {
    * 同时清 pending（还没被循环消费的）与 planner 已生效的 objective，避免旧目标继续驱动。
    */
   clearObjective(): boolean {
-    const had = this.pendingObjective !== null || (this.planner.hasObjective?.() ?? false);
+    const cancelledCmd = (this.planner as Planner & AutonomousPlannerHooks).cancelCommand?.() ?? null;
+    const had = cancelledCmd !== null || this.pendingObjective !== null || (this.planner.hasObjective?.() ?? false);
     this.pendingObjective = null;
     this.planner.setObjective?.(null);
     return had;
@@ -205,9 +256,10 @@ export class AutodriveRunner {
     this.humanSource = null;
     this.humanSince = null;
     this.humanStartSnapshot = null;
-    // 交还后从「现在」重新计 keepalive，避免刚松手就补一条无谓 keepalive
+    // 交还后从「现在」重新计 keepalive，避免刚松手就补一条无谓 keepalive；同时把介入差异摘要交给 planner
     this.lastMutationAt = clock();
     this.sentinel.reset();
+    (this.planner as Planner & AutonomousPlannerHooks).setHandoverSummary?.(summary);
     this.onEvent({ type: 'human-control', active: false, reason: 'resume', summary });
     return summary;
   }

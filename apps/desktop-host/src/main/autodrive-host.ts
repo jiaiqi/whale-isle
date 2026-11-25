@@ -4,7 +4,7 @@
  * 启停由 Shell 显式触发（用户不在游戏时不自动跑）。
  */
 import { app, ipcMain, type WebContents } from 'electron';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -13,8 +13,10 @@ import {
   LlmPlanner,
   RulePlanner,
   type AutodriveEvent,
+  type DayPlanSnapshot,
   type GameAdapter,
   type GameId,
+  type StrategyInsight,
 } from '@workbench/game-bridge-mcp';
 import { ModelGateway } from '@workbench/model-gateway';
 import {
@@ -33,6 +35,7 @@ import { dayKeyOf, type MemoryHost } from './memory-host';
 import {
   buildDirectiveSystemPrompt,
   buildDirectiveUserPrompt,
+  classifyChatInput,
   isCancelDirective,
   parseDirectiveResponse,
   resolveKeywordDirective,
@@ -90,7 +93,24 @@ const PLANNER_SLOTS: Record<GameId, WorkbenchRoleSlot> = {
   dst: 'DST_GAME_PLANNER',
 };
 
-const DEFAULT_GUIDE_TOPICS = ['钓鱼', '采矿', '节日', '结婚', '沙漠', '姜岛', '农场类型'];
+const DEFAULT_GUIDE_TOPICS = [
+  '钓鱼', '采矿', '节日', '结婚', '沙漠', '姜岛', '农场类型',
+  '开局前几周', '四季作物收益', '社区中心收集包', '赚钱路线', '工具升级',
+];
+
+function loadGuidesFromDirectory(dir: string, extraTopics: readonly string[]): Record<string, string> {
+  const topics = new Set<string>(extraTopics);
+  try {
+    for (const file of readdirSync(dir)) {
+      if (file.endsWith('.md') && file.toLowerCase() !== 'readme.md') topics.add(file.slice(0, -3));
+    }
+  } catch { /* 目录不存在时按声明专题尝试读取，全部缺失则返回空 */ }
+  const guides: Record<string, string> = {};
+  for (const topic of topics) {
+    try { guides[topic] = readFileSync(join(dir, `${topic}.md`), 'utf8'); } catch { /* 缺失专题跳过 */ }
+  }
+  return guides;
+}
 
 export function resolveGuideDirectory(
   isPackaged: boolean,
@@ -301,6 +321,14 @@ export function createAutodriveHost(
         broadcastRice(riceStatus.level);
       },
     });
+    const notesDir = vaultPath ? join(dirname(vaultPath), 'stardew-notes') : undefined;
+    let initialGuides: Record<string, string> = {};
+    if (gameId === 'stardew') {
+      try {
+        const dir = resolveGuideDirectory(app.isPackaged, process.resourcesPath, import.meta.url);
+        initialGuides = loadGuidesFromDirectory(dir, [...(adapter.guideTopics ?? []), ...DEFAULT_GUIDE_TOPICS]);
+      } catch { initialGuides = {}; }
+    }
     llmPlanner = new LlmPlanner({
       chat: (slot, messages, opts) =>
         gateway!.chat(slot as never, messages, { maxTokens: opts?.maxTokens }).catch((error: unknown) => {
@@ -308,10 +336,16 @@ export function createAutodriveHost(
           throw error;
         }),
       recentReceipts,
+      guides: initialGuides,
+      ...(notesDir === undefined ? {} : { notesDir }),
       slot: PLANNER_SLOTS[gameId],
       fallbackPlanner: adapter.createRulePlanner?.() ?? new RulePlanner(),
       ...(adapter.toolWhitelist !== undefined ? { toolWhitelist: adapter.toolWhitelist } : {}),
+      isKeyAvailable: () => brainProviders.length > 0,
       personaPrompt: () => characterNow()?.personaPrompt ?? '',
+      onInsight: (ev) => {
+        broadcastCurrent({ type: 'insight', ...ev } as unknown as AutodriveEvent);
+      },
       ...(gameId === 'stardew' ? {} : {
         // 惰性求值：角色在运行中热切换时，下一次规划立刻使用新角色名（T-M6-51）
         systemPrompt: () => [
@@ -325,15 +359,36 @@ export function createAutodriveHost(
     brainMode = 'llm';
     return { ok: true, mode: brainMode, llmReady: true, providers: brainProviders, missingKeys };
   };
+  const effectiveBrainMode = (): 'llm' | 'rule' | 'rule-standin' =>
+    brainMode === 'llm' && llmPlanner?.isStandin() ? 'rule-standin' : brainMode;
   ipcMain.handle('planner:switch', (_e, mode: string) => {
     if (mode === 'llm' && !llmPlanner) {
       return { ok: false, error: 'LLM 大脑未就绪（供应商 key 未配置或未重启工作台）' };
     }
     brainMode = mode === 'llm' ? 'llm' : 'rule';
+    llmPlanner?.brainSwitch.setUserMode(brainMode);
     runner.setPlanner(brainMode === 'llm' && llmPlanner ? llmPlanner : adapter.createRulePlanner?.() ?? new RulePlanner());
-    return { ok: true, mode: brainMode };
+    return { ok: true, mode: effectiveBrainMode() };
   });
-  ipcMain.handle('planner:status', () => ({ mode: brainMode, llmReady: llmPlanner !== null, providers: brainProviders, missingKeys: brainMissingKeys }));
+  ipcMain.handle('planner:status', (): {
+    mode: 'llm' | 'rule' | 'rule-standin';
+    userMode: 'llm' | 'rule';
+    llmReady: boolean;
+    providers: string[];
+    missingKeys: string[];
+    dayPlan: DayPlanSnapshot | null;
+    insights: StrategyInsight[];
+    saveName: string;
+  } => ({
+    mode: effectiveBrainMode(),
+    userMode: brainMode,
+    llmReady: llmPlanner !== null,
+    providers: brainProviders,
+    missingKeys: brainMissingKeys,
+    dayPlan: llmPlanner?.dayPlanStore.snapshot() ?? null,
+    insights: llmPlanner?.notebook.list() ?? [],
+    saveName: llmPlanner?.notebook.getSaveName() ?? 'default',
+  }));
 
   // 聊天回话（D3）：雷区反射先行（不烧主脑）→ 主脑回话 → 广播两窗
   // T-M6-17：对话驱动游戏行为——指令解析（关键词/LLM 状态感知）移入纯模块 ./chat-directive（可单测），
@@ -357,32 +412,116 @@ export function createAutodriveHost(
       speak({ text: reflex.response, scene: 'p0' });
       return { ok: true, reply: reflex.response, reflex: true };
     }
-    if (!gateway) return { ok: false, error: '主脑未接通（供应商 key 未配置）' };
-    // ── T-M6-17：指令先行（串行）——先解析接不接单，再让回话「说到做到」──
-    // 旧实现 void tryChatDirective 并行互不知情：回话可能否认自己要做的动作；自驾没开时更是只回复不动手
-    let order: ChatOrder | null = null;
-    let gameOffline = false;
-    let directiveError: string | null = null;
-    // 取消多步目标：只有确实有活跃目标时才消费「算了/取消目标」，避免把普通闲聊误当指令
-    let cancelledObjective: string | null = null;
-    if (activeObjective !== null && isCancelDirective(text)) {
+
+    const classified = classifyChatInput(text);
+
+    // 1) 快捷命令（/goto /fish /sleep /forage /state /stop）：直达工具，不经 LLM
+    if (classified.kind === 'shortcut') {
+      if (classified.tool === 'cancel_action') {
+        await runner.lock.cancel('slash-stop').catch(() => undefined);
+        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: classified.intent } as AutodriveEvent);
+        return { ok: true, reply: classified.intent };
+      }
+      if (!runner.isRunning()) {
+        try {
+          await runner.start();
+          broadcastCurrent({ type: 'receipt', tool: 'autodrive', status: 'COMPLETED', summary: '快捷指令触发，自动驾驶已启动' } as AutodriveEvent);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          broadcastCurrent({ type: 'watchdog', kind: 'heartbeat', detail: `快捷指令无法启动自驾：${msg}` } as AutodriveEvent);
+          return { ok: false, error: msg };
+        }
+      }
+      runner.submitDirective(classified.tool, classified.args, classified.intent);
+      broadcastCurrent({ type: 'decision', planner: 'remote', tool: classified.tool, args: classified.args, intent: classified.intent } as AutodriveEvent);
+      return { ok: true, reply: classified.intent };
+    }
+
+    // 2) /cancel 或有活跃目标/命令时的取消语
+    if (classified.kind === 'cancel' || (activeObjective !== null && isCancelDirective(text))) {
       const previous = activeObjective;
       activeObjective = null;
       pendingChatOrder = null;
-      // 只有 planner 里真的还有目标才播报取消；已完成/自动清空的目标不报假状态
-      if (runner.clearObjective()) {
-        cancelledObjective = previous;
+      const cancelledCmd = runner.cancelCommand();
+      const clearedObj = runner.clearObjective();
+      const label = cancelledCmd !== null ? `/${cancelledCmd}` : (previous ?? '当前目标');
+      if (cancelledCmd !== null || clearedObj) {
         broadcastCurrent({ type: 'objective', objective: null, reason: 'cancel' } as AutodriveEvent);
-        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消多步目标：${cancelledObjective}` } as AutodriveEvent);
+        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `已取消强制命令/目标：${label}` } as AutodriveEvent);
       }
+      const cancelReply = cancelledCmd !== null || clearedObj
+        ? `好啦，已经取消「${label}」，我继续按自己的计划来～`
+        : '当前没有正在执行的强制命令或目标哦～';
+      broadcastCurrent({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: cancelReply } as AutodriveEvent);
+      speak({ text: cancelReply, scene: 'normal' });
+      return { ok: true, reply: cancelReply };
     }
-    if (cancelledObjective === null) {
+
+    const llmOnline = gateway !== null && brainMode === 'llm' && llmPlanner !== null && !llmPlanner.isStandin();
+
+    // 3) `/自然语言` 强制命令（T-M6-70 §4.3：LLM 在线时只允许 execute/infeasible；离线时走关键词或如实告知）
+    if (classified.kind === 'command') {
+      if (!llmOnline) {
+        const kw = resolveKeywordDirective(classified.command, directiveProfile);
+        if (kw === null) {
+          const offlineReply = '大脑离线，现在只能执行快捷命令（/goto /fish /sleep /forage /state /stop）。';
+          broadcastCurrent({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: offlineReply } as AutodriveEvent);
+          speak({ text: offlineReply, scene: 'normal' });
+          return { ok: true, reply: offlineReply };
+        }
+        if (!runner.isRunning()) {
+          try {
+            await runner.start();
+          } catch (error) {
+            const offlineErr = `大脑离线且游戏未连上（${error instanceof Error ? error.message : String(error)}），暂时执行不了。`;
+            broadcastCurrent({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: offlineErr } as AutodriveEvent);
+            return { ok: true, reply: offlineErr };
+          }
+        }
+        runner.submitDirective(kw.tool, kw.args, kw.intent);
+        const ack = `大脑离线，已按关键词执行：${kw.intent.replace('主人指令：', '')}`;
+        broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `${kw.tool}｜${kw.intent}` } as AutodriveEvent);
+        broadcastCurrent({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: ack } as AutodriveEvent);
+        speak({ text: ack, scene: 'normal' });
+        return { ok: true, reply: ack };
+      }
+
+      if (!runner.isRunning()) {
+        try {
+          await runner.start();
+          broadcastCurrent({ type: 'receipt', tool: 'autodrive', status: 'COMPLETED', summary: '收到强制命令，自动驾驶已启动' } as AutodriveEvent);
+        } catch (error) {
+          const msg = `游戏还没启动或未连上（${error instanceof Error ? error.message : String(error)}），等进存档后再发强制命令吧～`;
+          broadcastCurrent({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: msg } as AutodriveEvent);
+          speak({ text: msg, scene: 'normal' });
+          return { ok: true, reply: msg };
+        }
+      }
+      activeObjective = `/${classified.command}`;
+      runner.submitCommand(classified.command);
+      broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `强制命令：/${classified.command}` } as AutodriveEvent);
+      return { ok: true, reply: `已下达强制命令：/${classified.command}` };
+    }
+
+    // 4) 普通非 `/` 聊天消息
+    if (!gateway) return { ok: false, error: '主脑未接通（供应商 key 未配置）' };
+
+    // 星露谷 + 自驾运行中 + LLM 自主模式在线：消息作为「主人建议」交给规划器下一轮自主表态（accept/modify/decline + reply）
+    if (gameId === 'stardew' && runner.isRunning() && llmOnline) {
+      runner.submitSuggestion(classified.text);
+      return { ok: true, reply: '' };
+    }
+
+    // 非星露谷（M7 冻结泳道）保留原有对话指令兼容；星露谷自驾未启动时做纯日常对话，不假装下发游戏动作
+    let order: ChatOrder | null = null;
+    let gameOffline = false;
+    let directiveError: string | null = null;
+    if (gameId !== 'stardew') {
       try {
         const keywordHit = resolveKeywordDirective(text, directiveProfile);
         if (keywordHit !== null) {
           order = keywordHit;
         } else {
-          // LLM 状态感知解析：拉一份当前游戏状态给它填参（游戏没开 → 如实标记，绝不假装接单）
           let stateRaw: string | null = null;
           try {
             const stateRes = await runner.client.callTool('get_state', {}, { timeoutMs: 15_000 });
@@ -401,78 +540,48 @@ export function createAutodriveHost(
             if (parsed !== null) order = { ...parsed, intent: `主人指令：${parsed.intent}` };
           }
         }
-        if (order !== null) {
-          const label = order.kind === 'act' ? `${order.tool} ${JSON.stringify(order.args)}` : `目标「${order.objective}」首步 ${order.firstTool ?? '由大脑决定'}`;
-          console.log('[chat-directive] 接单 →', label, `(${order.source})`);
-        }
       } catch (error) {
-        // 解析失败不能静默（2026-11-24 用户反馈「只回复不办事」）：记录原因，回话时如实说明，事件流可见
         directiveError = error instanceof Error ? error.message : String(error);
-        console.error('[chat-directive] 解析失败（未接单）：', directiveError);
       }
     }
-    try {
-      // T-M5-04：记忆增强——「你昨天做了什么」类问句检索图谱注入 system
-      const memoryContext = memoryHost?.contextFor(text) ?? '';
-      // T-M6-17 回话 ack：她嘴里说的必须和她马上要做的一致（接单/游戏没开两种情形都如实）
-      const ackHint = cancelledObjective !== null
-        ? `\n\n【主人刚取消了多步目标「${cancelledObjective}」：回话要自然承认已经停下，不要再声称正在继续做。】`
-        : order === null
-        ? (gameOffline
-          ? '\n\n【游戏现在没有开：如果主人的话是想让你在游戏里做事，如实撒娇说等开游戏再办，别假装去做。】'
-          : directiveError !== null
-            ? `\n\n【指令解析没成功（${directiveError}）：如果主人是在给你下单，如实说没听清或没连上，别假装接单；纯闲聊照常回。】`
-            : '')
-        : order.kind === 'act'
-          ? `\n\n【你刚刚接下单子并马上要在游戏里执行：${order.tool}（${order.intent.replace('主人指令：', '')}）。回话要自然承认这件事、傲娇地领任务，绝不能只嘴上说说或否认。】`
-          : `\n\n【你刚刚接下主人的多步目标：「${order.objective}」，会持续去做直到完成。回话要承认这件事并说出第一步打算做什么（${order.firstTool ?? '自己决定'}），绝不能只嘴上说说或否认。】`;
-      const base = memoryContext === '' ? personaSystemPrompt() : `${personaSystemPrompt()}
 
-${memoryContext}
-（以上是你的长期记忆；回答时自然地使用，不要编造记忆里没有的事）`;
-      const system = ackHint === '' ? base : `${base}
-${ackHint}`;
+    try {
+      const memoryContext = memoryHost?.contextFor(text) ?? '';
+      const ackHint = gameId === 'stardew'
+        ? '\n\n【当前星露谷自动驾驶未运行（或处于纯规则模式）：主人的普通消息属于日常聊天沟通，不要声称自己马上在游戏里动手；若主人想强制命令游戏操作，可提醒主人开启自动驾驶或以 / 开头发送命令。】'
+        : order === null
+          ? (gameOffline
+            ? '\n\n【游戏现在没有开：如果主人的话是想让你在游戏里做事，如实撒娇说等开游戏再办，别假装去做。】'
+            : directiveError !== null
+              ? `\n\n【指令解析没成功（${directiveError}）：如果主人是在给你下单，如实说没听清或没连上，别假装接单；纯闲聊照常回。】`
+              : '')
+          : order.kind === 'act'
+            ? `\n\n【你刚刚接下单子并马上要在游戏里执行：${order.tool}（${order.intent.replace('主人指令：', '')}）。回话要自然承认这件事。】`
+            : `\n\n【你刚刚接下主人的多步目标：「${order.objective}」，会持续去做直到完成。】`;
+      const base = memoryContext === '' ? personaSystemPrompt() : `${personaSystemPrompt()}\n\n${memoryContext}\n（以上是你的长期记忆；回答时自然地使用，不要编造记忆里没有的事）`;
+      const system = ackHint === '' ? base : `${base}\n${ackHint}`;
       const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [
         { role: 'system', content: system },
         { role: 'user', content: text },
       ], { maxTokens: 260 });
-      // LLM 回话里的 <think> 是内心戏：气泡只显示可见文本，语音也只念可见部分（别把标签读出来）
       const replyVisible = stripVisible(receipt.content);
       broadcastCurrent({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: replyVisible } as AutodriveEvent);
       if (replyVisible !== '') speak({ text: replyVisible, scene: 'normal' });
-      // ── T-M6-17 接单下发：自驾没开就自动拉起，绝不「只回复不动手」──
       if (order !== null) {
         const orderLabel = order.kind === 'act' ? order.tool : `多步目标：${order.objective}`;
         broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `${orderLabel}｜${order.intent}` } as AutodriveEvent);
-        // 失败回灌只跟踪真实工具动作（多步目标的首步；纯目标由 planner 自己换方案）
-        pendingChatOrder = {
-          tool: order.kind === 'act' ? order.tool : (order.firstTool ?? ''),
-          intent: order.intent,
-        };
+        pendingChatOrder = { tool: order.kind === 'act' ? order.tool : (order.firstTool ?? ''), intent: order.intent };
         if (!runner.isRunning()) {
           try {
             await runner.start();
-            broadcastCurrent({ type: 'receipt', tool: 'autodrive', status: 'COMPLETED', summary: '主人下单，自动驾驶已自动启动' } as AutodriveEvent);
           } catch (error) {
             broadcastCurrent({ type: 'watchdog', kind: 'heartbeat', detail: `接了单但自驾起不来：${error instanceof Error ? error.message : String(error)}` } as AutodriveEvent);
             return { ok: true, reply: replyVisible };
           }
         }
         if (order.kind === 'act') {
-          // 新的单步原子指令意味着旧多步目标作废：立即清空，别让「找鱼竿」继续驱动
-          if (activeObjective !== null) {
-            const previous = activeObjective;
-            activeObjective = null;
-            // 目标可能已被 objectiveDone/跨日/轮数上限自动清空，此时不播报「已结束」
-            if (runner.clearObjective()) {
-              broadcastCurrent({ type: 'objective', objective: null, reason: 'replaced' } as AutodriveEvent);
-              broadcastCurrent({ type: 'receipt', tool: 'chat_order', status: 'COMPLETED', summary: `收到新的单步指令，已结束旧目标：${previous}` } as AutodriveEvent);
-            }
-          }
           runner.submitDirective(order.tool, order.args, order.intent);
         } else {
-          // 多步目标：注入 planner 每轮 user prompt（单机 objective 不再被 teamContext 短路），
-          // 有首步则立刻插队执行，之后由大脑持续朝目标推进。
           activeObjective = order.objective;
           runner.submitObjective(order.objective, order.intent);
           if (order.firstTool !== undefined) {
@@ -507,13 +616,12 @@ ${ackHint}`;
     if (!llmPlanner) return { ok: false, error: 'LLM 大脑未就绪' };
     try {
       const dir = resolveGuideDirectory(app.isPackaged, process.resourcesPath, import.meta.url);
-      const guides: Record<string, string> = {};
-      const missing: string[] = [];
-      for (const topic of adapter.guideTopics ?? DEFAULT_GUIDE_TOPICS) {
-        try { guides[topic] = readFileSync(join(dir, topic + '.md'), 'utf8').slice(0, 4000); } catch { missing.push(topic); }
-      }
+      const topicSeed = gameId === 'stardew'
+        ? [...(adapter.guideTopics ?? []), ...DEFAULT_GUIDE_TOPICS]
+        : (adapter.guideTopics ?? DEFAULT_GUIDE_TOPICS);
+      const guides = loadGuidesFromDirectory(dir, topicSeed);
       llmPlanner.setGuides(guides);
-      console.log('[guides:load] dir =', dir, '| loaded:', Object.keys(guides).length, '| missing:', missing.join(','));
+      console.log('[guides:load] dir =', dir, '| loaded:', Object.keys(guides).length);
       return { ok: true, topics: Object.keys(guides) };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -572,6 +680,9 @@ ${ackHint}`;
     if (event.type === 'watchdog') {
       return { ...event, detail: stripVisible(event.detail) };
     }
+    if (event.type === 'chat-stance') {
+      return { ...event, reply: stripVisible(event.reply) };
+    }
     return event;
   };
   const broadcast = (rawEvent: AutodriveEvent, meta: { sessionId: string; gameId: GameId; generation: number }): void => {
@@ -606,6 +717,23 @@ ${ackHint}`;
       if (event.type === 'objective') {
         activeObjective = event.objective;
         if (event.objective === null) pendingChatOrder = null;
+      }
+      // T-M6-70：当日计划生成或修订时，用人设口吻在气泡/聊天流播报一句
+      if (event.type === 'plan') {
+        const goals = event.plan.slice(0, 3).map((item) => item.goal).join('、');
+        const line = event.reason === 'morning'
+          ? `今日计划（${event.dayKey}）：${goals}${event.mood === undefined ? '' : ` —— ${event.mood}`}`
+          : `计划调整：${event.updateWhy ?? goals}`;
+        broadcast({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: line } as AutodriveEvent, meta);
+        if (voiceHost?.config.enabled) speak({ text: line, scene: 'normal' });
+      }
+      // T-M6-70：LLM 对主人建议/强制命令的表态 → reply 走气泡与语音，stance 保留在事件流统计采纳率
+      if (event.type === 'chat-stance') {
+        const visible = stripVisible(event.reply);
+        if (visible !== '') {
+          broadcast({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: visible } as AutodriveEvent, meta);
+          if (voiceHost?.config.enabled) speak({ text: visible, scene: 'normal' });
+        }
       }
       if (event.type === 'receipt' && event.tool !== 'autodrive' && voiceHost?.config.enabled) {
         // 回执短评（D11 节流 8s 防刷）：翻车心虚 / 收获欢呼

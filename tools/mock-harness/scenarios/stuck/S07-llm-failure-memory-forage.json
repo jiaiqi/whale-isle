@@ -1,0 +1,24 @@
+{
+  "id": "S07-llm-failure-memory-forage",
+  "signature": "fish|背包里没有鱼竿|Beach",
+  "source": "T-M6-70（RUNBOOK §4.9 正例）：海滩钓鱼失败一次后，下一轮 prompt 注入失败签名与「换个做法」，LLM 读取失败记忆自主改选 forage 推进时间",
+  "initialState": "## 基本状态\n时间：第1年夏2日 07:10（Mon），天气：晴，明天天气：晴\n金钱：19519g  体力：270/270  生命：100/100\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Beach（沙滩），室外\n## 背包（序号: 物品）\n0: 斧头（手持）\n背包空位：20 个（共 24 格）\n",
+  "rules": [
+    { "tool": "fish", "receipt": { "text": "失败：背包里没有鱼竿（第二天早上上海边找威利 Willy 会送你一根，或者在鱼店 FishShop 买）", "isError": true } },
+    { "tool": "forage", "receipt": { "text": "OK forage: 采集到 2 个海草" }, "advanceMinutes": 30 },
+    { "tool": "wait", "receipt": { "text": "OK wait: 等待了 1 分钟" }, "advanceMinutes": 10 },
+    { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
+  ],
+  "llmScript": [
+    "{\"plan\":[{\"goal\":\"海滩钓鱼或捡贝壳\",\"why\":\"早上在海边赚点外快\"}],\"mood\":\"元气满满\"}",
+    "{\"tool\":\"fish\",\"args\":{},\"intent\":\"先甩一竿试试\"}",
+    "{\"tool\":\"forage\",\"args\":{},\"intent\":\"没带鱼竿钓不了，改在沙滩采集海草和贝壳！\",\"planUpdate\":{\"why\":\"没带鱼竿\",\"replace\":[{\"goal\":\"沙滩采集海产\",\"why\":\"替代钓鱼\"}]}}"
+  ],
+  "planner": "llm",
+  "expect": {
+    "maxCycles": 4,
+    "maxSameFailure": 1,
+    "mustCallOneOf": ["forage"],
+    "clockMustAdvance": true
+  }
+}

@@ -5,6 +5,26 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added / Changed（T-M6-72：攻略学习、按存档经验心得本与每晚复盘）
+
+- **攻略库切块索引与宿主侧 `read_guide` 伪工具** `packages/game-bridge-mcp/src/guide-library.ts`：按 `##` / `###` 将 Markdown 攻略稳定切为 `{topic, sectionId, title, summary(≤80字), text(≤2000字)}`（过滤 `History` 等样板节），每轮只注入 ≤800 字与当前季节/地点/计划最相关的索引；LLM 通过宿主直读伪工具 `{"tool":"read_guide","args":{"topic","section"}}` 按需读全文（每轮上限 2 节，绝不发往游戏也不占 `ActionLock`）。
+- **补采 5 个日常新手与经济专题** `tools/guide-forager/src/forage.ts` + `guide-forager/*.md`：扩充 `TOPIC_PAGES` 至 **12 专题**并从 Stardew Valley Wiki 实抓 `开局前几周`、`四季作物收益`、`社区中心收集包`、`赚钱路线`、`工具升级` 5 篇（保留出处与 CC BY-NC-SA 3.0 声明），`autodrive-host.ts` 解除 4000 字截断全量加载并同步暴露 `stardew-notes/<saveName>.json` 持久化。
+- **按存档持久化经验心得本** `packages/game-bridge-mcp/src/strategy-notebook.ts`：Zod 校验 `StrategyInsight`（`id, source, claim, when, verdict(adopt|defer|reject|refuted), why, evidence[], createdDay, updatedDay, hits`）；按游戏存档名持久化至 `stardew-notes/<saveName>.json`；容量上限 200 条按「先淘汰久未引用的 `refuted`，再淘汰 `hits` 最低」回收；每轮检索 Top 5 注入 prompt，引用 `usedInsight` 即刻 `hits+1` 并发射 `insight` 事件供事后追溯。
+- **每晚幂等复盘与明日打算闭环** `packages/game-bridge-mcp/src/reflection.ts`：在 LLM 决定 `sleep` 前（或 `≥24:00` 且当日已有回执时）每日幂等触发一次复盘，聚合当日计划、回执与失败签名 Top 3 修订或推翻既有心得、生成 `tomorrowHint` 注入次日晨间计划；复盘异常或乱码静默跳过，绝不阻断睡觉。
+- **中控台星露谷页只读展示** `apps/desktop-host/src/renderer/director/App.tsx`：新增「当日计划（只读）」与「心得本（只读）」卡片，并在 `EventCard` 渲染 `plan` / `insight` / `brain` 事件。`llm-planner.ts` 保持 **489 行（≤500 行）**。
+
+### Added / Changed（T-M6-70：LLM 全权决策模式、当日计划、强制命令分流与规则临时代驾）
+
+- **移除规则代决，`llm-planner.ts` 瘦身至 487 行（≤500 行硬门禁）**：删除 `LlmPlanner` 内全部替模型做主的硬编码分支（满包救援阶梯、23:00/低体力/低血量强制改写、`LOW_SPACE_BLOCKED`、冷却硬拦截、节日与砍树攒木确定性状态机）；LLM 在线可用期间 `RulePlanner.decide` 调用 **0 次**。拆出 `day-plan.ts`、`brain-switch.ts`、`llm-prompt.ts` 三个纯模块。
+- **每日计划自拟与步中修订** `packages/game-bridge-mcp/src/day-plan.ts`：换日后首次可自由行动时生成今日计划（`{plan:[{goal,why}],mood}`），每轮注入决策上下文；支持任意步通过 `planUpdate` 增删改或标记完成，发射 `AutodriveEvent { type: 'plan', reason: 'morning' | 'update' }` 并在桌宠气泡/聊天流播报。
+- **生存只提醒 + 失败记忆提示驱动 + T-M6-73 接管摘要注入** `packages/game-bridge-mcp/src/llm-prompt.ts`：每轮计算距 02:00 强制昏倒剩余分钟（深夜 `01:40` 精确报剩 20 分钟）、体力/生命百分比与背包空位，仅作风险提示不改动作；注入最近失败归一化签名、连败次数与时钟停滞秒数；`AutodriveRunner.setHumanControl(false)` 交还时的状态差异摘要自动注入下一轮 prompt 一次。
+- **普通建议 vs `/` 强制命令三类分流** `chat-directive.ts` / `autodrive-host.ts` / `App.tsx`：
+  - 普通非 `/` 消息：星露谷自驾 LLM 在线时进入「主人说」上下文，下一轮由模型按人设输出 `stance: accept | modify | decline` + `reply`（2 个游戏小时未表态自动过期），气泡发声并写入 `chat-stance` 事件统计采纳率；
+  - 快捷命令（`/goto` `/fish` `/sleep` `/forage` `/state` `/stop`）：直达工具 P0 插队；修复 `App.tsx` 的 `parseDirective` default 分支此前把未知 `/xxx` 误当工具名直发的 bug；
+  - `/自然语言` 强制命令：排在当日计划之前，严格校验只接受 `stance: execute` 或带非空 `reason` 的 `infeasible`（输出 `decline`/`modify`/缺表态自动拒收重问，连续 2 次不合规进代驾）；`execute` 持续至 `commandDone: true` + `COMPLETED` 回执（动作失败自动撤回声明继续推进）或 `/cancel`；LLM 离线时回退关键词直译，未命中如实告知「大脑离线，现在只能执行快捷命令」。
+- **`BrainSwitch` 临时代驾与中途无缝同步** `brain-switch.ts`：无 Key、单次网关超时或连续 3 次无法解析/越权时切换 `rule-standin`（发射 `brain` 事件，中控台顶栏接管条显示「规则代驾中」），每现实 2 分钟探测恢复（补 Key 即刻恢复）；修复中途切换代驾时 `RulePlanner` 首次 `decide` 误把初始化当跨日清空当日失败记忆的隐患（先锚定 `dayKey` 再重放当日真实回执）。
+- **卡死回归剧本升级 `S01–S07`**：按 T-M6-70 新语义更新 `S01`（LLM 自主读满包提醒与失败记忆选 `eat 太阳鱼 force=true`）、`S02`（死硬脚本触发 3 次全局熔断后转代驾推进时钟），新增正例 `S07-llm-failure-memory-forage.json`（海滩无鱼竿失败一次后读失败记忆改选 `forage`）。
+
 ### Fixed（T-M6-74：`localhost` 被解析到 IPv6 导致「游戏开着却报 MCP 不可达」）
 
 - **现象**：中控台点「启动自动驾驶」返回 `BWF MCP 不可达（http://localhost:18088/mcp）——确认游戏已启动`，但同一时刻 `curl http://127.0.0.1:18088/settings` 是 200、游戏也确实开着。

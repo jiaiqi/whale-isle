@@ -1,7 +1,7 @@
 {
   "id": "S01-full-bag-reserved-wood22",
   "signature": "tidy_backpack|农场上没有箱子 先 craft Chest 木材|Farm",
-  "source": "VERIFY「满包造箱自救·现场二」（2026-11-22 用户复测仍卡死）；state 片段取自 planner-rescue.spec.ts FULL_RESERVED（春21 08:30 Farm，木材 x22<50，非工具物品全带【留着】）",
+  "source": "VERIFY「满包造箱自救·现场二」（2026-11-22 真机现场）；T-M6-70 更新为 LLM 自主读取满包提醒与失败记忆脱困（tidy 失败 → donate 失败 → 自主选择 eat 太阳鱼 force=true 腾格）",
   "initialState": "## 基本状态\n时间：第1年春21日 08:30（Sun），天气：晴，明天天气：晴\n金钱：2890g  体力：270/270  生命：100/100\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Farm（泡泡湾农场），室外\n你站在 (64,15)，面朝右\n## 背包（序号: 物品）\n0: 斧头（手持）\n1: 锄头\n2: 喷壶\n5: 木材 x22【留着：社区中心“建筑”要交】\n7: 石头 x14【留着：社区中心“建筑”要交】\n10: 太阳鱼 金星 [可食用 +23体力]【留着：社区中心“河鱼”要交】\n背包空位：0 个（共 12 格）\n## 附近物体\n- 出货箱：(3,4)\n",
   "rules": [
     { "tool": "tidy_backpack", "receipt": { "text": "失败：农场上没有箱子。先 craft Chest（50 木材），再 place_item 放在农场上", "isError": true } },
@@ -19,12 +19,16 @@
     { "tool": "*", "receipt": { "text": "完成" }, "advanceMinutes": 10 }
   ],
   "llmScript": [
-    "（现场录制：大脑不可用，未产出可解析决策）"
+    "{\"plan\":[{\"goal\":\"整理满包腾空位\",\"why\":\"当前背包空位为 0\"},{\"goal\":\"砍树攒够 50 木材造箱\",\"why\":\"农场还没有箱子\"}],\"mood\":\"干劲满满\"}",
+    "{\"tool\":\"tidy_backpack\",\"args\":{},\"intent\":\"先试试整理背包\"}",
+    "{\"tool\":\"donate_bundles\",\"args\":{},\"intent\":\"农场没箱子，去社区中心试试捐材料腾位置\"}",
+    "{\"tool\":\"eat\",\"args\":{\"item\":\"太阳鱼\",\"force\":true},\"intent\":\"捐赠也不行，先把可再钓的太阳鱼吃掉腾出一格\"}",
+    "{\"tool\":\"clear_area\",\"args\":{\"include_trees\":true},\"intent\":\"空位腾出来啦，清场砍树攒木材\"}"
   ],
   "planner": "llm",
   "expect": {
-    "maxCycles": 20,
-    "maxSameFailure": 2,
+    "maxCycles": 8,
+    "maxSameFailure": 1,
     "mustCallOneOf": ["eat"],
     "mustCallWithArgs": [
       { "tool": "eat", "args": { "item": "太阳鱼", "force": true } }

@@ -115,11 +115,15 @@ describe('forageTopic / forageAll（离线注入 fetch）', () => {
     expect(r.error).toContain('页面不存在');
   });
 
-  it('forageAll：TOPIC_PAGES 7 专题全跑 + 报告条数一致', async () => {
+  it('forageAll：TOPIC_PAGES 全部专题全跑 + 报告条数一致', async () => {
     const dir = `/tmp/gf-test-all-${Date.now()}`;
     const r = await forageAll({ outDir: dir, fetchImpl: fetchOk(WIKITEXT_SAMPLE) });
-    expect(r.fetched).toHaveLength(Object.keys(TOPIC_PAGES).length);
+    const topicCount = Object.keys(TOPIC_PAGES).length;
+    expect(topicCount).toBeGreaterThanOrEqual(12);
+    expect(r.fetched).toHaveLength(topicCount);
     expect(Object.keys(TOPIC_PAGES)).toContain('钓鱼');
+    expect(Object.keys(TOPIC_PAGES)).toContain('开局前几周');
+    expect(Object.keys(TOPIC_PAGES)).toContain('四季作物收益');
     expect(r.fetched.every((f) => typeof f.changed === 'boolean')).toBe(true);
   });
 });
@@ -129,7 +133,7 @@ describe('forageAll 容错与真实 fetch 路径', () => {
     // fetchImpl 直接抛 → forageAll catch 收编为 error 字段
     const throwingFetch = (async () => { throw new Error('ECONNRESET'); }) as unknown as typeof fetch;
     const r = await forageAll({ outDir: '/tmp/gf-throw', fetchImpl: throwingFetch });
-    expect(r.fetched).toHaveLength(7);
+    expect(r.fetched).toHaveLength(Object.keys(TOPIC_PAGES).length);
     expect(r.fetched.every((f) => f.error?.includes('ECONNRESET'))).toBe(true);
     // fetch 返回 !ok → wiki HTTP 错误
     const notOk = (async () => ({ ok: false, status: 403, json: async () => ({}) })) as unknown as typeof fetch;

@@ -53,12 +53,13 @@ const SLASH_COMMANDS = [
   { cmd: '/sleep', desc: '回家睡觉' },
   { cmd: '/state', desc: '播报当前状态' },
   { cmd: '/stop', desc: '停下当前动作' },
+  { cmd: '/cancel', desc: '取消当前强制命令或目标' },
 ];
 
 function parseDirective(text: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
   const t = text.trim();
   if (!t.startsWith('/')) return null;
-  const parts = t.slice(1).split(/\s+/);
+  const parts = t.slice(1).trim().split(/\s+/);
   const cmd = (parts[0] ?? '').toLowerCase();
   const rest = parts.slice(1);
   switch (cmd) {
@@ -75,7 +76,8 @@ function parseDirective(text: string): { tool: string; args: Record<string, unkn
     case 'forage':
       return { tool: 'forage', args: {}, intent: '主人指令：去采集' };
     default:
-      return { tool: cmd, args: {}, intent: `主人指令：${cmd}` };
+      // T-M6-70：未知 /命令（如 /cancel 或 /自然语言 强制命令）交给 chatSay 由主进程与 LLM 处理，不再误当工具名直发
+      return null;
   }
 }
 
@@ -163,6 +165,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   /** T-M6-73：主人临时接管中（AI 只读状态、不发动作） */
   const [humanControl, setHumanControl] = useState(false);
   const [brain, setBrain] = useState<{ mode: string; llmReady: boolean }>({ mode: 'rule', llmReady: false });
+  const [dayPlan, setDayPlan] = useState<{ dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null>(null);
+  const [insights, setInsights] = useState<Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }>>([]);
   const [mainModelId, setMainModelId] = useState('');
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
   const [characterId, setCharacterId] = useState('blue-whale-maid');
@@ -270,6 +274,22 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt') setRunning(true);
       // T-M6-73：游戏内键鼠接管会在 BWF 侧上报，事件流与宿主开关双向同步
       if (event.type === 'human-control') setHumanControl(event.active === true);
+      // T-M6-70：大脑开/关/临时代驾状态实时同步（rule-standin 显示「规则代驾中」）
+      if ((event as { type: string }).type === 'brain') {
+        const nextMode = (event as unknown as { mode?: string }).mode;
+        if (typeof nextMode === 'string') setBrain((prev) => ({ ...prev, mode: nextMode }));
+      }
+      // T-M6-72：当日计划与心得本只读同步
+      if ((event as { type: string }).type === 'plan') {
+        const p = event as unknown as { dayKey?: string; plan?: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string };
+        if (typeof p.dayKey === 'string' && Array.isArray(p.plan)) {
+          setDayPlan({ dayKey: p.dayKey, items: p.plan, ...(p.mood === undefined ? {} : { mood: p.mood }), ...(p.updateWhy === undefined ? {} : { updateWhy: p.updateWhy }) });
+        }
+      }
+      if ((event as { type: string }).type === 'insight') {
+        const insEv = event as unknown as { insights?: Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }> };
+        if (Array.isArray(insEv.insights)) setInsights(insEv.insights);
+      }
     });
     void window.directorBridge.autodriveStatus().then((s) => {
       // 先记录会话再水合：历史事件同样按当前会话过滤
@@ -280,7 +300,15 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       const history = (s.events ?? []).filter(acceptEvent);
       if (history.length > 0) setEvents((prev) => mergeHydrated(history, prev));
     });
-    void window.directorBridge.plannerStatus().then((s) => setBrain(s));
+    void window.directorBridge.plannerStatus().then((s) => {
+      setBrain(s);
+      const ext = s as unknown as {
+        dayPlan?: { dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null;
+        insights?: Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }>;
+      };
+      if (ext.dayPlan !== undefined && ext.dayPlan !== null) setDayPlan(ext.dayPlan);
+      if (Array.isArray(ext.insights)) setInsights(ext.insights);
+    });
     // T-M6-48：主条只展示 9 角色（+内置小鲸）；CrossPet 的 30 个角色由召唤/彩蛋/跨 AI 跟随单独使用
     const refreshCharacters = (): void => {
       void window.directorBridge.characterList()
@@ -721,7 +749,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             color: 'var(--text-2)',
           }}
         >
-          <span>{humanControl ? '你正在操作：AI 只读状态，不发动作' : 'AI 正在驾驶'}</span>
+          <span>{humanControl ? '你正在操作：AI 只读状态，不发动作' : brain.mode === 'rule-standin' ? 'AI 正在驾驶（规则代驾中）' : 'AI 正在驾驶'}</span>
+          {brain.mode === 'rule-standin' && !humanControl && (
+            <span className="pill" style={{ fontSize: 10, color: 'var(--amber)', borderColor: 'var(--amber-line)', background: 'var(--amber-dim)' }}>
+              规则代驾中
+            </span>
+          )}
           <button
             type="button"
             className="pill"
@@ -1090,6 +1123,33 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
                   idleHint="等待自动驾驶启动…"
                 />
                 <GameDecisionTimeline decisions={decisions} objectiveActive={objective !== null} />
+                <div className="card px-4 py-3.5" data-day-plan-panel>
+                  <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
+                    <span>当日计划（只读 · {dayPlan?.dayKey ?? '未生成'}）</span>
+                    {dayPlan?.mood !== undefined && <span className="text-[9.5px]" style={{ color: 'var(--violet)' }}>{dayPlan.mood}</span>}
+                  </div>
+                  {dayPlan?.updateWhy !== undefined && (
+                    <div className="mb-1.5 text-[10px]" style={{ color: 'var(--amber)' }}>调整原因：{dayPlan.updateWhy}</div>
+                  )}
+                  {dayPlan !== null && dayPlan.items.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {dayPlan.items.map((item, idx) => (
+                        <div key={`${item.goal}:${idx}`} className="rounded-lg px-2 py-1 text-[10.5px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded px-1 py-px text-[9px]" style={{
+                              color: item.status === 'done' ? 'var(--green)' : item.status === 'in_progress' ? 'var(--blue)' : 'var(--text-3)',
+                              background: 'var(--inset)',
+                            }}>{item.status === 'done' ? '已完成' : item.status === 'in_progress' ? '进行中' : '待办'}</span>
+                            <span style={{ color: 'var(--text-1)' }}>{item.goal}</span>
+                          </div>
+                          {item.why !== '' && <div className="mt-0.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>{item.why}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>开启 LLM 大脑启动后，小鲸起床会自动拟定今日计划。</span>
+                  )}
+                </div>
                 <GameGoalChain goals={STARDEW_GOALS} activeIndex={0} />
               </section>
 
@@ -1101,6 +1161,32 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               />
 
               <section className="flex flex-col gap-3">
+                <div className="card px-4 py-3.5" data-strategy-notebook-panel>
+                  <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
+                    <span>心得本（只读 · 攻略与复盘）</span>
+                    <span className="mono text-[9.5px]" style={{ color: 'var(--green)' }}>{insights.length} 条</span>
+                  </div>
+                  {insights.length > 0 ? (
+                    <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
+                      {insights.slice(-8).reverse().map((ins) => (
+                        <div key={ins.id} className="rounded-lg px-2 py-1.5 text-[10px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="mono font-semibold" style={{
+                              color: ins.verdict === 'adopt' ? 'var(--green)' : ins.verdict === 'defer' ? 'var(--amber)' : ins.verdict === 'refuted' ? 'var(--red)' : 'var(--text-3)',
+                            }}>[{ins.verdict}]</span>
+                            <span style={{ color: 'var(--text-1)' }}>{ins.claim}</span>
+                            <span className="ml-auto text-[9px]" style={{ color: 'var(--text-3)' }}>引用{ins.hits}</span>
+                          </div>
+                          <div className="mt-0.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>
+                            条件：{ins.when} · {ins.source} · {ins.why}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>暂无心得：小鲸阅读攻略或夜间复盘后会记在这里。</span>
+                  )}
+                </div>
                 <GameMetricsCard
                   rows={[
                     ['回执总数', receipts.length],
@@ -1333,6 +1419,38 @@ function EventCard({ event, objectiveActive = false }: { event: AutodriveEventVi
     return (
       <div data-event="state" className="mono mb-2 text-center text-[10px]" style={{ color: 'var(--text-3)' }}>
         {event.clock} · {event.location} · {event.stamina}/{event.staminaMax} · {event.money}g
+      </div>
+    );
+  }
+  if ((event as { type: string }).type === 'brain') {
+    const b = event as unknown as { mode?: string; reason?: string };
+    return (
+      <div data-event="brain" className="mono mb-2 text-center text-[10px]" style={{ color: b.mode === 'rule-standin' ? 'var(--amber)' : 'var(--green)' }}>
+        — {b.mode === 'rule-standin' ? '规则代驾中' : 'LLM 大脑已接管'}{b.reason ? `（${b.reason}）` : ''} —
+      </div>
+    );
+  }
+  if ((event as { type: string }).type === 'plan') {
+    const p = event as unknown as { dayKey?: string; reason?: string; plan?: Array<{ goal: string }> };
+    const goals = (p.plan ?? []).slice(0, 3).map((x) => x.goal).join('、');
+    return (
+      <div data-event="plan" className="mb-3 rounded-2xl p-3" style={{ border: '1px solid var(--violet-line)', background: 'var(--violet-dim)' }}>
+        <div className="mono text-[10px] font-semibold" style={{ color: 'var(--violet)' }}>
+          {p.reason === 'update' ? '计划修订' : '今日计划'} · {p.dayKey ?? ''}
+        </div>
+        <div className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>{goals || '已更新计划'}</div>
+      </div>
+    );
+  }
+  if ((event as { type: string }).type === 'insight') {
+    const insEv = event as unknown as { action?: string; usedInsight?: string; insight?: { id?: string; claim?: string; verdict?: string } };
+    const label = insEv.action === 'used' ? `遵循心得 ${insEv.usedInsight ?? ''}` : insEv.action === 'reflected' ? '夜间复盘更新心得' : '记录攻略心得';
+    return (
+      <div data-event="insight" className="mb-3 rounded-2xl p-2.5" style={{ border: '1px solid var(--green-line)', background: 'var(--green-dim)' }}>
+        <div className="mono text-[10px] font-semibold" style={{ color: 'var(--green)' }}>
+          {label} [{insEv.insight?.verdict ?? ''}]
+        </div>
+        <div className="mt-0.5 text-xs" style={{ color: 'var(--text-2)' }}>{insEv.insight?.claim ?? ''}</div>
       </div>
     );
   }

@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDirectiveSystemPrompt,
   buildDirectiveUserPrompt,
+  classifyChatInput,
   isCancelDirective,
   parseDirectiveResponse,
+  parseSlashShortcut,
   resolveKeywordDirective,
   STARDEW_DIRECTIVE_PROFILE,
   type DirectiveProfile,
@@ -129,5 +131,45 @@ describe('取消多步目标识别（T-M6-54）', () => {
     for (const text of ['算了吧，今天天气不错', '取消订单要花钱吗', '我在想昨天的事', '继续找鱼竿', '不用鱼竿也能钓吗？']) {
       expect(isCancelDirective(text), text).toBe(false);
     }
+  });
+});
+
+describe('T-M6-70 §4.3 聊天输入三类分流（普通建议 / 快捷命令 / /自然语言 强制命令 / /cancel）', () => {
+  it('6 个快捷命令精确直译为工具调用', () => {
+    expect(parseSlashShortcut('/goto Beach')).toEqual({ tool: 'travel_to', args: { location: 'Beach' }, intent: '主人指令：去 Beach' });
+    expect(parseSlashShortcut('/goto')).toEqual({ tool: 'travel_to', args: { location: 'Farm' }, intent: '主人指令：去 Farm' });
+    expect(parseSlashShortcut('/fish 3')).toEqual({ tool: 'fish', args: { casts: 3 }, intent: '主人指令：钓鱼' });
+    expect(parseSlashShortcut('/sleep')).toMatchObject({ tool: 'sleep' });
+    expect(parseSlashShortcut('/forage')).toMatchObject({ tool: 'forage' });
+    expect(parseSlashShortcut('/state')).toMatchObject({ tool: 'get_state' });
+    expect(parseSlashShortcut('/stop')).toMatchObject({ tool: 'cancel_action' });
+    expect(classifyChatInput('/fish 3')).toMatchObject({ kind: 'shortcut', tool: 'fish', args: { casts: 3 } });
+  });
+
+  it('未知 /xxx 与 /自然语言 一律归为强制命令（绝不再被当成工具名直发）', () => {
+    expect(parseSlashShortcut('/去皮埃尔买 10 包防风草种子')).toBeNull();
+    expect(parseSlashShortcut('/unknown_tool')).toBeNull();
+    expect(classifyChatInput('/去皮埃尔买 10 包防风草种子')).toEqual({
+      kind: 'command',
+      command: '去皮埃尔买 10 包防风草种子',
+      raw: '/去皮埃尔买 10 包防风草种子',
+    });
+    expect(classifyChatInput('/今天别下矿')).toEqual({
+      kind: 'command',
+      command: '今天别下矿',
+      raw: '/今天别下矿',
+    });
+    expect(classifyChatInput('/unknown_tool arg1')).toEqual({
+      kind: 'command',
+      command: 'unknown_tool arg1',
+      raw: '/unknown_tool arg1',
+    });
+  });
+
+  it('/cancel 与 /取消 归为取消，普通非 / 文本归为建议，裸 / 不误判为命令', () => {
+    expect(classifyChatInput('/cancel')).toEqual({ kind: 'cancel', raw: '/cancel' });
+    expect(classifyChatInput('/取消命令')).toEqual({ kind: 'cancel', raw: '/取消命令' });
+    expect(classifyChatInput('去鱼店买根鱼竿')).toEqual({ kind: 'suggestion', text: '去鱼店买根鱼竿' });
+    expect(classifyChatInput('/')).toEqual({ kind: 'suggestion', text: '/' });
   });
 });

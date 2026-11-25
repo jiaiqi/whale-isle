@@ -64,6 +64,10 @@ class RecordingPlanner implements Planner {
   debugSnapshot(): Record<string, unknown> {
     return this.inner.debugSnapshot?.() ?? {};
   }
+
+  bindCallbacks(callbacks: Parameters<LlmPlanner['bindCallbacks']>[0]): void {
+    (this.inner as { bindCallbacks?: LlmPlanner['bindCallbacks'] }).bindCallbacks?.(callbacks);
+  }
 }
 
 /** 假 chat()：按剧本顺序吐出录制输出，吐完返回不可解析内容（覆盖 LLM 失败分支） */

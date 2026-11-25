@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 export const WIKI_API = 'https://stardewvalleywiki.com/mediawiki/api.php';
 
-/** BWF Guide.cs 专题枚举对齐（get_guide topic 直读）+ 攻略页名映射 */
+/** BWF Guide.cs 专题枚举对齐（get_guide topic 直读）+ 新手/经济专题映射（T-M6-72 扩充） */
 export const TOPIC_PAGES: Record<string, string[]> = {
   钓鱼: ['Fishing', 'Fishing Strategy'],
   采矿: ['Mining', 'The Mines'],
@@ -17,6 +17,11 @@ export const TOPIC_PAGES: Record<string, string[]> = {
   沙漠: ['Desert', 'Skull Cavern'],
   姜岛: ['Ginger Island'],
   农场类型: ['Farming'],
+  开局前几周: ['Getting Started'],
+  四季作物收益: ['Crops'],
+  社区中心收集包: ['Bundles'],
+  赚钱路线: ['Artisan Goods'],
+  工具升级: ['Tools'],
 };
 
 export interface ForagedGuide {

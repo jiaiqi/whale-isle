@@ -285,18 +285,87 @@ describe('RulePlanner 确定性日程', () => {
     expect(away.kind === 'act' && away.args).toMatchObject({ location: 'Farm' });
   });
 
-  it('起名界面 → set_name 小鲸；剧情过场无对话框 → LlmPlanner skip_event', async () => {
+  it('起名界面 → RulePlanner set_name 小鲸；剧情过场无对话框 → LlmPlanner 结合失败记忆选 skip_event', async () => {
     const p = new RulePlanner();
     const named = await p.decide({ ...base, menu: '正在播放剧情/节日事件\n要起名字（孩子或者刚出生的动物）：用 set_name 传一个名字' });
     expect(named.kind === 'act' && named.tool).toBe('set_name');
     expect(named.kind === 'act' && named.args).toEqual({ name: '小鲸' });
 
+    let seenPrompt = '';
     const planner = new (await import('./llm-planner')).LlmPlanner({
-      chat: async () => ({ content: '{"tool":"fish","args":{}}' }),
+      chat: async (_slot, messages) => {
+        seenPrompt = messages.at(-1)?.content ?? '';
+        return { content: '{"tool":"skip_event","args":{},"intent":"没有对话框，跳过过场"}' };
+      },
       recentReceipts: ['FAILED dialogue: 失败：剧情还在放，现在没有对话框，过一会儿再推进'],
     });
     const d = await planner.decide({ ...base, menu: '正在播放剧情/节日事件（可以用 skip_event 跳过）' });
     expect(d.kind === 'act' && d.tool).toBe('skip_event');
+    expect(seenPrompt).toContain('没有对话框');
+  });
+
+  it('T-M6-70 AutodriveRunner 桥接：plan / brain / chat-stance 事件转发、强制命令与取消、接管交还差异注入', async () => {
+    const { LlmPlanner } = await import('./llm-planner');
+    const events: AutodriveEvent[] = [];
+    let turn = 0;
+    const script = [
+      '{"stance":"execute","reply":"遵命出发！","tool":"travel_to","args":{"location":"SeedShop"},"intent":"去买种子","commandDone":true}',
+      '{"plan":[{"goal":"回田里种下","why":"刚买好种子"}],"mood":"开心"}',
+      '{"tool":"plant_seeds","args":{"seed":"防风草种子"},"intent":"播种","stance":"accept","reply":"听你的先种下去！"}',
+      '（故意乱码1）',
+      '（故意乱码2）',
+      '（故意乱码3）',
+    ];
+    const seenPrompts: string[] = [];
+    const llm = new LlmPlanner({
+      chat: async (_slot, messages) => {
+        seenPrompts.push(messages.at(-1)?.content ?? '');
+        return { content: script[turn++] ?? '（乱码）' };
+      },
+    });
+    const fakeAdapter = {
+      gameId: 'stardew' as const,
+      displayName: '星露谷物语',
+      unreachableMessage: '不可达',
+      transport: {
+        async callTool(tool: string) {
+          if (tool === 'get_state') return { kind: 'ok' as const, text: STATE_OK, isError: false };
+          return { kind: 'ok' as const, text: '成功：已完成', isError: false };
+        },
+      },
+      ping: async () => true,
+      isLongAction: () => false,
+      extractClock: () => '第1年春16日 07:30',
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: '完成' }),
+    };
+    const runner = new AutodriveRunner(
+      (e) => events.push(e),
+      { maxCycles: 3, stepDelayMs: 0, pollDelayMs: 0, errorDelayMs: 0, sleep: async () => {} },
+      fakeAdapter,
+    );
+    runner.setPlanner(llm);
+
+    // 先测提交并取消命令，再正式提交命令 + 人工接管交还摘要 + 普通建议
+    runner.submitCommand('测试取消');
+    expect(runner.cancelCommand()).toBe('测试取消');
+    expect(runner.cancelCommand()).toBeNull();
+
+    await runner.setHumanControl(true);
+    await runner.setHumanControl(false);
+    runner.submitCommand('去买防风草种子');
+    runner.submitSuggestion('买完顺便种下去');
+
+    await runner.start();
+    while (runner.isRunning()) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    await runner.stopAndWait();
+
+    expect(events.some((e) => e.type === 'chat-stance' && e.kind === 'command' && e.stance === 'execute')).toBe(true);
+    expect(events.some((e) => e.type === 'plan' && e.reason === 'morning')).toBe(true);
+    expect(events.some((e) => e.type === 'chat-stance' && e.kind === 'suggestion' && e.stance === 'accept')).toBe(true);
+    expect(events.some((e) => e.type === 'brain' && e.mode === 'rule-standin')).toBe(true);
+    expect(seenPrompts[0]).toContain('主人接管了');
   });
 
   it('剧情选择题：必须带 choice 序号（回归：无 choice 的 dialogue 会无限失败）', async () => {
@@ -964,6 +1033,9 @@ describe('T-M6-27 会话归属', () => {
     } as unknown as import('./adapter').GameAdapter);
     const before = runner.sessionId;
     await runner.start();
+    while (runner.isRunning()) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
     await runner.stopAndWait();
     expect(calls).toBeGreaterThan(0);
     expect(runner.sessionId).toBe(before);

@@ -10,12 +10,13 @@
 
 | 签名 | 首次出现 | 频次（累计浸泡） | 剧本 | 修复工单 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `tidy_backpack\|农场上没有箱子 先 craft Chest 木材\|Farm` | 2026-11-22（VERIFY 满包造箱自救·现场二） | 真机 ≥2（2026-11-22 用户复测仍卡死）；浸泡 **0**（T-M6-71 尚未执行） | `S01-full-bag-reserved-wood22` | T-M6-10（`pickRenewableReserved` 牺牲可再生预留物） | 已修 / 回归中 |
-| `fish\|背包里没有鱼竿\|Beach` | 2026-11-24（T-M6-10 真机：夏2 07:10 Beach 连败） | 真机 1 轮连续 ≥3 次同签名；浸泡 **0** | `S02-no-rod-fish-loop` | T-M6-10（`ENV_FAIL_RE` 识别 + `avoidTools` 冷却） | 已修 / 回归中 |
+| `tidy_backpack\|农场上没有箱子 先 craft Chest 木材\|Farm` | 2026-11-22（VERIFY 满包造箱自救·现场二） | 真机 ≥2（2026-11-22 用户复测仍卡死）；浸泡 **0**（T-M6-71 尚未执行） | `S01-full-bag-reserved-wood22` | T-M6-10 / T-M6-70（LLM 读满包提醒与失败记忆选 `eat force`） | 已修 / 回归中 |
+| `fish\|背包里没有鱼竿\|Beach`（死硬模型 3 连败熔断 + 代驾接手） | 2026-11-24（T-M6-10 真机：夏2 07:10 Beach 连败） | 真机 1 轮连续 ≥3 次同签名；浸泡 **0** | `S02-no-rod-fish-loop` | T-M6-10 / T-M6-70（3 次全局熔断 + 中途代驾回执同步） | 已修 / 回归中 |
 | `dialogue\|失败 这是选择题 需要 choice\|Farm` | 2026-11-22（T-M6-10 第一轮：剧情多行选择题） | 真机 1 轮无限 FAILED；浸泡 **0** | `S03-story-choice-multiline` | T-M6-10（多行「选项」块解析 + 自动 `choice: 0`） | 已修 / 回归中 |
 | `clock-stall\|第1年春24日 06:00\|FarmHouse` | 2026-11-23（VERIFY「T-M6-10 春24 冻结死锁」） | 真机连续多日复现；浸泡 **0** | `S04-bwf-self-pause-freeze` | T-M6-10（90s 无变更 → keepalive `wait {minutes:1}`） | 已修 / 回归中 |
 | `tidy_backpack\|农场上没有箱子\|Farm` | 2026-11-22（`transcript-20261122-182601`：tidy↔store↔donate 无箱死循环） | 真机 1 轮 3 次循环；浸泡 **0** | `S05-tidy-store-donate-loop` | T-M6-10（`rescueTried` 只 tidy 一次 → `wait` 求助） | 已修 / 回归中 |
-| `fish\|背包里没有鱼竿\|Beach`（LLM 连败 → 规则兜底不知失败） | 2026-11-24（T-M6-10 根因：回执未转发 fallback） | 真机 1 轮 ≥3 次同签名；浸泡 **0** | `S06-fallback-ignores-failure` | T-M6-10 / T-M6-52（`LlmPlanner.observeReceipt` 转发 fallback） | 已修 / 回归中 |
+| `fish\|背包里没有鱼竿\|Beach`（LLM 离线 → 规则代驾不知失败） | 2026-11-24（T-M6-10 根因：回执未转发 fallback） | 真机 1 轮 ≥3 次同签名；浸泡 **0** | `S06-fallback-ignores-failure` | T-M6-10 / T-M6-70（`BrainSwitch` 代驾 + 回执转发） | 已修 / 回归中 |
+| `fish\|背包里没有鱼竿\|Beach`（正例：LLM 读失败记忆自主换 `forage`） | 2026-11-25（T-M6-70 RUNBOOK §4.9 正例） | 浸泡 **0** | `S07-llm-failure-memory-forage` | T-M6-70（`buildFailureMemorySection` 注入签名与换做法提示） | 已修 / 回归中 |
 
 > 说明：S02 与 S06 共用同一签名（同为 Beach 无鱼竿），但失败路径不同（LLM 直接连败 vs LLM 交出控制后规则兜底继续），因此拆成两个剧本；台账按「签名 + 根因」登记，不合并。
 > 浸泡频次全为 0 是**如实记录**：T-M6-67 的 `soak:real` 尚未在真机执行（本机 BWF 18080 未监听），不得用人工复测次数冒充浸泡频次。

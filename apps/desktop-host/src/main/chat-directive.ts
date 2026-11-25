@@ -110,10 +110,68 @@ export const STARDEW_DIRECTIVE_PROFILE: DirectiveProfile = {
  * 取消当前多步目标（仅当确实有目标时由调用方消费）：
  * 「算了」「取消目标」「不用了」「别找了」等整句短指令，避免误伤普通聊天。
  */
-const CANCEL_OBJECTIVE_RE = /^(?:(?:算了|取消(?:当前)?(?:多步)?(?:目标|任务|计划)?|停止(?:当前)?(?:目标|任务|计划)?|结束(?:当前)?(?:目标|任务|计划)?|放弃(?:当前)?(?:目标|任务)?|不找了|不用了|不要了|别做了|别找了|停下来|停)[，,。.!！?？\s]*)+$/;
+const CANCEL_OBJECTIVE_RE = /^(?:(?:算了|取消(?:当前)?(?:多步)?(?:目标|任务|计划|命令)?|停止(?:当前)?(?:多步)?(?:目标|任务|计划|命令)?|结束(?:当前)?(?:多步)?(?:目标|任务|计划|命令)?|放弃(?:当前)?(?:目标|任务|命令)?|不找了|不用了|不要了|别做了|别找了|停下来|停)[，,。.!！?？\s]*)+$/;
 
 export function isCancelDirective(text: string): boolean {
   return CANCEL_OBJECTIVE_RE.test(text.trim());
+}
+
+/**
+ * T-M6-70 §4.3 聊天输入分流：
+ *   - shortcut  : `/goto` `/fish` `/sleep` `/forage` `/state` `/stop` —— 直达工具，不经 LLM；
+ *   - cancel    : `/cancel` 或 `/取消` —— 结束当前强制命令或目标；
+ *   - command   : 其余 `/自然语言` —— 作为强制命令交给 LLM（绝不把未知 `/xxx` 当工具名直发）；
+ *   - suggestion: 不以 `/` 开头的普通消息 —— 作为「主人说」建议由 LLM 自主表态。
+ */
+export type ClassifiedChatInput =
+  | { kind: 'shortcut'; tool: string; args: Record<string, unknown>; intent: string }
+  | { kind: 'cancel'; raw: string }
+  | { kind: 'command'; command: string; raw: string }
+  | { kind: 'suggestion'; text: string };
+
+export function parseSlashShortcut(text: string): { tool: string; args: Record<string, unknown>; intent: string } | null {
+  const t = text.trim();
+  if (!t.startsWith('/')) return null;
+  const parts = t.slice(1).trim().split(/\s+/);
+  const cmd = (parts[0] ?? '').toLowerCase();
+  const rest = parts.slice(1);
+  switch (cmd) {
+    case 'goto': {
+      const loc = rest[0] !== undefined && rest[0].trim() !== '' ? rest[0].trim() : 'Farm';
+      return { tool: 'travel_to', args: { location: loc }, intent: `主人指令：去 ${loc}` };
+    }
+    case 'stop':
+      return { tool: 'cancel_action', args: {}, intent: '主人指令：停下当前动作' };
+    case 'sleep':
+      return { tool: 'sleep', args: {}, intent: '主人指令：回家睡觉' };
+    case 'fish':
+      return { tool: 'fish', args: { casts: Number(rest[0] ?? 5) || 5 }, intent: '主人指令：钓鱼' };
+    case 'state':
+      return { tool: 'get_state', args: {}, intent: '主人指令：播报状态' };
+    case 'forage':
+      return { tool: 'forage', args: {}, intent: '主人指令：去采集' };
+    default:
+      return null;
+  }
+}
+
+export function classifyChatInput(text: string): ClassifiedChatInput {
+  const t = text.trim();
+  if (!t.startsWith('/')) {
+    return { kind: 'suggestion', text: t };
+  }
+  const shortcut = parseSlashShortcut(t);
+  if (shortcut !== null) {
+    return { kind: 'shortcut', ...shortcut };
+  }
+  const body = t.slice(1).trim();
+  if (body === '') {
+    return { kind: 'suggestion', text: t };
+  }
+  if (body.toLowerCase() === 'cancel' || isCancelDirective(body)) {
+    return { kind: 'cancel', raw: t };
+  }
+  return { kind: 'command', command: body, raw: t };
 }
 
 /** 确定性直译：命中返回指令；「疑问/回忆」文本返回 null（交给 LLM 层复核，绝不误接单） */
