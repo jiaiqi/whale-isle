@@ -27,7 +27,9 @@ import {
   PreferenceCategorySchema,
   VoiceProviderKindSchema,
   type CharacterCoreSnapshot,
+  type ImageGenProviderDescriptor,
 } from '@workbench/shared-protocol';
+import { MediaGenerationGateway } from './media-gateway';
 import {
   formatMemoryContext,
   retrieve,
@@ -498,6 +500,36 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:memory-deletion-audits', () =>
     memoryHostRef ? memoryHostRef.store.deletionAudits() : [],
   );
+  // V2-P2-03：MediaGenerationGateway 与候选区审查隔离 IPC
+  const mediaGateway = new MediaGenerationGateway({
+    userDataDir: options.userDataDir,
+    vaultPath: options.vaultPath,
+    homeDir: process.env['HOME'] ?? '',
+  });
+  ipcMain.handle('v2:media-providers', (_e, descriptors?: ImageGenProviderDescriptor[]) =>
+    mediaGateway.probeProviders(Array.isArray(descriptors) ? descriptors : []),
+  );
+  ipcMain.handle('v2:media-jobs', (_e, characterId?: string) =>
+    mediaGateway.listJobs(typeof characterId === 'string' && characterId !== '' ? characterId : undefined),
+  );
+  ipcMain.handle('v2:media-submit', async (_e, rawInput: unknown) => {
+    try {
+      const job = await mediaGateway.submitImageJob(rawInput);
+      return { ok: true, job };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:media-review', (_e, rawInput: {
+    jobId: string;
+    candidateId: string;
+    decision: 'approve' | 'reject';
+    note?: string;
+    license?: string;
+    allowCommercial?: boolean;
+    allowLivestream?: boolean;
+  }) => mediaGateway.reviewCandidate(rawInput));
+  ipcMain.handle('v2:media-cancel', (_e, jobId: string) => mediaGateway.cancelJob(String(jobId)));
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');

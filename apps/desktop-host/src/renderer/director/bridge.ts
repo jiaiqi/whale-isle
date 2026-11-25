@@ -18,6 +18,9 @@ import type {
   LifeActivityKind,
   LipSyncFrame,
   McpEndpoint,
+  MediaJobSnapshot,
+  MediaJobSubmitRequest,
+  MediaProviderCapability,
   MemoryCategory,
   MemoryDeletionAudit,
   MemoryUncertaintyLevel,
@@ -644,6 +647,19 @@ export interface DirectorBridge {
     deletedDerivedIds?: string[];
   }>;
   v2MemoryDeletionAudits(): Promise<MemoryDeletionAudit[]>;
+  v2MediaProviders(descriptors?: Array<{ id: string; name?: string; baseUrl: string; protocol?: 'openai' | 'gemini' | 'codex-cli'; candidateModels?: string[] }>): Promise<MediaProviderCapability[]>;
+  v2MediaJobs(characterId?: string): Promise<MediaJobSnapshot[]>;
+  v2MediaSubmit(input: MediaJobSubmitRequest): Promise<{ ok: boolean; error?: string; job?: MediaJobSnapshot }>;
+  v2MediaReview(input: {
+    jobId: string;
+    candidateId: string;
+    decision: 'approve' | 'reject';
+    note?: string;
+    license?: string;
+    allowCommercial?: boolean;
+    allowLivestream?: boolean;
+  }): Promise<{ ok: boolean; error?: string; job?: MediaJobSnapshot }>;
+  v2MediaCancel(jobId: string): Promise<{ ok: boolean; error?: string }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

@@ -61,6 +61,8 @@ interface DirectorV2Window {
     v2MemoryConsolidate(input?: { entityKey?: string; minInteractions?: number }): Promise<{ ok: boolean; impressions: Array<{ nodeId: string; interactionCount: number }> }>;
     v2MemoryHardDelete(input: { nodeId: string; reason?: string }): Promise<{ deleted: boolean; blockedReason?: string }>;
     v2MemoryDeletionAudits(): Promise<Array<{ targetNodeId: string; targetCategory: string; deletedNodeIds: string[] }>>;
+    v2MediaProviders(descriptors?: unknown[]): Promise<Array<{ providerId: string; kind: string; supportsImageGen: boolean; requiresOnlineBilling: boolean }>>;
+    v2MediaJobs(characterId?: string): Promise<Array<{ jobId: string; status: string }>>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -280,6 +282,19 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(memFlow.delRes.deleted).toBe(true);
       expect(memFlow.afterQuery.hits).toHaveLength(0);
       expect(memFlow.audits.some((a) => a.targetNodeId === memFlow.deletedId)).toBe(true);
+
+      // V2-P2-03：验证 MediaGenerationGateway 供应商能力探测与候选区查询
+      const mediaCaps = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const providers = await bridge.v2MediaProviders([
+          { id: 'openai-e2e', name: 'OpenAI Images', baseUrl: 'https://api.openai.com/v1', protocol: 'openai', candidateModels: ['gpt-image-1'] },
+        ]);
+        const jobs = await bridge.v2MediaJobs();
+        return { providers, jobs };
+      });
+      expect(mediaCaps.providers.some((p) => p.providerId === 'codex-cli' && p.requiresOnlineBilling === true)).toBe(true);
+      expect(mediaCaps.providers.some((p) => p.providerId === 'gemini-cli' && p.supportsImageGen === false)).toBe(true);
+      expect(Array.isArray(mediaCaps.jobs)).toBe(true);
     } finally {
       await app.close();
     }

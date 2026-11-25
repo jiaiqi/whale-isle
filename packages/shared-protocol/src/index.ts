@@ -1505,3 +1505,4 @@ export * from './quota';
 export * from './memory';
 export * from './knowledge';
 export * from './ecosystem';
+export * from './media';

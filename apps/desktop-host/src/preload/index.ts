@@ -356,6 +356,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2MemoryCorrect: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-correct', input),
   v2MemoryHardDelete: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-hard-delete', input),
   v2MemoryDeletionAudits: (): Promise<unknown[]> => ipcRenderer.invoke('v2:memory-deletion-audits'),
+  v2MediaProviders: (descriptors?: unknown[]): Promise<unknown[]> => ipcRenderer.invoke('v2:media-providers', descriptors),
+  v2MediaJobs: (characterId?: string): Promise<unknown[]> => ipcRenderer.invoke('v2:media-jobs', characterId),
+  v2MediaSubmit: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:media-submit', input),
+  v2MediaReview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:media-review', input),
+  v2MediaCancel: (jobId: string): Promise<unknown> => ipcRenderer.invoke('v2:media-cancel', jobId),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

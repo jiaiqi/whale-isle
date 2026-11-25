@@ -3,9 +3,9 @@
 > 本文件是面向任何新接手 Coding Agent 的跨会话单点进度恢复文件（不依赖聊天上下文）。每次完成或阻塞工单必须更新本文件。
 
 - **当前开发分支**：`feat/whale-isle-v2`（上游基线 `main` @ `f1ce271`）
-- **当前唯一激活工单**：`V2-P2-03`（`MediaGenerationGateway` 与图片生成流水线）
-- **刚完成待真机补验工单**：`V2-P1-06` / `V2-P2-01` / `V2-P2-02`（`IMPLEMENTED_UNVERIFIED` — 缺真实游戏与新增外部 CLI 真机联调；`V2-P2-02` 中 `REQ-SEC-01` 已达 `DONE`）
-- **下一排队工单**：`V2-P2-04`（3D 大模型生成与 Blender 自动化后处理流水线）
+- **当前唯一激活工单**：`V2-P2-04`（3D 大模型生成与 Blender 自动化后处理流水线）
+- **刚完成待真机补验工单**：`V2-P1-06` / `V2-P2-01` / `V2-P2-02` / `V2-P2-03`（`IMPLEMENTED_UNVERIFIED` — 缺真实游戏、外部 CLI 与在线生图 Key 实测；`V2-P2-02` 中 `REQ-SEC-01` 已达 `DONE`）
+- **下一排队工单**：`V2-P2-05`（Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入）
 
 ## 1. 工单状态快照
 
@@ -23,8 +23,9 @@
 | `V2-P1-05` | `DONE` | Obsidian Tide 中控台重构、`App.tsx` Strangler 拆解（1,466→914 行）、四大签名组件、`system/dark/light` 三态主题、`F8/F9/F10/⌘K` 与「V2 生命中枢」面板完成（commit `a9a5786`）；`verify:gate` 7/7 + 4 个 Electron 45 E2E 套件全绿，详见 [P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md) |
 | `V2-P1-06` | `IMPLEMENTED_UNVERIFIED` | AI-First 纠偏（`GameCharacterControlLease`、`PausedBrainPlanner` 清除默认静默规则代驾、13 项控制指令与 12 项 Blueprint 17 §12 仿真验收，commit `833bd0c`）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》+ SMAPI 真机联调与浸泡，详见 [P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) |
 | `V2-P2-01` | `IMPLEMENTED_UNVERIFIED` | 攻略学习闭环增强（`@workbench/shared-protocol/knowledge`、版本/Mod 兼容检查、实玩置信度演进与反例积累、复盘与 `LlmPlanner` 回执闭环，commit `c31271f`）、64 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》多日实测，详见 [P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) |
-| `V2-P2-02` | `IMPLEMENTED_UNVERIFIED` | 开放生态与插件进程隔离（`IsolatedPluginRunner` Worker Isolate 沙箱、`PolicyBroker` P0–P5、`SkillRegistry`、双向 MCP HTTP/STDIO、受控脱敏 MCP Server 与 7 家 Harness 执行器）、退役主进程第三方直连 `import` 达成 `REQ-SEC-01 DONE`，`verify:gate` 7/7 与 Electron 45 E2E 全绿；新增外部 CLI 真机实测待验，详见 [P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md) |
-| `V2-P2-03` | `NEXT` | `MediaGenerationGateway` 与图片生成流水线（本地生图 Agent + 在线图片 API，候选区审查隔离） |
+| `V2-P2-02` | `IMPLEMENTED_UNVERIFIED` | 开放生态与插件进程隔离（`IsolatedPluginRunner` Worker Isolate 沙箱、`PolicyBroker` P0–P5、`SkillRegistry`、双向 MCP HTTP/STDIO、受控脱敏 MCP Server 与 7 家 Harness 执行器，commit `bf779a4`）、退役主进程第三方直连 `import` 达成 `REQ-SEC-01 DONE`，`verify:gate` 7/7 与 Electron 45 E2E 全绿；新增外部 CLI 真机实测待验，详见 [P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md) |
+| `V2-P2-03` | `IMPLEMENTED_UNVERIFIED` | `MediaGenerationGateway` 与图片生成流水线（`@workbench/shared-protocol/media`、诚实能力探测、Character Bible 一致性、候选区审查隔离、SHA-256 校验与 5 路 V2 IPC），33 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 全绿；待真实云端生图 Key 联调，详见 [P2-media-gateway-verification.md](./evidence/P2-media-gateway-verification.md) |
+| `V2-P2-04` | `NEXT` | 3D 大模型生成与 Blender 自动化后处理流水线（Hunyuan3D 等网格生成 + Blender UV/骨骼/BlendShapes/VRM 导出与 QA） |
 
 ## 2. 新会话接手必查项
 

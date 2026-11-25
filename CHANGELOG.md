@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-03`：`MediaGenerationGateway` 与图片生成流水线 — `IMPLEMENTED_UNVERIFIED`）
+
+- **媒体生成与十态资产契约** `packages/shared-protocol/src/{media.ts,media.spec.ts,index.ts}`：定义 Blueprint 06 十态管线、`MediaProviderCapability`、`CharacterBible`（含三视图参考图与 `forbiddenChanges`）、`AssetProvenance`、`MediaCandidateItem` 与 `MediaJobSnapshot` Zod 契约。
+- **统一生图网关与候选区审查隔离** `apps/desktop-host/src/main/{media-gateway.ts,media-gateway.spec.ts,v2-kernel-host.ts}` & `apps/desktop-host/src/{preload/index.ts,renderer/director/bridge.ts}`：实现 `MediaGenerationGateway`（诚实探测本地 Coding Agent 生图能力与在线付费属性、Character Bible 提示词与已批准参考图过滤、独立候选区 `<userData>/media-candidates/` QA 校验与磁盘恢复、`approved` 门禁禁止跳过审查发布），并挂载 5 路 `v2:media-*` IPC。33 专项单测、`pnpm verify:gate` 7/7 与 4 个 Electron 45 E2E 套件全绿。
+
 ### Added / Changed（`V2-P2-02`：开放生态与插件进程隔离 — `REQ-SEC-01 DONE` / `REQ-EXT-01 IMPLEMENTED_UNVERIFIED`）
 
 - **生态与隔离契约** `packages/shared-protocol/src/{ecosystem.ts,ecosystem.spec.ts,index.ts}`：定义 `PluginTrustLevel`、`ToolRiskTier`（`P0_READ`–`P5_FORBIDDEN`）、`PluginSandboxHealth`、`AgentSkillManifest`、双向 MCP 描述/审计及 Harness 集成等级契约。

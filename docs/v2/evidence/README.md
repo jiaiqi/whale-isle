@@ -21,3 +21,4 @@
 | [P1-stardew-ai-first-verification.md](./P1-stardew-ai-first-verification.md) | `V2-P1-06` | `IMPLEMENTED_UNVERIFIED`：清除默认静默规则代驾、三方控制权租约、13 项控制指令与 12 项验收场景仿真（`verify:gate` 7/7 + Electron 45 E2E 全绿；待真实《星露谷》+ SMAPI 实机联调与浸泡） |
 | [P2-guide-learning-verification.md](./P2-guide-learning-verification.md) | `V2-P2-01` | `IMPLEMENTED_UNVERIFIED`：攻略溯源、游戏版本/Mod 兼容校验、实玩置信度演进与反例更新闭环（`verify:gate` 7/7 + 64 专项单测 + Electron 45 E2E 全绿；待真实《星露谷》多日实机校验） |
 | [P2-ecosystem-isolation-verification.md](./P2-ecosystem-isolation-verification.md) | `V2-P2-02` | `REQ-SEC-01 DONE` / `REQ-EXT-01 IMPLEMENTED_UNVERIFIED`：第三方插件 Worker Isolate 隔离、`PolicyBroker` P0–P5、`SkillRegistry`、双向 MCP 与多 Harness 扩展（`verify:gate` 7/7 + Electron 45 E2E 全绿；新外部 CLI 真机联调待验） |
+| [P2-media-gateway-verification.md](./P2-media-gateway-verification.md) | `V2-P2-03` | `IMPLEMENTED_UNVERIFIED`：`MediaGenerationGateway`、Character Bible 一致性、十态资产溯源与候选区审查隔离（`verify:gate` 7/7 + 33 专项单测 + Electron 45 E2E 全绿；真实云端生图 Key 待验） |
