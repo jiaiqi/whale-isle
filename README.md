@@ -23,10 +23,10 @@
 
 | 文档 | 作用 |
 | --- | --- |
-| [AGENTS.md](./AGENTS.md) | **AI 自治开发最高宪章**：五层铁笼、原子工单流、五道门禁、许可证红线 |
+| [AGENTS.md](./AGENTS.md) | **AI 自治开发最高宪章**：五层铁笼、原子工单流、四道门禁、许可证红线 |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | **系统架构方案 v2**：C4 拓扑、ADR-1~ADR-10（多游戏/插件分层/WebUI+OBS 合并）与风险清单 |
 | [docs/PRODUCT-DESIGN.md](./docs/PRODUCT-DESIGN.md) | 产品功能设计总纲（桌宠语音/气泡、声音工坊、记忆日记、多游戏与直播） |
-| [docs/ROADMAP.md](./docs/ROADMAP.md) | M0~M7 全阶段工单清单与当前实时状态 |
+| [docs/ROADMAP.md](./docs/ROADMAP.md) | M0~M8 全阶段工单清单与当前实时状态 |
 | [docs/VERIFY.md](./docs/VERIFY.md) | 验收矩阵（严格区分 `[SIMULATION]` / `[E2E-HOST]` 与 `[REAL-DEVICE]`） |
 | [docs/REFERENCES.md](./docs/REFERENCES.md) | 开源参考项目代码级复评清单与规则 |
 | [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md) | 第三方许可证与素材来源台账 |
@@ -35,7 +35,7 @@
 ## 仓库结构
 
 ```text
-packages/   shared-protocol（50 域跨语言契约）· pet-renderer · model-gateway · persona-brain
+packages/   shared-protocol（69 域跨语言契约，2026-11-25 实测）· pet-renderer · model-gateway · persona-brain
             game-bridge-mcp（多游戏 GameAdapter + 救援大脑）· memory-graph · live-stream-hub
             plugin-kit（Cordis 兼容层）· local-store · agent-harness（ACP v1）· stardew-mods
 apps/       desktop-host（Electron 主进程 + 中控台 Shell + pet-stage 透明桌宠 + 内嵌 WebUI :18780）
@@ -50,7 +50,7 @@ design/     v4「曜石」10 页可交互高保真原型
 ```bash
 pnpm install
 pnpm typecheck                                  # Gate 1：类型编译与架构边界校验
-pnpm verify:gate                                # 4 道门禁 / 7 项检查（744 tests，分支覆盖 90.12%）
+pnpm verify:gate                                # 4 道门禁 / 7 项检查（124 个测试文件 / 1482 个用例，分支覆盖 90.49%；2026-11-25 实测）
 pnpm --filter @workbench/desktop-host start     # 构建并启动桌面端（中控台 + 桌宠窗 + WebUI :18780）
 pnpm soak:autodrive 1                           # [SIMULATION] 仿真器长时浸泡 1 分钟（错误率/内存趋势）
 pnpm --filter @workbench/desktop-host package   # 打出独立安装包（macOS arm64 .dmg / Win x64 .exe）

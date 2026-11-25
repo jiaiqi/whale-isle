@@ -1,16 +1,49 @@
 # SPEC — 《鲸屿 Whale Isle 产品需求与技术架构总纲》
 
-> 状态：**核心产品定位、人设机制、技术选型与开源复评原则已完全闭环冻结。**
-> 分工：本文件管「做什么 / 为什么」；[AGENTS.md](../AGENTS.md)（AI 自治开发最高宪章）管「AI 怎么改代码」；[ROADMAP.md](./ROADMAP.md) 是冻结的工单清单。
+> 状态：**核心产品定位、人设机制与开源复评原则已闭环；技术选型为设计目标，落地情况以 §1 的「设计稿 vs 实际实现」对照与 [ROADMAP.md](./ROADMAP.md) / [VERIFY.md](./VERIFY.md) 为准。**
+> 分工：本文件管「做什么 / 为什么」；[AGENTS.md](../AGENTS.md)（AI 自治开发最高宪章）管「AI 怎么改代码」；[ROADMAP.md](./ROADMAP.md) 是工单清单。
 
 ---
 
-## 1. 冻结的 4 项底层工程默认决策
+## 1. 4 项底层工程决策：设计稿 vs 实际实现
 
-- **进程间通信与协议总线**：全局统一采用 **WebSocket + JSON-RPC 2.0（兼容 MCP 协议）**。Electron 主进程作为本地消息中心（端口默认 `18760`），统管桌宠渲染窗、主播中控台、OBS 浏览器挂件源、Python 音频 Sidecar 与《星露谷》SMAPI Mod。
-- **本地数据持久化方案**：中控台前端状态缓存与配置即时响应采用 **Dexie.js (IndexedDB)**；跨进程共享的常客账本、桌宠长期记忆、Token 消耗流水与点歌缓存索引统一落盘至本地 **SQLite（Node 侧 `better-sqlite3`）**，做到 100% 本地优先、断网可用。
-- **直播画面合成优先策略**：第一阶段优先采用 **OBS Browser Source（本地透明网页源，端口 `18765`）** 输出桌宠、双轨气泡、赛博饭碗、歌词与弹幕投票框，零 CPU 编码损耗且兼容 macOS/Windows；内置 FFmpeg 多路 RTMP 推流作为第二阶段可选模块接入。
-- **Python 跨平台环境隔离**：音频与 AI 推理服务统一使用 **`uv`** 管理独立的 Python 3.11 虚拟环境，启动时自动探测硬件后端（macOS Apple Silicon 自动挂载 `mps`，Windows N 卡自动挂载 `cuda`，无独显自动回退 `cpu`）。
+> ⚠️ 本节四条均为**立项时的设计目标**，不是已落地的既有事实。每条按「原设计稿 / 当前实现」两段对照：前者保留历史设计意图（供理解「为什么这样想」），后者为 2026-11-25 按源码核对后的真实实现。二者冲突时**以「当前实现」与代码为准**；架构层面的正式决策记录见 [ARCHITECTURE.md](./ARCHITECTURE.md) 的 ADR-5 / ADR-9 / ADR-10。
+
+### 1.1 进程间通信与协议总线
+
+- **原设计稿**：全局统一采用 **WebSocket + JSON-RPC 2.0（兼容 MCP 协议）**。Electron 主进程作为本地消息中心（端口默认 `18760`），统管桌宠渲染窗、主播中控台、OBS 浏览器挂件源、Python 音频 Sidecar 与《星露谷》SMAPI Mod。
+- **当前实现**：
+  - **`18760` 中心 WS 网关已正式搁置**（`packages/game-bridge-mcp/src/adapter.ts`、`packages/shared-protocol/src/index.ts` 注释与 ADR-10 均记录此事），`apps/desktop-host/src` 内该端口零命中。
+  - 渲染窗与主进程之间的真实总线是 **Electron IPC**（`ipcMain.handle` + preload `contextBridge`），不走 WebSocket，也不是 JSON-RPC。
+  - 对外只读通道是 **内嵌 WebUI 服务 `127.0.0.1:18780`**（`apps/desktop-host/src/main/webui-server.ts`）：HTTP + 原生 `ws`，消息为自定义 `{ type, data }` 形状而非 JSON-RPC；仅绑定回环地址，启动生成 device token，无 token 一律 401。
+  - 各游戏走**每游戏独立本机 HTTP**：星露谷 BWF MCP `18080`、泰拉瑞亚 `18090`、饥荒 DST sidecar `18100`，由 `GameAdapter` 统一适配（ADR-10）。
+  - 本地音频 Sidecar 使用 **HTTP `:18790` + `/ws/audio`**（该通道内部为 JSON-RPC 风格消息）；主进程目前**未接管**该进程，仅渲染层声音工坊在开发态直连。
+
+### 1.2 本地数据持久化方案
+
+- **原设计稿**：中控台前端状态缓存与配置即时响应采用 **Dexie.js (IndexedDB)**；跨进程共享的常客账本、桌宠长期记忆、Token 消耗流水与点歌缓存索引统一落盘至本地 **SQLite（Node 侧 `better-sqlite3`）**，做到 100% 本地优先、断网可用。
+- **当前实现**（「本地优先、断网可用」的目标成立，但落盘引擎并非单一 SQLite）：
+  - 中控台配置与 UI 状态：**Dexie.js (IndexedDB)** 已落地（`packages/local-store/src/dexie.ts`，仅渲染进程可 import）。
+  - 友谊/小本子账本：**Node 内置 `node:sqlite`**（`packages/local-store/src/friendship.ts`），落在 `userData/friendship.sqlite`。
+  - Token 消耗流水：**JSONL append-only + 状态文件原子写**（`apps/desktop-host/src/main/token-meter.ts`），明确注释说明因 `better-sqlite3` 的 Node ABI 与 Electron ABI 不兼容而放弃 SQLite。
+  - 桌宠长期记忆：**JSONL**（`packages/memory-graph/src/store.ts`）。
+  - `better-sqlite3` 只在 `packages/local-store/src/sqlite.ts` 一处使用，且该模块（`grudge_ledger` / `token_ledger` / `song_cache_index` 三表）当前仅被自身的单测与 Gate 4 回环 E2E 引用，尚未接入生产主链路。
+
+### 1.3 直播画面合成优先策略
+
+- **原设计稿**：第一阶段优先采用 **OBS Browser Source（本地透明网页源，端口 `18765`）** 输出桌宠、双轨气泡、赛博饭碗、歌词与弹幕投票框，零 CPU 编码损耗且兼容 macOS/Windows；内置 FFmpeg 多路 RTMP 推流作为第二阶段可选模块接入。
+- **当前实现**：
+  - 独立端口 `18765` 与 `apps/desktop-host/src/renderer/obs-layer/` 目录**均不存在**；按 ADR-9 已合并到 `18780`，即 `webui-server.ts` 的 **`GET /obs`** 只读透明挂件路由（页面标记 `data-stage-protocol="1"`，经 `/ws` 回放最近 20 条事件，无任何指令/审批入口）。
+  - 当前 `/obs` 只覆盖**动作/回执事件流**；双轨气泡、歌词、饭碗、弹幕投票等挂件层尚未接线。
+  - **FFmpeg RTMP 推流模块未实现**；仓库内 `ffmpeg` 的唯一用途是 macOS 语音链路的变调处理（`voice-host.ts`）。
+
+### 1.4 Python 跨平台环境隔离
+
+- **原设计稿**：音频与 AI 推理服务统一使用 **`uv`** 管理独立的 Python 3.11 虚拟环境，启动时自动探测硬件后端（macOS Apple Silicon 自动挂载 `mps`，Windows N 卡自动挂载 `cuda`，无独显自动回退 `cpu`）。
+- **当前实现**：
+  - **`uv` 作为运行/校验工具链成立**：根 `package.json` 的 `py:ruff` / `py:mypy` / `py:test` 均通过 `uv run` 调用，`pyproject.toml` 声明 `requires-python = ">=3.11"`；但仓库内**没有 `uv.lock` 与 `.python-version`**，虚拟环境未锁定。
+  - **推理依赖尚未接入**：`services/audio-ai-worker/pyproject.toml` 的运行依赖只有 `fastapi` / `uvicorn` / `websockets`，**没有 torch**；`app.py` 自述为「合成骨架（确定性 WAV stub，真实 GPT-SoVITS 接线在 T-M2-02）」，`detect_backend()` 是 `try: import torch` 的可选分支，torch 缺失时按 `platform` / `nvidia-smi` 推断 `mps` / `cuda` / `cpu`。
+  - 因此「自动挂载 mps/cuda」目前只是**探测与上报**，没有真实模型加载；GPU 推理待 T-M2-02 接线。
 
 ---
 
@@ -23,7 +56,7 @@ whale-isle/
 ├── AGENTS.md                        # AI 自治开发最高宪章（质量门禁、复评纪律、禁止事项）
 ├── docs/
 │   ├── SPEC.md                      # 产品需求与架构规范（本文档）
-│   ├── ROADMAP.md                   # 冻结的阶段迭代计划与任务工单状态
+│   ├── ROADMAP.md                   # 阶段迭代计划与任务工单状态
 │   ├── VERIFY.md                    # 验收标准矩阵（严格区分 Mock 测试与真机实测）
 │   ├── REFERENCES.md                # 开源参考项目清单与复评规则
 │   └── THIRD_PARTY_NOTICES.md       # 第三方开源代码与素材许可证台账
@@ -36,22 +69,22 @@ whale-isle/
 │   └── live-stream-hub/             # [直播编排层] dyhub/B站事件归一、P0/P1/P2 注意力队列、节目状态机、点歌队列
 ├── apps/
 │   └── desktop-host/                # [Electron 跨平台宿主]
-│       ├── src/main/                # 主进程：透明穿透窗管理、全局快捷键、SQLite 服务、Python Sidecar 守护
+│       ├── src/main/                # 主进程：透明穿透窗管理、全局快捷键、内嵌 WebUI(:18780)、游戏/插件/ACP 各 host
 │       ├── src/renderer/pet-stage/  # 桌面透明桌宠窗口（WebM 渲染 + 双轨气泡 + 赛博饭碗小挂件）
 │       ├── src/renderer/director/   # 主播中控台（React + Tailwind：模型配置、人设微调、直播控制台、切片导出）
-│       └── src/renderer/obs-layer/  # OBS 专用透明浏览器源（高帧率字幕、点歌歌词滚屏、弹幕投票面板）
+│       └── （无 obs-layer）          # OBS 挂件已按 ADR-9 合并为 18780 的 GET /obs 路由，见 §1.3
 ├── services/
-│   └── audio-ai-worker/             # [Python 独立推理进程] FastAPI + WebSocket
-│       ├── tts_engine/              # 本地 GPT-SoVITS v2 (MPS/CUDA) + 云端 OpenAI/SiliconFlow/FishAudio 混合路由
-│       ├── svc_singing/             # Demucs v4 伴奏分离 + RVC v2 歌声转换 + 切片流式预缓冲 + 磁盘缓存池
-│       └── asset_pipeline/          # 移植自 dsh-pet 的绿幕视频抠像、脚底对齐转 VP9-Alpha WebM 自动化工具链
+│   └── audio-ai-worker/             # [Python 独立推理进程] FastAPI + WebSocket（HTTP :18790 / /ws/audio）
+│       ├── tts_engine/              # 情绪路由骨架；本地 GPT-SoVITS v2 (MPS/CUDA) 待 T-M2-02 接线
+│       ├── svc_singing/             # [规划中，目录尚未创建] Demucs v4 伴奏分离 + RVC v2 歌声转换 + 切片流式预缓冲
+│       └── asset_pipeline/          # [规划中，目录尚未创建] dsh-pet 绿幕抠像、脚底对齐转 VP9-Alpha WebM 工具链
 ├── mods/
-│   └── stardew-mcp-mod/             # [C# SMAPI Mod] 基于 BlindWhaleFarmer 改造的跨平台星露谷状态感知与动作执行器
+│   └── stardew-mcp-mod/             # [C# SMAPI Mod] 设计为基于 BlindWhaleFarmer 改造的星露谷状态感知与动作执行器（当前仓库仅 README，实机 Mod 为 BWF 本体）
 └── tools/
-    └── mock-harness/                # [AI 自测沙盒] 模拟星露谷 MCP 服务端、模拟抖音高频弹幕发生器、音频回环校验器
+    └── mock-harness/                # [AI 自测沙盒] 三游戏仿真器、模拟抖音高频弹幕发生器、许可证扫描器
 ```
 
-> 物理目录即架构边界：依赖方向由 `dependency-cruiser` 在 Gate 1 强制校验（例如 UI 层严禁直接 import 数据库或绕过 `model-gateway` 直接调 LLM API）。
+> 上面的目录树是**设计蓝图**，与当前仓库的差异已在行内标注（如 `obs-layer`、`svc_singing`、`asset_pipeline` 尚未落地）。实际仓库结构以 [README.md](../README.md)「仓库结构」与 `ls packages apps services mods tools` 为准。
 
 ---
 
@@ -151,6 +184,8 @@ whale-isle/
 
 ### 3.4 模块四：本地显卡优先 + 混合云端音频引擎（`audio-ai-worker`）
 
+> 现状提醒：本节为**目标设计**。当前 `services/audio-ai-worker` 是骨架——TTS 返回确定性 WAV stub、无 torch 依赖，点歌/演唱轨尚未开工；桌面主路径的真实发声是 macOS `mcode-tools → say → afplay`（见 `apps/desktop-host/src/main/voice-host.ts`）。详见 §1.4。
+
 - **日常说话轨（Emotional TTS）**：
   - 本地优先使用 **GPT-SoVITS v2**（macOS `mps` / Windows `cuda`），为"大肥鱼"预置 5 组 5 秒情绪参考音频（`[嘴甜常态]`、`[傲娇反驳]`、`[破防喷水]`、`[困倦摸鱼]`、`[干饭兴奋]`）。
   - 大模型回复格式强制带有情绪前缀（如 `[傲娇反驳] 哼，本鱼才没有偷懒！`），网关自动剥离前缀并路由至对应参考音频生成语音，同时驱动桌宠切换对应 `.webm` 动作。
@@ -166,6 +201,8 @@ whale-isle/
   - Mod 实时监听本地物理键鼠/手柄输入。一旦检测到主人（鱼片）按下方向键或点击鼠标，**0.1 秒内挂起 AI 动作锁**，桌宠立即切换为"场边解说陪玩模式"（"哇，鱼片亲自操作了！快帮我把那个矿石敲掉~"）；当物理输入静默超过 8 秒，自动弹窗询问或平滑接回自动驾驶权。
 
 ### 3.6 模块六：直播大脑、注意力调度与高光切片（`live-stream-hub`）
+
+> 现状提醒：P0 雷区反射（`persona-brain` 的 `reflex.ts`，预设台词直出、不消耗 Token）已落地；`live-stream-hub` 当前实现的是「护栏 → 去重 → 同观众合并/衰减/分档 → 批量广播」，`P0/P1/P2` 只作为 `assignedPriority` 字段随归一化事件流转，**抢占式调度器本身尚未实现**；真实 dyhub 弹幕接入与切片生成也未闭环。
 
 - **三级注意力优先级队列（Attention Arbiter）**：
   - **P0（即时抢占）**：主人接管指令、"大肥鱼"雷区关键词反射、高价值礼物（投喂红烧肉）、星露谷生命值濒危。
@@ -194,6 +231,6 @@ whale-isle/
 | **M1："大肥鱼"桌面复活 + 模型网关** | Electron 跨平台透明穿透窗、移植 `dsh-pet` WebM 渲染与物理引擎、实现 CC Switch + Magpie 模型网关与"大肥鱼"人设（内心戏气泡+饭碗+雷区反射） | Playwright 自动验证透明穿透、双轨气泡渲染、雷区正则 <100ms 拦截与粘性路由故障转移 | 在 Mac 桌面上拖拽"大肥鱼"，在输入框打一句"大肥鱼"，看她是否瞬间喷水破防并弹出 `<think>` 内心戏气泡 |
 | **M2：本地 GPU 语音与点歌台** | Python `uv` Sidecar 服务、GPT-SoVITS 情绪语音路由、Demucs+RVC 切片流式唱歌、语音 TTL 播放回执锁 | 音频回环测试验证：连续发 5 条消息绝不叠音；点歌首切片生成的 OGG 文件非空且二次点歌命中缓存 <50ms | 听一下 Mac M 系列芯片本地生成的傲娇语音延迟，点一首歌听她用自己的声音唱出来 |
 | **M3：《星露谷》自动驾驶与丝滑共玩** | 基于 `BlindWhaleFarmer` 改造 C# SMAPI Mod、接入摸鱼/认真双态权重、实现真实回执与翻车找补、键鼠一动即接管 | `stardew-mcp-simulator` 5 个标准剧本（含 `uncertain` 卡死与玩家接管）100% 断言通过 | 打开《星露谷》，看她自己去翻垃圾桶/种菜；你晃一下鼠标，看她是否立刻停手变成场边啦啦队 |
-| **M4：抖音直播大脑、OBS 图层与切片** | 接入 `dyhub` 弹幕流、P0/P1/P2 注意力调度、常客记仇账本、节目状态机、OBS 透明挂件源与高光翻车切片 | `danmaku-storm-replay` 高并发弹幕压测不崩、敏感词 100% 拦截、环形缓存正常导出切片草稿 | 在 OBS 添加 `http://localhost:18765` 浏览器源，挂测试直播间看她边玩星露谷边回弹幕、记仇和唱歌 |
+| **M4：抖音直播大脑、OBS 图层与切片** | 接入 `dyhub` 弹幕流、P0/P1/P2 注意力调度、常客记仇账本、节目状态机、OBS 透明挂件源与高光翻车切片 | `danmaku-storm-replay` 高并发弹幕压测不崩、敏感词 100% 拦截、环形缓存正常导出切片草稿 | 在 OBS 添加内嵌 WebUI 的 `GET /obs` 浏览器源（`http://127.0.0.1:18780/obs?token=<device-token>`；原设计的独立端口 `18765` 已按 ADR-9 合并），挂测试直播间看她边玩星露谷边回弹幕、记仇和唱歌 |
 
-> 原子级工单清单（M0~M4 共 20 张工单）见 [ROADMAP.md](./ROADMAP.md)；验收证据分栏记录见 [VERIFY.md](./VERIFY.md)。
+> 原子级工单清单见 [ROADMAP.md](./ROADMAP.md)（已扩展至 M0~M8 批次）；验收证据分栏记录见 [VERIFY.md](./VERIFY.md)。本表 M0~M4 为立项时的里程碑划分，后续批次（M5~M8）与当前唯一 `NEXT` 工单以 ROADMAP 头部为准。
