@@ -1,8 +1,12 @@
 # Whale Isle V2 总体技术架构（修订版 · v2.1）
 
-> **上游依据**：[blueprint/](./blueprint/README.md)（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-001](./adr/ADR-001-v2-foundation.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)。  
+> **上游依据**：[blueprint/](./blueprint/README.md)（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-000](./adr/ADR-000-product-charter-and-risks.md)、[ADR-001](./adr/ADR-001-v2-foundation.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)。  
 > **核心理念**：AI 不只是聊天机器人，而是一个拥有统一数字身份、人格、记忆、情绪、声音、身体和自主生活能力的数字生命平台。  
-> **架构原则**：Modular Monolith + 独立 Worker 起步；**先用一个主 AI 角色（小鲸）跑通全量产品闭环**；生产运行平面与 Evolution 研发平面严格物理隔离。
+> **架构原则**：Modular Monolith + 独立 Worker 起步；**先用一个主 AI 角色（小鲸 `char_xiaojing`）跑通全量产品闭环**；生产运行平面与 Evolution 研发平面严格物理隔离。
+
+### 核心概念解耦边界（来自 [03-领域模型与数据契约](./blueprint/03-%E9%A2%86%E5%9F%9F%E6%A8%A1%E5%9E%8B%E4%B8%8E%E6%95%B0%E6%8D%AE%E5%A5%91%E7%BA%A6.md)）
+- **`Character`**（稳定数字身份，如主角色 **小鲸** `char_xiaojing`） ≠ **`AgentRuntime`**（`primary` / `worker` / `passive` 执行态） ≠ **`ModelProvider`**（LLM / 生图 / 语音后端） ≠ **`Harness`**（Codex / Claude / Gemini 等外部框架） ≠ **`Embodiment`**（`desktop-2d` / `live2d` / `vrm-3d` / `game` / `stage`） ≠ **`Device`** ≠ **`SocialAccountBinding`** ≠ **`AssetVersion`** ≠ **`MemoryRecord`**。
+- **硬规则**：更换模型不创建新 Character；更换桌宠外观不创建新 Agent；同一 Character 可同时映射多个 Embodiment；第一阶段仅维护一个 `primary` AgentRuntime，其余桌宠为 `passive`；**Plugin**（安装/隔离单位）、**Skill**（任务知识包）、**MCP Server**、**Tool** 与 **Harness Adapter** 五者概念严格区分。
 
 ---
 
@@ -160,11 +164,14 @@ flowchart TD
 3. **人机联机共玩**（用户与 AI 分别操作各自游戏角色共同探索、分工）；
 4. **协作与冲突解决**：`SharedGoal`、`CoopTaskBoard`、农场箱子/作物 `ResourceReservation`、任务交接、**联机客户端 Mod/自定义外观兼容性预检**（不假设本机像素替换自动同步至其他玩家）、断线重连与状态恢复。
 
-### 4.3 三层控制权租约模型（严格分离）
+### 4.3 四种控制模式、六级控制优先级与三层控制权租约（严格分离）
 
-1. **设备级 `ComputerUseLease`**：同一主机同一时刻仅允许一个前台自动化控制者，用户键鼠输入立即夺回。
-2. **游戏角色级 `GameCharacterControlLease`**：绑定至具体 `gameInstanceId + playerRoleId`，支持 `Stop / Pause / Takeover / Release`、在飞动作即时 `cancel_action` 与过期指令拒绝。
-3. **角色活动级 `LifeActivityAuthority`**：由 `LifeRuntime` 裁决角色当前是专注于游戏、切换去回消息，还是进入休息。
+1. **四种游戏控制模式**（来自 [17-自主游戏智能](./blueprint/17-%E8%87%AA%E4%B8%BB%E6%B8%B8%E6%88%8F%E6%99%BA%E8%83%BD%E4%B8%8E%E4%BA%BA%E6%9C%BA%E5%85%B1%E7%8E%A9%E7%B3%BB%E7%BB%9F.md) §9）：`Autonomous Mode`（AI 自主决策）、`Collaborative Mode`（双方围绕共同目标协商）、`Direct Command Mode`（优先完成明确任务指令）、`Manual Takeover`（人类直接接管，AI 停止写入控制动作）。
+2. **六级控制优先级（高 → 低）**：`① 急停 / 手动接管 / 用户物理键鼠输入` > `② 明确强制命令` > `③ 直接任务指令` > `④ 双方共同计划` > `⑤ AI 自主目标` > `⑥ 默认待机`（普通建议纳入评估但可被 AI 有理有据婉拒；出售稀有物/高消耗等高影响不可逆操作支持二次确认）。
+3. **三层控制权租约模型**：
+   - **设备级 `ComputerUseLease`**：同一主机同一时刻仅允许一个前台自动化控制者，用户键鼠输入立即夺回。
+   - **游戏角色级 `GameCharacterControlLease`**：绑定至具体 `gameInstanceId + playerRoleId`，支持 `Stop / Pause / Takeover / Release`、在飞动作即时 `cancel_action` 与过期指令拒绝（`sessionId` / `generation`）。
+   - **角色活动级 `LifeActivityAuthority`**：由 `LifeRuntime` 裁决角色当前是专注于游戏、切换去回消息，还是进入休息。
 
 ---
 
@@ -225,11 +232,14 @@ flowchart LR
 
 ---
 
-## 九、安全边界、插件隔离与 `Evolution Engine`
+## 九、安全边界、权限分级、插件隔离与 `Evolution Engine`
 
+- **P0–P5 权限阶梯与数据分类**（来自 [11-安全隐私权限与治理](./blueprint/11-%E5%AE%89%E5%85%A8%E9%9A%90%E7%A7%81%E6%9D%83%E9%99%90%E4%B8%8E%E6%B2%BB%E7%90%86.md)）：
+  - **权限等级**：`P0` 读取本地非敏感状态（可授权自动）→ `P1` 读取公开/已授权内容 → `P2` 生成草稿/计划/预览（自动）→ `P3` 可撤销本地变更（按规则授权）→ `P4` 对外评论/发布/关注/互动（默认确认或有限白名单）→ `P5` 私信/删除/账号安全设置/支付/出售稀有游戏物品（每次明确确认）；**用户授权绝不能覆盖平台禁止规则**。
+  - **7 类数据分级**：`Public`、`User Content`、`Character Private`、`Account Secret`（只存引用与钥匙串，Cookie 禁入普通 JSON）、`Live Audience Data`、`Runtime Diagnostics`、`Development Artifacts`（研发平面只接收脱敏最小诊断集）。
 - **插件真实隔离**：
   - 内置可信插件运行于受控内核上下文；
-  - **第三方不可信插件**运行在独立 Worker/子进程沙箱中，所有文件、网络、系统与账号调用经主进程 Policy Broker 真实拦截校验（P0–P5 权限阶梯 + `vault://*` / `shell://*` 硬拒）。
+  - **第三方不可信插件**运行在独立 Worker/子进程沙箱中，所有文件、网络、系统与账号调用经主进程 Policy Broker 真实拦截校验（`vault://*` / `shell://*` 硬拒）。
 - **Evolution Engine 双阶段架构**：
   - **Lite（P0/P1）**：`tools/evolution-lite` —— 唯一工单状态机、生产仓库外独立 Git Worktree 隔离、Coding Agent CLI 适配器、自动化门禁运行器、独立 Diff/安全审查器、PR 草案与失败停机报告、跨会话进度恢复；
   - **Full（P4）**：接入生产脱敏诊断遥测、问题自动复现回放、优化提案、低风险策略自动合并与灰度回滚。

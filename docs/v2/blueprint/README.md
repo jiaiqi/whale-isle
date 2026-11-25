@@ -1,8 +1,25 @@
-# Whale Isle V2 --- 产品与技术蓝图
+# Whale Isle V2 --- 产品与技术蓝图（历史出处归档）
 
-> 版本：V2 Blueprint 1.0\
-> 整理日期：2026-11-25\
-> 状态：产品方向与目标架构基线；不是已经实现的功能清单\
+> **归档定位（重要）**：本目录收录 V2 启动阶段的原始蓝图讨论稿（Blueprint 1.0 · `MASTER` + `01`–`17`）。所有有效规范、架构修订与可执行工单均已融合并升级至 **`docs/v2/` 顶层现行真源**；日常研发以顶层文档为准，本目录仅作历史设计背景追溯（注：原稿 `03` 等处曾出现的临时命名「小莓」已在现行真源中统一收敛为主角色 **小鲸 `char_xiaojing`**）。
+
+| 原蓝图章节 | 已融合 / 升级至现行真源 |
+| --- | --- |
+| `Whale-Isle-V2-MASTER.md` · `01-产品愿景与完整PRD.md` | [PRODUCT.md](../PRODUCT.md) · [REQUIREMENTS.md](../REQUIREMENTS.md) |
+| `02-总体技术架构.md` · `03-领域模型与数据契约.md` · `04`–`10` | [ARCHITECTURE.md](../ARCHITECTURE.md)（含 V2.1 增补与 `ADR-002`） |
+| `11-安全隐私权限与治理.md` | [ARCHITECTURE.md](../ARCHITECTURE.md) §9 · [ADR-002](../adr/ADR-002-v2-architecture-revision.md) |
+| `12-技术选型与开源项目复用.md` | [OPEN-SOURCE.md](../OPEN-SOURCE.md) |
+| `13-现有Whale-Isle仓库审计与迁移.md` | [TAKEOVER-AUDIT.md](../TAKEOVER-AUDIT.md) |
+| `14-实施路线图与验收标准.md` | [ROADMAP.md](../ROADMAP.md) · [TRACEABILITY.md](../TRACEABILITY.md) · [EVALUATION.md](../EVALUATION.md) |
+| `15-Agent开发宪章与任务模板.md` | [AGENTS.md](../../../AGENTS.md) §5 · [tools/evolution-lite](../../../tools/evolution-lite/src/index.ts) |
+| `16-决策记录与风险清单.md` | [ADR-000](../adr/ADR-000-product-charter-and-risks.md) · [ADR-001](../adr/ADR-001-v2-foundation.md) · [ADR-002](../adr/ADR-002-v2-architecture-revision.md) |
+| `17-自主游戏智能与人机共玩系统.md` | [ARCHITECTURE.md](../ARCHITECTURE.md) §4 · [EVALUATION.md](../EVALUATION.md) §5 · `V2-P1-06` |
+
+---
+
+> 原版说明（保留存档）：
+> 版本：V2 Blueprint 1.0  
+> 整理日期：2026-11-25  
+> 状态：原始设计基线存档；不是已经实现的功能清单  
 > 主仓库：<https://github.com/jiaiqi/whale-isle>
 
 ## 这套文档是什么
