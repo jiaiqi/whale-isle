@@ -11,7 +11,7 @@
  *
  * 退出码：0 达标；1 有卡死或闭环不达标；2 连接/参数错误。Ctrl+C 先 stopAndWait 再写报告。
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +58,7 @@ import {
   type SoakLlmInfo,
   type SoakRunOptions,
   type SoakSummary,
+  type SoakTokenUsage,
   type StuckEntry,
 } from './report';
 
@@ -275,6 +276,27 @@ export interface PlannerBundle {
 
 export interface PlannerDeps {
   fetchImpl?: ConstructorParameters<typeof ModelGateway>[0]['fetchImpl'];
+  guidesDir?: string;
+  notesDir?: string;
+  onUsage?: ConstructorParameters<typeof ModelGateway>[0]['onUsage'];
+}
+
+/** 读取 guide-forager 目录下全部 Markdown 攻略（目录不存在或异常返回空映射，不阻塞启动） */
+export function loadGuideFiles(dir: string = join(repoRoot(), 'guide-forager')): Record<string, string> {
+  if (!existsSync(dir)) return {};
+  try {
+    const guides: Record<string, string> = {};
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.md') || file.startsWith('.')) continue;
+      const topic = file.slice(0, -3).trim();
+      if (topic === '') continue;
+      const body = readFileSync(join(dir, file), 'utf8').trim();
+      if (body !== '') guides[topic] = body;
+    }
+    return guides;
+  } catch {
+    return {};
+  }
 }
 
 /** 组装规划器：LLM 可用则 LlmPlanner（规则兜底仍接 RulePlanner），否则纯规则 */
@@ -306,7 +328,9 @@ export function createPlanner(resolution: LlmResolution, deps: PlannerDeps = {})
       keys: { [provider.id]: config.apiKey },
       providers: [provider],
       ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+      ...(deps.onUsage === undefined ? {} : { onUsage: deps.onUsage }),
     });
+    const guides = loadGuideFiles(deps.guidesDir ?? join(repoRoot(), 'guide-forager'));
     const planner = new LlmPlanner({
       chat: (slot, messages, opts) =>
         gateway
@@ -315,6 +339,8 @@ export function createPlanner(resolution: LlmResolution, deps: PlannerDeps = {})
       slot: 'STARDEW_GAME_PLANNER',
       fallbackPlanner: new RulePlanner(),
       recentReceipts: [],
+      ...(Object.keys(guides).length > 0 ? { guides } : {}),
+      ...(deps.notesDir === undefined ? {} : { notesDir: deps.notesDir }),
     });
     return { planner, llm: { mode: 'llm', provider: provider.id, model: config.model } };
   } catch (error) {
@@ -391,6 +417,7 @@ export interface SoakSessionDeps {
   createRunner?: (onEvent: (event: AutodriveEvent) => void) => RunnerLike;
   fetchSettings?: () => Promise<{ ok: boolean; text?: string; error?: string }>;
   readGitHead?: () => string | null;
+  getTokenUsage?: () => SoakTokenUsage;
 }
 
 export interface SoakResult {
@@ -584,6 +611,12 @@ export class SoakSession {
           ...this.deps.runnerOptions,
         }, this.deps.adapter);
       this.runner.setPlanner?.(this.deps.planner);
+      this.llmPlanner?.bindCallbacks({
+        onInsight: (ev) => {
+          appendEventLine(eventsFile, { type: 'insight', ...ev }, this.now());
+          this.tracker.markInsight(ev.action);
+        },
+      });
       await this.runner.start();
     } catch (error) {
       startError = errorMessage(error);
@@ -622,6 +655,7 @@ export class SoakSession {
         || this.interruptReason === 'runner-exit',
       notes: this.notes,
       events: this.qualityEvents,
+      ...(this.deps.getTokenUsage === undefined ? {} : { tokensUsed: this.deps.getTokenUsage() }),
     });
     const reportPath = join(this.runDir, 'report.md');
     const summaryPath = join(this.runDir, 'summary.json');
@@ -731,6 +765,11 @@ export class SoakSession {
 
     const verdict = this.detector.onEvent(event, ts);
     const finalized = this.tracker.ingest(event, ts);
+    if ((event.type === 'decision' || event.type === 'receipt') && this.llmPlanner !== null && this.tracker.today !== null) {
+      const today = this.tracker.today;
+      const shortDayKey = `${today.season}${today.dayKey.split('-').pop() ?? ''}`;
+      if (this.llmPlanner.notebook.hasReflectedDay(shortDayKey)) this.tracker.markReflected();
+    }
     if (finalized !== null) this.onDayFinalized(finalized);
     if (verdict !== null) this.handleStuck(verdict, ts);
     this.maybeProgress(ts);
@@ -832,8 +871,18 @@ export async function main(
     throw error;
   }
 
+  const runId = formatRunId(new Date());
+  const tokenTotals: SoakTokenUsage = { input: 0, cachedInput: 0, output: 0, total: 0 };
   const resolution = resolveLlm(env, { noLlm: !options.llm });
-  const bundle = createPlanner(resolution);
+  const bundle = createPlanner(resolution, {
+    notesDir: join(options.outRoot, runId, 'notes'),
+    onUsage: (usage) => {
+      tokenTotals.input += usage.inputTokens;
+      tokenTotals.cachedInput += usage.cachedInputTokens;
+      tokenTotals.output += usage.outputTokens;
+      tokenTotals.total += usage.inputTokens + usage.outputTokens;
+    },
+  });
   if (bundle.llm.mode === 'llm') {
     console.log(`[soak] LLM：开（${bundle.llm.provider}/${bundle.llm.model}）`);
   } else {
@@ -843,12 +892,14 @@ export async function main(
   const adapter = new StardewAdapter(options.endpoint);
   const observer = options.observerMs > 0 ? new BwfMcpClient(options.endpoint) : null;
   const session = new SoakSession({
+    runId,
     options,
     adapter,
     planner: bundle.planner,
     llm: bundle.llm,
     observer,
     fetchSettings: () => fetchBwfSettings(options.endpoint),
+    ...(bundle.llm.mode === 'llm' ? { getTokenUsage: () => ({ ...tokenTotals }) } : {}),
   });
 
   const onSigint = (): void => {

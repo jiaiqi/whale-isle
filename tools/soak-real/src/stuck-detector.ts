@@ -97,6 +97,8 @@ export class StuckDetector {
   private location = '未知';
   /** 最近一次决策是 sleep 时，给「睡觉」一段白名单窗口（默认 10 分钟现实时间） */
   private sleepWhitelistUntil = 0;
+  /** T-M6-72b/73：主人临时介入中（介入期间不判时钟停滞/自暂停/重复失败） */
+  private humanControlActive = false;
   private readonly receipts: ReceiptRecord[] = [];
   private readonly reportedAt = new Map<string, number>();
   private readonly failures = new Map<string, number>();
@@ -108,6 +110,11 @@ export class StuckDetector {
     this.repeatWindow = options.repeatWindow ?? 30;
     this.cooldownMs = options.cooldownMs ?? 5 * 60_000;
     this.repeatClockBudgetMin = options.repeatClockBudgetMin ?? 60;
+  }
+
+  /** 是否处于主人临时介入态 */
+  get isHumanControl(): boolean {
+    return this.humanControlActive;
   }
 
   /** 全部失败签名计数（报告 Top10 用；按真实失败回执累计，不做冷却） */
@@ -143,6 +150,11 @@ export class StuckDetector {
         return null;
       case 'receipt':
         return this.onReceipt(event, now);
+      case 'human-control':
+        this.humanControlActive = event.active;
+        this.lastClockAt = now;
+        if (!event.active) this.lastStateText = '';
+        return null;
       case 'watchdog':
         if (event.kind !== 'stuck') return null;
         return this.emit('sentinel', `sentinel|${normalizeFailureReason(event.detail) || 'watchdog'}`, event.detail, now);
@@ -157,6 +169,15 @@ export class StuckDetector {
    */
   onClock(clock: string | null, stateText: string, now: number): StuckVerdict | null {
     this.setStateText(stateText);
+    if (this.humanControlActive) {
+      const synced = parseGameClock(clock);
+      if (synced !== null) {
+        this.lastClock = clock;
+        this.currentAbsoluteMinutes = synced.absoluteMinutes;
+      }
+      this.lastClockAt = now;
+      return null;
+    }
     const text = this.lastStateText;
 
     if (PAUSE_TEXT_RE.test(text)) {
@@ -201,6 +222,7 @@ export class StuckDetector {
   }
 
   private onReceipt(event: Extract<AutodriveEvent, { type: 'receipt' }>, now: number): StuckVerdict | null {
+    if (this.humanControlActive) return null;
     if (event.tool === 'sleep') {
       // 睡觉回执到了：退出白名单，并从「回执时刻」重新计时——换日期间时钟本就还在停
       this.sleepWhitelistUntil = 0;

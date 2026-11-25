@@ -53,6 +53,29 @@ export interface SoakTotals {
   moneyDelta: number | null;
 }
 
+export interface SoakTokenUsage {
+  input: number;
+  cachedInput: number;
+  output: number;
+  total: number;
+}
+
+export interface SoakLlmMetrics {
+  plans: number;
+  reflections: number;
+  newInsights: number;
+  usedInsights: number;
+  decisions: number;
+  standinDecisions: number;
+  standinRatio: number | null;
+  chatSuggestions: number;
+  chatAccepted: number;
+  chatAdoptRate: number | null;
+  humanControlCount: number;
+  humanControlMs: number;
+  tokensUsed: SoakTokenUsage | null;
+}
+
 export interface SoakSummary {
   runId: string;
   startedAt: string;
@@ -63,13 +86,15 @@ export interface SoakSummary {
   options: SoakRunOptions;
   llm: SoakLlmInfo;
   totals: SoakTotals;
+  /** T-M6-72b：LLM 自主计划/复盘/心得/代驾占比/采纳率/Token/临时介入 */
+  llmMetrics: SoakLlmMetrics;
   /** game-bridge-mcp metrics.ts 的质量指标（成功率/失败率/重复率/看门狗） */
   quality: AutodriveQuality;
   days: DayRecord[];
   failureSignatures: SignatureCount[];
   stucks: StuckEntry[];
   notes: string[];
-  /** 运行判据：游戏日够数、0 卡死、无累晕、无 2:00 遣返 */
+  /** 运行判据：--llm 按 LLM 自主口径；--no-llm 按每日闭环 7/7 口径 */
   pass: boolean;
   /** 未达标原因（人类可读，逐条） */
   reasons: string[];
@@ -88,6 +113,8 @@ export interface SummaryInput {
   notes?: readonly string[];
   /** 全量事件（只取 type/tool/status 字段）；缺省时质量指标为空表 */
   events?: readonly QualityEventLike[];
+  /** T-M6-72b：来自 ModelGateway onUsage 的真实 Token 累计 */
+  tokensUsed?: SoakTokenUsage | null;
 }
 
 function ratio(numerator: number, denominator: number): number | null {
@@ -121,24 +148,74 @@ export function buildSummary(input: SummaryInput): SoakSummary {
   const forcedHomeDays = input.days.filter((day) => day.forcedHome2am).length;
   const loopCompleteDays = input.days.filter((day) => isDayLoopComplete(day)).length;
 
+  let plans = 0;
+  let reflections = 0;
+  let newInsights = 0;
+  let usedInsights = 0;
+  let decisions = 0;
+  let standinDecisions = 0;
+  let chatSuggestions = 0;
+  let chatAccepted = 0;
+  let humanControlCount = 0;
+  let humanControlMs = 0;
+  for (const day of input.days) {
+    const llm = day.llm;
+    if (llm === undefined) continue;
+    if (llm.planGenerated) plans += 1;
+    if (llm.reflected) reflections += 1;
+    newInsights += llm.insightsLearned;
+    usedInsights += llm.insightsUsed;
+    decisions += llm.decisions;
+    standinDecisions += llm.standinDecisions;
+    chatSuggestions += llm.chatSuggestions;
+    chatAccepted += llm.chatAccepted;
+    humanControlCount += llm.humanControlCount;
+    humanControlMs += llm.humanControlMs;
+  }
+  const llmMetrics: SoakLlmMetrics = {
+    plans,
+    reflections,
+    newInsights,
+    usedInsights,
+    decisions,
+    standinDecisions,
+    standinRatio: ratio(standinDecisions, decisions),
+    chatSuggestions,
+    chatAccepted,
+    chatAdoptRate: ratio(chatAccepted, chatSuggestions),
+    humanControlCount,
+    humanControlMs,
+    tokensUsed: input.tokensUsed ?? null,
+  };
+
   const reasons: string[] = [];
-  const incompleteDays = input.days.length - loopCompleteDays;
   if (input.days.length < input.options.days) {
     reasons.push(`游戏日不足：完成 ${input.days.length}/${input.options.days}`);
   }
-  // 超时/中断时当天按「部分日」落账，不能算进达标天数
-  if (incompleteDays > 0) reasons.push(`闭环不完整 ${incompleteDays} 天`);
   if (input.stucks.length > 0) reasons.push(`卡死 ${input.stucks.length} 次`);
-  if (passedOutDays > 0) reasons.push(`累晕 ${passedOutDays} 天`);
-  if (forcedHomeDays > 0) reasons.push(`2:00 遣返 ${forcedHomeDays} 天`);
+  if (input.llm.mode === 'llm') {
+    if (moneyStart === null || moneyEnd === null || moneyEnd <= moneyStart) {
+      reasons.push(`金币未增长（${money(moneyStart)} → ${money(moneyEnd)}）`);
+    }
+    if (llmMetrics.plans < input.options.days) {
+      reasons.push(`每日计划不足：${llmMetrics.plans}/${input.options.days}`);
+    }
+    if (llmMetrics.reflections < input.options.days) {
+      reasons.push(`每晚复盘不足：${llmMetrics.reflections}/${input.options.days}`);
+    }
+    if (llmMetrics.newInsights < input.options.days) {
+      reasons.push(`新增心得不足：${llmMetrics.newInsights}/${input.options.days}`);
+    }
+  } else {
+    // 超时/中断时当天按「部分日」落账，不能算进达标天数
+    const incompleteDays = input.days.length - loopCompleteDays;
+    if (incompleteDays > 0) reasons.push(`闭环不完整 ${incompleteDays} 天`);
+    if (passedOutDays > 0) reasons.push(`累晕 ${passedOutDays} 天`);
+    if (forcedHomeDays > 0) reasons.push(`2:00 遣返 ${forcedHomeDays} 天`);
+  }
   if (input.interrupted) reasons.push('运行被中断（未跑满计划游戏日）');
 
-  const pass = input.days.length >= input.options.days
-    && loopCompleteDays === input.days.length
-    && input.stucks.length === 0
-    && passedOutDays === 0
-    && forcedHomeDays === 0
-    && !input.interrupted;
+  const pass = reasons.length === 0;
 
   return {
     runId: input.runId,
@@ -161,8 +238,15 @@ export function buildSummary(input: SummaryInput): SoakSummary {
       moneyEnd,
       moneyDelta: moneyStart === null || moneyEnd === null ? null : moneyEnd - moneyStart,
     },
+    llmMetrics,
     quality,
-    days: [...input.days].map((day) => ({ ...day, loop: { ...day.loop }, na: { ...day.na }, receipts: { ...day.receipts } })),
+    days: [...input.days].map((day) => ({
+      ...day,
+      loop: { ...day.loop },
+      na: { ...day.na },
+      receipts: { ...day.receipts },
+      ...(day.llm === undefined ? {} : { llm: { ...day.llm } }),
+    })),
     failureSignatures,
     stucks: [...input.stucks],
     notes: [...(input.notes ?? [])],
@@ -220,7 +304,7 @@ export function renderMoneySvg(days: readonly DayRecord[]): string {
 }
 
 export function renderReport(summary: SoakSummary): string {
-  const { totals, options, llm } = summary;
+  const { totals, options, llm, llmMetrics } = summary;
   const lines: string[] = [];
 
   lines.push(`# 星露谷真机浸泡报告（soak:real · ${summary.runId}）`, '');
@@ -250,6 +334,9 @@ export function renderReport(summary: SoakSummary): string {
   lines.push(`| 卡死 | ${totals.stuck} |`);
   lines.push(`| 累晕 | ${totals.passedOutDays} |`);
   lines.push(`| 2:00 遣返 | ${totals.forcedHomeDays} |`);
+  if (llmMetrics.humanControlCount > 0 || llm.mode === 'llm') {
+    lines.push(`| 临时介入 | ${llmMetrics.humanControlCount} 次（${minutesText(llmMetrics.humanControlMs)}） |`);
+  }
   lines.push(
     `| 回执 | 完成 ${totals.receipts.completed} · 失败 ${totals.receipts.failed} · 超时 ${totals.receipts.timeout} · 不确定 ${totals.receipts.uncertain} · 错误 ${totals.receipts.error}（成功率 ${percent(totals.successRate)}） |`,
   );
@@ -260,6 +347,24 @@ export function renderReport(summary: SoakSummary): string {
   );
   lines.push(`| 金币 | ${money(totals.moneyStart)} → ${money(totals.moneyEnd)}（Δ ${money(totals.moneyDelta)}） |`);
   lines.push('');
+
+  if (llm.mode === 'llm') {
+    lines.push('## LLM 自主指标', '');
+    lines.push('| 指标 | 值 |', '| --- | --- |');
+    lines.push(`| 每日计划 | ${llmMetrics.plans}/${options.days} |`);
+    lines.push(`| 每晚复盘 | ${llmMetrics.reflections}/${options.days} |`);
+    lines.push(`| 心得本 | 新增 ${llmMetrics.newInsights} · 引用 ${llmMetrics.usedInsights} |`);
+    lines.push(`| 规则代驾占比 | ${percent(llmMetrics.standinRatio)}（${llmMetrics.standinDecisions}/${llmMetrics.decisions}） |`);
+    lines.push(`| 聊天建议采纳率 | ${percent(llmMetrics.chatAdoptRate)}（${llmMetrics.chatAccepted}/${llmMetrics.chatSuggestions}） |`);
+    lines.push(
+      `| Token 用量 | ${
+        llmMetrics.tokensUsed === null
+          ? '—'
+          : `${llmMetrics.tokensUsed.total}（入 ${llmMetrics.tokensUsed.input} / 缓存 ${llmMetrics.tokensUsed.cachedInput} / 出 ${llmMetrics.tokensUsed.output}）`
+      } |`,
+    );
+    lines.push('');
+  }
 
   lines.push('## 每日闭环', '');
   lines.push('| 日期 | 天气 | 金币 起→止 | 读信 | 浇水 | 收获 | 出货 | 买种 | 播种 | 2:00 前睡觉 | 卡死 | 累晕 | 遣返 | 回执 完成/失败/超时 |');

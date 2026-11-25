@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added / Changed（T-M6-72b：`soak:real` 同步 LLM 自主验收口径与 `human` 态防误判）
+
+- **攻略、心得本与 Token 实装进 `tools/soak-real/src/cli.ts`**：新增 `loadGuideFiles()` 自动载入 `guide-forager/*.md` 全部 **12 专题**，为 `LlmPlanner` 传入 `<runDir>/notes/` 持久化心得本并绑定 `onInsight` 写入 `events.jsonl`（同时检查 `notebook.hasReflectedDay` 捕获只更新 `tomorrowHint` 的复盘）；接入 `ModelGateway.onUsage` 真实累加 `input/cachedInput/output/total` Token。
+- **`human-control` 介入豁免与精细计时** `stuck-detector.ts` / `day-tracker.ts`：`StuckDetector` 在 `human-control(active=true)` 期间跳过 `clock-stall`、`bwf-self-pause` 与 `repeat-failure`，交还时清除接入期滞留文本并重置时钟基线；`DayTracker` 新增 `DayLlmStats` 追踪每日计划/修订、规则代驾占比、聊天建议采纳、`insight` 次数及跨日/收尾精确累计的临时介入次数与时长。
+- **双模式汇报与退出码分流** `report.ts`：`--llm` 按 2026-11-25 自主模式口径（日数、0 卡死、金币上涨、计划/复盘/心得 ≥ 计划日数）判定 `pass` 与退出码，累晕与 2:00 遣返只记不判失败，报告新增 `## LLM 自主指标` 与总览「临时介入」行；`--no-llm` 保持原有 7/7 每日闭环口径不变。
+
 ### Added / Changed（T-M6-72：攻略学习、按存档经验心得本与每晚复盘）
 
 - **攻略库切块索引与宿主侧 `read_guide` 伪工具** `packages/game-bridge-mcp/src/guide-library.ts`：按 `##` / `###` 将 Markdown 攻略稳定切为 `{topic, sectionId, title, summary(≤80字), text(≤2000字)}`（过滤 `History` 等样板节），每轮只注入 ≤800 字与当前季节/地点/计划最相关的索引；LLM 通过宿主直读伪工具 `{"tool":"read_guide","args":{"topic","section"}}` 按需读全文（每轮上限 2 节，绝不发往游戏也不占 `ActionLock`）。

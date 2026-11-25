@@ -21,6 +21,7 @@ import {
   defaultSoakOptions,
   fetchBwfSettings,
   formatRunId,
+  loadGuideFiles,
   main,
   parseArgs,
   parseDayOpportunity,
@@ -382,6 +383,67 @@ describe('resolveLlm / createPlanner', () => {
     expect(bundle.llm.mode).toBe('rule');
     expect(bundle.llm.degradedReason).toContain('LLM 初始化失败');
   });
+
+  it('T-M6-72b：loadGuideFiles 装载攻略、跳过隐藏/空文件；createPlanner 注入攻略/notesDir/onUsage', async () => {
+    const missing = loadGuideFiles(join(tmpdir(), 'no-such-guides-dir-123'));
+    expect(missing).toEqual({});
+
+    const gDir = mkdtempSync(join(tmpdir(), 'soak-guides-'));
+    writeFileSync(join(gDir, '.hidden.md'), 'ignore');
+    writeFileSync(join(gDir, 'empty.md'), '   ');
+    writeFileSync(join(gDir, '钓鱼.md'), '## 海边钓鱼\n春夏去沙滩钓鱼收益不错。');
+    const loaded = loadGuideFiles(gDir);
+    expect(Object.keys(loaded)).toEqual(['钓鱼']);
+
+    const notesDir = mkdtempSync(join(tmpdir(), 'soak-notes-'));
+    let usageSeen = 0;
+    const fetchImpl = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"plan":[{"goal":"钓鱼","why":"赚钱"}],"mood":"干劲","tool":"wait","args":{},"intent":"先等一下"}' } }],
+        usage: { prompt_tokens: 30, completion_tokens: 12 },
+      }),
+    })) as unknown as NonNullable<Parameters<typeof createPlanner>[1]>['fetchImpl'];
+
+    const bundle = createPlanner(
+      { mode: 'llm', config: { provider: 'deepseek-official', apiKey: 'sk-test', model: 'deepseek-chat' } },
+      {
+        fetchImpl,
+        guidesDir: gDir,
+        notesDir,
+        onUsage: (u) => { usageSeen += u.inputTokens + u.outputTokens; },
+      },
+    );
+    const planner = bundle.planner as LlmPlanner;
+    expect(planner.guideLibrary.allSections().length).toBeGreaterThan(0);
+
+    // 默认 guidesDir 应真实装载仓库 guide-forager/ 全部 12 个专题
+    const repoGuides = loadGuideFiles();
+    expect(Object.keys(repoGuides).length).toBeGreaterThanOrEqual(12);
+
+    await planner.decide({
+      raw: `## 基本状态\n时间：${DAY16}\n## 当前界面\n无（可以自由行动）\n## 位置\n地点：Farm（测试农场），室外`,
+      gameClock: DAY16,
+      clockMinutes: 7 * 60,
+      stamina: 270,
+      staminaMax: 270,
+      money: 640,
+      location: 'Farm',
+      menu: '',
+      season: '春',
+      day: 16,
+      freeSlots: 10,
+      posX: 1,
+      posY: 1,
+      weather: '晴',
+      health: 100,
+      healthMax: 100,
+      birthday: null,
+      festival: null,
+    });
+    expect(usageSeen).toBe(42);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -594,6 +656,72 @@ describe('SoakSession', () => {
     }).run();
     expect(result.exitCode).toBe(1);
     expect(result.summary.totals.receipts.completed).toBeGreaterThan(0);
+  });
+
+  it('T-M6-72b：LLM 自主模式完整 1 日（计划 + 心得 + 复盘 + 金币上涨）达标退出 0 并记录 insight/Token', async () => {
+    const options = baseOptions({ llm: true });
+    const notesDir = mkdtempSync(join(tmpdir(), 'soak-llm-notes-'));
+    let watered = false;
+    let slept = false;
+    let step = 0;
+    const chatReplies = [
+      // 1) 晨间计划（带首步动作复用）
+      '{"plan":[{"goal":"去农场浇水再睡觉","why":"保底"}],"mood":"元气"}',
+      // 2) 首步决策 + 学一条心得
+      JSON.stringify({
+        tool: 'water_crops',
+        args: {},
+        intent: '先给作物浇水',
+        insight: { source: 'guide:开局', claim: '晴天早起先浇水', when: '春晴', verdict: 'adopt', why: '省时' },
+      }),
+      // 3) 睡觉 + 引用心得
+      '{"tool":"sleep","args":{},"intent":"回屋睡觉","usedInsight":"ins-1"}',
+      // 4) 夜间复盘（sleep 前触发）
+      JSON.stringify({
+        updates: [{ id: 'ins-1', verdict: 'adopt', why: '实测省时有效', evidence: '今日浇水完成' }],
+        tomorrowHint: '明天继续早起看信',
+      }),
+    ];
+    const planner = new LlmPlanner({
+      notesDir,
+      chat: async () => ({ content: chatReplies[Math.min(step++, chatReplies.length - 1)] ?? '{"tool":"wait","args":{},"intent":"等待"}' }),
+      slot: 'STARDEW_GAME_PLANNER',
+    });
+    const adapter = new StardewAdapter(options.endpoint, fakeBwf((tool) => {
+      if (tool === 'get_state') return { text: stateText(slept ? DAY17 : DAY16, { money: watered ? 900 : 640 }) };
+      if (tool === 'water_crops') {
+        watered = true;
+        return { text: '完成 water_crops' };
+      }
+      if (tool === 'sleep') {
+        slept = true;
+        return { text: '睡了一觉，第 17 天' };
+      }
+      return { text: `完成 ${tool}` };
+    }));
+    const result = await makeSession({
+      options,
+      adapter,
+      planner,
+      llm: { mode: 'llm', provider: 'deepseek-official', model: 'deepseek-chat' },
+      getTokenUsage: () => ({ input: 500, cachedInput: 100, output: 120, total: 620 }),
+    }).run();
+
+    expect(result.exitCode).toBe(0);
+    expect(result.summary.pass).toBe(true);
+    expect(result.summary.llmMetrics).toMatchObject({
+      plans: 1,
+      reflections: 1,
+      newInsights: 1,
+      usedInsights: 1,
+      tokensUsed: { input: 500, cachedInput: 100, output: 120, total: 620 },
+    });
+    const eventsRaw = readFileSync(join(result.runDir, 'events.jsonl'), 'utf8');
+    expect(eventsRaw).toContain('"type":"insight"');
+    const reportMd = readFileSync(result.reportPath, 'utf8');
+    expect(reportMd).toContain('## LLM 自主指标');
+    expect(reportMd).toContain('| 每日计划 | 1/1 |');
+    expect(reportMd).toContain('| 每晚复盘 | 1/1 |');
   });
 
   it('观察者时钟停滞 → clock-stall 现场包（含观察者状态原文）', async () => {

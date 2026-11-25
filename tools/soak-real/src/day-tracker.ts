@@ -88,6 +88,21 @@ export interface DayReceipts {
   error: number;
 }
 
+/** 当天 LLM 自主指标与临时介入统计（T-M6-72b） */
+export interface DayLlmStats {
+  planGenerated: boolean;
+  planUpdates: number;
+  reflected: boolean;
+  insightsLearned: number;
+  insightsUsed: number;
+  decisions: number;
+  standinDecisions: number;
+  chatSuggestions: number;
+  chatAccepted: number;
+  humanControlCount: number;
+  humanControlMs: number;
+}
+
 /**
  * 当天各闭环项「是否真的出现过可做的机会」。
  * 由调用方从 `get_state` 原文解析后传入（本模块保持纯状态机，不读文本、不猜）。
@@ -119,6 +134,8 @@ export interface DayRecord {
   forcedHome2am: boolean;
   stuckCount: number;
   receipts: DayReceipts;
+  /** LLM 自主模式与临时介入日统计（可选，保持历史夹具兼容） */
+  llm?: DayLlmStats;
 }
 
 /** 观察者 / 事件流喂给 DayTracker 的状态补丁 */
@@ -140,6 +157,7 @@ export interface StatePatch {
 }
 
 interface MutableDay extends DayRecord {
+  llm: DayLlmStats;
   sawRain: boolean;
   slept: boolean;
   lastDayMinutes: number | null;
@@ -157,6 +175,22 @@ function emptyReceipts(): DayReceipts {
   return { completed: 0, failed: 0, timeout: 0, uncertain: 0, error: 0 };
 }
 
+function emptyLlmStats(): DayLlmStats {
+  return {
+    planGenerated: false,
+    planUpdates: 0,
+    reflected: false,
+    insightsLearned: 0,
+    insightsUsed: 0,
+    decisions: 0,
+    standinDecisions: 0,
+    chatSuggestions: 0,
+    chatAccepted: 0,
+    humanControlCount: 0,
+    humanControlMs: 0,
+  };
+}
+
 function newDay(clock: GameClock, money: number, weather: string): MutableDay {
   return {
     dayKey: clock.dayKey,
@@ -170,6 +204,7 @@ function newDay(clock: GameClock, money: number, weather: string): MutableDay {
     forcedHome2am: false,
     stuckCount: 0,
     receipts: emptyReceipts(),
+    llm: emptyLlmStats(),
     sawRain: false,
     slept: false,
     lastDayMinutes: null,
@@ -200,6 +235,8 @@ export class DayTracker {
   private readonly records: DayRecord[] = [];
   /** 最近一次决策（buy 回执要看 args 里买的是不是种子） */
   private lastDecision: { tool: string; args: Record<string, unknown> } | null = null;
+  /** 临时介入开始时间戳（用于跨日/交还/收尾精确累计接入时长） */
+  private humanStartedAt: number | null = null;
 
   /** 已完成的游戏日（不含进行中的当天） */
   get days(): readonly DayRecord[] {
@@ -215,14 +252,14 @@ export class DayTracker {
    * 喂状态（事件流里的 state 事件或观察者的 get_state 快照）。
    * 返回「刚刚被切分完成的上一天」，没有跨日则返回 null。
    */
-  observe(patch: StatePatch, _now: number): DayRecord | null {
+  observe(patch: StatePatch, now: number): DayRecord | null {
     const clock = parseGameClock(patch.clock);
     if (clock === null) return null;
     let finalized: DayRecord | null = null;
     if (this.current === null) {
       this.current = newDay(clock, patch.money ?? 0, patch.weather ?? '');
     } else if (this.current.dayKey !== clock.dayKey) {
-      finalized = this.finalize(this.current);
+      finalized = this.finalize(this.current, now);
       this.records.push(finalized);
       const carryMoney = patch.money ?? this.current.moneyEnd;
       this.current = newDay(clock, carryMoney, patch.weather ?? '');
@@ -256,13 +293,55 @@ export class DayTracker {
         return this.observe({ clock: event.clock, money: event.money, stamina: event.stamina }, now);
       case 'decision':
         this.lastDecision = { tool: event.tool, args: event.args };
+        if (this.current !== null && event.planner !== 'team-objective') {
+          this.current.llm.decisions += 1;
+          if (event.intent.startsWith('规则代驾：')) this.current.llm.standinDecisions += 1;
+        }
         return null;
       case 'receipt':
         this.ingestReceipt(event);
         return null;
+      case 'plan':
+        if (this.current !== null) {
+          if (event.reason === 'morning') this.current.llm.planGenerated = true;
+          else this.current.llm.planUpdates += 1;
+        }
+        return null;
+      case 'chat-stance':
+        if (this.current !== null && event.kind === 'suggestion') {
+          this.current.llm.chatSuggestions += 1;
+          if (event.stance === 'accept' || event.stance === 'modify') this.current.llm.chatAccepted += 1;
+        }
+        return null;
+      case 'human-control':
+        if (event.active) {
+          if (this.humanStartedAt === null) {
+            this.humanStartedAt = now;
+            if (this.current !== null) this.current.llm.humanControlCount += 1;
+          }
+        } else if (this.humanStartedAt !== null) {
+          if (this.current !== null) {
+            this.current.llm.humanControlMs += Math.max(0, now - this.humanStartedAt);
+          }
+          this.humanStartedAt = null;
+        }
+        return null;
       default:
         return null;
     }
+  }
+
+  /** 记录当天 LLM 心得学习/引用/复盘事件（由 SoakSession 从 onInsight 回调注入） */
+  markInsight(action: 'learned' | 'used' | 'reflected'): void {
+    if (this.current === null) return;
+    if (action === 'learned') this.current.llm.insightsLearned += 1;
+    else if (action === 'used') this.current.llm.insightsUsed += 1;
+    else this.current.llm.reflected = true;
+  }
+
+  /** 标记当天已完成夜间复盘（覆盖仅更新 tomorrowHint 而未改写既有心得条目的场景） */
+  markReflected(): void {
+    if (this.current !== null) this.current.llm.reflected = true;
   }
 
   /** 卡死计数（当天；没有当天时忽略） */
@@ -271,9 +350,10 @@ export class DayTracker {
   }
 
   /** 收尾：把进行中的当天按已完成落账（运行结束/中断时调用） */
-  finish(_now: number): DayRecord | null {
+  finish(now: number): DayRecord | null {
     if (this.current === null) return null;
-    const record = this.finalize(this.current);
+    const record = this.finalize(this.current, now);
+    this.humanStartedAt = null;
     this.current = null;
     this.records.push(record);
     return record;
@@ -336,7 +416,7 @@ export class DayTracker {
     }
   }
 
-  private finalize(day: MutableDay): DayRecord {
+  private finalize(day: MutableDay, now: number): DayRecord {
     const dayNumber = Number(day.dayKey.split('-').pop() ?? '1');
     const plantingNA = isPlantingNA(day.season, Number.isFinite(dayNumber) ? dayNumber : 1);
     if (day.sawRain) day.loop.water = true; // 雨天作物自动喝饱，不浇也算完成
@@ -351,6 +431,10 @@ export class DayTracker {
       ...(noOpportunity(day.opp.harvest) ? { harvest: true } : {}),
     };
     day.forcedHome2am = !day.slept && day.lastDayMinutes !== null && day.lastDayMinutes >= 23 * 60 + 50;
+    if (this.humanStartedAt !== null) {
+      day.llm.humanControlMs += Math.max(0, now - this.humanStartedAt);
+      this.humanStartedAt = now;
+    }
     return this.snapshot(day);
   }
 
@@ -367,6 +451,7 @@ export class DayTracker {
       forcedHome2am: day.forcedHome2am,
       stuckCount: day.stuckCount,
       receipts: { ...day.receipts },
+      llm: { ...day.llm },
     };
   }
 }

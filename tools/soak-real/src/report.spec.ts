@@ -115,7 +115,7 @@ describe('buildSummary', () => {
       startedAt: START,
       endedAt: END,
       options: { days: 3, onStuck: 'stop', maxHours: 2, observerMs: 0, endpoint: 'http://x/mcp' },
-      llm: { mode: 'llm', provider: 'deepseek-official', model: 'deepseek-chat' },
+      llm: { mode: 'rule', degradedReason: '--no-llm' },
       days: [makeDay('Y1-春-16', { forcedHome2am: true })],
       stucks: [],
       failureCounts: new Map(),
@@ -163,6 +163,105 @@ describe('buildSummary', () => {
     expect(summary.failureSignatures).toHaveLength(10);
     expect(summary.failureSignatures[0]?.signature).toBe('sig-11');
     expect(summary.failureSignatures[9]?.signature).toBe('sig-02');
+  });
+
+  it('LLM 自主模式口径（T-M6-72b）：闭环不全/累晕/遣返只记不判失败，按计划/复盘/心得/金币上涨判定', () => {
+    const llmDays = [
+      makeDay('Y1-春-16', {
+        moneyStart: 500,
+        moneyEnd: 550,
+        passedOut: true,
+        forcedHome2am: true,
+        loop: { mail: false, water: false, harvest: false, ship: false, buySeeds: false, plant: false, sleptBefore2am: false },
+        llm: {
+          planGenerated: true,
+          planUpdates: 1,
+          reflected: true,
+          insightsLearned: 1,
+          insightsUsed: 1,
+          decisions: 10,
+          standinDecisions: 2,
+          chatSuggestions: 2,
+          chatAccepted: 1,
+          humanControlCount: 1,
+          humanControlMs: 120_000,
+        },
+      }),
+      makeDay('Y1-春-17', {
+        moneyStart: 550,
+        moneyEnd: 800,
+        llm: {
+          planGenerated: true,
+          planUpdates: 0,
+          reflected: true,
+          insightsLearned: 1,
+          insightsUsed: 0,
+          decisions: 10,
+          standinDecisions: 0,
+          chatSuggestions: 0,
+          chatAccepted: 0,
+          humanControlCount: 0,
+          humanControlMs: 0,
+        },
+      }),
+    ];
+    const pass = buildSummary({
+      runId: 'llm-ok',
+      startedAt: START,
+      endedAt: END,
+      options: { days: 2, onStuck: 'continue', maxHours: 0, observerMs: 0, endpoint: 'http://x/mcp' },
+      llm: { mode: 'llm', provider: 'deepseek-official', model: 'deepseek-chat' },
+      days: llmDays,
+      stucks: [],
+      failureCounts: new Map(),
+      interrupted: false,
+      tokensUsed: { input: 1000, cachedInput: 400, output: 200, total: 1200 },
+    });
+    expect(pass.pass).toBe(true);
+    expect(pass.reasons).toEqual([]);
+    expect(exitCodeFor(pass)).toBe(0);
+    expect(pass.llmMetrics).toMatchObject({
+      plans: 2,
+      reflections: 2,
+      newInsights: 2,
+      usedInsights: 1,
+      standinRatio: 0.1,
+      chatAdoptRate: 0.5,
+      humanControlCount: 1,
+      humanControlMs: 120_000,
+    });
+
+    const md = renderReport(pass);
+    expect(md).toContain('## LLM 自主指标');
+    expect(md).toContain('| 每日计划 | 2/2 |');
+    expect(md).toContain('| 每晚复盘 | 2/2 |');
+    expect(md).toContain('| 心得本 | 新增 2 · 引用 1 |');
+    expect(md).toContain('| 规则代驾占比 | 10%（2/20） |');
+    expect(md).toContain('| 聊天建议采纳率 | 50%（1/2） |');
+    expect(md).toContain('| Token 用量 | 1200（入 1000 / 缓存 400 / 出 200） |');
+    expect(md).toContain('| 临时介入 | 1 次（2m） |');
+
+    // 不满足 LLM 门槛时逐条列出具体原因
+    const fail = buildSummary({
+      runId: 'llm-fail',
+      startedAt: START,
+      endedAt: END,
+      options: { days: 2, onStuck: 'continue', maxHours: 0, observerMs: 0, endpoint: 'http://x/mcp' },
+      llm: { mode: 'llm', provider: 'deepseek-official', model: 'deepseek-chat' },
+      days: [makeDay('Y1-春-16', { moneyStart: 500, moneyEnd: 500 })],
+      stucks: [],
+      failureCounts: new Map(),
+      interrupted: false,
+    });
+    expect(fail.pass).toBe(false);
+    expect(fail.reasons).toEqual(expect.arrayContaining([
+      expect.stringContaining('游戏日不足'),
+      expect.stringContaining('金币未增长'),
+      expect.stringContaining('每日计划不足：0/2'),
+      expect.stringContaining('每晚复盘不足：0/2'),
+      expect.stringContaining('新增心得不足：0/2'),
+    ]));
+    expect(exitCodeFor(fail)).toBe(1);
   });
 });
 

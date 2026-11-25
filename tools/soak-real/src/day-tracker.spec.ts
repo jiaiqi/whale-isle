@@ -276,4 +276,56 @@ describe('DayTracker 日切分', () => {
     tracker.ingest({ type: 'cycle-end', delayMs: 10 }, 4);
     expect(tracker.finish(5)?.loop.buySeeds).toBe(true);
   });
+
+  it('统计 LLM 计划、代驾占比、聊天采纳、心得复盘与临时介入（含跨日/结束时长结算）', () => {
+    const tracker = new DayTracker();
+    // 尚无当天状态时：markInsight/markReflected/plan/chat-stance 安全空跑
+    tracker.markInsight('learned');
+    tracker.markReflected();
+    tracker.ingest({ type: 'plan', dayKey: '春16', plan: [{ goal: '钓鱼', why: '赚钱', status: 'pending' }], reason: 'morning' }, 0);
+    tracker.ingest({ type: 'chat-stance', kind: 'suggestion', text: '去钓鱼', stance: 'accept', reply: '好' }, 0);
+
+    tracker.observe({ clock: DAY16, money: 100 }, 1_000);
+    tracker.ingest({ type: 'plan', dayKey: '春16', plan: [{ goal: '钓鱼', why: '赚钱', status: 'pending' }], reason: 'morning' }, 1_100);
+    tracker.ingest({ type: 'plan', dayKey: '春16', plan: [{ goal: '挖矿', why: '下雨', status: 'in_progress' }], reason: 'update' }, 1_200);
+    tracker.ingest({ type: 'decision', planner: 'llm-xiaojing', tool: 'fish', args: {}, intent: '去钓鱼' }, 1_300);
+    tracker.ingest({ type: 'decision', planner: 'llm-xiaojing', tool: 'wait', args: {}, intent: '规则代驾：等会儿' }, 1_400);
+    tracker.ingest({ type: 'decision', planner: 'team-objective', tool: 'wait', args: {}, intent: '目标提示' }, 1_450);
+    tracker.ingest({ type: 'chat-stance', kind: 'suggestion', text: '钓鱼', stance: 'accept', reply: '去' }, 1_500);
+    tracker.ingest({ type: 'chat-stance', kind: 'suggestion', text: '采矿', stance: 'modify', reply: '改做' }, 1_600);
+    tracker.ingest({ type: 'chat-stance', kind: 'suggestion', text: '砍树', stance: 'decline', reply: '不去' }, 1_700);
+    tracker.ingest({ type: 'chat-stance', kind: 'command', text: '/fish', stance: 'execute', reply: '马上' }, 1_750);
+
+    tracker.markInsight('learned');
+    tracker.markInsight('used');
+    tracker.markInsight('reflected');
+
+    // 完整介入一次（2_000 -> 5_000 = 3_000ms），重复 active=true / false 幂等
+    tracker.ingest({ type: 'human-control', active: true, reason: 'switch' }, 2_000);
+    tracker.ingest({ type: 'human-control', active: true, reason: 'in-game' }, 2_500);
+    tracker.ingest({ type: 'human-control', active: false, reason: 'resume' }, 5_000);
+    tracker.ingest({ type: 'human-control', active: false, reason: 'resume' }, 5_500);
+
+    // 第二次介入跨日结算（6_000 -> 10_000 跨日 -> 14_000 finish）
+    tracker.ingest({ type: 'human-control', active: true, reason: 'switch' }, 6_000);
+    const day1 = tracker.observe({ clock: DAY17, money: 200 }, 10_000);
+    expect(day1?.llm).toEqual({
+      planGenerated: true,
+      planUpdates: 1,
+      reflected: true,
+      insightsLearned: 1,
+      insightsUsed: 1,
+      decisions: 2,
+      standinDecisions: 1,
+      chatSuggestions: 3,
+      chatAccepted: 2,
+      humanControlCount: 2,
+      humanControlMs: 7_000,
+    });
+
+    tracker.markReflected();
+    const day2 = tracker.finish(14_000);
+    expect(day2?.llm?.reflected).toBe(true);
+    expect(day2?.llm?.humanControlMs).toBe(4_000);
+  });
 });

@@ -195,3 +195,26 @@ describe('bwf-self-pause / sentinel', () => {
     expect(detector.last).toBe(verdict);
   });
 });
+
+describe('human-control 临时介入防误判（T-M6-72b）', () => {
+  it('介入期间时钟停滞、自暂停文案与连续失败均不判卡死；退出后重新计时', () => {
+    const detector = new StuckDetector({ clockStallMs: 1_000 });
+    detector.onClock(CLOCK_A, '', 0);
+    detector.onEvent({ type: 'human-control', active: true, reason: 'switch' }, 200);
+    expect(detector.isHumanControl).toBe(true);
+
+    // 远超 1s 阈值 + 自暂停文案 + 3 次同签名失败，全豁免
+    expect(detector.onClock(CLOCK_A, '已暂停游戏', 10_000)).toBeNull();
+    expect(detector.onClock(CLOCK_B, '', 11_000)).toBeNull();
+    expect(detector.onEvent(receipt('fish', 'FAILED', '背包里没有鱼竿'), 11_100)).toBeNull();
+    expect(detector.onEvent(receipt('fish', 'FAILED', '背包里没有鱼竿'), 11_200)).toBeNull();
+    expect(detector.onEvent(receipt('fish', 'FAILED', '背包里没有鱼竿'), 11_300)).toBeNull();
+    expect(detector.failureCounts().size).toBe(0);
+
+    // 交还时重置时钟基线：须完整走满 1_000ms 才判 clock-stall
+    detector.onEvent({ type: 'human-control', active: false, reason: 'resume', summary: '介入了 11 秒' }, 12_000);
+    expect(detector.isHumanControl).toBe(false);
+    expect(detector.onClock(CLOCK_B, '', 12_500)).toBeNull();
+    expect(detector.onClock(CLOCK_B, '', 13_100)?.kind).toBe('clock-stall');
+  });
+});
