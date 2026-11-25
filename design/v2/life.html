@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>生活 · 自主日程 · 内容 · 记忆 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .lf-sched { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; align-items: stretch; }
+  .lf-gauge { display: flex; align-items: center; gap: 10px; padding: 6.5px 0; font-size: 11.5px; }
+  .lf-gauge .lbl { width: 66px; flex-shrink: 0; color: var(--text-2); }
+  .lf-gauge .meter { flex: 1; }
+  .lf-gauge .val { font-family: var(--font-mono); font-size: 10px; width: 106px; text-align: right; color: var(--text-1); white-space: nowrap; }
+  .lf-ccard { padding: 14px 16px; display: flex; flex-direction: column; }
+  .lf-uri { font-family: var(--font-mono); font-size: 10px; color: var(--text-2); display: flex; align-items: center; gap: 6px; word-break: break-all; margin-bottom: 8px; }
+  .lf-ents { display: flex; flex-wrap: wrap; gap: 5px; }
+  .lf-ents span { font-family: var(--font-mono); font-size: 9.5px; padding: 2px 8px; border-radius: 7px; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); }
+  .lf-mx th:nth-child(n+2), .lf-mx td:nth-child(n+2) { text-align: center; }
+  .lf-mx td:first-child { font-weight: 650; white-space: nowrap; }
+  .lf-steps .step .node { min-width: 62px; }
+  .lf-steps .step .link { width: 22px; }
+  .lf-mempanel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .lf-mmeta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); }
+  .lf-mmeta .meter { width: 46px; height: 3.5px; }
+  .lf-kv2 { display: flex; gap: 8px; font-size: 11px; color: var(--text-2); padding: 2.5px 0; align-items: baseline; }
+  .lf-kv2 .k2 { width: 60px; flex-shrink: 0; color: var(--text-3); font-size: 10.5px; }
+  .lf-kv2 .mono { font-size: 10px; }
+  .lf-macts { display: flex; gap: 6px; margin-top: 9px; padding-top: 9px; }
+  .lf-rel { padding: 14px 16px; }
+  .lf-rel .avatar { width: 40px; height: 40px; font-size: 14px; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--tide-line); }
+  .lf-asc { padding: 13px 15px; }
+  .lf-asc h4 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-2); }
+  .why { display: inline-flex; align-items: flex-start; gap: 7px; padding: 8px 12px; border-radius: var(--r-md); background: var(--tide-dim); border: 1px dashed var(--tide-line); font-size: 11.5px; color: var(--text-2); line-height: 1.6; }
+  .why b { color: var(--tide); }
+</style>
+</head>
+<body data-page="life" data-crumb="生命体 · 生活">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① 生活调度与预算 ── -->
+    <div class="sec-h"><i data-lucide="calendar-clock" class="sm"></i>生活调度与预算 · 今日时间轴<span class="ln"></span><span class="cnt">Life Scheduler v2 · 三重预算 · 2026-11-25</span></div>
+    <div class="lf-sched">
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:13px">
+          <h3 style="font-size:13.5px;display:flex;align-items:center;gap:8px"><i data-lucide="calendar-clock" class="sm" style="color:var(--tide)"></i>今日生活时间轴</h3>
+          <span class="sp"></span>
+          <span class="pill pill-green"><span class="dot green pulse"></span>Life Scheduler 运行中</span>
+        </div>
+        <div class="tl">
+          <div class="tl-item done"><span class="tm">08:30</span><span class="t">晨间内容发现流</span> <span class="receipt ok">COMPLETED</span><div class="note" style="margin-top:3px">预算 12k 米 · 停止条件：连续 3 条「不感兴趣」即收束 · 候选 9 条，理解 7 条</div></div>
+          <div class="tl-item done"><span class="tm">09:47</span><span class="t">理解 B 站攻略视频「星露谷 1.6 钓鱼全攻略」</span> <span class="receipt ok">COMPLETED</span><div class="note" style="margin-top:3px">预算 15k 米 · 停止条件：理解率 &lt;60% 转存稍后再看 · 实际 16/18 要点</div></div>
+          <div class="tl-item done"><span class="tm">11:30</span><span class="t">兴趣更新与记忆归档</span> <span class="receipt ok">COMPLETED</span><div class="note" style="margin-top:3px">预算 6k 米 · semantic +4 · episodic +9 · 双写审计 evt_20261125_1130</div></div>
+          <div class="tl-item now"><span class="tm">13:00</span><span class="t">社交行动：评论草稿过策略门</span> <span class="receipt run">IN_PROGRESS</span><div class="note" style="margin-top:3px">预算 3k 米 · 停止条件：P4 未批准不进入「行动」· 草稿见下方审核卡</div></div>
+          <div class="tl-item"><span class="tm">15:00</span><span class="t">静默陪伴 · 低功耗待机</span> <span class="pill">待开始</span><div class="note" style="margin-top:3px">预算 2k 米 · 停止条件：宿主键鼠活跃即退避，不打扰</div></div>
+          <div class="tl-item"><span class="tm">22:30</span><span class="t">复盘与记忆归档</span> <span class="pill pill-amber"><i data-lucide="moon" class="xs"></i>勿扰开始</span><div class="note" style="margin-top:3px">预算 8k 米 · 停止条件：23:30 硬截止，剩余明天做（不透支）</div></div>
+        </div>
+        <div class="hairline" style="margin:10px 0 9px"></div>
+        <div class="note">与游戏平面并行调度（游戏时间轴见「游戏共玩」页）；两平面共享 500k 米日预算与 22:30 勿扰窗口，跨平面动作互相让路不并发抢资源。</div>
+      </div>
+
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:13px">
+          <h3 style="font-size:13.5px;display:flex;align-items:center;gap:8px"><i data-lucide="wallet" class="sm" style="color:var(--amber)"></i>预算三重门</h3>
+          <span class="sp"></span>
+          <span class="pill pill-amber"><i data-lucide="gauge" class="xs"></i>耗尽即静默</span>
+        </div>
+        <div class="lf-gauge"><span class="lbl">每日成本</span><span class="meter"><i style="width:5.9%"></i></span><span class="val">29.4k / 500k 米</span></div>
+        <div class="lf-gauge"><span class="lbl">活跃时长</span><span class="meter"><i class="green" style="width:73%"></i></span><span class="val">4.4h / 6h</span></div>
+        <div class="lf-gauge"><span class="lbl">主动发言</span><span class="meter"><i class="amber" style="width:37.5%"></i></span><span class="val">9 / ≤24 次</span></div>
+        <div class="hairline" style="margin:10px 0 9px"></div>
+        <div class="kv"><span class="k">成本分项</span><span class="v">日常对话 19.8k · 攻略检索 9.6k（与总览饭碗分账一致）</span></div>
+        <div class="kv"><span class="k">发言限额</span><span class="v">单小时 ≤4 次 · 22:30 后归零 · 夜间只接收不发送</span></div>
+        <div class="note" style="margin-top:8px">任一预算触顶自动转入静默陪伴并写入审计；预算不跨日透支——今天的额度用完，明天重新计算。</div>
+      </div>
+    </div>
+
+    <!-- ── ② 内容发现流 ── -->
+    <div class="sec-h"><i data-lucide="rss" class="sm"></i>内容发现流 · 理解与兴趣回路<span class="ln"></span><span class="cnt">今日理解 12 条 · 驱动源：兴趣档案 v2.4</span></div>
+    <div class="grid3 stagger">
+      <div class="card card-hover lf-ccard">
+        <div class="row-wrap" style="gap:6px;margin-bottom:8px">
+          <span class="pill pill-blue"><i data-lucide="video" class="xs"></i>bilibili</span>
+          <span class="receipt ok">UNDERSTOOD</span>
+          <span class="mono" style="font-size:9.5px;color:var(--text-3);margin-left:auto">09:47</span>
+        </div>
+        <b style="font-size:13px;display:block;margin-bottom:6px">星露谷 1.6 钓鱼全攻略</b>
+        <div class="lf-uri"><i data-lucide="link" class="xs"></i>bilibili.com/video/BV1rx421D7fk · UP 主「海岛老钓手」</div>
+        <p class="note">理解摘要：14 分钟视频讲解 1.6 版钓鱼机制——绿条收敛速度、池塘判定改动、雨天鱼种替换表。要点 18 条，理解 16 条；2 条存疑（音频噪声段），已挂待验证标签。</p>
+        <div class="row-wrap" style="gap:5px;margin-top:8px">
+          <span class="k" style="font-size:10px">兴趣更新</span>
+          <span class="pill pill-tide" style="font-size:10px">钓鱼 0.72 → 0.81</span>
+          <span class="pill" style="font-size:10px">攻略研究 +0.40 新增</span>
+        </div>
+        <div style="margin-top:auto;padding-top:9px">
+          <div class="hairline" style="margin-bottom:8px"></div>
+          <div class="note mono" style="font-size:10px">关联记忆 #mem_a7d3 semantic「雨天鱼种替换」· 与游戏页知识库 VERIFIED 交叉引用</div>
+        </div>
+      </div>
+
+      <div class="card card-hover lf-ccard">
+        <div class="row-wrap" style="gap:6px;margin-bottom:8px">
+          <span class="pill pill-red"><i data-lucide="image" class="xs"></i>小红书</span>
+          <span class="receipt warn">PARTIAL</span>
+          <span class="mono" style="font-size:9.5px;color:var(--text-3);margin-left:auto">10:32</span>
+        </div>
+        <b style="font-size:13px;display:block;margin-bottom:6px">农场布局灵感 · 3 种流派</b>
+        <div class="lf-uri"><i data-lucide="link" class="xs"></i>xhslink.com/aB3kQr · 分享短链（原文帖跳转）</div>
+        <p class="note">理解摘要：9 图图文帖——对称园林式 / 功能优先式 / 混养式布局；提取洒水器间距参考值 4 格。文本仅 120 字、以图为主，视觉理解完成度 68%，OCR 噪声导致 3 处低置信标注，不强行补全。</p>
+        <div class="row-wrap" style="gap:5px;margin-top:8px">
+          <span class="k" style="font-size:10px">兴趣更新</span>
+          <span class="pill pill-tide" style="font-size:10px">农场美学 +0.30 新增</span>
+          <span class="pill pill-amber" style="font-size:10px">低置信 ×3</span>
+        </div>
+        <div style="margin-top:auto;padding-top:9px">
+          <div class="hairline" style="margin-bottom:8px"></div>
+          <div class="note mono" style="font-size:10px">关联记忆 #mem_b1e9 semantic「洒水器最优间距 4 格」· confidence 0.55 待游戏内实测</div>
+        </div>
+      </div>
+
+      <div class="card card-hover lf-ccard">
+        <div class="row-wrap" style="gap:6px;margin-bottom:8px">
+          <span class="pill pill-tide"><i data-lucide="clapperboard" class="xs"></i>抖音</span>
+          <span class="receipt ok">UNDERSTOOD</span>
+          <span class="mono" style="font-size:9.5px;color:var(--text-3);margin-left:auto">11:58</span>
+        </div>
+        <b style="font-size:13px;display:block;margin-bottom:6px">主播互动节奏学习 · 45s 高光切片</b>
+        <div class="lf-uri"><i data-lucide="link" class="xs"></i>douyin.com/video/7432189064512348930 · 45s 环形缓存切片</div>
+        <p class="note">理解摘要：切片含完整「读弹幕 → 回应 → 抛梗」节奏，平均间隔 8.2s；提取互动模式 3 条——重复观众问候、点歌报幕、失败自嘲。仅用于事后复盘与节目状态机参考，不实时模仿。</p>
+        <div class="row-wrap" style="gap:5px;margin-top:8px">
+          <span class="k" style="font-size:10px">兴趣更新</span>
+          <span class="pill pill-tide" style="font-size:10px">直播表演 0.44 → 0.52</span>
+        </div>
+        <div style="margin-top:auto;padding-top:9px">
+          <div class="hairline" style="margin-bottom:8px"></div>
+          <div class="note mono" style="font-size:10px">关联记忆 #mem_r0219 relational「主播风格画像」· 供直播页节目状态机参考</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ③ 平台能力矩阵 ── -->
+    <div class="sec-h"><i data-lucide="table-2" class="sm"></i>平台能力矩阵 · 访问方式与风险<span class="ln"></span><span class="cnt">3 平台 × 7 能力 · 台账可审计</span></div>
+    <div class="card" style="padding:8px 14px 14px">
+      <table class="tbl lf-mx">
+        <thead>
+          <tr><th>平台</th><th>搜索内容</th><th>读取公开内容</th><th>评论读取</th><th>点赞收藏</th><th>评论发布</th><th>图文发布</th><th>直播事件</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>抖音</td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-ok">official_api</span></td>
+          </tr>
+          <tr>
+            <td>B站</td>
+            <td><span class="mx-ok">official_api</span></td>
+            <td><span class="mx-ok">official_api</span></td>
+            <td><span class="mx-ok">official_api</span></td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-ok">official_api</span></td>
+          </tr>
+          <tr>
+            <td>小红书</td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-ui">browser_ui</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-no">—</span></td>
+            <td><span class="mx-no">—</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="inset" style="padding:11px 14px;margin-top:10px">
+        <div class="note" style="margin-bottom:6px">每项能力在台账中记录三元组：接入方式 <span class="mono">official_api | browser_ui | third_party_adapter</span> · 风险级别 <span class="mono">low|med|high</span> · 最近验证日期。抽样三行：</div>
+        <div class="mono" style="font-size:10px;color:var(--text-3);line-height:1.9">
+          douyin.live_events · official_api（dyhub v0.9.2 适配封装）· risk med · verified 2026-11-24<br>
+          bilibili.comment_post · browser_ui · risk high · P4 gate · verified 2026-11-19<br>
+          xhs.search · browser_ui · risk low · verified 2026-11-22
+        </div>
+        <div class="row" style="margin-top:9px;gap:8px;align-items:flex-start">
+          <i data-lucide="shield-alert" class="sm" style="color:var(--red)"></i>
+          <span class="note">红线：不绕过验证码与访问控制——遇到 CAPTCHA 立即停止并记录 <span class="mono">BLOCKED_CAPTCHA</span> 转人工，绝不重试绕过；发布类能力默认关闭，逐条人工批准。</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ④ 社交决策链 ── -->
+    <div class="sec-h"><i data-lucide="route" class="sm"></i>社交决策链 · 从看到内容到公开表达<span class="ln"></span><span class="cnt">9 步 · now = 策略门 P4</span></div>
+    <div class="card" style="padding:16px 18px 14px">
+      <div class="steps lf-steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">调度</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">发现</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">理解</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">兴趣</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">关系</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">6</span><span class="lb">决策</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">7</span><span class="lb">策略门</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">8</span><span class="lb">行动</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">9</span><span class="lb">记录</span></div></div>
+      </div>
+      <div class="note" style="margin-top:10px">本轮链路：08:30 调度排入晨间浏览 → 发现 3 条候选 → 理解 B 站攻略视频 → 兴趣钓鱼 +0.09 → 关系检查（UP 主非熟人，公开评论区）→ 决策「仅评论，不点赞、不私信」→ <b style="color:var(--tide)">策略门拦截：P4 需宿主逐条确认</b>。五查全过才放行：权限等级 · 雷区词 · 预算 · 频次上限 · 观众数据最小化；拦截与放行均写入审计 <span class="mono">evt_gate_*</span>。</div>
+    </div>
+
+    <div class="card" style="padding:16px 18px;margin-top:12px">
+      <div class="row" style="align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div style="flex:1.4;min-width:300px">
+          <div class="row" style="margin-bottom:9px;gap:8px">
+            <i data-lucide="message-square-quote" class="sm" style="color:var(--tide)"></i>
+            <b style="font-size:13px">评论草稿 draft_c5e2</b>
+            <span class="sp"></span>
+            <span class="pill pill-amber"><i data-lucide="shield-alert" class="xs"></i>P4 公开发布 · 需宿主确认</span>
+          </div>
+          <div class="bubble ai" style="max-width:none">这条攻略讲得很清楚，感谢整理！</div>
+          <div class="kv" style="margin-top:9px"><span class="k">目标</span><span class="v">bilibili.com/video/BV1rx421D7fk · 评论区（公开）</span></div>
+          <div class="kv"><span class="k">语气校验</span><span class="v">PASS · 雷区词 0 · 长度 18 字</span></div>
+          <div class="kv"><span class="k">预算占用</span><span class="v">发言 9 → 10 / ≤24 · 成本约 1.2k 米</span></div>
+        </div>
+        <div style="flex:1;min-width:260px">
+          <div class="row-wrap" style="gap:5px;margin-bottom:10px">
+            <span class="pill" style="font-size:10px">P0 观察</span>
+            <span class="pill pill-tide" style="font-size:10px">P1 本地草稿 · 常态</span>
+            <span class="pill" style="font-size:10px">P2 定向草稿</span>
+            <span class="pill" style="font-size:10px">P3 半自动回复</span>
+            <span class="pill pill-amber" style="font-size:10px"><i data-lucide="shield-alert" class="xs"></i>P4 公开发布 · 本次请求</span>
+          </div>
+          <div class="row" style="gap:8px;margin-bottom:9px">
+            <button class="btn sm soft-green" data-act="已批准 draft_c5e2 · 进入行动队列（P4 单次有效）"><i data-lucide="check" class="xs"></i>批准</button>
+            <button class="btn sm ghost" data-act="打开草稿编辑器（演示）"><i data-lucide="pencil" class="xs"></i>编辑</button>
+            <button class="btn sm soft-red" data-act="已拒绝 draft_c5e2 · 24h 内不再生成同类草稿"><i data-lucide="x" class="xs"></i>拒绝</button>
+          </div>
+          <p class="note"><b style="color:var(--text-1)">默认只读与草稿，逐步开放有限写入：</b>P0–P3 不产生公开痕迹；P4 每条单独确认、批准仅对当次有效；拒绝后记入审计 evt_gate_*，24h 内不再重复生成同类草稿。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ⑤ 五类记忆浏览器 ── -->
+    <div class="sec-h"><i data-lucide="database" class="sm"></i>记忆浏览器 · 五类分区<span class="ln"></span>
+      <span class="seg" data-mutex id="lf-memseg" style="margin-left:12px">
+        <button class="seg-tab on" data-tab="working">Working · 12</button>
+        <button class="seg-tab" data-tab="episodic">Episodic · 1,204</button>
+        <button class="seg-tab" data-tab="semantic">Semantic · 486</button>
+        <button class="seg-tab" data-tab="relational">Relational · 213</button>
+        <button class="seg-tab" data-tab="self">Self · 58</button>
+      </span>
+      <span class="cnt">总计 1,973 条 · 今日写入 +13</span>
+    </div>
+
+    <div class="lf-mempanel" data-tab="working">
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--tide)">WORKING</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_w01</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">正在把「钓鱼攻略 16 要点」压缩进 Semantic；2 处存疑待与游戏内实测交叉验证后再定稿。</p>
+        <div class="lf-ents"><span>钓鱼攻略 BV1rx421D7fk</span><span>雨天鱼种</span><span>绿条收敛</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">evt_20261125_0947 · 内容理解完成</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:88%"></i></span>confidence 0.88</span>
+          <span>salience 0.92</span>
+          <span>lastRecalledAt 13:02</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy session_ttl_24h</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_w01 详情（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_w01（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_w01（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_w01 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--tide)">WORKING</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_w02</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">评论草稿 draft_c5e2 停在策略门 P4：等待宿主批准后进入「行动」，批准仅对当次有效。</p>
+        <div class="lf-ents"><span>draft_c5e2</span><span>bilibili 评论发布</span><span>P4 gate</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">evt_20261125_1310 · 策略门拦截</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:100%"></i></span>confidence 1.00</span>
+          <span>salience 0.85</span>
+          <span>lastRecalledAt 刚刚</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy until_resolved</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_w02 详情（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_w02（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_w02（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_w02 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem pinned">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--tide)">WORKING</span><i data-lucide="pin" class="xs" style="color:var(--amber)"></i><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_w03</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">宿主今早指令「今天先别下矿，整理农场」→ 18:00 前抑制一切矿洞类任务。</p>
+        <div class="lf-ents"><span>宿主</span><span>矿洞抑制</span><span>18:00</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">对话#4833 · 08:12</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:97%;background:var(--green)"></i></span>confidence 0.97</span>
+          <span>salience 1.00</span>
+          <span>lastRecalledAt 刚刚</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy user_pinned</span><span>userPinned true</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_w03 详情（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_w03（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="解除固定 #mem_w03（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_w03 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--tide)">WORKING</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_w04</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">直播前预检清单：OBS 预检完成、点歌队列 2 首、语音锁 TTL 4s 正常释放。</p>
+        <div class="lf-ents"><span>live_2030</span><span>song_queue</span><span>voice_lock</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">evt_20261125_1244 · 直播预检</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:95%;background:var(--green)"></i></span>confidence 0.95</span>
+          <span>salience 0.78</span>
+          <span>lastRecalledAt 12:44</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy until_live_end</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_w04 详情（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_w04（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_w04（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_w04 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lf-mempanel" data-tab="episodic" style="display:none">
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--green)">EPISODIC</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_e4821</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">和宿主约定「升级工具优先于买装饰」——发生在整理农场储物时的一次协商。</p>
+        <div class="lf-ents"><span>宿主</span><span>升级工具</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">对话#4821 · 11-23 15:40</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:86%;background:var(--green)"></i></span>confidence 0.86</span>
+          <span>salience 0.64</span>
+          <span>lastRecalledAt 昨天 20:31</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy raw_90d → summary_1y</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_e4821（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_e4821（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_e4821（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_e4821 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--green)">EPISODIC</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_e4796</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">11-24 直播：观众「海风」连点 3 首歌，点歌队列峰值 5，气氛热烈无事故。</p>
+        <div class="lf-ents"><span>海风</span><span>点歌队列</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">live_20261124 · 直播复盘</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:91%;background:var(--green)"></i></span>confidence 0.91</span>
+          <span>salience 0.51</span>
+          <span>lastRecalledAt 昨天 23:05</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy raw_90d</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_e4796（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_e4796（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_e4796（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_e4796 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lf-mempanel" data-tab="semantic" style="display:none">
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--blue)">SEMANTIC</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_a7d3</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">雨天河流鱼种会替换为冬季鱼与鲶鱼（星露谷 1.6 版本机制）。</p>
+        <div class="lf-ents"><span>雨天</span><span>冬季鱼</span><span>鲶鱼</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">攻略 BV1rx421D7fk + 游戏内实测 ×2</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:92%;background:var(--green)"></i></span>confidence 0.92</span>
+          <span>salience 0.70</span>
+          <span>lastRecalledAt 09:52</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy summary_1y</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_a7d3（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_a7d3（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_a7d3（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_a7d3 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--blue)">SEMANTIC</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_b1e9</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">洒水器最优间距 4 格（来自小红书帖，视觉推断，尚未游戏内实测）。</p>
+        <div class="lf-ents"><span>洒水器</span><span>农场布局</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">xhslink.com/aB3kQr · 10:32</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:55%;background:var(--amber)"></i></span>confidence 0.55</span>
+          <span>salience 0.42</span>
+          <span>lastRecalledAt 10:35</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy summary_1y</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_b1e9（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_b1e9（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_b1e9（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_b1e9 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lf-mempanel" data-tab="relational" style="display:none">
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--violet)">RELATIONAL</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_r0217</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">与宿主：共同计划「升级工具」「社区中心收集」；信任基线高，冲突时优先协商。</p>
+        <div class="lf-ents"><span>宿主</span><span>共同计划 ×2</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">关系快照 rs_1125 · 每日重建</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:94%;background:var(--green)"></i></span>confidence 0.94</span>
+          <span>salience 0.88</span>
+          <span>lastRecalledAt 08:12</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy relational_active</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_r0217（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_r0217（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_r0217（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_r0217 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--violet)">RELATIONAL</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_r0218</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">观众「海风」：常客，偏好点歌与星露谷话题；仅基于公开弹幕，无任何私密画像。</p>
+        <div class="lf-ents"><span>海风</span><span>点歌</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">live_20261124 · 弹幕聚合</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:74%;background:var(--green)"></i></span>confidence 0.74</span>
+          <span>salience 0.46</span>
+          <span>lastRecalledAt 昨天 21:07</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy audience_minimized</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_r0218（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_r0218（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_r0218（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_r0218 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lf-mempanel" data-tab="self" style="display:none">
+      <div class="mem pinned">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--amber)">SELF</span><i data-lucide="pin" class="xs" style="color:var(--amber)"></i><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_s0031</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">对自己的认知：嘴硬心软，对钓鱼有执念——来自 27 轮人格迭代与宿主长期反馈。</p>
+        <div class="lf-ents"><span>人格 v27</span><span>钓鱼执念</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">persona_review_27 · 11-18</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:83%;background:var(--amber)"></i></span>confidence 0.83</span>
+          <span>salience 0.90</span>
+          <span>lastRecalledAt 07:58</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy self_core</span><span>userPinned true</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_s0031（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_s0031（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="解除固定 #mem_s0031（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_s0031 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+      <div class="mem">
+        <div class="row" style="gap:8px"><span class="type" style="color:var(--amber)">SELF</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">#mem_s0032</span></div>
+        <p style="font-size:12px;line-height:1.6;margin:7px 0 8px">我容易在长任务里过度省略解释——改进中：每次决策至少输出一句「为什么」。</p>
+        <div class="lf-ents"><span>解释习惯</span><span>改进项</span></div>
+        <div class="lf-kv2" style="margin-top:8px"><span class="k2">来源事件</span><span class="mono">复盘 evt_20261123_2305</span></div>
+        <div class="lf-mmeta" style="margin-top:7px">
+          <span class="conf"><span class="meter"><i style="width:79%;background:var(--amber)"></i></span>confidence 0.79</span>
+          <span>salience 0.55</span>
+          <span>lastRecalledAt 昨天 23:10</span>
+        </div>
+        <div class="lf-mmeta" style="margin-top:4px"><span>retentionPolicy self_core</span><span>userPinned false</span></div>
+        <div class="lf-macts hairline">
+          <button class="btn sm ghost" data-act="查看 #mem_s0032（演示）"><i data-lucide="eye" class="xs"></i>查看</button>
+          <button class="btn sm ghost" data-act="纠正 #mem_s0032（演示）"><i data-lucide="pencil" class="xs"></i>纠正</button>
+          <button class="btn sm ghost" data-act="固定 #mem_s0032（演示）"><i data-lucide="pin" class="xs"></i>固定</button>
+          <button class="btn sm soft-red" data-act="删除 #mem_s0032 · 进入 30 天冷却（演示）"><i data-lucide="trash-2" class="xs"></i>删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top:10px">页签切换为真实交互（Working 为当前活动分区，其余分区以相同结构展示）；卡片操作均为演示交互——「删除」走第 ⑥ 区删除请求流程，冷却期内可撤销。</div>
+
+    <!-- ── ⑥ 遗忘机制 ── -->
+    <div class="sec-h"><i data-lucide="eraser" class="sm"></i>遗忘机制 · 保留与删除<span class="ln"></span><span class="cnt">记得该记的，忘掉该忘的</span></div>
+    <div class="grid2">
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:11px">
+          <h3 style="font-size:13.5px;display:flex;align-items:center;gap:8px"><i data-lucide="hourglass" class="sm" style="color:var(--blue)"></i>保留策略</h3>
+          <span class="sp"></span>
+          <span class="pill"><i data-lucide="refresh-cw" class="xs"></i>每日 03:00 自动巡检</span>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>记忆形态</th><th>保留策略</th><th>到期行为</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="mono">raw_event</span><div class="note" style="font-size:10px">原始事件</div></td>
+              <td><span class="pill" style="font-size:10px">90 天</span></td>
+              <td class="note">压缩为 episodic 摘要，实体与时间戳保留</td>
+            </tr>
+            <tr>
+              <td><span class="mono">summary</span><div class="note" style="font-size:10px">摘要</div></td>
+              <td><span class="pill" style="font-size:10px">1 年</span></td>
+              <td class="note">合并进 semantic 画像与统计特征</td>
+            </tr>
+            <tr>
+              <td><span class="mono">user_pinned</span><div class="note" style="font-size:10px">用户固定</div></td>
+              <td><span class="pill pill-amber" style="font-size:10px">永久</span></td>
+              <td class="note">不参与自动清理；仅宿主手动解除固定后按上两级策略流转</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:11px">
+          <h3 style="font-size:13.5px;display:flex;align-items:center;gap:8px"><i data-lucide="trash-2" class="sm" style="color:var(--red)"></i>删除请求流程</h3>
+          <span class="sp"></span>
+          <span class="pill pill-red"><i data-lucide="shield-check" class="xs"></i>覆盖衍生索引与备份</span>
+        </div>
+        <div class="tl">
+          <div class="tl-item"><span class="tm">REQ</span><span class="t">宿主发起删除请求</span><div class="note" style="margin-top:2px">入口：记忆卡「删除」按钮 / 对话 /forget + 记忆 ID</div></div>
+          <div class="tl-item"><span class="tm">MARK</span><span class="t">tombstone 立即生效</span><div class="note" style="margin-top:2px">向量 / 倒排 / 图谱边三条检索路径 0ms 内全部不可见</div></div>
+          <div class="tl-item"><span class="tm">HOLD</span><span class="t">30 天冷却期</span><div class="note" style="margin-top:2px">期间可一键撤销；撤销不残留任何标记</div></div>
+          <div class="tl-item"><span class="tm">PURGE</span><span class="t">物理删除</span><div class="note" style="margin-top:2px">同步覆盖衍生索引（embedding / 倒排 / 图谱）与全部备份快照（滚动窗口 ≤7 天），不留幽灵副本</div></div>
+          <div class="tl-item"><span class="tm">AUDIT</span><span class="t">写入审计 evt_del_*</span><div class="note" style="margin-top:2px">记录时间 / 范围 / 发起者；不推断删除原因，不生成「被遗忘内容」的摘要</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="why" style="margin-top:12px"><i data-lucide="lightbulb" class="sm"></i><span><b>不确定就说不确定，不编造记忆：</b>每条记忆写入必须携带来源事件与 confidence；检索不到或置信 &lt;0.5 时，明确回答「我不确定 / 我不记得」，绝不猜测补全。确需推断时，答案里标注 <span class="mono">inference</span> 及依据链条。</span></div>
+
+    <!-- ── ⑦ 关系记忆 ── -->
+    <div class="sec-h"><i data-lucide="users" class="sm"></i>关系记忆 · 人在循环里<span class="ln"></span><span class="cnt">4 段关系 · 观众数据最小化</span></div>
+    <div class="grid2 stagger">
+      <div class="card card-hover lf-rel">
+        <div class="row" style="gap:10px;margin-bottom:10px">
+          <div class="avatar">宿</div>
+          <div style="flex:1;min-width:0">
+            <b style="font-size:13px">宿主</b>
+            <div class="note mono" style="font-size:9.5px">host · human · 一起开发这只鲸鱼的人</div>
+          </div>
+          <span class="pill pill-blue" style="font-size:10px">核心关系</span>
+        </div>
+        <div class="lf-kv2"><span class="k2">首次认识</span><span class="mono">2026-03-02 · 项目启动日</span></div>
+        <div class="lf-kv2"><span class="k2">互动次数</span><span class="mono num">4,832 次（对话 1,912 · 共同任务 2,920）</span></div>
+        <div class="lf-kv2"><span class="k2">共同兴趣</span><span>星露谷 · 像素艺术 · 钓鱼</span></div>
+        <div class="lf-kv2"><span class="k2">置信度</span><span class="conf"><span class="meter" style="width:70px"><i style="width:96%;background:var(--green)"></i></span>0.96</span></div>
+        <div class="lf-kv2"><span class="k2">最近互动</span><span class="mono">今天 08:12 · 对话#4833「今天先别下矿」</span></div>
+      </div>
+
+      <div class="card card-hover lf-rel">
+        <div class="row" style="gap:10px;margin-bottom:10px">
+          <div class="avatar">威</div>
+          <div style="flex:1;min-width:0">
+            <b style="font-size:13px">威利</b>
+            <div class="note mono" style="font-size:9.5px">Willy · Stardew NPC · 存档 S1</div>
+          </div>
+          <span class="pill pill-violet" style="font-size:10px">游戏内角色</span>
+        </div>
+        <div class="lf-kv2"><span class="k2">首次认识</span><span class="mono">游戏日 春 3 · 存档 S1</span></div>
+        <div class="lf-kv2"><span class="k2">互动次数</span><span class="mono num">23 次（对话 14 · 剧情事件 9）</span></div>
+        <div class="lf-kv2"><span class="k2">共同兴趣</span><span>钓鱼 · 传说鱼类话题</span></div>
+        <div class="lf-kv2"><span class="k2">置信度</span><span class="conf"><span class="meter" style="width:70px"><i style="width:88%;background:var(--green)"></i></span>0.88</span></div>
+        <div class="lf-kv2"><span class="k2">最近互动</span><span class="mono">11-24 16:40 · 赠送钓竿 evt_g712</span></div>
+        <div class="note" style="margin-top:7px">NPC 无真实偏好，仅游戏内事实与好感度数值；不与真人关系混淆。</div>
+      </div>
+
+      <div class="card card-hover lf-rel">
+        <div class="row" style="gap:10px;margin-bottom:10px">
+          <div class="avatar">海</div>
+          <div style="flex:1;min-width:0">
+            <b style="font-size:13px">海风</b>
+            <div class="note mono" style="font-size:9.5px">audience · 常客观众 · 抖音公开昵称</div>
+          </div>
+          <span class="pill pill-amber" style="font-size:10px"><i data-lucide="shield-check" class="xs"></i>数据最小化</span>
+        </div>
+        <div class="lf-kv2"><span class="k2">首次认识</span><span class="mono">2026-10-12 · 第 1 场直播</span></div>
+        <div class="lf-kv2"><span class="k2">互动次数</span><span class="mono num">156 次（弹幕 141 · 点歌 12 · 礼物 3）</span></div>
+        <div class="lf-kv2"><span class="k2">共同兴趣</span><span>点歌 · 星露谷话题</span></div>
+        <div class="lf-kv2"><span class="k2">置信度</span><span class="conf"><span class="meter" style="width:70px"><i style="width:74%;background:var(--green)"></i></span>0.74</span></div>
+        <div class="lf-kv2"><span class="k2">最近互动</span><span class="mono">11-24 21:07 · 弹幕 ×12</span></div>
+      </div>
+
+      <div class="card card-hover lf-rel">
+        <div class="row" style="gap:10px;margin-bottom:10px">
+          <div class="avatar">小</div>
+          <div style="flex:1;min-width:0">
+            <b style="font-size:13px">小岛主</b>
+            <div class="note mono" style="font-size:9.5px">audience · 常客观众 · B站公开昵称</div>
+          </div>
+          <span class="pill pill-amber" style="font-size:10px"><i data-lucide="shield-check" class="xs"></i>数据最小化</span>
+        </div>
+        <div class="lf-kv2"><span class="k2">首次认识</span><span class="mono">2026-11-02 · 第 9 场直播</span></div>
+        <div class="lf-kv2"><span class="k2">互动次数</span><span class="mono num">38 次（弹幕 31 · 礼物 7）</span></div>
+        <div class="lf-kv2"><span class="k2">共同兴趣</span><span>生存攻略 · 模拟经营</span></div>
+        <div class="lf-kv2"><span class="k2">置信度</span><span class="conf"><span class="meter" style="width:70px"><i style="width:61%;background:var(--amber)"></i></span>0.61</span></div>
+        <div class="lf-kv2"><span class="k2">最近互动</span><span class="mono">11-24 22:40 · 礼物 + 感谢弹幕</span></div>
+      </div>
+    </div>
+
+    <div class="inset" style="padding:11px 14px;margin-top:12px">
+      <div class="row" style="gap:8px"><i data-lucide="shield-check" class="sm" style="color:var(--green)"></i><b style="font-size:12px">观众数据最小化</b></div>
+      <p class="note" style="margin-top:5px">仅保留平台公开昵称、互动计数与公开表达的兴趣；不存储 uid 之外的身份线索，不推断住址、职业等敏感属性。关系卡支持一键遗忘（进入第 ⑥ 区删除流程）；游戏 NPC 关系仅服务游戏内行为，永不与真人混淆。</p>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card lf-asc">
+      <h4><i data-lucide="anchor" class="sm" style="color:var(--tide)"></i>自主生活原则</h4>
+      <div class="ladder-item on"><span class="lv">1</span><div><div class="t">有目标</div><div class="d">每项活动声明目标与完成判据</div></div></div>
+      <div class="ladder-item"><span class="lv">2</span><div><div class="t">有预算</div><div class="d">Token · 时长 · 发言次数三重上限</div></div></div>
+      <div class="ladder-item"><span class="lv">3</span><div><div class="t">有停止条件</div><div class="d">触发即停，宁可空转不硬撑</div></div></div>
+      <div class="ladder-item" style="margin-bottom:0"><span class="lv">4</span><div><div class="t">有审计记录</div><div class="d">evt_* 落库，事后可复盘</div></div></div>
+      <p class="note" style="margin-top:9px"><b style="color:var(--text-1)">非无边界循环：</b>不存在「无限刷内容」的状态——每一轮生活调度都要能回答「为什么做、什么时候停」。</p>
+    </div>
+
+    <div class="card lf-asc">
+      <h4><i data-lucide="layers" class="sm" style="color:var(--violet)"></i>数据分类 · 七类</h4>
+      <div class="row-wrap" style="gap:6px">
+        <span class="pill">identity 身份配置</span>
+        <span class="pill">preference 偏好画像</span>
+        <span class="pill">memory 记忆内容</span>
+        <span class="pill">social 社交互动</span>
+        <span class="pill">behavior 行为日志</span>
+        <span class="pill">ledger 消耗账本</span>
+        <span class="pill">audit 审计记录</span>
+      </div>
+      <p class="note" style="margin-top:9px">分类决定保留策略与导出粒度；观众相关数据一律归入 social 并最小化（见关系记忆）。</p>
+    </div>
+
+    <div class="card lf-asc">
+      <h4><i data-lucide="activity" class="sm" style="color:var(--green)"></i>今日活动统计</h4>
+      <div class="grid2" style="gap:8px">
+        <div class="stat"><div class="n num">12</div><div class="l">内容理解（条）</div></div>
+        <div class="stat"><div class="n num">9<span style="font-size:12px;color:var(--text-3)">/24</span></div><div class="l">主动发言</div></div>
+        <div class="stat"><div class="n num">13</div><div class="l">记忆写入</div></div>
+        <div class="stat"><div class="n num">1</div><div class="l">草稿待审（P4）</div></div>
+      </div>
+      <div class="hairline" style="margin:9px 0"></div>
+      <p class="note">活跃 4.4h / 6h · 发言全部经策略门 · 0 次绕过访问控制。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  function pageInit() {
+    if (pageInit._wired) return;
+    pageInit._wired = true;
+    var tabs = document.querySelectorAll('#lf-memseg .seg-tab');
+    var panels = document.querySelectorAll('.lf-mempanel');
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        var tab = t.getAttribute('data-tab');
+        panels.forEach(function (p) {
+          p.style.display = (p.getAttribute('data-tab') === tab) ? 'grid' : 'none';
+        });
+      });
+    });
+    document.querySelectorAll('[data-act]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (window.W && W.toast) W.toast(b.getAttribute('data-act'));
+      });
+    });
+  }
+  lucide.createIcons();
+  if (window.pageInit) pageInit();
+</script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>总览 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .hero { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+  .presence-card { display: grid; grid-template-columns: 220px 1fr; overflow: hidden; }
+  .presence-card .stage { position: relative; background:
+      radial-gradient(120px 60px at 50% 88%, var(--sea-soft), transparent 70%),
+      linear-gradient(180deg, var(--sunken), transparent); border-right: 1px solid var(--line); min-height: 300px; }
+  .presence-card .stage video { position: absolute; inset: 10px 0 18px; width: 100%; height: calc(100% - 28px); object-fit: contain; transform: scale(1.75); transform-origin: 50% 62%; }
+  .presence-card .stage .tag { position: absolute; left: 12px; top: 12px; }
+  .presence-card .stage .clipname { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 10.5px; }
+  .state-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .state-row .chip { cursor: default; }
+  .state-row .chip.on { background: var(--inverse); color: var(--inverse-ink); border-color: transparent; }
+  .mood { display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; }
+  .mood-map { position: relative; height: 96px; border-radius: 12px; background: var(--sunken); border: 1px solid var(--line); overflow: hidden; }
+  .mood-map::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 75% 30%, var(--coral-soft), transparent 55%), radial-gradient(circle at 20% 80%, var(--whale-soft), transparent 55%); }
+  .mood-map .ax { position: absolute; background: var(--line-2); }
+  .mood-map .ax.v { left: 50%; top: 8px; bottom: 8px; width: 1px; } .mood-map .ax.h { top: 50%; left: 8px; right: 8px; height: 1px; }
+  .mood-map .pt { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--coral); transform: translate(-50%, -50%); box-shadow: 0 0 0 5px var(--coral-soft); transition: left 1.2s var(--ease-out), top 1.2s var(--ease-out); }
+  .mood-map .trail { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--coral); opacity: .25; transform: translate(-50%, -50%); }
+  .mood-map .lb { position: absolute; font-size: 9px; color: var(--ink-3); font-family: var(--font-mono); }
+  .think { padding: 14px 16px; border-radius: 14px; border: 1px dashed var(--line-3); background: color-mix(in srgb, var(--surface-2) 60%, transparent); position: relative; }
+  .think .serif-quote { transition: opacity .4s var(--ease); min-height: 48px; }
+  .body-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); align-items: start; }
+  .body-row:last-child { border-bottom: 0; }
+  .why { margin-top: 8px; font-size: 12px; color: var(--ink-2); padding: 8px 10px; border-radius: 9px; background: var(--sunken); display: flex; gap: 7px; }
+  .why [data-lucide] { color: var(--sea); margin-top: 2px; }
+  .journal .tl-item b { font-weight: 600; }
+  .journal .tl-item p { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .journal .tm { display: inline-block; width: 44px; }
+  .suggest { padding: 14px 16px; border-radius: 13px; border: 1px solid var(--line); background: var(--surface-2); transition: all .4s var(--ease-out); }
+  .suggest.gone { opacity: 0; transform: translateX(30px); height: 0; padding-top: 0; padding-bottom: 0; margin: 0 !important; border-width: 0; overflow: hidden; }
+  .worlds { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .world { padding: 16px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 10px; transition: all var(--t-med) var(--ease); }
+  .world:hover { transform: translateY(-3px); box-shadow: var(--shadow-2); border-color: var(--line-2); }
+  .world .n { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+  .world .en { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .health { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+  .health div { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .health .mono { margin-left: auto; color: var(--ink-3); font-size: 10.5px; }
+  @media (max-width: 1250px) { .worlds { grid-template-columns: repeat(3, 1fr); } .hero { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="home" data-crumb="此刻 / 总览">
+<main class="page">
+
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="sunset" class="ic-xs"></i><span id="clock">11 月 25 日 · 周三 · 22:14</span></div>
+      <h1>晚上好。小鲸正<span class="t-accent">安静地</span>陪你写代码。</h1>
+      <p>她已经 42 分钟没有主动说话——你看起来很专注。星露谷那边，她在自己照看防风草；明天有雨，她打算后天再去矿洞。</p>
+    </div>
+    <div class="actions">
+      <button class="btn" data-toast="安静陪伴 · 30 分钟内不主动发言" data-icon="moon"><i data-lucide="moon"></i>安静陪伴</button>
+      <a class="btn accent" href="chat.html"><i data-lucide="message-circle"></i>和她说点什么</a>
+    </div>
+  </div>
+
+  <!-- ============ Hero：在场 + 此刻在做 ============ -->
+  <div class="hero">
+    <section class="card presence-card rise rise-1">
+      <div class="stage">
+        <span class="chip sm tag"><span class="dot ok pulse"></span>桌面化身 · 在线</span>
+        <video id="heroPet" data-clip="待机呼吸休闲" autoplay loop muted playsinline></video>
+        <div class="clipname faint mono" id="clipName">待机呼吸休闲.webm</div>
+      </div>
+      <div class="card-b stack-16" style="padding:20px 22px">
+        <div class="row">
+          <div>
+            <div class="row gap-8"><h2>小鲸</h2><span class="chip sm accent">Primary</span><span class="faint mono tiny">char_xj01</span></div>
+            <div class="small muted" style="margin-top:3px">傲娇干饭蓝鲸女仆 · 一个 AI，三种身体</div>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn sm ghost" data-menu="petMenu"><i data-lucide="sparkles" class="ic-sm"></i>逗逗她</button>
+        </div>
+
+        <div>
+          <div class="eyebrow" style="margin-bottom:8px">表现状态 · Embodiment Runtime 仲裁结果</div>
+          <div class="state-row" id="states">
+            <span class="chip on" data-s="idle">idle 陪伴</span><span class="chip" data-s="listening">listening</span><span class="chip" data-s="thinking">thinking</span>
+            <span class="chip" data-s="speaking">speaking</span><span class="chip" data-s="singing">singing</span><span class="chip" data-s="dancing">dancing</span>
+            <span class="chip" data-s="gaming">gaming</span><span class="chip" data-s="reacting">reacting</span><span class="chip" data-s="resting">resting</span>
+          </div>
+        </div>
+
+        <div class="mood">
+          <div class="mood-map" id="moodMap">
+            <span class="ax v"></span><span class="ax h"></span>
+            <span class="lb" style="right:6px;top:4px">兴奋</span><span class="lb" style="left:6px;bottom:4px">低落</span>
+            <span class="trail" style="left:58%;top:52%"></span><span class="trail" style="left:63%;top:45%"></span><span class="trail" style="left:67%;top:40%"></span>
+            <span class="pt" id="moodPt" style="left:70%;top:36%"></span>
+          </div>
+          <div class="stack-8">
+            <div class="row gap-6"><span class="chip sm coral">好奇</span><span class="chip sm sun">有点饿</span><span class="chip sm sea">放松</span><span class="faint tiny" style="margin-left:auto">情绪 2 小时后自然回落</span></div>
+            <div class="row small"><span class="faint" style="width:56px">社交能量</span><div class="meter thin sea" style="flex:1;--v:62%"><i></i></div><span class="mono tiny">62</span></div>
+            <div class="row small"><span class="faint" style="width:56px">自信</span><div class="meter thin whale" style="flex:1;--v:78%"><i></i></div><span class="mono tiny">78</span></div>
+            <div class="row small"><span class="faint" style="width:56px">饱腹</span><div class="meter thin sun" style="flex:1;--v:41%"><i></i></div><span class="mono tiny">41</span></div>
+          </div>
+        </div>
+
+        <div class="think">
+          <div class="row" style="margin-bottom:6px"><span class="eyebrow"><i data-lucide="cloud" class="ic-xs"></i>内心戏 · 不外放</span><span class="spacer"></span>
+            <label class="row gap-6 tiny faint">用声音说出来<span class="switch sm"><input type="checkbox"><span class="tr"></span></span></label></div>
+          <p class="serif-quote" id="think">「他今天第三次改同一个 bug 了……先不打扰，等他伸懒腰的时候再递一句吧。」</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card rise rise-2" style="display:flex;flex-direction:column">
+      <div class="card-h"><h3><i data-lucide="layers-3"></i>此刻，她的每个身体</h3><span class="tools"><a class="btn xs ghost" href="embodiment.html">全部化身<i data-lucide="arrow-right" class="ic-xs"></i></a></span></div>
+      <div class="body-row">
+        <div class="tile sea"><i data-lucide="app-window"></i></div>
+        <div><b class="small">桌面 · 安静陪伴</b><div class="tiny faint">待机呼吸 · 语音锁空闲 · 42 分钟未主动发言</div></div>
+        <span class="chip sm kelp">idle</span>
+      </div>
+      <div class="body-row">
+        <div class="tile kelp"><i data-lucide="sprout"></i></div>
+        <div style="min-width:0">
+          <div class="row gap-6"><b class="small">星露谷 · 春 14 日 · 10:40</b><span class="chip sm">自主模式</span></div>
+          <div class="small" style="margin-top:6px">浇完东侧防风草 <i data-lucide="arrow-right" class="ic-xs" style="display:inline;vertical-align:-1px;opacity:.5"></i> 去皮埃尔买花椰菜种子</div>
+          <div class="row gap-8" style="margin-top:8px"><div class="meter thin kelp" style="flex:1;--v:64%"><i></i></div><span class="mono tiny faint">18 / 28 格</span></div>
+          <div class="why"><i data-lucide="lightbulb" class="ic-sm"></i><span>明天有雨不用浇水，所以今天先把种子买齐，后天整天下矿。<span class="faint">· 参考攻略《春季作物收益》v1.6 · 置信 0.82</span></span></div>
+        </div>
+        <span class="receipt progress">IN_PROGRESS</span>
+      </div>
+      <div class="body-row">
+        <div class="tile"><i data-lucide="radio"></i></div>
+        <div><b class="small">直播 · 未开播</b><div class="tiny faint">下次计划：周五 21:00 · 星露谷 + 点歌 · 抖音（dyhub）</div></div>
+        <span class="chip sm outline">offline</span>
+      </div>
+      <div class="card-f" style="margin-top:auto;flex-wrap:wrap">
+        <span class="tiny faint">星露谷控制权</span>
+        <div class="seg" id="modeSeg"><button class="on" data-v="auto">自主</button><button data-v="coop">协作</button><button data-v="cmd">指令</button><button data-v="manual">接管</button></div>
+        <span class="spacer"></span>
+        <button class="btn sm" data-toast="AI 游戏控制已暂停（F8 恢复）" data-kind="warn" data-icon="pause"><i data-lucide="pause" class="ic-sm"></i>暂停</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ 指标 ============ -->
+  <div class="grid g4" style="margin-top:16px">
+    <a class="card pad hover rise rise-3" href="providers.html">
+      <div class="stat"><span class="k"><i data-lucide="wheat" class="ic-sm t-sun"></i>今日饭碗</span><span class="v">68<small>% 剩余</small></span>
+      <div class="meter sun" style="--v:68%;margin:6px 0 4px"><i></i></div><span class="d">已吃 ¥5.76 / ¥18 · 主力 DeepSeek-V3.2</span></div>
+    </a>
+    <a class="card pad hover rise rise-3" href="voice.html">
+      <div class="stat"><span class="k"><i data-lucide="audio-lines" class="ic-sm t-coral"></i>语音首包</span><span class="v">412<small>ms · P50</small></span>
+      <div class="wave-bars" style="height:20px;margin:4px 0"><i style="--h:30%"></i><i style="--h:55%"></i><i style="--h:40%"></i><i style="--h:70%"></i><i style="--h:45%"></i><i style="--h:60%"></i><i style="--h:35%"></i><i style="--h:80%"></i><i style="--h:50%"></i><i style="--h:42%"></i><i style="--h:65%"></i><i style="--h:38%"></i></div>
+      <span class="d up">↓ 38ms · 本地 GPT-SoVITS 命中</span></div>
+    </a>
+    <a class="card pad hover rise rise-4" href="game.html">
+      <div class="stat"><span class="k"><i data-lucide="gamepad-2" class="ic-sm t-kelp"></i>游戏动作真实完成率</span><span class="v">94.1<small>%</small></span>
+      <div class="row gap-6" style="margin:6px 0 2px"><span class="receipt completed">212</span><span class="receipt uncertain">9</span><span class="receipt failed">4</span></div>
+      <span class="d">以 Mod 回执为准 · 不信台词</span></div>
+    </a>
+    <a class="card pad hover rise rise-4" href="memory.html">
+      <div class="stat"><span class="k"><i data-lucide="database" class="ic-sm t-plum"></i>今天新增记忆</span><span class="v">37<small>条</small></span>
+      <div class="row gap-8" style="margin:6px 0 2px"><span class="mem episodic">21</span><span class="mem semantic">9</span><span class="mem relational">5</span><span class="mem self">2</span></div>
+      <span class="d">2 条不确定，等你确认</span></div>
+    </a>
+  </div>
+
+  <!-- ============ 今天的小鲸 + 她想说 ============ -->
+  <div class="grid" style="grid-template-columns:1.25fr 1fr;margin-top:16px">
+    <section class="card rise rise-5">
+      <div class="card-h"><h3><i data-lucide="notebook-pen"></i>今天的小鲸</h3><span class="sub">由事件流自动编写 · 可追溯到每条回执</span>
+        <div class="tools"><div class="seg" data-group="jn"><button class="on" data-v="all">全部</button><button data-v="game">游戏</button><button data-v="talk">对话</button><button data-v="mem">记忆</button></div></div></div>
+      <div class="card-b">
+        <div class="timeline journal" id="journal">
+          <div class="tl-item now" data-k="game"><span class="tm">22:14</span><b>在星露谷浇东侧防风草</b><p>第 18 / 28 格。连续两次走到石头前卡住，她换了一条绕田埂的路线。</p></div>
+          <div class="tl-item ok" data-k="talk"><span class="tm">21:32</span><b>你说「今晚别下矿了」</b><p>她理解为<span class="chip sm" style="margin:0 4px">建议</span>而非指令，回答：「那我把矿洞挪到后天，正好赶上下雨。」</p></div>
+          <div class="tl-item warn" data-k="game"><span class="tm">20:57</span><b>钓鱼 · 一条鲶鱼脱钩</b><p><span class="receipt uncertain">UNCERTAIN</span> 回执未确认入包，旁观验证后判定失败；已写入心得：「雨天河口，鲶鱼需要更长的拉力」。</p></div>
+          <div class="tl-item ok" data-k="mem"><span class="tm">19:40</span><b>记住了一件事</b><p>「你周三晚上通常写代码到 23 点，这时候不喜欢被打扰。」<span class="mem relational" style="margin-left:6px">关系记忆</span> 置信 0.74</p></div>
+          <div class="tl-item ok" data-k="talk"><span class="tm">18:05</span><b>投喂：吃晚餐</b><p>你点了「投喂」，饭碗 +¥2，她播放了 <span class="mono tiny">吃晚餐.webm</span> 并说「哼，勉强好吃」。</p></div>
+          <div class="tl-item" data-k="game"><span class="tm">09:12</span><b>星露谷 · 新的一天</b><p>读信 → 发现皮埃尔打折 → 改变计划：先买种子，原计划的整理箱子推迟。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="col gap-16">
+      <section class="card rise rise-5">
+        <div class="card-h"><h3><i data-lucide="message-circle-heart"></i>她想和你说</h3><span class="sub">主动但不打扰</span></div>
+        <div class="card-b stack-12" id="suggests">
+          <div class="suggest">
+            <div class="row top gap-12"><div class="tile sm coral"><i data-lucide="coffee" class="ic-sm"></i></div><div style="flex:1"><div class="small"><b>「你已经连续写了 2 小时……要不要起来走走？我可以先帮你记住现在改到哪了。」</b></div><div class="tiny faint" style="margin-top:4px">触发：连续专注 120 分钟 · 将在你下一次停顿时说出</div></div></div>
+            <div class="row gap-6" style="margin-top:10px;justify-content:flex-end"><button class="btn xs ghost" data-dismiss>今天别提醒</button><button class="btn xs" data-dismiss>稍后</button><button class="btn xs primary" data-dismiss data-toast="好，她会在你停顿时轻轻说">好的</button></div>
+          </div>
+          <div class="suggest">
+            <div class="row top gap-12"><div class="tile sm kelp"><i data-lucide="fish" class="ic-sm"></i></div><div style="flex:1"><div class="small"><b>「明天下雨，我想去河口试试钓鲶鱼。你周末想一起完成鱼类收集包吗？」</b></div><div class="tiny faint" style="margin-top:4px">来自游戏 Agent · 影响共同目标「社区中心」，需要你同意</div></div></div>
+            <div class="row gap-6" style="margin-top:10px;justify-content:flex-end"><button class="btn xs" data-dismiss>改天</button><button class="btn xs primary" data-dismiss data-toast="已加入共同目标 · 周末">一起做</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card rise rise-6">
+        <div class="card-h"><h3><i data-lucide="activity"></i>运行健康</h3><span class="tools"><span class="evi real">REAL-DEVICE</span></span></div>
+        <div class="card-b health">
+          <div><span class="dot ok"></span>消息总线 :18760<span class="mono">3 ms</span></div>
+          <div><span class="dot ok"></span>模型网关<span class="mono">粘性路由</span></div>
+          <div><span class="dot ok"></span>audio-ai-worker<span class="mono">mps</span></div>
+          <div><span class="dot ok"></span>BWF Mod :18088<span class="mono">IPv4</span></div>
+          <div><span class="dot warn"></span>OBS 叠加层 :18765<span class="mono">未连接</span></div>
+          <div><span class="dot"></span>dyhub 弹幕<span class="mono">待开播</span></div>
+          <div><span class="dot ok"></span>记忆图谱 SQLite<span class="mono">1,204 节点</span></div>
+          <div><span class="dot ok"></span>进化引擎<span class="mono">独立工作区</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ 六个世界 ============ -->
+  <div class="sec"><h2>鲸屿的六个世界</h2><span class="line"></span><span class="aside">Character · Embodiment · Agent · Life · Creative · Evolution</span></div>
+  <div class="worlds">
+    <a class="world" href="character.html"><div class="tile coral"><i data-lucide="user-round"></i></div><div><div class="n">角色</div><div class="en">Character</div></div><div class="tiny faint">人格 v7 · 记忆 1,204 · 声音 v3</div></a>
+    <a class="world" href="embodiment.html"><div class="tile sea"><i data-lucide="shapes"></i></div><div><div class="n">化身</div><div class="en">Embodiment</div></div><div class="tiny faint">桌宠 · 星露谷 · 舞台 · 114 动作</div></a>
+    <a class="world" href="plugins.html"><div class="tile whale"><i data-lucide="bot"></i></div><div><div class="n">能力</div><div class="en">Agent</div></div><div class="tiny faint">6 Provider · 9 MCP · 14 Skill</div></a>
+    <a class="world" href="game.html"><div class="tile kelp"><i data-lucide="sun-medium"></i></div><div><div class="n">生活</div><div class="en">Digital Life</div></div><div class="tiny faint">星露谷 · 直播 · 社区只读</div></a>
+    <a class="world" href="studio.html"><div class="tile plum"><i data-lucide="wand-sparkles"></i></div><div><div class="n">创作</div><div class="en">Creative</div></div><div class="tiny faint">3 任务进行中 · 1 待审</div></a>
+    <a class="world" href="evolution.html"><div class="tile sun"><i data-lucide="dna"></i></div><div><div class="n">进化</div><div class="en">Evolution</div></div><div class="tiny faint">PR #218 待审批 · L3</div></a>
+  </div>
+</main>
+
+<div class="menu" id="petMenu">
+  <button data-clip-play="点击回应-挠痒咯咯笑"><i data-lucide="hand" class="ic-sm"></i>摸摸头</button>
+  <button data-clip-play="吃晚餐"><i data-lucide="utensils" class="ic-sm"></i>投喂一碗饭 <span class="faint tiny" style="margin-left:auto">+¥2</span></button>
+  <button data-clip-play="优雅女仆舞"><i data-lucide="music-2" class="ic-sm"></i>跳个舞</button>
+  <button data-clip-play="点击回应-傲娇生气"><i data-lucide="flame" class="ic-sm"></i>叫她「大肥鱼」</button>
+  <div class="sep"></div>
+  <button data-clip-play="原地小憩沉眠"><i data-lucide="moon" class="ic-sm"></i>让她小憩</button>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  // 内心戏轮播
+  const thoughts = [
+    '「他今天第三次改同一个 bug 了……先不打扰，等他伸懒腰的时候再递一句吧。」',
+    '「防风草还差十格。石头那条路走不通，绕田埂好了——上次就是在那里卡住的。」',
+    '「饭碗只剩六成多……今晚要省着点想事情。」',
+    '「后天下矿。如果他周末有空，鱼类收集包可以一起做。」',
+  ];
+  let ti = 0; const th = WI.$('#think');
+  setInterval(() => { th.style.opacity = 0; setTimeout(() => { ti = (ti + 1) % thoughts.length; th.textContent = thoughts[ti]; th.style.opacity = 1; }, 400); }, 7000);
+
+  // 情绪点漂移
+  const pt = WI.$('#moodPt');
+  setInterval(() => { pt.style.left = (64 + Math.random() * 12) + '%'; pt.style.top = (30 + Math.random() * 12) + '%'; }, 3500);
+
+  // 逗逗她 → 播放动作 → 回落 idle
+  const pet = WI.$('#heroPet'), clipName = WI.$('#clipName');
+  const stateMap = { '点击回应-挠痒咯咯笑': 'reacting', '吃晚餐': 'reacting', '优雅女仆舞': 'dancing', '点击回应-傲娇生气': 'reacting', '原地小憩沉眠': 'resting' };
+  function setState(s) { WI.$$('#states .chip').forEach((c) => c.classList.toggle('on', c.dataset.s === s)); }
+  let backT;
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-clip-play]'); if (!b) return;
+    const n = b.dataset.clipPlay; pet.src = WI.clip(n); clipName.textContent = n + '.webm'; setState(stateMap[n] || 'reacting');
+    WI.$('#petMenu').classList.remove('on');
+    if (n === '点击回应-傲娇生气') WI.toast('雷区词命中 · 0.1s 反射：喷水反驳，已记入记仇账本', 'warn', 'flame');
+    clearTimeout(backT); backT = setTimeout(() => { pet.src = WI.clip('待机呼吸休闲'); clipName.textContent = '待机呼吸休闲.webm'; setState('idle'); }, 6000);
+  });
+
+  // 控制权模式
+  const modeTips = { auto: '自主模式 · 她自己决定目标，你随时可以建议', coop: '协作模式 · 围绕共同目标协商', cmd: '指令模式 · 优先执行你的明确任务', manual: '手动接管 · AI 不再发送任何游戏动作' };
+  WI.$('#modeSeg').addEventListener('change', (e) => WI.toast(modeTips[e.detail], e.detail === 'manual' ? 'warn' : 'ok', e.detail === 'manual' ? 'hand' : 'gamepad-2'));
+
+  // 日志筛选
+  document.querySelector('[data-group="jn"]').addEventListener('change', (e) => {
+    WI.$$('#journal .tl-item').forEach((it) => it.classList.toggle('hidden', e.detail !== 'all' && it.dataset.k !== e.detail));
+  });
+
+  // 建议卡收起
+  document.addEventListener('click', (e) => { const d = e.target.closest('[data-dismiss]'); if (d) d.closest('.suggest').classList.add('gone'); });
+
+  // 时钟
+  const wk = '日一二三四五六';
+  function tick() { const d = new Date(); WI.$('#clock').textContent = `${d.getMonth() + 1} 月 ${d.getDate()} 日 · 周${wk[d.getDay()]} · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+  tick(); setInterval(tick, 30000);
+</script>
+</body>
+</html>

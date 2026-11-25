@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>进化引擎 · 自主研发与发布 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  /* ── ① 研发平面声明条 ── */
+  .ev-decl { border-left: 3px solid var(--violet); padding: 16px 20px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .ev-decl-ic { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; background: var(--violet-dim); border: 1px solid var(--violet-line); color: var(--violet); flex-shrink: 0; }
+  .ev-decl-ic svg { width: 22px; height: 22px; }
+  .ev-pol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; min-width: 340px; max-width: 520px; }
+  .ev-pol .it { display: flex; flex-direction: column; gap: 4px; padding: 9px 11px; border-radius: var(--r-md); background: var(--inset); border: 1px solid var(--stroke); }
+  .ev-pol .it .h { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; }
+  .ev-pol .it .s { font-size: 10px; color: var(--text-3); line-height: 1.5; }
+
+  /* ── ② 遥测事件卡 ── */
+  .ev-tel { position: relative; border-radius: var(--r-lg); padding: 12px 14px; background: var(--surface); border: 1px solid var(--stroke); }
+  .ev-tel h4 { font-size: 12.5px; font-weight: 700; margin: 8px 0 4px; line-height: 1.45; }
+  .ev-tel .meta { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); line-height: 1.7; }
+
+  /* ── ③ 研发看板 ── */
+  .ev-kb { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .ev-kb-n { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--text-3); background: var(--inset); border: 1px solid var(--stroke); border-radius: 980px; padding: 0 7px; }
+  .ev-kbt { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
+  .ev-kba { display: flex; align-items: center; gap: 5px; margin-top: 7px; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); }
+
+  /* ── ④ 工单详情 ── */
+  .step.gate .b { background: var(--amber-dim); border-color: var(--amber-line); color: var(--amber); box-shadow: 0 0 0 4px var(--amber-dim); }
+  .step.gate .lb { color: var(--amber); font-weight: 650; }
+  .ev-rv { display: flex; gap: 7px; align-items: flex-start; font-size: 11px; color: var(--text-2); line-height: 1.55; padding: 3px 0; }
+  .ev-rv .receipt { flex-shrink: 0; margin-top: 1px; }
+
+  /* ── ⑦ 指标块 ── */
+  .ev-stat { padding: 13px 15px; }
+
+  /* ── ⑧ 回放卡 ── */
+  .ev-rp { border-radius: var(--r-lg); padding: 12px 13px; background: var(--surface); border: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 7px; }
+  .ev-rp-item { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; color: var(--text-2); line-height: 1.5; }
+  .ev-rp-item .rid { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); flex-shrink: 0; padding-top: 1px; }
+  .ev-rp-item .receipt { margin-left: auto; flex-shrink: 0; }
+  .ev-rp-foot { font-family: var(--font-mono); font-size: 9px; color: var(--text-3); border-top: 1px solid var(--stroke); padding-top: 6px; margin-top: 2px; }
+
+  /* ── 解释性虚线框（页内版 .why）── */
+  .ev-why { display: flex; align-items: flex-start; gap: 7px; padding: 9px 13px; border-radius: var(--r-md); background: var(--tide-dim); border: 1px dashed var(--tide-line); font-size: 11.5px; color: var(--text-2); line-height: 1.65; }
+  .ev-why b { color: var(--tide); }
+  .ev-why.red { background: var(--red-dim); border-color: var(--red-line); }
+  .ev-why.red b { color: var(--red); }
+
+  /* ── 右栏 ── */
+  .ev-ah4 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-2); }
+  .ev-ban { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .ev-ban li { display: flex; gap: 8px; align-items: flex-start; font-size: 11.5px; color: var(--text-2); line-height: 1.55; }
+  .ev-ban li svg.lucide { color: var(--red); margin-top: 2px; }
+  .ev-def { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; color: var(--text-2); line-height: 1.55; padding: 5px 0; }
+  .ev-def b { color: var(--text-1); }
+  .ev-def svg.lucide { margin-top: 2px; }
+</style>
+</head>
+<body data-page="evolution" data-crumb="系统面 · 进化引擎">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① 研发平面声明条 ── -->
+    <div class="card ev-decl rise">
+      <div class="ev-decl-ic"><i data-lucide="dna"></i></div>
+      <div style="flex:1;min-width:280px">
+        <div class="row-wrap" style="gap:8px">
+          <b style="font-size:14.5px">研发平面声明 · Evolution Plane</b>
+          <span class="pill pill-violet"><i data-lucide="git-fork" class="xs"></i>独立工作区 whale-isle-dev · 不碰生产目录与凭证</span>
+          <span class="pill pill-green"><span class="dot green pulse"></span>直播中 · 研发策略生效</span>
+        </div>
+        <p class="note" style="margin-top:6px">进化引擎的全部自改行为发生在独立克隆仓库 <span class="mono">whale-isle-dev</span>：与生产目录物理隔离、不挂载密钥；本页是观察窗，<b style="color:var(--text-1)">不提供「跳过审批」入口</b>。审批动作只属于宿主。</p>
+      </div>
+      <div class="ev-pol">
+        <div class="it"><div class="h" style="color:var(--green)"><i data-lucide="microscope" class="xs"></i>可分析 · 可开发 · 可测试</div><div class="s">直播不中断研发平面工作流，遥测持续流入</div></div>
+        <div class="it"><div class="h" style="color:var(--amber)"><i data-lucide="clock" class="xs"></i>代码发布 → 维护窗口</div><div class="s">直播中冻结发布与合并动作（下一窗口 11-26 03:00）</div></div>
+        <div class="it"><div class="h" style="color:var(--tide)"><i data-lucide="refresh-cw" class="xs"></i>安全配置 → 可热更</div><div class="s">经 Zod Schema 校验通过即生效，无需等窗口</div></div>
+      </div>
+    </div>
+
+    <!-- ── ② 遥测流入 ── -->
+    <div class="sec-h"><i data-lucide="satellite-dish" class="sm"></i>遥测流入 · Telemetry Inbox<span class="ln"></span><span class="cnt">今日 27 条 · 脱敏 27/27 · 自动进 Triage</span></div>
+    <div class="grid4 stagger">
+      <div class="ev-tel">
+        <div class="row" style="gap:6px"><span class="pill pill-red" style="font-size:9.5px"><i data-lucide="bug" class="xs"></i>错误</span><span class="sp"></span><span class="pill" style="font-size:9px;padding:1px 7px"><i data-lucide="eye-off" class="xs"></i>已脱敏</span></div>
+        <h4>audio stub 误调用 ×3</h4>
+        <div class="meta">13:12:04 · trace dsh-audio#e91c<br>TTS 未就绪仍走 stub 合成 → 已自动归因</div>
+        <div class="row" style="margin-top:8px;gap:6px"><span class="pill pill-blue" style="font-size:9.5px">→ Triage #214</span><span class="receipt warn">OPEN</span></div>
+      </div>
+      <div class="ev-tel">
+        <div class="row" style="gap:6px"><span class="pill pill-amber" style="font-size:9.5px"><i data-lucide="gauge" class="xs"></i>性能</span><span class="sp"></span><span class="pill" style="font-size:9px;padding:1px 7px"><i data-lucide="eye-off" class="xs"></i>已脱敏</span></div>
+        <h4>气泡链路 p95 380ms</h4>
+        <div class="meta">12:40–13:30 窗口 · 阈值 300ms<br>主因 LLM 流式首包抖动 · 已立工单</div>
+        <div class="row" style="margin-top:8px;gap:6px"><span class="pill pill-blue" style="font-size:9.5px">→ #219 perf-219</span><span class="receipt run">FIXING</span></div>
+      </div>
+      <div class="ev-tel">
+        <div class="row" style="gap:6px"><span class="pill pill-blue" style="font-size:9.5px"><i data-lucide="message-square-warning" class="xs"></i>用户反馈</span><span class="sp"></span><span class="pill" style="font-size:9px;padding:1px 7px"><i data-lucide="eye-off" class="xs"></i>已脱敏</span></div>
+        <h4>「这里有问题」标记 ×2</h4>
+        <div class="meta">11:47 · fb_114 / fb_115<br>附宿主授权截图 2 张 · 仅本地留存 24h</div>
+        <div class="row" style="margin-top:8px;gap:6px"><span class="pill pill-blue" style="font-size:9.5px">→ Triage #213</span><span class="receipt warn">OPEN</span></div>
+      </div>
+      <div class="ev-tel">
+        <div class="row" style="gap:6px"><span class="pill pill-violet" style="font-size:9.5px"><i data-lucide="film" class="xs"></i>回放</span><span class="sp"></span><span class="pill" style="font-size:9px;padding:1px 7px"><i data-lucide="eye-off" class="xs"></i>已脱敏</span></div>
+        <h4>游戏动作序列 #r-881</h4>
+        <div class="meta">10:58 捕获 · 17 动作 · 2m41s<br>矿洞丝血未撤退 · 已稳定复现</div>
+        <div class="row" style="margin-top:8px;gap:6px"><span class="pill pill-violet" style="font-size:9.5px">→ Issue #212</span><span class="receipt run">CAPTURED</span></div>
+      </div>
+    </div>
+
+    <!-- ── ③ 研发看板 ── -->
+    <div class="sec-h"><i data-lucide="workflow" class="sm"></i>研发看板 · Dev Board<span class="ln"></span><span class="cnt">11 卡 · 6 阶段 · 6 agent 在线</span></div>
+    <div class="card" style="padding:14px 16px">
+      <div class="ev-kb stagger">
+        <div class="kb-col">
+          <div class="kb-head"><i data-lucide="inbox" class="xs"></i>Triage<span class="ev-kb-n">3</span></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#213</span><span class="receipt warn">OPEN</span></div><b>「这里有问题」反馈聚类归因</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>triage-bot</div></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#214</span><span class="receipt warn">OPEN</span></div><b>audio stub 误调用归因</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>triage-bot</div></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#215</span><span class="receipt warn">OPEN</span></div><b>弹幕合并窗口与点歌节奏冲突</b><div class="ev-kba"><i data-lucide="help-circle" class="xs"></i>待认领</div></div>
+        </div>
+        <div class="kb-col">
+          <div class="kb-head"><i data-lucide="clipboard-list" class="xs"></i>Plan<span class="ev-kb-n">2</span></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#216</span><span class="receipt run">PLANNING</span></div><b>雷区词库热更通道设计</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>planner</div></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#217</span><span class="receipt run">PLANNING</span></div><b>直播事件漏失 0.2% → &lt;0.05%</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>planner</div></div>
+        </div>
+        <div class="kb-col">
+          <div class="kb-head"><i data-lucide="hammer" class="xs"></i>Worktree · Coding<span class="ev-kb-n">2</span></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#219</span><span class="receipt run">CODING</span></div><b>气泡 p95 380ms → 300ms</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>coder-α · perf-219</div></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#218</span><span class="receipt run">CODING</span></div><b>记忆召回结果去重</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>coder-β · mem-218</div></div>
+        </div>
+        <div class="kb-col">
+          <div class="kb-head"><i data-lucide="flask-conical" class="xs"></i>Test<span class="ev-kb-n">1</span></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#220</span><span class="receipt run">RUNNING</span></div><b>回放回归 r-902 · 语音队列乱序</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>test-runner</div></div>
+        </div>
+        <div class="kb-col">
+          <div class="kb-head"><i data-lucide="eye" class="xs"></i>Review<span class="ev-kb-n">1</span></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">#221</span><span class="receipt run">REVIEWING</span></div><b>独立 Review · 雷区词库 diff 复核</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>reviewer-2</div></div>
+        </div>
+        <div class="kb-col">
+          <div class="kb-head"><i data-lucide="git-pull-request" class="xs"></i>PR · RC<span class="ev-kb-n">2</span></div>
+          <div class="kb-card" style="border-color:var(--amber-line);background:var(--amber-dim)"><div class="ev-kbt"><span class="mono">PR #88</span><span class="receipt warn">L4-HOLD</span></div><b>矿洞丝血不撤退 · Issue #212</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>coder-α · 等人工审批</div></div>
+          <div class="kb-card"><div class="ev-kbt"><span class="mono">RC v2.3.2-rc2</span><span class="receipt run">CANDIDATE</span></div><b>灰度 whale-h1 · 观察中</b><div class="ev-kba"><i data-lucide="bot" class="xs"></i>release-bot</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ④ 工单详情 Issue #212 ── -->
+    <div class="sec-h"><i data-lucide="ticket" class="sm"></i>工单详情 · Issue #212「矿洞丝血不撤退」<span class="ln"></span><span class="cnt">worktree fix-212 · P1 · coder-α</span></div>
+    <div class="card" style="padding:16px 20px 14px">
+      <div class="row-wrap" style="gap:8px;margin-bottom:14px">
+        <span class="pill pill-red">P1 · bug</span>
+        <span class="pill"><i data-lucide="film" class="xs"></i>复现回放 #r-881</span>
+        <span class="pill pill-violet">承办 coder-α</span>
+        <span class="pill"><i data-lucide="git-branch" class="xs"></i>worktree fix-212</span>
+        <span class="sp"></span>
+        <span class="receipt warn"><i data-lucide="lock" class="xs"></i>L4-HOLD · 等待人工审批</span>
+      </div>
+      <div class="steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">复现</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">方案</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">worktree</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">coding 提交</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">测试</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">6</span><span class="lb">独立 Review</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">7</span><span class="lb">PR #88</span></div><span class="link"></span></div>
+        <div class="step gate"><div class="node"><span class="b">8</span><span class="lb">人工审批 L4</span></div></div>
+      </div>
+      <div class="grid3" style="margin-top:14px">
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="film" class="sm tide"></i><b style="font-size:12.5px">① 复现</b><span class="sp"></span><span class="mono k" style="font-size:9.5px">REPLAY #r-881</span></div>
+          <div class="kv"><span class="k">来源</span><span class="v">直播遥测捕获 · 17 动作 · 2m41s</span></div>
+          <div class="kv"><span class="k">触发条件</span><span class="v">生命 &lt;15% 且敌对 ×3</span></div>
+          <div class="kv"><span class="k">根因</span><span class="v" style="color:var(--amber)">旧判据只看体力不看生命</span></div>
+          <div class="note mono" style="font-size:9.5px;margin-top:6px">seed 0x7f3a · 沙盒复演一致 [SIMULATION]</div>
+        </div>
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="lightbulb" class="sm tide"></i><b style="font-size:12.5px">② 方案 · 决策声明</b></div>
+          <p style="font-size:12px;line-height:1.7;color:var(--text-2)">撤退判据改为<b style="color:var(--tide)">「生命 &lt;25% 或 体力 &lt;20%」</b>双阈值 + 0.5s 滞回；<b style="color:var(--text-1)">不采用</b>「直接退出矿洞」——丢层进度，违背升级工具共同计划。回退方案：feature flag <span class="mono">retreat_v2</span> 可热关。</p>
+        </div>
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="git-branch" class="sm tide"></i><b style="font-size:12.5px">③ worktree · fix-212</b><span class="sp"></span><span class="receipt ok">COMMITTED</span></div>
+          <div class="kv"><span class="k">隔离</span><span class="v">whale-isle-dev 独立克隆</span></div>
+          <div class="kv"><span class="k">提交</span><span class="v">3 commits · 9f3ab12 / c41d9e0 / 7d02b3f</span></div>
+          <div class="kv"><span class="k">承办</span><span class="v">coder-α · 12:47 已提交</span></div>
+        </div>
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="flask-conical" class="sm" style="color:var(--green)"></i><b style="font-size:12.5px">④ 测试</b><span class="sp"></span><span class="receipt ok">ALL-GREEN</span></div>
+          <div class="kv"><span class="k">单元测试</span><span class="v">42 pass / 0 fail</span></div>
+          <div class="kv"><span class="k">分支覆盖</span><span class="v">93%（门禁 ≥90%）</span></div>
+          <div class="kv"><span class="k">回放回归</span><span class="v">#r-881 复演 → 撤退 COMPLETED</span></div>
+        </div>
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="eye" class="sm" style="color:var(--violet)"></i><b style="font-size:12.5px">⑤ 独立 Review · 2 条</b><span class="sp"></span><span class="receipt ok">2/2 CLOSED</span></div>
+          <div class="ev-rv"><span class="receipt ok">FIXED</span><span>① 生命 25% 边界抖动 → 加 0.5s 滞回（c41d9e0）</span></div>
+          <div class="ev-rv"><span class="receipt ok">CASE+1</span><span>② 「背包无药」分支未覆盖 → 补回放 case #17</span></div>
+          <div class="note" style="margin-top:5px">reviewer-2 独立于 coder-α，不同 agent 不得自审（10 §11）</div>
+        </div>
+        <div class="inset" style="padding:12px 14px;border-color:var(--amber-line)">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="git-pull-request" class="sm" style="color:var(--amber)"></i><b style="font-size:12.5px">⑥ PR #88</b><span class="sp"></span><span class="receipt warn">L4-HOLD</span></div>
+          <div class="kv"><span class="k">diffstat</span><span class="v"><span style="color:var(--green)">+214</span> <span style="color:var(--red)">−66</span> · 6 files</span></div>
+          <div class="kv"><span class="k">门禁</span><span class="v">verify:gate 4/4 · 13:41</span></div>
+          <div class="kv"><span class="k">状态</span><span class="v" style="color:var(--amber)">等待人工审批（L4 门禁）</span></div>
+        </div>
+      </div>
+      <div class="hairline" style="margin:13px 0 11px"></div>
+      <div class="row-wrap" style="gap:8px">
+        <span class="receipt ok">GATE 1 类型·边界</span>
+        <span class="receipt ok">GATE 2 许可·密钥</span>
+        <span class="receipt ok">GATE 3 单测 93%</span>
+        <span class="receipt ok">GATE 4 回环 E2E</span>
+        <span class="sp"></span>
+        <span class="note mono" style="font-size:10px">审批人＝宿主 · 批准写入审计 aud_7c21 · AI 无自批权限（10 §11）</span>
+      </div>
+    </div>
+
+    <!-- ── ⑤ 自主等级 ── -->
+    <div class="sec-h"><i data-lucide="chevrons-up" class="sm"></i>自主等级 · Autonomy Ladder<span class="ln"></span><span class="cnt">10 §12 · 当前 L3 · 上次升降评审 11-18</span></div>
+    <div class="card" style="padding:14px 18px">
+      <div class="ladder-item"><span class="lv" style="color:var(--text-3)">L1</span><div style="flex:1"><div class="t">发现异常 → 报告</div><div class="d">只聚类与上报（Triage 卡），不触碰代码与配置</div></div></div>
+      <div class="ladder-item"><span class="lv" style="color:var(--text-3)">L2</span><div style="flex:1"><div class="t">诊断与建议</div><div class="d">出具修复草案与影响面评估，宿主确认后进入 L3 流水</div></div></div>
+      <div class="ladder-item on"><span class="lv" style="color:var(--tide)">L3</span><div style="flex:1"><div class="row" style="gap:6px"><span class="t">独立修复</span><span class="pill pill-tide" style="font-size:9px">当前等级</span></div><div class="d">whale-isle-dev 内自主 分析→开发→测试→Review，产物不直接进主干 —— Issue #212 即由本层完成</div></div></div>
+      <div class="ladder-item" style="border-left-color:var(--amber)"><span class="lv" style="color:var(--amber)">L4</span><div style="flex:1"><div class="row" style="gap:6px"><span class="t">合入主干</span><span class="pill pill-amber" style="font-size:9px">仅低风险规则化变更</span></div><div class="d">规则 / 文案 / 配置默认值可自动合入；代码变更需人工审批 —— PR #88 正卡在此门禁</div></div></div>
+      <div class="ladder-item" style="border-left-color:var(--red);margin-bottom:0"><span class="lv" style="color:var(--red)">L5</span><div style="flex:1"><div class="row" style="gap:6px"><span class="t">正式发布 · 高权限变更</span><span class="pill pill-red" style="font-size:9px">人工审批</span></div><div class="d">发布列车与回滚仅在维护窗口执行；高影响操作永远由宿主把关</div></div></div>
+      <div class="ev-why" style="margin-top:10px"><i data-lucide="lightbulb" class="sm"></i><span><b>为什么分级：</b>等级越高，副作用半径越大。L3 的一切产物都停留在 whale-isle-dev，跨过 L4 才触碰真实运行面；等级升降由安全治理评审决定，<b>进化引擎不得自评升级</b>。</span></div>
+    </div>
+
+    <!-- ── ⑥ 发布列车 ── -->
+    <div class="sec-h"><i data-lucide="rocket" class="sm"></i>发布列车 · Release Train<span class="ln"></span><span class="cnt">v2.3.2-rc2 · now=灰度 · 窗口 11-26 03:00–05:00</span></div>
+    <div class="card" style="padding:16px 20px 14px">
+      <div class="row-wrap" style="gap:8px;margin-bottom:14px">
+        <b style="font-size:13.5px">v2.3.2-rc2 → 全量</b>
+        <span class="pill pill-blue">RC v2.3.2-rc2</span>
+        <span class="pill">上一稳定 v2.3.1</span>
+        <span class="receipt run">CANDIDATE · 灰度 whale-h1</span>
+        <span class="sp"></span>
+        <span class="pill"><i data-lucide="timer" class="xs"></i>灰度 03:14 起 · 已 10h31m</span>
+      </div>
+      <div class="steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">RC 构建</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">2</span><span class="lb">灰度 · 1 台</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">3</span><span class="lb">观察指标 24h</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">4</span><span class="lb">全量</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">5</span><span class="lb">回滚待命</span></div></div>
+      </div>
+      <div class="grid2" style="margin-top:14px">
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="clock" class="sm" style="color:var(--amber)"></i><b style="font-size:12.5px">维护窗口 Maintenance Window</b></div>
+          <p class="note">代码发布只允许在维护窗口执行：<b style="color:var(--text-1)">下一窗口 2026-11-26 03:00–05:00</b>；直播中冻结一切发布与合并动作。例外：安全配置经 Zod Schema 校验通过后可热更，无需等窗口。</p>
+        </div>
+        <div class="inset" style="padding:12px 14px;border-color:var(--red-line)">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="undo-2" class="sm" style="color:var(--red)"></i><b style="font-size:12.5px">回滚预案 Rollback</b><span class="sp"></span><button class="btn sm soft-red" data-ev-toast="演示交互：实机回滚需维护窗口 + 二次确认"><i data-lucide="undo-2" class="xs"></i>一键回滚 v2.3.1</button></div>
+          <div class="kv"><span class="k">上一稳定</span><span class="v">v2.3.1 · 快照 11-20 · sha a91f0c</span></div>
+          <div class="kv"><span class="k">演练</span><span class="v">11-20 通过 · RTO 3m42s</span></div>
+          <div class="kv"><span class="k">触发条件</span><span class="v">安全错误率 &gt;0 · 成功率 &lt;80% · 宿主指令</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ⑦ 评估指标盘 ── -->
+    <div class="sec-h"><i data-lucide="gauge" class="sm"></i>评估指标盘 · Eval Board<span class="ln"></span><span class="cnt">快照 13:45 · 每 15min · 定义见右栏</span></div>
+    <div class="grid3 stagger">
+      <div class="inset ev-stat"><div class="stat"><div class="n" style="color:var(--tide)">87%</div><div class="l">游戏任务成功率 · 目标 ≥85%</div></div><div class="meter" style="margin-top:8px"><i style="width:87%"></i></div><div class="note mono" style="font-size:9.5px;margin-top:6px">↑ +1.2pt 周环比 · 样本 312 任务 · 7d</div></div>
+      <div class="inset ev-stat"><div class="stat"><div class="n" style="color:var(--blue)">0.8s</div><div class="l">语音首包延迟 · 目标 ≤1.0s</div></div><div class="meter" style="margin-top:8px"><i style="width:80%;background:var(--blue)"></i></div><div class="note mono" style="font-size:9.5px;margin-top:6px">预算占用 80% · p95 1.2s · 可打断</div></div>
+      <div class="inset ev-stat"><div class="stat"><div class="n" style="color:var(--green)">0.2%</div><div class="l">直播事件漏失 · 目标 &lt;0.5%</div></div><div class="meter" style="margin-top:8px"><i style="width:40%;background:var(--green)"></i></div><div class="note mono" style="font-size:9.5px;margin-top:6px">弹幕/礼物/点歌去重后 · 24h 窗口</div></div>
+      <div class="inset ev-stat"><div class="stat"><div class="n" style="color:var(--violet)">91%</div><div class="l">记忆回忆准确率 · 基线 88%</div></div><div class="meter" style="margin-top:8px"><i style="width:91%;background:var(--violet)"></i></div><div class="note mono" style="font-size:9.5px;margin-top:6px">抽检 200 条 · 评审集 v3 · 5 类记忆</div></div>
+      <div class="inset ev-stat"><div class="stat"><div class="n" style="color:var(--green)">0</div><div class="l">桌宠掉帧次数 · 近 24h</div></div><div class="note mono" style="font-size:9.5px;margin-top:10px">60fps 稳定 · VP9-Alpha 双 video 交叉淡入</div></div>
+      <div class="inset ev-stat"><div class="stat"><div class="n" style="color:var(--tide)">96%</div><div class="l">资产导出成功率 · 本周</div></div><div class="meter" style="margin-top:8px"><i style="width:96%"></i></div><div class="note mono" style="font-size:9.5px;margin-top:6px">118/123 · 平均 46s/件 · 失败 5 件已归因</div></div>
+    </div>
+    <div class="card" style="margin-top:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;border-color:var(--red-line)">
+      <i data-lucide="shield-alert" class="lg" style="color:var(--red)"></i>
+      <div style="flex:1">
+        <div class="row" style="gap:8px"><b style="font-size:12.5px">安全错误率 <span class="num" style="color:var(--green)">0</span></b><span class="pill pill-green" style="font-size:9.5px">近 30 天</span></div>
+        <div class="note" style="font-size:10.5px;margin-top:2px">定义：未经授权的副作用 · 越权操作 · 凭证泄漏 · 伪造回执 —— 任何非零立即冻结发布列车并评估回滚（10 §13）</div>
+      </div>
+      <span class="receipt ok">SEC-0 · 30d</span>
+    </div>
+
+    <!-- ── ⑧ 回放系统 ── -->
+    <div class="sec-h"><i data-lucide="history" class="sm"></i>回放系统 · Replay Library<span class="ln"></span><span class="cnt">94 段 · 脱敏事件 + Mock Provider</span></div>
+    <div class="grid4 stagger">
+      <div class="ev-rp">
+        <div class="row"><i data-lucide="pickaxe" class="sm tide"></i><b style="font-size:12.5px">游戏动作</b><span class="sp"></span><span class="pill" style="font-size:9px">47 段</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-881</span><span style="flex:1">矿洞丝血未撤退 · 17 动作 · 已修复验证</span><span class="receipt ok">FIXED</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-903</span><span style="flex:1">寻路卡石头 → uncertain 绕行复归</span><span class="receipt ok">PASS</span></div>
+        <div class="ev-rp-foot">provider: stardew-mcp-simulator</div>
+      </div>
+      <div class="ev-rp">
+        <div class="row"><i data-lucide="radio" class="sm" style="color:var(--violet)"></i><b style="font-size:12.5px">直播事件</b><span class="sp"></span><span class="pill" style="font-size:9px">23 段</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-874</span><span style="flex:1">弹幕风暴 20 条/s · 6min 压测注意力队列</span><span class="receipt ok">PASS</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-889</span><span style="flex:1">雷区词触发 → 0.1s 喷水反驳链路</span><span class="receipt ok">PASS</span></div>
+        <div class="ev-rp-foot">provider: danmaku-storm-replay</div>
+      </div>
+      <div class="ev-rp">
+        <div class="row"><i data-lucide="mic" class="sm" style="color:var(--blue)"></i><b style="font-size:12.5px">语音队列</b><span class="sp"></span><span class="pill" style="font-size:9px">15 段</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-902</span><span style="flex:1">乱序注入 · 打断与语音锁 TTL 释放</span><span class="receipt ok">PASS</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-871</span><span style="flex:1">双端语音锁竞争 · 边界待补 case</span><span class="receipt warn">EDGE</span></div>
+        <div class="ev-rp-foot">provider: voice-host mock</div>
+      </div>
+      <div class="ev-rp">
+        <div class="row"><i data-lucide="puzzle" class="sm" style="color:var(--amber)"></i><b style="font-size:12.5px">插件调用</b><span class="sp"></span><span class="pill" style="font-size:9px">9 段</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-856</span><span style="flex:1">点歌插件幂等重放 · 同曲去重</span><span class="receipt ok">PASS</span></div>
+        <div class="ev-rp-item"><span class="rid">#r-842</span><span style="flex:1">资产导出 Mock Provider 重放</span><span class="receipt ok">PASS</span></div>
+        <div class="ev-rp-foot">provider: plugin-sandbox mock</div>
+      </div>
+    </div>
+    <div class="ev-why red" style="margin-top:12px"><i data-lucide="shield-alert" class="sm"></i><span><b>回放边界：</b>重放一律使用脱敏事件 + Mock Provider（游戏 → stardew-mcp-simulator · 直播 → danmaku-storm-replay）；<b>真实支付、发布、私信等外部副作用绝不重放</b>——此类调用在回放中替换为 Mock 回执并强制携带 [SIMULATION] 标记。</span></div>
+
+  </div></main>
+
+  <!-- ── 右栏：治理与边界 ── -->
+  <aside class="wv2-aside">
+    <div class="card" style="padding:13px 15px">
+      <h4 class="ev-ah4"><i data-lucide="ban" class="sm" style="color:var(--red)"></i>绝对禁止清单 · 10 §11</h4>
+      <ul class="ev-ban">
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得跳过测试或伪造「通过」证据；Mock 证据不得写成真机验收</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得自动修改安全策略并自我审批</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得删除、改写或绕过审计记录</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得在运行期自我修改业务代码</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得接触生产目录与凭证 / 密钥</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得重放支付、发布、私信等真实外部副作用</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得越过 L4 人工审批门禁合并代码</span></li>
+        <li><i data-lucide="octagon-x" class="xs"></i><span>不得把模拟指标（码率 / 观看 / 时长）当真实数据上报</span></li>
+      </ul>
+    </div>
+    <div class="card" style="padding:13px 15px">
+      <h4 class="ev-ah4"><i data-lucide="ruler" class="sm tide"></i>指标怎么定义</h4>
+      <p class="note" style="margin-bottom:6px">每个功能进入灰度前，先在工单里写清四个刻度——写不清就不许上发布列车：</p>
+      <div class="ev-def"><i data-lucide="circle-check-big" class="xs" style="color:var(--green)"></i><span><b>成功率</b> — 什么算「做完」？以真实回执为准，不以台词为准</span></div>
+      <div class="ev-def"><i data-lucide="timer" class="xs" style="color:var(--blue)"></i><span><b>延迟</b> — p50 / p95 各多少（如语音首包 ≤1.0s）</span></div>
+      <div class="ev-def"><i data-lucide="coins" class="xs" style="color:var(--amber)"></i><span><b>成本</b> — Token 与时长预算，按饭碗扣费口径计</span></div>
+      <div class="ev-def"><i data-lucide="shield-alert" class="xs" style="color:var(--red)"></i><span><b>安全错误率</b> — 越权与未授权副作用计数，恒要求 0</span></div>
+    </div>
+    <div class="card" style="padding:13px 15px;border-style:dashed">
+      <h4 class="ev-ah4"><i data-lucide="folder-git-2" class="sm"></i>为什么独立仓库 whale-isle-dev</h4>
+      <p class="note">进化引擎只在独立克隆仓库 <span class="mono">whale-isle-dev</span> 工作：与生产目录物理隔离、不挂载凭证；每张工单一个 worktree 分支；PR 只能由宿主在维护窗口合并。<b style="color:var(--text-1)">本页是观察窗，不是遥控器。</b></p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  window.pageInit = function () {
+    document.querySelectorAll('[data-ev-toast]').forEach(function (el) {
+      el.addEventListener('click', function () { if (window.W && W.toast) W.toast(el.getAttribute('data-ev-toast')); });
+    });
+  };
+  lucide.createIcons();
+  if (window.pageInit) pageInit();
+</script>
+</body>
+</html>

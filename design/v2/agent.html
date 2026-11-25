@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>智能体 · 模型 · Harness · MCP — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .ag-gic { width:30px; height:30px; border-radius:10px; display:grid; place-items:center; background:var(--tide-dim); border:1px solid var(--tide-line); color:var(--tide); flex-shrink:0; }
+  .ag-gic.violet { background:var(--violet-dim); border-color:var(--violet-line); color:var(--violet); }
+  .ag-gic.blue { background:var(--blue-dim); border-color:var(--blue-line); color:var(--blue); }
+  .ag-gic.amber { background:var(--amber-dim); border-color:var(--amber-line); color:var(--amber); }
+  .ag-pgroup { padding:14px 16px; }
+  .ag-plist { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:11px; }
+  .ag-plist.one { grid-template-columns:1fr; }
+  .ag-pcard { background:var(--inset); border:1px solid var(--stroke); border-radius:var(--r-md); padding:10px 12px; }
+  .ag-pcard.dashed { border-style:dashed; }
+  .ag-pcard .kv { padding:2px 0; }
+  .ag-pcard .kv .k { min-width:46px; font-size:10px; }
+  .ag-pcard .kv .v { font-size:10.5px; }
+  .ag-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; }
+  .ag-chips span { font-family:var(--font-mono); font-size:9px; padding:2px 7px; border-radius:6px; background:var(--inset); border:1px solid var(--stroke); color:var(--text-2); }
+  .ag-chips span.hot { color:var(--tide); border-color:var(--tide-line); background:var(--tide-dim); }
+  .ag-md { background:var(--inset); border:1px solid var(--stroke); border-radius:var(--r-md); padding:9px 12px; font-family:var(--font-mono); font-size:10px; line-height:1.8; color:var(--text-2); white-space:pre-wrap; word-break:break-all; }
+  .ag-md b { color:var(--tide); font-weight:600; }
+  .ag-why { display:inline-flex; align-items:flex-start; gap:7px; padding:8px 12px; border-radius:var(--r-md); background:var(--tide-dim); border:1px dashed var(--tide-line); font-size:11.5px; color:var(--text-2); line-height:1.6; }
+  .ag-why b { color:var(--tide); }
+  .ag-hcard { padding:13px 15px; }
+  .ag-hcard .kv { padding:2.5px 0; }
+  .ag-hcard .kv .k { min-width:46px; font-size:10px; }
+  .ag-hcard .kv .v { font-size:10.5px; }
+  .ag-ascard { padding:13px 15px; }
+  .ag-ascard h4 { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; margin-bottom:10px; color:var(--text-2); }
+  .ag-swrow { display:flex; align-items:center; justify-content:space-between; padding:5px 0; font-size:12px; }
+  .ag-tool { display:flex; align-items:flex-start; gap:9px; padding:7px 0; border-bottom:1px solid var(--stroke); }
+  .ag-tool:last-of-type { border-bottom:none; }
+  .ag-tool .nm { font-family:var(--font-mono); font-size:11px; color:var(--text-1); }
+  .ag-lv-item { margin-bottom:6px; }
+  .ag-lv-item:last-child { margin-bottom:0; }
+</style>
+</head>
+<body data-page="agent" data-crumb="能力面 · 智能体">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① Provider Registry ── -->
+    <div class="sec-h"><i data-lucide="server" class="sm"></i>Provider Registry · 供应商注册表<span class="ln"></span><span class="cnt">4 组 · 7 provider · 认证统一走系统凭证库 kc_*</span></div>
+
+    <div class="grid2 stagger">
+      <!-- LLM 组 -->
+      <div class="card ag-pgroup">
+        <div class="row">
+          <span class="ag-gic"><i data-lucide="brain" class="sm"></i></span>
+          <b style="font-size:12.5px">LLM · 文本推理</b>
+          <span class="note" style="font-size:10px">对话 / 决策 / 规划</span>
+          <span class="sp"></span><span class="pill" style="font-size:9px">2 providers</span>
+        </div>
+        <div class="ag-plist">
+          <div class="ag-pcard">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12.5px">DeepSeek-V4</b><span class="pill pill-tide" style="font-size:9px">主模型</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">API Key · 凭证库 kc_7d2a</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">国内直连 · cn-north</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">¥2/1M in · ¥8/1M out</span></div>
+            <div class="kv"><span class="k">首字</span><span class="v">412ms · 24h 错误率 0.2%</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt ok">PASS · 32 用例</span><span class="pill" style="font-size:9px"><span class="dot green"></span>在线</span></div>
+          </div>
+          <div class="ag-pcard">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12.5px">Claude</b><span class="pill pill-blue" style="font-size:9px">辅助 · 规划</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">OAuth · 凭证库 kc_11d9</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">海外 · 专线中转 gw-sh-01</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">按量 · 月预算上限 $50</span></div>
+            <div class="kv"><span class="k">首字</span><span class="v">1.9s · reasoning 规划档</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt ok">PASS · 12 用例</span><span class="pill" style="font-size:9px"><span class="dot green"></span>在线</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Image 组 -->
+      <div class="card ag-pgroup">
+        <div class="row">
+          <span class="ag-gic violet"><i data-lucide="image" class="sm"></i></span>
+          <b style="font-size:12.5px">Image · 图像生成</b>
+          <span class="note" style="font-size:10px">素材 / 一致性卡</span>
+          <span class="sp"></span><span class="pill" style="font-size:9px">2 providers</span>
+        </div>
+        <div class="ag-plist">
+          <div class="ag-pcard">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12px">本地 Coding Agent 入口</b><span class="pill pill-tide" style="font-size:9px">主通道</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">本地进程 · 无密钥</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">localhost · 沙盒内</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">计入饭碗 Token 预算</span></div>
+            <div class="kv"><span class="k">用途</span><span class="v">资产管线出图 · Harness 编排</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt ok">能力探测通过 · 3/3</span></div>
+          </div>
+          <div class="ag-pcard dashed">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12px">在线 API</b><span class="pill" style="font-size:9px">按量计费</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">API Key · 凭证库 kc_91c3</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">国内 · 图像端点</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">¥0.20/张 · 按量计费</span></div>
+            <div class="kv"><span class="k">额度</span><span class="v" style="color:var(--text-3)">未知 / 不可查询 · 04 §10：不编造余额</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt warn">未实测 · 验收排期 11-28</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D 组 -->
+      <div class="card ag-pgroup">
+        <div class="row">
+          <span class="ag-gic amber"><i data-lucide="box" class="sm"></i></span>
+          <b style="font-size:12.5px">3D · 资产生成</b>
+          <span class="note" style="font-size:10px">道具 / 场景粗模</span>
+          <span class="sp"></span><span class="pill" style="font-size:9px">1 provider</span>
+        </div>
+        <div class="ag-plist one">
+          <div class="ag-pcard">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12.5px">Hunyuan3D</b><span class="pill pill-amber" style="font-size:9px">队列制</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">API Key · 凭证库 kc_5e08</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">国内 · 对象存储回传</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">¥1.5/次 · 队列制</span></div>
+            <div class="kv"><span class="k">队列</span><span class="v">等待 41s · 单次 3–8 min</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt warn">限流 · 2 req/min</span><span class="pill" style="font-size:9px"><span class="dot amber"></span>降级可用</span></div>
+          </div>
+        </div>
+        <p class="note" style="margin-top:9px">限流期间自动排队并在事件流播报进度，不阻塞直播与桌宠主链路；琥珀点 = 可用但降级。</p>
+      </div>
+
+      <!-- TTS 组 -->
+      <div class="card ag-pgroup">
+        <div class="row">
+          <span class="ag-gic blue"><i data-lucide="mic" class="sm"></i></span>
+          <b style="font-size:12.5px">TTS · 语音合成</b>
+          <span class="note" style="font-size:10px">桌宠语音 / 歌声干声</span>
+          <span class="sp"></span><span class="pill" style="font-size:9px">2 providers</span>
+        </div>
+        <div class="ag-plist">
+          <div class="ag-pcard">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12.5px">CosyVoice 本地</b><span class="pill pill-tide" style="font-size:9px">主合成</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">本地进程 · 无密钥</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">本地 GPU · 占显存 4.2GB</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">免费 · 无按量费用</span></div>
+            <div class="kv"><span class="k">首包</span><span class="v">0.8s · 支持随时打断</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt ok">PASS · 36 用例</span><span class="pill" style="font-size:9px"><span class="dot green"></span>在线</span></div>
+          </div>
+          <div class="ag-pcard">
+            <div class="row" style="justify-content:space-between"><b style="font-size:12.5px">云端兜底</b><span class="pill" style="font-size:9px">兜底</span></div>
+            <div class="kv"><span class="k">认证</span><span class="v">API Key · 凭证库 kc_2b71</span></div>
+            <div class="kv"><span class="k">地域</span><span class="v">国内 · 同区容灾</span></div>
+            <div class="kv"><span class="k">成本</span><span class="v">¥0.30/万字符</span></div>
+            <div class="kv"><span class="k">角色</span><span class="v">本地不可用 / 长文本时切换</span></div>
+            <div class="row" style="margin-top:7px;gap:6px"><span class="receipt warn">未实测 · 兜底未启用</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ② 模型路由 ── -->
+    <div class="sec-h"><i data-lucide="route" class="sm"></i>模型路由 · Model Routing<span class="ln"></span><span class="cnt">route.tbl v1.7 · 2026-11-22 修订 · 合计 480k/日 ≤ 500k 饭碗</span></div>
+    <div class="card rise" style="padding:4px 14px 2px">
+      <table class="tbl">
+        <thead><tr><th>任务类型</th><th>主模型</th><th>回退链</th><th>预算上限</th><th>主模型命中 · 7d</th></tr></thead>
+        <tbody>
+          <tr><td><b>闲聊</b> <span class="mono k" style="font-size:9.5px">chat</span></td><td class="mono" style="font-size:11px">DeepSeek-V4 · temp 0.8</td><td class="mono" style="font-size:11px;color:var(--text-2)">GLM-5-Flash</td><td class="mono" style="font-size:11px">8k/次 · 150k/日</td><td><span class="conf"><span class="meter"><i style="width:97%"></i></span>97.1%</span></td></tr>
+          <tr><td><b>游戏决策</b> <span class="mono k" style="font-size:9.5px">game</span></td><td class="mono" style="font-size:11px">DeepSeek-V4 · reasoning on</td><td class="mono" style="font-size:11px;color:var(--text-2)">Claude（规划档）</td><td class="mono" style="font-size:11px">12k/次 · 180k/日</td><td><span class="conf"><span class="meter"><i style="width:95%"></i></span>94.8%</span></td></tr>
+          <tr><td><b>歌声</b> <span class="mono k" style="font-size:9.5px">song</span></td><td class="mono" style="font-size:11px">DeepSeek-V4（歌词）→ CosyVoice（合成）</td><td class="mono" style="font-size:11px;color:var(--text-2)">云端 TTS 兜底</td><td class="mono" style="font-size:11px">25k/首 · 60k/日</td><td><span class="conf"><span class="meter"><i style="width:98%;background:var(--green)"></i></span>98.6%</span></td></tr>
+          <tr><td><b>攻略检索</b> <span class="mono k" style="font-size:9.5px">kb</span></td><td class="mono" style="font-size:11px">DeepSeek-V4 + 本地 RAG</td><td class="mono" style="font-size:11px;color:var(--text-2)">GLM-5-Flash（摘要）</td><td class="mono" style="font-size:11px">6k/次 · 40k/日</td><td><span class="conf"><span class="meter"><i style="width:91%;background:var(--blue)"></i></span>91.3%</span></td></tr>
+          <tr><td><b>视觉理解</b> <span class="mono k" style="font-size:9.5px">vision</span></td><td class="mono" style="font-size:11px">Qwen3-VL-Plus（在线）</td><td class="mono" style="font-size:11px;color:var(--text-2)">本地 MiniCPM-V 4.5</td><td class="mono" style="font-size:11px">10k/次 · 50k/日</td><td><span class="conf"><span class="meter"><i style="width:89%;background:var(--violet)"></i></span>89.4%</span></td></tr>
+        </tbody>
+      </table>
+      <p class="note" style="padding:8px 10px 10px">回退触发：连续 2 次 5xx · 首字延迟 &gt; 8s · 当日预算触顶。切换自动播报于事件流，仅换执行模型，<b style="color:var(--text-1)">不更换 persona 上下文模板</b>。</p>
+    </div>
+
+    <!-- ── ③ Harness 适配（ACP） ── -->
+    <div class="sec-h"><i data-lucide="workflow" class="sm"></i>Harness 适配 · ACP<span class="ln"></span><span class="cnt">接入等级：配置级 &lt; 协议级 &lt; 执行级 &lt; 深度集成（预留未开放）</span></div>
+    <div class="grid3 stagger">
+      <div class="card card-hover ag-hcard">
+        <div class="row" style="margin-bottom:8px">
+          <span class="ag-gic violet"><i data-lucide="square-terminal" class="sm"></i></span>
+          <div style="flex:1"><b style="font-size:12.5px">Claude Code</b><div class="note" style="font-size:10px">审查 · 方案评审 · 危险改动把关</div></div>
+          <span class="pill pill-blue" style="font-size:9px">协议级</span>
+        </div>
+        <div class="kv"><span class="k">接入</span><span class="v">ACP 1.2 · stdio · 只读会话</span></div>
+        <div class="kv"><span class="k">测试</span><span class="v"><span class="receipt ok">通过 · 47/47</span></span></div>
+        <div class="kv"><span class="k">回归</span><span class="v">2026-11-20 · 累计会话 21</span></div>
+        <p class="note" style="margin-top:7px">用途分工：审查给 Claude——分析结论以「建议回执」进入决策上下文，不直接执行任何写操作。</p>
+      </div>
+      <div class="card card-hover ag-hcard">
+        <div class="row" style="margin-bottom:8px">
+          <span class="ag-gic"><i data-lucide="terminal" class="sm"></i></span>
+          <div style="flex:1"><b style="font-size:12.5px">Codex</b><div class="note" style="font-size:10px">开发任务 · 写码 · 跑测试</div></div>
+          <span class="pill pill-tide" style="font-size:9px">执行级</span>
+        </div>
+        <div class="kv"><span class="k">接入</span><span class="v">ACP 1.2 · sandbox workspace-write</span></div>
+        <div class="kv"><span class="k">测试</span><span class="v"><span class="receipt ok">通过 · 112/118</span></span></div>
+        <div class="kv"><span class="k">回归</span><span class="v">2026-11-23 · 6 项跳过（网络类）· 本周 PR 9</span></div>
+        <p class="note" style="margin-top:7px">用途分工：开发任务给 Codex——产物走独立分支 + 人工 Review 合入，不直推主分支。</p>
+      </div>
+      <div class="card card-hover ag-hcard">
+        <div class="row" style="margin-bottom:8px">
+          <span class="ag-gic blue"><i data-lucide="telescope" class="sm"></i></span>
+          <div style="flex:1"><b style="font-size:12.5px">OpenCode</b><div class="note" style="font-size:10px">开放研究 · 资料汇总</div></div>
+          <span class="pill" style="font-size:9px">配置级</span>
+        </div>
+        <div class="kv"><span class="k">接入</span><span class="v">adapter 0.3 · 兼容层 · 只读检索</span></div>
+        <div class="kv"><span class="k">测试</span><span class="v"><span class="receipt warn">未实测 · 不宣称通过</span></span></div>
+        <div class="kv"><span class="k">排期</span><span class="v">验收 2026-11-28 · 会话 5 全部人工审阅</span></div>
+        <p class="note" style="margin-top:7px">用途分工：研究给 OpenCode——输出仅作参考素材进上下文，未经审阅不参与任何决策。</p>
+      </div>
+    </div>
+    <div class="ag-why" style="margin-top:12px"><i data-lucide="shield-check" class="sm"></i><span><b>返回结果不接管角色身份：</b>Harness 产物一律以「工具回执」进入上下文队列——不写入 persona、不获得语音锁与直播间发言权、不持有 ControlLease；对观众来说，署名永远只是「小莓」。</span></div>
+
+    <!-- ── ④ MCP 双向 ── -->
+    <div class="sec-h"><i data-lucide="cable" class="sm"></i>MCP 双向 · Client / Server<span class="ln"></span><span class="cnt">JSON-RPC 2.0 · 仅本地回环 · token 鉴权</span></div>
+    <div class="grid2 stagger">
+      <!-- Client -->
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:11px">
+          <span class="ag-gic"><i data-lucide="zap" class="sm"></i></span>
+          <b style="font-size:12.5px">MCP Client · 鲸屿调用外部</b>
+          <span class="sp"></span><span class="pill pill-green" style="font-size:9.5px"><span class="dot green"></span>已连 2 · tools 17</span>
+        </div>
+        <div class="inset" style="padding:11px 13px">
+          <div class="row"><span class="dot green"></span><b class="mono" style="font-size:11.5px">stardew-bwf</b><span class="sp"></span><span class="pill" style="font-size:9px">12 tools</span></div>
+          <div class="note mono" style="font-size:9.5px;margin-top:5px">stdio → 127.0.0.1:18080 · BlindWhaleFarmer 游戏桥</div>
+          <div class="ag-chips"><span class="hot">game.get_state</span><span class="hot">game.do_action</span><span>game.path_to</span><span>game.craft</span><span>game.container_move</span><span>game.lock_status</span><span>+6</span></div>
+          <div class="note" style="margin-top:7px">最近调用 <span class="mono">#a421</span> do_action → <span class="receipt ok">COMPLETED</span> 0.42s</div>
+        </div>
+        <div class="inset" style="padding:11px 13px;margin-top:9px">
+          <div class="row"><span class="dot green"></span><b class="mono" style="font-size:11.5px">whale-memory</b><span class="sp"></span><span class="pill" style="font-size:9px">5 tools</span></div>
+          <div class="note mono" style="font-size:9.5px;margin-top:5px">stdio · SQLite 只读副本 · 记仇账本 / 长期记忆 / Token 流水</div>
+          <div class="ag-chips"><span class="hot">mem_search</span><span>mem_pin</span><span>ledger_read</span><span>token_flow</span><span>song_cache</span></div>
+          <div class="note" style="margin-top:7px">最近调用 ledger_read → 243 条（含 pinned 4 条）</div>
+        </div>
+        <div class="inset" style="padding:9px 13px;margin-top:9px;border-style:dashed;display:flex;align-items:center;gap:8px">
+          <span class="dot off"></span><b class="mono" style="font-size:11px">dyhub-danmaku</b>
+          <span class="note" style="flex:1;font-size:10.5px">弹幕主线走独立事件流 · 不经 MCP</span>
+          <span class="pill" style="font-size:9px">未启用</span>
+        </div>
+      </div>
+
+      <!-- Server -->
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:6px">
+          <span class="ag-gic"><i data-lucide="server" class="sm"></i></span>
+          <b style="font-size:12.5px">MCP Server · 鲸屿对外工具</b>
+          <span class="sp"></span><span class="pill pill-blue" style="font-size:9.5px">5 tools · 默认只读</span>
+        </div>
+        <div class="note mono" style="font-size:9.5px;margin:2px 0 4px">transport: stdio + token 鉴权 · Schema 字段白名单导出 · 面向 Harness / 桌面插件</div>
+        <div class="ag-tool">
+          <i data-lucide="user" class="xs" style="color:var(--text-3);margin-top:3px"></i>
+          <div style="flex:1"><b class="nm">query_character_status</b><div class="note" style="font-size:10.5px">查询角色状态 · 情绪 / 社交能量 / 当前任务摘要</div></div>
+          <span class="pill pill-blue" style="font-size:9px">character.read</span>
+        </div>
+        <div class="ag-tool">
+          <i data-lucide="hand" class="xs" style="color:var(--amber);margin-top:3px"></i>
+          <div style="flex:1"><b class="nm">request_pet_action</b><div class="note" style="font-size:10.5px">请求桌宠动作（挥手 / 点头 / 转圈）· 频控 1 次/10s</div></div>
+          <span class="pill pill-amber" style="font-size:9px">pet.action · 需授权</span>
+        </div>
+        <div class="ag-tool">
+          <i data-lucide="gamepad-2" class="xs" style="color:var(--text-3);margin-top:3px"></i>
+          <div style="flex:1"><b class="nm">query_game_state</b><div class="note" style="font-size:10.5px">查询游戏状态快照 · 位置 / 体力 / 金币（只读）</div></div>
+          <span class="pill pill-blue" style="font-size:9px">game.state.read</span>
+        </div>
+        <div class="ag-tool">
+          <i data-lucide="image" class="xs" style="color:var(--text-3);margin-top:3px"></i>
+          <div style="flex:1"><b class="nm">query_asset</b><div class="note" style="font-size:10.5px">查询素材清单与 assetVersionId · 不含二进制</div></div>
+          <span class="pill pill-blue" style="font-size:9px">asset.read</span>
+        </div>
+        <div class="ag-tool">
+          <i data-lucide="list-checks" class="xs" style="color:var(--text-3);margin-top:3px"></i>
+          <div style="flex:1"><b class="nm">query_task_status</b><div class="note" style="font-size:10.5px">查询任务状态与回执摘要（COMPLETED / FAILED / UNCERTAIN）</div></div>
+          <span class="pill pill-blue" style="font-size:9px">task.read</span>
+        </div>
+        <div class="hairline" style="margin:9px 0 8px"></div>
+        <div class="row" style="align-items:flex-start;gap:8px">
+          <i data-lucide="shield" class="sm" style="color:var(--tide);margin-top:2px"></i>
+          <p class="note" style="flex:1"><b style="color:var(--text-1)">不返回秘密：</b>secrets.* / 凭证引用 / 记仇账本明细 / Token 流水永不导出，Schema 白名单在协议层拦截。</p>
+        </div>
+        <div class="row" style="align-items:flex-start;gap:8px;margin-top:6px">
+          <i data-lucide="fingerprint" class="sm" style="color:var(--tide);margin-top:2px"></i>
+          <p class="note" style="flex:1"><b style="color:var(--text-1)">授权审计过滤：</b>每次调用落审计（调用方 · 时间 · 参数摘要 <span class="mono">#b7e2</span>）；写动作需 capability 授予 + 主人确认。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ⑤ Skills Registry ── -->
+    <div class="sec-h"><i data-lucide="library" class="sm"></i>Skills Registry<span class="ln"></span><span class="cnt">4 skills · enabled ≠ authorized</span></div>
+    <div class="grid2 stagger">
+      <div class="card card-hover" style="padding:13px 15px">
+        <div class="row">
+          <span class="ag-gic"><i data-lucide="pickaxe" class="sm"></i></span>
+          <div style="flex:1"><b class="mono" style="font-size:12px">stardew-cooperation</b><div class="note" style="font-size:10px">v1.4.2 · 与宿主协作玩星露谷</div></div>
+          <span class="pill pill-tide" style="font-size:9px">启用：全局</span>
+        </div>
+        <div class="ag-md" style="margin-top:9px">---
+name: stardew-cooperation
+version: 1.4.2
+allowed-tools: game.state.read · game.action.request · task.plan
+---
+## Steps：读状态 → 提案 → 等授权 → 执行 → 验回执
+## Guardrails：资源锁优先 · uncertain 不盲击重试</div>
+        <div class="ag-chips" style="margin-top:8px"><span>game.state.read</span><span>game.action.request</span><span>task.plan</span></div>
+        <div class="row" style="margin-top:8px;gap:6px">
+          <span class="lic apache">Apache-2.0</span><span class="note" style="font-size:10px">自研 · 回执协议参考 BWF</span>
+        </div>
+      </div>
+      <div class="card card-hover" style="padding:13px 15px">
+        <div class="row">
+          <span class="ag-gic violet"><i data-lucide="palette" class="sm"></i></span>
+          <div style="flex:1"><b class="mono" style="font-size:12px">character-asset-generation</b><div class="note" style="font-size:10px">v0.9.1 · 角色素材生成管线</div></div>
+          <span class="pill pill-violet" style="font-size:9px">启用：角色 char_9f3k</span>
+        </div>
+        <div class="ag-md" style="margin-top:9px">---
+name: character-asset-generation
+version: 0.9.1
+allowed-tools: asset.read · asset.write.draft · studio.render
+---
+## Steps：一致性卡 → 生成 → 审核 → 入库 assetVersionId
+## Guardrails：内置素材 NC 禁商用 · 覆盖前备份 v(n-1)</div>
+        <div class="ag-chips" style="margin-top:8px"><span>asset.read</span><span>asset.write.draft</span><span>studio.render</span></div>
+        <div class="row" style="margin-top:8px;gap:6px">
+          <span class="lic mit">MIT · 代码</span><span class="lic nc">CC BY-NC-SA 4.0 · 素材</span>
+          <span class="note" style="font-size:10px">DEV_ONLY_NON_COMMERCIAL</span>
+        </div>
+      </div>
+      <div class="card card-hover" style="padding:13px 15px">
+        <div class="row">
+          <span class="ag-gic"><i data-lucide="radio" class="sm"></i></span>
+          <div style="flex:1"><b class="mono" style="font-size:12px">livestream-performance</b><div class="note" style="font-size:10px">v1.1.0 · 直播表演与节目状态机</div></div>
+          <span class="pill pill-amber" style="font-size:9px">启用：任务级 · 开播期间</span>
+        </div>
+        <div class="ag-md" style="margin-top:9px">---
+name: livestream-performance
+version: 1.1.0
+allowed-tools: live.draft · song.queue · pet.action.request
+---
+## Steps：节目状态机 打游戏 ↔ 点歌 ↔ 杂谈
+## Guardrails：弹幕只出草稿 · 发言需白名单模板</div>
+        <div class="ag-chips" style="margin-top:8px"><span>live.draft</span><span>song.queue</span><span>pet.action.request</span></div>
+        <div class="row" style="margin-top:8px;gap:6px">
+          <span class="lic mit">MIT</span><span class="note" style="font-size:10px">自研 · 防呆借鉴节目状态机思想</span>
+        </div>
+      </div>
+      <div class="card card-hover" style="padding:13px 15px">
+        <div class="row">
+          <span class="ag-gic blue"><i data-lucide="newspaper" class="sm"></i></span>
+          <div style="flex:1"><b class="mono" style="font-size:12px">social-content-research</b><div class="note" style="font-size:10px">v0.5.3 · 社媒内容调研</div></div>
+          <span class="pill pill-blue" style="font-size:9px">启用：全局 · 只读</span>
+        </div>
+        <div class="ag-md" style="margin-top:9px">---
+name: social-content-research
+version: 0.5.3
+allowed-tools: web.fetch · kb_search · asset.read
+---
+## Steps：选题 → 交叉检索 → 合规检查 → 汇总
+## Guardrails：只读 · 不自动发布 · 引用存证 URL</div>
+        <div class="ag-chips" style="margin-top:8px"><span>web.fetch</span><span>kb_search</span><span>asset.read</span></div>
+        <div class="row" style="margin-top:8px;gap:6px">
+          <span class="lic apache">Apache-2.0</span><span class="note" style="font-size:10px">自研 · 检索模板随仓库分发</span>
+        </div>
+      </div>
+    </div>
+    <div class="ag-why" style="margin-top:12px"><i data-lucide="lock" class="sm"></i><span><b>Skill 是操作说明不是权限凭证：</b>enabled ≠ authorized——SKILL.md 里的 allowed-tools 只是申请清单，实际生效以安全治理页的 capability 台账为准；越权调用按最小集执行并告警。</span></div>
+
+    <!-- ── ⑥ 插件与沙箱 ── -->
+    <div class="sec-h"><i data-lucide="puzzle" class="sm"></i>插件与沙箱 · Plugin Sandbox<span class="ln"></span><span class="cnt">manifest 白名单 · 隔离四策略</span></div>
+    <div class="grid2 stagger">
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:9px">
+          <span class="ag-gic"><i data-lucide="file-json" class="sm"></i></span>
+          <b style="font-size:12.5px">plugin.manifest · 示例</b>
+          <span class="sp"></span><span class="pill" style="font-size:9px">whale.timer-ring · v0.3.1</span>
+        </div>
+        <div class="ag-md">{
+  <b>"id"</b>: "whale.timer-ring",
+  <b>"version"</b>: "0.3.1",
+  <b>"permissions"</b>: ["character.read", "asset.read"],
+  <b>"capabilities"</b>: ["stage.overlay.render"],
+  <b>"sandbox"</b>: { "process": "isolated", "fs": "ro:/assets", "net": "deny" },
+  <b>"rollback"</b>: { "prev": "0.3.0", "snapshot": "snap_9c41" }
+}</div>
+        <p class="note" style="margin-top:9px">permissions 是申请而不是授予——Broker 按 capability 台账逐项校验，未声明一律拒绝；net: deny 意味着插件无法外联回传。</p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:11px">
+          <span class="ag-gic"><i data-lucide="shield-check" class="sm"></i></span>
+          <b style="font-size:12.5px">隔离策略 × 4</b>
+          <span class="sp"></span><span class="pill pill-green" style="font-size:9px">崩溃不伤主进程</span>
+        </div>
+        <div class="ladder-item ag-lv-item on"><span class="lv" style="color:var(--tide)">1</span><div style="flex:1"><div class="t">独立进程</div><div class="d">每插件独立 OS 进程 · CPU ≤10% / RSS ≤256MB，与主进程零共享内存</div></div></div>
+        <div class="ladder-item ag-lv-item" style="border-left-color:var(--blue)"><span class="lv" style="color:var(--blue)">2</span><div style="flex:1"><div class="t">Broker 通道</div><div class="d">无宿主 API 直连：全部请求经 Broker 校验 capability 并记账 · 默认拒绝</div></div></div>
+        <div class="ladder-item ag-lv-item" style="border-left-color:var(--amber)"><span class="lv" style="color:var(--amber)">3</span><div style="flex:1"><div class="t">崩溃隔离</div><div class="d">插件崩溃自动重启；10 分钟内 3 次熔断禁用并通知主人</div></div></div>
+        <div class="ladder-item ag-lv-item" style="border-left-color:var(--green)"><span class="lv" style="color:var(--green)">4</span><div style="flex:1"><div class="t">可回滚</div><div class="d">安装保留上一版本快照（snap_9c41）· 一键回滚 · 卸载回收 capability</div></div></div>
+      </div>
+    </div>
+
+    <!-- ── ⑦ 工具风险分级 ── -->
+    <div class="sec-h"><i data-lucide="gauge" class="sm"></i>工具风险分级 · Risk Ladder<span class="ln"></span><span class="cnt">P0 自动 → P5 每次确认 · 越界默认拒绝</span></div>
+    <div class="card rise" style="padding:12px 16px 10px">
+      <div class="ladder-item ag-lv-item on"><span class="lv" style="color:var(--tide)">P0</span><div style="flex:1"><div class="t">读取本地非敏感状态</div><div class="d">game.state.read · 角色状态 · 素材清单 · 任务状态</div></div><span class="pill pill-tide" style="font-size:9.5px">可授权自动</span></div>
+      <div class="ladder-item ag-lv-item" style="border-left-color:var(--green)"><span class="lv" style="color:var(--green)">P1</span><div style="flex:1"><div class="t">写本地可逆数据</div><div class="d">记忆追加 · 素材草稿 · 缓存清理 · 全程可回滚</div></div><span class="pill pill-green" style="font-size:9.5px">授权后自动</span></div>
+      <div class="ladder-item ag-lv-item" style="border-left-color:var(--blue)"><span class="lv" style="color:var(--blue)">P2</span><div style="flex:1"><div class="t">外部只读请求</div><div class="d">攻略 / 文档检索 · 域名白名单 · 限额内放行</div></div><span class="pill pill-blue" style="font-size:9.5px">限额内自动</span></div>
+      <div class="ladder-item ag-lv-item" style="border-left-color:var(--amber)"><span class="lv" style="color:var(--amber)">P3</span><div style="flex:1"><div class="t">消耗预算</div><div class="d">付费 API · 图片 / 3D 生成 · 云端 TTS</div></div><span class="pill pill-amber" style="font-size:9.5px">水位内自动 · 触线确认</span></div>
+      <div class="ladder-item ag-lv-item" style="border-left-color:var(--violet)"><span class="lv" style="color:var(--violet)">P4</span><div style="flex:1"><div class="t">对外发声</div><div class="d">直播间发言 · 发布动态 · 白名单模板之外人工预审</div></div><span class="pill pill-violet" style="font-size:9.5px">预审 / 白名单</span></div>
+      <div class="ladder-item ag-lv-item" style="border-left-color:var(--red)"><span class="lv" style="color:var(--red)">P5</span><div style="flex:1"><div class="t">私信 / 删除 / 支付</div><div class="d">DM 发送 · 删除文件 · 任何资金操作 · 永不自动</div></div><span class="pill pill-red" style="font-size:9.5px">每次明确确认</span></div>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card ag-ascard">
+      <h4><i data-lucide="key-round" class="sm" style="color:var(--tide)"></i>配置管理</h4>
+      <div class="kv"><span class="k">Key 存储</span><span class="v">系统凭证库 Keychain / DPAPI</span></div>
+      <div class="kv"><span class="k">明文落盘</span><span class="v">0 处 · 扫描 2026-11-24</span></div>
+      <div class="kv"><span class="k">别名</span><span class="v">main → deepseek-v4（可换供应商）</span></div>
+      <div class="kv"><span class="k">回退链</span><span class="v">route.tbl 独立配置 · 换模型不动路由</span></div>
+      <div class="hairline" style="margin:8px 0"></div>
+      <div class="ag-swrow"><span>导出默认剔除 Key</span><span class="sw on"></span></div>
+      <div class="ag-swrow"><span>供应商健康巡检</span><span class="sw on"></span></div>
+      <p class="note" style="margin-top:7px">导出 config.bundle.json 时 secrets.* 替换为 $ref:kc_* 引用并附校验哈希 <span class="mono">sha256:9a4f…</span>；别名与回退分开配置，换供应商不重排 route.tbl。</p>
+    </div>
+
+    <div class="card ag-ascard" style="border-style:dashed">
+      <h4><i data-lucide="dna" class="sm" style="color:var(--violet)"></i>研发平面隔离</h4>
+      <div class="row" style="margin-bottom:8px">
+        <span class="pill pill-violet" style="font-size:10px"><i data-lucide="dna" class="xs"></i>Evolution Engine · Harness 平面</span>
+      </div>
+      <div class="kv"><span class="k">运行位置</span><span class="v">Harness A/B 沙盒 · ACP 会话</span></div>
+      <div class="kv"><span class="k">主 Runtime</span><span class="v">占用 0% · 不进直播 · 不接语音锁</span></div>
+      <div class="kv"><span class="k">Token 池</span><span class="v">独立 25k/日 · 与饭碗分开记账</span></div>
+      <div class="kv"><span class="k">产物入口</span><span class="v">人工 Review → PR #88（L4 门禁）</span></div>
+      <p class="note" style="margin-top:7px">实验崩溃或超支不波及直播与桌宠主链路；进化产物必须经人工审批才能合入主平面。</p>
+    </div>
+
+    <div class="card ag-ascard">
+      <h4><i data-lucide="activity" class="sm" style="color:var(--green)"></i>供应商健康</h4>
+      <div class="kv"><span class="k">DeepSeek-V4</span><span class="v"><span class="dot green"></span> 412ms · 错误率 0.2%</span></div>
+      <div class="kv"><span class="k">Claude</span><span class="v"><span class="dot green"></span> 1.9s · 规划链路</span></div>
+      <div class="kv"><span class="k">Image 本地</span><span class="v"><span class="dot green"></span> 探测 3/3 · 在线</span></div>
+      <div class="kv"><span class="k">Hunyuan3D</span><span class="v"><span class="dot amber"></span> 限流 2/min · 队列 41s</span></div>
+      <div class="kv"><span class="k">CosyVoice</span><span class="v"><span class="dot green"></span> 首包 0.8s</span></div>
+      <div class="kv"><span class="k">云端 TTS</span><span class="v"><span class="dot off"></span> 未实测 · 兜底未启用</span></div>
+      <div class="kv"><span class="k">额度查询</span><span class="v" style="color:var(--text-3)">未知 / 不可查询（不编造余额）</span></div>
+      <p class="note" style="margin-top:7px">多数供应商不提供余额查询端点——面板如实显示「未知」，04 §10：不编造余额。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

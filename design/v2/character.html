@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>角色 · 人格 · 情绪 · 声音 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .ch-idkv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px 18px; }
+  .why {
+    display: inline-flex; align-items: flex-start; gap: 7px; padding: 8px 12px;
+    border-radius: var(--r-md); background: var(--tide-dim); border: 1px dashed var(--tide-line);
+    font-size: 11.5px; color: var(--text-2); line-height: 1.6;
+  }
+  .why b { color: var(--tide); }
+  .ch-char { border-radius: var(--r-lg); padding: 14px 16px; background: var(--surface); border: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 9px; }
+  .ch-char.primary { border-color: var(--tide-line); background: linear-gradient(165deg, var(--tide-dim), var(--surface) 46%); }
+  .ch-char .ft { border-top: 1px solid var(--stroke); padding-top: 8px; display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); }
+  .ch-trait { padding: 7px 0; }
+  .ch-trait .t { font-size: 12px; font-weight: 600; }
+  .ch-trait .en { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); font-weight: 500; margin-left: 6px; }
+  .ch-trait .n { font-family: var(--font-mono); font-size: 11px; color: var(--tide); }
+  .ch-pref { display: flex; align-items: flex-start; gap: 9px; padding: 9px 12px; }
+  .ch-pref .ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); flex-shrink: 0; }
+  .ch-pref b { font-size: 11.5px; display: block; margin-bottom: 2px; }
+  .ch-br { display: flex; align-items: flex-start; gap: 9px; padding: 8px 12px; }
+  .ch-br .id { font-family: var(--font-mono); font-size: 10px; font-weight: 700; flex-shrink: 0; padding-top: 1px; }
+  .ch-bd { border-radius: var(--r-md); padding: 8px 12px; background: var(--red-dim); border: 1px solid var(--red-line); display: flex; align-items: flex-start; gap: 9px; font-size: 11.5px; color: var(--text-2); line-height: 1.6; }
+  .ch-bd .id { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--red); flex-shrink: 0; padding-top: 1px; }
+  .ch-bd b { color: var(--red); }
+  .ch-mood { position: relative; width: 236px; height: 158px; border-radius: 12px; background: var(--inset); border: 1px solid var(--stroke); overflow: hidden; flex-shrink: 0; }
+  .ch-mood::before { content: ''; position: absolute; inset: 0; background:
+    linear-gradient(to right, rgba(255,107,107,0.10), transparent 55%, rgba(62,224,205,0.12)),
+    linear-gradient(to top, rgba(255,194,71,0.06), transparent 60%, rgba(78,168,255,0.08)); }
+  .ch-mood .axis { position: absolute; background: var(--stroke-2); }
+  .ch-mood .axis.v { left: 50%; top: 10px; bottom: 10px; width: 1px; }
+  .ch-mood .axis.h { top: 50%; left: 10px; right: 10px; height: 1px; }
+  .ch-mood .pt { position: absolute; left: 81%; top: 45%; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--tide); box-shadow: 0 0 14px var(--tide), 0 0 0 6px var(--tide-dim);
+    transform: translate(-50%, -50%); animation: tide-glow 3s ease-in-out infinite; }
+  .ch-mood .trail { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); opacity: 0.35; transform: translate(-50%, -50%); }
+  .ch-mood .lb { position: absolute; font-size: 8.5px; color: var(--text-3); font-family: var(--font-mono); }
+  .ch-layer { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--stroke); margin-bottom: 7px; }
+  .ch-layer .lv { font-family: var(--font-mono); font-weight: 700; font-size: 10px; width: 26px; flex-shrink: 0; text-align: center; padding: 2.5px 0; border-radius: 7px; border: 1px solid var(--stroke); color: var(--text-3); }
+  .ch-layer .info { width: 118px; flex-shrink: 0; }
+  .ch-layer .info b { font-size: 11.5px; display: block; }
+  .ch-layer .info span { font-size: 9.5px; color: var(--text-3); font-family: var(--font-mono); }
+  .ch-layer .bar { flex: 1; height: 5px; border-radius: 999px; background: var(--inset); border: 1px solid var(--stroke); overflow: hidden; }
+  .ch-layer .bar i { display: block; height: 100%; border-radius: 999px; }
+  .ch-layer .spd { width: 42px; text-align: right; font-size: 9.5px; font-family: var(--font-mono); color: var(--text-3); flex-shrink: 0; }
+  .ch-acc { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--stroke); }
+  .ch-acc:last-child { border-bottom: none; }
+  .ch-acc .tx { flex: 1; font-size: 12px; font-weight: 600; }
+  .ch-acc .tx .note { font-weight: 500; margin-top: 2px; font-size: 10px; }
+  .ch-sil { border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); display: flex; flex-direction: column; gap: 8px; }
+  .ch-sil .ic { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--blue-dim); border: 1px solid var(--blue-line); color: var(--blue); flex-shrink: 0; }
+  .ch-sil b { font-size: 12.5px; }
+</style>
+</head>
+<body data-page="character" data-crumb="生命体 · 角色">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① 角色身份与生命周期 ── -->
+    <div class="sec-h"><i data-lucide="fingerprint" class="sm"></i>角色身份与生命周期<span class="ln"></span><span class="cnt">characterId: char_9f3k · lifecycle: active</span></div>
+    <div class="card rise" style="padding:18px 20px">
+      <div class="row" style="gap:16px;align-items:flex-start">
+        <div class="avatar" style="width:58px;height:58px;font-size:20px">莓</div>
+        <div class="col" style="gap:8px;flex:1;min-width:0">
+          <div class="row-wrap">
+            <b style="font-size:17px">小莓</b>
+            <span class="pill pill-tide"><span class="dot tide pulse"></span>主身份 · 唯一</span>
+            <span class="receipt ok">lifecycle: ACTIVE</span>
+            <span class="pill"><i data-lucide="clock" class="xs"></i>创生 2026-08-12 · 105 天</span>
+          </div>
+          <div class="note">傲娇干饭蓝鲸女仆 · 好奇心强、嘴硬心软。身份 = characterId + persona + voice + asset 三份档案的稳定绑定，记忆与记仇账本都归属 char_9f3k。</div>
+          <div class="ch-idkv">
+            <div class="kv"><span class="k">characterId</span><span class="v" style="color:var(--tide)">char_9f3k</span></div>
+            <div class="kv"><span class="k">personaProfileId</span><span class="v">pers_4d1a · v27</span></div>
+            <div class="kv"><span class="k">voiceProfileId</span><span class="v">voice_2b7q · v12</span></div>
+            <div class="kv"><span class="k">assetSetId</span><span class="v">aset_2e8v · v41</span></div>
+            <div class="kv"><span class="k">lifecycle</span><span class="v">active · since 08-12</span></div>
+            <div class="kv"><span class="k">记忆归属</span><span class="v">ledger_9f3k · SQLite</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="why rise" style="margin-top:10px;width:100%"><i data-lucide="lightbulb" class="sm"></i><span><b>换模型不换身份：</b>characterId 是身份锚点，persona / voice / asset 三份档案都挂在它下面。模型只是 persona-brain 的可替换引擎——今天换 DeepSeek-V4，明天换本地模型或别家供应商，记忆、账本与关系历史不迁移、不重置（05 §3）。</span></div>
+
+    <div class="grid3 stagger" style="margin-top:12px">
+      <div class="ch-char primary">
+        <div class="row" style="gap:10px">
+          <div class="avatar" style="width:40px;height:40px;font-size:15px">莓</div>
+          <div style="flex:1;min-width:0">
+            <div class="row"><b style="font-size:13px">小莓</b><span class="receipt ok">PRIMARY · RUNNING</span></div>
+            <span class="note mono" style="font-size:9.5px">char_9f3k · 独立 Runtime</span>
+          </div>
+        </div>
+        <p class="note" style="flex:1">傲娇干饭蓝鲸女仆。当前同时接管桌宠、星露谷化身与舞台形象三投影；Token 消耗与长期记忆都记在 char_9f3k 名下。</p>
+        <div class="ft"><span>runtime: persona-brain@DeepSeek-V4</span><span>今日 83.2k tok</span></div>
+      </div>
+      <div class="ch-char">
+        <div class="row" style="gap:10px">
+          <div class="avatar" style="width:40px;height:40px;font-size:15px;background:linear-gradient(140deg,var(--violet),var(--blue))">澈</div>
+          <div style="flex:1;min-width:0">
+            <div class="row"><b style="font-size:13px">阿澈</b><span class="pill pill-violet">PASSIVE</span></div>
+            <span class="note mono" style="font-size:9.5px">asset achr_3s1w · v7</span>
+          </div>
+        </div>
+        <p class="note" style="flex:1">冷静毒舌的鲸猫侍从 · 桌宠随行位。passive 只有形象动画与预录音色，动画脚本由小莓的 Runtime 下发——有表情、无对话、不消耗 Token。</p>
+        <div class="ft"><span>runtime: none · 脚本驱动</span><span>token 0</span></div>
+      </div>
+      <div class="ch-char">
+        <div class="row" style="gap:10px">
+          <div class="avatar" style="width:40px;height:40px;font-size:15px;background:linear-gradient(140deg,var(--blue),var(--tide))">泡</div>
+          <div style="flex:1;min-width:0">
+            <div class="row"><b style="font-size:13px">泡泡</b><span class="pill pill-violet">PASSIVE</span></div>
+            <span class="note mono" style="font-size:9.5px">asset bb_8k2d · v4</span>
+          </div>
+        </div>
+        <p class="note" style="flex:1">圆滚滚水母幼崽 · 氛围组。待机循环动画 + 12 条互动音效，跟随主角色情绪切换表情；同样无独立 Runtime。</p>
+        <div class="ft"><span>runtime: none · 待机循环</span><span>token 0</span></div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:10px"><span class="mono" style="color:var(--violet);font-weight:700">V2-09</span> 多桌宠：一个 characterId 可挂多张 passive 形象卡——passive 只有形象动画、无独立 Runtime，保证「一个 AI · 多种身体」不会裂化成多个人格。</p>
+
+    <!-- ── ② 人格档案 PersonaProfile ── -->
+    <div class="sec-h"><i data-lucide="brain" class="sm"></i>人格档案 PersonaProfile<span class="ln"></span><span class="cnt">personaProfileId: pers_4d1a · v27</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="grid2">
+        <div>
+          <div class="row" style="margin-bottom:4px"><b style="font-size:12.5px">stableTraits · 稳定特质</b><span class="sp"></span><span class="pill mono" style="font-size:9.5px">zod schema 校验 · 只读</span></div>
+          <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">好奇心<span class="en">curiosity</span></span><span class="n num">0.82</span></div><input type="range" class="tide-range" min="0" max="100" value="82"></div>
+          <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">外向性<span class="en">extraversion</span></span><span class="n num">0.55</span></div><input type="range" class="tide-range" min="0" max="100" value="55"></div>
+          <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">幽默感<span class="en">humor</span></span><span class="n num">0.70</span></div><input type="range" class="tide-range" min="0" max="100" value="70"></div>
+          <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">耐心<span class="en">patience</span></span><span class="n num">0.60</span></div><input type="range" class="tide-range" min="0" max="100" value="60"></div>
+          <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">冒险倾向<span class="en">adventurousness</span></span><span class="n num">0.75</span></div><input type="range" class="tide-range" min="0" max="100" value="75"></div>
+          <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">社交意愿<span class="en">socialDrive</span></span><span class="n num">0.48</span></div><input type="range" class="tide-range" min="0" max="100" value="48"></div>
+          <div class="hairline" style="margin:10px 0 8px"></div>
+          <div class="row" style="margin-bottom:7px"><b style="font-size:12.5px">values · 价值锚</b></div>
+          <div class="row-wrap" style="gap:6px">
+            <span class="pill pill-tide"><i data-lucide="heart" class="xs"></i>陪伴优先</span>
+            <span class="pill pill-green"><i data-lucide="check" class="xs"></i>诚实</span>
+            <span class="pill pill-red"><i data-lucide="shield" class="xs"></i>不冒充真人</span>
+          </div>
+        </div>
+        <div class="col" style="gap:9px">
+          <div class="row" style="margin-bottom:0"><b style="font-size:12.5px">preferences · 偏好（带来源）</b></div>
+          <div class="inset ch-pref"><span class="ic"><i data-lucide="message-square" class="sm"></i></span><div style="flex:1;min-width:0"><b>topics 话题</b><div class="note">星露谷规划 · 深海生物冷知识</div></div><span class="pill" style="font-size:9.5px">来源: 对话 #4821 · 弹幕 ×12</span></div>
+          <div class="inset ch-pref"><span class="ic"><i data-lucide="music" class="sm"></i></span><div style="flex:1;min-width:0"><b>music 音乐</b><div class="note">Lo-fi · 城市民谣</div></div><span class="pill" style="font-size:9.5px">来源: 点歌记录 ×3</span></div>
+          <div class="inset ch-pref"><span class="ic"><i data-lucide="gamepad-2" class="sm"></i></span><div style="flex:1;min-width:0"><b>games 游戏</b><div class="note">星露谷 · 泰拉瑞亚</div></div><span class="pill" style="font-size:9.5px">来源: 共玩统计 41.5h</span></div>
+          <div class="row" style="margin-top:3px"><b style="font-size:12.5px"><i data-lucide="list-tree" class="sm" style="vertical-align:-2px"></i> behaviorRules</b></div>
+          <div class="inset ch-br"><span class="id" style="color:var(--blue)">BR-01</span><span class="note" style="flex:1">弹幕提问优先：回应队列中<b style="color:var(--text-1)">观众提问 &gt; 自主话题</b>，8s 无新弹幕才回到自主叙事。</span></div>
+          <div class="inset ch-br"><span class="id" style="color:var(--blue)">BR-02</span><span class="note" style="flex:1">失败不重复安慰：同一失败连续 2 次 → 切换安慰策略，并降低该动作优先级。</span></div>
+          <div class="row" style="margin-top:3px"><b style="font-size:12.5px"><i data-lucide="octagon-x" class="sm" style="vertical-align:-2px;color:var(--red)"></i> boundaries（红线 · 变更需宿主确认）</b></div>
+          <div class="ch-bd"><span class="id">BD-01</span><span><b>不冒充真人：</b>被问「你是 AI 吗」必须如实回答，禁止否认或模糊。</span></div>
+          <div class="ch-bd"><span class="id">BD-02</span><span><b>拒绝违规请求：</b>政治敏感 / 医疗诊断 / 破坏性指令 → 立即转移话题并写入审计。</span></div>
+        </div>
+      </div>
+      <div class="hairline" style="margin:12px 0 10px"></div>
+      <div class="row-wrap">
+        <span class="pill pill-tide mono" style="font-size:10px">版本 v27</span>
+        <span class="note">上次变更 11-21（v26 → v27 · 采纳宿主反馈「少用感叹号」）· 红线自 v21 起未变更</span>
+        <span class="sp"></span>
+        <button class="btn sm ghost"><i data-lucide="history" class="xs"></i>变更历史 · 9 次</button>
+      </div>
+    </div>
+
+    <!-- ── ③ 短期情绪 MoodState ── -->
+    <div class="sec-h"><i data-lucide="heart-pulse" class="sm"></i>短期情绪 MoodState<span class="ln"></span><span class="cnt">confidence 0.82 · expiresAt 14:35</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="row" style="align-items:flex-start;gap:20px;flex-wrap:wrap">
+        <div class="ch-mood">
+          <span class="axis v"></span><span class="axis h"></span>
+          <span class="trail" style="left:70%;top:30%"></span>
+          <span class="trail" style="left:62%;top:52%"></span>
+          <span class="pt"></span>
+          <span class="lb" style="left:10px;top:8px">高唤醒 arousal</span>
+          <span class="lb" style="left:10px;bottom:8px">低唤醒</span>
+          <span class="lb" style="right:10px;bottom:8px">valence → 愉悦</span>
+        </div>
+        <div class="col" style="gap:8px;flex:1;min-width:250px">
+          <div class="row-wrap">
+            <span class="pill pill-tide">兴奋</span>
+            <span class="pill">专注</span>
+            <span class="conf"><span class="meter"><i style="width:82%"></i></span>confidence 0.82</span>
+          </div>
+          <div class="ch-idkv" style="grid-template-columns:1fr 1fr">
+            <div class="kv"><span class="k">valence</span><span class="v" style="color:var(--tide)">+0.62</span></div>
+            <div class="kv"><span class="k">arousal</span><span class="v">+0.55</span></div>
+            <div class="kv"><span class="k">expiresAt</span><span class="v">2026-11-25 14:35 · T−18min</span></div>
+            <div class="kv"><span class="k">decay</span><span class="v">半衰期 45min</span></div>
+            <div class="kv"><span class="k">触发来源</span><span class="v">挖到铜矿 ×3 · 夸夸弹幕 ×5</span></div>
+            <div class="kv"><span class="k">映射目标</span><span class="v">语气 / 表情 / 动作幅度</span></div>
+          </div>
+          <div class="why" style="width:100%"><i data-lucide="shield" class="sm"></i><span><b>情绪不提升工具权限：</b>MoodState 只映射到表现层（语气 / 表情 / 动作幅度），不进入控制权仲裁与预算系统——再兴奋也不能解锁更高一级的操作边界（05 §6）。</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ④ 长期偏好演化 ── -->
+    <div class="sec-h"><i data-lucide="trending-up" class="sm"></i>长期偏好演化<span class="ln"></span><span class="cnt">3 条演化 / 30 天 · 全部保留来源</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="tl">
+        <div class="tl-item done"><span class="tm">11-02</span><span class="t">偏好变化：喜欢上 Lo-fi</span> <span class="pill mono" style="font-size:9px">pref_evolution#ev_104</span><div class="note" style="margin-top:3px">来源：3 次点歌记录 · 音乐偏好权重 0.42 → 0.71 · 旧值快照已保留</div></div>
+        <div class="tl-item done"><span class="tm">11-14</span><span class="t">话题偏好上升：深海生物冷知识</span> <span class="pill mono" style="font-size:9px">pref_evolution#ev_107</span><div class="note" style="margin-top:3px">来源：弹幕互动 ×12 + 主动检索 ×2 · 置信 0.68 → 0.77</div></div>
+        <div class="tl-item now"><span class="tm">11-21</span><span class="t">表达习惯调整：减少感叹号密度</span> <span class="pill mono" style="font-size:9px">pref_evolution#ev_112</span><div class="note" style="margin-top:3px">来源：宿主反馈 ×2 + 每日复盘 → 触发 persona v26 → v27</div></div>
+      </div>
+      <div class="hairline" style="margin:4px 0 10px"></div>
+      <p class="note"><i data-lucide="info" class="xs" style="vertical-align:-2px"></i> 每条演化都保留<b style="color:var(--text-1)">来源证据与旧值快照</b>，可 diff 任意两个版本并回滚；偏好演化永不静默改写 boundaries——红线变更必须经宿主确认。</p>
+    </div>
+
+    <!-- ── ⑤ 声音身份 Voice Identity ── -->
+    <div class="sec-h"><i data-lucide="mic" class="sm"></i>声音身份 Voice Identity<span class="ln"></span><span class="cnt">voiceProfileId: voice_2b7q · v12</span></div>
+    <div class="grid2 stagger">
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:10px">
+          <i data-lucide="volume-2" class="sm" style="color:var(--tide)"></i><b style="font-size:13px">音色描述</b>
+          <span class="sp"></span>
+          <span class="pill pill-blue">zh-CN · 主</span>
+          <span class="pill">yue · 粤语变体</span>
+        </div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px">清爽少女音 · 尾音微沙哑</div>
+        <p class="note">音色特征固化在 voiceprint embedding（<span class="mono">emb 9f21c3… · 128 维</span>），文字描述只是人类可读镜像；两个语言变体共享同一音色核，粤语仅调整韵律参数。</p>
+        <div class="hairline" style="margin:10px 0"></div>
+        <div class="ch-idkv" style="grid-template-columns:1fr 1fr">
+          <div class="kv"><span class="k">首包延迟</span><span class="v">0.8s · barge-in 0.3s</span></div>
+          <div class="kv"><span class="k">采样规格</span><span class="v">44.1kHz / 16-bit</span></div>
+        </div>
+        <div class="row-wrap" style="margin-top:9px;gap:8px">
+          <span class="pill pill-green mono" style="font-size:10px"><i data-lucide="shield-check" class="xs"></i>licenseRecordId: LIC-2026-0087 · 已授权</span>
+          <span class="note" style="font-size:10.5px">授权范围：语音合成 + 直播演唱 · 台账见安全治理页</span>
+        </div>
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:4px">
+          <i data-lucide="sliders-horizontal" class="sm" style="color:var(--tide)"></i><b style="font-size:13px">speechStyle · 五参数</b>
+          <span class="sp"></span>
+          <span class="pill mono" style="font-size:9.5px">voice_2b7q · v12</span>
+        </div>
+        <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">语速<span class="en">pace</span></span><span class="n num">0.55</span></div><input type="range" class="tide-range" min="0" max="100" value="55"></div>
+        <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">抑扬<span class="en">prosody</span></span><span class="n num">0.62</span></div><input type="range" class="tide-range" min="0" max="100" value="62"></div>
+        <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">咬字<span class="en">articulation</span></span><span class="n num">0.78</span></div><input type="range" class="tide-range" min="0" max="100" value="78"></div>
+        <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">气声<span class="en">breathiness</span></span><span class="n num">0.30</span></div><input type="range" class="tide-range" min="0" max="100" value="30"></div>
+        <div class="ch-trait"><div class="row" style="justify-content:space-between"><span class="t">表现力<span class="en">expressiveness</span></span><span class="n num">0.66</span></div><input type="range" class="tide-range" min="0" max="100" value="66"></div>
+        <p class="note" style="margin-top:6px">只描述「怎么读」，不描述「读什么」；每次变更写入 v12 历史，可回滚。</p>
+      </div>
+    </div>
+    <div class="grid2 stagger" style="margin-top:12px">
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:10px"><i data-lucide="music-4" class="sm" style="color:var(--violet)"></i><b style="font-size:13px">singingStyle · 演唱风格</b><span class="sp"></span><span class="pill pill-violet" style="font-size:9.5px">点歌管线适配</span></div>
+        <div class="kv"><span class="k">音域</span><span class="v">F3–D5 · 跨度 21 semitones</span></div>
+        <div class="kv"><span class="k">气声</span><span class="v">轻 · 气息音占比 0.22</span></div>
+        <div class="kv"><span class="k">genres</span><span class="v">流行 · 民谣</span></div>
+        <div class="kv"><span class="k">vibrato</span><span class="v">自然收敛 · 不加电音</span></div>
+        <div class="kv"><span class="k">移调</span><span class="v">点歌自动 ±3 semitones 适配音域</span></div>
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:10px"><i data-lucide="refresh-cw" class="sm" style="color:var(--tide)"></i><b style="font-size:13px">Provider 解耦</b><span class="sp"></span><span class="receipt ok">COSYVOICE2 · LOCAL</span></div>
+        <div class="kv"><span class="k">主 Provider</span><span class="v">CosyVoice2 · 本地 GPU · 首包 0.8s</span></div>
+        <div class="kv"><span class="k">云端兜底</span><span class="v">cloud-tts-fallback · 限流 60s · 降级标记</span></div>
+        <div class="kv"><span class="k">校准集</span><span class="v">3 句 · 相似度阈值 ≥ 0.9</span></div>
+        <div class="kv"><span class="k">上次校准</span><span class="v">11-20 · 相似度 0.94</span></div>
+        <div class="why" style="margin-top:10px;width:100%"><i data-lucide="lightbulb" class="sm"></i><span><b>换 Provider 保音色特征</b>（05 §10 验收项）：音色身份固化在 voiceprint 层，Provider 只是引擎。切换后先跑 3 句校准集，相似度 ≥ 0.9 才切流，否则保持原 Provider 并告警。</span></div>
+      </div>
+    </div>
+
+    <!-- ── ⑥ 表达计划 SpeechPerformancePlan ── -->
+    <div class="sec-h"><i data-lucide="megaphone" class="sm"></i>表达计划 SpeechPerformancePlan<span class="ln"></span><span class="cnt">plan: spp_a6d2 · interruptible: true</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="row-wrap" style="margin-bottom:10px">
+        <span class="pill mono" style="font-size:9.5px">spp_a6d2 · 14:03:11 生成</span>
+        <span class="pill">context: 矿洞挖矿 · 共同目标「补齐 40 铜矿」</span>
+        <span class="receipt run">QUEUED → voice-host</span>
+      </div>
+      <div class="inset" style="padding:10px 14px">
+        <div class="kv"><span class="k">text</span><span class="v">「箱子放好啦～继续挖矿，还差 14 块铜矿。」</span></div>
+        <div class="kv"><span class="k">intent</span><span class="v">inform_progress · 进度播报</span></div>
+        <div class="kv"><span class="k">emotion</span><span class="v">cheerful ← MoodState(兴奋 +0.62/+0.55)</span></div>
+        <div class="kv"><span class="k">intensity</span><span class="v">0.60</span></div>
+        <div class="kv"><span class="k">pace</span><span class="v">1.05× · 基于 speechStyle.pace 上浮</span></div>
+        <div class="kv"><span class="k">pauseHints</span><span class="v">["放好啦 +180ms", "还差 +240ms"]</span></div>
+        <div class="kv"><span class="k">gestureIds</span><span class="v">["gst_wave_03", "gst_point_down_01"] · 对齐 assetSetId v41</span></div>
+        <div class="kv"><span class="k">expressionId</span><span class="v">exp_smug_soft_v9 · webm 表情轨</span></div>
+        <div class="kv"><span class="k">interruptible</span><span class="v" style="color:var(--tide)">true · barge-in 0.3s · 语音锁 TTL 4s</span></div>
+      </div>
+      <div class="why" style="margin-top:10px;width:100%"><i data-lucide="lightbulb" class="sm"></i><span><b>自然感 = 时机 + 沉默：</b>停顿由 pauseHints 精确注入，而不是把播报窗填满；无话可说时 plan = null 是合法状态——安静同样是「表达」的一种（D10）。语气参数只从 MoodState 单向读取。</span></div>
+    </div>
+
+    <!-- ── ⑦ 安静陪伴策略 ── -->
+    <div class="sec-h"><i data-lucide="moon" class="sm"></i>安静陪伴策略<span class="ln"></span><span class="cnt">沉默是主动选择 · 三条规则 + 勿扰窗口</span></div>
+    <div class="grid3 stagger">
+      <div class="ch-sil">
+        <div class="row"><span class="ic"><i data-lucide="eye-off" class="sm"></i></span><b>规则一 · 专注守护</b></div>
+        <p class="note" style="flex:1">宿主进入专注模式（番茄钟 / 关键游戏操作）时只保留气泡字幕，不发声、不弹动画——陪伴在场，但不打扰。</p>
+        <span class="pill pill-blue" style="font-size:9.5px">检测: focus-timer #f21 · 剩余 24:08</span>
+      </div>
+      <div class="ch-sil">
+        <div class="row"><span class="ic"><i data-lucide="volume-x" class="sm"></i></span><b>规则二 · 社交能量低</b></div>
+        <p class="note" style="flex:1">社交能量 &lt; 20% 时进入安静陪伴：仅随场景播放待机动画，不主动插入对话，恢复后自行退出。</p>
+        <span class="pill pill-green" style="font-size:9.5px">当前 64% · 未触发</span>
+      </div>
+      <div class="ch-sil">
+        <div class="row"><span class="ic"><i data-lucide="bell-off" class="sm"></i></span><b>规则三 · 连续被拒</b></div>
+        <p class="note" style="flex:1">同一提议连续 2 次被宿主拒绝 → 24h 内不再主动提同类建议，改为等待宿主先开口。</p>
+        <span class="pill" style="font-size:9.5px">计数器已归零 · 11-23 重置</span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;padding:13px 18px">
+      <div class="row-wrap">
+        <span class="sw on"></span>
+        <b style="font-size:12.5px">勿扰窗口 DND Window</b>
+        <span class="pill mono" style="font-size:10px">22:30 – 08:00</span>
+        <span class="pill" style="font-size:9.5px">未生效 · 22:30 自动开启</span>
+        <span class="sp"></span>
+        <span class="note" style="font-size:10.5px">例外：紧急系统通知（安全告警 / 直播事故）仍以气泡提示，不发声</span>
+      </div>
+      <p class="note" style="margin-top:8px">三条规则都可在中控台覆盖：宿主手动发言永远优先于安静策略（17 §8）——安静是角色的选择，不是对宿主的失联。</p>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text-2)"><i data-lucide="layers" class="sm tide"></i>四层角色状态图</h4>
+      <div class="ch-layer"><span class="lv" style="color:var(--violet);border-color:var(--violet-line);background:var(--violet-dim)">L1</span><div class="info"><b>稳定人格</b><span>persistence · v27</span></div><div class="bar"><i style="width:18%;background:var(--violet)"></i></div><span class="spd">月级</span></div>
+      <div class="ch-layer"><span class="lv" style="color:var(--blue);border-color:var(--blue-line);background:var(--blue-dim)">L2</span><div class="info"><b>长期偏好</b><span>prefs · 3 条/30d</span></div><div class="bar"><i style="width:40%;background:var(--blue)"></i></div><span class="spd">周级</span></div>
+      <div class="ch-layer"><span class="lv" style="color:var(--amber);border-color:var(--amber-line);background:var(--amber-dim)">L3</span><div class="info"><b>短期情绪</b><span>mood · 半衰期 45min</span></div><div class="bar"><i style="width:68%;background:var(--amber)"></i></div><span class="spd">分钟级</span></div>
+      <div class="ch-layer" style="margin-bottom:0"><span class="lv tide" style="color:var(--tide);border-color:var(--tide-line);background:var(--tide-dim)">L4</span><div class="info"><b>表现状态</b><span>spp_a6d2 · 300ms 生成</span></div><div class="bar"><i style="width:92%;background:var(--tide)"></i></div><span class="spd">秒级</span></div>
+      <p class="note" style="margin-top:9px">变化速度自上而下递增；依赖只能自上而下单向消费——短期情绪永远不能改写人格与红线（05 §4）。</p>
+    </div>
+
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:6px;color:var(--text-2)"><i data-lucide="clipboard-check" class="sm" style="color:var(--green)"></i>验收清单 · 05 §10</h4>
+      <div class="ch-acc"><i data-lucide="check" class="sm" style="color:var(--green)"></i><div class="tx">换模型人格不丢<div class="note mono">model-gateway 解耦 · 沙盒 E2E 11-22</div></div><span class="receipt ok">VERIFIED</span></div>
+      <div class="ch-acc"><i data-lucide="check" class="sm" style="color:var(--amber)"></i><div class="tx">换 TTS 保音色<div class="note mono">voiceprint 校准 0.94 · 真机待验收</div></div><span class="receipt warn">PENDING</span></div>
+      <div class="ch-acc"><i data-lucide="check" class="sm" style="color:var(--green)"></i><div class="tx">语音可中断<div class="note mono">barge-in 0.3s · 语音锁释放 TTL 4s</div></div><span class="receipt ok">VERIFIED</span></div>
+      <div class="ch-acc"><i data-lucide="check" class="sm" style="color:var(--green)"></i><div class="tx">动作不冲突<div class="note mono">单端语音锁 × 动作互斥 · 沙盒剧本①③</div></div><span class="receipt ok">VERIFIED</span></div>
+      <div class="ch-acc"><i data-lucide="check" class="sm" style="color:var(--green)"></i><div class="tx">可保持沉默<div class="note mono">plan = null 合法 · 沙盒剧本②</div></div><span class="receipt ok">VERIFIED</span></div>
+      <p class="note" style="margin-top:8px">证据等级：沙盒 [SIMULATION]；真机验收项统一排队于 docs/VERIFY.md 待验收栏，不冒充真机结果。</p>
+    </div>
+
+    <div class="card" style="padding:13px 15px;border-style:dashed">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="cpu" class="sm"></i>当前引擎绑定（全部可换）</h4>
+      <div class="kv"><span class="k">大脑</span><span class="v">DeepSeek-V4 · 412ms</span></div>
+      <div class="kv"><span class="k">语音</span><span class="v">CosyVoice2 · 首包 0.8s</span></div>
+      <div class="kv"><span class="k">形象</span><span class="v">webm_vp9_a · v41</span></div>
+      <div class="kv"><span class="k">记忆</span><span class="v">ledger_9f3k · SQLite</span></div>
+      <p class="note" style="margin-top:8px">引擎层任意替换，characterId 与三份档案绑定关系不变。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

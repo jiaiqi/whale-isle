@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>直播舞台 · 弹幕点歌与表演 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .lv-ctrl { display: flex; gap: 18px; padding: 16px 18px; align-items: stretch; flex-wrap: wrap; }
+  .lv-time { font-family: var(--font-mono); font-size: 27px; font-weight: 700; letter-spacing: 1.5px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .lv-degrade { display: flex; align-items: flex-start; gap: 8px; padding: 8px 13px; border-radius: var(--r-md); background: var(--amber-dim); border: 1px dashed var(--amber-line); font-size: 11.5px; color: var(--amber); line-height: 1.6; }
+  .lv-merge { display: flex; align-items: flex-start; gap: 9px; padding: 9px 13px; border-radius: var(--r-md); background: var(--tide-dim); border: 1px dashed var(--tide-line); font-size: 11.5px; color: var(--text-2); line-height: 1.65; margin-bottom: 10px; }
+  .lv-merge b { color: var(--tide); }
+  .lv-q { border-radius: var(--r-lg); padding: 11px 13px; background: var(--surface); border: 1px solid var(--stroke); }
+  .lv-q .txt { font-size: 12.5px; line-height: 1.6; margin: 8px 0 9px; }
+  .lv-song { border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); }
+  .lv-song.blocked { border-color: var(--red-line); background: linear-gradient(160deg, var(--red-dim), var(--surface) 58%); }
+  .lv-lyric { display: flex; flex-direction: column; gap: 4px; }
+  .lv-line { display: flex; align-items: baseline; gap: 12px; padding: 8px 14px; border-radius: var(--r-md); border: 1.5px solid transparent; }
+  .lv-line .tm { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); width: 66px; flex-shrink: 0; }
+  .lv-line .zh { font-size: 13px; color: var(--text-2); }
+  .lv-line .en { font-size: 11px; color: var(--text-3); margin-left: auto; text-align: right; }
+  .lv-line.past { opacity: 0.5; }
+  .lv-line.now { background: var(--tide-dim); border-color: var(--tide-line); box-shadow: 0 0 18px rgba(62, 224, 205, 0.1); }
+  .lv-line.now .zh { color: var(--tide); font-weight: 700; }
+  .lv-line.now .tm { color: var(--tide); }
+  .lv-out { border-radius: var(--r-lg); padding: 12px 14px; background: var(--surface); border: 1px solid var(--stroke); display: flex; gap: 11px; align-items: flex-start; }
+  .lv-out .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); flex-shrink: 0; }
+  .lv-out.dim .ic { background: var(--inset); border-color: var(--stroke); color: var(--text-3); }
+  .lv-out.warn .ic { background: var(--amber-dim); border-color: var(--amber-line); color: var(--amber); }
+  .lv-api { font-family: var(--font-mono); font-size: 10.5px; padding: 5px 12px; border-radius: 9px; background: var(--inset); border: 1px solid var(--stroke-2); color: var(--text-2); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .lv-api .dot { width: 6px; height: 6px; }
+  .lv-api.on { background: var(--tide-dim); border-color: var(--tide-line); color: var(--tide); }
+  .lv-api.danger { background: var(--red-dim); border-color: var(--red-line); color: var(--red); }
+  .lv-metric { font-family: var(--font-mono); font-size: 10.5px; padding: 3px 10px; border-radius: 8px; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); }
+  .lv-metric b { color: var(--text-1); }
+  .lv-ck { display: flex; align-items: center; gap: 9px; font-size: 11.5px; padding: 5.5px 0; color: var(--text-2); line-height: 1.5; }
+  .lv-ck .receipt { margin-left: auto; flex-shrink: 0; }
+  .lv-devrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; padding: 6px 0; }
+  .lv-devrow .sub { display: block; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); margin-top: 1px; }
+</style>
+</head>
+<body data-page="live" data-crumb="能力面 · 直播舞台" data-live="on">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① 会话控制条 ── -->
+    <div class="sec-h"><i data-lucide="radio" class="sm"></i>会话控制 · Session<span class="ln"></span><span class="cnt">session #L-218 · 抖音 room 7012345678 · 开播 20:00:00</span></div>
+    <div class="card lv-ctrl rise">
+      <div class="col" style="gap:9px;flex:1;min-width:250px">
+        <div class="row-wrap">
+          <span class="seg" data-mutex>
+            <button class="seg-tab on tide"><i data-lucide="radio-tower" class="xs"></i>抖音</button>
+            <button class="seg-tab">B站</button>
+          </span>
+          <span class="pill"><i data-lucide="shield-check" class="xs"></i>平台 API 逐项验证，非官方逆向不作生产依赖</span>
+        </div>
+        <div class="row-wrap" style="gap:6px">
+          <button class="btn ghost sm"><i data-lucide="flask-conical" class="xs"></i>预演 · 不出网</button>
+          <button class="btn soft-red sm"><i data-lucide="octagon-x" class="xs"></i>结束直播</button>
+          <span class="pill pill-amber" style="margin-left:2px"><i data-lucide="timer" class="xs"></i>租约至 24:00 · 自动下播</span>
+        </div>
+      </div>
+      <div class="row" style="gap:26px;align-items:center">
+        <div class="col" style="gap:4px;align-items:flex-start">
+          <div class="row" style="gap:9px"><span class="dot red pulse"></span><span class="lv-time num">02:14:37</span></div>
+          <span class="k" style="font-size:10px;letter-spacing:1.5px">直播时长 · LIVE</span>
+        </div>
+        <div class="stat"><div class="n">1,208</div><div class="l">观众 · 峰值 1,342</div></div>
+        <div class="stat"><div class="n">23<span style="font-size:12px;color:var(--text-3)"> 条/分</span></div><div class="l">弹幕速率 · 今日 4,318</div></div>
+        <div class="stat"><div class="n">¥86</div><div class="l">本场礼物 · 已感谢 4 起</div></div>
+      </div>
+    </div>
+    <div class="lv-degrade" style="margin-top:10px"><i data-lucide="triangle-alert" class="sm"></i><span><b>降级运行 DEGRADED：</b>抖音弹幕 ws 直连 10 分钟内重连失败 ×2 → 已切换 dyhub 备用通道，弹幕延迟 +1.4s；SVC 实时率受限，歌声合成降级 48kHz 中质量。恢复直连后自动升回，全程有回执。</span></div>
+
+    <!-- ── ② 弹幕收件箱 ── -->
+    <div class="sec-h"><i data-lucide="inbox" class="sm"></i>弹幕收件箱 · Attention Inbox<span class="ln"></span><span class="cnt">窗口显示 8 / 412 条 · 今日 4,318 条</span></div>
+    <div class="lv-merge"><i data-lucide="git-merge" class="sm"></i><span><b>合并示例：</b>22:13:02–22:13:47 海风、岛民阿澄 及 1 条已滚出窗口的弹幕，3 人同问「什么时候唱歌」→ 合并为 1 条回应（回复一次 · 播放 1 次），合并窗口 30s，省 2 次模型调用。</span></div>
+    <div class="card" style="padding:4px 14px 8px">
+      <table class="tbl">
+        <thead><tr><th style="width:118px">时间 / 观众</th><th>内容</th><th style="width:92px">类型</th><th style="width:70px">重要性</th><th style="width:118px">处理状态</th></tr></thead>
+        <tbody>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:14:02</div><div class="mono" style="font-size:10px">鲲鹏</div></td><td>「小莓小莓！抬头看我贴的贴纸！」</td><td><span class="pill pill-tide" style="font-size:10px">点名</span></td><td><span class="pill pill-red" style="font-size:10px">P0</span></td><td><span class="receipt ok">已回应</span></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:13:47</div><div class="mono" style="font-size:10px">海风</div></td><td>「什么时候唱歌？想听《起风了》」 <span class="pill pill-blue" style="font-size:9.5px">×3 合并</span></td><td><span class="pill pill-violet" style="font-size:10px">点歌</span></td><td><span class="pill pill-amber" style="font-size:10px">P1</span></td><td><span class="receipt run">已合并</span></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:09:41</div><div class="mono" style="font-size:10px">浪里白条</div></td><td>「大肥鱼游得好慢～追不上弹幕吧」 <span class="pill pill-red" style="font-size:9.5px">雷区</span></td><td><span class="pill" style="font-size:10px">普通</span></td><td><span class="pill pill-red" style="font-size:10px">P0</span></td><td><span class="receipt ok">已回应</span><div class="mono" style="font-size:9px;color:var(--text-3);margin-top:2px">本地规则 0.08s</div></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:12:55</div><div class="mono" style="font-size:10px">岛民阿澄</div></td><td>「矿洞 55 层用什么武器好？」</td><td><span class="pill pill-blue" style="font-size:10px">游戏问题</span></td><td><span class="pill pill-amber" style="font-size:10px">P1</span></td><td><span class="receipt warn">草稿中</span></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:12:30</div><div class="mono" style="font-size:10px">小岛主</div></td><td>送出 <b>10 × 粉丝团灯牌</b>（¥42）</td><td><span class="pill pill-amber" style="font-size:10px">礼物感谢</span></td><td><span class="pill pill-red" style="font-size:10px">P0</span></td><td><span class="receipt run">已合并</span><div class="mono" style="font-size:9px;color:var(--text-3);margin-top:2px">进合并感谢卡</div></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:12:07</div><div class="mono" style="font-size:10px">微风不燥</div></td><td>「这游戏我玩了三百小时，主播稳住！」</td><td><span class="pill" style="font-size:10px">普通</span></td><td><span class="pill" style="font-size:10px">P2</span></td><td><span class="receipt ok">已回应</span></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:11:40</div><div class="mono" style="font-size:10px">路过的咸鱼</div></td><td style="color:var(--text-3)">「加微信低价代练看片…」</td><td><span class="pill pill-red" style="font-size:10px">垃圾</span></td><td><span class="pill" style="font-size:10px">P2</span></td><td><span class="receipt fail">已过滤</span></td></tr>
+          <tr><td><div class="mono" style="font-size:10px;color:var(--text-3)">22:11:15</div><div class="mono" style="font-size:10px">深海小章鱼</div></td><td>「下一把能演示水稻种植吗？」</td><td><span class="pill pill-blue" style="font-size:10px">游戏问题</span></td><td><span class="pill pill-amber" style="font-size:10px">P1</span></td><td><span class="receipt warn">草稿中</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── ③ 回应管线 ── -->
+    <div class="sec-h"><i data-lucide="workflow" class="sm"></i>回应管线 · Response Pipeline<span class="ln"></span><span class="cnt">端到端延迟 1.2s · now = 语音队列</span></div>
+    <div class="card" style="padding:18px 20px 14px">
+      <div class="steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">去重</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">风险检测</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">分类</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">重要性排序</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">合并</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">6</span><span class="lb">选择</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">7</span><span class="lb">草稿</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">8</span><span class="lb">策略检查</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">9</span><span class="lb">语音队列</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">10</span><span class="lb">记录</span></div></div>
+      </div>
+      <div class="grid3" style="margin-top:14px">
+        <div class="lv-q" style="border-color:var(--red-line)">
+          <div class="row" style="gap:7px"><span class="pill pill-red" style="font-size:9.5px">P0</span><span class="pill" style="font-size:9.5px">雷区反驳</span><span class="sp"></span><span class="mono" style="font-size:10px;color:var(--text-3)">1.8s</span></div>
+          <div class="txt">「哼！本鲸才不是大肥鱼，是练过仰卧起坐的鲸！」</div>
+          <div class="row-wrap" style="gap:5px"><span class="pill pill-red" style="font-size:9.5px">不可打断</span><span class="pill" style="font-size:9.5px">锁 1.8s · TTL 4s 释放</span><span class="mono k" style="font-size:9.5px;margin-left:auto">q_01</span></div>
+        </div>
+        <div class="lv-q">
+          <div class="row" style="gap:7px"><span class="pill pill-amber" style="font-size:9.5px">P1</span><span class="pill" style="font-size:9.5px">游戏问答</span><span class="sp"></span><span class="mono" style="font-size:10px;color:var(--text-3)">6.4s</span></div>
+          <div class="txt">「矿洞 55 层推荐骷髅锤，先清蝙蝠再开箱子，别贪矿石～」</div>
+          <div class="row-wrap" style="gap:5px"><span class="pill pill-green" style="font-size:9.5px">可打断</span><span class="pill" style="font-size:9.5px">草稿 #d-093 · 待播</span><span class="mono k" style="font-size:9.5px;margin-left:auto">q_02</span></div>
+        </div>
+        <div class="lv-q">
+          <div class="row" style="gap:7px"><span class="pill" style="font-size:9.5px">P2</span><span class="pill" style="font-size:9.5px">点歌预告</span><span class="sp"></span><span class="mono" style="font-size:10px;color:var(--text-3)">2.2s</span></div>
+          <div class="txt">「马上唱《起风了》，SVC 管线已经就位咯～」</div>
+          <div class="row-wrap" style="gap:5px"><span class="pill pill-green" style="font-size:9.5px">可打断</span><span class="pill" style="font-size:9.5px">合并感谢后播放</span><span class="mono k" style="font-size:9.5px;margin-left:auto">q_03</span></div>
+        </div>
+      </div>
+      <div class="why" style="margin-top:12px"><i data-lucide="lightbulb" class="sm"></i><span><b>弹幕峰值不逐条调模型：</b>&gt;8 条/分进入 30s 合并窗口，仅 P0/P1 生成草稿，普通闲聊折叠进合并摘要；本地规则与 TTS 缓存模板 0 token。当前 23 条/分 → 模型调用 2.1 次/分，峰值 20 条/秒压测下仍 ≤ 3 次/分。</span></div>
+    </div>
+
+    <!-- ── ④ 礼物与关注 ── -->
+    <div class="sec-h"><i data-lucide="gift" class="sm"></i>礼物与关注 · Gratitude<span class="ln"></span><span class="cnt">本场 ¥86 · 新常客 +2</span></div>
+    <div class="grid2">
+      <div class="card" style="padding:15px 17px">
+        <div class="row" style="margin-bottom:9px"><i data-lucide="heart" class="sm" style="color:var(--amber)"></i><b style="font-size:13px">合并感谢卡</b><span class="sp"></span><span class="receipt ok">MERGED ×5</span></div>
+        <div style="font-size:16px;font-weight:700;line-height:1.5">感谢 <span style="color:var(--tide)">海风</span>、<span style="color:var(--tide)">小岛主</span> 及 3 位新朋友</div>
+        <div class="kv" style="margin-top:8px"><span class="k">粉丝团灯牌</span><span class="v">10 × · 小岛主 · ¥42</span></div>
+        <div class="kv"><span class="k">心动气泡</span><span class="v">32 × · 海风 · ¥28</span></div>
+        <div class="kv"><span class="k">舰长开通</span><span class="v">1 × · 新朋友 · ¥16</span></div>
+        <div class="hairline" style="margin:9px 0"></div>
+        <div class="row-wrap" style="gap:6px"><span class="pill pill-amber" style="font-size:10px">下一轮合并播报 22:16:10</span><span class="pill" style="font-size:10px">窗口 90s · 待播 1 起</span><span class="pill pill-violet" style="font-size:10px">大额 ≥¥66 立即插队 P0</span></div>
+      </div>
+      <div class="col" style="gap:10px">
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="gauge" class="sm" style="color:var(--blue)"></i><b style="font-size:12.5px">频率限制</b></div>
+          <p class="note">感谢语音 ≤ 每 90s 1 条、单场 ≤ 20 条；P2 感谢不打断进行中的 P0/P1；礼物风暴（&gt;30 起/分）折叠为一轮总感谢 + 弹幕公告，不逐条念名字。</p>
+        </div>
+        <div class="inset" style="padding:12px 14px;flex:1">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="user-check" class="sm" style="color:var(--tide)"></i><b style="font-size:12.5px">观众身份记忆最小化</b><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">memory_ledger · SQLite · 214 条</span></div>
+          <p class="note">常客账本只存 <b style="color:var(--text-1)">昵称 + 互动次数 + 偏好标签</b>（如「爱点歌」「矿洞党」）；不存平台 UID 明文、私信内容与联系方式；90 天无互动自动降级为匿名聚合条目。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ⑤ 点歌台 ── -->
+    <div class="sec-h"><i data-lucide="music-4" class="sm"></i>点歌台 · Song Request<span class="ln"></span><span class="cnt">队列 2 · License Gate 本地 0 token</span></div>
+    <div class="grid2">
+      <div class="col" style="gap:10px">
+        <div class="lv-song">
+          <div class="row" style="gap:9px;margin-bottom:7px"><i data-lucide="music-4" class="sm" style="color:var(--tide)"></i><b style="font-size:13.5px">《起风了》</b><span class="receipt ok">OK</span><span class="pill pill-green" style="font-size:10px">可直播</span><span class="sp"></span><span class="mono" style="font-size:10px;color:var(--text-3)">排播 22:16 · 请求 海风</span></div>
+          <div class="row-wrap" style="gap:5px"><span class="pill pill-green" style="font-size:9.5px">词曲授权 ✓</span><span class="pill pill-green" style="font-size:9.5px">平台白名单 ✓</span><span class="pill pill-green" style="font-size:9.5px">音源合规 ✓</span><span class="pill pill-green" style="font-size:9.5px">AI 翻唱声明 ✓</span><span class="pill" style="font-size:9.5px">5/5 核验</span></div>
+          <div class="mono" style="font-size:9.5px;color:var(--text-3);margin-top:7px">song_qifengle · bpm 88 · 4:18 · lrc v3 · SVC voice xiaomei_v4 · RTF 0.31</div>
+        </div>
+        <div class="lv-song blocked">
+          <div class="row" style="gap:9px;margin-bottom:7px"><i data-lucide="music-4" class="sm" style="color:var(--red)"></i><b style="font-size:13.5px">《某版权曲》</b><span class="lic unl">lic: unl</span><span class="pill pill-red" style="font-size:10px">拦截 · 不可直播</span><span class="sp"></span><span class="mono" style="font-size:10px;color:var(--text-3)">请求 深海小章鱼</span></div>
+          <div class="row-wrap" style="gap:5px"><span class="pill pill-red" style="font-size:9.5px">权利人未授权翻唱 ✗</span><span class="pill pill-red" style="font-size:9.5px">平台曲库黑名单 ✗</span><span class="pill" style="font-size:9.5px">0/5 核验</span></div>
+          <p class="note" style="margin-top:7px">本地门禁直接拦截，不进入队列、不调用模型；请求者收到弹幕引导改点其他曲目，拦截事件写入审计日志。</p>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:12px"><i data-lucide="mic" class="sm" style="color:var(--violet)"></i><b style="font-size:12.5px">SVC 歌声合成管线</b><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">now = SVC 角色音色</span></div>
+        <div class="steps">
+          <div class="step done"><div class="node"><span class="b">1</span><span class="lb">伴奏</span></div><span class="link"></span></div>
+          <div class="step now"><div class="node"><span class="b">2</span><span class="lb">SVC 角色音色</span></div><span class="link"></span></div>
+          <div class="step"><div class="node"><span class="b">3</span><span class="lb">混音</span></div><span class="link"></span></div>
+          <div class="step"><div class="node"><span class="b">4</span><span class="lb">口型同步</span></div></div>
+        </div>
+        <p class="note" style="margin-top:10px">伴奏轨预检通过（-14 LUFS · 无版权水印音频）；SVC 本地推理 RTF 0.31，变换声明随曲自动标注（AI 翻唱）；混音后交口型 viseme 队列。</p>
+      </div>
+    </div>
+    <div class="card" style="padding:14px 16px;margin-top:12px">
+      <div class="row" style="margin-bottom:10px"><i data-lucide="captions" class="sm" style="color:var(--tide)"></i><b style="font-size:12.5px">歌词时间轴预览 · 《起风了》</b><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">qifengle.lrc v3 · 音频时钟偏移 +20ms</span></div>
+      <div class="lv-lyric">
+        <div class="lv-line past"><span class="tm num">01:42.5</span><span class="zh">潮水退去 礁石开口</span><span class="en">The tide recedes, the reefs speak</span></div>
+        <div class="lv-line past"><span class="tm num">01:45.8</span><span class="zh">我把名字写进浪花</span><span class="en">I write my name into the sea foam</span></div>
+        <div class="lv-line now"><span class="tm num">01:49.2</span><span class="zh">起风的时候 我正好路过</span><span class="en">The wind rose as I passed by</span></div>
+        <div class="lv-line"><span class="tm num">01:53.0</span><span class="zh">深海里有一盏灯 为你亮着</span><span class="en">A lantern in the deep, lit for you</span></div>
+        <div class="lv-line"><span class="tm num">01:56.7</span><span class="zh">别怕 黑夜替我守口</span><span class="en">Fear not, the night keeps my secret</span></div>
+      </div>
+      <div class="why" style="margin-top:12px"><i data-lucide="lightbulb" class="sm"></i><span><b>歌词与音频时钟同步，不靠模型估算：</b>高亮行由 .lrc 时间轴直接驱动，与播放器 audio_clock 对齐（±20ms）；口型 viseme 同源音频，模型只负责渲染，不做时间轴猜测。</span></div>
+    </div>
+
+    <!-- ── ⑥ 舞台导演 ── -->
+    <div class="sec-h"><i data-lucide="clapperboard" class="sm"></i>舞台导演 · Stage Director<span class="ln"></span><span class="cnt">Stage API · media_time 主时钟</span></div>
+    <div class="grid4 stagger">
+      <div class="lv-out"><span class="ic"><i data-lucide="monitor"></i></span><div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:12.5px">桌面直接表演</b><span class="receipt ok">LIVE</span></div><div class="mono" style="font-size:9.5px;color:var(--text-3);margin-top:4px">desktop_pet · webm_vp9_a v41<br>双 video 交叉淡入</div></div></div>
+      <div class="lv-out"><span class="ic"><i data-lucide="layers"></i></span><div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:12.5px">2D 场景</b><span class="receipt run">STANDBY</span></div><div class="mono" style="font-size:9.5px;color:var(--text-3);margin-top:4px">live2d_v3 · v9<br>口型参数已绑定</div></div></div>
+      <div class="lv-out warn"><span class="ic"><i data-lucide="box"></i></span><div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:12.5px">3D VRM 舞台</b><span class="receipt warn">EXPERIMENTAL</span></div><div class="mono" style="font-size:9.5px;color:var(--text-3);margin-top:4px">vrm 0.12 · v3<br>光照烘焙 60fps</div></div></div>
+      <div class="lv-out"><span class="ic"><i data-lucide="tv-minimal-play"></i></span><div style="flex:1;min-width:0"><div class="row" style="gap:6px"><b style="font-size:12.5px">OBS 透明输出</b><span class="receipt ok">ON AIR</span></div><div class="mono" style="font-size:9.5px;color:var(--text-3);margin-top:4px">transparent_1080p · v9<br>obs-overlay · WebUI /obs 同源 18780</div></div></div>
+    </div>
+    <div class="card" style="padding:13px 16px;margin-top:12px">
+      <div class="row" style="margin-bottom:9px"><i data-lucide="terminal" class="sm" style="color:var(--blue)"></i><b style="font-size:12.5px">Stage API 动作面</b><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">统一时钟 media_time · Electron IPC + WebUI(18780) 下发</span></div>
+      <div class="row-wrap" style="gap:8px">
+        <span class="lv-api"><span class="dot off"></span>load character</span>
+        <span class="lv-api"><span class="dot off"></span>load scene</span>
+        <span class="lv-api"><span class="dot tide"></span>set expression</span>
+        <span class="lv-api"><span class="dot tide"></span>play animation</span>
+        <span class="lv-api"><span class="dot off"></span>start speech</span>
+        <span class="lv-api on"><span class="dot tide pulse"></span>start singing</span>
+        <span class="lv-api on"><span class="dot tide pulse"></span>show lyrics</span>
+        <span class="lv-api"><span class="dot off"></span>transition</span>
+        <span class="lv-api danger"><span class="dot red"></span>stop</span>
+      </div>
+      <p class="note" style="margin-top:10px">口型与动作统一时间基准：所有输出以音频 media_time 为主时钟，口型 viseme、骨骼动画、歌词高亮共用同一时钟轴；漂移 &gt;40ms 自动重同步——上一场实测漂移 22ms。</p>
+    </div>
+
+    <!-- ── ⑦ 雷区护栏 ── -->
+    <div class="sec-h"><i data-lucide="shield-alert" class="sm"></i>雷区护栏 · Minefield Guard<span class="ln"></span><span class="cnt">0 token 本地规则 · 延迟 ≤0.1s</span></div>
+    <div class="grid2">
+      <div class="card" style="padding:15px 17px">
+        <div class="row" style="margin-bottom:10px"><i data-lucide="siren" class="sm" style="color:var(--red)"></i><b style="font-size:13px">示例 · 雷区弹幕即反驳</b><span class="sp"></span><span class="receipt ok">FIRED 0.08s</span></div>
+        <div class="bubble user" style="font-size:12px"><div class="who"><i data-lucide="message-square" class="xs"></i>浪里白条 · 22:09:41 <span class="pill pill-red" style="font-size:9px;padding:1px 7px">命中雷区词 #11「大肥鱼」</span></div>「大肥鱼游得好慢～追不上弹幕吧」</div>
+        <div class="row" style="justify-content:center;margin:6px 0"><i data-lucide="corner-right-down" class="sm" style="color:var(--text-3)"></i></div>
+        <div class="bubble ai" style="font-size:12px"><div class="who"><span class="dot tide"></span>小莓 · 本地模板 t-07 · 0 token</div>「哼！本鲸才不是大肥鱼，是练过仰卧起坐的鲸！」 <span class="pill pill-blue" style="font-size:9.5px">Stage API spray_02 喷水</span> <span class="pill" style="font-size:9.5px">TTS 缓存 1.8s</span></div>
+        <div class="row-wrap" style="gap:6px;margin-top:10px">
+          <span class="lv-metric">端到端 <b>0.08s</b></span>
+          <span class="lv-metric">token <b>0</b></span>
+          <span class="lv-metric">本场触发 <b>3</b></span>
+          <span class="lv-metric">误伤 <b>0</b></span>
+          <span class="lv-metric">记仇账本 <b>+1</b> · SQLite</span>
+        </div>
+        <p class="note" style="margin-top:9px">雷区词表维护在 persona.json（当前 23 词），命中即走本地模板与预设动作，不进模型、不花预算；反驳语气与人格一致。</p>
+      </div>
+      <div class="col" style="gap:10px">
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="zap" class="sm" style="color:var(--amber)"></i><b style="font-size:12.5px">刷屏检测</b></div>
+          <p class="note">同观众 &gt;8 条/10s → 静音 60s 并写入账本；全局 &gt;20 条/秒 → 合并窗口收紧至 3s，只保 P0/P1 进入草稿，其余折叠为统计。</p>
+        </div>
+        <div class="inset" style="padding:12px 14px;flex:1">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="filter" class="sm" style="color:var(--red)"></i><b style="font-size:12.5px">垃圾过滤</b><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">本场过滤 14 条</span></div>
+          <p class="note">广告正则 217 条 + 黑名单 UID 哈希表，命中直接过滤、不进模型；误杀可通过申诉恢复并记录审计日志，不静默丢人。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ⑧ 事件摘要 ── -->
+    <div class="sec-h"><i data-lucide="scroll-text" class="sm"></i>事件摘要 · Post-Stream Summary<span class="ln"></span><span class="cnt">场次 #L-217 · 11-24 20:00–22:48 · 下播 90s 自动生成</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="row" style="margin-bottom:12px"><i data-lucide="clipboard-check" class="sm" style="color:var(--green)"></i><b style="font-size:13px">上一场直播摘要</b><span class="receipt ok">SUMMARY_OK</span><span class="sp"></span><span class="mono" style="font-size:9.5px;color:var(--text-3)">digest_9e2f · 模型成本 3.2k token · 一次生成</span></div>
+      <div class="grid4">
+        <div class="stat"><div class="n num">2:48:12</div><div class="l">直播时长</div></div>
+        <div class="stat"><div class="n num">8,431</div><div class="l">弹幕</div></div>
+        <div class="stat"><div class="n num">96</div><div class="l">回应 · 含合并</div></div>
+        <div class="stat"><div class="n num">¥128</div><div class="l">礼物 · 已感谢 17 起</div></div>
+        <div class="stat"><div class="n num">2</div><div class="l">新常客 · 已入账本</div></div>
+        <div class="stat"><div class="n num">3</div><div class="l">点歌 · 2 成功 1 拦截</div></div>
+        <div class="stat"><div class="n num" style="color:var(--red)">1</div><div class="l">翻车点 · 见下</div></div>
+        <div class="stat"><div class="n num">1</div><div class="l">高光切片 · 45s 环形缓存</div></div>
+      </div>
+      <div class="inset" style="padding:11px 14px;margin-top:13px;border-color:var(--red-line)">
+        <div class="row" style="margin-bottom:5px"><i data-lucide="triangle-alert" class="sm" style="color:var(--red)"></i><b style="font-size:12px;color:var(--red)">翻车点 ×1 · 忘关麦 12s</b><span class="mono" style="font-size:9.5px;color:var(--text-3);margin-left:auto">21:42:08–21:42:20</span></div>
+        <p class="note">桌面麦克风误采集宿主说话，泄漏进直播声卡 12 秒 → 已在摘要与复盘草案标记；预检规则已更新：麦克风默认禁用、开播前显式开启并二次确认（见右栏设备分离）。</p>
+      </div>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text-2)"><i data-lucide="list-checks" class="sm tide" style="color:var(--tide)"></i>直播验收清单 · 09 §11<span class="sp"></span><span class="pill pill-green" style="font-size:9.5px">6/7</span></h4>
+      <div class="lv-ck"><i data-lucide="check" class="xs" style="color:var(--green)"></i>弹幕峰值 20 条/秒 · 注意力队列不逐条调模型<span class="receipt ok">沙盒</span></div>
+      <div class="lv-ck"><i data-lucide="check" class="xs" style="color:var(--green)"></i>雷区弹幕 ≤0.1s 本地反驳 · 0 token<span class="receipt ok">沙盒</span></div>
+      <div class="lv-ck"><i data-lucide="check" class="xs" style="color:var(--green)"></i>语音锁获取 / TTL 释放无泄漏<span class="receipt ok">E2E-HOST</span></div>
+      <div class="lv-ck"><i data-lucide="check" class="xs" style="color:var(--green)"></i>授权门禁未过歌曲自动拦截<span class="receipt ok">单测+沙盒</span></div>
+      <div class="lv-ck"><i data-lucide="check" class="xs" style="color:var(--green)"></i>OBS 透明输出 1080p 预检<span class="receipt ok">沙盒</span></div>
+      <div class="lv-ck"><i data-lucide="check" class="xs" style="color:var(--green)"></i>下播摘要与账本落盘 SQLite<span class="receipt ok">沙盒</span></div>
+      <div class="lv-ck"><i data-lucide="triangle-alert" class="xs" style="color:var(--amber)"></i>真机抖音开播推流（OBS + 虚拟声卡）<span class="receipt warn">[REAL-DEVICE]</span></div>
+      <div class="hairline" style="margin:9px 0"></div>
+      <p class="note">6 项沙盒/静态已过，真机推流待宿主实测；沙盒证据只写 Mock 栏，不冒充真机验收。</p>
+    </div>
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="speaker" class="sm" style="color:var(--blue)"></i>直播与桌面输出分离</h4>
+      <div class="lv-devrow"><span>直播音频 → 虚拟声卡<span class="sub">Live-Virtual · device B6</span></span><span class="sw on"></span></div>
+      <div class="lv-devrow"><span>桌宠语音 → 扬声器<span class="sub">Built-in · device B0</span></span><span class="sw on"></span></div>
+      <div class="lv-devrow"><span>OBS 独立窗口捕获<span class="sub">transparent_1080p</span></span><span class="sw on"></span></div>
+      <div class="lv-devrow"><span style="color:var(--red)">桌面麦克风 → 默认禁用<span class="sub">昨晚忘关麦翻车点来源</span></span><span class="sw"></span></div>
+      <p class="note" style="margin-top:8px">OBS 只采虚拟声卡，避免回采与桌宠语音串流；麦克风需开播预检中显式开启并二次确认。</p>
+    </div>
+    <div class="card" style="padding:13px 15px;border-style:dashed">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="ban" class="sm"></i>授权门禁 · License Gate</h4>
+      <p class="note">未过授权检查的歌曲<b style="color:var(--red)">自动拦截</b>：不进入队列、不可直播；拦截事件写入审计日志并弹幕引导观众改点，绝不静默丢弃。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons(); if (window.pageInit) pageInit();</script>
+</body>
+</html>

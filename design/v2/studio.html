@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>创作工坊 · 形象与资产生成 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  /* ── ① 工作室入口 ── */
+  .st-entries { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .st-entry { padding: 14px 15px; display: flex; flex-direction: column; gap: 7px; }
+  .st-entry .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); margin-bottom: 2px; }
+  .st-entry b { font-size: 13px; letter-spacing: 0.2px; }
+  .st-entry .sub { font-size: 11px; color: var(--text-2); margin-top: -3px; }
+  .st-entry p { font-size: 11px; color: var(--text-3); line-height: 1.6; }
+  .st-foot { margin-top: auto; padding-top: 6px; gap: 5px; }
+
+  /* ── ② 看板 ── */
+  .st-kb { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+  .st-kmeta { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); line-height: 1.7; margin-top: 5px; }
+
+  /* ── ③ 任务详情 ── */
+  .st-mini { position: relative; flex: 1; border-radius: var(--r-lg); padding: 12px 14px; background: var(--surface); border: 1px solid var(--stroke); }
+  .st-mini.chosen { border-color: var(--tide-line); background: linear-gradient(160deg, var(--tide-dim), var(--surface) 45%); box-shadow: 0 0 0 1px var(--tide-line); }
+  .st-score { font-family: var(--font-mono); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .st-qa { display: flex; flex-direction: column; }
+  .st-qarow { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 12px; border-bottom: 1px dashed var(--stroke); }
+  .st-qarow:last-child { border-bottom: none; }
+  .st-qarow .val { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); text-align: right; }
+
+  /* ── ④ Character Bible ── */
+  .st-bgrid { display: grid; grid-template-columns: 340px 1fr; gap: 12px; }
+  .st-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .st-thumb { border: 1px dashed var(--stroke-2); border-radius: var(--r-md); background: var(--inset); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px 6px 12px; color: var(--text-3); }
+  .st-thumb b { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.2px; color: var(--text-2); }
+  .st-thumb .mono { font-size: 9px; }
+  .st-sw { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
+  .st-sw i { width: 14px; height: 14px; border-radius: 5px; border: 1px solid var(--stroke-2); display: inline-block; flex-shrink: 0; }
+  .st-lockgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .st-lock { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--stroke); font-size: 11.5px; color: var(--text-2); }
+  .st-lock svg { color: var(--amber); }
+
+  /* ── ⑥ 资产库 ── */
+  .st-asset { padding: 13px 15px; display: flex; flex-direction: column; gap: 8px; }
+  .st-arow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .st-arow .pill { font-size: 10px; padding: 2px 8px; }
+
+  /* ── ⑦ 门禁记录 / ⑨ 检查单 ── */
+  .st-gate { display: flex; align-items: flex-start; gap: 12px; padding: 11px 14px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--stroke); }
+  .st-gate .ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); flex-shrink: 0; }
+  .st-ck { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--stroke); font-size: 12.5px; }
+  .st-ck:last-child { border-bottom: none; }
+  .st-ck .ic { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
+  .st-ck .ic.ok { background: var(--green-dim); border: 1px solid var(--green-line); color: var(--green); }
+  .st-ck .ic.todo { background: var(--amber-dim); border: 1px solid var(--amber-line); color: var(--amber); }
+  .st-ck .ic.fail { background: var(--red-dim); border: 1px solid var(--red-line); color: var(--red); }
+  .st-ck .val { margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--text-3); text-align: right; }
+</style>
+</head>
+<body data-page="studio" data-crumb="能力面 · 创作工坊">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① 五个工作室入口 ── -->
+    <div class="sec-h"><i data-lucide="pen-tool" class="sm"></i>五个工作室 · 入口<span class="ln"></span><span class="cnt">6 个在制任务 · 共用 Character Bible char_9f3k@v27</span></div>
+    <div class="st-entries stagger">
+      <div class="card card-hover st-entry">
+        <span class="ic"><i data-lucide="pen-tool"></i></span>
+        <b>Character Design</b><span class="sub">角色设定三视图</span>
+        <p>正/侧/背三视图与表情表生成，Brief 强制引用 bible_id，特征锁冲突自动拦截。</p>
+        <div class="row-wrap st-foot"><span class="pill pill-blue">在制 1</span><span class="pill">bible v27</span></div>
+      </div>
+      <div class="card card-hover st-entry">
+        <span class="ic" style="background:var(--blue-dim);border-color:var(--blue-line);color:var(--blue)"><i data-lucide="layers"></i></span>
+        <b>2D Asset Studio</b><span class="sub">像素与 Live2D 分层</span>
+        <p>像素帧、SpriteSheet 与 manifest 导出；Live2D 分层 PSD 按 param 组命名。</p>
+        <div class="row-wrap st-foot"><span class="pill pill-blue">在制 2</span><span class="pill">像素包 v18</span></div>
+      </div>
+      <div class="card card-hover st-entry">
+        <span class="ic" style="background:var(--violet-dim);border-color:var(--violet-line);color:var(--violet)"><i data-lucide="boxes"></i></span>
+        <b>3D Asset Studio</b><span class="sub">VRM</span>
+        <p>文生 3D 候选 → 九项后处理检查 → VRM 0.x 兼容导出，许可门禁前置。</p>
+        <div class="row-wrap st-foot"><span class="pill pill-violet">在制 1</span><span class="pill pill-red">已拦截 1</span></div>
+      </div>
+      <div class="card card-hover st-entry">
+        <span class="ic" style="background:var(--amber-dim);border-color:var(--amber-line);color:var(--amber)"><i data-lucide="clapperboard"></i></span>
+        <b>Animation Studio</b><span class="sub">动作时间轴</span>
+        <p>待机/互动动作编排，帧动画导出 VP9-Alpha WebM，锚点对齐强制校验。</p>
+        <div class="row-wrap st-foot"><span class="pill pill-amber">在制 1</span><span class="pill">动画 14 条</span></div>
+      </div>
+      <div class="card card-hover st-entry">
+        <span class="ic" style="background:var(--green-dim);border-color:var(--green-line);color:var(--green)"><i data-lucide="mountain"></i></span>
+        <b>Scene &amp; Asset Studio</b><span class="sub">舞台道具</span>
+        <p>直播舞台背景、道具与 OBS 图层素材；Apache-2.0 模板需保留 NOTICE。</p>
+        <div class="row-wrap st-foot"><span class="pill pill-green">在制 1</span><span class="pill">背景包 v6</span></div>
+      </div>
+    </div>
+
+    <!-- ── ② 生成任务看板 ── -->
+    <div class="sec-h"><i data-lucide="layout-dashboard" class="sm"></i>生成任务看板<span class="ln"></span><span class="cnt">2026-11-25 · 12 张卡 · 状态与资产状态机对齐</span></div>
+    <div class="st-kb">
+      <div class="kb-col">
+        <div class="kb-head"><span class="dot blue pulse"></span>generating<span class="mono k" style="margin-left:auto">2</span></div>
+        <div class="kb-card"><b>桌宠待机动画 · 伸懒腰</b><div class="st-kmeta">webm-anim · Seedance-1.5-pro<br>14:22 起 · ETA 3 分 · task_b7e2</div></div>
+        <div class="kb-card"><b>三视图 · 秋装设定</b><div class="st-kmeta">sheet_3v · Seedream-4.0<br>13:58 起 · 第 2/3 张 · task_b7f9</div></div>
+      </div>
+      <div class="kb-col">
+        <div class="kb-head"><span class="dot violet"></span>candidate<span class="mono k" style="margin-left:auto">3</span></div>
+        <div class="kb-card"><b>呆毛抖动 · 8 帧</b><div class="st-kmeta">sprite_16x32 · SDXL 本地<br>11-24 20:10 · cand 3/3</div></div>
+        <div class="kb-card"><b>白围裙蕾丝修正</b><div class="st-kmeta">image_1024 · Seedream-4.0<br>11-24 16:42</div></div>
+        <div class="kb-card"><b>舞台背景 · 深海夜色</b><div class="st-kmeta">image_1920 · Seedream-4.0<br>11-23 21:05</div></div>
+      </div>
+      <div class="kb-col">
+        <div class="kb-head"><span class="dot amber"></span>review_required<span class="mono k" style="margin-left:auto">2</span></div>
+        <div class="kb-card"><b>口型参数集 v10 草案</b><div class="st-kmeta">live2d_param · Cubism 导出<br>待人工听感核对 · 11-25 10:31</div></div>
+        <div class="kb-card"><b>3D 角色 VRM 候选 v0.3</b><div class="st-kmeta">vrm · Hunyuan3D-2.1<br>许可待补 · 已挂起 11-24</div></div>
+      </div>
+      <div class="kb-col">
+        <div class="kb-head"><span class="dot green"></span>published<span class="mono k" style="margin-left:auto">4</span></div>
+        <div class="kb-card"><b>webm 素材包 v41</b><div class="st-kmeta">桌宠+OBS · 11-21 发布<br>VP9-Alpha · sha 4b1d9e07</div></div>
+        <div class="kb-card"><b>像素包 v18 · idle_east</b><div class="st-kmeta">spritesheet · 11-19 发布<br>SDXL 本地 · MIT</div></div>
+        <div class="kb-card"><b>口型参数集 v9</b><div class="st-kmeta">live2d_param · 11-18 发布<br>音素映射 v2 对齐</div></div>
+        <div class="kb-card"><b>舞台背景包 v6 · 6 张</b><div class="st-kmeta">1920×1080 png · 11-15 发布<br>Apache-2.0 · NOTICE 已留</div></div>
+      </div>
+      <div class="kb-col">
+        <div class="kb-head"><span class="dot red"></span>restricted<span class="mono k" style="margin-left:auto">1</span></div>
+        <div class="kb-card" style="border-color:var(--red-line)"><b>外部素材 · 无 LICENSE</b><div class="st-kmeta">scrape · 来源未知<br>11-22 · gate_0420 拒绝</div><div class="row-wrap" style="margin-top:6px"><span class="lic unl">UNLICENSED</span></div></div>
+      </div>
+    </div>
+
+    <!-- ── ③ 任务详情 ── -->
+    <div class="sec-h"><i data-lucide="list-checks" class="sm"></i>任务详情 · 桌宠待机动画「伸懒腰」<span class="ln"></span><span class="cnt">task_b7e2 · Seedance-1.5-pro · 已耗 ¥3.20</span></div>
+    <div class="card" style="padding:16px 20px 14px">
+      <div class="row" style="margin-bottom:13px;flex-wrap:wrap">
+        <b style="font-size:13.5px">Brief：待机 · 每 12s 伸懒腰一次 · 锚点脚底</b>
+        <span class="pill pill-amber"><span class="dot amber pulse"></span>review_required</span>
+        <span class="pill">bible char_9f3k@v27</span>
+        <span class="mono k">14:22 起 · 预算 ¥5.00</span>
+      </div>
+      <div class="steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">Brief</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">生成</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">候选</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">后处理</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">自动 QA</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">6</span><span class="lb">人工预览</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">7</span><span class="lb">授权门禁</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">8</span><span class="lb">发布</span></div></div>
+      </div>
+      <div class="row" style="gap:12px;margin-top:14px;align-items:stretch">
+        <div class="row" style="gap:12px;flex:2;min-width:0">
+          <div class="st-mini chosen">
+            <div class="row"><b style="font-size:12px">候选 1 · cand_9a</b><span class="pill pill-tide" style="margin-left:auto;font-size:9.5px">推荐 · 待确认</span></div>
+            <div class="st-score" style="color:var(--tide)">0.92</div>
+            <div class="st-kmeta">2.4s · 24 帧 · 平滑 0.95<br>锚点 y=498 · 呆毛完整</div>
+          </div>
+          <div class="st-mini">
+            <div class="row"><b style="font-size:12px">候选 2 · cand_9b</b></div>
+            <div class="st-score" style="color:var(--text-2)">0.81</div>
+            <div class="st-kmeta">2.2s · 24 帧 · 平滑 0.88<br>第 17 帧轻微残影</div>
+          </div>
+          <div class="st-mini">
+            <div class="row"><b style="font-size:12px">候选 3 · cand_9c</b></div>
+            <div class="st-score" style="color:var(--text-2)">0.63</div>
+            <div class="st-kmeta">2.6s · 24 帧 · 平滑 0.71<br>左臂与围裙穿插 ×2 帧</div>
+          </div>
+        </div>
+        <div class="inset" style="flex:1;padding:11px 14px;min-width:250px">
+          <div class="row" style="margin-bottom:4px"><i data-lucide="shield-check" class="sm" style="color:var(--green)"></i><b style="font-size:12.5px">自动 QA · autoQA v3</b><span class="pill pill-green" style="margin-left:auto;font-size:9.5px">4/4 PASS</span></div>
+          <div class="st-qa">
+            <div class="st-qarow"><i data-lucide="check" class="xs" style="color:var(--green)"></i>帧尺寸<span class="val">512×512 · 30fps · 24 帧</span><span class="receipt ok">PASS</span></div>
+            <div class="st-qarow"><i data-lucide="check" class="xs" style="color:var(--green)"></i>透明边界<span class="val">alpha 覆盖 96.4% · 无孤岛</span><span class="receipt ok">PASS</span></div>
+            <div class="st-qarow"><i data-lucide="check" class="xs" style="color:var(--green)"></i>调色板<span class="val">32 色 · ΔE ≤ 2.3</span><span class="receipt ok">PASS</span></div>
+            <div class="st-qarow"><i data-lucide="check" class="xs" style="color:var(--green)"></i>锚点对齐<span class="val">脚底基线 y=498/512</span><span class="receipt ok">PASS</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:12px">当前停在「人工预览」：确认候选 1 后进入授权门禁（gate_0421 排队中）；门禁未过则回退 candidate 或标记 restricted，不存在跳过门禁直接发布。</p>
+    </div>
+
+    <!-- ── ④ Character Bible ── -->
+    <div class="sec-h"><i data-lucide="book-marked" class="sm"></i>Character Bible · 单一事实源<span class="ln"></span><span class="cnt">char_9f3k@v27 · 11-20 更新 · 引用即锁特征</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="st-bgrid">
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:10px"><i data-lucide="scan" class="sm tide"></i><b style="font-size:12.5px">三视图基准</b><span class="mono k" style="margin-left:auto">512×768 · PNG</span></div>
+          <div class="st-thumbs">
+            <div class="st-thumb"><i data-lucide="user"></i><b>FRONT</b><span class="mono k">v27</span></div>
+            <div class="st-thumb"><i data-lucide="user"></i><b>SIDE</b><span class="mono k">v27</span></div>
+            <div class="st-thumb"><i data-lucide="user"></i><b>BACK</b><span class="mono k">v27</span></div>
+          </div>
+          <p class="note" style="margin-top:10px">所有工作室的 Brief 必须以本组三视图为参照基准；替代素材需先升版 bible 再生成。</p>
+        </div>
+        <div class="col" style="gap:12px">
+          <div class="inset" style="padding:12px 14px">
+            <div class="row" style="margin-bottom:9px"><i data-lucide="palette" class="sm tide"></i><b style="font-size:12.5px">发型 · 眼睛 · 配色锚定</b><span class="mono k" style="margin-left:auto">6 swatch</span></div>
+            <div class="row-wrap" style="gap:12px">
+              <span class="st-sw"><i style="background:#5E8BD9"></i>发 · 鲸蓝 #5E8BD9</span>
+              <span class="st-sw"><i style="background:#3C5E9E"></i>发暗部 #3C5E9E</span>
+              <span class="st-sw"><i style="background:#7FE9DC"></i>呆毛 #7FE9DC</span>
+              <span class="st-sw"><i style="background:#3EE0CD"></i>瞳 · 潮汐青 #3EE0CD</span>
+              <span class="st-sw"><i style="background:#F2F6FA"></i>围裙 · 雾白 #F2F6FA</span>
+              <span class="st-sw"><i style="background:#FFB3C0"></i>腮红 #FFB3C0</span>
+            </div>
+            <div class="row-wrap" style="margin-top:10px;gap:6px">
+              <span class="pill">标志配件</span>
+              <span class="pill pill-tide">白围裙 · 左侧蝴蝶结</span>
+              <span class="pill pill-tide">呆毛 ×1 居中</span>
+              <span class="pill pill-tide">鲸尾耳饰 成对</span>
+            </div>
+          </div>
+          <div class="inset" style="padding:12px 14px">
+            <div class="row" style="margin-bottom:9px"><i data-lucide="smile" class="sm tide"></i><b style="font-size:12.5px">表情规范 &amp; 风格约束</b><span class="mono k" style="margin-left:auto">12 组已入库</span></div>
+            <div class="row-wrap" style="gap:6px">
+              <span class="pill">傲娇 · mouth_a + brw_dn</span>
+              <span class="pill">害羞 · blush_0.6</span>
+              <span class="pill">得意 · smile_w</span>
+              <span class="pill">震惊 · eye_wide</span>
+              <span class="pill">wink · eye_l</span>
+              <span class="pill">困 · eye_half</span>
+            </div>
+            <p class="note" style="margin-top:9px">像素侧：线条闭合 · 2.5 头身 · 色阶 ≤32 · 禁长渐变阴影；Live2D 侧：禁透视夸张，变形参数必须绑定到对应 param 组后导出。</p>
+          </div>
+        </div>
+      </div>
+      <div class="hairline" style="margin:13px 0 11px"></div>
+      <div class="row" style="margin-bottom:9px"><i data-lucide="lock" class="sm" style="color:var(--amber)"></i><b style="font-size:12.5px">特征锁 · 禁止改变清单</b><span class="pill pill-amber" style="margin-left:auto;font-size:9.5px">冲突自动降级 review_required</span></div>
+      <div class="st-lockgrid">
+        <div class="st-lock"><i data-lucide="lock" class="xs"></i>呆毛 1 根 · 居中不偏移</div>
+        <div class="st-lock"><i data-lucide="lock" class="xs"></i>白围裙 · 左侧蝴蝶结</div>
+        <div class="st-lock"><i data-lucide="lock" class="xs"></i>鲸尾耳饰 · 必须成对</div>
+        <div class="st-lock"><i data-lucide="lock" class="xs"></i>眼下腮红点 · 3 颗</div>
+        <div class="st-lock"><i data-lucide="lock" class="xs"></i>尾身比 · 1 : 0.6</div>
+        <div class="st-lock"><i data-lucide="lock" class="xs"></i>主色锚定 · 蓝白青三色</div>
+      </div>
+    </div>
+
+    <!-- ── ⑤ 像素素材流水线 ── -->
+    <div class="sec-h"><i data-lucide="workflow" class="sm"></i>像素素材流水线<span class="ln"></span><span class="cnt">16×32 · 4 方向 × 8 帧 · palette 32 · done 到第 8 步</span></div>
+    <div class="card" style="padding:16px 20px 14px">
+      <div class="steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">读取游戏规格</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">像素参考</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">方向图</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">动作帧</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">网格对齐</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">6</span><span class="lb">帧检查</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">7</span><span class="lb">调色板</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">8</span><span class="lb">SpriteSheet</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">9</span><span class="lb">manifest</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">10</span><span class="lb">游戏环境验证</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">11</span><span class="lb">发布</span></div></div>
+      </div>
+      <div class="row-wrap" style="margin-top:13px;gap:8px">
+        <span class="pill"><i data-lucide="file-check" class="xs"></i>输入 game_spec_v6.json（16×32 · 4dir）</span>
+        <span class="pill"><i data-lucide="book-marked" class="xs"></i>参照 bible v27 · 像素风格卡</span>
+        <span class="pill pill-green"><i data-lucide="check" class="xs"></i>spritesheet_512.png 已产出 · sha 77c2a5ef</span>
+        <span class="pill pill-blue"><span class="dot blue pulse"></span>manifest.json 生成中</span>
+      </div>
+      <p class="note" style="margin-top:10px">帧检查或网格对齐失败时自动回退到「方向图」整批重生成，不允许手改单帧破坏方向间一致性；第 10 步游戏环境验证须在星露谷真机或 SMAPI 沙盒中过一遍后再发布。</p>
+    </div>
+
+    <!-- ── ⑥ 资产库 ── -->
+    <div class="sec-h"><i data-lucide="library" class="sm"></i>资产库<span class="ln"></span><span class="cnt">6 个资产包 · 28 项资产 · 版本 / hash / validationStatus</span></div>
+    <div class="grid3 stagger">
+      <div class="card card-hover st-asset">
+        <div class="row"><b style="font-size:12.5px">dsh-pet webm 素材包</b><span class="lic nc" style="margin-left:auto">CC BY-NC-SA 4.0</span></div>
+        <div class="st-kmeta">webm_vp9_a · 桌宠 + OBS 双端<br>原型与二创形象 · 非商用范围</div>
+        <div class="st-arow"><span class="pill">v41</span><span class="pill mono">sha 4b1d9e07</span><span class="pill pill-green">VALIDATED</span></div>
+        <p class="note">已标记 <span class="mono" style="color:var(--amber)">licenseScope: DEV_ONLY_NON_COMMERCIAL</span> 与 [DEV-ASSET-ONLY]；保留一键替换为自制素材包的管线。</p>
+      </div>
+      <div class="card card-hover st-asset">
+        <div class="row"><b style="font-size:12.5px">自制像素包</b><span class="lic mit" style="margin-left:auto">MIT</span></div>
+        <div class="st-kmeta">spritesheet 16×32 · 星露谷化身<br>保留版权头 © 2026 Whale Isle</div>
+        <div class="st-arow"><span class="pill">v18</span><span class="pill mono">sha 77c2a5ef</span><span class="pill pill-green">VALIDATED</span></div>
+        <p class="note">本地 SDXL 生成 + 人工修帧，全流程在本仓库内，无外部许可依赖。</p>
+      </div>
+      <div class="card card-hover st-asset" style="border-color:var(--red-line)">
+        <div class="row"><b style="font-size:12.5px">3D 角色候选</b><span class="lic unl" style="margin-left:auto">UNLICENSED</span></div>
+        <div class="st-kmeta">vrm 0.x 候选 · Hunyuan3D-2.1<br>上游素材无 LICENSE 文件</div>
+        <div class="st-arow"><span class="pill">v0.3</span><span class="pill mono">sha e58c11d2</span><span class="pill pill-red">BLOCKED</span></div>
+        <p class="note">许可门禁拦截（gate_0420）：禁止入库与商用，仅作管线联通测试，测试后销毁本地副本。</p>
+      </div>
+      <div class="card card-hover st-asset">
+        <div class="row"><b style="font-size:12.5px">Live2D 分层</b><span class="lic mit" style="margin-left:auto">MIT</span></div>
+        <div class="st-kmeta">psd 分层 · live2d_v3 · Cubism 5<br>按 param 组命名 · 口型已绑定</div>
+        <div class="st-arow"><span class="pill">v9</span><span class="pill mono">sha 12f04ab9</span><span class="pill pill-green">VALIDATED</span></div>
+        <p class="note">与口型参数集 v9 配套发布；拆层规则见 2D Asset Studio 导出预设 exp_live2d_v3。</p>
+      </div>
+      <div class="card card-hover st-asset">
+        <div class="row"><b style="font-size:12.5px">Live2D 口型参数集</b><span class="lic" style="margin-left:auto">INTERNAL</span></div>
+        <div class="st-kmeta">json 参数 · a / i / u / e / o + w<br>与 voice-host 音素映射表 v2 对齐</div>
+        <div class="st-arow"><span class="pill">v9</span><span class="pill mono">sha 3a90c6d1</span><span class="pill pill-green">VALIDATED</span></div>
+        <p class="note">v10 草案在 review_required，待人工听感核对通过后升版。</p>
+      </div>
+      <div class="card card-hover st-asset">
+        <div class="row"><b style="font-size:12.5px">舞台背景包</b><span class="lic apache" style="margin-left:auto">Apache-2.0</span></div>
+        <div class="st-kmeta">1920×1080 png ×6 · OBS 图层源<br>基于 Apache-2.0 模板重绘</div>
+        <div class="st-arow"><span class="pill">v6</span><span class="pill mono">sha c7d3301e</span><span class="pill pill-amber">PARTIAL</span></div>
+        <p class="note">NOTICE 与署名已保留；「极夜灯塔」1 张待补 attribution，补齐前不得用于直播。</p>
+      </div>
+    </div>
+
+    <!-- ── ⑦ 授权门禁记录 ── -->
+    <div class="sec-h"><i data-lucide="scale" class="sm"></i>授权门禁记录<span class="ln"></span><span class="cnt">本月 3 条 · 通过 2 · 拦截 1 · 台账写入 SQLite</span></div>
+    <div class="col stagger" style="gap:9px">
+      <div class="st-gate">
+        <span class="ic" style="color:var(--green)"><i data-lucide="check" class="sm"></i></span>
+        <div style="flex:1">
+          <div class="row"><b style="font-size:12.5px">三视图 · 秋装设定</b><span class="receipt ok">PASS · gate_0418</span><span class="lic" style="margin-left:auto">SELF-GEN</span></div>
+          <div class="st-kmeta">来源 Character Design 工作室（task_b7f9）· 模型 Seedream-4.0<br>用途 直播舞台立绘 · 商用范围已登记 · 11-24 14:05</div>
+        </div>
+      </div>
+      <div class="st-gate">
+        <span class="ic" style="color:var(--green)"><i data-lucide="check" class="sm"></i></span>
+        <div style="flex:1">
+          <div class="row"><b style="font-size:12.5px">像素帧 · idle_east 4 帧</b><span class="receipt ok">PASS · gate_0419</span><span class="lic mit" style="margin-left:auto">MIT</span></div>
+          <div class="st-kmeta">来源 2D Asset Studio（task_b6c2）· 模型 SDXL（本地 WebUI）<br>用途 星露谷化身 sprite_16x32 · 本地推理无外部许可 · 11-19 09:40</div>
+        </div>
+      </div>
+      <div class="st-gate" style="border-color:var(--red-line)">
+        <span class="ic" style="color:var(--red)"><i data-lucide="ban" class="sm"></i></span>
+        <div style="flex:1">
+          <div class="row"><b style="font-size:12.5px">外部素材站抓取 · 「深海少女立绘」</b><span class="receipt fail">BLOCKED · gate_0420</span><span class="lic unl" style="margin-left:auto">UNLICENSED</span></div>
+          <div class="st-kmeta">来源 外部素材站（无来源页存档）· 模型 — · 用途 未登记 · 11-22 21:14</div>
+          <p class="note" style="margin-top:6px;color:var(--red)">拒绝理由：未附 LICENSE 文件，默认保留所有权利。已拒绝入库并写入台账；仅允许作为构图参考后彻底重绘，重绘稿按 SELF-GEN 重新过门禁。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ⑧ Media Generation Gateway ── -->
+    <div class="sec-h"><i data-lucide="server" class="sm"></i>Media Generation Gateway<span class="ln"></span><span class="cnt">两个入口 · 统一计费与台账 · 2026-11 已用 ¥105.60 / ¥300</span></div>
+    <div class="grid2">
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:7px"><span class="ic" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--tide-dim);border:1px solid var(--tide-line);color:var(--tide)"><i data-lucide="terminal" class="sm"></i></span><b style="font-size:13px">入口 A · 本地 Coding Agent 调度</b><span class="pill pill-tide" style="margin-left:auto">推荐 · 流水线</span></div>
+        <p class="note">CLI / MCP 由本地 Agent 编排：批量任务、失败重试、预算护栏（80% 水位提醒）、产物直写资产库并登记 hash。当前队列 2 · 重试 1。</p>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:7px"><span class="ic" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--blue-dim);border:1px solid var(--blue-line);color:var(--blue)"><i data-lucide="cloud" class="sm"></i></span><b style="font-size:13px">入口 B · 直接 API（中控台）</b><span class="pill pill-blue" style="margin-left:auto">轻量修补</span></div>
+        <p class="note">中控台单次交互生成，即时预览、手动入库，走同一计费与许可门禁。今日调用 6 次，全部为小图修补与背景试渲。</p>
+      </div>
+    </div>
+    <div class="why" style="margin-top:12px"><i data-lucide="lightbulb" class="sm"></i><span><b>本地 CLI ≠ 本地生成：</b>CLI 只是调度入口，模型推理发生在云端 Provider；费用按 Provider 记入 Media Gateway 台账，不会因为"在本地执行命令"而免费。仅 SDXL 等 WebUI 本地推理不产生云费用。</span></div>
+    <div class="card" style="padding:6px 16px 10px;margin-top:12px">
+      <table class="tbl">
+        <thead><tr><th>Provider</th><th>用途</th><th>调用次数</th><th>生成量</th><th style="text-align:right">本月费用</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Seedream-4.0</td><td>图像 · 三视图 / 立绘 / 背景</td><td class="num">86</td><td class="num">214 张</td><td class="num" style="text-align:right">¥46.20</td></tr>
+          <tr><td class="mono">Seedance-1.5-pro</td><td>视频 · 桌宠动画候选</td><td class="num">12</td><td class="num">36 段</td><td class="num" style="text-align:right">¥38.40</td></tr>
+          <tr><td class="mono">Hunyuan3D-2.1</td><td>3D · VRM 候选</td><td class="num">5</td><td class="num">5 个</td><td class="num" style="text-align:right">¥21.00</td></tr>
+          <tr><td class="mono">SDXL（本地 WebUI）</td><td>像素帧 · 本地推理</td><td class="num">148</td><td class="num">592 帧</td><td class="num" style="text-align:right;color:var(--text-3)">¥0.00（不计云费）</td></tr>
+          <tr><td><b>合计</b></td><td class="k">预算 ¥300.00 · 水位 35.2%</td><td class="num"><b>251</b></td><td></td><td class="num" style="text-align:right"><b>¥105.60</b></td></tr>
+        </tbody>
+      </table>
+      <div class="meter" style="margin:4px 0 4px"><i style="width:35.2%;background:linear-gradient(90deg,var(--tide),var(--blue))"></i></div>
+    </div>
+
+    <!-- ── ⑨ 3D 后处理检查单 ── -->
+    <div class="sec-h"><i data-lucide="clipboard-check" class="sm"></i>3D 后处理检查单<span class="ln"></span><span class="cnt">VRM 候选 v0.3 · 6 done · 2 待办 · 1 失败</span></div>
+    <div class="card" style="padding:8px 18px 10px">
+      <div class="st-ck"><span class="ic ok"><i data-lucide="check" class="xs"></i></span><b style="font-weight:650">网格 Mesh</b><span class="val">manifold ✓ · 24,318 tris</span><span class="receipt ok">DONE</span></div>
+      <div class="st-ck"><span class="ic ok"><i data-lucide="check" class="xs"></i></span><b style="font-weight:650">法线 Normals</b><span class="val">无翻转 · 平滑角 38°</span><span class="receipt ok">DONE</span></div>
+      <div class="st-ck"><span class="ic ok"><i data-lucide="check" class="xs"></i></span><b style="font-weight:650">UV</b><span class="val">重叠 0% · 贴图 4096²</span><span class="receipt ok">DONE</span></div>
+      <div class="st-ck"><span class="ic ok"><i data-lucide="check" class="xs"></i></span><b style="font-weight:650">材质 Materials</b><span class="val">MToon ×3 · 不透明度合规</span><span class="receipt ok">DONE</span></div>
+      <div class="st-ck"><span class="ic ok"><i data-lucide="check" class="xs"></i></span><b style="font-weight:650">面数 PolyBudget</b><span class="val">24.3k / 50k 上限</span><span class="receipt ok">DONE</span></div>
+      <div class="st-ck"><span class="ic ok"><i data-lucide="check" class="xs"></i></span><b style="font-weight:650">骨骼 Rig</b><span class="val">Humanoid 65 骨 · IK 就绪</span><span class="receipt ok">DONE</span></div>
+      <div class="st-ck"><span class="ic todo"><i data-lucide="clock" class="xs"></i></span><b style="font-weight:650">BlendShapes</b><span class="val">12 组表情 morph 待补</span><span class="receipt warn">TODO</span></div>
+      <div class="st-ck"><span class="ic fail"><i data-lucide="x" class="xs"></i></span><b style="font-weight:650">VRM 兼容</b><span class="val" style="color:var(--red)">SpringBone 组缺失 ×2 · 1 个非标 shader</span><span class="receipt fail">FAILED</span></div>
+      <div class="st-ck"><span class="ic todo"><i data-lucide="clock" class="xs"></i></span><b style="font-weight:650">动画测试</b><span class="val">依赖 VRM 兼容修复后重跑</span><span class="receipt warn">TODO</span></div>
+      <p class="note" style="padding:6px 0 8px">VRM 兼容失败已生成修复任务 fix_3d_0221 并阻塞发布；修复前该候选保持 review_required，不得以"生成成功"为由放行。</p>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text-2)"><i data-lucide="workflow" class="sm tide"></i>资产状态机 · 十态</h4>
+      <div class="row-wrap" style="gap:6px">
+        <span class="pill"><span class="dot off"></span>draft</span>
+        <span class="pill pill-blue"><span class="dot blue pulse"></span>generating</span>
+        <span class="pill pill-violet"><span class="dot violet"></span>candidate</span>
+        <span class="pill pill-blue"><span class="dot blue"></span>processing</span>
+        <span class="pill pill-red"><span class="dot red"></span>validation_failed</span>
+        <span class="pill pill-amber"><span class="dot amber"></span>review_required</span>
+        <span class="pill pill-green"><span class="dot green"></span>approved</span>
+        <span class="pill pill-tide"><span class="dot tide"></span>published</span>
+        <span class="pill"><span class="dot off"></span>deprecated</span>
+        <span class="pill pill-red"><span class="dot red"></span>restricted</span>
+      </div>
+      <div class="hairline" style="margin:10px 0 8px"></div>
+      <p class="note mono" style="font-size:10px">draft → generating → candidate → processing → review_required → approved → published</p>
+      <p class="note" style="margin-top:6px">validation_failed / restricted 为人工介入态，处理后重入主链；deprecated 仅归档、可回滚，不参与生成。</p>
+    </div>
+
+    <div class="card" style="padding:13px 15px;border-style:dashed">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="info" class="sm"></i>注记</h4>
+      <p class="note"><b style="color:var(--text-1)">模型生成成功 ≠ 可投入生产。</b>生成只产生候选；必须依次通过自动 QA → 人工预览 → 授权门禁三道关才允许进入 published。许可缺失或校验失败直接落入 validation_failed / restricted，不存在"先上架后补票"。</p>
+    </div>
+
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text-2)"><i data-lucide="circle-check-big" class="sm green"></i>验收摘要 · 蓝图 06 §12</h4>
+      <div class="kv"><span class="k">沙盒 / Mock</span><span class="v"><span class="dot green"></span> 已验证 12/12 · QA 脚本 ×4 · 门禁拦截 ×3</span></div>
+      <div class="kv"><span class="k">manifest 校验</span><span class="v"><span class="dot green"></span> 通过 · spritesheet_512 装载</span></div>
+      <div class="kv"><span class="k">调色板 / 锚点</span><span class="v"><span class="dot green"></span> 自动校验通过</span></div>
+      <div class="kv"><span class="k">待真机验收</span><span class="v" style="color:var(--amber)">3 项：VP9-Alpha 桌宠窗渲染 / Live2D 口型联调 / VRM 桌面宿主加载</span></div>
+      <p class="note" style="margin-top:8px">[SIMULATION] 证据仅写入 VERIFY.md 的 Mock 栏，严禁冒充真机验收；真机项由宿主按验收排期执行。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons(); if (window.pageInit) pageInit();</script>
+</body>
+</html>

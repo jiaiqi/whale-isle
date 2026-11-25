@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>总览 · 数字生命仪表盘 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .idcard { display: flex; gap: 18px; padding: 18px 20px; align-items: stretch; }
+  .mood-map { position: relative; width: 128px; height: 92px; border-radius: 12px; background: var(--inset); border: 1px solid var(--stroke); overflow: hidden; }
+  .mood-map::before { content: ''; position: absolute; inset: 0; background:
+    linear-gradient(to right, rgba(255,107,107,0.10), transparent 55%, rgba(62,224,205,0.12)),
+    linear-gradient(to top, rgba(255,194,71,0.06), transparent 60%, rgba(78,168,255,0.08)); }
+  .mood-map .axis { position: absolute; background: var(--stroke-2); }
+  .mood-map .axis.v { left: 50%; top: 8px; bottom: 8px; width: 1px; }
+  .mood-map .axis.h { top: 50%; left: 8px; right: 8px; height: 1px; }
+  .mood-map .pt {
+    position: absolute; left: 68%; top: 34%; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--tide); box-shadow: 0 0 12px var(--tide), 0 0 0 5px var(--tide-dim);
+    transform: translate(-50%, -50%); animation: tide-glow 3s ease-in-out infinite;
+  }
+  .mood-map .lb { position: absolute; font-size: 8.5px; color: var(--text-3); font-family: var(--font-mono); }
+  .state-chip { padding: 4px 11px; border-radius: 980px; font-size: 11px; border: 1px solid var(--stroke); color: var(--text-3); }
+  .state-chip.on { background: var(--tide-dim); border-color: var(--tide-line); color: var(--tide); font-weight: 650; box-shadow: 0 0 14px rgba(62,224,205,0.15); }
+  .emb-strip { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--stroke); }
+  .emb-strip .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); flex-shrink: 0; }
+  .emb-strip.dim .ic { background: var(--inset); border-color: var(--stroke); color: var(--text-3); }
+  .why {
+    display: inline-flex; align-items: flex-start; gap: 7px; padding: 8px 12px;
+    border-radius: var(--r-md); background: var(--tide-dim); border: 1px dashed var(--tide-line);
+    font-size: 11.5px; color: var(--text-2); line-height: 1.6;
+  }
+  .why b { color: var(--tide); }
+  .feed { display: flex; flex-direction: column; gap: 9px; }
+  .feed .bubble { animation: bubble-up 0.5s var(--ease-out) both; }
+  .feed > *:nth-child(2) { animation-delay: 0.05s; } .feed > *:nth-child(3) { animation-delay: 0.1s; }
+  .feed > *:nth-child(4) { animation-delay: 0.15s; } .feed > *:nth-child(5) { animation-delay: 0.2s; }
+  .feed > *:nth-child(6) { animation-delay: 0.25s; }
+  .as-card { padding: 13px 15px; }
+  .as-card h4 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; margin-bottom: 10px; color: var(--text-2); }
+  .sw-row2 { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 12px; }
+  .sub-meter { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-2); padding: 3px 0; }
+  .sub-meter .meter { flex: 1; }
+  .sub-meter .n { font-family: var(--font-mono); font-size: 10px; width: 52px; text-align: right; color: var(--text-1); }
+</style>
+</head>
+<body data-page="home" data-crumb="生命体 · 总览">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <div class="sec-h"><i data-lucide="compass" class="sm"></i>数字生命 · 此刻<span class="ln"></span><span class="cnt">Character ID: char_9f3k ·「小莓」</span></div>
+
+    <!-- 身份 + 声呐 + 情绪 -->
+    <div class="card idcard rise">
+      <div class="avatar" style="width:58px;height:58px;font-size:20px">莓</div>
+      <div class="col" style="gap:9px;flex:1;min-width:0">
+        <div class="row-wrap">
+          <b style="font-size:17px">小莓</b>
+          <span class="pill pill-tide"><span class="dot tide pulse"></span>主角色 Primary</span>
+          <span class="pill">一个 AI · 多种身体</span>
+          <span class="pill pill-green"><i data-lucide="check" class="xs"></i>化身一致性 3/3</span>
+        </div>
+        <div class="note">傲娇干饭蓝鲸女仆 · 好奇心强、嘴硬心软、对钓鱼有执念。人格 v27 · 模型：DeepSeek-V4（可替换，不影响身份）。</div>
+        <div class="why"><i data-lucide="lightbulb" class="sm"></i><span><b>正在做：</b>在矿洞 45 层挖矿，为升级工具补矿石。<br><b>为什么：</b>短期目标"补齐 40 铜矿"来自共同计划「升级工具」，背包已满，已建临时箱子存放杂物（证据：回执 #a421）。</span></div>
+        <div class="row-wrap" style="margin-top:2px">
+          <span class="state-chip">idle</span><span class="state-chip">listening</span><span class="state-chip">thinking</span><span class="state-chip">speaking</span>
+          <span class="state-chip">singing</span><span class="state-chip on">gaming</span><span class="state-chip">reacting</span>
+          <span class="state-chip">dancing</span><span class="state-chip">resting</span>
+        </div>
+      </div>
+      <div class="row" style="gap:26px;align-items:center">
+        <div class="col" style="gap:14px;align-items:center">
+          <div class="sonar"><span class="ring"></span><span class="ring"></span><span class="ring"></span><div class="core"><i data-lucide="gamepad-2"></i></div><span class="sonar-label">GAMING · 星露谷</span></div>
+          <span class="pill"><i data-lucide="timer" class="xs"></i>本轮租约 14:52 释放</span>
+        </div>
+        <div class="col" style="gap:8px">
+          <span class="k" style="font-size:10.5px;letter-spacing:1px">情绪 MOOD · V/A 地图</span>
+          <div class="mood-map"><span class="axis v"></span><span class="axis h"></span><span class="pt"></span>
+            <span class="lb" style="left:8px;top:6px">高唤醒</span><span class="lb" style="right:8px;bottom:6px">愉悦 ↑</span>
+          </div>
+          <div class="row-wrap" style="gap:5px">
+            <span class="pill pill-tide" style="font-size:10px">兴奋</span><span class="pill" style="font-size:10px">专注</span>
+            <span class="conf"><span class="meter"><i style="width:82%"></i></span>置信 0.82</span>
+          </div>
+          <div class="kv"><span class="k">社交能量</span><span class="v" style="min-width:110px"><span class="meter" style="width:110px;display:inline-block"><i style="width:64%"></i></span></span><span class="k" style="min-width:0">64%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 时间轴 + 目标 -->
+    <div class="grid2" style="margin-top:12px">
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:13px">
+          <h3 style="font-size:13.5px;display:flex;align-items:center;gap:8px"><i data-lucide="calendar-clock" class="sm tide"></i>今日生活时间轴</h3>
+          <span class="sp"></span>
+          <span class="pill pill-green"><span class="dot green"></span>Life Scheduler 运行中</span>
+        </div>
+        <div class="tl">
+          <div class="tl-item done"><span class="tm">08:30</span><span class="t">晨间浇灌农场</span> <span class="receipt ok">COMPLETED</span><div class="note" style="margin-top:3px">浇水 42 格 · 消耗体力 18% · 回执 #a3f2</div></div>
+          <div class="tl-item done"><span class="tm">10:00</span><span class="t">整理背包 · 建临时箱</span> <span class="receipt ok">COMPLETED</span><div class="note" style="margin-top:3px">自主决策：建箱子优于回家（附近有材料 + 夜晚临近）</div></div>
+          <div class="tl-item now"><span class="tm">11:30</span><span class="t">矿洞 45 层 · 补铜矿石</span> <span class="receipt run">IN_PROGRESS</span><div class="note" style="margin-top:3px">共同目标 · 预算 30k 米 · 剩余 18k · 挂攻略知识 2 条</div></div>
+          <div class="tl-item"><span class="tm">14:00</span><span class="t">创作工坊 · 像素素材补帧</span> <span class="pill">待开始</span></div>
+          <div class="tl-item"><span class="tm">20:00</span><span class="t">直播：星露谷共玩场</span> <span class="pill pill-violet"><i data-lucide="radio" class="xs"></i>已排期</span><div class="note" style="margin-top:3px">点歌队列 2 首 · 授权检查通过 · OBS 场景预检完成</div></div>
+          <div class="tl-item"><span class="tm">22:30</span><span class="t">复盘 & 记忆归档</span> <span class="pill">勿扰开始</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="margin-bottom:13px">
+          <h3 style="font-size:13.5px;display:flex;align-items:center;gap:8px"><i data-lucide="target" class="sm tide"></i>多时间尺度目标</h3>
+          <span class="sp"></span>
+          <span class="pill"><i data-lucide="git-branch" class="xs"></i>可暂停 · 可放弃 · 可重排</span>
+        </div>
+        <div class="col" style="gap:8px">
+          <div class="goal"><span class="src pill pill-run" style="background:var(--blue-dim);border-color:var(--blue-line);color:var(--blue)">当前动作</span><h4><i data-lucide="pickaxe" class="xs"></i>清理 45 层东侧石堆</h4><p>执行中 · 回执 #a421 · 预计 6 分钟</p></div>
+          <div class="goal"><span class="src pill pill-blue">短期目标</span><h4><i data-lucide="hammer" class="xs"></i>补齐 40 铜矿 → 升级镐</h4><p>进度 26/40 · 自主调整过一次（背包满先建箱）</p></div>
+          <div class="goal"><span class="src pill pill-tide">游戏日目标</span><h4><i data-lucide="cloud-drizzle" class="xs"></i>雨天备水：修好洒水器 2 台</h4><p>材料已锁定 · 不占用用户保留物资</p></div>
+          <div class="goal"><span class="src pill pill-violet">长期项目</span><h4><i data-lucide="warehouse" class="xs"></i>扩建畜棚 → 养鸭子计划</h4><p>共同计划 · 用户出资 5,000g · AI 出劳动力</p></div>
+          <div class="goal"><span class="src pill pill-amber">自主兴趣</span><h4><i data-lucide="fish" class="xs"></i>尝试传说中的「冰川鱼」</h4><p>来自兴趣档案「钓鱼执念」· 排期在雨雪天 · 不影响任务</p></div>
+          <div class="goal"><span class="src pill pill-green">共同目标</span><h4><i data-lucide="home" class="xs"></i>冬季前完成社区中心收集</h4><p>协作模式 · 任务板 4 项 · 资源锁见游戏页</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 化身一致性 -->
+    <div class="sec-h"><i data-lucide="shapes" class="sm"></i>化身一致性 · 同一身份的四种投影<span class="ln"></span><span class="cnt">03 §7 Embodiment · 资产版本对齐</span></div>
+    <div class="grid4 stagger">
+      <div class="emb-strip"><span class="ic"><i data-lucide="monitor"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">桌面桌宠</b><span class="receipt ok">LIVE</span></div><div class="note mono" style="font-size:10px">webm_vp9_a · v41 · 双video交叉淡入</div></div><span class="pill pill-green" style="font-size:9.5px">一致</span></div>
+      <div class="emb-strip"><span class="ic"><i data-lucide="pickaxe"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">星露谷化身</b><span class="receipt run">L1</span></div><div class="note mono" style="font-size:10px">sprite_16x32 · v18 · avatar-sync</div></div><span class="pill pill-green" style="font-size:9.5px">一致</span></div>
+      <div class="emb-strip"><span class="ic"><i data-lucide="music-4"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">舞台形象</b><span class="receipt ok">READY</span></div><div class="note mono" style="font-size:10px">live2d_v3 · v9 · 口型参数已绑定</div></div><span class="pill pill-green" style="font-size:9.5px">一致</span></div>
+      <div class="emb-strip dim"><span class="ic"><i data-lucide="tv-minimal-play"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">OBS 图层源</b><span class="receipt warn">OFF</span></div><div class="note mono" style="font-size:10px">transparent_1080p · v9</div></div><span class="pill" style="font-size:9.5px">未推流</span></div>
+    </div>
+
+    <!-- 事件流 -->
+    <div class="sec-h"><i data-lucide="messages-square" class="sm"></i>事件气泡流<span class="ln"></span>
+      <span class="seg" data-mutex style="margin-left:12px">
+        <button class="seg-tab on">全部</button><button class="seg-tab">游戏</button><button class="seg-tab">直播</button><button class="seg-tab">记忆</button><button class="seg-tab">资产</button><button class="seg-tab">进化</button>
+      </span>
+    </div>
+    <div class="feed stagger" style="max-width:860px">
+      <div class="bubble ai"><div class="who"><span class="dot tide"></span>小莓 · 内心戏 <span class="pill" style="font-size:9px;padding:1px 7px">D11 可开关</span></div>背包满了但矿洞里正好有石头…就地建个箱子存杂物，比跑一趟农场划算。</div>
+      <div class="bubble sys"><div class="who"><i data-lucide="gamepad-2" class="xs"></i>游戏桥 · BWF 回执</div>#a421 放置木箱 → <span class="receipt ok">COMPLETED</span> 0.42s · 物品已分类存放 12 格</div>
+      <div class="bubble"><div class="who"><i data-lucide="radio" class="xs"></i>直播（昨晚回放样本）· 弹幕</div><span class="pill pill-amber" style="font-size:9.5px;margin-right:6px">重要性 P1</span>「鲸鱼今天钓到冰川鱼了吗？！」→ 合并同类 3 条 → 已入回应草稿</div>
+      <div class="bubble sys"><div class="who"><i data-lucide="database" class="xs"></i>记忆 · episodic</div>新记忆：和宿主约定「升级工具优先于买装饰」 · 置信 0.86 · 来源 对话#4821</div>
+      <div class="bubble"><div class="who"><i data-lucide="mic" class="xs"></i>voice-host · 单端语音锁</div>播报「箱子放好啦，继续挖矿咯~」 · <span class="receipt ok">PLAYED</span> 2.8s · 锁已释放 TTL 4s</div>
+      <div class="bubble sys"><div class="who"><i data-lucide="dna" class="xs"></i>进化引擎 · 研发平面</div>Issue #212「矿洞丝血不撤退」已通过独立 Review → PR #88 等待人工审批（L4 门禁）</div>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏：快控与仪表 ── -->
+  <aside class="wv2-aside">
+    <div class="card as-card">
+      <h4><i data-lucide="sliders-horizontal" class="sm tide"></i>快速控制</h4>
+      <div class="sw-row2"><span>自动驾驶</span><span class="sw on" data-page-sw></span></div>
+      <div class="sw-row2"><span>语音（voice-host）</span><span class="sw on"></span></div>
+      <div class="sw-row2"><span>内心戏外放</span><span class="sw on"></span></div>
+      <div class="sw-row2"><span>勿扰模式</span><span class="sw"></span></div>
+      <div class="sw-row2"><span>静默陪伴（不主动说话）</span><span class="sw"></span></div>
+      <div class="hairline" style="margin:9px 0"></div>
+      <div class="row-wrap" style="gap:6px">
+        <button class="btn sm soft-red"><i data-lucide="octagon-x" class="xs"></i>全部停止</button>
+        <button class="btn sm ghost"><i data-lucide="hand" class="xs"></i>接管键鼠</button>
+        <button class="btn sm ghost"><i data-lucide="wheat" class="xs"></i>投喂</button>
+      </div>
+    </div>
+
+    <div class="card as-card">
+      <h4><i data-lucide="wheat" class="sm amber" style="color:var(--amber)"></i>饭碗 · Token 预算</h4>
+      <div class="row" style="justify-content:space-between;font-size:12px"><span>今日消耗</span><b class="num" style="font-family:var(--font-mono);color:var(--amber)">83.2k / 500k</b></div>
+      <div class="meter" style="margin:7px 0 10px"><i style="width:16.6%;background:linear-gradient(90deg,var(--amber),var(--green))"></i></div>
+      <div class="sub-meter"><span style="width:58px">游戏决策</span><span class="meter"><i style="width:44%"></i></span><span class="n">31.4k</span></div>
+      <div class="sub-meter"><span style="width:58px">日常对话</span><span class="meter"><i style="width:28%"></i></span><span class="n">19.8k</span></div>
+      <div class="sub-meter"><span style="width:58px">攻略检索</span><span class="meter"><i style="width:14%;background:var(--blue)"></i></span><span class="n">9.6k</span></div>
+      <div class="sub-meter"><span style="width:58px">歌声合成</span><span class="meter"><i style="width:8%;background:var(--violet)"></i></span><span class="n">5.1k</span></div>
+      <div class="sub-meter"><span style="width:58px">资产生成</span><span class="meter"><i style="width:6%;background:var(--violet)"></i></span><span class="n">3.9k</span></div>
+      <div class="note" style="margin-top:8px">燃烧速率 ≈ 1.9k/时 · 预计 22:10 触达 60% 水位提醒</div>
+    </div>
+
+    <div class="card as-card">
+      <h4><i data-lucide="activity" class="sm green"></i>平面健康</h4>
+      <div class="kv"><span class="k">模型网关</span><span class="v"><span class="dot green"></span> DeepSeek-V4 · 412ms</span></div>
+      <div class="kv"><span class="k">TTS 首包</span><span class="v"><span class="dot green"></span> 0.8s · 可打断</span></div>
+      <div class="kv"><span class="k">图片 Provider</span><span class="v"><span class="dot green"></span> online · 本地 Agent 入口</span></div>
+      <div class="kv"><span class="k">3D Provider</span><span class="v"><span class="dot amber"></span> Hunyuan3D · 限流</span></div>
+      <div class="kv"><span class="k">额度查询</span><span class="v" style="color:var(--text-3)">未知 / 不可查询（不编造余额）</span></div>
+      <div class="kv"><span class="k">游戏桥</span><span class="v"><span class="dot green"></span> BWF MCP 18080</span></div>
+      <div class="kv"><span class="k">WebUI</span><span class="v"><span class="dot green"></span> 127.0.0.1:18780 · token 鉴权</span></div>
+    </div>
+
+    <div class="card as-card" style="border-style:dashed">
+      <h4><i data-lucide="moon" class="sm"></i>安静设计</h4>
+      <p class="note">22:30–08:00 勿扰窗口；专注时段只保留气泡不发声；<b style="color:var(--text-1)">沉默是角色的一种主动选择</b>，语音队列可随时打断与清空。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>化身 · 桌宠 游戏与舞台 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  /* ── ① 化身星座图 ── */
+  .eb-sky { position: relative; height: 400px; overflow: hidden; background:
+    radial-gradient(ellipse 640px 300px at 50% 44%, rgba(62,224,205,0.07), transparent 70%),
+    radial-gradient(ellipse 420px 220px at 16% 10%, rgba(78,168,255,0.06), transparent 70%),
+    radial-gradient(ellipse 420px 220px at 86% 90%, rgba(180,140,255,0.055), transparent 70%),
+    var(--inset); }
+  .eb-sky::after { content: ''; position: absolute; inset: 0; pointer-events: none; background-image:
+    radial-gradient(circle at 22% 30%, rgba(190,230,255,0.5) 1px, transparent 2px),
+    radial-gradient(circle at 74% 16%, rgba(190,230,255,0.4) 1px, transparent 2px),
+    radial-gradient(circle at 40% 80%, rgba(190,230,255,0.32) 1px, transparent 2px),
+    radial-gradient(circle at 90% 58%, rgba(190,230,255,0.4) 1px, transparent 2px),
+    radial-gradient(circle at 7% 56%, rgba(190,230,255,0.3) 1px, transparent 2px),
+    radial-gradient(circle at 58% 6%, rgba(190,230,255,0.3) 1px, transparent 2px); }
+  .eb-web { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .eb-web line { stroke-width: 1.2; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; fill: none; }
+  .eb-web .l-on { stroke: var(--tide-line); stroke-opacity: 0.5; }
+  .eb-web .l-dim { stroke: var(--stroke-2); stroke-opacity: 0.7; }
+  .eb-orbit { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); border: 1px dashed var(--stroke); border-radius: 50%; pointer-events: none; }
+  .eb-orbit.o1 { width: 300px; height: 300px; border-color: var(--stroke-2); }
+  .eb-orbit.o2 { width: 880px; height: 300px; }
+  .eb-core { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 3; }
+  .eb-halo { position: relative; width: 100px; height: 100px; display: grid; place-items: center; }
+  .eb-halo::before, .eb-halo::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--tide-line); animation: sonar-ping 3.2s var(--ease-out) infinite; }
+  .eb-halo::after { animation-delay: 1.6s; }
+  .eb-tag { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.5px; color: var(--text-3); white-space: nowrap; }
+  .eb-corner { position: absolute; left: 14px; top: 12px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1px; color: var(--text-3); }
+  .eb-node { position: absolute; transform: translate(-50%,-50%); width: 208px; border-radius: var(--r-lg); padding: 10px 12px; background: var(--surface); border: 1px solid var(--stroke); box-shadow: var(--shadow-1), inset 0 1px 0 var(--hi); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 2; }
+  .eb-node .nic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; }
+  .eb-node .nic.t-tide { background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); }
+  .eb-node .nic.t-green { background: var(--green-dim); border: 1px solid var(--green-line); color: var(--green); }
+  .eb-node .nic.t-violet { background: var(--violet-dim); border: 1px solid var(--violet-line); color: var(--violet); }
+  .eb-node .nic.t-blue { background: var(--blue-dim); border: 1px solid var(--blue-line); color: var(--blue); }
+  .eb-node.dim { opacity: 0.78; }
+
+  /* ── why 解释框（TEMPLATE 文档组件，tokens 未内置，本页补齐） ── */
+  .why { display: inline-flex; align-items: flex-start; gap: 7px; padding: 8px 12px; border-radius: var(--r-md); background: var(--tide-dim); border: 1px dashed var(--tide-line); font-size: 11.5px; color: var(--text-2); line-height: 1.6; }
+  .why b { color: var(--tide); }
+
+  /* ── ④ Character Bible ── */
+  .eb-view { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 16px 8px 11px; background: var(--inset); border: 1px solid var(--stroke); border-radius: var(--r-md); text-align: center; }
+  .eb-view svg { width: 22px; height: 22px; color: var(--text-2); }
+  .eb-view b { font-size: 11.5px; }
+  .eb-chip { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-2); }
+  .eb-chip .swc { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--stroke-2); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.14); flex-shrink: 0; }
+  .eb-lock { border: 1px dashed var(--red-line); background: var(--red-dim); border-radius: var(--r-md); padding: 10px 13px; }
+
+  /* ── ⑤ 渲染技术面板 ── */
+  .eb-tech { border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); }
+  .eb-tech h4 { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .eb-tech p { font-size: 11.5px; color: var(--text-2); line-height: 1.65; }
+  .eb-tech .pipe { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); margin-top: 8px; }
+
+  /* ── ⑥ 多桌宠槽位 ── */
+  .eb-slot { border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); }
+  .eb-slot.passive { border-style: dashed; }
+</style>
+</head>
+<body data-page="embodiment" data-crumb="生命体 · 化身">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── ① 化身星座图 ── -->
+    <div class="sec-h"><i data-lucide="orbit" class="sm"></i>化身星座图 · 同一身份多投影<span class="ln"></span><span class="cnt">char_9f3k ·「小莓」 · ONE IDENTITY × 4 PROJECTIONS</span></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="eb-sky">
+        <span class="eb-corner">LIVE TOPOLOGY · 11-25 13:42 · sonar ok</span>
+        <span class="eb-orbit o1"></span><span class="eb-orbit o2"></span>
+        <svg class="eb-web" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <line class="l-on" x1="50" y1="50" x2="15" y2="24"></line>
+          <line class="l-on" x1="50" y1="50" x2="85" y2="24"></line>
+          <line class="l-dim" x1="50" y1="50" x2="17" y2="78"></line>
+          <line class="l-dim" x1="50" y1="50" x2="83" y2="78"></line>
+        </svg>
+        <div class="eb-core">
+          <div class="eb-halo"><div class="avatar" style="width:64px;height:64px;font-size:24px">莓</div></div>
+          <span class="pill pill-tide" style="font-size:10px"><i data-lucide="fingerprint" class="xs"></i>Avatar Root · persona v27</span>
+        </div>
+        <div class="eb-node" style="left:15%;top:24%">
+          <div class="row" style="gap:9px">
+            <span class="nic t-tide"><i data-lucide="monitor" class="sm"></i></span>
+            <div style="flex:1;min-width:0">
+              <div class="row" style="gap:7px"><b style="font-size:12px">桌面桌宠</b><span class="dot green pulse" style="margin-left:auto"></span></div>
+              <div class="mono k" style="font-size:9.5px;margin-top:1px">desktop-2d · webm_vp9_a v41</div>
+              <div class="row" style="gap:6px;margin-top:5px"><span class="receipt ok">LIVE</span><span class="mono k" style="font-size:9px">pet-window#main</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="eb-node" style="left:85%;top:24%">
+          <div class="row" style="gap:9px">
+            <span class="nic t-green"><i data-lucide="pickaxe" class="sm"></i></span>
+            <div style="flex:1;min-width:0">
+              <div class="row" style="gap:7px"><b style="font-size:12px">星露谷化身</b><span class="dot blue pulse" style="margin-left:auto"></span></div>
+              <div class="mono k" style="font-size:9.5px;margin-top:1px">game · sprite_16x32 v18</div>
+              <div class="row" style="gap:6px;margin-top:5px"><span class="receipt run">SYNCED</span><span class="mono k" style="font-size:9px">avatar-sync 心跳 2s</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="eb-node" style="left:17%;top:78%">
+          <div class="row" style="gap:9px">
+            <span class="nic t-violet"><i data-lucide="music-4" class="sm"></i></span>
+            <div style="flex:1;min-width:0">
+              <div class="row" style="gap:7px"><b style="font-size:12px">舞台形象</b><span class="dot green" style="margin-left:auto"></span></div>
+              <div class="mono k" style="font-size:9.5px;margin-top:1px">stage · live2d_v3 v9</div>
+              <div class="row" style="gap:6px;margin-top:5px"><span class="receipt ok">READY</span><span class="mono k" style="font-size:9px">口型参数已绑定</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="eb-node dim" style="left:83%;top:78%">
+          <div class="row" style="gap:9px">
+            <span class="nic t-blue"><i data-lucide="tv-minimal-play" class="sm"></i></span>
+            <div style="flex:1;min-width:0">
+              <div class="row" style="gap:7px"><b style="font-size:12px">OBS 图层源</b><span class="dot amber" style="margin-left:auto"></span></div>
+              <div class="mono k" style="font-size:9.5px;margin-top:1px">obs · transparent_1080p v9</div>
+              <div class="row" style="gap:6px;margin-top:5px"><span class="receipt warn">OFF</span><span class="mono k" style="font-size:9px">未推流 · OBS 图层源待接线</span></div>
+            </div>
+          </div>
+        </div>
+        <span class="eb-tag">同一身份 · 四个投影 · 共享 Character Bible v6 约束</span>
+      </div>
+    </div>
+    <div class="why" style="margin-top:12px;max-width:860px"><i data-lucide="lightbulb" class="sm"></i><span><b>为什么同一身份要多投影：</b>人格、记忆与决策都在 Agent Runtime 里，化身只是可替换的表现层——<b>换皮肤不换灵魂</b>。四个投影共用同一 Character Bible 做特征约束，任何一侧换装，其余三侧同步校验一致性。</span></div>
+
+    <!-- ── ② 化身登记表 ── -->
+    <div class="sec-h"><i data-lucide="clipboard-list" class="sm"></i>化身登记表<span class="ln"></span><span class="cnt">03 §7.1 embodiment-registry · 4 条记录</span></div>
+    <div class="card" style="padding:4px 14px 8px">
+      <table class="tbl">
+        <thead><tr><th>embodimentId</th><th>kind</th><th>targetId</th><th>assetVersionId</th><th>stateMappingVersion</th><th>enabled</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">emb_desk_01</td><td class="mono">desktop-2d</td><td class="mono k">pet-window#main</td><td class="mono">webm_vp9_a@v41</td><td class="mono k">smap_v12</td><td><span class="sw on"></span></td></tr>
+          <tr><td class="mono">emb_game_07</td><td class="mono">game-stardew</td><td class="mono k">stardew#player-sprite</td><td class="mono">sprite_16x32@v18</td><td class="mono k">smap_v08</td><td><span class="sw on"></span></td></tr>
+          <tr><td class="mono">emb_stage_33</td><td class="mono">stage-live2d</td><td class="mono k">stage-canvas#02</td><td class="mono">live2d_v3@v9</td><td class="mono k">smap_v15</td><td><span class="sw on"></span></td></tr>
+          <tr><td class="mono">emb_obs_09</td><td class="mono">obs-overlay</td><td class="mono k">obs#scene-b</td><td class="mono">transparent_1080p@v9</td><td class="mono k">smap_v03</td><td><span class="sw"></span></td></tr>
+        </tbody>
+      </table>
+      <p class="note" style="padding:6px 2px 2px">登记结构由 <span class="mono">packages/shared-protocol/embodiment.zod</span> 契约生成（第一层 · 契约先行）；enabled 关闭仅暂停该投影的渲染订阅，不注销化身记录。</p>
+    </div>
+
+    <!-- ── ③ 状态映射表 ── -->
+    <div class="sec-h"><i data-lucide="arrow-right-left" class="sm"></i>状态映射表 · 表现状态 → 化身动作<span class="ln"></span><span class="cnt">03 §7.2 state-mapping · smap 由契约自动生成</span></div>
+    <div class="card" style="padding:4px 14px 8px">
+      <table class="tbl">
+        <thead><tr><th>state</th><th>桌宠 desktop-2d</th><th>星露谷 game</th><th>舞台 stage</th><th>触发来源与规则</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="row" style="gap:7px;white-space:nowrap"><span class="dot tide"></span><span class="mono" style="font-weight:700">speaking</span></span><span class="note" style="font-size:10px">说话</span></td>
+            <td><span class="mono">talk_03.webm</span> · 口型驱动 viseme A/I/U/E/O（音素流 40ms 粒度）</td>
+            <td>对话气泡 + 头顶动画帧 <span class="mono">talk_a</span></td>
+            <td><span class="mono">ParamMouthOpenY</span> 实时绑定（Live2D）</td>
+            <td class="k">TTS 播放回执 <span class="receipt ok">PLAYED</span> 起止驱动 · 可打断</td>
+          </tr>
+          <tr>
+            <td><span class="row" style="gap:7px;white-space:nowrap"><span class="dot blue"></span><span class="mono" style="font-weight:700">gaming</span></span><span class="note" style="font-size:10px">游戏中</span></td>
+            <td><span class="mono">focus_loop.webm</span> · 6s 循环</td>
+            <td>持镐/持竿动作帧（BWF 动作回执驱动）</td>
+            <td><span class="mono">motion focus_idle</span> 低头专注</td>
+            <td class="k">控制权租约持有期间持续（agent_primary）</td>
+          </tr>
+          <tr>
+            <td><span class="row" style="gap:7px;white-space:nowrap"><span class="dot violet"></span><span class="mono" style="font-weight:700">resting</span></span><span class="note" style="font-size:10px">休息</span></td>
+            <td><span class="mono">sleep_1 / sleep_2 / sleep_3</span> 三段帧连续规则</td>
+            <td>坐下或上床 sprite（游戏内 22:40 后）</td>
+            <td><span class="mono">motion sleep_idle</span> 闭眼</td>
+            <td class="k">无交互 30s → sleep_1 · 120s → sleep_2 · 勿扰窗口 → sleep_3</td>
+          </tr>
+          <tr>
+            <td><span class="row" style="gap:7px;white-space:nowrap"><span class="dot amber pulse"></span><span class="mono" style="font-weight:700">reacting</span></span><span class="note" style="font-size:10px">反应</span></td>
+            <td><span class="mono">splash.webm</span> 喷水 · 1.2s 单次</td>
+            <td>头顶感叹号帧 + 跳跃 0.3s</td>
+            <td><span class="mono">motion surprise_01</span></td>
+            <td class="k">弹幕雷区词「大肥鱼」命中 → <b style="color:var(--amber)">0.1s 内触发</b>（护栏 P0）</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note" style="padding:6px 2px 2px">OBS 图层源 transparent_1080p 与桌面桌宠共享同一 WebM 通道，动作随 desktop-2d 镜像，不单设映射行；resting 任意一段被弹幕 @ 或键鼠接管打断，立即回到 idle。</p>
+    </div>
+
+    <!-- ── ④ Character Bible 特征锁 ── -->
+    <div class="sec-h"><i data-lucide="scan-face" class="sm"></i>Character Bible · 特征锁<span class="ln"></span><span class="cnt">bible v6 · 生成与校验的唯一形象事实源</span></div>
+    <div class="grid2">
+      <div class="card" style="padding:14px 16px">
+        <div class="row" style="margin-bottom:10px"><b style="font-size:12.5px">参考视图 Reference Views</b><span class="sp"></span><span class="pill">3 视图 · 520×840 px</span></div>
+        <div class="grid3" style="gap:9px">
+          <div class="eb-view"><i data-lucide="user"></i><b>正面 front</b><span class="mono k" style="font-size:9px">front_ref_v3 · a3f2c1d8</span></div>
+          <div class="eb-view"><i data-lucide="scan-face"></i><b>侧面 side</b><span class="mono k" style="font-size:9px">side_ref_v2 · 7b91e04c</span></div>
+          <div class="eb-view"><i data-lucide="footprints"></i><b>背面 back</b><span class="mono k" style="font-size:9px">back_ref_v2 · d48c9a26</span></div>
+        </div>
+        <div class="hairline" style="margin:13px 0 11px"></div>
+        <b style="font-size:12px">配色锁定 Palette</b>
+        <div class="row-wrap" style="margin-top:8px;gap:14px">
+          <span class="eb-chip"><span class="swc" style="background:#6fc3ff"></span>发色 <span class="mono k">#6fc3ff</span></span>
+          <span class="eb-chip"><span class="swc" style="background:#3ee0cd"></span>瞳色 <span class="mono k">#3ee0cd</span></span>
+          <span class="eb-chip"><span class="swc" style="background:#ffe3cf"></span>肤色 <span class="mono k">#ffe3cf</span></span>
+          <span class="eb-chip"><span class="swc" style="background:#f2f6fa"></span>围裙 <span class="mono k">#f2f6fa</span></span>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <b style="font-size:12.5px">标志配件 Signature Props</b>
+        <div class="row-wrap" style="margin:9px 0 13px;gap:7px">
+          <span class="pill pill-green"><i data-lucide="shirt" class="xs"></i>白围裙 apron</span>
+          <span class="pill pill-tide"><i data-lucide="wind" class="xs"></i>呆毛 ahoge ×1</span>
+          <span class="pill pill-amber"><i data-lucide="smile" class="xs"></i>腮红 blush</span>
+        </div>
+        <div class="eb-lock">
+          <div class="row" style="gap:7px;margin-bottom:7px"><i data-lucide="lock" class="sm" style="color:var(--red)"></i><b style="font-size:12px;color:var(--red)">禁止改变特征 LOCKED</b></div>
+          <div class="row-wrap" style="gap:6px;margin-bottom:8px">
+            <span class="pill pill-red" style="font-size:10px"><i data-lucide="lock" class="xs"></i>发色 #6fc3ff</span>
+            <span class="pill pill-red" style="font-size:10px"><i data-lucide="lock" class="xs"></i>瞳色 #3ee0cd</span>
+            <span class="pill pill-red" style="font-size:10px"><i data-lucide="lock" class="xs"></i>白围裙</span>
+          </div>
+          <p class="note">任何资产生成（WebM 合成 / Live2D 绑定 / sprite 重绘）必须携带 bible v6 约束字段，自动校验不通过直接打回工单。</p>
+        </div>
+      </div>
+    </div>
+    <div class="card row-wrap" style="margin-top:12px;padding:12px 16px;gap:9px">
+      <span class="receipt ok" style="font-size:11px;padding:5px 12px">4/4 PASS</span>
+      <b style="font-size:12px">跨形态一致性检查 cross_form_check v0.9</b>
+      <span class="mono k" style="font-size:9.5px">run: 11-24 02:10 · 42 项子检查</span>
+      <span class="sp"></span>
+      <span class="pill pill-green" style="font-size:9.5px"><i data-lucide="check" class="xs"></i>剪影 silhouette · webm_vp9_a</span>
+      <span class="pill pill-green" style="font-size:9.5px"><i data-lucide="check" class="xs"></i>配色 palette · sprite_16x32</span>
+      <span class="pill pill-green" style="font-size:9.5px"><i data-lucide="check" class="xs"></i>配件 props · live2d_v3</span>
+      <span class="pill pill-green" style="font-size:9.5px"><i data-lucide="check" class="xs"></i>比例 proportion · transparent_1080p</span>
+    </div>
+
+    <!-- ── ⑤ 桌宠渲染技术面板 ── -->
+    <div class="sec-h"><i data-lucide="monitor-play" class="sm"></i>桌宠渲染技术面板<span class="ln"></span><span class="cnt">pet-window · Electron + Chromium 原生 VP9-Alpha</span></div>
+    <div class="grid4 stagger">
+      <div class="eb-tech"><h4><i data-lucide="layers" class="sm" style="color:var(--tide)"></i>双 video 交叉淡入<span class="dot green pulse" style="margin-left:auto"></span></h4>
+        <p><span class="mono">&lt;video&gt; A/B</span> 双通道加载 VP9-Alpha（yuv420p + alpha）30fps 帧序列；切换动作时旧层淡出 220ms，无黑闪。</p>
+        <div class="pipe">pipeline: webm_ab_crossfade v3 · 0 dropped frames</div></div>
+      <div class="eb-tech"><h4><i data-lucide="mouse-pointer-click" class="sm" style="color:var(--blue)"></i>透明区穿透<span class="dot green" style="margin-left:auto"></span></h4>
+        <p><span class="mono">ignoreMouseEvents</span>：alpha &lt; 8% 的区域 forward 穿透给下层应用；命中身体像素立即收回事件，判定 16ms 节流。</p>
+        <div class="pipe">mode: forward:true ⇄ false · setIgnoreMouseEvents</div></div>
+      <div class="eb-tech"><h4><i data-lucide="footprints" class="sm" style="color:var(--green)"></i>脚底对齐<span class="dot green" style="margin-left:auto"></span></h4>
+        <p>资产锚点 bottom-center；窗口 y = 工作区高度 − 6px，多显示器 DPI 缩放 ×2 已换算，换屏不错位。</p>
+        <div class="pipe">anchor: feet_bottom · offset 6px · dpi-aware</div></div>
+      <div class="eb-tech"><h4><i data-lucide="puzzle" class="sm" style="color:var(--amber)"></i>Live2D 扩展接口<span class="dot amber pulse" style="margin-left:auto"></span></h4>
+        <p><span class="mono">Live2DRenderer</span> 的 init / frame / dispose 接口 stub 已预留未接线；待 WebM 链路稳定后启用（T-M7 工单）。</p>
+        <div class="pipe">status: reserved · not wired</div></div>
+    </div>
+
+    <!-- ── ⑥ 多桌宠槽位 ── -->
+    <div class="sec-h"><i data-lucide="boxes" class="sm"></i>多桌宠槽位<span class="ln"></span><span class="cnt">pet-slots 3/3 · 仅 slot#1 持有独立 Agent Runtime</span></div>
+    <div class="grid3 stagger">
+      <div class="eb-slot card-hover">
+        <div class="row" style="gap:11px;margin-bottom:9px">
+          <div class="avatar" style="width:40px;height:40px;font-size:15px">莓</div>
+          <div style="flex:1"><div class="row" style="gap:7px"><b style="font-size:13px">小莓</b><span class="pill pill-tide" style="font-size:9.5px"><span class="dot tide pulse"></span>ACTIVE</span></div><span class="note" style="font-size:10.5px">主角色 Primary · 傲娇干饭蓝鲸女仆</span></div>
+        </div>
+        <div class="kv"><span class="k">槽位</span><span class="v">slot#1 · pet-window#main</span></div>
+        <div class="kv"><span class="k">Agent Runtime</span><span class="v" style="color:var(--green)">独立运行 · persona v27</span></div>
+        <div class="kv"><span class="k">表现驱动</span><span class="v">决策流实时驱动 · 语音锁持有者</span></div>
+      </div>
+      <div class="eb-slot passive card-hover">
+        <div class="row" style="gap:11px;margin-bottom:9px">
+          <div class="avatar" style="width:40px;height:40px;font-size:15px">澈</div>
+          <div style="flex:1"><div class="row" style="gap:7px"><b style="font-size:13px">阿澈</b><span class="pill" style="font-size:9.5px">PASSIVE</span></div><span class="note" style="font-size:10.5px">挂件陪伴 · 鲸崽跟随游动</span></div>
+        </div>
+        <div class="kv"><span class="k">槽位</span><span class="v">slot#2 · pet-window#side-2</span></div>
+        <div class="kv"><span class="k">Agent Runtime</span><span class="v" style="color:var(--amber)">无 · 情绪镜像（无独立决策）</span></div>
+        <div class="kv"><span class="k">资产</span><span class="v">whale_calf_a@v12 · 静音</span></div>
+      </div>
+      <div class="eb-slot passive card-hover">
+        <div class="row" style="gap:11px;margin-bottom:9px">
+          <div class="avatar" style="width:40px;height:40px;font-size:15px">泡</div>
+          <div style="flex:1"><div class="row" style="gap:7px"><b style="font-size:13px">泡泡</b><span class="pill" style="font-size:9.5px">PASSIVE</span></div><span class="note" style="font-size:10.5px">气氛组 · 水母漂浮灯效</span></div>
+        </div>
+        <div class="kv"><span class="k">槽位</span><span class="v">slot#3 · pet-window#side-3</span></div>
+        <div class="kv"><span class="k">Agent Runtime</span><span class="v" style="color:var(--amber)">无 · 情绪镜像（无独立决策）</span></div>
+        <div class="kv"><span class="k">资产</span><span class="v">jelly_glow_a@v7 · 静音</span></div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:10px">PASSIVE 槽位没有独立 Agent Runtime：只订阅主角色的情绪/状态总线做表现镜像，不产生对话、决策与语音；切换主角色需重启 pet-window 进程（安全锁 05 §3）。</p>
+
+    <!-- ── ⑦ 资产版本与回滚 ── -->
+    <div class="sec-h"><i data-lucide="history" class="sm"></i>资产版本与回滚<span class="ln"></span><span class="cnt">asset-registry · webm_vp9_a · 当前 v41</span></div>
+    <div class="card" style="padding:4px 14px 8px">
+      <table class="tbl">
+        <thead><tr><th>版本</th><th>hash 前 8 位</th><th>发布时间</th><th>变更说明</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td><span class="row" style="gap:7px"><b class="mono" style="font-size:12px">v41</b><span class="receipt ok">当前</span></span></td><td class="mono k">7c1f44aa</td><td class="mono k">11-23 18:20</td><td>修正 talk_03 口型闭合帧；新增 viseme 时间戳通道</td><td><button class="btn sm ghost" disabled style="opacity:.45;cursor:not-allowed"><i data-lucide="check" class="xs"></i>使用中</button></td></tr>
+          <tr><td><b class="mono" style="font-size:12px">v40</b></td><td class="mono k">2b9d31ef</td><td class="mono k">11-19 21:05</td><td>新增 splash.webm 1080p alpha · 雷区喷水首版</td><td><button class="btn sm soft-amber"><i data-lucide="rotate-ccw" class="xs"></i>回滚</button></td></tr>
+          <tr><td><b class="mono" style="font-size:12px">v39</b></td><td class="mono k">91e0a7d3</td><td class="mono k">11-12 14:32</td><td>sleep 三段帧时长重排（30s / 120s / 勿扰）</td><td><button class="btn sm soft-amber"><i data-lucide="rotate-ccw" class="xs"></i>回滚</button></td></tr>
+          <tr><td><b class="mono" style="font-size:12px">v38</b></td><td class="mono k">5f6c2b18</td><td class="mono k">11-05 10:11</td><td>VP9-Alpha 编码基线（libvpx -crf 18 · alpha 通道）</td><td><button class="btn sm soft-amber"><i data-lucide="rotate-ccw" class="xs"></i>回滚</button></td></tr>
+        </tbody>
+      </table>
+      <p class="note" style="padding:6px 2px 2px">回滚 = asset-registry 原子交换 + pet-window 热重载，A/B 双 video 交叉淡入保证切换无闪烁；版本包由创作工坊打包工单生成并附 diff 清单，回滚同样写入审计日志。</p>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:4px;color:var(--text-2)"><i data-lucide="chevrons-up" class="sm" style="color:var(--tide)"></i>化身等级 Embodiment Ladder</h4>
+      <span class="mono k" style="font-size:9.5px;display:block;margin-bottom:10px">07 §2 · 当前 L1</span>
+      <div class="ladder-item on" style="padding:8px 11px;margin-bottom:6px"><span class="lv">L1</span><div style="flex:1"><div class="row" style="gap:7px"><div class="t" style="font-size:11.5px">外观替换</div><span class="receipt run" style="margin-left:auto">当前</span></div><div class="d">桌宠 WebM / Live2D 舞台 / 游戏 sprite 替换</div></div></div>
+      <div class="ladder-item" style="padding:8px 11px;margin-bottom:6px"><span class="lv">L2</span><div><div class="t" style="font-size:11.5px">AI 专属 NPC</div><div class="d">星露谷内独立 NPC 实体与日程，村民会记得她</div></div></div>
+      <div class="ladder-item" style="padding:8px 11px;margin-bottom:0"><span class="lv">L3</span><div><div class="t" style="font-size:11.5px">完整可控</div><div class="d">多人房间以完整玩家角色行动（专属形象 + 全动作集）</div></div></div>
+      <p class="note" style="margin-top:9px">升级 L2 需 avatar-npc Mod v1.0 与村民记忆系统联调，当前排期 T-M7；等级只影响化身的<b style="color:var(--text-1)">行动能力</b>，不影响身份一致性。</p>
+    </div>
+
+    <div class="card" style="padding:13px 15px;border-style:dashed">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="users" class="sm" style="color:var(--amber)"></i>多人兼容 Multiplayer</h4>
+      <p class="note">联机时其他玩家的客户端需安装<b style="color:var(--text-1)">同款 whale-isle-avatar-sync Mod v0.9.2</b>，才能看到小莓的自定义形象；未安装的客户端只能看到原版角色模型。</p>
+      <div class="row-wrap" style="margin-top:9px;gap:5px">
+        <span class="pill pill-amber" style="font-size:9.5px"><span class="dot amber"></span>形象不写入存档</span>
+        <span class="pill" style="font-size:9.5px">旁路 sync 通道 · 09 §4</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="scale" class="sm" style="color:var(--amber)"></i>素材许可 License</h4>
+      <div class="row-wrap" style="gap:6px;margin-bottom:8px">
+        <span class="lic nc">CC BY-NC-SA 4.0</span>
+        <span class="mono k" style="font-size:9px">"licenseScope":"DEV_ONLY_NON_COMMERCIAL"</span>
+      </div>
+      <p class="note">桌宠形象与动画源自 <b>dsh-pet</b>「大肥鱼」二创素材（原型与二创形象授权），仅限开发测试，<b style="color:var(--amber)">禁止商用</b>；资产清单已标注 <span class="mono">[DEV-ASSET-ONLY]</span>。</p>
+      <button class="btn sm soft-tide" style="width:100%;margin-top:10px"><i data-lucide="package" class="xs"></i>一键替换自制素材包管线</button>
+      <p class="note" style="margin-top:7px">替换后此卡自动切换为自制许可，解除商用限制；替换管线由创作工坊提供，含逐帧比对与一致性校验。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>游戏共玩 · 控制权与自主决策 — 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .cand { position: relative; border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); flex: 1; }
+  .cand.chosen { border-color: var(--tide-line); box-shadow: 0 0 0 1px var(--tide-line), var(--shadow-1), inset 0 1px 0 var(--hi); background: linear-gradient(160deg, var(--tide-dim), var(--surface) 42%); }
+  .cand h4 { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .cand .eval { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .cand .eval span { font-size: 10px; font-family: var(--font-mono); padding: 2px 8px; border-radius: 7px; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); }
+  .cand .eval .good { color: var(--green); border-color: var(--green-line); background: var(--green-dim); }
+  .cand .eval .risk { color: var(--amber); border-color: var(--amber-line); background: var(--amber-dim); }
+  .receipt-stream { display: flex; flex-direction: column; gap: 8px; }
+  .rs-item { display: flex; align-items: flex-start; gap: 11px; padding: 9px 13px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--stroke); }
+  .rs-item .ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; background: var(--inset); border: 1px solid var(--stroke); color: var(--text-2); flex-shrink: 0; }
+  .kn { border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); position: relative; }
+  .kn .conf-bar { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+  .kn .conf-bar .meter { flex: 1; }
+  .kn .st { position: absolute; top: 12px; right: 12px; }
+  .kn h4 { font-size: 12.5px; font-weight: 650; line-height: 1.5; padding-right: 88px; }
+  .kn .meta { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); margin-top: 7px; line-height: 1.8; }
+  .kn.conflict { border-color: var(--amber-line); }
+  .coop { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .coop-card { border-radius: var(--r-lg); padding: 13px 15px; background: var(--surface); border: 1px solid var(--stroke); }
+  .coop-card h4 { font-size: 12.5px; font-weight: 700; display: flex; gap: 7px; align-items: center; margin-bottom: 6px; }
+  .coop-card p { font-size: 11.5px; color: var(--text-2); line-height: 1.65; }
+  .cmd-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .cmd { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--stroke); font-size: 12px; }
+  .cmd .kbd { font-size: 9px; }
+</style>
+</head>
+<body data-page="game" data-crumb="能力面 · 游戏共玩">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── 控制权 HUD ── -->
+    <div class="hud rise">
+      <div class="row" style="gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:280px">
+          <div class="row" style="margin-bottom:8px">
+            <i data-lucide="gamepad-2" class="lg tide" style="color:var(--tide)"></i>
+            <b style="font-size:14.5px">控制权仲裁台</b>
+            <span class="pill pill-green"><span class="dot green pulse"></span>游戏桥已连接 · 星露谷 1.6.15</span>
+            <span class="pill"><i data-lucide="clock" class="xs"></i>租约 14:52 释放</span>
+          </div>
+          <div class="seg" data-mutex style="margin-bottom:10px">
+            <button class="seg-tab"><i data-lucide="brain" class="xs"></i>自主</button>
+            <button class="seg-tab on tide"><i data-lucide="handshake" class="xs"></i>协作</button>
+            <button class="seg-tab"><i data-lucide="square-check-big" class="xs"></i>指令</button>
+            <button class="seg-tab"><i data-lucide="hand" class="xs"></i>手动接管</button>
+          </div>
+          <p class="mode-desc"><b style="color:var(--tide)">协作模式：</b>AI 围绕共同目标自主行动，可与你协商；你的<b style="color:var(--text-1)">建议</b>它认真考虑但可以不同意，<b style="color:var(--text-1)">明确指令</b>优先执行。<span class="kbd">Space</span> 立即停止，<span class="kbd">T</span> 接管——你的键鼠永远最高优先。</p>
+        </div>
+        <div class="col" style="gap:8px;align-items:stretch">
+          <button class="hud-emg"><i data-lucide="octagon-x"></i>紧急停止 <span class="kbd" style="border-color:var(--red-line);color:var(--red)">Space</span></button>
+          <button class="btn ghost" style="width:100%"><i data-lucide="hand" class="sm"></i>接管角色 <span class="kbd">T</span></button>
+        </div>
+      </div>
+      <div class="hairline" style="margin:13px 0 11px"></div>
+      <div class="row-wrap" style="gap:14px;font-size:11px;color:var(--text-3)">
+        <span><b style="color:var(--text-1)">优先级阶梯：</b>紧急停止/接管 &gt; 强制命令 &gt; 直接任务 &gt; 共同计划 &gt; AI 自主目标 &gt; 待机</span>
+        <span class="sp"></span>
+        <span><i data-lucide="shield-check" class="xs"></i>高影响操作（卖稀有物/消耗关键资源）需二次确认</span>
+      </div>
+    </div>
+
+    <!-- ── 决策循环 ── -->
+    <div class="sec-h"><i data-lucide="refresh-cw" class="sm"></i>自主决策循环 · 此刻<span class="ln"></span><span class="cnt">Observe → World → Retrieve → Choose → Policy → Execute → Verify → Reflect</span></div>
+    <div class="card" style="padding:18px 20px 14px">
+      <div class="steps">
+        <div class="step done"><div class="node"><span class="b">1</span><span class="lb">观察状态</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">2</span><span class="lb">世界模型</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">3</span><span class="lb">检索目标/知识</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">4</span><span class="lb">生成候选</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">5</span><span class="lb">控制权仲裁</span></div><span class="link"></span></div>
+        <div class="step done"><div class="node"><span class="b">6</span><span class="lb">执行动作</span></div><span class="link"></span></div>
+        <div class="step now"><div class="node"><span class="b">7</span><span class="lb">验证真实结果</span></div><span class="link"></span></div>
+        <div class="step"><div class="node"><span class="b">8</span><span class="lb">反思/更新经验</span></div></div>
+      </div>
+      <div class="grid3" style="margin-top:14px">
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="eye" class="sm tide"></i><b style="font-size:12.5px">世界快照</b><span class="sp"></span><span class="mono k" style="font-size:9.5px">GAME STATE 13:40:22</span></div>
+          <div class="kv"><span class="k">位置</span><span class="v">矿洞 · 45 层东侧</span></div>
+          <div class="kv"><span class="k">时间/天气</span><span class="v">春 16 · 13:40 · 晴</span></div>
+          <div class="kv"><span class="k">体力/生命</span><span class="v">62% / 88%</span></div>
+          <div class="kv"><span class="k">金币</span><span class="v">1,204g</span></div>
+          <div class="kv"><span class="k">背包</span><span class="v" style="color:var(--amber)">24/24 满格</span></div>
+        </div>
+        <div class="inset" style="padding:12px 14px">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="lightbulb" class="sm tide"></i><b style="font-size:12.5px">本轮决策</b><span class="sp"></span><span class="mono k" style="font-size:9.5px">GOAL: 短期 · 补铜矿</span></div>
+          <p style="font-size:12px;line-height:1.7;color:var(--text-2)">候选方案 3 个（见右）→ 选择「就地建箱存放」。<br>理由：背包已满但矿层尚未清完；附近有 12 石头+2 铜矿可制箱；夜晚尚早（13:40）；回农场往返约 40 分钟，会打断升级工具的共同计划。</p>
+        </div>
+        <div class="inset" style="padding:12px 14px;border-color:var(--tide-line)">
+          <div class="row" style="margin-bottom:6px"><i data-lucide="check-circle-2" class="sm" style="color:var(--green)"></i><b style="font-size:12.5px">执行与验证</b><span class="sp"></span><span class="mono k" style="font-size:9.5px">ACTION #a421</span></div>
+          <div class="kv"><span class="k">动作</span><span class="v">craft(木箱) → place(x=41,y=87)</span></div>
+          <div class="kv"><span class="k">前置条件</span><span class="v">wood≥50 ✓ · 空地 ✓ · 不占用户农田 ✓</span></div>
+          <div class="kv"><span class="k">真实回执</span><span class="v"><span class="receipt ok">COMPLETED</span> 0.42s · 箱子已存在</span></div>
+          <div class="kv"><span class="k">验证方式</span><span class="v">Mod 状态回执 + 存档快照比对</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 候选方案对比 ── -->
+    <div class="sec-h"><i data-lucide="git-compare" class="sm"></i>候选方案评估 · 背包满场景<span class="ln"></span><span class="cnt">17 §5 · 不写死“回家”规则</span></div>
+    <div class="row stagger" style="gap:12px;align-items:stretch">
+      <div class="cand chosen"><h4><i data-lucide="package" class="sm" style="color:var(--tide)"></i>就地建箱存放杂物<span class="receipt ok" style="margin-left:auto">已选择</span></h4><p class="note">将 12 格非任务物品存入新木箱，继续采矿。时间成本最低，不离开矿层。</p>
+        <div class="eval"><span class="good">收益 +0.9</span><span class="risk">代价 −0.2</span><span class="good">风险 低</span><span class="good">兴趣 +0.7</span></div></div>
+      <div class="cand"><h4><i data-lucide="home" class="sm"></i>回农场整理储物箱</h4><p class="note">往返约 40 分钟，打断「升级工具」共同计划；但可整理全部存储。</p>
+        <div class="eval"><span class="good">收益 +0.5</span><span class="risk">代价 −0.7</span><span class="risk">风险 中</span><span>兴趣 +0.2</span></div></div>
+      <div class="cand"><h4><i data-lucide="coins" class="sm"></i>出售冗余物品腾格</h4><p class="note">石英/纤维可卖，但部分是「社区中心收集」需要的材料，需资源锁校验。</p>
+        <div class="eval"><span class="good">收益 +0.4</span><span class="risk">代价 −0.4</span><span class="risk">风险 高 · 资源锁</span><span>兴趣 0.0</span></div></div>
+    </div>
+    <div class="why" style="margin-top:12px;max-width:860px"><i data-lucide="message-circle-question" class="sm"></i><span><b>可协商：</b>如果你觉得“箱子乱放矿洞不好看”，直接在聊天里说——我会评估你的建议，也可以提出折中方案（比如先标记、回程时统一收纳）。普通建议不会让我立刻改变计划。</span></div>
+
+    <!-- ── 回执流 ── -->
+    <div class="sec-h"><i data-lucide="receipt-text" class="sm"></i>动作回执流<span class="ln"></span><span class="cnt">发出命令 ≠ 任务完成</span></div>
+    <div class="receipt-stream stagger">
+      <div class="rs-item"><span class="ic" style="color:var(--green)"><i data-lucide="check" class="sm"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">走到矿洞 45 层入口</b><span class="receipt ok">COMPLETED · 4.8s</span></div><div class="note mono" style="font-size:10px;margin-top:3px">#a41e · pathfinding ok · 体力 −2%</div></div></div>
+      <div class="rs-item"><span class="ic" style="color:var(--amber)"><i data-lucide="triangle-alert" class="sm"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">挥镐敲击铜矿石</b><span class="receipt warn">UNCERTAIN · 重试 1/3</span></div><div class="note mono" style="font-size:10px;margin-top:3px">#a41f · 石头遮挡视线，模型不确定是否命中 → 触发旁观验证，不盲目连击</div></div></div>
+      <div class="rs-item"><span class="ic" style="color:var(--green)"><i data-lucide="check" class="sm"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">制作并放置木箱</b><span class="receipt ok">COMPLETED · 0.42s</span></div><div class="note mono" style="font-size:10px;margin-top:3px">#a421 · 存入 12 格杂物 · 保留 4 格任务物品</div></div></div>
+      <div class="rs-item"><span class="ic" style="color:var(--red)"><i data-lucide="x" class="sm"></i></span><div style="flex:1"><div class="row"><b style="font-size:12.5px">传送回家（图腾）</b><span class="receipt fail">FAILED · 前置不满足</span></div><div class="note mono" style="font-size:10px;margin-top:3px">#a422 · 农场图腾不在背包（已存入箱子）→ 改为步行，回执如实记录，不伪造成功</div></div></div>
+    </div>
+
+    <!-- ── 攻略知识 ── -->
+    <div class="sec-h"><i data-lucide="book-marked" class="sm"></i>游戏知识库 · 攻略是参考，不是命令<span class="ln"></span><span class="cnt">来源 · 版本 · 适用条件 · 置信度 · 验证状态</span></div>
+    <div class="grid3 stagger">
+      <div class="kn"><span class="st receipt ok">VERIFIED</span><h4>雨天河流鱼种会替换为冬季鱼与鲶鱼</h4>
+        <div class="meta">source: official-wiki · v1.6 · 无Mod依赖<br>retrieved: 11-20 · 适用: 存档S1 ✓</div>
+        <div class="conf-bar"><span class="conf"><span class="meter"><i style="width:92%;background:var(--green)"></i></span>0.92</span><span class="pill" style="font-size:9px">已实践 3 次</span></div></div>
+      <div class="kn conflict"><span class="st receipt warn">PARTIALLY-VERIFIED</span><h4>「春季第 3 天必出铜矿脉，应囤体力到矿洞」</h4>
+        <div class="meta">source: community-guide · 版本未知 ⚠<br>适用: 存档S1 ✗ 已过第16天 · 与实际观察冲突×2</div>
+        <div class="conf-bar"><span class="conf"><span class="meter"><i style="width:45%;background:var(--amber)"></i></span>0.45</span><span class="pill pill-amber" style="font-size:9px">本轮不采用</span></div>
+        <p class="note" style="margin-top:7px">AI 判断：该攻略版本条件不匹配当前存档，且 11-24 实测第 40 层矿脉分布与之不符 → 标记存疑，仅作参考。不盲从。</p></div>
+      <div class="kn"><span class="st receipt fail">REJECTED</span><h4>经验：雷雨夜在海洋码头钓鱼效率极低</h4>
+        <div class="meta">source: experience · 亲自验证 11-23<br>失败条件: 雷雨 + 夜间 + 海域 · 抛竿 9 次无咬钩</div>
+        <div class="conf-bar"><span class="conf"><span class="meter"><i style="width:18%;background:var(--red)"></i></span>0.18</span><span class="pill pill-red" style="font-size:9px">失败经验</span></div>
+        <p class="note" style="margin-top:7px">失败经验同样入库：后续遇同类条件将主动降低该活动优先级，并向你说明原因。</p></div>
+    </div>
+
+    <!-- ── 共玩任务板 ── -->
+    <div class="sec-h"><i data-lucide="users" class="sm"></i>人机协作任务板<span class="ln"></span><span class="cnt">Shared Goal · 资源锁 · 冲突处理</span></div>
+    <div class="coop stagger">
+      <div class="coop-card"><h4><i data-lucide="user" class="sm blue" style="color:var(--blue)"></i>宿主 · 探索钓鱼线<span class="receipt run" style="margin-left:auto">RUNNING</span></h4><p>去河边钓鱼 8 条，顺路拜访威利。AI 承诺：不占用背包前 4 格任务区，鱼获由宿主分配。</p><div class="row-wrap" style="margin-top:8px;gap:5px"><span class="pill" style="font-size:9.5px">ownership: 宿主</span><span class="pill pill-blue" style="font-size:9.5px">资源锁: 鱼竿×1</span></div></div>
+      <div class="coop-card"><h4><i data-lucide="bot" class="sm tide" style="color:var(--tide)"></i>小莓 · 农务补给线<span class="receipt run" style="margin-left:auto">RUNNING</span></h4><p>浇水→收获防风草→补充箱子物资→矿洞补铜。完成自动交接，失败挂起并通知。</p><div class="row-wrap" style="margin-top:8px;gap:5px"><span class="pill" style="font-size:9.5px">ownership: AI</span><span class="pill pill-tide" style="font-size:9.5px">资源锁: 洒水器×2 · 小桶×3</span></div></div>
+      <div class="coop-card" style="border-color:var(--green-line)"><h4><i data-lucide="flag" class="sm green" style="color:var(--green)"></i>共同 · 社区中心收集<span class="receipt ok" style="margin-left:auto">ACCEPTED</span></h4><p>冬季前集齐工艺室收集包。已锁定：硬木×10 保留（<b style="color:var(--text-1)">AI 不会卖</b>），矿洞铜矿 40 进度 26。</p><div class="row-wrap" style="margin-top:8px;gap:5px"><span class="pill pill-green" style="font-size:9.5px">双方共同</span><span class="pill pill-amber" style="font-size:9.5px">高影响操作需确认</span></div></div>
+    </div>
+
+    <!-- ── 协商对话 ── -->
+    <div class="sec-h"><i data-lucide="messages-square" class="sm"></i>像朋友一样协商<span class="ln"></span><span class="cnt">17 §8 · 意图分类：闲聊/建议/讨论/请求/指令/接管</span></div>
+    <div class="col stagger" style="max-width:760px;gap:9px">
+      <div class="bubble user"><div class="who"><i data-lucide="user" class="xs"></i>宿主 · 意图：<span class="pill pill-blue" style="font-size:9px;padding:1px 7px">建议</span></div>今天要不要去钓鱼？天气挺好的。</div>
+      <div class="bubble ai"><div class="who"><span class="dot tide"></span>小莓 · 意图：协商回应</div>我有点想继续在矿洞补铜——升级工具还差 14 块。不过今天确实适合钓鱼，<b style="color:var(--tide)">要不先钓一小时，之后回矿洞？</b>箱子我已经放好了，不用担心背包。</div>
+      <div class="bubble user"><div class="who"><i data-lucide="user" class="xs"></i>宿主 · 意图：<span class="pill pill-blue" style="font-size:9px;padding:1px 7px">建议</span></div>我觉得先把农场整理一下比较好。</div>
+      <div class="bubble ai"><div class="who"><span class="dot tide"></span>小莓</div>也可以。我看了一下，有几样东西得先存起来，整理完再决定去哪儿——反正矿洞不会跑。</div>
+      <div class="bubble sys"><div class="who"><i data-lucide="terminal" class="xs"></i>指令通道</div>宿主输入 <span class="kbd">Go Mine</span> → 意图：<span class="pill pill-amber" style="font-size:9px;padding:1px 7px">明确指令</span> → 排期：钓鱼 1 小时（共同计划保持）后转入矿洞任务，租约 2 小时，<b style="color:var(--text-1)">Stop 随时终止</b></div>
+    </div>
+
+    <!-- ── 快捷命令 ── -->
+    <div class="sec-h"><i data-lucide="keyboard" class="sm"></i>快捷命令 · 全部可自定义<span class="ln"></span><span class="cnt">快捷键 / 命令面板 / 聊天前缀 /game</span></div>
+    <div class="cmd-grid stagger">
+      <div class="cmd"><span><i data-lucide="octagon-x" class="xs" style="color:var(--red)"></i> Stop 停止</span><span class="kbd">Space</span></div>
+      <div class="cmd"><span><i data-lucide="pause" class="xs"></i> Pause AI 暂停</span><span class="kbd">P</span></div>
+      <div class="cmd"><span><i data-lucide="hand" class="xs"></i> Take Over 接管</span><span class="kbd">T</span></div>
+      <div class="cmd"><span><i data-lucide="handshake" class="xs"></i> Release 交还</span><span class="kbd">R</span></div>
+      <div class="cmd"><span><i data-lucide="footprints" class="xs"></i> Follow Me 跟随</span><span class="kbd">F</span></div>
+      <div class="cmd"><span><i data-lucide="fish" class="xs"></i> Go Fish 钓鱼</span><span class="kbd">/fish</span></div>
+      <div class="cmd"><span><i data-lucide="pickaxe" class="xs"></i> Go Mine 下矿</span><span class="kbd">/mine</span></div>
+      <div class="cmd"><span><i data-lucide="help-circle" class="xs"></i> 在干嘛？</span><span class="kbd">/why</span></div>
+      <div class="cmd"><span><i data-lucide="list-tree" class="xs"></i> Show Plan 展示计划</span><span class="kbd">/plan</span></div>
+      <div class="cmd"><span><i data-lucide="x-circle" class="xs"></i> Cancel Task 取消任务</span><span class="kbd">/cancel</span></div>
+      <div class="cmd"><span><i data-lucide="pin" class="xs"></i> Stay Here 留在原地</span><span class="kbd">/stay</span></div>
+      <div class="cmd"><span><i data-lucide="circle-check-big" class="xs"></i> Do This 执行指定</span><span class="kbd">/do</span></div>
+    </div>
+
+    <!-- ── 沙盒剧本 ── -->
+    <div class="sec-h"><i data-lucide="flask-conical" class="sm"></i>回环沙盒 · 无真机也能回归<span class="ln"></span><span class="cnt">[SIMULATION] 标识 · 严禁冒充真机测试</span></div>
+    <div class="card" style="padding:14px 18px">
+      <div class="row-wrap">
+        <span class="seg" data-mutex>
+          <button class="seg-tab on">① 正常种地浇水</button><button class="seg-tab">② 寻路卡石头 → uncertain</button><button class="seg-tab">③ 体力耗尽晕倒</button><button class="seg-tab">④ 玩家接管</button><button class="seg-tab">⑤ 矿洞丝血</button>
+        </span>
+        <span class="sp"></span>
+        <button class="btn sm primary"><i data-lucide="play" class="xs"></i>重放剧本</button>
+        <span class="pill pill-amber"><i data-lucide="flask-conical" class="xs"></i>[SIMULATION]</span>
+      </div>
+      <p class="note" style="margin-top:10px">当前选中剧本 ② 的回归结果：寻路阻塞 → UNCERTAIN → 旁观验证 → 绕行 → <span class="receipt ok">COMPLETED</span>。沙盒证据只写入 docs/VERIFY.md 的 Mock 栏，真机验收单独排队。</p>
+    </div>
+
+  </div></main>
+
+  <!-- ── 右栏 ── -->
+  <aside class="wv2-aside">
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text-2)"><i data-lucide="key-round" class="sm tide"></i>控制租约 ControlLease</h4>
+      <div class="kv"><span class="k">持有者</span><span class="v">agent_primary · 小莓</span></div>
+      <div class="kv"><span class="k">模式</span><span class="v">协作 Collaborative</span></div>
+      <div class="kv"><span class="k">心跳</span><span class="v"><span class="dot green pulse"></span> 2s · 正常</span></div>
+      <div class="kv"><span class="k">到期</span><span class="v">14:52（2h 租约）</span></div>
+      <div class="kv"><span class="k">释放条件</span><span class="v">任务完成 / Stop / 接管 / 阻塞超时</span></div>
+      <div class="note" style="margin-top:8px">同一时刻只有一个控制者。你的任意键鼠输入立即夺回控制权，租约自动进入“用户持有”。</div>
+    </div>
+    <div class="card" style="padding:13px 15px">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:10px;color:var(--text-2)"><i data-lucide="shield-check" class="sm green"></i>动作自主边界</h4>
+      <div class="ladder-item on" style="padding:7px 11px;margin-bottom:5px"><span class="lv" style="color:var(--green)">A</span><div><div class="t" style="font-size:11.5px">自主执行</div><div class="d">走路 · 浇水 · 拾取 · 制作 · 放箱</div></div></div>
+      <div class="ladder-item" style="border-left-color:var(--amber);padding:7px 11px;margin-bottom:5px"><span class="lv" style="color:var(--amber)">B</span><div><div class="t" style="font-size:11.5px">需二次确认</div><div class="d">出售稀有物 · 消耗关键资源 · 卖收藏品</div></div></div>
+      <div class="ladder-item" style="border-left-color:var(--red);padding:7px 11px;margin-bottom:0"><span class="lv" style="color:var(--red)">C</span><div><div class="t" style="font-size:11.5px">永远禁止</div><div class="d">删除存档 · 改动用户地图建筑</div></div></div>
+    </div>
+    <div class="card" style="padding:13px 15px;border-style:dashed">
+      <h4 style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-2)"><i data-lucide="info" class="sm"></i>这不是遥控机器人</h4>
+      <p class="note">也不是 AI 抢走你的游戏——是一个有自己想法的伙伴和你一起玩：它会解释在做什么、为什么，会接受建议也会提出折中，但<b style="color:var(--text-1)">方向盘永远在你手里</b>。</p>
+    </div>
+  </aside>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

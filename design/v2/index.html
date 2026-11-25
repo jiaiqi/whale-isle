@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<title>设计系统总览「潮汐 Tide v5」— 鲸屿 V2</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .hero { padding: 10px 0 6px; }
+  .hero .tag-line { font-size: 10.5px; letter-spacing: 2.6px; color: var(--tide); font-weight: 700; font-family: var(--font-mono); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .hero h1 { font-size: 40px; font-weight: 800; letter-spacing: 0.2px; line-height: 1.14; display: flex; align-items: center; gap: 14px; }
+  .hero h1 svg { filter: drop-shadow(0 4px 18px rgba(62, 224, 205, 0.45)); }
+  .hero p { font-size: 14px; color: var(--text-2); margin-top: 14px; line-height: 1.85; max-width: 760px; }
+  .hero .meta { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .pr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .pr { padding: 16px 18px; }
+  .pr h3 { font-size: 13.5px; font-weight: 700; margin: 8px 0 7px; display: flex; align-items: center; gap: 8px; }
+  .pr p { font-size: 12px; color: var(--text-2); line-height: 1.75; }
+  .pr .ic { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); box-shadow: inset 0 1px 0 var(--hi); }
+  .ia-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .pc { display: flex; flex-direction: column; gap: 9px; border-radius: var(--r-xl); padding: 16px 17px; text-decoration: none; color: var(--text-1); }
+  .pc-head { display: flex; align-items: center; gap: 11px; }
+  .pc .ic { width: 37px; height: 37px; border-radius: 12px; display: grid; place-items: center; background: var(--tide-dim); border: 1px solid var(--tide-line); color: var(--tide); flex-shrink: 0; box-shadow: inset 0 1px 0 var(--hi); }
+  .pc .ic.sys { background: var(--violet-dim); border-color: var(--violet-line); color: var(--violet); }
+  .pc h3 { font-size: 14px; font-weight: 700; }
+  .pc p { font-size: 11.5px; color: var(--text-2); line-height: 1.7; flex: 1; }
+  .pc .no { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+  .pc .go { font-size: 10.5px; color: var(--tide); display: inline-flex; align-items: center; gap: 5px; font-weight: 650; padding-top: 7px; border-top: 1px dashed var(--stroke); }
+  .sw-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 9px; }
+  .sw-row .s { border-radius: 12px; overflow: hidden; border: 1px solid var(--stroke); }
+  .sw-row .c { height: 44px; }
+  .sw-row .n { font-size: 8.5px; padding: 5px 6px; color: var(--text-3); font-family: var(--font-mono); background: var(--inset); }
+  .mat-grid { display: grid; grid-template-columns: 1.12fr 1fr; gap: 12px; }
+  .mat { border-radius: var(--r-xl); padding: 18px 20px; }
+  .mat h4 { font-size: 13px; font-weight: 700; margin-bottom: 13px; display: flex; align-items: center; gap: 8px; }
+  .layer { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-2); }
+  .layer .demo { width: 62px; height: 36px; border-radius: 10px; flex-shrink: 0; }
+  .layer b { color: var(--text-1); font-weight: 650; width: 104px; flex-shrink: 0; }
+  .d-strata { background: linear-gradient(180deg, #0a1626, #04070d); border: 1px solid var(--stroke); }
+  .d-glass { background: var(--surface); backdrop-filter: blur(10px); border: 1px solid var(--stroke); box-shadow: inset 0 1px 0 var(--hi); }
+  .d-hairline { background: linear-gradient(180deg, transparent 47%, var(--stroke-2) 50%, transparent 53%), var(--bg-elev); border: 1px solid var(--stroke); }
+  .d-tideglow { background: var(--bg-elev); border: 1px solid var(--tide-line); box-shadow: var(--glow-tide); }
+  .d-aurora { background: var(--aurora); }
+  .comp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .comp { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .comp h4 { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; }
+  .comp .desc { font-size: 11px; color: var(--text-3); line-height: 1.7; }
+  .map-tbl td { font-size: 11.5px; }
+  .mig-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .mig { padding: 13px 16px; }
+  .mig h4 { font-size: 12.5px; font-weight: 700; margin-bottom: 5px; display: flex; gap: 7px; align-items: center; }
+  .mig p { font-size: 11.5px; color: var(--text-2); line-height: 1.7; }
+</style>
+</head>
+<body data-page="index" data-crumb="设计系统 · 总览">
+<div class="strata"></div>
+<div class="wv2-shell">
+  <main class="wv2-main"><div class="wv2-wrap">
+
+    <!-- ── Hero ── -->
+    <section class="hero rise">
+      <div class="tag-line"><i data-lucide="waves" class="xs"></i>WHALE ISLE V2 · UI/UX DESIGN SYSTEM</div>
+      <h1><i data-lucide="waves" class="lg"></i><span class="grad-text">潮汐</span>&nbsp;Tide v5</h1>
+      <p>鲸屿 V2 的设计母题是「深海屿光」：角色是深海中会发光的数字生命体，控制台是守望它的灯塔。
+      本套系统承接 v4「曜石」的玻璃材质与 Apple 三原则，把色温转向深海墨蓝，以<span class="grad-text" style="font-weight:700"> 鲸光青 </span>为主色、
+      极光渐变为品牌时刻，并新增声呐环、回执芯片、许可徽章、控制权 HUD 四个签名组件——
+      分别回应蓝图对<b style="color:var(--text-1)">表现状态、真实回执、素材授权、用户控制权</b>的四个硬要求。</p>
+      <div class="meta">
+        <span class="pill pill-tide"><i data-lucide="layers" class="xs"></i>设计系统 v5</span>
+        <span class="pill"><i data-lucide="moon-star" class="xs"></i>深海 / 晨汐 双主题</span>
+        <span class="pill"><i data-lucide="layout-grid" class="xs"></i>10 个世界页面</span>
+        <span class="pill"><i data-lucide="book-open" class="xs"></i>覆盖蓝图 17 篇文档</span>
+        <span class="pill"><i data-lucide="accessibility" class="xs"></i>reduced-motion 适配</span>
+      </div>
+    </section>
+
+    <!-- ── 设计原则 ── -->
+    <div class="sec-h"><i data-lucide="gem" class="sm"></i>设计原则 · 六条铁律<span class="ln"></span><span class="cnt">来自蓝图 §README 8 原则 × PRD 体验原则</span></div>
+    <div class="pr-grid stagger">
+      <div class="card card-hover pr"><span class="ic"><i data-lucide="fingerprint"></i></span><h3>一个 AI，多种身体</h3><p>Character Identity 是唯一恒星，化身只是投影。界面永远显示当前角色与其全部化身的一致性状态，换模型、换皮肤不产生新角色。</p></div>
+      <div class="card card-hover pr"><span class="ic"><i data-lucide="scan-eye"></i></span><h3>决策透明可解释</h3><p>每一个自主动作都带「目标 · 动作 · 一句话理由 · 置信度 · 证据来源」。不要求用户看懂全部推理，但任何时候都能追问“为什么”。</p></div>
+      <div class="card card-hover pr"><span class="ic"><i data-lucide="hand"></i></span><h3>控制权最高优先</h3><p>停止 / 接管入口永远在视线内。四档控制模式（自主·协作·指令·接管）用同一套 HUD 表达，用户键鼠输入永远压过 AI。</p></div>
+      <div class="card card-hover pr"><span class="ic"><i data-lucide="receipt-text"></i></span><h3>回执不撒谎</h3><p>COMPLETED / UNCERTAIN / FAILED 三色回执芯片贯穿游戏、语音、资产全链路。「发出命令」与「任务完成」在视觉上永远不同。</p></div>
+      <div class="card card-hover pr"><span class="ic"><i data-lucide="scale"></i></span><h3>授权显性化</h3><p>许可徽章（MIT / Apache / CC BY-NC-SA / 无许可证）出现在每个素材、每个账号、每条攻略知识上；P0–P5 权限阶梯可见可调。</p></div>
+      <div class="card card-hover pr"><span class="ic"><i data-lucide="anchor"></i></span><h3>本地优先 · 安静陪伴</h3><p>凭证入系统钥匙串、费用与预算常驻侧栏、勿扰一键可达。角色可以选择沉默——安静是一种被设计的状态，不是缺失。</p></div>
+    </div>
+
+    <!-- ── 信息架构 ── -->
+    <div class="sec-h"><i data-lucide="network"></i>信息架构 · 六世界 × 十页面<span class="ln"></span><span class="cnt">侧栏即世界地图</span></div>
+    <div class="ia-grid stagger">
+      <a class="card card-hover pc" href="home.html"><div class="pc-head"><span class="ic"><i data-lucide="compass"></i></span><div><h3>总览</h3><span class="no">HOME · 数字生命仪表盘</span></div></div><p>声呐状态环、情绪地图、今日生活时间轴、多时间尺度目标、化身一致性条、全事件气泡流与快控。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="character.html"><div class="pc-head"><span class="ic"><i data-lucide="user"></i></span><div><h3>角色</h3><span class="no">CHARACTER · 人格情绪声音</span></div></div><p>人格档案滑杆、情绪 valence/arousal 地图、长期偏好来源历史、Voice Identity 与表达计划、安静陪伴策略。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="embodiment.html"><div class="pc-head"><span class="ic"><i data-lucide="shapes"></i></span><div><h3>化身</h3><span class="no">EMBODIMENT · 多形态投影</span></div></div><p>化身星座图（桌面 webm / 游戏像素 / 舞台 VRM / OBS），状态映射表、Character Bible 特征锁、多桌宠槽位。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="life.html"><div class="pc-head"><span class="ic"><i data-lucide="globe"></i></span><div><h3>生活</h3><span class="no">DIGITAL LIFE · 日程浏览记忆</span></div></div><p>生活调度与预算、内容发现流、平台能力矩阵、社交决策链、五类记忆浏览器与遗忘机制。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="agent.html"><div class="pc-head"><span class="ic"><i data-lucide="bot"></i></span><div><h3>智能体</h3><span class="no">AGENT · 模型 Harness MCP</span></div></div><p>九类 Provider Registry、任务路由、ACP Harness 适配等级、MCP 双向、Skills Registry 与插件沙箱。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="studio.html"><div class="pc-head"><span class="ic"><i data-lucide="palette"></i></span><div><h3>创作工坊</h3><span class="no">CREATIVE · 五工作室资产线</span></div></div><p>生成任务看板（十态）、Character Bible、像素流水线 11 步、资产库许可徽章与授权门禁记录。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="game.html"><div class="pc-head"><span class="ic"><i data-lucide="gamepad-2"></i></span><div><h3>游戏共玩</h3><span class="no">GAME · 控制权决策知识</span></div></div><p>控制权 HUD、决策循环直播、候选方案对比、回执流、攻略知识卡（不盲从）、共玩任务板与协商对话。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="live.html"><div class="pc-head"><span class="ic"><i data-lucide="radio"></i></span><div><h3>直播舞台</h3><span class="no">LIVE · 弹幕点歌表演</span></div></div><p>弹幕重要性收件箱、回应语音队列、点歌授权检查、歌词时间轴、舞台导演四输出与雷区护栏。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="evolution.html"><div class="pc-head"><span class="ic sys"><i data-lucide="dna"></i></span><div><h3>进化引擎</h3><span class="no">EVOLUTION · 独立研发平面</span></div></div><p>遥测→Issue→Worktree→PR 看板、自主等级 L1–L5 门禁、发布列车与回滚、回放与评估指标。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+      <a class="card card-hover pc" href="security.html"><div class="pc-head"><span class="ic sys"><i data-lucide="shield"></i></span><div><h3>安全治理</h3><span class="no">SECURITY · 权限审计合规</span></div></div><p>P0–P5 权限阶梯、账号金库与 Profile 隔离、键鼠互斥 Lease、记忆隐私、NC 素材台账与审计日志。</p><span class="go">打开页面<i data-lucide="arrow-right" class="xs"></i></span></a>
+    </div>
+
+    <!-- ── 色彩 ── -->
+    <div class="sec-h"><i data-lucide="palette"></i>色彩 Tokens · 深海与鲸光<span class="ln"></span><span class="cnt">dark「深海」/ light「晨汐」对等实现</span></div>
+    <div class="card" style="padding:16px 18px">
+      <div class="sw-row">
+        <div class="s"><div class="c" style="background:#3ee0cd"></div><div class="n">tide · 鲸光青</div></div>
+        <div class="s"><div class="c" style="background:#4ea8ff"></div><div class="n">blue · 海流蓝</div></div>
+        <div class="s"><div class="c" style="background:#35d49a"></div><div class="n">green · 回执绿</div></div>
+        <div class="s"><div class="c" style="background:#ffc247"></div><div class="n">amber · 米黄</div></div>
+        <div class="s"><div class="c" style="background:#b48cff"></div><div class="n">violet · 灵光紫</div></div>
+        <div class="s"><div class="c" style="background:#ff6b6b"></div><div class="n">red · 警示红</div></div>
+        <div class="s"><div class="c" style="background:linear-gradient(115deg,#3ee0cd,#4ea8ff 48%,#b48cff)"></div><div class="n">aurora · 极光</div></div>
+        <div class="s"><div class="c" style="background:linear-gradient(180deg,#0a1626,#04070d)"></div><div class="n">strata · 深海底</div></div>
+      </div>
+      <div class="row-wrap" style="margin-top:14px">
+        <span class="pill pill-tide"><span class="dot tide"></span>表现状态 · speaking</span>
+        <span class="pill pill-green"><i data-lucide="check" class="xs"></i>COMPLETED</span>
+        <span class="pill pill-amber"><i data-lucide="alert-triangle" class="xs"></i>UNCERTAIN</span>
+        <span class="pill pill-red"><i data-lucide="x" class="xs"></i>FAILED</span>
+        <span class="pill pill-violet"><i data-lucide="wand-2" class="xs"></i>生成中</span>
+        <span class="pill pill-blue"><i data-lucide="info" class="xs"></i>信息</span>
+        <span class="lic mit">MIT</span><span class="lic apache">APACHE-2.0</span>
+        <span class="lic nc">CC BY-NC-SA 4.0</span><span class="lic unl">UNLICENSED</span>
+      </div>
+      <p class="note" style="margin-top:12px">语义规则：<b style="color:var(--tide)">鲸光青</b>=角色生命力与主交互；<b style="color:var(--green)">绿</b>=已验证的真实回执；<b style="color:var(--amber)">琥珀</b>=不确定 / 预算 / 待人工；<b style="color:var(--red)">红</b>=失败 / 危险 / 直播红点；<b style="color:var(--violet)">紫</b>=AI 创造与研发平面；<b style="color:var(--blue)">蓝</b>=进行中与信息。极光渐变只用于品牌时刻（Hero、主角色 Avatar、关键 CTA），不做大面积铺色。</p>
+    </div>
+
+    <!-- ── 材质与光 ── -->
+    <div class="sec-h"><i data-lucide="sun-medium"></i>材质七层 · 承曜石 × 深海化<span class="ln"></span><span class="cnt">Clarity / Deference / Depth</span></div>
+    <div class="mat-grid">
+      <div class="card mat">
+        <h4><i data-lucide="layers" class="sm tide"></i>光的分层</h4>
+        <div class="col" style="gap:10px">
+          <div class="layer"><span class="demo d-strata"></span><b>L1 深海分层底</b>海水分层渐变 + 缓慢漂移光斑，不是纯黑</div>
+          <div class="layer"><span class="demo d-glass"></span><b>L2 玻璃卡</b>blur(30) + 饱和度提升，透出深层海水</div>
+          <div class="layer"><span class="demo d-hairline"></span><b>L3 发丝线</b>半透明蓝白描边，勾出岛屿轮廓</div>
+          <div class="layer"><span class="demo d-tideglow"></span><b>L4 鲸光晕</b>状态发光只给"活着"的东西（状态点/声呐/主按钮）</div>
+          <div class="layer"><span class="demo d-aurora"></span><b>L5 极光</b>品牌时刻专用渐变，替代大面积彩色背景</div>
+        </div>
+      </div>
+      <div class="card mat">
+        <h4><i data-lucide="type" class="sm tide"></i>文字与排版</h4>
+        <div class="col" style="gap:9px">
+          <div class="layer"><span class="demo" style="display:grid;place-items:center;font-size:20px;font-weight:800;color:var(--text-1)">鲸屿</span><b>Display 800</b>页面主标题 / 数字仪表</div>
+          <div class="layer"><span class="demo" style="display:grid;place-items:center;font-size:13px;font-weight:650;color:var(--text-1)">角色世界</span><b>Body 600</b>卡片标题 / 按钮文字</div>
+          <div class="layer"><span class="demo" style="display:grid;place-items:center;font-size:11px;color:var(--text-2)">描述文本 12–13.5px</span><b>Body 400</b>正文行高 1.65–1.8</div>
+          <div class="layer"><span class="demo" style="display:grid;place-items:center;font-size:10px;font-family:var(--font-mono);color:var(--tide)">RECEIPT · 0.42s</span><b>Mono 9.5–11.5</b>ID、回执、许可、耗时</div>
+          <div class="layer"><span class="demo" style="display:grid;place-items:center;font-size:9.5px;letter-spacing:1.6px;color:var(--text-3)">CAPABILITY</span><b>Label 700</b>分区标题大写 + 1.8px 字距</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 签名组件 ── -->
+    <div class="sec-h"><i data-lucide="component"></i>签名组件 · 蓝图硬要求的视觉答案<span class="ln"></span><span class="cnt">四个新组件 + 三个承继组件</span></div>
+    <div class="comp-grid stagger">
+      <div class="card comp">
+        <h4><i data-lucide="radio" class="sm tide"></i>声呐环 Sonar</h4>
+        <div class="row" style="gap:22px;padding:14px 0 22px;justify-content:center">
+          <div class="sonar"><span class="ring"></span><span class="ring"></span><span class="ring"></span><div class="core"><i data-lucide="gamepad-2"></i></div><span class="sonar-label">GAMING · 星露谷</span></div>
+          <div class="sonar amber"><div class="core"><i data-lucide="moon"></i></div><span class="sonar-label">RESTING · 静默</span></div>
+        </div>
+        <p class="desc">回应《05 表演系统》九态表现状态。脉冲环向外扩散表达"活着"；颜色随表现状态切换（青=活跃/琥珀=休息/紫=表演/红=告警）。总览、桌宠、直播页复用同一语义。</p>
+      </div>
+      <div class="card comp">
+        <h4><i data-lucide="receipt-text" class="sm tide"></i>回执芯片 Receipt</h4>
+        <div class="col" style="gap:8px">
+          <div class="row"><span class="receipt ok">COMPLETED · 0.42s</span><span class="receipt run">IN_PROGRESS</span></div>
+          <div class="row"><span class="receipt warn">UNCERTAIN · 重试2/3</span><span class="receipt fail">FAILED · 卡石头</span></div>
+        </div>
+        <p class="desc">回应《07 游戏化身》与仓库铁律「真实执行回执」。任何自动化动作都以三色回执收口，UNCERTAIN 必须带重试计数，FAILED 必须带原因。严禁把绿色之外的任何状态画成完成。</p>
+      </div>
+      <div class="card comp">
+        <h4><i data-lucide="scale" class="sm tide"></i>许可徽章 License</h4>
+        <div class="col" style="gap:8px">
+          <div class="row-wrap"><span class="lic mit">MIT</span><span class="lic apache">APACHE-2.0</span><span class="lic nc">CC BY-NC-SA 4.0</span><span class="lic unl">UNLICENSED</span></div>
+          <div class="row-wrap"><span class="lic nc">DEV_ONLY_NON_COMMERCIAL</span><span class="receipt warn">商用前须清洗</span></div>
+        </div>
+        <p class="desc">回应《06/11 素材与声音授权》。每个资产、账号、攻略知识都挂许可徽章；NC 素材自动带"商用前须清洗"提示。门禁拦截用红色 UNLICENSED。</p>
+      </div>
+      <div class="card comp">
+        <h4><i data-lucide="gamepad-2" class="sm tide"></i>控制权 HUD</h4>
+        <div class="hud" style="padding:12px 14px">
+          <div class="seg" data-mutex style="margin-bottom:9px">
+            <button class="seg-tab">自主</button><button class="seg-tab on tide">协作</button><button class="seg-tab">指令</button><button class="seg-tab">接管</button>
+          </div>
+          <div class="row" style="justify-content:space-between">
+            <span class="hud-emg" style="padding:6px 14px;font-size:11.5px"><i data-lucide="octagon-x" class="sm"></i>停止 Space</span>
+            <span class="pill"><i data-lucide="keyboard" class="xs"></i>用户输入永远最高</span>
+          </div>
+        </div>
+        <p class="desc">回应《17 人机共玩》§9。四档控制模式 + 常驻紧急停止；租约倒计时与优先级阶梯在 HUD 内可见。总览页有迷你版，游戏页为完整版。</p>
+      </div>
+      <div class="card comp">
+        <h4><i data-lucide="message-circle" class="sm tide"></i>气泡 Bubble</h4>
+        <div class="col" style="gap:8px">
+          <div class="bubble ai"><div class="who"><span class="dot tide"></span>小莓 · 内心戏</div>背包快满了…附近能放个箱子吗？</div>
+          <div class="bubble user">先钓一会儿再去矿洞？</div>
+        </div>
+        <p class="desc">事件流、对话、桌宠台词共用形态：AI 鲸光描边、用户海流蓝、系统虚线。D11 内心戏用半透明 + 「内心戏」角标与语音区分。</p>
+      </div>
+      <div class="card comp">
+        <h4><i data-lucide="database" class="sm tide"></i>记忆卡 Memory</h4>
+        <div class="mem pinned"><div class="row" style="justify-content:space-between;margin-bottom:5px"><span class="type" style="color:var(--violet)">EPISODIC</span><span class="conf"><span class="meter"><i style="width:86%"></i></span>0.86</span></div><div style="font-size:12px">11-22 与宿主约定：雨夜不下矿</div><div class="row" style="gap:5px;margin-top:7px"><span class="pill" style="font-size:9.5px">来源:对话#4821</span><span class="pill" style="font-size:9.5px"><i data-lucide="pin" class="xs" style="color:var(--amber)"></i> 用户固定</span></div></div>
+        <p class="desc">回应《08 记忆》：五类色标 + 置信度条 + 来源事件 + 用户固定。可纠正、可删除、不确定的表达在 UI 上永远是"灰度"而非"事实"。</p>
+      </div>
+    </div>
+
+    <!-- ── 蓝图映射 ── -->
+    <div class="sec-h"><i data-lucide="book-open-check"></i>蓝图映射 · 每个需求都有落点<span class="ln"></span><span class="cnt">Whale-Isle-V2-Blueprint 01–17</span></div>
+    <div class="card" style="padding:6px 18px 10px">
+      <table class="tbl map-tbl">
+        <tr><th style="width:130px">页面</th><th>蓝图文档 → 设计落点</th></tr>
+        <tr><td><b>总览</b></td><td>01 PRD 场景/体验原则 → 声呐环、勿扰与快控；02 三平面 → 顶栏平面状态灯；17 §4 → 多时间尺度目标区</td></tr>
+        <tr><td><b>角色</b></td><td>03 §2/4/5 领域模型 → Persona/Mood 表单即契约；05 四层角色状态与 Voice Profile → 人格滑杆组 + 声音身份编辑器 + 表达计划预览</td></tr>
+        <tr><td><b>化身</b></td><td>03 §7 Embodiment → 星座图；06 Character Bible → 特征锁定清单；07 三级化身 → 等级标注；13 迁移 → 桌宠渲染现状面板</td></tr>
+        <tr><td><b>生活</b></td><td>08 全篇 → 调度/发现/矩阵/决策链/记忆浏览器；11 §7 记忆隐私 → 纠正·固定·删除工作流</td></tr>
+        <tr><td><b>智能体</b></td><td>04 全篇 → Provider 九类分组、ACP 等级、MCP 双向、Skills/插件权限；10 §2 研发隔离 → Harness 卡片标"研发平面"</td></tr>
+        <tr><td><b>创作工坊</b></td><td>06 全篇 → 十态看板、Bible、像素 11 步流水线、授权门禁；12 §4 3D/Blender → 后处理检查单</td></tr>
+        <tr><td><b>游戏共玩</b></td><td>07 Game Adapter/回执 → 回执流；17 全篇 → 控制权 HUD、决策循环、背包满场景、知识卡、快捷命令、验收场景</td></tr>
+        <tr><td><b>直播舞台</b></td><td>09 全篇 → 弹幕收件箱、语音队列、点歌授权流、歌词同步、Stage API 导演台；05 §7 唱歌 → 歌声任务管线</td></tr>
+        <tr><td><b>进化引擎</b></td><td>10 全篇 → 研发看板、L1–L5 门禁、发布列车、回放与评估；11 §11 安全事件 → 回滚演练卡</td></tr>
+        <tr><td><b>安全治理</b></td><td>11 全篇 → P0–P5 阶梯、账号金库、Lease、审计；16 风险清单 → NC 素材台账与商用清洗提示</td></tr>
+      </table>
+    </div>
+
+    <!-- ── 迁移 ── -->
+    <div class="sec-h"><i data-lucide="git-branch"></i>从 v4 到 v5 · 渐进演进<span class="ln"></span><span class="cnt">不推倒重来（对齐 D-009）</span></div>
+    <div class="mig-grid stagger">
+      <div class="card card-hover mig"><h4><i data-lucide="check-circle-2" class="sm green"></i>保留</h4><p>玻璃材质七层、发丝线、统一 Shell 栅格、lucide 图标体系、深浅双主题机制、⌘K 命令面板、reduced-motion 适配——全部原样承继。</p></div>
+      <div class="card card-hover mig"><h4><i data-lucide="palette" class="sm tide"></i>重调</h4><p>主色从系统蓝 #0A84FF 转向鲸光青 #3EE0CD；背景从纯黑转向深海分层墨蓝；语义色统一饱和度曲线；极光渐变取代零散的多彩光斑。</p></div>
+      <div class="card card-hover mig"><h4><i data-lucide="sparkles" class="sm violet"></i>新增</h4><p>声呐环、回执芯片、许可徽章、控制权 HUD、能力矩阵、决策循环、化身星座图——把蓝图特有的领域概念（回执/授权/控制权）变成一等组件。</p></div>
+      <div class="card card-hover mig"><h4><i data-lucide="network" class="sm blue"></i>重组</h4><p>导航从 20+ 插件平铺重组为「六世界十页面」：现有 chat/memory/voice/pet/providers/plugins… 面板全部有新家，映射表见 SPEC 附录。</p></div>
+    </div>
+
+    <p class="note" style="margin-top:26px;text-align:center">鲸屿 Whale Isle V2 · UI/UX 设计稿 v1.0 · 2026-11-25 · 与 <a href="SPEC.md" style="color:var(--tide)">SPEC.md</a>（设计规范）、蓝图 Whale-Isle-V2-MASTER.md 配套阅读</p>
+  </div></main>
+</div>
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>
