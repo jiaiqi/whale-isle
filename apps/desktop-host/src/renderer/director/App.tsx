@@ -160,6 +160,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   });
   const [events, setEvents] = useState<AutodriveEventView[]>([]);
   const [running, setRunning] = useState(false);
+  /** T-M6-73：主人临时接管中（AI 只读状态、不发动作） */
+  const [humanControl, setHumanControl] = useState(false);
   const [brain, setBrain] = useState<{ mode: string; llmReady: boolean }>({ mode: 'rule', llmReady: false });
   const [mainModelId, setMainModelId] = useState('');
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
@@ -266,11 +268,14 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       setEvents((prev) => (prev.length >= 500 ? [...prev.slice(-499), event] : [...prev, event]));
       // 事件即代表正在跑（外部启动/重启后 UI 不落后）
       if (event.type === 'state' || event.type === 'decision' || event.type === 'receipt') setRunning(true);
+      // T-M6-73：游戏内键鼠接管会在 BWF 侧上报，事件流与宿主开关双向同步
+      if (event.type === 'human-control') setHumanControl(event.active === true);
     });
     void window.directorBridge.autodriveStatus().then((s) => {
       // 先记录会话再水合：历史事件同样按当前会话过滤
       sessionRef.current = { sessionId: s.sessionId, gameId: s.gameId, generation: s.generation ?? -1 };
       setRunning(s.running);
+      setHumanControl(s.humanControl === true);
       if (s.running && s.gameId !== undefined) setActiveGame(s.gameId);
       const history = (s.events ?? []).filter(acceptEvent);
       if (history.length > 0) setEvents((prev) => mergeHydrated(history, prev));
@@ -379,6 +384,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     const refreshStatus = (): void => {
       void window.directorBridge.autodriveStatus().then((status) => {
         setRunning(status.running);
+        setHumanControl(status.humanControl === true);
         if (status.sessionId !== undefined) {
           sessionRef.current = { sessionId: status.sessionId, gameId: status.gameId, generation: status.generation ?? sessionRef.current.generation };
         }
@@ -477,7 +483,27 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const stop = async (): Promise<void> => {
     await window.directorBridge.autodriveStop();
     setRunning(false);
+    setHumanControl(false);
     toast('自动驾驶已停止：控制权交还主人');
+  };
+
+  /**
+   * T-M6-73 临时接管开关：不动 running（AI 仍在会话里，只是不出手），
+   * 交还时把主进程算出的「接管期间发生了什么」摘要念给主人听。
+   */
+  const toggleHumanControl = async (): Promise<void> => {
+    const want = !humanControl;
+    const res = await window.directorBridge.autodriveSetHumanControl(want);
+    if (!res.ok) {
+      toast.error('接管开关失败，请查看主进程日志');
+      return;
+    }
+    setHumanControl(res.humanControl);
+    if (want) {
+      toast(res.warning ?? 'AI 已停手，现在由你操作');
+    } else {
+      toast(res.summary ?? '已交还给 AI');
+    }
   };
 
   const selectGame = (gameId: GameId): void => {
@@ -683,6 +709,30 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         onToggleDrive={() => void (running ? stop() : start())}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />
+
+      {/* T-M6-73 临时接管条：AI 在跑时常驻，一键在「我来操作 / 交还给 AI」之间切换 */}
+      {running && (
+        <div
+          data-testid="human-control-bar"
+          className="flex items-center gap-3 border-b px-6 py-1.5 text-[11px]"
+          style={{
+            borderColor: 'var(--line)',
+            background: humanControl ? 'color-mix(in oklab, var(--warn, #d97706) 12%, transparent)' : 'transparent',
+            color: 'var(--text-2)',
+          }}
+        >
+          <span>{humanControl ? '你正在操作：AI 只读状态，不发动作' : 'AI 正在驾驶'}</span>
+          <button
+            type="button"
+            className="pill"
+            style={{ fontSize: 10, cursor: 'pointer' }}
+            onClick={() => void toggleHumanControl()}
+          >
+            {humanControl ? '交还给 AI' : '我来操作'}
+          </button>
+          {humanControl && <span style={{ color: 'var(--text-3)' }}>在游戏里动键鼠会自动进入此状态；松手后点「交还给 AI」</span>}
+        </div>
+      )}
 
       {tab === 'chat' && (
         <aside className="wb-aside">
@@ -1164,13 +1214,15 @@ function EventCard({ event, objectiveActive = false }: { event: AutodriveEventVi
     );
   }
   if (event.type === 'objective') {
-    const meta: Record<NonNullable<AutodriveEventView['reason']>, { label: string; color: string; bg: string }> = {
+    const meta: Record<'set' | 'replaced' | 'cancel' | 'done', { label: string; color: string; bg: string }> = {
       set: { label: '目标已开始', color: 'var(--violet)', bg: 'var(--violet-dim)' },
       replaced: { label: '目标被新指令替换', color: 'var(--amber)', bg: 'var(--amber-dim)' },
       cancel: { label: '目标已取消', color: 'var(--text-2)', bg: 'var(--surface-2)' },
       done: { label: '目标已完成', color: 'var(--green)', bg: 'var(--green-dim)' },
     };
-    const view = meta[event.reason ?? 'set'];
+    // T-M6-73 起 reason 联合还包含接管的 switch/in-game/resume，这里只认目标生命周期的四态
+    const reasonKey = event.reason === 'replaced' || event.reason === 'cancel' || event.reason === 'done' ? event.reason : 'set';
+    const view = meta[reasonKey];
     return (
       <div data-event="objective" data-objective-reason={event.reason} className="mb-3 rounded-2xl px-3.5 py-2.5" style={{ border: `1px solid ${view.color}`, background: view.bg }}>
         <div className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: view.color }}>

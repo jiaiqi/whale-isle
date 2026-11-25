@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity, AlertCircle, CheckCircle2, ChevronRight, Clock, Copy, DoorOpen, Egg, Eye, EyeOff,
-  FlaskConical, Gamepad2, Gift, LayoutDashboard, LogOut, Moon, MoveRight, PawPrint, Play, Plus,
+  FlaskConical, Gamepad2, Gift, Hand, LayoutDashboard, LogOut, Moon, MoveRight, PawPrint, Play, Plus,
   RefreshCw, Route, Send, Square, Sun, Target, Users, Volume2, VolumeX, Wheat, XCircle,
 } from 'lucide-react';
 import { whaleMarkPaths } from '../../shared/brand';
@@ -42,10 +42,14 @@ interface AutodriveEventView {
   intent?: string;
   objective?: string | null;
   reason?: string;
+  /** T-M6-73：human-control 事件里表示「进入(true) / 交还(false)」 */
+  active?: boolean;
 }
 
 interface AutodriveStatusView {
   running: boolean;
+  /** T-M6-73：主人临时接管中 */
+  humanControl?: boolean;
   gameId?: GameId;
   sessionId?: string;
   generation?: number;
@@ -295,6 +299,10 @@ function App(): React.JSX.Element {
       if (event.type === 'state' || event.type === 'cycle-end') {
         setDrive((previous) => (previous.running ? previous : { ...previous, running: true }));
       }
+      // T-M6-73：游戏内键鼠接管状态与托盘开关双向同步
+      if (event.type === 'human-control') {
+        setDrive((previous) => ({ ...previous, humanControl: event.active === true }));
+      }
     });
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') void bridge.hidePopover();
@@ -409,6 +417,23 @@ function App(): React.JSX.Element {
       return;
     }
     await runAction('drive', () => bridge.autodriveStart(activeGame), `自驾已启动：${gameLabel}`);
+  };
+
+  /** T-M6-73：托盘里一键在「我来操作 / 交还给 AI」之间切换（不停自驾会话） */
+  const toggleHumanControl = async (): Promise<void> => {
+    if (busy !== null) return;
+    setBusy('human');
+    try {
+      const want = drive.humanControl !== true;
+      const result = await bridge.autodriveSetHumanControl(want);
+      setDrive((previous) => ({ ...previous, humanControl: result.humanControl }));
+      if (want) notify('ok', result.warning ?? 'AI 已停手，现在由你操作');
+      else notify('ok', result.summary ?? '已交还给 AI');
+    } catch (error) {
+      notify('err', error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const clearObjective = async (): Promise<void> => {
@@ -675,6 +700,20 @@ function App(): React.JSX.Element {
               {drive.running ? <Square size={13} /> : <Play size={13} />}
               {drive.running ? '停止自驾' : '一键启动自驾'}
             </button>
+
+            {/* T-M6-73：不停会话、只让 AI 停手；游戏内动键鼠也会自动切到这个状态 */}
+            {drive.running && (
+              <button
+                type="button"
+                className={`wide-btn${drive.humanControl === true ? ' stop' : ''}`}
+                data-action="human-control-toggle"
+                disabled={busy !== null}
+                onClick={() => { void toggleHumanControl(); }}
+              >
+                <Hand size={13} />
+                {drive.humanControl === true ? '交还给 AI' : '我来操作'}
+              </button>
+            )}
 
             <div className="section-title"><Target size={11} />当前多步目标</div>
             {objective !== null ? (

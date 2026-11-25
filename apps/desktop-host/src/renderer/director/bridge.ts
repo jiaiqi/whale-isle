@@ -225,7 +225,7 @@ export interface GameHealthView {
 }
 
 export interface AutodriveEventView {
-  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective';
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective' | 'human-control';
   clock?: string;
   stamina?: number;
   staminaMax?: number;
@@ -240,9 +240,11 @@ export interface AutodriveEventView {
   kind?: 'stuck' | 'heartbeat';
   detail?: string;
   delayMs?: number;
-  /** T-M6-57 目标生命周期事件 */
+  /** T-M6-57 目标生命周期事件 / T-M6-73 临时接管事件 */
   objective?: string | null;
-  reason?: 'set' | 'replaced' | 'cancel' | 'done';
+  reason?: 'set' | 'replaced' | 'cancel' | 'done' | 'switch' | 'in-game' | 'resume';
+  /** T-M6-73：human-control 事件里表示「进入(true) / 交还(false)」 */
+  active?: boolean;
   /** 主进程单调序号：刷新水合时去重（同一事件不插两次卡） */
   seq?: number;
   /** T-M6-27 会话归属：单例 autodrive 事件带 sessionId/gameId/generation；联机端点事件带 agentId */
@@ -268,8 +270,10 @@ export interface DirectorBridge {
   autodriveStop(): Promise<{ ok: boolean }>;
   autodriveObjectiveStatus(): Promise<{ ok: boolean; objective: string | null }>;
   autodriveClearObjective(): Promise<{ ok: boolean; had?: boolean; objective?: string }>;
-  autodriveStatus(): Promise<{ running: boolean; gameId?: GameId; sessionId?: string; generation?: number; events?: AutodriveEventView[] }>;
+  autodriveStatus(): Promise<{ running: boolean; gameId?: GameId; sessionId?: string; generation?: number; humanControl?: boolean; events?: AutodriveEventView[] }>;
   autodriveDirective(tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }>;
+  /** T-M6-73 临时接管开关：active=true 让 AI 停手，false 交还并返回接管期间摘要 */
+  autodriveSetHumanControl(active: boolean): Promise<{ ok: boolean; humanControl: boolean; summary?: string | null; warning?: string }>;
   onAutodriveEvent(handler: (event: AutodriveEventView) => void): void;
   // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100
   gameHealth(gameId: GameId, endpoint?: string): Promise<GameHealthView>;

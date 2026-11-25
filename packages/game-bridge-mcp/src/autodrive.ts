@@ -20,7 +20,39 @@ export type AutodriveEvent =
   | { type: 'watchdog'; kind: 'stuck' | 'heartbeat'; detail: string }
   /** 多步目标生命周期（T-M6-57）：set/replaced/cancel/done，供 UI 目标条与徽标使用 */
   | { type: 'objective'; objective: string | null; reason: 'set' | 'replaced' | 'cancel' | 'done' }
+  /** 主人临时接管（T-M6-73）：active=true 进入静默只读态；false 交还并带回归摘要 */
+  | { type: 'human-control'; active: boolean; reason: 'switch' | 'in-game' | 'resume'; summary?: string }
   | { type: 'cycle-end'; delayMs: number };
+
+/** 接管期间用于对比的游戏状态快照（只读） */
+export interface HumanSessionSnapshot {
+  clock: string;
+  money: number;
+  location: string;
+  stamina: number;
+  staminaMax: number;
+}
+
+/**
+ * 交还时的人话摘要（T-M6-73）：主人接管这段时间游戏发生了什么，交给宿主写进聊天流。
+ * 纯函数，便于单测；任一快照缺失时如实说明「没有可比对的状态」，不编造变化。
+ */
+export function describeHumanSession(
+  start: HumanSessionSnapshot | null,
+  end: HumanSessionSnapshot | null,
+  durationMs: number,
+): string {
+  const seconds = Math.max(0, Math.round(durationMs / 1000));
+  const span = seconds >= 90 ? `${Math.round(seconds / 60)} 分钟` : `${seconds} 秒`;
+  if (start === null || end === null) return `主人接管了 ${span}：期间没有拿到可比对的游戏状态，按当前状态重新开始。`;
+  const parts: string[] = [];
+  const delta = end.money - start.money;
+  if (delta !== 0) parts.push(`金币 ${start.money}→${end.money}（${delta > 0 ? '+' : ''}${delta}）`);
+  if (start.clock !== end.clock) parts.push(`时钟 ${start.clock}→${end.clock}`);
+  if (start.location !== end.location) parts.push(`位置 ${start.location}→${end.location}`);
+  if (start.stamina !== end.stamina) parts.push(`体力 ${start.stamina}/${start.staminaMax}→${end.stamina}/${end.staminaMax}`);
+  return `主人接管了 ${span}：${parts.length === 0 ? '游戏状态没有可见变化' : parts.join('，')}。`;
+}
 
 export interface AutodriveOptions {
   endpoint?: string;
@@ -39,6 +71,9 @@ export interface AutodriveOptions {
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** BWF 补丁在玩家接管键鼠后附加到 get_state 文本里的标记（T-M6-73） */
+export const PLAYER_IN_CONTROL_MARKER = '【玩家接管中】';
 
 export class AutodriveRunner {
   /** 会话标识：宿主事件出站与 P0 指令入站都以它为归属键（T-M6-27） */
@@ -65,6 +100,14 @@ export class AutodriveRunner {
   private stallSignature: string | null = null;
   private stallClock = '';
   private stallCount = 0;
+  /** T-M6-73：主人临时接管中（true 时循环只读状态，不发任何动作/keepalive） */
+  private humanControl = false;
+  /** 接管的触发来源：宿主开关 or 游戏内键鼠（BWF 上报【玩家接管中】） */
+  private humanSource: 'switch' | 'in-game' | null = null;
+  private humanSince: number | null = null;
+  private humanStartSnapshot: HumanSessionSnapshot | null = null;
+  /** 最近一次成功的 get_state 快照：接管结束的事件流就差 */
+  private lastStateSnapshot: HumanSessionSnapshot | null = null;
 
   constructor(
     private readonly onEvent: (event: AutodriveEvent) => void,
@@ -118,6 +161,57 @@ export class AutodriveRunner {
     return this.running;
   }
 
+  /** T-M6-73：当前是否处于主人临时接管态（UI 三处开关与状态栏共用） */
+  isHumanControl(): boolean {
+    return this.humanControl;
+  }
+
+  /**
+   * T-M6-73 临时接管开关：进入时尽力中止在飞动作并停止一切决策/keepalive，
+   * 只保留 get_state 只读轮询（供交还时给出差异摘要）；退出时返回摘要字符串。
+   *
+   * 降级说明：真正让游戏内 AI 松手靠 BWF 的 `playerInControl`（补丁未安装时不生效），
+   * 但宿主侧仍然会立刻停止发动作——所以缺补丁时是「AI 停手、游戏内仍可自由操作」，
+   * 而不是彻底不可用。
+   */
+  async setHumanControl(active: boolean, reason: 'switch' | 'in-game' = 'switch'): Promise<string | null> {
+    const clock = this.options.now ?? Date.now;
+    if (active) {
+      if (this.humanControl) return null;
+      this.humanControl = true;
+      this.humanSource = reason;
+      this.humanSince = clock();
+      this.humanStartSnapshot = this.lastStateSnapshot;
+      // 接管期间旧的卡死/熔断计数不再有意义
+      this.sentinel.reset();
+      this.stallCount = 0;
+      this.stallSignature = null;
+      this.stallClock = '';
+      this.pendingDirective = null;
+      this.lastWaitReason = null;
+      this.onEvent({ type: 'human-control', active: true, reason });
+      // 尽力中止在飞动作：cancel 失败不影响接管状态本身
+      try {
+        await this.lock.cancel('human-control');
+      } catch {
+        /* 接管优先，取消失败只记在上游日志 */
+      }
+      return null;
+    }
+    if (!this.humanControl) return null;
+    const startedAt = this.humanSince ?? clock();
+    const summary = describeHumanSession(this.humanStartSnapshot, this.lastStateSnapshot, clock() - startedAt);
+    this.humanControl = false;
+    this.humanSource = null;
+    this.humanSince = null;
+    this.humanStartSnapshot = null;
+    // 交还后从「现在」重新计 keepalive，避免刚松手就补一条无谓 keepalive
+    this.lastMutationAt = clock();
+    this.sentinel.reset();
+    this.onEvent({ type: 'human-control', active: false, reason: 'resume', summary });
+    return summary;
+  }
+
   async start(): Promise<void> {
     if (this.running || this.starting) return;
     this.starting = true;
@@ -152,6 +246,7 @@ export class AutodriveRunner {
     const clock = this.options.now ?? Date.now;
     const stepDelay = this.options.stepDelayMs ?? 3_000;
     const errorDelay = this.options.errorDelayMs ?? 8_000;
+    const pollDelay = this.options.pollDelayMs ?? 8_000;
     while (this.running) {
       this.cycle++;
       if (this.options.maxCycles && this.cycle > this.options.maxCycles) {
@@ -187,6 +282,30 @@ export class AutodriveRunner {
           healthMax: state.healthMax,
           freeSlots: state.freeSlots,
         });
+        this.lastStateSnapshot = {
+          clock: state.gameClock,
+          money: state.money,
+          location: state.location,
+          stamina: state.stamina,
+          staminaMax: state.staminaMax,
+        };
+
+        // 1.2 主人临时接管（T-M6-73）：只读状态，不发动作、不发 keepalive、不做卡死恢复。
+        // 游戏侧上报【玩家接管中】说明键鼠仍由主人控制；该标记消失即视为游戏内已交还。
+        const playerInControl = stateRes.text.includes(PLAYER_IN_CONTROL_MARKER);
+        if (this.humanControl) {
+          if (this.humanSource === 'in-game' && !playerInControl) {
+            await this.setHumanControl(false);
+          } else {
+            await sleep(pollDelay);
+            continue;
+          }
+        } else if (playerInControl) {
+          // 主人在游戏里动了键鼠（BWF 补丁上报）→ 与宿主开关双向同步
+          await this.setHumanControl(true, 'in-game');
+          await sleep(pollDelay);
+          continue;
+        }
 
         // 1.5 BWF 防自暂停心跳：连续 90s 只有 get_state（或 planner 一直 wait）会被 BWF 判为
         // “120 秒没有动作”并暂停游戏；发一次游戏原生安全 wait，保持时钟推进。

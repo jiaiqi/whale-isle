@@ -780,10 +780,12 @@ bridge.onWorkCards?.((payload) => {
 
 // ---- autodrive 事件驱动（T-M5-02 宿主层）：回执 → 动作映射（人格化） ----
 type AutodriveEventLite = {
-  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective';
+  type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective' | 'human-control';
   tool?: string; status?: string; summary?: string; intent?: string; clock?: string;
   /** T-M6-57 目标生命周期（本窗只消费回执文案，不单独绘制） */
-  objective?: string | null; reason?: 'set' | 'replaced' | 'cancel' | 'done';
+  objective?: string | null; reason?: 'set' | 'replaced' | 'cancel' | 'done' | 'switch' | 'in-game' | 'resume';
+  /** T-M6-73 临时接管（本窗不绘制，仅接收以保持类型收敛） */
+  active?: boolean;
   /** T-M6-27 会话归属：联机端点事件（agentId）与旧 generation 事件不驱动主桌宠 */
   agentId?: string; generation?: number;
 };

@@ -5,6 +5,15 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added（T-M6-73：临时介入开关，宿主侧骨架）
+
+- **runner `human` 态** `packages/game-bridge-mcp/src/autodrive.ts`：`setHumanControl(active, reason)` 进入时清空 pending 指令与卡死/熔断计数、`ActionLock.cancel('human-control')` 中止在飞动作，主循环在 `get_state` 之后短路——只读轮询，不发动作、不发 keepalive、不做卡死恢复；退出时重置 `lastMutationAt` 与哨兵，避免刚松手就补一条无谓 keepalive。新增事件 `{ type: 'human-control', active, reason: 'switch' | 'in-game' | 'resume', summary? }`。
+- **与游戏内 F7 双向同步**：`get_state` 文本出现 `【玩家接管中】`（BWF 补丁标记，导出常量 `PLAYER_IN_CONTROL_MARKER`）→ 自动进入 `human` 态并广播 `reason='in-game'`；标记消失 → 自动交还。宿主开关与游戏内操作因此共用同一状态机，不会互相打架。
+- **交还差异摘要** `describeHumanSession()`（纯函数）：用接管前与交还时的状态快照给出「主人接管了 X 分钟：金币 640→900（+260），时钟 …，位置 Farm→Town，体力 …」；缺快照时如实说「没有拿到可比对的游戏状态」，不编造变化。
+- **IPC 与两处 UI**：主进程 `autodrive:set-human-control`（返回 `humanControl` 与降级提示）、`autodrive:status.humanControl`；中控台星露谷页顶栏新增接管条（「我来操作 / 交还给 AI」+ 状态文案），托盘快捷浮窗自驾页新增同款按钮，两处都由 `human-control` 事件驱动同步。
+- **降级如实说明**：本轮没有改 BWF C# `playerInControl`（真机被长时 soak 占用，C# 无法编译验证），因此开关只保证「宿主侧立刻停手」；游戏内彻底松手需按 F7 或更新 BWF 补丁，开关返回里会带上这句提示。
+- **验证**：`autodrive.spec.ts` 新增 5 例（接管态 0 决策且只发 `get_state`/`cancel_action`、`【玩家接管中】` 自动进出、交还摘要含金币差值、开关幂等、无快照不编造）；`pnpm test` 124 文件 / **1496 用例全绿**、分支 **90.51%**；`pnpm verify:gate` **7 过 / 0 跳过**。**真机未验**：桌宠右键菜单第三处开关、BWF 补丁、摘要注入 LLM prompt、`soak:real` 识别 `human` 态均留在 `T-M6-73`（状态 `DOING`）。
+
 ### Fixed（soak:real 每日闭环口径：区分「没做」与「没事可做」）
 
 - **问题**：`day-tracker` 的每日闭环只认「当天出现对应工具的 COMPLETED 回执」，`N/A` 仅覆盖冬季/季末不买种不播种。真机连续 5 次浸泡都是「闭环 0/1」，但事件流显示读信、收获、买种、播种当天根本没有机会（无未读信、农场概况「可收获 0」、无空耕地、背包无种子），属于把「没事可做」误判成失败。

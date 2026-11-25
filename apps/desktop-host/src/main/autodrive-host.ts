@@ -703,6 +703,21 @@ ${ackHint}`;
     runner.stop();
     return { ok: true };
   });
+  // T-M6-73 临时接管：进入时取消在飞动作并停掉决策/keepalive，只留 get_state 只读轮询；
+  // 退出时把「主人接管期间发生了什么」的摘要交回 UI 与事件流。
+  ipcMain.handle('autodrive:set-human-control', async (_e, active: unknown) => {
+    const want = active === true;
+    const summary = await runner.setHumanControl(want);
+    return {
+      ok: true,
+      humanControl: runner.isHumanControl(),
+      summary,
+      // 降级说明：宿主侧一定会停手；游戏内彻底松手依赖 BWF 的 playerInControl（补丁未装则游戏内 AI 仍可能动）
+      ...(want && runner.isRunning()
+        ? { warning: 'AI 已停止决策与动作；游戏内彻底松手需 BWF playerInControl 补丁，未安装时游戏内角色仍可能继续行动' }
+        : {}),
+    };
+  });
   ipcMain.handle('autodrive:directive', (_e, tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string) => {
     // T-M6-27：渲染层带上它认为的会话；不匹配说明 UI 已切走（旧面板/迟到点击）→ 拒绝，绝不误发到新游戏
     if (typeof expectedSessionId === 'string' && expectedSessionId !== '' && expectedSessionId !== activeSessionId) {
@@ -713,6 +728,7 @@ ${ackHint}`;
   });
   ipcMain.handle('autodrive:status', () => ({
     running: runner.isRunning(),
+    humanControl: runner.isHumanControl(),
     gameId,
     sessionId: activeSessionId,
     generation,

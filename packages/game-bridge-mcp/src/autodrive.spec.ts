@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { actionTimeoutMs, BwfMcpClient, isLongAction } from './mcp-client';
 import { ActionLock, StuckSentinel } from './action-lock';
-import { AutodriveRunner, type AutodriveEvent } from './autodrive';
+import { AutodriveRunner, PLAYER_IN_CONTROL_MARKER, describeHumanSession, type AutodriveEvent } from './autodrive';
 import { StardewAdapter } from './adapter';
 import { findFreeTile, parseGameState, pickEdible, RulePlanner, type GameStateSnapshot } from './planner';
 
@@ -1249,5 +1249,120 @@ describe('objectiveDone 闭环（T-M6-57）', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(restored).toBeGreaterThan(0);
     expect(events.some((event) => event.type === 'receipt' && event.tool === 'chat_order' && (event.summary ?? '').startsWith('目标已完成'))).toBe(false);
+  });
+});
+
+describe('T-M6-73 主人临时接管（human-control）', () => {
+  function fakeAdapter(state: () => string, calls: string[]): import('./adapter').GameAdapter {
+    return {
+      gameId: 'stardew',
+      displayName: 'test',
+      transport: {
+        callTool: async (tool: string) => {
+          calls.push(tool);
+          return { kind: 'ok' as const, text: state(), isError: false };
+        },
+      },
+      ping: async () => true,
+      unreachableMessage: 'unreachable',
+      extractClock: () => null,
+      isLongAction: () => false,
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: 'ok' }),
+    } as unknown as import('./adapter').GameAdapter;
+  }
+
+  it('describeHumanSession 列出可见差异；无差异时不编造变化', () => {
+    const start = { clock: '第1年春16日 09:00', money: 640, location: 'Farm', stamina: 98, staminaMax: 270 };
+    const end = { clock: '第1年春16日 12:30', money: 900, location: 'Town', stamina: 40, staminaMax: 270 };
+    const text = describeHumanSession(start, end, 3 * 60_000);
+    expect(text).toContain('3 分钟');
+    expect(text).toContain('640→900（+260）');
+    expect(text).toContain('Farm→Town');
+    expect(text).toContain('98/270→40/270');
+    expect(describeHumanSession(start, start, 30_000)).toContain('游戏状态没有可见变化');
+  });
+
+  it('describeHumanSession 缺快照时如实说明，不伪造变化', () => {
+    const text = describeHumanSession(null, null, 45_000);
+    expect(text).toContain('45 秒');
+    expect(text).toContain('没有拿到可比对的游戏状态');
+    expect(text).not.toContain('金币');
+  });
+
+  it('接管态下循环只读状态，不产生任何决策或动作', async () => {
+    const events: AutodriveEvent[] = [];
+    const calls: string[] = [];
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      maxCycles: 3, stepDelayMs: 1, pollDelayMs: 1, sleep: async () => undefined,
+    }, fakeAdapter(() => STATE_OK, calls));
+    let decisions = 0;
+    runner.setPlanner({ name: 'count', decide: async () => { decisions += 1; return { kind: 'wait', seconds: 1, reason: 'x' }; } });
+    await runner.setHumanControl(true);
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await runner.stopAndWait();
+    expect(runner.isHumanControl()).toBe(true);
+    expect(decisions).toBe(0);
+    // 只有 get_state 与一次 cancel_action，没有任何业务动作
+    expect(calls.filter((tool) => tool !== 'get_state' && tool !== 'cancel_action')).toEqual([]);
+    expect(events.some((event) => event.type === 'human-control' && event.active && event.reason === 'switch')).toBe(true);
+    expect(events.some((event) => event.type === 'decision')).toBe(false);
+  });
+
+  it('get_state 出现【玩家接管中】自动进入接管，标记消失后自动交还并给出摘要', async () => {
+    const events: AutodriveEvent[] = [];
+    const calls: string[] = [];
+    // 前两次 get_state 带接管标记，之后消失（模拟主人松手）——按调用次数驱动，避免依赖时序
+    const stateOf = (): string => {
+      const seen = calls.filter((tool) => tool === 'get_state').length;
+      return seen <= 2 ? `${STATE_OK}\n${PLAYER_IN_CONTROL_MARKER}` : STATE_OK;
+    };
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      maxCycles: 6, stepDelayMs: 1, pollDelayMs: 1, sleep: async () => undefined,
+    }, fakeAdapter(stateOf, calls));
+    runner.setPlanner({ name: 'noop', decide: async () => ({ kind: 'wait', seconds: 1, reason: 'x' }) });
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runner.stopAndWait();
+    expect(events.some((event) => event.type === 'human-control' && event.active && event.reason === 'in-game')).toBe(true);
+    expect(runner.isHumanControl()).toBe(false);
+    const resume = events.find((event) => event.type === 'human-control' && !event.active);
+    expect(resume).toBeDefined();
+    expect(resume !== undefined && resume.type === 'human-control' ? resume.summary : '').toContain('主人接管了');
+  });
+
+  it('宿主开关交还返回摘要：接管期间金币与位置的变化被写进事件流', async () => {
+    const events: AutodriveEvent[] = [];
+    const calls: string[] = [];
+    let money = 640;
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      stepDelayMs: 1, pollDelayMs: 1, sleep: () => new Promise((resolve) => setTimeout(resolve, 1)),
+    }, fakeAdapter(() => STATE_OK.replace('金钱：640g', `金钱：${money}g`), calls));
+    runner.setPlanner({ name: 'noop', decide: async () => ({ kind: 'wait', seconds: 1, reason: 'x' }) });
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runner.stopAndWait();
+    await runner.setHumanControl(true);
+    money = 900;
+    await runner.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await runner.stopAndWait();
+    const summary = await runner.setHumanControl(false);
+    expect(summary).toContain('640→900（+260）');
+    const resume = events.filter((event) => event.type === 'human-control' && !event.active);
+    expect(resume).toHaveLength(1);
+  });
+
+  it('重复进入/退出接管是幂等的（不重复广播）', async () => {
+    const events: AutodriveEvent[] = [];
+    const runner = new AutodriveRunner((event) => events.push(event), {
+      maxCycles: 1, sleep: async () => undefined,
+    }, fakeAdapter(() => STATE_OK, []));
+    await runner.setHumanControl(true);
+    await runner.setHumanControl(true);
+    expect(events.filter((event) => event.type === 'human-control').length).toBe(1);
+    expect(await runner.setHumanControl(false)).not.toBeNull();
+    expect(await runner.setHumanControl(false)).toBeNull();
+    expect(events.filter((event) => event.type === 'human-control').length).toBe(2);
   });
 });

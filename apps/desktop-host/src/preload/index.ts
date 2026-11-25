@@ -39,7 +39,10 @@ contextBridge.exposeInMainWorld('directorBridge', {
   autodriveStop: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('autodrive:stop'),
   autodriveObjectiveStatus: (): Promise<{ ok: boolean; objective: string | null }> => ipcRenderer.invoke('autodrive:objective-status'),
   autodriveClearObjective: (): Promise<{ ok: boolean; had?: boolean; objective?: string }> => ipcRenderer.invoke('autodrive:clear-objective'),
-  autodriveStatus: (): Promise<{ running: boolean; gameId?: 'stardew' | 'terraria' | 'dst'; sessionId?: string; generation?: number; events?: unknown[] }> => ipcRenderer.invoke('autodrive:status'),
+  autodriveStatus: (): Promise<{ running: boolean; gameId?: 'stardew' | 'terraria' | 'dst'; sessionId?: string; generation?: number; humanControl?: boolean; events?: unknown[] }> => ipcRenderer.invoke('autodrive:status'),
+  // T-M6-73 临时接管：active=true 让 AI 立刻停手（取消在飞动作、停决策与 keepalive），false 交还并返回摘要
+  autodriveSetHumanControl: (active: boolean): Promise<{ ok: boolean; humanControl: boolean; summary?: string | null; warning?: string }> =>
+    ipcRenderer.invoke('autodrive:set-human-control', active),
   // T-M6-27：expectedSessionId 用于拒绝来自已切换会话的迟到指令（可选，省略保持兼容）
   autodriveDirective: (tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('autodrive:directive', tool, args, intent, expectedSessionId),
