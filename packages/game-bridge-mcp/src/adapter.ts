@@ -120,6 +120,15 @@ export function classifyStardewReceipt(input: {
 const STARDEW_CLOCK_RE = /时间：第\d+年[春夏秋冬]\d+日 \d{2}:\d{2}/;
 const DEFAULT_STARDEW_ENDPOINT = 'http://127.0.0.1:18080/mcp';
 
+/**
+ * 把 `localhost` 换成本机回环 IP（真机 2026-11-25 踩坑）。
+ * macOS 上 `localhost` 优先解析到 IPv6 `::1`，而 BWF 的 HttpListener 只注册了
+ * `http://127.0.0.1:<port>/` 前缀——`::1` 能建连但一路 404，表现成「游戏明明开着却报 MCP 不可达」。
+ */
+export function normalizeBwfEndpoint(endpoint: string): string {
+  return endpoint.replace('//localhost', '//127.0.0.1');
+}
+
 /** 星露谷适配器：原样包装 BwfMcpClient（真机链路行为不变，18760 WS 设计稿搁置） */
 export class StardewAdapter implements GameAdapter {
   readonly gameId = 'stardew' as const;
@@ -129,10 +138,11 @@ export class StardewAdapter implements GameAdapter {
   readonly guideTopics = ['钓鱼', '采矿', '节日', '结婚', '沙漠', '姜岛', '农场类型'];
 
   constructor(endpoint: string = DEFAULT_STARDEW_ENDPOINT, fetchImpl: typeof fetch = fetch) {
-    this.transport = new BwfMcpClient(endpoint, fetchImpl);
-    this.unreachableMessage = endpoint === DEFAULT_STARDEW_ENDPOINT
+    const normalized = normalizeBwfEndpoint(endpoint);
+    this.transport = new BwfMcpClient(normalized, fetchImpl);
+    this.unreachableMessage = normalized === DEFAULT_STARDEW_ENDPOINT
       ? 'BWF MCP 不可达（18080）——确认游戏已启动且 Mod MCP 服务器就绪'
-      : `BWF MCP 不可达（${endpoint}）——确认游戏已启动且 Mod MCP 服务器就绪`;
+      : `BWF MCP 不可达（${normalized}）——确认游戏已启动且 Mod MCP 服务器就绪`;
   }
 
   ping(): Promise<boolean> {

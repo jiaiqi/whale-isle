@@ -11,12 +11,16 @@ import { DEFAULT_BWF_MCP_PORT } from '@workbench/shared-protocol';
 
 export const BWF_DEFAULT_PORT = DEFAULT_BWF_MCP_PORT;
 
+/**
+ * 一律用 `127.0.0.1` 而不是 `localhost`：macOS 上 localhost 优先解析到 IPv6 `::1`，
+ * BWF 的 HttpListener 只注册了 IPv4 前缀，`::1` 会一路 404（真机 2026-11-25 踩坑）。
+ */
 export function bwfBaseUrl(port: number = BWF_DEFAULT_PORT): string {
-  return `http://localhost:${port}`;
+  return `http://127.0.0.1:${port}`;
 }
 
 export function bwfMcpEndpoint(port: number = BWF_DEFAULT_PORT): string {
-  return `http://localhost:${port}/mcp`;
+  return `http://127.0.0.1:${port}/mcp`;
 }
 
 export const BWF_BASE_URL = bwfBaseUrl(BWF_DEFAULT_PORT);

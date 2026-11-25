@@ -10,6 +10,7 @@ import {
   gameAdapters,
   humanizeBwfReceipt,
   StardewAdapter,
+  normalizeBwfEndpoint,
   type GameAdapter,
   type GameBridgeTransport,
 } from './adapter';
@@ -202,5 +203,19 @@ describe('假新游戏适配器驱动同一编排器（T-M7-02 seam 证明）', 
     expect(runner.sentinel.observe('{"dayCount":4}').stale).toBe(false); // 时钟变了 → 不 stale
     now += 5 * 60_000;
     expect(runner.sentinel.observe('{"dayCount":4}').stale).toBe(true); // 时钟冻结 → stale
+  });
+});
+
+describe('normalizeBwfEndpoint（真机 2026-11-25：localhost 优先解析 ::1，BWF 只注册 IPv4 前缀会 404）', () => {
+  it('localhost 换成本机回环 IP，其它主机名原样保留', () => {
+    expect(normalizeBwfEndpoint('http://localhost:18088/mcp')).toBe('http://127.0.0.1:18088/mcp');
+    expect(normalizeBwfEndpoint('http://127.0.0.1:18088/mcp')).toBe('http://127.0.0.1:18088/mcp');
+    expect(normalizeBwfEndpoint('http://192.168.1.9:18088/mcp')).toBe('http://192.168.1.9:18088/mcp');
+  });
+
+  it('适配器内部用规范化后的端点（报错文案也带 IP，便于排查）', () => {
+    const adapter = new StardewAdapter('http://localhost:18088/mcp');
+    expect(adapter.unreachableMessage).toContain('127.0.0.1:18088');
+    expect(adapter.unreachableMessage).not.toContain('localhost');
   });
 });
