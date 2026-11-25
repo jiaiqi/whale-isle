@@ -26,6 +26,7 @@ import {
 } from '@workbench/shared-protocol';
 import { stripThink } from '@workbench/persona-brain';
 import { readVaultKey } from './provider-vault';
+import { pushBwfPlayerInControl } from './bwf-settings'; // T-M6-73 临时接管同步到游戏侧
 import { currentPersonaPrompt, currentPersonaReflex } from './character-persona'; // T-M6-21 多角色口吻与 persona-brain 雷区钩子
 import { createTokenMeter } from './token-meter';
 import { dayKeyOf, type MemoryHost } from './memory-host';
@@ -704,18 +705,34 @@ ${ackHint}`;
     return { ok: true };
   });
   // T-M6-73 临时接管：进入时取消在飞动作并停掉决策/keepalive，只留 get_state 只读轮询；
-  // 退出时把「主人接管期间发生了什么」的摘要交回 UI 与事件流。
+  // 退出时把「主人接管期间发生了什么」的摘要交回 UI 与事件流。同时把开关同步到游戏侧
+  // （BWF 补丁 playerInControl），让 AI 的动作被游戏真正拒绝，而不只是宿主不发指令。
   ipcMain.handle('autodrive:set-human-control', async (_e, active: unknown) => {
     const want = active === true;
     const summary = await runner.setHumanControl(want);
+    // endpoint 形如 http://127.0.0.1:18088/mcp，/settings 在同端口的根路径
+    const baseUrl = (endpoint ?? 'http://127.0.0.1:18088/mcp').replace(/\/mcp\/?$/, '');
+    const pushed = await pushBwfPlayerInControl(want, baseUrl);
+    let warning: string | undefined;
+    if (!pushed.reachable) {
+      warning = want
+        ? 'AI 已停止决策与动作；游戏没连上（BWF 不可达），游戏内接管未下发，重连后可再点一次'
+        : 'AI 已恢复决策；游戏没连上，游戏内仍可能处于接管态，回游戏后按 F7 交还';
+    } else if (!pushed.supported) {
+      warning = want
+        ? 'AI 已停止决策与动作；BWF 未打 T-M6-73 补丁（旧 DLL 忽略 playerInControl），游戏内角色可能继续行动，请在游戏里按 F7'
+        : 'AI 已恢复决策；旧 DLL 无法远程交还，请在游戏里按 F7';
+    } else if (!pushed.applied) {
+      warning = want
+        ? 'AI 已停止决策与动作；游戏侧接管未确认生效，请在游戏里按 F7 复核'
+        : 'AI 已恢复决策；游戏侧交还未确认，请在游戏里按 F7 复核';
+    }
     return {
       ok: true,
       humanControl: runner.isHumanControl(),
       summary,
-      // 降级说明：宿主侧一定会停手；游戏内彻底松手依赖 BWF 的 playerInControl（补丁未装则游戏内 AI 仍可能动）
-      ...(want && runner.isRunning()
-        ? { warning: 'AI 已停止决策与动作；游戏内彻底松手需 BWF playerInControl 补丁，未安装时游戏内角色仍可能继续行动' }
-        : {}),
+      gameSync: pushed,
+      ...(warning === undefined ? {} : { warning }),
     };
   });
   ipcMain.handle('autodrive:directive', (_e, tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string) => {

@@ -273,7 +273,14 @@ export interface DirectorBridge {
   autodriveStatus(): Promise<{ running: boolean; gameId?: GameId; sessionId?: string; generation?: number; humanControl?: boolean; events?: AutodriveEventView[] }>;
   autodriveDirective(tool: string, args: Record<string, unknown>, intent: string, expectedSessionId?: string): Promise<{ ok: boolean; error?: string }>;
   /** T-M6-73 临时接管开关：active=true 让 AI 停手，false 交还并返回接管期间摘要 */
-  autodriveSetHumanControl(active: boolean): Promise<{ ok: boolean; humanControl: boolean; summary?: string | null; warning?: string }>;
+  autodriveSetHumanControl(active: boolean): Promise<{
+    ok: boolean;
+    humanControl: boolean;
+    summary?: string | null;
+    warning?: string;
+    /** 游戏侧（BWF playerInControl）的同步结果；旧 DLL 时 supported=false */
+    gameSync?: { applied: boolean; reachable: boolean; supported: boolean; playerInControl: boolean };
+  }>;
   onAutodriveEvent(handler: (event: AutodriveEventView) => void): void;
   // 三游戏桥接探活（T-M6-25）：只读探测 18080/18090/18100
   gameHealth(gameId: GameId, endpoint?: string): Promise<GameHealthView>;

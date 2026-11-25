@@ -37,6 +37,52 @@ export interface BwfPortSyncResult {
   error?: string;
 }
 
+export interface BwfPlayerInControlPush {
+  /** 游戏侧真正切到目标态了吗（回读快照 == 目标值） */
+  applied: boolean;
+  /** /settings 可达吗（游戏没开时为 false） */
+  reachable: boolean;
+  /** 游戏侧 DLL 认识 playerInControl 这个键吗（未打 T-M6-73 补丁的旧 DLL 为 false） */
+  supported: boolean;
+  playerInControl: boolean;
+}
+
+/**
+ * T-M6-73：把宿主侧「我来操作 / 交还给 AI」同步成游戏内接管态（BWF `playerInControl`）。
+ *
+ * 补丁那边 `ApplyRemoteSettings` 把 `SetPlayerInControl` 排到主线程执行，所以 POST 返回的
+ * 快照仍是旧值——必须隔一拍再回读一次才算真回执。旧 DLL 不认识这个键，回读里根本没有该字段，
+ * 这时如实报 `supported: false`，宿主据此提示「按 F7 或更新 BWF 补丁」，而不是假装成功。
+ */
+export async function pushBwfPlayerInControl(
+  inControl: boolean,
+  baseUrl: string = BWF_BASE_URL,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BwfPlayerInControlPush> {
+  try {
+    const response = await fetchImpl(`${baseUrl}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revision: `whaleisle-${Date.now()}`, settings: { playerInControl: inControl } }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return { applied: false, reachable: true, supported: false, playerInControl: inControl };
+    // 最多试 3 次，覆盖主线程一帧的调度延迟
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const snapshot = await fetchImpl(`${baseUrl}/settings`, { signal: AbortSignal.timeout(5_000) });
+      if (!snapshot.ok) continue;
+      const body = (await snapshot.json()) as { settings?: { playerInControl?: unknown } };
+      const value = body.settings?.playerInControl;
+      if (value === undefined) return { applied: false, reachable: true, supported: false, playerInControl: inControl };
+      if (value === inControl) return { applied: true, reachable: true, supported: true, playerInControl: inControl };
+    }
+    return { applied: false, reachable: true, supported: true, playerInControl: inControl };
+  } catch {
+    return { applied: false, reachable: false, supported: false, playerInControl: inControl };
+  }
+}
+
 /**
  * 将目标端口原子同步到星露谷 Mods/BlindWhaleFarmer/config.json 的 McpPort 字段，
  * 保留其他字段（ShowHud 等）。若目录不存在则如实返回 ok:false，绝不伪造写入。

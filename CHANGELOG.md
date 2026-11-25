@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added（T-M6-73：BWF `playerInControl` 补丁，接管开关打通到游戏内）
+
+- **补丁** `mods/bwf-patches/2026-11-25-player-in-control-settings.patch`：BWF 上游本来就有 `SetPlayerInControl(bool)`（取消在跑动作 + 停下内置 AI + 解冻时间 + 恢复玩家移动 + HUD 提示），但只有 F7 能触发。补丁把它接进 `/settings` 远程设置——`ApplyRemoteSettings` 收到 `playerInControl` 时切主线程调用（`Game1.player` 必须主线程；未进存档则记日志忽略），`SettingsSnapshot` 上报 `playerInControl` 供宿主回读。
+- **宿主侧同步** `apps/desktop-host/src/main/bwf-settings.ts`：新增 `pushBwfPlayerInControl()`，POST 后隔一拍回读快照确认——补丁把设置排到主线程执行，POST 返回的快照还是旧值，不回读就等于假装成功；旧 DLL 快照里没有该字段，如实返回 `supported:false`。`autodrive:set-human-control` 现在同时停宿主 runner 并把开关下发到游戏，按 `reachable/supported/applied` 三态给出「游戏没连上 / 旧 DLL 请按 F7 / 接管未确认」的不同提示。
+- **真机验证（`[REAL-DEVICE]`）**：`dotnet build -c Release` 0 警告 → 备份旧 DLL 装机 → 重启 SMAPI → `GET /settings` 出现 `"playerInControl": false` → `load_save 泡泡湾` → `POST true` → 回读 `true` → `get_state` 首行出现 `【玩家接管中】玩家按 F7 接管了游戏，你的游戏动作都会被拒绝` → `POST false` → 回读 `false` → 标记消失。**未验**：游戏内实按 F7（与远程调同一函数）、Electron UI 点击链路、桌宠右键菜单第三处开关。
+- **验证**：`bwf-settings.spec.ts` 新增 5 例（新 DLL 命中、主线程竞态回读第二次才生效、旧 DLL 不重试直接报不支持、补丁在但一直没生效、连接拒绝）；`pnpm test` 124 文件 / **1501 用例全绿**、分支 **90.52%**。
+
 ### Added（T-M6-73：临时介入开关，宿主侧骨架）
 
 - **runner `human` 态** `packages/game-bridge-mcp/src/autodrive.ts`：`setHumanControl(active, reason)` 进入时清空 pending 指令与卡死/熔断计数、`ActionLock.cancel('human-control')` 中止在飞动作，主循环在 `get_state` 之后短路——只读轮询，不发动作、不发 keepalive、不做卡死恢复；退出时重置 `lastMutationAt` 与哨兵，避免刚松手就补一条无谓 keepalive。新增事件 `{ type: 'human-control', active, reason: 'switch' | 'in-game' | 'resume', summary? }`。
@@ -30,7 +37,14 @@
 - **RulePlanner 改造** `planner.ts`：拆成「主动商店买种 → 菜单 → 生存护栏 → 满包救援阶梯（行为不变）→ 日程状态机」；跨日（含换季）重置日程与失败记忆；最近一次农场概况缓存供离开农场后的决策使用；商店界面若是自己开的先买种再处理界面。
 - **多日活农场仿真** `tools/mock-harness/src/bwf-farm-sim.ts`（新）：日期/时钟/金币/体力/背包/农田/天气随工具调用真实变化，`get_state` 与真机 BWF 1.1.27 同段落同措辞；支持换日结算出货、作物过夜生长、雨天自动浇水、换季枯萎、周三/打烊商店、02:00 遣返与累晕扣钱；复用 `bwf-replay-server.ts` 抽出的 `startBwfHttpServer`（JSON/SSE 双形态），S01–S06 剧本保持全绿。
 - **7 日纯规则闭环** `tools/mock-harness/src/rule-7day.spec.ts`（新）：真实 `RulePlanner` 在仿真里从春 16 跑 7 天——每日闭环项完成（当天无机会的项记 N/A）、7 项各至少完成一次、0 累晕、0 次 2:00 遣返、第 7 天金币 5890g > 第 1 天 1370g、`chat()` 0 次；跨季（春 26 → 夏 4）断言春季季末不买种、夏季自动改买辣椒种子。另有 `seed-table.spec.ts`、`rule-schedule.spec.ts`、`bwf-farm-sim.spec.ts` 与 `state-hints.spec.ts` 扩展覆盖每条优先级分支（周三/17:00 后不去商店、雨天不浇水、24:00 强制回家、中途接手）。
-- **验证**：`pnpm typecheck` 通过；`pnpm test` 124 文件 / **1481 用例全绿**（含并行工单在 `apps/desktop-host` 新增的 13 例；本工单相关 `game-bridge-mcp` 14 文件 294 例）、分支 **90.47%**；`pnpm verify:gate` **7 过 / 0 跳过**。真机：REAL_DEVICE_PLACEHOLDER
+- **验证**：`pnpm typecheck` 通过；`pnpm test` 124 文件 / **1481 用例全绿**（含并行工单在 `apps/desktop-host` 新增的 13 例；本工单相关 `game-bridge-mcp` 14 文件 294 例）、分支 **90.47%**；`pnpm verify:gate` **7 过 / 0 跳过**。真机（本机 SMAPI → BWF `McpPort=18088`，`--no-llm`）4 轮：① `artifacts/soak/20261125-105149`（夏5 09:50 **中途接手**）`take_items 喷壶` → `water_crops` 2 株 → 出货 → 钓鱼，25/25 回执成功，证明「任意时刻接手能续上当天日程」；② `artifacts/soak/20261125-114409`（夏8–夏9，**2/2 游戏日**）**0 卡死 / 0 累晕 / 0 次 2:00 遣返**，49 条回执 0 失败（成功率 100%），金币 35448g → 40202g（+4754g），夏8 浇水+出货+22:00 睡觉、夏9 浇水+出货完成；③ `20261125-121556`（夏9 21:20 接手 → 夏10 06:00）读信 1 封 + 收获 2 株 + 浇水 + 出货全完成，21 分钟后 SMAPI 本体崩溃（`recursive_mutex lock failed`）；④ `20261125-122237`（夏10 06:00）复现完整晨间闭环后玩家按 F7 接管（`human-control active`），按「键鼠接管停手」停止。报告里「闭环完整 0/2」是 `day-tracker` 的 N/A 口径所致（只覆盖冬季/季末买种播种；无未读信、无可收作物记「—」），当天的读写/收获/浇水/出货/睡觉回执均在事件流里，已由并行修复「soak:real 每日闭环口径」补上机会型 N/A。
+
+### Fixed（T-M6-69：真机浸泡发现）
+
+- **BWF 农场内作物段是明细格式**：站在农场时 `get_state` 没有「（农场概况：共 N 株作物…）」总览行，`parseFarmSummary` 整段返回 null，真机上表现为「播种完不浇水」。改为双格式解析（明细「需要浇水 N 株 / 可收获 N 株 / 零散耕地 N 格（其中 M 株作物）」与旧措辞并行，缺字段仍为 null 不猜 0）。
+- **中文版浇水工具叫「喷壶」**：`take_items { item: '水壶' }` 被 BWF 判「所有地点的箱子里都没有水壶」，白冷却一天。背包识别用宽松正则（水壶/喷壶/Watering Can），取回用游戏内名字 `WATERING_CAN_ITEM = '喷壶'`，取回后当轮立刻浇水。
+- **长动作执行中不抢动作**：`get_state` 顶部「【正在执行】sleep 已经执行 …」期间任何动作都会被拒，规则层连发会把失败刷成 `repeat-failure` 卡死签名（真机夏6 22:40 实测 2 次）。新增 `inProgressGuard()`（RulePlanner 决策第 0 步）：有执行中动作只 `wait` 15s，等它做完再决策。
+- **水壶曾被当成可出货物**：`ESSENTIAL_RE` / `NON_SELLABLE_RE` 不含「水壶/喷壶」，测试里往背包加水壶后规划器会 `ship_items 水壶`。两个正则都补上，真机不会再把浇水工具卖掉。
 
 ## [Unreleased] — 2026-11-24
 

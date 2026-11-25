@@ -1,0 +1,42 @@
+diff --git a/BlindWhaleFarmer/McpServer.cs b/BlindWhaleFarmer/McpServer.cs
+--- a/BlindWhaleFarmer/McpServer.cs
++++ b/BlindWhaleFarmer/McpServer.cs
+@@ -642,6 +642,8 @@
+                     ["idleSeconds"] = c.McpIdleSeconds,
+                     ["allowChat"] = c.AllowChat,
+                     ["showHud"] = c.ShowHud,
++                    // T-M6-73：宿主据此回读「游戏内是否已被玩家接管」，与 F7 双向同步
++                    ["playerInControl"] = mod.PlayerInControl,
+                     ["extraInstructions"] = c.ExtraInstructions,
+                     ["reservedItems"] = c.ReservedItems,
+                     ["guideFile"] = c.GuideFile
+diff --git a/BlindWhaleFarmer/ModEntry.cs b/BlindWhaleFarmer/ModEntry.cs
+--- a/BlindWhaleFarmer/ModEntry.cs
++++ b/BlindWhaleFarmer/ModEntry.cs
+@@ -185,6 +185,26 @@
+             // 鲸屿中控台 HUD 开关（T-M6-16）：DrawHud 每帧读 Config.ShowHud，改这里即时生效
+             if (s["showHud"] is { } hud)
+                 Config.ShowHud = hud.GetValue<bool>();
++            // 鲸屿中控台「临时介入」开关（T-M6-73）：把宿主侧的开关键同步成游戏内接管态。
++            // SetPlayerInControl 会取消在跑的动作并动 Game1.player，必须回主线程；没进存档时它没有意义，直接忽略。
++            if (s["playerInControl"] is { } pic)
++            {
++                bool wantControl = pic.GetValue<bool>();
++                if (Context.IsWorldReady)
++                {
++                    _ = MainThread.Invoke(() =>
++                    {
++                        if (PlayerInControl != wantControl)
++                            SetPlayerInControl(wantControl);
++                        return true;
++                    });
++                    Monitor.Log($"DSH 远程设置：{(wantControl ? "接管" : "交还")}（playerInControl={wantControl}）", LogLevel.Info);
++                }
++                else
++                {
++                    Monitor.Log("DSH 远程设置：游戏还没进入存档，playerInControl 已忽略（进档后用 F7 或重新下发）", LogLevel.Warn);
++                }
++            }
+             if (s["companionMode"] is { } mode)
+             {
+                 string newMode = GameActions.NormalizeMode(mode.GetValue<string>());
