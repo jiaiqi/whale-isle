@@ -4,6 +4,7 @@
  * - 复用 provider-vault.ts 的 safeStorage 凭据库作为 SecretVaultPort，绝不重复造钥匙串逻辑
  * - 注册内置诊断插件 core-diagnostics，并将 V1 autodrive/voice 关键状态事件同步到 CharacterCore & LifeRuntime
  */
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { ipcMain } from 'electron';
@@ -34,6 +35,12 @@ import {
   SystemFallbackVoiceProvider,
   VoiceProviderRouter,
 } from '@workbench/voice-runtime';
+import {
+  BUILTIN_PROVIDER_PRESETS,
+  probeProviderQuota,
+  probeQuotaMatrix,
+  type ProbeQuotaInput,
+} from '@workbench/model-gateway';
 import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
 import type { VoiceHost } from './voice-host';
@@ -138,6 +145,30 @@ const VoiceIdentityPatchSchema = z.object({
   preferredProviderId: z.string().min(1).optional(),
   providerVoiceRef: z.string().min(1).optional(),
 });
+
+const ProviderQuotaQuerySchema = z.object({
+  providerId: z.string().min(1),
+  planType: z.enum(['PAY_AS_YOU_GO', 'CODING_PLAN', 'LOCAL_GPU']).optional(),
+  region: z.enum(['CN', 'GLOBAL', 'LOCAL']).optional(),
+  baseUrl: z.string().optional(),
+});
+
+const ProviderQuotaMatrixQuerySchema = z.object({
+  providerIds: z.array(z.string().min(1)).optional(),
+  includeCli: z.boolean().default(true),
+}).default({ includeCli: true });
+
+function hasCliBinary(binary: string): boolean {
+  try {
+    execFileSync(process.platform === 'win32' ? 'where' : 'which', [binary], {
+      stdio: 'ignore',
+      timeout: 2_000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function createV2KernelHost(options: {
   userDataDir: string;
@@ -306,6 +337,39 @@ export async function createV2KernelHost(options: {
       },
       parsed.preferredProvider === undefined ? {} : { preferredProvider: parsed.preferredProvider },
     );
+  });
+  // V2-P1-03：四级诚实额度矩阵探针（明文 Key 仅在主进程解析，绝不回传渲染层）
+  ipcMain.handle('v2:provider-quota', (_e, rawInput: unknown) => {
+    const parsed = ProviderQuotaQuerySchema.parse(rawInput);
+    const preset = BUILTIN_PROVIDER_PRESETS.find((p) => p.id === parsed.providerId);
+    return probeProviderQuota({
+      providerId: parsed.providerId,
+      ...(preset === undefined ? {} : { providerName: preset.name }),
+      apiKey: kernel.secrets.resolve(parsed.providerId),
+      ...(parsed.planType === undefined ? {} : { planType: parsed.planType }),
+      ...(parsed.region === undefined ? {} : { region: parsed.region }),
+      ...(parsed.baseUrl === undefined ? {} : { baseUrl: parsed.baseUrl }),
+      probeCli: hasCliBinary,
+    });
+  });
+  ipcMain.handle('v2:provider-quota-matrix', (_e, rawInput?: unknown) => {
+    const parsed = ProviderQuotaMatrixQuerySchema.parse(rawInput ?? {});
+    const defaultIds = BUILTIN_PROVIDER_PRESETS
+      .filter((p) => p.id !== 'local-gpt-sovits')
+      .map((p) => p.id);
+    const cliIds = parsed.includeCli ? ['codex-cli', 'claude-cli', 'gemini-cli', 'opencode-cli'] : [];
+    const targetIds = parsed.providerIds
+      ? [...parsed.providerIds, ...cliIds.filter((c) => !parsed.providerIds!.includes(c))]
+      : [...defaultIds, ...cliIds];
+    const entries: ProbeQuotaInput[] = targetIds.map((providerId) => {
+      const preset = BUILTIN_PROVIDER_PRESETS.find((p) => p.id === providerId);
+      return {
+        providerId,
+        ...(preset === undefined ? {} : { providerName: preset.name }),
+        apiKey: kernel.secrets.resolve(providerId),
+      };
+    });
+    return probeQuotaMatrix(entries, { probeCli: hasCliBinary, timeoutMs: 8_000 });
   });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {

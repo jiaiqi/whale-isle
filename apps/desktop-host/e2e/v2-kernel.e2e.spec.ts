@@ -43,6 +43,19 @@ interface DirectorV2Window {
     v2VoiceTrackStart(input: { trackId: string; kind: string; label: string }): Promise<{ trackId: string; playing: boolean }>;
     v2VoiceOutputRoute(input: { kind: string; deviceId: string }): Promise<{ outputRoutes: Record<string, string> }>;
     v2VoiceSynthesizePreview(input: { text: string }): Promise<{ providerKind: string; lipFrames: Array<{ viseme: string }> }>;
+    v2ProviderQuota(input: { providerId: string }): Promise<{
+      providerId: string;
+      queryable: boolean;
+      source: string;
+      authState: string;
+      balance: unknown;
+      windows: unknown[];
+      summary: string;
+    }>;
+    v2ProviderQuotaMatrix(input?: { providerIds?: string[]; includeCli?: boolean }): Promise<{
+      generatedAt: number;
+      reports: Array<{ providerId: string; source: string; queryable: boolean }>;
+    }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -70,6 +83,10 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
     });
     try {
       const director = await waitForDirector(app);
+      // 清理上次 E2E 持久化在 e2e-profile 中的急停状态
+      await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2Resume('autonomous'),
+      );
       const health = await director.evaluate(() =>
         (window as unknown as DirectorV2Window).directorBridge.v2KernelHealth(),
       );
@@ -187,6 +204,33 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
         (window as unknown as DirectorV2Window).directorBridge.v2VoiceMixerState(),
       );
       expect(mixerAfterHalt.tracks).toHaveLength(0);
+
+      // V2-P1-03：验证四级诚实额度矩阵（不编造未知余额、缺 Key 明确标 missing_key）
+      const openaiQuota = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2ProviderQuota({ providerId: 'openai' }),
+      );
+      expect(openaiQuota.queryable).toBe(false);
+      expect(openaiQuota.source).toBe('unknown');
+      expect(openaiQuota.balance).toBeNull();
+      expect(openaiQuota.windows).toEqual([]);
+      expect(openaiQuota.summary).toContain('未知');
+
+      const deepseekQuota = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2ProviderQuota({ providerId: 'deepseek-official' }),
+      );
+      expect(deepseekQuota.queryable).toBe(true);
+      expect(deepseekQuota.authState).toBe('missing_key');
+      expect(deepseekQuota.balance).toBeNull();
+
+      const matrix = await director.evaluate(() =>
+        (window as unknown as DirectorV2Window).directorBridge.v2ProviderQuotaMatrix({
+          providerIds: ['deepseek-official', 'kimi-moonshot', 'minimax', 'opencode-go', 'openai'],
+          includeCli: true,
+        }),
+      );
+      expect(matrix.generatedAt).toBeGreaterThan(0);
+      expect(matrix.reports.length).toBe(9);
+      expect(matrix.reports.some((r) => r.providerId === 'codex-cli' && r.source === 'cli_status')).toBe(true);
     } finally {
       await app.close();
     }

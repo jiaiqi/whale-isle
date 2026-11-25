@@ -627,6 +627,8 @@ const KEY_CONSOLE_HOSTS: ReadonlySet<string> = new Set([
   'platform.openai.com',
   'console.anthropic.com',
   'platform.minimaxi.com',
+  'platform.moonshot.cn',
+  'platform.moonshot.ai',
   'opencode.ai',
   'jevmodel.org',
 ]);

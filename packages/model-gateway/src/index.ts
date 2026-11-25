@@ -30,3 +30,10 @@ export {
   type FetchLike,
   type GatewayErrorCode,
 } from './gateway';
+export {
+  probeProviderQuota,
+  probeQuotaMatrix,
+  sanitizeQuotaText,
+  type ProbeQuotaInput,
+  type QuotaFetchLike,
+} from './quota-probes';

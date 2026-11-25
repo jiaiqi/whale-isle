@@ -272,6 +272,18 @@ export class CharacterCore {
 
     this.ready = true;
     this.syncRegistryProjection();
+    if (this.registryCore) {
+      if (snap.activityState.halted) {
+        this.registryCore.emergencyHalt(snap.activityState.haltReason ?? '恢复持久急停状态', characterId);
+      } else {
+        if (snap.activityState.controlMode !== 'autonomous') {
+          this.registryCore.setControlMode(characterId, snap.activityState.controlMode, '恢复持久控制模式');
+        }
+        if (snap.activityState.expression !== 'idle') {
+          this.registryCore.setExpression(characterId, snap.activityState.expression, '恢复持久表现态');
+        }
+      }
+    }
     if (this.filePath && !existsSync(this.filePath)) {
       this.save();
     }

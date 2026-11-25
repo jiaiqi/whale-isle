@@ -348,6 +348,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2VoiceTrackStop: (trackId: string): Promise<boolean> => ipcRenderer.invoke('v2:voice-track-stop', trackId),
   v2VoiceOutputRoute: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-output-route', input),
   v2VoiceSynthesizePreview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-synthesize-preview', input),
+  v2ProviderQuota: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota', input),
+  v2ProviderQuotaMatrix: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota-matrix', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

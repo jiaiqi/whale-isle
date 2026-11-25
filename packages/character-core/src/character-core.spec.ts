@@ -85,6 +85,7 @@ describe('CharacterCore 12-domain & LifeRuntime (V2-P1-01)', () => {
     // 跨实例磁盘重加载验证
     const reloaded = new CharacterCore({
       events: new RuntimeEventBus(),
+      registryCore: new CharacterRegistryCore(new RuntimeEventBus()),
       filePath,
       now: () => ++tick,
     });
@@ -93,6 +94,19 @@ describe('CharacterCore 12-domain & LifeRuntime (V2-P1-01)', () => {
     expect(reloaded.goals.list()).toHaveLength(1);
     expect(reloaded.commitments.listAll()).toHaveLength(1);
     expect(reloaded.life.activityState().activeModelRef).toBe('minimax-m3');
+
+    // 从持久化控制模式/表情/急停状态重加载并与 registryCore 同步
+    reloaded.life.setControlMode('coop', '联机');
+    reloaded.life.selectActivity({ mode: 'gaming', expression: 'gaming', reason: '玩游戏', source: 'user_command' });
+    const regCoop = new CharacterRegistryCore(new RuntimeEventBus());
+    new CharacterCore({ events: new RuntimeEventBus(), registryCore: regCoop, filePath });
+    expect(regCoop.primaryState().controlMode).toBe('coop');
+    expect(regCoop.primaryState().expression).toBe('gaming');
+
+    reloaded.life.emergencyHalt('持久急停测试');
+    const regHalt = new CharacterRegistryCore(new RuntimeEventBus());
+    new CharacterCore({ events: new RuntimeEventBus(), registryCore: regHalt, filePath });
+    expect(regHalt.primaryState().halted).toBe(true);
   });
 
   it('evolves traits, preferences, emotions, relationships, memory refs, and voice identity cleanly', () => {

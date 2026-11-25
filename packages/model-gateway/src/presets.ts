@@ -208,11 +208,29 @@ export const BUILTIN_PROVIDER_PRESETS: ModelProviderConfig[] = [
     id: 'minimax',
     name: 'MiniMax',
     category: 'OFFICIAL_LLM',
-    variants: [{ region: 'CN', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://api.minimaxi.com/v1', isFullUrl: false, protocol: 'openai' }],
+    variants: [
+      { region: 'CN', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://api.minimaxi.com/v1', isFullUrl: false, protocol: 'openai' },
+      { region: 'CN', planType: 'CODING_PLAN', baseUrl: 'https://api.minimaxi.com/v1', isFullUrl: false, protocol: 'openai' },
+    ],
     apiKeyMaskedOrRef: '',
     discoveredModels: [
       model('MiniMax-M3.1-Flash', { reasoning: true }),
       model('MiniMax-M2.5'),
+    ],
+  }),
+  preset({
+    id: 'kimi-moonshot',
+    name: 'Kimi (Moonshot AI)',
+    category: 'OFFICIAL_LLM',
+    variants: [
+      { region: 'CN', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://api.moonshot.cn/v1', isFullUrl: false, protocol: 'openai' },
+      { region: 'GLOBAL', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://api.moonshot.ai/v1', isFullUrl: false, protocol: 'openai' },
+    ],
+    apiKeyMaskedOrRef: '',
+    discoveredModels: [
+      model('kimi-k2-0905-preview'),
+      model('kimi-k2-thinking', { reasoning: true }),
+      model('moonshot-v1-32k'),
     ],
   }),
   preset({

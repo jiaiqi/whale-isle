@@ -81,7 +81,7 @@
 - **预计风险**：云端 TTS 首包延迟波动 → 流式分句预取与超时取消。
 
 ### `V2-P1-03`：模型供应商与四级诚实额度矩阵（DeepSeek / MiniMax / Kimi / OpenCode 等）
-- **状态**：`NEXT`
+- **状态**：`IMPLEMENTED_UNVERIFIED`（2026-11-25 代码/单测/门禁 7/7/Electron 45 E2E 完成；DeepSeek/OpenRouter/OpenCode Go 已实测，待 Kimi 与 MiniMax Coding Plan 真实 Key 联调）
 - **目标**：完善供应商网关与精细化额度中心，覆盖平衡/5h/周/月/Token/次数/套餐/重置时间，并如实记录来源、更新时间与不可查标记。
 - **依赖**：`V2-P0-02`
 - **实现方案**：参考 Magpie / Pi / 成熟 Harness，在 `shared-protocol` 新增 `ProviderQuotaReport` Schema，在主进程实现各主流厂商实测探针（DeepSeek/OpenRouter/OpenCode/MiniMax/Kimi/本地 CLI 状态），未实测字段强制标记 `unknown`。
@@ -90,7 +90,7 @@
 - **预计风险**：厂商私有接口变更 → Schema 宽松容错并在 UI 显示原始失败原因。
 
 ### `V2-P1-04`：类人五类记忆与经验成长（模糊印象、情绪关联、级联真删除）
-- **状态**：`PENDING`
+- **状态**：`NEXT`
 - **目标**：在 `memory-graph` 上实现 Working/Episodic/Semantic/Relational/Self 五分域、情绪加权回忆、模糊印象归纳、不确定性表达与覆盖衍生索引的真删除。
 - **依赖**：`V2-P1-01`、`V2-P0-03`
 - **实现方案**：升级图谱节点分类与巩固任务；区分自然衰减遗忘与显式删除（删除同步清理 SQLite 关联账本、图谱摘要与检索索引，保留审计条目）。

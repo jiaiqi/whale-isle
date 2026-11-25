@@ -15,3 +15,4 @@
 | [P0-foundation-verification.md](./P0-foundation-verification.md) | `V2-P0-01` ~ `V2-P0-05` | 自动化门禁、单测覆盖率、`node:sqlite` 迁移恢复、`electron-builder` 打包与 Electron 45 E2E 实测通过；外部 CLI 自动调用与 V1 旧库真机抽检诚实标注待验 |
 | [P1-character-life-verification.md](./P1-character-life-verification.md) | `V2-P1-01` | 12 域 `CharacterCore` 与 `LifeRuntime`（`92.33%` 分支覆盖）、`verify:gate` 7/7、Electron 45 E2E 实测通过 |
 | [P1-voice-mixer-verification.md](./P1-voice-mixer-verification.md) | `V2-P1-02` | `IMPLEMENTED_UNVERIFIED`：`@workbench/voice-runtime` 单测、`verify:gate` 7/7 与 Electron 45 E2E 通过；真实音频听感、云端 TTS Key 与 Windows SAPI 实机待验 |
+| [P1-provider-quota-verification.md](./P1-provider-quota-verification.md) | `V2-P1-03` | `IMPLEMENTED_UNVERIFIED`：四级诚实额度契约与探针（`90.86%` 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 通过；Kimi / MiniMax Coding Plan 真实 Key 待验 |

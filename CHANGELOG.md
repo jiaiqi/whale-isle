@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added（`V2-P1-03`：模型供应商与四级诚实额度矩阵 — `IMPLEMENTED_UNVERIFIED`）
+
+- **额度矩阵契约** `packages/shared-protocol/src/{quota.ts,quota.spec.ts,index.ts}`：定义 `ProviderQuotaReport`（`official_api` | `verifiable_third_party` | `cli_status` | `unknown` 四级来源、余额、5h/日/周/月窗口、认证状态、错误详情与脱敏摘要）与 `ProviderQuotaMatrix`。
+- **预设扩展与统一探针** `packages/model-gateway/src/{presets.ts,quota-probes.ts,quota-probes.spec.ts,index.ts}`：新增 `kimi-moonshot`（CN/GLOBAL）预设与 `minimax` `CODING_PLAN` 变体；实现 DeepSeek / Kimi / OpenRouter / SiliconFlow / OpenCode Go / MiniMax Coding Plan / Ollama / 本地 CLI 状态探针；不支持查询厂商（OpenAI/Anthropic/MiniMax 按量/火山方舟等）强制返回 `queryable: false, source: 'unknown'`，绝不编造数字。
+- **Electron 宿主接线** `apps/desktop-host/src/{main/provider-vault.ts,main/v2-kernel-host.ts,preload/index.ts}`：暴露 `v2:provider-quota` 与 `v2:provider-quota-matrix` IPC（主进程侧解析 Key 并脱敏错误摘要）；扩展 `v2-kernel.e2e.spec.ts` Electron 45 E2E 验证。待补 Kimi 与 MiniMax Coding Plan 真实 Key 实测。
+
 ### Added（`V2-P1-02`：真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer` — `IMPLEMENTED_UNVERIFIED`）
 
 - **语音与混音契约** `packages/shared-protocol/src/{voice.ts,voice.spec.ts,index.ts}`：定义 `VoiceProviderStatus`、`LipSyncFrame`、`VoiceSynthesisRequest` / `Output`、`AudioTrackState`、`SpeechFloorHolder` 与 `AudioMixerSnapshot`。
