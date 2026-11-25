@@ -50,6 +50,6 @@
 - **`REQ-AUTO-01` 受控 Browser Use 与 Computer Use**：确定性脚本（Playwright）优先于 AI 视觉浏览；设备级 `ComputerUseLease` 保证同机单主控，用户键鼠动作瞬间夺回控制权。
 - **`REQ-LIVE-01` `LifeRuntime` 驱动的直播与 OBS 舞台**：真实接入平台直播间事件、弹幕注意力调度与点歌授权拦截，同步双语歌词与舞台表演。
 - **`REQ-SOC-01` 社区数字生活 L1 → L2 → L3**：经历 L1 只读学习与兴趣沉淀、L2 草稿生成人工审核，到 L3 平台规则与用户白名单授权内的自主互动发布；平台官方能力必须逐项实测。
-- **`REQ-UI-01` Obsidian Tide 工作台 UI**：渐进拆解巨型 `App.tsx`，交付真实控制权 HUD、4 态回执、许可徽章，严格标注未接线页面状态，零假指标。
+- **`REQ-UI-01` Tidepaper 主基线与多主题工作台 UI**：以 **Tidepaper（`design/tidepaper/`）** 为主 UI/UX 参考基线，保留 **Obsidian Tide（`design/theme-obsidian-tide/`）** 等既有设计为可选主题（原型仅供参考，实际开发按真实能力渐进落地）；渐进拆解巨型 `App.tsx`，交付真实控制权 HUD、4 态回执、许可徽章，严格标注未接线页面状态，零假指标。
 - **`REQ-EVO-01` / `02` Evolution Engine（Lite P0 → Full P4）**：研发平面与运行平面物理隔离；P0 跑通唯一工单 + 外部 Worktree + Agent + 门禁 + 独立审查 + PR + 跨会话恢复；P4 接入脱敏遥测、复现回放与灰度回滚。
 - **`REQ-MULTI-01` P5 多角色与多设备扩展**：单角色“小鲸”全闭环验收完成后，解锁多完整自主角色、跨设备协同与多游戏正式扩展。

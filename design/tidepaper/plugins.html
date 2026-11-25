@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件 · MCP · 技能 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .p-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .p-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .p-card.crashed { border-color: var(--rose-line); background: linear-gradient(180deg, var(--rose-soft), transparent 60%), var(--surface); }
+  @media (max-width: 980px) { .p-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="plugins" data-crumb="能力 / 插件 · MCP · 技能">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="puzzle" class="ic-xs"></i>Plugin Runtime · 双向 MCP · Agent Skills</div>
+      <h1>开放扩展，但每个扩展都锁在权限与隔离边界里</h1>
+      <p>第三方插件运行在独立 Worker / 进程中，崩溃不会拖垮桌宠；MCP 双向经过授权与审计；Skill 只是操作说明（<span class="mono">SKILL.md</span>），绝不是权限凭证。</p>
+    </div>
+    <div class="actions">
+      <button class="btn" data-open="installModal"><i data-lucide="download"></i>安装插件（权限审查）</button>
+    </div>
+  </div>
+
+  <div class="tabs rise rise-1" data-group="ptab">
+    <button class="on" data-tab="plugins">插件运行时 <span class="cnt">5</span></button>
+    <button data-tab="mcp">MCP 双向网关 <span class="cnt">9</span></button>
+    <button data-tab="skills">Agent Skills <span class="cnt">14</span></button>
+  </div>
+
+  <!-- Tab 1：插件 -->
+  <div class="tab-panel on" data-panel="plugins" data-group="ptab">
+    <div class="callout ok" style="margin-bottom:14px">
+      <i data-lucide="shield-check" class="ic-sm"></i>
+      <div><b>崩溃隔离演示生效：</b>第三方插件 <span class="mono">community.danmaku-fx</span> 刚才在独立 Worker 中发生内存溢出，已被熔断重启——<b>小鲸桌宠进程与语音服务完全未受影响</b>。</div>
+    </div>
+    <div class="p-grid">
+      <article class="card p-card">
+        <div class="row between"><div class="row gap-8"><div class="tile sm kelp"><i data-lucide="gamepad-2" class="ic-sm"></i></div><div><b>stardew-coop-bridge</b><div class="tiny faint mono">v2.1.0 · 内置可信模块</div></div></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+        <div class="tiny muted">提供星露谷 MCP 状态读取、短动作互斥执行与资源锁。</div>
+        <div class="row wrap gap-6"><span class="lic mit">MIT</span><span class="chip sm">进程内受控接口</span><span class="chip sm kelp">CPU 1.2% · 健康</span></div>
+      </article>
+
+      <article class="card p-card">
+        <div class="row between"><div class="row gap-8"><div class="tile sm coral"><i data-lucide="radio" class="ic-sm"></i></div><div><b>douyin-dyhub-live</b><div class="tiny faint mono">v1.3.4 · 独立 Worker</div></div></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+        <div class="tiny muted">抖音弹幕、关注与礼物事件采集适配器（已签名，网络经 Broker 限域）。</div>
+        <div class="row wrap gap-6"><span class="lic apache">APACHE-2.0</span><span class="chip sm sea">Worker 沙箱隔离</span><span class="chip sm">待机中</span></div>
+      </article>
+
+      <article class="card p-card crashed">
+        <div class="row between"><div class="row gap-8"><div class="tile sm rose"><i data-lucide="alert-octagon" class="ic-sm"></i></div><div><b>community.danmaku-fx</b><div class="tiny faint mono">v0.4.2 · 第三方未签名</div></div></div><button class="btn xs primary" data-toast="已在隔离 Worker 中冷重启该插件">安全重启</button></div>
+        <div class="tiny rose">已隔离：Worker OOM 崩溃 (128MB 上限触达)，主进程与桌宠未受任何影响。</div>
+        <div class="row wrap gap-6"><span class="lic mit">MIT</span><span class="receipt failed">ISOLATED · CRASHED</span></div>
+      </article>
+
+      <article class="card p-card">
+        <div class="row between"><div class="row gap-8"><div class="tile sm plum"><i data-lucide="music" class="ic-sm"></i></div><div><b>sing-svc-demucs</b><div class="tiny faint mono">v1.0.8 · Python Sidecar</div></div></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+        <div class="tiny muted">干声分离 + RVC v2 授权声线转换管线。</div>
+        <div class="row wrap gap-6"><span class="lic mit">MIT</span><span class="chip sm">独立进程</span><span class="chip sm kelp">健康</span></div>
+      </article>
+    </div>
+  </div>
+
+  <!-- Tab 2：MCP 双向 -->
+  <div class="tab-panel" data-panel="mcp" data-group="ptab">
+    <div class="grid g2">
+      <section class="card">
+        <div class="card-h"><h3><i data-lucide="plug-zap"></i>MCP Client（连接外部工具）</h3><span class="sub">STDIO / Streamable HTTP</span></div>
+        <div class="list">
+          <div class="li"><div class="body"><b>BlindWhaleFarmer (星露谷)</b><span class="mono tiny">http://127.0.0.1:18088/mcp · 28 tools</span></div><span class="chip sm kelp">已连接</span></div>
+          <div class="li"><div class="body"><b>Playwright Browser MCP</b><span class="mono tiny">stdio · 仅限 profile_xj_readonly</span></div><span class="chip sm kelp">已连接</span></div>
+          <div class="li"><div class="body"><b>Blender Headless Bridge</b><span class="mono tiny">stdio · 3D UV/骨骼导出</span></div><span class="chip sm">按需唤醒</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h"><h3><i data-lucide="server"></i>MCP Server（对外暴露给 Codex/Claude）</h3><span class="sub">需授权与审计</span></div>
+        <div class="list">
+          <div class="li"><div class="body"><b>character.get_state</b><span>允许外部 Harness 读取小鲸当前情绪与表现状态</span></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+          <div class="li"><div class="body"><b>memory.query_authorized</b><span>仅返回已授权且脱敏后的非私密记忆</span></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+          <div class="li"><div class="body"><b>pet.request_expression</b><span>允许外部任务完成时让小鲸挥手或冒泡</span></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+          <div class="li"><div class="body"><b>account.read_credentials</b><span class="t-rose">永不暴露给任何外部 MCP 客户端</span></div><span class="chip sm rose">永久禁止</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Tab 3：Agent Skills -->
+  <div class="tab-panel" data-panel="skills" data-group="ptab">
+    <div class="callout info" style="margin-bottom:14px">
+      <i data-lucide="info" class="ic-sm"></i>
+      <div><b>开放规范对齐 (agentskills.io)：</b>Skill 包含 <span class="mono">SKILL.md</span>、references 与脚本，但它只是「操作说明书」，<b>Skill 里写「访问账号」绝不代表自动拥有账号权限</b>，必须受策略引擎约束。</div>
+    </div>
+    <div class="card">
+      <table class="table click">
+        <thead><tr><th>Skill 目录</th><th>启用范围</th><th>声明所需权限</th><th>来源 / License</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr data-open="skillDrawer"><td class="mono small">skills/stardew-cooperation/</td><td><span class="chip sm kelp">角色 · 小鲸</span></td><td><span class="perm p1">P1</span> <span class="perm p3">P3</span></td><td><span class="lic mit">MIT</span></td><td><button class="btn xs">预览 SKILL.md</button></td></tr>
+          <tr data-open="skillDrawer"><td class="mono small">skills/character-asset-generation/</td><td><span class="chip sm">全局</span></td><td><span class="perm p2">P2</span></td><td><span class="lic mit">MIT</span></td><td><button class="btn xs">预览 SKILL.md</button></td></tr>
+          <tr data-open="skillDrawer"><td class="mono small">skills/livestream-performance/</td><td><span class="chip sm plum">仅直播任务</span></td><td><span class="perm p2">P2</span> <span class="perm p4">P4</span></td><td><span class="lic apache">APACHE-2.0</span></td><td><button class="btn xs">预览 SKILL.md</button></td></tr>
+          <tr data-open="skillDrawer"><td class="mono small">skills/social-content-research/</td><td><span class="chip sm">按任务启用</span></td><td><span class="perm p1">P1</span></td><td><span class="lic mit">MIT</span></td><td><button class="btn xs">预览 SKILL.md</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- 安装插件权限清单模态 -->
+<div class="modal" id="installModal">
+  <div class="modal-h"><h3>安装插件：权限清单审查</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="row between"><div><b>weather-mood-sync</b><div class="tiny faint mono">v1.0.2 · 社区开源插件</div></div><span class="lic mit">MIT</span></div>
+    <div class="eyebrow">Manifest 申请的最小权限（需逐项授予）：</div>
+    <div class="stack-8">
+      <label class="check"><input type="checkbox" checked> <span><span class="mono">character.read</span> — 读取当前角色情绪（允许）</span></label>
+      <label class="check"><input type="checkbox" checked> <span><span class="mono">network.wttr</span> — 仅允许经 Broker 访问天气域</span></label>
+      <label class="check"><input type="checkbox" disabled> <span class="faint"><span class="mono">vault.secrets</span> — 凭证库禁止插件声明（已拒）</span></label>
+    </div>
+    <div class="tiny muted">运行边界：独立 Worker 进程 · 内存上限 128MB · 超时 5000ms。</div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>取消</button><button class="btn sm primary" data-close data-toast="插件已安装在隔离 Worker 中">确认最小权限安装</button></div>
+</div>
+
+<!-- Skill 预览抽屉 -->
+<div class="drawer" id="skillDrawer">
+  <div class="drawer-h"><h3>SKILL.md 预览 · stardew-cooperation</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="drawer-b stack-12">
+    <div class="callout warn"><i data-lucide="lock" class="ic-sm"></i><span class="tiny">本文件仅提供操作指导；实际工具执行仍由 Control Arbiter 与 Policy Engine 仲裁。</span></div>
+    <pre class="code"><span class="c">---
+name: stardew-cooperation
+description: 星露谷自主决策与人机共玩协作指引
+---</span>
+<span class="k"># 原则</span>
+1. 不编写“背包满必须回家”等死板情景规则。
+2. 每次下发移动或工具动作，必须等待真实 BWF 回执
+   (<span class="s">COMPLETED | FAILED | UNCERTAIN</span>)。
+3. 遇到用户 <span class="s">Stop / F8 / Take Over</span> 立即释放控制权。</pre>
+  </div>
+  <div class="drawer-f"><button class="btn sm" data-close>关闭</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

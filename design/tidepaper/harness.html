@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness 智能体 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .acp-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .acp-card { padding: 12px 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+  .acp-card.on { border-color: var(--accent-line); background: var(--surface-2); }
+  .h-ws { display: grid; grid-template-columns: 280px 1fr; gap: 16px; margin-top: 16px; }
+  .term {
+    background: #111829; color: #D7DCE8; border-radius: var(--r-md); padding: 14px 16px; font-family: var(--font-mono);
+    font-size: 11.5px; line-height: 1.75; height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,.08);
+  }
+  .term .ok { color: #5FCB86; } .term .warn { color: #F2B84B; } .term .cmd { color: #FF7D5C; }
+  .diff-box { border-radius: var(--r-md); border: 1px solid var(--line); overflow: hidden; font-family: var(--font-mono); font-size: 11.5px; }
+  .diff-add { background: var(--kelp-soft); color: var(--kelp); padding: 2px 12px; }
+  .diff-del { background: var(--rose-soft); color: var(--rose); padding: 2px 12px; }
+  .diff-ctx { padding: 2px 12px; color: var(--ink-3); }
+  @media (max-width: 1100px) { .acp-strip { grid-template-columns: repeat(2, 1fr); } .h-ws { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="harness" data-crumb="能力 / Harness 智能体">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="square-terminal" class="ic-xs"></i>Harness Bridge · ACP (Agent Client Protocol)</div>
+      <h1>把工作交给外部 Coding Agent，不交出小鲸的身份</h1>
+      <p>通过标准 ACP / MCP 接入 Codex、Claude Code、OpenCode、Gemini CLI 与 dsh：开发、代码审查和研究按擅长分派给不同 Harness，它们只返回任务结果，绝不接管角色人格与记忆。</p>
+    </div>
+    <div class="actions">
+      <button class="btn sm" data-open="dispatchModal"><i data-lucide="send"></i>分派新任务</button>
+    </div>
+  </div>
+
+  <!-- ACP 接入矩阵 -->
+  <div class="acp-strip rise rise-1">
+    <div class="acp-card on"><div class="row between"><b>Codex CLI</b><span class="chip sm kelp">Level 4</span></div><div class="tiny faint">深度集成 · 执行/生图</div><span class="evi real">集成测试已过</span></div>
+    <div class="acp-card on"><div class="row between"><b>Claude Code</b><span class="chip sm kelp">Level 4</span></div><div class="tiny faint">深度集成 · 独立审查</div><span class="evi real">集成测试已过</span></div>
+    <div class="acp-card"><div class="row between"><b>OpenCode</b><span class="chip sm sea">Level 3</span></div><div class="tiny faint">隔离 Worker · 研究任务</div><span class="evi sim">沙盒已验证</span></div>
+    <div class="acp-card"><div class="row between"><b>Gemini CLI</b><span class="chip sm">Level 2</span></div><div class="tiny faint">配置级 · 备选推理</div><span class="evi pending">待真机集成测</span></div>
+    <div class="acp-card"><div class="row between"><b>dsh Harness</b><span class="chip sm sea">Level 3</span></div><div class="tiny faint">兼容 Cordis 插件树</div><span class="evi real">已对接</span></div>
+  </div>
+
+  <!-- 实时会话工作台 -->
+  <div class="h-ws rise rise-2">
+    <section class="card" style="display:flex;flex-direction:column">
+      <div class="card-h"><h3>ACP 会话队列</h3></div>
+      <div class="list" id="sessList">
+        <div class="li click on" data-s="codex"><div class="ic"><i data-lucide="terminal" class="ic-sm t-coral"></i></div><div class="body"><b>#S-218 · Codex CLI</b><span>修复背包满评估逻辑 · 等待工具审批</span></div><span class="dot warn pulse"></span></div>
+        <div class="li click" data-s="claude"><div class="ic"><i data-lucide="shield-check" class="ic-sm t-kelp"></i></div><div class="body"><b>#S-219 · Claude Code</b><span>独立审查 PR #218 diff</span></div><span class="receipt completed">DONE</span></div>
+        <div class="li click" data-s="opencode"><div class="ic"><i data-lucide="search" class="ic-sm t-sea"></i></div><div class="body"><b>#S-220 · OpenCode</b><span>调研 1.6 鱼塘收益变化</span></div><span class="receipt completed">DONE</span></div>
+      </div>
+      <div class="card-f" style="margin-top:auto">
+        <div class="tiny faint">权限原则：所有修改仅在独立 Worktree，绝不碰运行目录</div>
+      </div>
+    </section>
+
+    <section class="card pad stack-16">
+      <div class="row wrap between gap-10">
+        <div>
+          <div class="row gap-8"><h3>#S-218 · Codex CLI (worktree: wt/fix-inv-218)</h3><span class="chip sm sun">等待确认工具调用</span></div>
+          <div class="tiny faint mono" style="margin-top:3px">ACP Session: acp_8842a · 本次耗时 01:18 · 成本 ¥0.34</div>
+        </div>
+        <button class="btn xs danger-soft" data-toast="已向 Codex CLI 发送 ACP Cancel 信号" data-kind="warn"><i data-lucide="square" class="ic-xs"></i>取消任务</button>
+      </div>
+
+      <!-- 待审批工具调用 -->
+      <div class="callout warn" id="acpAppr">
+        <i data-lucide="shield-alert" class="ic-sm"></i>
+        <div style="flex:1">
+          <b>ACP 工具调用请求审批：</b><span class="mono">run_command("pnpm --filter game-bridge-mcp test")</span>
+          <div class="tiny muted" style="margin-top:3px">作用范围仅限隔离 Worktree，无网络出站与生产目录写入。</div>
+        </div>
+        <button class="btn xs danger-soft" onclick="WI.$('#acpAppr').classList.add('hidden');WI.toast('已拒绝该命令执行','warn')">拒绝</button>
+        <button class="btn xs primary" onclick="approveCmd()">批准执行</button>
+      </div>
+
+      <div class="term" id="termLog">
+        <div><span class="cmd">$</span> acp.connect --harness codex --worktree /tmp/wt-fix-inv-218</div>
+        <div>[plan] 1. 复现东侧石头碰撞与背包满场景</div>
+        <div>[plan] 2. 移除硬编码“回家”分支，接入决策候选评分</div>
+        <div><span class="ok">✓</span> 已修改 packages/persona-brain/src/game-planner.ts (+24/-9)</div>
+        <div><span class="warn">⏸</span> 请求宿主审批：pnpm --filter game-bridge-mcp test</div>
+      </div>
+
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">变更 Diff 片段</div>
+        <div class="diff-box">
+          <div class="diff-ctx">@@ -118,5 +118,8 @@ evaluateInventoryFull(state)</div>
+          <div class="diff-del">- if (state.inventory.isFull) return forceReturnHome();</div>
+          <div class="diff-add">+ if (state.inventory.isFull) {</div>
+          <div class="diff-add">+   return generateCandidates(['craft_chest', 'store_nearby', 'sell_low_value', 'return_home'], state);</div>
+          <div class="diff-add">+ }</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- 任务分派模态 -->
+<div class="modal" id="dispatchModal">
+  <div class="modal-h"><h3>按擅长分派任务给外部 Harness</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="field"><label>选择 Harness（解耦分工）</label>
+      <select class="select"><option>Codex CLI — 代码实现 / 测试修复 / 图像生成</option><option>Claude Code — 独立代码审查与安全审计</option><option>OpenCode — 文档调研与方案对比</option></select>
+    </div>
+    <div class="field"><label>任务描述</label><textarea class="textarea" placeholder="仅传脱敏后的最小上下文，不传用户凭证与观众私密聊天…"></textarea></div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>取消</button><button class="btn sm primary" data-close data-toast="已通过 ACP 协议派发隔离任务">派发</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  WI.$$('#sessList .li').forEach((li) => li.addEventListener('click', () => {
+    WI.$$('#sessList .li').forEach((x) => x.classList.remove('on'));
+    li.classList.add('on');
+    WI.toast('切换查看会话：' + li.querySelector('b').textContent, 'info');
+  }));
+
+  window.approveCmd = function () {
+    WI.$('#acpAppr').classList.add('hidden');
+    const t = WI.$('#termLog');
+    t.appendChild(WI.h('<div><span class="ok">✓</span> 审批通过，运行测试中… 42/42 passed (branch coverage 92.4%)</div>'));
+    t.scrollTop = t.scrollHeight;
+    WI.toast('命令执行完成 · 测试全部通过', 'ok', 'check-circle-2');
+  };
+</script>
+</body>
+</html>

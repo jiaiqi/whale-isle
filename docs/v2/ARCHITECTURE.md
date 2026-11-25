@@ -1,6 +1,6 @@
 # Whale Isle V2 总体技术架构（修订版 · v2.1）
 
-> **上游依据**：[blueprint/](./blueprint/README.md)（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-000](./adr/ADR-000-product-charter-and-risks.md)、[ADR-001](./adr/ADR-001-v2-foundation.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)。  
+> **上游依据**：[blueprint/](./blueprint/README.md)（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-000](./adr/ADR-000-product-charter-and-risks.md)、[ADR-001](./adr/ADR-001-v2-foundation.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)、[ADR-003](./adr/ADR-003-uiux-tidepaper-primary-and-themes.md)。  
 > **核心理念**：AI 不只是聊天机器人，而是一个拥有统一数字身份、人格、记忆、情绪、声音、身体和自主生活能力的数字生命平台。  
 > **架构原则**：Modular Monolith + 独立 Worker 起步；**先用一个主 AI 角色（小鲸 `char_xiaojing`）跑通全量产品闭环**；生产运行平面与 Evolution 研发平面严格物理隔离。
 
@@ -15,7 +15,7 @@
 ```mermaid
 flowchart TB
   subgraph Surfaces["交互与表现表面 (Presentation Surfaces)"]
-    Director["中控台 Shell (Obsidian Tide · React 19)"]
+    Director["中控台 Shell (Tidepaper 主基线 + 多主题 · React 19)"]
     PetStage["透明桌宠窗 (WebM / Spritesheet / Live2D / VRM-3D)"]
     Tray["托盘快捷浮窗 (Tray Popover)"]
     WebObs["内嵌 WebUI & OBS 舞台输出 (:18780 /ui, /obs)"]

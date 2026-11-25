@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>菜单栏托盘（独立窗口）· 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { overflow-y: auto; }
+  .tray-stage { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 28px 20px 60px; gap: 20px; }
+  .tray-pair { display: grid; grid-template-columns: repeat(2, 368px); gap: 28px; align-items: start; }
+  .tray-win {
+    width: 368px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--line-2); box-shadow: var(--shadow-3);
+    overflow: hidden; position: relative;
+  }
+  .tray-win.dark-preview {
+    --bg: #0D1220; --surface: #151C2E; --surface-2: #1A2236; --sunken: #10172A;
+    --ink-1: #EEE9DF; --ink-2: #A9AEBB; --ink-3: #6E7486; --line: rgba(238,233,223,0.08); --line-2: rgba(238,233,223,0.14);
+    --inverse: #EEE9DF; --inverse-ink: #111829;
+    background: var(--surface-2); color: var(--ink-1); border-color: var(--line-2);
+  }
+  .tray-head { padding: 14px 16px; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); }
+  .tray-pet { width: 54px; height: 54px; border-radius: 14px; background: var(--sea-soft); border: 1px solid var(--sea-line); overflow: hidden; flex-shrink: 0; }
+  .tray-pet video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.55) translateY(5%); }
+  .tray-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 14px; }
+  .tray-act { padding: 10px 11px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 12.5px; font-weight: 550; text-align: left; transition: all var(--t-fast); }
+  .tray-act:hover { border-color: var(--line-2); }
+  .tray-act.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+  @media (max-width: 820px) { .tray-pair { grid-template-columns: 368px; } }
+</style>
+</head>
+<body data-shell="none">
+<div class="tray-stage">
+  <div class="row wrap gap-10" style="width:min(764px,100%)">
+    <div>
+      <div class="eyebrow">macOS Menu Bar / Windows Tray Popover</div>
+      <h2 style="margin-top:2px">菜单栏快速托盘（368px）</h2>
+    </div>
+    <span class="spacer"></span>
+    <a class="btn sm" href="home.html"><i data-lucide="arrow-left" class="ic-sm"></i>返回中控台</a>
+    <a class="btn sm ghost" href="index.html">目录</a>
+  </div>
+
+  <div class="tray-pair">
+    <!-- 晨雾日间托盘 -->
+    <div>
+      <div class="eyebrow" style="margin-bottom:8px;justify-content:center;width:100%">晨雾 · Light</div>
+      <div class="tray-win" id="trayLight">
+        <div class="tray-head">
+          <div class="tray-pet"><video data-clip="待机呼吸休闲" autoplay loop muted playsinline></video></div>
+          <div style="flex:1;min-width:0">
+            <div class="row gap-6"><b>小鲸</b><span class="chip sm kelp"><span class="dot ok pulse"></span>安静陪伴</span></div>
+            <div class="tiny faint ellipsis" style="margin-top:3px">星露谷 · 春 14 日 · 浇防风草 18/28</div>
+          </div>
+          <button class="btn xs danger-soft" onclick="WI.halt()"><i data-lucide="octagon-x" class="ic-xs"></i>停止</button>
+        </div>
+
+        <div class="tray-grid">
+          <button class="tray-act on" onclick="this.classList.toggle('on');WI.toast('切换安静陪伴模式')"><i data-lucide="moon" class="ic-sm"></i>安静模式</button>
+          <button class="tray-act" onclick="this.classList.toggle('on');WI.toast('已暂停 / 恢复 AI 游戏控制','warn')"><i data-lucide="pause" class="ic-sm"></i>暂停 AI (F8)</button>
+          <button class="tray-act" onclick="this.classList.toggle('on');WI.toast('接管星露谷角色')"><i data-lucide="hand" class="ic-sm"></i>接管游戏 (T)</button>
+          <button class="tray-act" onclick="location.href='live.html'"><i data-lucide="radio" class="ic-sm"></i>准备开播</button>
+        </div>
+
+        <div style="padding:0 14px 12px">
+          <div class="card sunken pad" style="padding:10px 12px">
+            <div class="row between tiny"><span><i data-lucide="wheat" class="ic-xs t-sun" style="display:inline;vertical-align:-2px;margin-right:4px"></i>今日饭碗余量</span><span class="mono"><b>68%</b> · ¥12.24</span></div>
+            <div class="meter thin sun" style="--v:68%;margin-top:6px"><i></i></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--line)">
+          <div class="eyebrow" style="padding:10px 14px 4px">最近 3 条真实回执</div>
+          <div class="list">
+            <div class="li" style="padding:8px 14px"><div class="body"><b class="small">星露谷 · 浇水第 18 格</b><span class="tiny">22:14 · BWF Mod</span></div><span class="receipt completed">COMPLETED</span></div>
+            <div class="li" style="padding:8px 14px"><div class="body"><b class="small">河口钓鱼 · 鲶鱼脱钩</b><span class="tiny">20:57 · 旁观判定失败</span></div><span class="receipt uncertain">UNCERTAIN</span></div>
+            <div class="li" style="padding:8px 14px"><div class="body"><b class="small">投喂语音播放</b><span class="tiny">18:05 · GPT-SoVITS</span></div><span class="receipt played">PLAYED</span></div>
+          </div>
+        </div>
+
+        <div class="card-f" style="padding:10px 14px">
+          <a class="chip sm coral" href="security.html"><i data-lucide="inbox" class="ic-xs"></i>4 条待审批</a>
+          <span class="spacer"></span>
+          <a class="btn xs primary" href="home.html">打开中控台</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 夜潮暗色托盘预览 -->
+    <div>
+      <div class="eyebrow" style="margin-bottom:8px;justify-content:center;width:100%">夜潮 · Dark</div>
+      <div class="tray-win dark-preview">
+        <div class="tray-head">
+          <div class="tray-pet"><video data-clip="工作状态-思考冒泡" autoplay loop muted playsinline></video></div>
+          <div style="flex:1;min-width:0">
+            <div class="row gap-6"><b>小鲸</b><span class="chip sm whale">thinking</span></div>
+            <div class="tiny faint ellipsis" style="margin-top:3px">正在评估后天下矿装备与食物…</div>
+          </div>
+          <button class="btn xs danger-soft" onclick="WI.halt()"><i data-lucide="octagon-x" class="ic-xs"></i>停止</button>
+        </div>
+
+        <div class="tray-grid">
+          <button class="tray-act" onclick="this.classList.toggle('on')"><i data-lucide="moon" class="ic-sm"></i>安静模式</button>
+          <button class="tray-act on" onclick="this.classList.toggle('on')"><i data-lucide="pause" class="ic-sm"></i>已暂停 AI</button>
+          <button class="tray-act" onclick="this.classList.toggle('on')"><i data-lucide="hand" class="ic-sm"></i>接管游戏</button>
+          <button class="tray-act" onclick="location.href='pet-stage.html'"><i data-lucide="app-window" class="ic-sm"></i>呼出桌宠</button>
+        </div>
+
+        <div style="padding:0 14px 12px">
+          <div class="card sunken pad" style="padding:10px 12px">
+            <div class="row between tiny"><span><i data-lucide="wheat" class="ic-xs t-sun" style="display:inline;vertical-align:-2px;margin-right:4px"></i>今日饭碗余量</span><span class="mono"><b>68%</b> · ¥12.24</span></div>
+            <div class="meter thin sun" style="--v:68%;margin-top:6px"><i></i></div>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--line)">
+          <div class="eyebrow" style="padding:10px 14px 4px">最近 3 条真实回执</div>
+          <div class="list">
+            <div class="li" style="padding:8px 14px"><div class="body"><b class="small">星露谷 · 浇水第 18 格</b><span class="tiny">22:14 · BWF Mod</span></div><span class="receipt completed">COMPLETED</span></div>
+            <div class="li" style="padding:8px 14px"><div class="body"><b class="small">河口钓鱼 · 鲶鱼脱钩</b><span class="tiny">20:57 · 旁观判定失败</span></div><span class="receipt uncertain">UNCERTAIN</span></div>
+            <div class="li" style="padding:8px 14px"><div class="body"><b class="small">投喂语音播放</b><span class="tiny">18:05 · GPT-SoVITS</span></div><span class="receipt played">PLAYED</span></div>
+          </div>
+        </div>
+
+        <div class="card-f" style="padding:10px 14px">
+          <a class="chip sm coral" href="security.html"><i data-lucide="inbox" class="ic-xs"></i>4 条待审批</a>
+          <span class="spacer"></span>
+          <a class="btn xs primary" href="home.html">打开中控台</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

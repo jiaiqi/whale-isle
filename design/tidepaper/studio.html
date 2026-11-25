@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>创作工坊 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .cand-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .cand { border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); overflow: hidden; display: flex; flex-direction: column; }
+  .cand.sel { border-color: var(--accent-line); box-shadow: var(--ring); }
+  .cand-art { height: 155px; background: radial-gradient(90px 40px at 50% 85%, var(--sea-soft), transparent), var(--sunken); position: relative; display: grid; place-items: center; overflow: hidden; }
+  .cand-art video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.45) translateY(4%); }
+  .sprite-sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; border-radius: var(--r-md); background: var(--sunken); border: 1px solid var(--line); }
+  .sp-cell { aspect-ratio: 1 / 1.25; border-radius: 6px; border: 1px dashed var(--line-3); background: var(--surface); display: grid; place-items: center; font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); position: relative; }
+  .sp-cell::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--coral); transform: translateX(-50%); opacity: .65; }
+  .turntable { height: 220px; border-radius: var(--r-lg); border: 1px solid var(--line); background: radial-gradient(120px 40px at 50% 82%, var(--whale-soft), transparent), var(--sunken); display: grid; place-items: center; perspective: 700px; }
+  .mesh-box { width: 96px; height: 120px; border-radius: 18px; border: 2px solid var(--whale); background: var(--whale-soft); display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; color: var(--whale); animation: spin3d 8s linear infinite; }
+  @keyframes spin3d { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+  @media (max-width: 980px) { .cand-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="studio" data-crumb="创作 / 创作工坊">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="wand-sparkles" class="ic-xs"></i>Creative World · 大模型生成 × 自动后处理 × 许可门禁</div>
+      <h1>为小鲸创造自己的原创形象与舞台资产</h1>
+      <p>不自研通用生图/3D 模型：图片经 Codex CLI 或在线图片 API，3D 经 Hunyuan3D 生成网格后交由 Blender 自动绑骨、修法线并导出 VRM——所有候选必过自动 QA 与许可门禁才能发布。</p>
+    </div>
+    <div class="actions">
+      <a class="btn sm" href="character.html"><i data-lucide="book" class="ic-sm"></i>Character Bible</a>
+      <a class="btn sm primary" href="assets.html"><i data-lucide="package" class="ic-sm"></i>查看资产库</a>
+    </div>
+  </div>
+
+  <!-- 5 个工作室页签 -->
+  <div class="tabs rise rise-1" data-group="studios">
+    <button class="on" data-tab="design">1. 角色设计</button>
+    <button data-tab="s2d">2. 2D 与游戏像素</button>
+    <button data-tab="s3d">3. 3D / VRM</button>
+    <button data-tab="anim">4. 动画时间轴</button>
+    <button data-tab="scene">5. 舞台与直播素材</button>
+  </div>
+
+  <!-- 8 步流水线状态 -->
+  <div class="card pad rise rise-1" style="margin-bottom:16px">
+    <div class="eyebrow" style="margin-bottom:10px">Asset Pipeline · 当前任务「自制可商用小鲸 2026 原创套装」</div>
+    <div class="steps" style="overflow-x:auto;padding-bottom:4px">
+      <div class="step done"><span class="n">1</span>Brief</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">2</span>Provider 生成</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">3</span>候选区</div><div class="step-line done"></div>
+      <div class="step now"><span class="n">4</span>后处理</div><div class="step-line"></div>
+      <div class="step"><span class="n">5</span>自动 QA</div><div class="step-line"></div>
+      <div class="step"><span class="n">6</span>人工审阅</div><div class="step-line"></div>
+      <div class="step"><span class="n">7</span>许可门禁</div><div class="step-line"></div>
+      <div class="step"><span class="n">8</span>发布包</div>
+    </div>
+  </div>
+
+  <!-- Studio 1：角色设计 -->
+  <div class="tab-panel on" data-panel="design" data-group="studios">
+    <div class="grid" style="grid-template-columns:1.1fr 1.35fr">
+      <section class="card pad stack-12">
+        <h3>发起生成任务</h3>
+        <div class="field"><label>Media Generation Provider</label>
+          <select class="select"><option>Codex CLI 图像能力（本地调用入口）</option><option>在线 Image API（GPT-Image-1）</option><option>ComfyUI 本地工作流（仅可选，非默认捆绑）</option></select>
+        </div>
+        <div class="field"><label>强制一致性引用</label>
+          <div class="row wrap gap-6"><span class="chip sm coral">Character Bible v2</span><span class="chip sm sea">禁止改变：蓝鲸耳鳍/尾鳍</span><span class="chip sm">色板 #3B5EA8</span></div>
+        </div>
+        <div class="field"><label>补充提示词</label><textarea class="textarea" style="min-height:70px">夏日海风海军领水手服皮肤，保持蓝鲸耳鳍与白色波浪发箍，三视图立绘，纯白背景。</textarea></div>
+        <div class="grid g2">
+          <div class="field"><label>尺寸</label><select class="select"><option>1024 × 1024</option><option>1536 × 1024 三视图</option></select></div>
+          <div class="field"><label>候选数</label><select class="select"><option>3 张候选</option><option>6 张</option></select></div>
+        </div>
+        <button class="btn accent" id="genBtn"><i data-lucide="sparkles"></i>提交候选生成 (预估 ¥0.45)</button>
+      </section>
+
+      <section class="card pad stack-12">
+        <div class="row between"><h3>候选区（新结果不自动覆盖已发布资产）</h3><span class="tiny faint">点击选中进入自动 QA</span></div>
+        <div class="cand-grid" id="candGrid">
+          <div class="cand sel">
+            <div class="cand-art"><video data-clip="整体换装试色" autoplay loop muted playsinline></video></div>
+            <div style="padding:10px" class="stack-4">
+              <div class="row between"><b class="small">候选 #A · 夏日换装</b><span class="chip sm kelp">一致性 94%</span></div>
+              <div class="tiny faint">色板匹配 · 含尾鳍</div>
+              <div class="row gap-4" style="margin-top:4px"><button class="btn xs primary" data-toast="已送入自动 QA 与许可门禁">入库审核</button><button class="btn xs ghost" data-toast="已打回候选 #A">打回</button></div>
+            </div>
+          </div>
+          <div class="cand">
+            <div class="cand-art"><video data-clip="优雅女仆舞" autoplay loop muted playsinline></video></div>
+            <div style="padding:10px" class="stack-4">
+              <div class="row between"><b class="small">候选 #B · 经典女仆</b><span class="chip sm sea">一致性 91%</span></div>
+              <div class="tiny faint">裙摆褶皱较细腻</div>
+              <div class="row gap-4" style="margin-top:4px"><button class="btn xs" data-toast="已选中候选 #B">选中</button><button class="btn xs ghost" data-toast="已打回候选 #B">打回</button></div>
+            </div>
+          </div>
+          <div class="cand">
+            <div class="cand-art"><video data-clip="点击回应-元气挥手" autoplay loop muted playsinline></video></div>
+            <div style="padding:10px" class="stack-4">
+              <div class="row between"><b class="small">候选 #C · 元气挥手</b><span class="chip sm sun">缺发箍细节</span></div>
+              <div class="tiny rose">QA 警告：缺少发箍</div>
+              <div class="row gap-4" style="margin-top:4px"><button class="btn xs ghost" data-toast="已打回并记录缺失发箍特征">打回</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Studio 2：2D 与星露谷像素流水线 -->
+  <div class="tab-panel" data-panel="s2d" data-group="studios">
+    <div class="grid g2">
+      <section class="card pad stack-12">
+        <div class="row between"><h3>星露谷像素 Sprite Sheet 流水线 (16×32 帧网格)</h3><span class="receipt completed">QA PASSED</span></div>
+        <div class="sprite-sheet">
+          <div class="sp-cell">下走 · F1</div><div class="sp-cell">下走 · F2</div><div class="sp-cell">下走 · F3</div><div class="sp-cell">下走 · F4</div>
+          <div class="sp-cell">右走 · F1</div><div class="sp-cell">右走 · F2</div><div class="sp-cell">浇水 · F1</div><div class="sp-cell">挥杆 · F1</div>
+        </div>
+        <div class="tiny muted">已自动校验：16×32px 像素网格对齐 · 脚底锚点 (8, 30) 一致 · 透明边界零溢出 · 生成 <span class="mono">manifest.json</span>。</div>
+      </section>
+      <section class="card pad stack-12">
+        <h3>自动检查与导出</h3>
+        <div class="list" style="margin:0 -18px">
+          <div class="li"><div class="body"><b>调色板锁定</b><span>仅使用 Character Bible 16 色索引</span></div><span class="receipt completed">PASS</span></div>
+          <div class="li"><div class="body"><b>Mod Manifest 校验</b><span>stardew-avatar-sync 1.6 帧布局兼容</span></div><span class="receipt completed">PASS</span></div>
+          <div class="li"><div class="body"><b>Origin &amp; License</b><span>自有原创生成，标注生成模型与提示词</span></div><span class="lic own">OWN_RELEASE</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Studio 3：3D / VRM -->
+  <div class="tab-panel" data-panel="s3d" data-group="studios">
+    <div class="grid g2">
+      <section class="card pad stack-12">
+        <div class="row between"><h3>Hunyuan3D 生成 + Blender 自动化后处理</h3><span class="chip sm whale">VRM 1.0 目标</span></div>
+        <div class="turntable"><div class="mesh-box">Mesh<br>18.4k tris</div></div>
+        <div class="row between tiny muted"><span>注意：生成一个漂亮静态网格 ≠ 已具备可动画能力</span><button class="btn xs primary" data-toast="已拉起 Blender 无头脚本检查骨骼与 BlendShapes">运行 Blender 绑骨检查</button></div>
+      </section>
+      <section class="card pad stack-12">
+        <h3>VRM 可动画检查清单</h3>
+        <div class="list" style="margin:0 -18px">
+          <div class="li"><div class="body"><b>流形网格 &amp; 法线方向</b><span>面数优化至 18,400 tris</span></div><span class="receipt completed">PASS</span></div>
+          <div class="li"><div class="body"><b>Humanoid 标准骨骼映射</b><span>Hips / Spine / Head / TailBone</span></div><span class="receipt completed">PASS</span></div>
+          <div class="li"><div class="body"><b>面部 BlendShapes (A/I/U/E/O + 眨眼)</b><span>待补全 U / E 口型权重点</span></div><span class="receipt uncertain">REVIEW</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Studio 4 & 5 -->
+  <div class="tab-panel" data-panel="anim" data-group="studios">
+    <div class="card pad stack-12"><h3>动画动作时间轴（待机 / 行走 / 说话 / 唱歌 / 舞蹈）</h3><p class="small muted">支持为 WebM、Live2D 参数曲线与 VRM Humanoid 骨骼统一导出动作包，并与 <a class="t-accent" href="embodiment.html">化身动作库</a> 对齐。</p></div>
+  </div>
+  <div class="tab-panel" data-panel="scene" data-group="studios">
+    <div class="card pad stack-12"><h3>舞台与直播场景素材</h3><p class="small muted">生成星露谷夜航舞台背景、直播边框与透明道具特效，自动进入 <a class="t-accent" href="assets.html">资产库</a> 接受版权与直播授权检验。</p></div>
+  </div>
+
+  <!-- 任务队列 -->
+  <div class="sec"><h2>媒体生成任务队列</h2><span class="line"></span><span class="aside">全部费用与失败原因可追踪</span></div>
+  <div class="card">
+    <table class="table" id="taskTable">
+      <thead><tr><th>任务</th><th>Provider</th><th>状态</th><th>费用</th><th>耗时</th></tr></thead>
+      <tbody>
+        <tr><td><b>夏日海军领三视图候选 #A–#C</b></td><td class="mono tiny">Codex CLI Image</td><td><span class="receipt completed">COMPLETED</span></td><td class="mono">¥0.45</td><td class="mono">14.2s</td></tr>
+        <tr><td><b>小鲸 VRM BlendShapes 补全</b></td><td class="mono tiny">Hunyuan3D + Blender</td><td><span class="receipt progress">PROCESSING</span></td><td class="mono">¥1.20</td><td class="mono">00:42</td></tr>
+        <tr><td><b>深夜霓虹舞台背景 v2</b></td><td class="mono tiny">Online Image API</td><td><span class="receipt failed">FAILED · 内容审核超时</span></td><td class="mono">¥0.00</td><td class="mono">30.0s</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  WI.$$('#candGrid .cand').forEach((c) => c.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    WI.$$('#candGrid .cand').forEach((x) => x.classList.remove('sel'));
+    c.classList.add('sel');
+  }));
+  WI.$('#genBtn').onclick = () => {
+    const row = WI.h(`<tr><td><b>新候选任务（已绑定 Character Bible）</b></td><td class="mono tiny">Codex CLI Image</td><td><span class="receipt progress">GENERATING</span></td><td class="mono">¥0.45</td><td class="mono">00:01</td></tr>`);
+    WI.$('#taskTable tbody').prepend(row);
+    WI.toast('任务已入队 · 完成后进入候选区待审', 'ok', 'sparkles');
+  };
+</script>
+</body>
+</html>

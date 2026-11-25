@@ -160,8 +160,8 @@ AI 只能在开发期修改仓库代码；软件编译运行后，线上环境�
    - 每个工单完成后（或遇到阻塞停止时），必须同步更新：`docs/v2/ROADMAP.md`、`docs/v2/TRACEABILITY.md`、`docs/v2/CURRENT.md`、`docs/v2/EVALUATION.md`（及对应 `docs/v2/evidence/` 记录），确保任意新 Agent 不依赖聊天历史即可接手。
    - `docs/v2/` 标准文档真源目录：
      - 产品与需求：`PRODUCT.md`（产品定义）、`REQUIREMENTS.md`（全量原始需求）、`TRACEABILITY.md`（需求工单矩阵）
-     - 架构与规范：`ARCHITECTURE.md`（有效架构）、`adr/`（决策记录）、`OPEN-SOURCE.md`（开源与许可证）、`DESIGN-SYSTEM.md`（曜石设计规范）、`TAKEOVER-AUDIT.md`（V1 基线）、`blueprint/`（蓝图归档）
-     - 执行与验收：`ROADMAP.md`（唯一工单来源）、`CURRENT.md`（当前交接上下文）、`EVALUATION.md`（质量评估）、`evidence/`（实测证据归档）
+     - 架构与规范：`ARCHITECTURE.md`（有效架构）、`adr/`（决策记录，含 UI 主基线 `ADR-003`）、`OPEN-SOURCE.md`（开源与许可证）、`DESIGN-SYSTEM.md`（Tidepaper 主设计规范与多主题体系）、`TAKEOVER-AUDIT.md`（V1 基线）、`blueprint/`（蓝图归档）
+     - 执行与验收：`README.md`（V2 文档总索引）、`ROADMAP.md`（唯一工单来源）、`CURRENT.md`（当前交接上下文）、`EVALUATION.md`（质量评估）、`evidence/`（实测证据归档）
 3. **AI-First 游戏智能红线（ADR-002 D-103）**：
    - 严禁把游戏情景策略写死为固定 if/else 规则树；程序只做观察、前置条件、互斥执行、超时取消与真实回执验证。
    - 模型不可用或异常时，默认安全暂停高级自主决策并告知用户，**严禁未经用户选择静默退化为规则机器人**。

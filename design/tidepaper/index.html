@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原型目录 · 鲸屿 Whale Isle v3</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { overflow-y: auto; }
+  .wrap { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 36px 40px 80px; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .top .mark { width: 34px; height: 34px; border-radius: 10px; background: var(--inverse); color: var(--inverse-ink); display: grid; place-items: center; }
+  .cover { display: grid; grid-template-columns: 1.25fr 1fr; gap: 40px; align-items: center; margin: 46px 0 56px; }
+  .cover h1 { font-size: 64px; line-height: 1.04; letter-spacing: -0.03em; }
+  .cover h1 em { font-style: italic; color: var(--accent); }
+  .cover .lede { font-size: 16px; line-height: 1.8; color: var(--ink-2); margin-top: 22px; max-width: 560px; }
+  .stagebox { position: relative; height: 420px; border-radius: 32px; overflow: hidden; border: 1px solid var(--line);
+    background: radial-gradient(260px 90px at 50% 86%, var(--sea-soft), transparent 70%), linear-gradient(180deg, var(--surface), var(--sunken)); }
+  .stagebox video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scale(1.05) translateY(4%); }
+  .stagebox .sea { position: absolute; left: 0; right: 0; bottom: 0; height: 90px; opacity: .55; }
+  .stagebox .cap { position: absolute; left: 20px; top: 18px; right: 20px; display: flex; justify-content: space-between; }
+  .stagebox .bub { position: absolute; left: 50%; top: 18%; transform: translateX(-10%); padding: 9px 14px; border-radius: 16px 16px 16px 4px; background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--shadow-2); font-size: 13px; animation: float 4s ease-in-out infinite; max-width: 240px; }
+  .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+  .principles > div { background: var(--surface); padding: 20px; }
+  .principles .n { font-family: var(--font-display); font-size: 13px; color: var(--accent); font-style: italic; }
+  .principles h3 { margin: 6px 0 6px; font-family: var(--font-display); font-size: 17px; }
+  .group { margin-top: 44px; }
+  .group-h { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
+  .group-h .idx { font-family: var(--font-display); font-style: italic; color: var(--ink-3); font-size: 15px; }
+  .group-h h2 { font-size: 24px; }
+  .group-h .line { flex: 1; height: 1px; background: var(--line); align-self: center; }
+  .pages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .pg { display: flex; flex-direction: column; gap: 10px; padding: 18px 18px 16px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--surface); transition: all var(--t-med) var(--ease); position: relative; }
+  .pg:hover { transform: translateY(-3px); box-shadow: var(--shadow-2); border-color: var(--line-2); }
+  .pg:hover .go { opacity: 1; transform: none; }
+  .pg .go { position: absolute; right: 16px; top: 18px; opacity: 0; transform: translateX(-4px); transition: all var(--t-med) var(--ease); color: var(--accent); }
+  .pg h3 { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
+  .pg p { font-size: 12.5px; color: var(--ink-2); line-height: 1.65; }
+  .pg .file { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); margin-top: auto; }
+  .accents { display: flex; gap: 6px; }
+  .accents button { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line-2); cursor: pointer; transition: transform var(--t-fast) var(--ease-spring); }
+  .accents button:hover { transform: scale(1.15); }
+  .accents button.on { box-shadow: 0 0 0 2px var(--ink-1); }
+  .foot { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; gap: 16px; color: var(--ink-3); font-size: 12px; }
+  @media (max-width: 1000px) { .cover { grid-template-columns: 1fr; } .pages { grid-template-columns: repeat(2, 1fr); } .principles { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body data-shell="none">
+<div class="wrap">
+  <div class="top">
+    <div class="mark"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14c2.5 0 3-3 5.5-3S11 14 13.5 14 17 9 21 9"/><path d="M14.5 5.5c1-1.4 2.6-2 4-1.6M17 3.6c.2 1 .1 2-.5 2.8"/><path d="M3 19c2 0 2.6-1.6 4.5-1.6S10 19 12 19s2.6-1.6 4.5-1.6S19 19 21 19"/></svg></div>
+    <div><div class="display" style="font-size:17px;line-height:1">鲸屿 Whale Isle</div><div class="eyebrow" style="margin-top:3px">Design v3 · 潮汐纸 Tidepaper · 高保真交互原型</div></div>
+    <span class="spacer"></span>
+    <div class="accents" id="accents">
+      <button data-a="coral" style="background:#E5603F" data-tip="珊瑚"></button>
+      <button data-a="sea" style="background:#1D7A8A" data-tip="海蓝"></button>
+      <button data-a="whale" style="background:#3260C9" data-tip="鲸蓝"></button>
+      <button data-a="kelp" style="background:#3C8A58" data-tip="苔绿"></button>
+      <button data-a="plum" style="background:#7A5AB0" data-tip="紫藤"></button>
+    </div>
+    <button class="btn sm" id="themeBtn"><i data-lucide="moon" class="ic-sm"></i>夜潮</button>
+    <a class="btn sm primary" href="home.html">进入中控台<i data-lucide="arrow-right" class="ic-sm"></i></a>
+  </div>
+
+  <section class="cover">
+    <div class="rise">
+      <div class="eyebrow"><span class="dot live pulse"></span>AI Companion &amp; Digital Life Platform</div>
+      <h1 style="margin-top:18px">一个 AI，<br><em>多种身体。</em></h1>
+      <p class="lede">小鲸有稳定的身份、人格、记忆与声音；她住在你的桌面，也在星露谷里种地，偶尔在直播间唱歌。这份原型覆盖鲸屿 V2 蓝图的全部产品界面——从首次相遇，到她自己进化。</p>
+      <div class="row gap-8" style="margin-top:26px">
+        <a class="btn lg accent" href="home.html"><i data-lucide="compass"></i>从总览开始</a>
+        <a class="btn lg" href="pet-stage.html"><i data-lucide="app-window"></i>看看桌面上的她</a>
+        <a class="btn lg ghost" href="onboarding.html"><i data-lucide="sparkles"></i>首次启动</a>
+      </div>
+      <div class="row gap-16 tiny faint" style="margin-top:22px"><span><span class="kbd">⌘K</span> 命令面板</span><span><span class="kbd">⇧Esc</span> 紧急停止</span><span><span class="kbd">⌘⇧L</span> 深浅色</span></div>
+    </div>
+    <div class="stagebox rise rise-2">
+      <div class="cap"><span class="chip sm"><span class="dot ok pulse"></span>desktop-2d · idle</span><span class="lic devonly">DEV_ONLY_NON_COMMERCIAL</span></div>
+      <video id="coverPet" data-clip="点击回应-元气挥手" autoplay loop muted playsinline></video>
+      <div class="bub" id="coverBub">哼，终于想起来看我了？</div>
+      <svg class="sea" viewBox="0 0 600 90" preserveAspectRatio="none"><path d="M0 40 Q75 20 150 40 T300 40 T450 40 T600 40 V90 H0Z" fill="var(--sea-soft)"/><path d="M0 58 Q75 42 150 58 T300 58 T450 58 T600 58 V90 H0Z" fill="var(--sea-soft)"/></svg>
+    </div>
+  </section>
+
+  <div class="principles rise rise-3">
+    <div><div class="n">i.</div><h3>角色先于功能</h3><p class="small muted">先告诉你她在做什么、为什么，再给你指标。</p></div>
+    <div><div class="n">ii.</div><h3>诚实的回执</h3><p class="small muted">只认真实执行回执，沙盒永远标注为沙盒。</p></div>
+    <div><div class="n">iii.</div><h3>控制权在你</h3><p class="small muted">随时停止、暂停、接管；对外动作必经审批。</p></div>
+    <div><div class="n">iv.</div><h3>授权优先</h3><p class="small muted">每一个素材、声音、歌曲都有来源和许可。</p></div>
+  </div>
+
+  <div id="groups"></div>
+
+  <div class="foot"><span>设计规范：<a class="t-accent" href="SPEC.md">SPEC.md</a></span><span>令牌：tokens.css</span><span>外壳：shell.js</span><span class="spacer"></span><span>依据 docs/Whale-Isle-V2-Blueprint · 2026-11</span></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  const G = [
+    ['此刻', 'Now', [
+      ['home', '总览', 'compass', '她此刻在每个身体里做什么、心情、内心戏、今日日记与运行健康。'],
+      ['chat', '对话', 'message-circle', '流式内心戏、工具调用与回执、意图识别（建议 / 指令）、语音打断。'],
+    ]],
+    ['角色', 'Character', [
+      ['character', '角色档案', 'user-round', '身份、人格特质、价值与边界、偏好历史、Character Bible 与版本回滚。'],
+      ['voice', '声音与表演', 'audio-lines', 'Voice Profile、说话风格、TTS 路由、试听台、唱歌、动作仲裁与语音锁。'],
+      ['memory', '记忆', 'database', '五类记忆、图谱与时间线、纠正 / 固定 / 删除、常客记仇账本。'],
+    ]],
+    ['化身', 'Embodiment', [
+      ['embodiment', '化身与动作库', 'shapes', '桌宠 / 星露谷 / 舞台化身，114 个动作即点即播，情绪与事件映射。'],
+      ['pet-stage', '桌宠舞台', 'app-window', '独立窗口：桌面上的小鲸，可拖拽、右键、双轨气泡与游戏状态气泡。'],
+      ['tray', '菜单栏托盘', 'panel-top', '独立窗口：一眼看状态，快捷安静、暂停、接管与开播。'],
+    ]],
+    ['生活', 'Digital Life', [
+      ['game', '游戏共玩', 'gamepad-2', '控制权 HUD、目标栈、方案比较与理由、实时回执、共玩任务板。'],
+      ['knowledge', '攻略与心得', 'book-open', '带版本与置信度的攻略库、经验心得、卡死台账与回归剧本。'],
+      ['live', '直播间', 'radio', '导演台：注意力分档弹幕、语音队列、礼物合并、点歌与授权检查。'],
+      ['obs-overlay', 'OBS 叠加层', 'video', '独立窗口：透明图层，歌词卡、点歌卡、礼物动画与安全区。'],
+      ['life', '数字生活', 'sun-medium', '日程、内容探索、平台能力矩阵、草稿审批与浏览器租约。'],
+      ['remote', '手机远程', 'smartphone', '独立窗口：手机上摸头投喂、审批与游戏遥控。'],
+    ]],
+    ['创作', 'Creative', [
+      ['studio', '创作工坊', 'wand-sparkles', '五个工作室、生成任务、候选审阅、像素 Sprite 与 3D 流水线。'],
+      ['assets', '资产库', 'package', '版本、Hash、来源与许可；NC 素材进入商业包会被阻断。'],
+    ]],
+    ['能力', 'Agent', [
+      ['providers', '模型与饭碗', 'bot', '两步式 Provider、六角色路由、干饭套餐、每日饭碗与消耗。'],
+      ['plugins', '插件 · MCP · 技能', 'puzzle', '权限清单、进程隔离、MCP 双向、Skills 启用范围。'],
+      ['harness', 'Harness 智能体', 'square-terminal', 'ACP 接入的 Coding Agent、实时会话与工具调用审批。'],
+      ['devices', '设备与租约', 'monitor-smartphone', '设备节点、Computer Use 租约、游戏节点与联机兼容检查。'],
+    ]],
+    ['治理', 'Governance', [
+      ['security', '安全与授权', 'shield-check', 'P0–P5 策略、审批中心、凭证库、审计与安全事件。'],
+      ['evolution', '进化引擎', 'dna', '独立研发平面：Issue → PR → 门禁 → 发布 / 回滚，L1–L5。'],
+      ['settings', '设置', 'settings-2', '外观主题、快捷键、音频设备、隐私与远程访问。'],
+      ['onboarding', '首次启动引导', 'sparkles', '独立窗口：认识小鲸、配置模型与声音、安装 Mod、了解停止键。'],
+    ]],
+  ];
+  WI.$('#groups').innerHTML = G.map((g, gi) => `
+    <section class="group"><div class="group-h"><span class="idx">0${gi + 1}</span><h2>${g[0]}</h2><span class="eyebrow">${g[1]}</span><span class="line"></span><span class="tiny faint">${g[2].length} 个界面</span></div>
+    <div class="pages">${g[2].map((p) => `<a class="pg" href="${p[0]}.html"><i data-lucide="arrow-up-right" class="go"></i><div class="tile"><i data-lucide="${p[2]}"></i></div><h3>${p[1]}</h3><p>${p[3]}</p><span class="file">${p[0]}.html</span></a>`).join('')}</div></section>`).join('');
+  WI.icons();
+
+  const tb = WI.$('#themeBtn');
+  const syncT = () => { const d = document.documentElement.dataset.theme === 'dark'; tb.innerHTML = `<i data-lucide="${d ? 'sun' : 'moon'}" class="ic-sm"></i>${d ? '晨雾' : '夜潮'}`; WI.icons(); };
+  tb.onclick = () => { WI.toggleTheme(); syncT(); }; syncT();
+  const syncA = () => WI.$$('#accents button').forEach((b) => b.classList.toggle('on', b.dataset.a === document.documentElement.dataset.accent));
+  WI.$('#accents').onclick = (e) => { const b = e.target.closest('button'); if (b) { WI.setAccent(b.dataset.a); syncA(); } }; syncA();
+
+  const lines = ['哼，终于想起来看我了？', '今天的饭……还够吃吗？', '星露谷的防风草我已经浇了一半了。', '不许叫我大肥鱼！'];
+  let li = 0; setInterval(() => { li = (li + 1) % lines.length; WI.$('#coverBub').textContent = lines[li]; }, 4000);
+</script>
+</body>
+</html>

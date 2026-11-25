@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>资产库 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .a-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .a-card { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+  .a-card.restricted { border-color: var(--sun-line); }
+  @media (max-width: 1080px) { .a-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body data-page="assets" data-crumb="创作 / 资产库">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="package" class="ic-xs"></i>Asset Registry &amp; Provenance Gate</div>
+      <h1>每个文件都有版本、Hash、来源与许可边界</h1>
+      <p>代码仓库是 MIT 不代表里面的美术和声音都能商用直播。资产分为「开发测试包 / 个人使用包 / 商业发布包」三档，未通过授权门禁的素材在打包时会被红色强制阻断。</p>
+    </div>
+    <div class="actions">
+      <button class="btn sm" data-open="gateDemoModal"><i data-lucide="shield-alert" class="ic-sm t-rose"></i>演示 NC 素材阻断</button>
+      <a class="btn sm primary" href="studio.html"><i data-lucide="wand-sparkles" class="ic-sm"></i>前往创作工坊</a>
+    </div>
+  </div>
+
+  <!-- 筛选与资产包切换 -->
+  <div class="row wrap gap-12 rise rise-1" style="margin-bottom:16px">
+    <div class="seg" id="packSeg">
+      <button class="on" data-v="all">全部资产</button>
+      <button data-v="dev">Dev / Test 包</button>
+      <button data-v="personal">Personal 个人包</button>
+      <button data-v="release">Commercial 发布包</button>
+    </div>
+    <div class="row wrap gap-6" data-chips="single" id="typeChips">
+      <span class="chip click on" data-v="all">全类型</span>
+      <span class="chip click" data-v="animation">animation</span>
+      <span class="chip click" data-v="sprite">sprite</span>
+      <span class="chip click" data-v="model3d">model3d</span>
+      <span class="chip click" data-v="audio">audio</span>
+      <span class="chip click" data-v="scene">scene</span>
+    </div>
+  </div>
+
+  <div class="a-grid rise rise-2" id="assetGrid">
+    <article class="card a-card restricted hover" data-pack="dev" data-type="animation" data-open="provDrawer">
+      <div class="row between"><span class="chip sm">animation · 114 clips</span><span class="lic devonly">DEV_ONLY_NON_COMMERCIAL</span></div>
+      <b>blue-whale-maid 桌宠动画包</b>
+      <div class="tiny muted">来源：PC2005-cloud/dsh-pet (CC BY-NC-SA 4.0) · 不可用于商业或收益直播。</div>
+      <div class="row gap-6 tiny mono faint"><span>v3.2</span><span>·</span><span>sha256: 9f41…b8a2</span><span class="spacer"></span><span class="receipt completed">PASSED (DEV)</span></div>
+    </article>
+
+    <article class="card a-card hover" data-pack="release" data-type="sprite" data-open="provDrawer">
+      <div class="row between"><span class="chip sm">sprite · 16×32</span><span class="lic own">OWN_COMMERCIAL</span></div>
+      <b>小鲸原创星露谷像素形象 v1.4</b>
+      <div class="tiny muted">来源：创作工坊自制 + Character Bible v2 · 已过 Mod 像素网格与锚点 QA。</div>
+      <div class="row gap-6 tiny mono faint"><span>v1.4</span><span>·</span><span>sha256: 3a09…c12d</span><span class="spacer"></span><span class="receipt completed">PUBLISHED</span></div>
+    </article>
+
+    <article class="card a-card hover" data-pack="personal" data-type="audio" data-open="provDrawer">
+      <div class="row between"><span class="chip sm">audio · 5 refs</span><span class="lic own">自有声线授权</span></div>
+      <b>小鲸 GPT-SoVITS v2 情绪参考音</b>
+      <div class="tiny muted">5 组情绪样本（开心/生气/安慰/困倦/平静），绑定授权签署记录。</div>
+      <div class="row gap-6 tiny mono faint"><span>v2.0</span><span>·</span><span>sha256: 7e20…410f</span><span class="spacer"></span><span class="receipt completed">PASSED</span></div>
+    </article>
+
+    <article class="card a-card hover" data-pack="release" data-type="scene" data-open="provDrawer">
+      <div class="row between"><span class="chip sm">scene · OBS</span><span class="lic apache">APACHE-2.0</span></div>
+      <b>星露谷夜航直播边框与歌词槽</b>
+      <div class="tiny muted">继承 dsh-video-storyboard 视觉规范（保留 NOTICE 与署名）。</div>
+      <div class="row gap-6 tiny mono faint"><span>v2.1</span><span>·</span><span>sha256: 5c18…90e1</span><span class="spacer"></span><span class="receipt completed">PUBLISHED</span></div>
+    </article>
+
+    <article class="card a-card hover" data-pack="personal" data-type="model3d" data-open="provDrawer">
+      <div class="row between"><span class="chip sm">model3d · VRM</span><span class="lic own">自有生成</span></div>
+      <b>小鲸 3D 舞台模型候选 (Hunyuan3D)</b>
+      <div class="tiny muted">Blender 后处理完成骨骼，U/E 口型 BlendShape 待补充复核。</div>
+      <div class="row gap-6 tiny mono faint"><span>v0.8</span><span>·</span><span>sha256: 1d77…a03c</span><span class="spacer"></span><span class="receipt uncertain">REVIEW_REQ</span></div>
+    </article>
+
+    <article class="card a-card hover" data-pack="dev" data-type="audio" data-open="provDrawer">
+      <div class="row between"><span class="chip sm">audio · 曲库</span><span class="lic blocked">NO_LIVE_RIGHTS</span></div>
+      <b>《晴天》伴奏（未获直播授权）</b>
+      <div class="tiny rose">已标注为 restricted，点歌台检测到此曲时自动拦截禁止演唱。</div>
+      <div class="row gap-6 tiny mono faint"><span>v1.0</span><span>·</span><span>sha256: 88ab…0f19</span><span class="spacer"></span><span class="receipt failed">RESTRICTED</span></div>
+    </article>
+  </div>
+</main>
+
+<!-- Provenance 详情抽屉 -->
+<div class="drawer" id="provDrawer">
+  <div class="drawer-h"><h3>资产来源与版本回滚 (Provenance)</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="drawer-b stack-16">
+    <div class="row gap-6"><span class="lic devonly">CC BY-NC-SA 4.0</span><span class="chip sm">DEV_ONLY_NON_COMMERCIAL</span></div>
+    <dl class="kv">
+      <dt>资产 ID</dt><dd class="mono">ast_bwm_pack_v3</dd>
+      <dt>仓库 / 来源</dt><dd>PC2005-cloud/dsh-pet</dd>
+      <dt>商业使用</dt><dd class="t-rose"><b>禁止（NC 条款）</b></dd>
+      <dt>公开直播使用</dt><dd class="t-rose"><b>须先替换为自制商业发布包</b></dd>
+      <dt>SHA-256</dt><dd class="mono tiny">9f4120c8…74d1b8a2</dd>
+      <dt>校验状态</dt><dd><span class="receipt completed">PASSED (DEV)</span></dd>
+    </dl>
+    <hr>
+    <div class="eyebrow">版本历史（支持安全回滚）</div>
+    <div class="list" style="margin:0 -20px">
+      <div class="li on"><div class="body"><b>v3.2 · 当前</b><span>114/114 clips 完整覆盖校验通过</span></div><span class="chip sm accent">Active</span></div>
+      <div class="li"><div class="body"><b>v3.1</b><span>修正睡眠 3 段接力脚底基准线</span></div><button class="btn xs" data-close data-toast="已回滚到 v3.1" data-kind="warn">回滚</button></div>
+    </div>
+  </div>
+  <div class="drawer-f"><button class="btn sm" data-close>关闭</button></div>
+</div>
+
+<!-- 许可门禁阻断演示模态 -->
+<div class="modal" id="gateDemoModal">
+  <div class="modal-h"><i data-lucide="shield-x" class="t-rose"></i><h3>许可门禁已阻断：禁止加入商业发布包</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="callout danger">
+      <i data-lucide="octagon-x" class="ic-sm"></i>
+      <div class="small"><b>阻断原因：</b>你尝试将 <span class="mono">blue-whale-maid</span>（授权：<span class="lic devonly">CC BY-NC-SA 4.0</span>）打包进 <b>Commercial / Release Asset Pack</b>。依据 Blueprint 11 §8 与开源合规门禁，非商业（NC）素材禁止进入商业与公开直播发布包。</div>
+    </div>
+    <p class="small muted">建议处理：前往「创作工坊」生成或导入自制可商用动画包，再一键替换。</p>
+  </div>
+  <div class="modal-f">
+    <button class="btn sm" data-close>我知道了</button>
+    <button class="btn sm primary" disabled data-tip="NC 素材已锁定禁止强行打包">确认打包（已阻断）</button>
+  </div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  function filterAssets() {
+    const p = WI.$('#packSeg button.on').dataset.v;
+    const t = WI.$('#typeChips .chip.on').dataset.v;
+    WI.$$('#assetGrid .a-card').forEach((c) => {
+      const ok = (p === 'all' || c.dataset.pack === p) && (t === 'all' || c.dataset.type === t);
+      c.classList.toggle('hidden', !ok);
+    });
+  }
+  WI.$('#packSeg').addEventListener('change', filterAssets);
+  WI.$('#typeChips').addEventListener('change', filterAssets);
+</script>
+</body>
+</html>

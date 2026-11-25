@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>首次启动引导 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { overflow-y: auto; }
+  .ob-wrap { min-height: 100vh; display: grid; place-items: center; padding: 28px; }
+  .ob-card { width: min(980px, 100%); min-height: 580px; border-radius: var(--r-2xl); background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--shadow-3); display: grid; grid-template-columns: 270px 1fr; overflow: hidden; }
+  .ob-rail { background: var(--sunken); border-right: 1px solid var(--line); padding: 24px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .ob-step { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); font-size: 12.5px; color: var(--ink-3); cursor: pointer; }
+  .ob-step.on { background: var(--surface-2); color: var(--ink-1); font-weight: 600; box-shadow: var(--shadow-1); }
+  .ob-step.done { color: var(--kelp); }
+  .ob-step .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line-3); }
+  .ob-step.on .n { background: var(--accent); border-color: transparent; color: #fff; }
+  .ob-step.done .n { background: var(--kelp-soft); border-color: var(--kelp-line); color: var(--kelp); }
+  .ob-main { padding: 32px 36px; display: flex; flex-direction: column; }
+  .ob-pane { display: none; flex: 1; flex-direction: column; gap: 16px; }
+  .ob-pane.on { display: flex; animation: rise .3s var(--ease-out); }
+  .ob-pet { height: 220px; border-radius: var(--r-xl); background: radial-gradient(140px 45px at 50% 85%, var(--sea-soft), transparent), var(--sunken); border: 1px solid var(--line); overflow: hidden; }
+  .ob-pet video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.12); }
+  @media (max-width: 820px) { .ob-card { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-shell="none">
+<div class="ob-wrap">
+  <div class="ob-card">
+    <aside class="ob-rail">
+      <div class="row gap-8" style="margin-bottom:14px">
+        <i data-lucide="waves" class="t-accent"></i>
+        <b class="display" style="font-size:16px">鲸屿 · 首次相遇</b>
+      </div>
+      <div id="obSteps">
+        <div class="ob-step on" data-i="0"><span class="n">1</span>欢迎来到鲸屿</div>
+        <div class="ob-step" data-i="1"><span class="n">2</span>认识主角色「小鲸」</div>
+        <div class="ob-step" data-i="2"><span class="n">3</span>形象包与许可说明</div>
+        <div class="ob-step" data-i="3"><span class="n">4</span>配置模型 Provider</div>
+        <div class="ob-step" data-i="4"><span class="n">5</span>声音服务准备</div>
+        <div class="ob-step" data-i="5"><span class="n">6</span>星露谷 Mod 一键安装</div>
+        <div class="ob-step" data-i="6"><span class="n">7</span>认识你的紧急停止键</div>
+        <div class="ob-step" data-i="7"><span class="n">8</span>准备就绪</div>
+      </div>
+      <div style="margin-top:auto" class="row gap-8">
+        <button class="btn xs ghost" onclick="WI.toggleTheme()"><i data-lucide="moon" class="ic-xs"></i>深浅</button>
+        <a class="btn xs ghost" href="index.html">退出到目录</a>
+      </div>
+    </aside>
+
+    <div class="ob-main">
+      <!-- 0 -->
+      <div class="ob-pane on" data-i="0">
+        <div class="eyebrow">Step 1 / 8 · 开箱即用</div>
+        <h1>一个 AI，多种身体。</h1>
+        <p class="muted">所有代码、桌宠素材与音频服务均已自包含在安装包中。接下来只需要 2 分钟，帮小鲸接上你的模型密钥并检查控制安全边界。</p>
+        <div class="ob-pet"><video data-clip="蓝鲸现世" autoplay loop muted playsinline></video></div>
+      </div>
+      <!-- 1 -->
+      <div class="ob-pane" data-i="1">
+        <div class="eyebrow">Step 2 / 8 · Single Primary Character First</div>
+        <h2>这是小鲸（傲娇干饭蓝鲸女仆）</h2>
+        <p class="muted">她有自己的记忆、情绪和偏好，会陪你写代码、在星露谷种地，也可以选择保持沉默。记住千万别叫她「大肥鱼」……除非你想被水枪滋一脸。</p>
+        <div class="ob-pet"><video data-clip="点击回应-元气挥手" autoplay loop muted playsinline></video></div>
+      </div>
+      <!-- 2 -->
+      <div class="ob-pane" data-i="2">
+        <div class="eyebrow">Step 3 / 8 · 资产授权透明</div>
+        <h2>选择桌宠初始形象包</h2>
+        <div class="callout warn"><i data-lucide="alert-triangle" class="ic-sm"></i><div class="small">默认内置 <span class="mono">blue-whale-maid</span> 动画包属于 <b>CC BY-NC-SA 4.0 (DEV_ONLY_NON_COMMERCIAL)</b>，仅限个人体验与本地测试；若未来用于商业直播，请先在「创作工坊 / 资产库」一键替换为自制素材。</div></div>
+        <label class="card pad row gap-12" style="cursor:pointer"><input type="radio" name="pack" checked><div><b>默认测试动画包 (114 clips)</b><div class="tiny faint">本地个人免费体验，已标记非商用范围</div></div></label>
+        <label class="card pad row gap-12" style="cursor:pointer"><input type="radio" name="pack"><div><b>导入我的原创素材包</b><div class="tiny faint">需含 manifest.json 与 provenance.json</div></div></label>
+      </div>
+      <!-- 3 -->
+      <div class="ob-pane" data-i="3">
+        <div class="eyebrow">Step 4 / 8 · Model Gateway</div>
+        <h2>接入你的主力大模型</h2>
+        <p class="small muted">密钥仅写入系统钥匙串 (OS Keychain)，不会落盘任何明文配置文件。</p>
+        <div class="field"><label>Provider 预设</label><select class="select"><option>DeepSeek Official (推荐 · 均衡性价比)</option><option>Moonshot Kimi</option><option>OpenAI / OpenRouter</option></select></div>
+        <div class="field"><label>API Key</label><input class="input mono" type="password" value="sk-demo-keychain-protected"></div>
+        <button class="btn sm" style="align-self:flex-start" data-toast="连通测试成功 · 延迟 175ms"><i data-lucide="activity" class="ic-xs"></i>测试连通性</button>
+      </div>
+      <!-- 4 -->
+      <div class="ob-pane" data-i="4">
+        <div class="eyebrow">Step 5 / 8 · Voice Runtime</div>
+        <h2>给小鲸配置声音</h2>
+        <label class="card pad row gap-12"><input type="radio" name="tts" checked><div><b>云端 TTS 兜底 + 稍后下载本地 GPT-SoVITS v2</b><div class="tiny faint">立即开箱可用，免等待 2GB 权重下载</div></div></label>
+        <label class="card pad row gap-12"><input type="radio" name="tts"><div><b>立即下载本地 GPT-SoVITS v2 (Apple MPS)</b><div class="tiny faint">首包 ~410ms，完全离线</div></div></label>
+      </div>
+      <!-- 5 -->
+      <div class="ob-pane" data-i="5">
+        <div class="eyebrow">Step 6 / 8 · 可选游戏连接</div>
+        <h2>星露谷物语与 BWF Mod 一键检测</h2>
+        <div class="card sunken pad stack-8">
+          <div class="row between"><b class="small">检测到本地 Stardew Valley 1.6 + SMAPI 4.x</b><span class="chip sm kelp">就绪</span></div>
+          <div class="tiny muted">安装包自带 MIT 协议的 <span class="mono">BlindWhaleFarmer</span> 与 <span class="mono">stardew-avatar-sync</span>，可一键复制到游戏 Mods 目录。</div>
+        </div>
+        <button class="btn sm primary" style="align-self:flex-start" data-toast="已安装并校验 Mod 到 Stardew Valley/Mods"><i data-lucide="download" class="ic-xs"></i>一键安装 Mod (或稍后跳过)</button>
+      </div>
+      <!-- 6 -->
+      <div class="ob-pane" data-i="6">
+        <div class="eyebrow">Step 7 / 8 · 控制权与安全</div>
+        <h2>永远记得这颗紧急停止键</h2>
+        <p class="small muted">无论小鲸正在游戏里浇水、操作浏览器还是说话，只要按下 <span class="kbd">⇧ Esc</span> 或顶栏红色停止按钮，一切动作都会立刻终止。</p>
+        <button class="btn-stop" style="align-self:flex-start" onclick="WI.toast('演练成功！AI 控制权在 <50ms 内停止','ok','shield-check')"><i data-lucide="octagon-x" class="ic-sm"></i>试按一次紧急停止 <span class="kbd">⇧Esc</span></button>
+      </div>
+      <!-- 7 -->
+      <div class="ob-pane" data-i="7">
+        <div class="eyebrow">Step 8 / 8 · 一切就绪</div>
+        <h2>小鲸已经在桌面等你了</h2>
+        <div class="ob-pet"><video data-clip="工作状态-雀跃庆祝" autoplay loop muted playsinline></video></div>
+        <p class="small muted">你可以先进入中控台总览，或者直接把透明桌宠唤到你的屏幕上。</p>
+      </div>
+
+      <div class="row" style="margin-top:auto;padding-top:20px;border-top:1px solid var(--line)">
+        <button class="btn sm" id="prevBtn" disabled>上一步</button>
+        <span class="spacer"></span>
+        <button class="btn sm ghost" id="skipBtn">跳过此步</button>
+        <button class="btn sm primary" id="nextBtn">下一步</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  let cur = 0; const max = 7;
+  function go(n) {
+    cur = Math.max(0, Math.min(max, n));
+    WI.$$('.ob-pane').forEach((p) => p.classList.toggle('on', +p.dataset.i === cur));
+    WI.$$('#obSteps .ob-step').forEach((s) => {
+      const i = +s.dataset.i;
+      s.classList.toggle('on', i === cur);
+      s.classList.toggle('done', i < cur);
+    });
+    WI.$('#prevBtn').disabled = cur === 0;
+    WI.$('#skipBtn').style.display = cur === max ? 'none' : '';
+    WI.$('#nextBtn').textContent = cur === max ? '进入总览' : '下一步';
+  }
+  WI.$('#prevBtn').onclick = () => go(cur - 1);
+  WI.$('#skipBtn').onclick = () => go(cur + 1);
+  WI.$('#nextBtn').onclick = () => (cur === max ? (location.href = 'home.html') : go(cur + 1));
+  WI.$$('#obSteps .ob-step').forEach((s) => (s.onclick = () => go(+s.dataset.i)));
+</script>
+</body>
+</html>

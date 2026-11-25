@@ -1,7 +1,8 @@
-# 鲸屿 Whale Isle · Design v3 规范「潮汐纸 Tidepaper」
+# 鲸屿 Whale Isle · 潮汐纸 Tidepaper 设计规范（主 UI/UX 参考基线）
 
-> 依据：`docs/Whale-Isle-V2-Blueprint/*`（V2 蓝图 + V2.1 自主游戏）、`docs/PRODUCT-DESIGN.md`（D1–D16 用户决策）、`docs/ROADMAP.md`（已实现功能）。
-> 本目录是**高保真可交互原型**（纯静态 HTML + `tokens.css` + `shell.js` + lucide），双击任意 HTML 用 Chrome 打开即可。
+> 依据：`docs/v2/blueprint/*`（V2 蓝图 + V2.1 自主游戏）、`docs/PRODUCT-DESIGN.md`（D1–D16 用户决策）、`docs/ROADMAP.md`（已实现功能）。  
+> **定位声明（[ADR-003](../../docs/v2/adr/ADR-003-uiux-tidepaper-primary-and-themes.md)）**：本目录是 Whale Isle V2 的**主 UI/UX 参考设计高保真原型**（原 `design/v3/`），`design/theme-obsidian-tide/`、`design/theme-tide-deep/` 与 `design/theme-obsidian-v4/` 保留为**可选主题**。**本原型仅作高保真参考，实际 Electron + React 开发须结合真实后端成熟度、硬件边界、性能与无障碍需求因地制宜演进，严禁照搬未接线空壳或伪造指标。**  
+> 本目录为纯静态 HTML + `tokens.css` + `shell.js` + lucide，双击任意 HTML 用 Chrome 打开即可。
 
 ---
 
@@ -21,7 +22,7 @@
 ## 2. 文件结构
 
 ```
-design/v3/
+design/tidepaper/
 ├── tokens.css        设计令牌 + 全部组件（页面不得重复定义）
 ├── shell.js          外壳（侧栏/顶栏）、主题、⌘K、审批收件箱、紧急停止、通用交互接线
 ├── vendor/lucide.min.js

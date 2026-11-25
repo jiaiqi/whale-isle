@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设置 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .set-grid { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: start; }
+  .accent-swatches { display: flex; gap: 10px; }
+  .ac-btn { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); cursor: pointer; font-size: 12.5px; }
+  .ac-btn.on { border-color: var(--accent-line); box-shadow: var(--ring); font-weight: 600; }
+  .ac-btn i { width: 14px; height: 14px; border-radius: 50%; }
+  .key-btn { min-width: 110px; justify-content: center; font-family: var(--font-mono); }
+  @media (max-width: 900px) { .set-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="settings" data-crumb="治理 / 设置">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="settings-2" class="ic-xs"></i>Preferences &amp; Shortcuts</div>
+      <h1>外观、快捷键与本地隐私设置</h1>
+      <p>这里的颜色与主题切换会立即保存到本地并同步到全站其他页面；导出配置默认剔除全部 API Key 与私密数据。</p>
+    </div>
+    <div class="actions">
+      <a class="btn sm" href="onboarding.html"><i data-lucide="sparkles" class="ic-sm"></i>重新打开首次引导</a>
+    </div>
+  </div>
+
+  <div class="set-grid rise rise-1">
+    <aside class="card pad">
+      <div class="list" style="margin:-10px">
+        <a class="li click on" href="#look"><div class="body"><b>外观与主题</b></div></a>
+        <a class="li click" href="#keys"><div class="body"><b>游戏控制快捷键</b></div></a>
+        <a class="li click" href="#remote"><div class="body"><b>WebUI 远程访问</b></div></a>
+        <a class="li click" href="#privacy"><div class="body"><b>导出与数据</b></div></a>
+      </div>
+    </aside>
+
+    <div class="col gap-16">
+      <section class="card pad stack-16" id="look">
+        <h3>外观与潮汐纸主题</h3>
+        <div class="field"><label>明暗模式</label>
+          <div class="seg lg" id="themeSeg" style="align-self:flex-start">
+            <button class="on" data-v="light"><i data-lucide="sun" class="ic-sm"></i>晨雾 Light</button>
+            <button data-v="dark"><i data-lucide="moon" class="ic-sm"></i>夜潮 Dark</button>
+          </div>
+        </div>
+        <div class="field"><label>强调色（全站实时生效）</label>
+          <div class="accent-swatches" id="accBox">
+            <button class="ac-btn on" data-a="coral"><i style="background:#E5603F"></i>珊瑚</button>
+            <button class="ac-btn" data-a="sea"><i style="background:#1D7A8A"></i>海蓝</button>
+            <button class="ac-btn" data-a="whale"><i style="background:#3260C9"></i>鲸蓝</button>
+            <button class="ac-btn" data-a="kelp"><i style="background:#3C8A58"></i>苔绿</button>
+            <button class="ac-btn" data-a="plum"><i style="background:#7A5AB0"></i>紫藤</button>
+          </div>
+        </div>
+        <div class="row between"><div><b class="small">紧凑信息密度</b><div class="tiny faint">缩小字号与内边距，适合多屏控制台</div></div><label class="switch"><input type="checkbox" id="densSw"><span class="tr"></span></label></div>
+      </section>
+
+      <section class="card pad stack-12" id="keys">
+        <div class="row between"><h3>全局与游戏控制快捷键</h3><span class="tiny faint">点击按钮后按任意键重新录制</span></div>
+        <div class="row between"><span>紧急停止 AI 全部控制 (Stop)</span><button class="btn sm key-btn" onclick="recordKey(this)">⇧ Esc</button></div>
+        <div class="row between"><span>暂停 / 恢复 AI 自主游戏 (Pause / Resume)</span><button class="btn sm key-btn" onclick="recordKey(this)">F8</button></div>
+        <div class="row between"><span>立即接管游戏角色 (Take Over)</span><button class="btn sm key-btn" onclick="recordKey(this)">T</button></div>
+        <div class="row between"><span>交还控制权给 AI (Release Control)</span><button class="btn sm key-btn" onclick="recordKey(this)">R</button></div>
+      </section>
+
+      <section class="card pad stack-12" id="remote">
+        <div class="row between"><h3>WebUI 局域网远程访问</h3><label class="switch"><input type="checkbox" checked><span class="tr"></span></label></div>
+        <div class="row between card sunken pad" style="padding:10px 14px">
+          <div><div class="tiny faint">当前 6 位配对码（10 分钟有效）</div><b class="mono" style="font-size:18px;letter-spacing:.15em" id="pairCode">482-915</b></div>
+          <div class="row gap-6">
+            <button class="btn xs" onclick="WI.$('#pairCode').textContent=Math.floor(100+Math.random()*900)+'-'+Math.floor(100+Math.random()*900);WI.toast('配对码已刷新')">刷新</button>
+            <a class="btn xs primary" href="remote.html">预览手机端</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="card pad stack-12" id="privacy">
+        <h3>数据备份、迁移与版本信息</h3>
+        <div class="row wrap gap-8">
+          <button class="btn sm" data-toast="已导出脱敏配置包（自动剔除全部 API Key 与 Cookie）"><i data-lucide="download" class="ic-xs"></i>导出不含密钥的配置</button>
+          <button class="btn sm danger-soft" data-toast="已清理临时播放缓存 (142 MB)" data-kind="warn"><i data-lucide="trash-2" class="ic-xs"></i>清理音频与帧缓存</button>
+        </div>
+        <div class="tiny faint mono">Whale Isle Desktop v2.4.1 · Electron 38 · React 19 · SQLite + Dexie.js</div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  const curT = document.documentElement.dataset.theme || 'light';
+  WI.$$('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === curT));
+  WI.$('#themeSeg').addEventListener('change', (e) => WI.setTheme(e.detail));
+
+  const curA = document.documentElement.dataset.accent || 'coral';
+  WI.$$('#accBox .ac-btn').forEach((b) => b.classList.toggle('on', b.dataset.a === curA));
+  WI.$('#accBox').addEventListener('click', (e) => {
+    const b = e.target.closest('.ac-btn'); if (!b) return;
+    WI.$$('#accBox .ac-btn').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on'); WI.setAccent(b.dataset.a);
+    WI.toast('已切换强调色');
+  });
+
+  WI.$('#densSw').checked = document.documentElement.dataset.density === 'compact';
+  WI.$('#densSw').onchange = (e) => {
+    if (e.target.checked) { document.documentElement.dataset.density = 'compact'; localStorage.setItem('wi3-density', 'compact'); }
+    else { delete document.documentElement.dataset.density; localStorage.removeItem('wi3-density'); }
+  };
+
+  window.recordKey = function (btn) {
+    btn.textContent = '请按键…'; btn.classList.add('accent');
+    window.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      btn.textContent = (e.shiftKey ? '⇧ ' : '') + (e.key === ' ' ? 'Space' : e.key.toUpperCase());
+      btn.classList.remove('accent');
+      WI.toast('快捷键已更新为 ' + btn.textContent);
+    }, { once: true });
+  };
+</script>
+</body>
+</html>

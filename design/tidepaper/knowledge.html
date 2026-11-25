@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>攻略与心得 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .k-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .k-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .k-card.conflict { border-color: var(--sun-line); background: linear-gradient(180deg, var(--sun-soft), transparent 60%), var(--surface); }
+  @media (max-width: 980px) { .k-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="knowledge" data-crumb="生活 / 攻略与心得">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="book-open" class="ic-xs"></i>Game Knowledge Base &amp; guide-forager</div>
+      <h1>攻略是参考，经验靠自己摔出来</h1>
+      <p>AI 从 Wiki、小黑盒与自己的游玩经历中学习，但每一条知识都记录版本、Mod 条件、置信度与反例——版本对不上或现场不符时，她会主动说「不盲从攻略」。</p>
+    </div>
+    <div class="actions">
+      <button class="btn" data-open="foragerModal"><i data-lucide="settings-2"></i>采集器设置</button>
+      <button class="btn primary" data-toast="正在增量抓取中文 Wiki 与热榜攻略（仅本地缓存）"><i data-lucide="refresh-cw"></i>立即采集</button>
+    </div>
+  </div>
+
+  <div class="tabs rise rise-1" data-group="ktab">
+    <button class="on" data-tab="guides">攻略库 <span class="cnt">18</span></button>
+    <button data-tab="exp">个人经验心得本 <span class="cnt">24</span></button>
+    <button data-tab="stuck">卡死现场与回归台账 <span class="cnt">6</span></button>
+  </div>
+
+  <!-- Tab 1：攻略库 -->
+  <div class="tab-panel on" data-panel="guides" data-group="ktab">
+    <div class="callout warn" style="margin-bottom:14px">
+      <i data-lucide="alert-triangle" class="ic-sm"></i>
+      <div><b>版本冲突提醒：</b>有 1 条社区攻略针对 <b>Stardew Valley 1.5</b> 编写（茶苗售价规则已于 1.6 下调），已自动标记为「适用性不确定」，AI 在决策中不会直接采信。</div>
+    </div>
+
+    <div class="k-grid">
+      <article class="card k-card hover" data-open="guideDrawer">
+        <div class="row between"><span class="chip sm sea">星露谷中文 Wiki · MediaWiki</span><span class="chip sm kelp">已真实验证 · 置信 0.92</span></div>
+        <h3>春季作物收益与雨天浇水窗口规划</h3>
+        <p class="small muted">含防风草、花椰菜生长天数表与皮埃尔商店营业时段约束；已切分为 6 个按需检索小节。</p>
+        <div class="row gap-8 tiny faint"><span>适用版本：SV 1.6+</span><span>·</span><span>命中检索：14 次</span><span>·</span><span>反例：0</span><span class="spacer"></span><span class="t-accent">查看小节 →</span></div>
+      </article>
+
+      <article class="card k-card hover" data-open="guideDrawer">
+        <div class="row between"><span class="chip sm plum">小黑盒社区攻略</span><span class="chip sm whale">部分验证 · 置信 0.78</span></div>
+        <h3>雨天河口钓鲶鱼拉条节奏与站位</h3>
+        <p class="small muted">推荐镇南河口木桥下段，注意前 2 秒急速上窜；AI 曾记录 1 次反例（无鱼饵时脱钩率偏高）。</p>
+        <div class="row gap-8 tiny faint"><span>适用版本：SV 1.6</span><span>·</span><span>命中检索：8 次</span><span>·</span><span>反例：1</span><span class="spacer"></span><span class="t-accent">查看小节 →</span></div>
+      </article>
+
+      <article class="card k-card conflict hover" data-open="guideDrawer">
+        <div class="row between"><span class="chip sm sun">B 站专栏 · 旧版攻略</span><span class="chip sm sun">版本不匹配 · 不确定</span></div>
+        <h3>茶苗流快速暴富路线（SV 1.5 适用）</h3>
+        <p class="small muted">攻略声称单个茶苗售价 500g，但当前存档为 SV 1.6 实测仅 250g——AI 已标注「观察不符，暂不采信」。</p>
+        <div class="row gap-8 tiny faint"><span>目标版本：SV 1.5</span><span>·</span><span>已拒绝采用：3 次</span><span class="spacer"></span><span class="t-sun">查看冲突依据 →</span></div>
+      </article>
+
+      <article class="card k-card hover" data-open="guideDrawer">
+        <div class="row between"><span class="chip sm">本地游玩沉淀</span><span class="chip sm kelp">置信 0.89</span></div>
+        <h3>矿洞 1–30 层背包满时的现场造箱策略</h3>
+        <p class="small muted">携带 50 木材时可直接在电梯口放置临时储物箱，无需中断下矿回家；须避免放置于 NPC 行走路径上。</p>
+        <div class="row gap-8 tiny faint"><span>Mod 条件：BWF</span><span>·</span><span>命中检索：11 次</span><span class="spacer"></span><span class="t-accent">查看小节 →</span></div>
+      </article>
+    </div>
+  </div>
+
+  <!-- Tab 2：个人经验心得 -->
+  <div class="tab-panel" data-panel="exp" data-group="ktab">
+    <div class="card">
+      <div class="card-h"><h3><i data-lucide="notebook"></i>小鲸的游戏经验本</h3><span class="sub">记录做过什么、观察到什么、为什么失败</span></div>
+      <table class="table">
+        <thead><tr><th>游戏 / 场景</th><th>观察与总结的心得</th><th>失败条件（不再无条件重复）</th><th>结果</th><th>更新时间</th></tr></thead>
+        <tbody>
+          <tr><td><b>星露谷 · 农场东侧</b></td><td>第 18 格旁有一块石头，斜向寻路容易擦边卡住；先往北走 1 格再东移即可稳定绕过</td><td class="tiny faint">连续 2 次坐标零变化</td><td><span class="receipt completed">已生效</span></td><td class="mono tiny faint">今天 22:14</td></tr>
+          <tr><td><b>星露谷 · 河口钓鱼</b></td><td>雨天鲶鱼起步爆发快，未挂玻璃纤维鱼竿与鱼饵时不要硬拼大条</td><td class="tiny faint">无鱼饵状态下 3 次脱钩</td><td><span class="receipt uncertain">待再试</span></td><td class="mono tiny faint">今天 20:57</td></tr>
+          <tr><td><b>星露谷 · 皮埃尔商店</b></td><td>周三关门！周三下午去买种子必然扑空，周二或周四提前规划</td><td class="tiny faint">周三 16:00 门锁无法进入</td><td><span class="receipt completed">已牢记</span></td><td class="mono tiny faint">昨天</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 3：卡死台账 -->
+  <div class="tab-panel" data-panel="stuck" data-group="ktab">
+    <div class="callout info" style="margin-bottom:14px">
+      <i data-lucide="bug" class="ic-sm"></i>
+      <div>来自 <span class="mono">soak:real</span> 的真实卡死现场包（含 <span class="mono">get_state</span> 快照与回执序列），可一键转换为 <span class="mono">stardew-simulator</span> 确定性回归剧本。</div>
+    </div>
+    <div class="card">
+      <table class="table">
+        <thead><tr><th>归一化失败签名</th><th>触发原因</th><th>现场包</th><th>证据类型</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td class="mono tiny">water_tile::stone_edge_stall</td><td>东侧田埂石头碰撞边界判定偏差</td><td class="mono tiny">soak/1125-1512/08-sentinel</td><td><span class="evi real">REAL-DEVICE</span></td><td><button class="btn xs primary" data-toast="已生成确定性回归剧本，可在 mock-harness 运行">转回归剧本</button></td></tr>
+          <tr><td class="mono tiny">clock_stall::pierre_wednesday</td><td>周三闭店仍尝试进门买种循环</td><td class="mono tiny">soak/1125-1127/02-clock</td><td><span class="evi real">REAL-DEVICE</span></td><td><button class="btn xs" data-toast="已生成 PR #219 线索提交进化引擎">送进化引擎</button></td></tr>
+          <tr><td class="mono tiny">repeat_failure::inventory_full_mine</td><td>背包满时未带够木材造箱</td><td class="mono tiny">soak/1125-0926/01-repeat</td><td><span class="evi sim">SIMULATION</span></td><td><span class="chip sm kelp">已在 PR #218 修复</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- 攻略详情抽屉 -->
+<div class="drawer" id="guideDrawer">
+  <div class="drawer-h"><h3>攻略详情与不采信记录</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="drawer-b stack-16">
+    <div class="row gap-6"><span class="chip sm sea">MediaWiki</span><span class="chip sm">SV 1.6+</span><span class="chip sm kelp">置信 0.92</span></div>
+    <p class="small muted">本攻略已由 guide-forager 按小节切块索引（每轮决策仅按需注入 ≤ 2k token 片段，不会整篇硬塞进 Prompt）。</p>
+    <div>
+      <div class="eyebrow" style="margin-bottom:8px">小节切块</div>
+      <div class="stack-8">
+        <div class="card sunken pad" style="padding:10px 12px"><b class="small">1. 春季生长周期对照表</b><div class="tiny faint">防风草 4 天 · 花椰菜 12 天 · 草莓需复活节购入</div></div>
+        <div class="card sunken pad" style="padding:10px 12px"><b class="small">2. 雨天与体力节约技巧</b><div class="tiny faint">提前看电视天气预报，雨天把全部体力投入矿洞或钓鱼</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:8px">AI 何时选择不按照攻略操作</div>
+      <div class="callout warn"><i data-lucide="info" class="ic-sm"></i><span class="tiny">11/24 19:20：攻略建议「优先全买防风草」，但当时用户约定周末需要花椰菜完成收集包，AI 决定改买花椰菜并记录原因。</span></div>
+    </div>
+  </div>
+  <div class="drawer-f"><button class="btn sm" data-close>关闭</button></div>
+</div>
+
+<!-- 采集器模态 -->
+<div class="modal" id="foragerModal">
+  <div class="modal-h"><h3>guide-forager 攻略采集设置</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="callout info"><i data-lucide="info" class="ic-sm"></i><span class="tiny">仅用于本地自用缓存，遵守站点头限速与 robots 规则，保留原作者与来源 URL；公开分发前必须清洗。</span></div>
+    <div class="field"><label>数据源优先级</label><input class="input" value="1. 星露谷中文 Wiki (API) → 2. 小黑盒热榜 → 3. B 站攻略专栏"></div>
+    <div class="field"><label>自动更新周期</label><select class="select"><option>每周日 + 开播前增量检查</option><option>仅手动触发</option></select></div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>取消</button><button class="btn sm primary" data-close data-toast="采集器设置已保存">保存</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

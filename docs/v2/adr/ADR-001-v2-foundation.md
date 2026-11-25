@@ -5,12 +5,11 @@
 
 ---
 
-## 分歧 1：UI 目标视觉体系选择（Obsidian Tide vs Tidepaper）
+## 分歧 1：UI 目标视觉体系选择（已于 2026-11-26 由 [ADR-003](./ADR-003-uiux-tidepaper-primary-and-themes.md) 修订）
 
-- **背景**：仓库同时存在 `design/`（Obsidian v4）、`whale-isle-v2-obsidian.html`、`design/v2/`（Tide v5）、`design/v2-gemini/`（Obsidian Tide）和 `design/v3/`（Tidepaper）。
-- **选项 A（默认采纳）**：采用 **Obsidian Tide（`design/v2-gemini/`）**。承接 V1 已落地的 Tailwind v4 曜石 token 与暗/浅双主题（加 `system` 跟随），采用「六世界 × 十页面」IA 与四签名组件（声呐环 / 回执芯片 / 许可徽章 / 控制权 HUD），兼容实时监控与手账感。
-- **选项 B**：切换到 `design/v3/` Tidepaper 纸感手账风格。
-- **影响**：选 A 可直接渐进重构现有 React/Tailwind 组件，无推倒重做成本；若改选 B，需重写全部颜色与排版 token（约 2–3 天额外工作量）。
+- **背景**：仓库曾同时存在 `design/`（Obsidian v4）、`whale-isle-v2-obsidian.html`、`design/v2/`（Tide v5）、`design/v2-gemini/`（Obsidian Tide）和 `design/v3/`（Tidepaper）。现已统一整编至 `design/tidepaper/`、`design/theme-obsidian-tide/`、`design/theme-tide-deep/`、`design/theme-obsidian-v4/` 与 `design/archive/`。
+- **P1 首轮默认选择**：`V2-P1-05` 先采用 **Obsidian Tide** 完成巨型 `App.tsx` 拆解、四大签名组件与三态主题落地（零破坏既有 Tailwind 工程资产）。
+- **现行有效决策（ADR-003 修订）**：随着 **Tidepaper（`design/tidepaper/`）** 25 页全量高保真原型完成，后续 UI/UX 演进确立 **Tidepaper 为主参考基线**，而将 **Obsidian Tide**、**Tide Deep** 与 **Obsidian v4** 保留为**可选主题（Optional Themes）**；原型稿仅作参考，实际开发结合真实模块成熟度因地制宜演进。
 
 ## 分歧 2：演进路线策略（独立分支 Strangler 渐进重构 vs 全新仓库推倒重写）
 

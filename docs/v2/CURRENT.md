@@ -31,8 +31,8 @@
 
 1. 阅读 [AGENTS.md](../../AGENTS.md)（含 §5 V2 增补宪章）。
 2. 阅读 [ROADMAP.md](./ROADMAP.md) 确认唯一 `NEXT` / `DOING` 工单，不跨工单抢跑。
-3. 阅读 [PRODUCT.md](./PRODUCT.md)、[REQUIREMENTS.md](./REQUIREMENTS.md)、[TRACEABILITY.md](./TRACEABILITY.md)、[ARCHITECTURE.md](./ARCHITECTURE.md) 与 [EVALUATION.md](./EVALUATION.md) 确认产品范围、接口边界与真实验证口径（设计规范见 [DESIGN-SYSTEM.md](./DESIGN-SYSTEM.md)，开源合规见 [OPEN-SOURCE.md](./OPEN-SOURCE.md)）。
-4. 运行 `git status --short` 确认工作区干净（`design/v2-gemini/`、`whale-isle-v2-obsidian.html`、`design/v2/`、`design/v3/` 与 `docs/v2/blueprint/` 已归档入库）。
+3. 阅读 [README.md](./README.md)、[PRODUCT.md](./PRODUCT.md)、[REQUIREMENTS.md](./REQUIREMENTS.md)、[TRACEABILITY.md](./TRACEABILITY.md)、[ARCHITECTURE.md](./ARCHITECTURE.md) 与 [EVALUATION.md](./EVALUATION.md) 确认产品范围、接口边界与真实验证口径（UI/UX 设计规范见 [DESIGN-SYSTEM.md](./DESIGN-SYSTEM.md) 与 [ADR-003](./adr/ADR-003-uiux-tidepaper-primary-and-themes.md)，开源合规见 [OPEN-SOURCE.md](./OPEN-SOURCE.md)）。
+4. 运行 `git status --short` 确认工作区状态（设计原型已整编为 `design/tidepaper/` 主基线、`design/theme-obsidian-tide/`、`design/theme-tide-deep/`、`design/theme-obsidian-v4/` 可选主题与 `design/archive/` 归档，原始蓝图位于 `docs/v2/blueprint/`）。
 5. 常用校验指令：
    - 构建：`pnpm --filter @workbench/desktop-host build`
    - 门禁：`pnpm verify:gate`

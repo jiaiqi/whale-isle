@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设备与租约 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .dev-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .dev-card { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  @media (max-width: 1050px) { .dev-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="devices" data-crumb="能力 / 设备与租约">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="monitor-smartphone" class="ic-xs"></i>Device Registry &amp; ComputerUseLease</div>
+      <h1>多台设备一起工作，但键盘和鼠标永远优先听你的</h1>
+      <p>同一台设备同一时刻只允许一个 Agent 持有前台键鼠租约；一旦检测到人类真实键鼠动作，AI 控制权在毫秒级自动夺回并暂停。</p>
+    </div>
+    <div class="actions">
+      <button class="btn sm" id="simHumanBtn"><i data-lucide="mouse-pointer-click" class="ic-sm"></i>模拟用户动键鼠</button>
+    </div>
+  </div>
+
+  <!-- 设备节点 -->
+  <div class="dev-grid rise rise-1" style="margin-bottom:18px">
+    <article class="card dev-card">
+      <div class="row between"><div class="tile sm sea"><i data-lucide="laptop" class="ic-sm"></i></div><span class="chip sm kelp"><span class="dot ok pulse"></span>在线 · 主节点</span></div>
+      <b>MacBook Pro (Apple Silicon)</b>
+      <div class="tiny muted">macOS 15 · 托管 Electron 宿主、桌宠、MPS 本地语音、星露谷 BWF Mod (:18088)</div>
+      <div class="row wrap gap-4"><span class="chip sm">desktop-2d</span><span class="chip sm">audio-mps</span><span class="chip sm">stardew</span></div>
+      <div class="tiny faint mono">dev_mac_m3 · 心跳 1s 前</div>
+    </article>
+
+    <article class="card dev-card">
+      <div class="row between"><div class="tile sm whale"><i data-lucide="cpu" class="ic-sm"></i></div><span class="chip sm">待机 · 局域网</span></div>
+      <b>客厅游戏主机 (Windows x64)</b>
+      <div class="tiny muted">Win 11 · 可运行泰拉瑞亚 (:18090) 与 DST (:18100)，CUDA 语音备用节点</div>
+      <div class="row wrap gap-4"><span class="chip sm">terraria</span><span class="chip sm">dst</span><span class="chip sm">cuda-tts</span></div>
+      <div class="tiny faint mono">dev_win_rtx · 心跳 18s 前</div>
+    </article>
+
+    <article class="card dev-card">
+      <div class="row between"><div class="tile sm coral"><i data-lucide="smartphone" class="ic-sm"></i></div><span class="chip sm kelp">WebUI 已配对</span></div>
+      <b>iPhone 16 Pro (远程陪伴)</b>
+      <div class="tiny muted">通过局域网配对码访问 WebUI：摸头、投喂、审批 P4/P5 与游戏急停</div>
+      <div class="row wrap gap-4"><span class="chip sm">webui-remote</span><span class="chip sm">approval</span></div>
+      <div class="tiny faint mono">dev_ios_webui · 刚刚活跃</div>
+    </article>
+  </div>
+
+  <!-- ComputerUseLease + 多人联机兼容 -->
+  <div class="grid g2 rise rise-2">
+    <section class="card pad stack-16">
+      <div class="row between">
+        <h3 class="row gap-8"><i data-lucide="key-round" class="ic-sm t-coral"></i>Computer Use 前台键鼠互斥租约</h3>
+        <span class="chip sm" id="leaseBadge">未激活自动化键鼠</span>
+      </div>
+      <dl class="kv">
+        <dt>目标设备</dt><dd class="mono">dev_mac_m3 (本机)</dd>
+        <dt>当前持有者</dt><dd id="leaseHolder"><b>无</b>（星露谷直接走结构化 BWF MCP，不抢桌面鼠标）</dd>
+        <dt>抢占规则</dt><dd>用户真实键鼠位移 / 按键触发立即吊销 Lease (&lt;50ms)</dd>
+        <dt>租约超时</dt><dd class="mono">最长 120s 自动过期释放</dd>
+      </dl>
+      <div class="row gap-8">
+        <button class="btn sm" id="grantLeaseBtn">演示：申请浏览器读图 Lease</button>
+        <button class="btn sm danger-soft" id="revokeLeaseBtn">立即吊销全部 Lease</button>
+      </div>
+    </section>
+
+    <section class="card pad stack-16">
+      <div class="row between">
+        <h3 class="row gap-8"><i data-lucide="users" class="ic-sm t-sea"></i>多人联机 Mod 与资产兼容检查</h3>
+        <span class="chip sm sun">1 项警告</span>
+      </div>
+      <div class="callout warn" style="padding:10px 12px">
+        <i data-lucide="alert-triangle" class="ic-sm"></i>
+        <span class="tiny">多人游戏时，本机替换的自定义像素外观<b>不会自动同步给未装 Mod 的好友客户端</b>。开房前必检下列哈希：</span>
+      </div>
+      <div class="list" style="margin:0 -18px">
+        <div class="li"><div class="body"><b>你的主机 (dev_mac_m3)</b><span class="mono tiny">BWF v1.6.2 · avatar-sync sha:3a09c12d</span></div><span class="receipt completed">MATCH</span></div>
+        <div class="li"><div class="body"><b>联机好友节点 #2 (Steam 邀请)</b><span class="mono tiny">缺少 stardew-avatar-sync Mod</span></div><span class="receipt uncertain">对方不可见定制形象</span></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 音频设备矩阵 -->
+  <div class="sec"><h2>跨场景音频设备路由</h2><span class="line"></span></div>
+  <div class="card pad rise rise-3">
+    <div class="grid g3">
+      <div class="field"><label>桌面陪伴说话 (TTS)</label><select class="select"><option>MacBook Pro 扬声器（默认）</option><option>AirPods Pro</option></select></div>
+      <div class="field"><label>直播舞台 / 唱歌独立轨</label><select class="select"><option>BlackHole 2ch → OBS 混音台</option><option>物理声卡通道 3-4</option></select></div>
+      <div class="field"><label>语音输入 (按住说话)</label><select class="select"><option>USB 电容麦 (降噪开启)</option><option>MacBook 内置麦克风</option></select></div>
+    </div>
+  </div>
+</main>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  WI.$('#grantLeaseBtn').onclick = () => {
+    WI.$('#leaseBadge').className = 'chip sm coral';
+    WI.$('#leaseBadge').textContent = '租约持有中 · 118s';
+    WI.$('#leaseHolder').innerHTML = '<b class="t-coral">Browser Runtime (profile_xj_readonly)</b> · 心跳正常';
+    WI.toast('已授予单设备唯一 ComputerUseLease', 'info');
+  };
+  function revoke(msg) {
+    WI.$('#leaseBadge').className = 'chip sm kelp';
+    WI.$('#leaseBadge').textContent = '用户主控 · 已释放';
+    WI.$('#leaseHolder').innerHTML = '<b>你（物理键鼠输入最高优先级）</b>';
+    WI.toast(msg, 'ok', 'hand');
+  }
+  WI.$('#revokeLeaseBtn').onclick = () => revoke('已手动吊销桌面自动化租约');
+  WI.$('#simHumanBtn').onclick = () => revoke('检测到物理鼠标移动 · AI 租约在 18ms 内自动让出控制权');
+</script>
+</body>
+</html>

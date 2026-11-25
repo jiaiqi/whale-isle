@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>桌宠舞台（独立窗口）· 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { overflow: hidden; }
+  .desktop {
+    position: relative; width: 100vw; height: 100vh; overflow: hidden;
+    background:
+      radial-gradient(900px 600px at 78% 18%, rgba(229, 96, 63, 0.16), transparent 60%),
+      radial-gradient(800px 550px at 18% 82%, rgba(29, 122, 138, 0.22), transparent 60%),
+      linear-gradient(155deg, #E8E1D3 0%, #D9D5CB 55%, #C9D2D8 100%);
+  }
+  [data-theme="dark"] .desktop {
+    background:
+      radial-gradient(900px 600px at 78% 18%, rgba(255, 125, 92, 0.14), transparent 60%),
+      radial-gradient(800px 550px at 18% 82%, rgba(63, 193, 201, 0.14), transparent 60%),
+      linear-gradient(155deg, #0D1424 0%, #141E33 55%, #0F1727 100%);
+  }
+  /* 模拟 macOS 菜单栏 */
+  .mac-bar {
+    height: 28px; padding: 0 16px; display: flex; align-items: center; gap: 16px; font-size: 12px; font-weight: 550;
+    background: color-mix(in srgb, var(--surface) 72%, transparent); backdrop-filter: blur(18px); border-bottom: 1px solid var(--line);
+  }
+  /* 假的代码编辑器窗口 */
+  .fake-ide {
+    position: absolute; left: 7%; top: 9%; width: min(760px, 60vw); height: min(500px, 66vh);
+    border-radius: 14px; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-3);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .ide-h { height: 36px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); background: var(--sunken); }
+  .lights { display: flex; gap: 6px; }
+  .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .ide-b { flex: 1; padding: 18px 22px; font-family: var(--font-mono); font-size: 12px; line-height: 1.85; color: var(--ink-2); overflow: hidden; }
+
+  /* 桌宠本体（透明穿透层） */
+  .pet-actor {
+    position: absolute; left: 63%; top: 34%; width: 250px; user-select: none; cursor: grab; z-index: 20;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .pet-actor.dragging { cursor: grabbing; }
+  .pet-bubbles { display: flex; flex-direction: column; align-items: center; gap: 7px; margin-bottom: -14px; pointer-events: none; width: 280px; }
+  .b-think {
+    padding: 8px 13px; border-radius: 16px; font-size: 12px; font-family: var(--font-display); font-style: italic;
+    background: color-mix(in srgb, var(--surface-2) 72%, transparent); backdrop-filter: blur(10px);
+    border: 1px dashed var(--line-3); color: var(--ink-2); box-shadow: var(--shadow-1);
+  }
+  .b-talk {
+    padding: 10px 14px; border-radius: 16px 16px 16px 4px; font-size: 12.5px; line-height: 1.55;
+    background: var(--surface-2); border: 1px solid var(--line-2); color: var(--ink-1); box-shadow: var(--shadow-2);
+  }
+  .b-game {
+    display: flex; gap: 5px; flex-wrap: wrap; justify-content: center;
+  }
+  .pet-stage-video { width: 220px; height: 185px; position: relative; }
+  .pet-stage-video video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.45) translateY(6%); pointer-events: none; }
+  .bowl-badge {
+    margin-top: -8px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill);
+    background: color-mix(in srgb, var(--surface-2) 88%, transparent); border: 1px solid var(--line); box-shadow: var(--shadow-1); font-size: 11px;
+  }
+
+  /* 演示控制台 */
+  .demo-dock {
+    position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 30;
+    display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: var(--r-xl);
+    background: color-mix(in srgb, var(--surface-2) 90%, transparent); backdrop-filter: blur(16px);
+    border: 1px solid var(--line-2); box-shadow: var(--shadow-3); white-space: nowrap;
+  }
+  .secondary-pet { position: absolute; left: 12%; bottom: 86px; width: 110px; z-index: 15; display: flex; flex-direction: column; align-items: center; }
+  .secondary-pet.hidden { display: none; }
+</style>
+</head>
+<body data-shell="none">
+<div class="desktop">
+  <div class="mac-bar">
+    <i data-lucide="waves" class="ic-sm t-accent"></i>
+    <b>Whale Isle · 透明穿透桌宠窗</b>
+    <span class="faint">Electron Transparent · Alpha 像素穿透</span>
+    <span class="spacer"></span>
+    <a class="btn xs ghost" href="home.html"><i data-lucide="arrow-left" class="ic-xs"></i>返回中控台</a>
+    <a class="btn xs ghost" href="index.html">目录</a>
+    <button class="btn xs" onclick="WI.toggleTheme()"><i data-lucide="moon" class="ic-xs"></i>深浅</button>
+    <span class="mono tiny">22:14</span>
+  </div>
+
+  <!-- 背景假编辑窗 -->
+  <div class="fake-ide">
+    <div class="ide-h">
+      <div class="lights"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+      <span class="mono tiny faint">packages/persona-brain/src/reflex.ts — whale-isle</span>
+      <span class="spacer"></span>
+      <span class="chip sm"><span class="dot ok"></span>专注编码中 · 桌宠自动降噪</span>
+    </div>
+    <pre class="ide-b"><span class="faint">01</span>  export function evaluateMinefieldReflex(text: string): ReflexResult {
+<span class="faint">02</span>    if (/大肥鱼/.test(text)) {
+<span class="faint">03</span>      return {
+<span class="faint">04</span>        matched: true,
+<span class="faint">05</span>        latencyBudgetMs: 100,
+<span class="faint">06</span>        clip: '玩水枪',
+<span class="faint">07</span>        grudgeDelta: +1,
+<span class="faint">08</span>      };
+<span class="faint">09</span>    }
+<span class="faint">10</span>    return { matched: false };
+<span class="faint">11</span>  }</pre>
+  </div>
+
+  <!-- 可选被动多桌宠 -->
+  <div class="secondary-pet hidden" id="secPet">
+    <div class="chip sm" style="margin-bottom:4px">小柚 · Passive</div>
+    <div class="card pad" style="padding:12px 16px;border-radius:18px;text-align:center">
+      <div class="avatar c4" style="margin:0 auto 4px">柚</div>
+      <span class="tiny faint">正在打盹</span>
+    </div>
+  </div>
+
+  <!-- 小鲸主桌宠（可拖拽 + 右键菜单） -->
+  <div class="pet-actor" id="petActor">
+    <div class="pet-bubbles">
+      <div class="b-think" id="bThink">「他还在调 reflex.ts……先乖乖蹲着别吵他。」</div>
+      <div class="b-talk" id="bTalk">拖拽我可以甩着玩哦。点右键可以投喂或让我安静！</div>
+      <div class="b-game">
+        <span class="chip sm kelp"><i data-lucide="sprout" class="ic-xs"></i>正在做：浇防风草 18/28</span>
+        <span class="chip sm"><i data-lucide="arrow-right" class="ic-xs"></i>准备：买花椰菜种</span>
+      </div>
+    </div>
+    <div class="pet-stage-video">
+      <video id="petVideo" data-clip="待机呼吸休闲" autoplay loop muted playsinline></video>
+      <div class="pet-ground"></div>
+    </div>
+    <div class="bowl-badge">
+      <i data-lucide="wheat" class="ic-xs t-sun"></i>
+      <span class="mono">68%</span>
+      <span class="faint">¥12.24</span>
+    </div>
+  </div>
+
+  <!-- 演示控制条 -->
+  <div class="demo-dock">
+    <span class="eyebrow" style="padding:0 6px">舞台演示</span>
+    <button class="btn xs" onclick="scene('talk')"><i data-lucide="message-circle" class="ic-xs"></i>说话</button>
+    <button class="btn xs" onclick="scene('uncertain')"><i data-lucide="alert-triangle" class="ic-xs t-sun"></i>游戏 UNCERTAIN</button>
+    <button class="btn xs" onclick="scene('hungry')"><i data-lucide="wheat" class="ic-xs t-rose"></i>饭碗告急</button>
+    <button class="btn xs" onclick="scene('bait')"><i data-lucide="flame" class="ic-xs t-coral"></i>喊「大肥鱼」</button>
+    <button class="btn xs" onclick="scene('sleep')"><i data-lucide="moon" class="ic-xs t-plum"></i>睡眠安静</button>
+    <button class="btn xs" onclick="WI.$('#secPet').classList.toggle('hidden')"><i data-lucide="users" class="ic-xs"></i>多桌宠</button>
+    <span class="tiny faint" style="padding:0 4px">· 支持直接拖拽 / 右键小鲸</span>
+  </div>
+</div>
+
+<!-- 右键菜单 -->
+<div class="menu" id="petCtxMenu">
+  <button onclick="scene('feed')"><i data-lucide="utensils" class="ic-sm"></i>投喂晚餐 (+¥2)</button>
+  <button onclick="scene('pat')"><i data-lucide="hand" class="ic-sm"></i>摸摸头</button>
+  <button onclick="scene('dance')"><i data-lucide="music-2" class="ic-sm"></i>跳一段女仆舞</button>
+  <button onclick="scene('sleep')"><i data-lucide="moon" class="ic-sm"></i>进入安静睡眠</button>
+  <div class="sep"></div>
+  <button onclick="location.href='home.html'"><i data-lucide="layout-dashboard" class="ic-sm"></i>打开鲸屿中控台</button>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  const actor = WI.$('#petActor'), vid = WI.$('#petVideo'), bThink = WI.$('#bThink'), bTalk = WI.$('#bTalk');
+
+  window.scene = function (s) {
+    const map = {
+      talk: ['碎碎念-对屏碎碎念', '「防风草快浇完了，你要不要休息两分钟？」', '好像看他伸了个懒腰，现在搭话应该没关系。'],
+      uncertain: ['工作状态-原地踱步张望', '刚才那一杆好像没收到确认回执……我再看一眼水面。', 'MOD 返回 UNCERTAIN，先别急着判定成功。'],
+      hungry: ['余额-分文不剩', '饭碗只剩 12% 了！！再不投喂我就只能吃白米饭了！', '好饿……连思考 token 都要省着花了。'],
+      bait: ['玩水枪', '噗——！谁允许你叫我大肥鱼的！记仇账本 +1！', '0.1 秒条件反射，水枪发射！'],
+      sleep: ['睡觉-循环', '呼……安静模式开启，有事再叫我……', '（轻声呼吸，不主动发言）'],
+      feed: ['吃晚餐', '哼，勉强挺好吃的。今天原谅你一半。', '投喂 +¥2，饱腹度恢复！'],
+      pat: ['点击回应-挠痒咯咯笑', '喂、别突然摸头啦！发箍要歪掉了。', '其实还挺舒服的。'],
+      dance: ['优雅女仆舞', '看好了，这可是我的招牌女仆舞步！', '舞台同步时钟准备中…'],
+    };
+    const [clip, talk, think] = map[s];
+    vid.src = WI.clip(clip); bTalk.textContent = talk; bThink.textContent = '「' + think + '」';
+  };
+
+  // Pointer Events 拖拽（带悬空反馈）
+  let drag = null;
+  actor.addEventListener('pointerdown', (e) => {
+    if (e.button === 2) return;
+    actor.setPointerCapture(e.pointerId);
+    const r = actor.getBoundingClientRect();
+    drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false };
+    actor.classList.add('dragging');
+  });
+  actor.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    if (!drag.moved) { drag.moved = true; vid.src = WI.clip('被鼠标拖拽悬空反馈'); bTalk.textContent = '哇呀！别把我拎起来晃啦！'; }
+    actor.style.left = Math.max(10, Math.min(innerWidth - 260, e.clientX - drag.dx)) + 'px';
+    actor.style.top = Math.max(32, Math.min(innerHeight - 260, e.clientY - drag.dy)) + 'px';
+  });
+  actor.addEventListener('pointerup', () => {
+    if (!drag) return;
+    actor.classList.remove('dragging');
+    if (drag.moved) { vid.src = WI.clip('待机呼吸休闲'); bTalk.textContent = '总算落地了……脚底基准线对齐确认！'; }
+    else scene('pat');
+    drag = null;
+  });
+
+  // 右键菜单
+  actor.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const m = WI.$('#petCtxMenu');
+    m.style.left = Math.min(innerWidth - 210, e.clientX) + 'px';
+    m.style.top = Math.min(innerHeight - 210, e.clientY) + 'px';
+    m.classList.add('on');
+    setTimeout(() => document.addEventListener('click', () => m.classList.remove('on'), { once: true }), 0);
+  });
+</script>
+</body>
+</html>

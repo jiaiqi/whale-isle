@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数字生活 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .sched-row { display: grid; grid-template-columns: 78px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .sched-row:last-child { border-bottom: 0; }
+  .feed-card { padding: 15px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .draft-box { padding: 14px; border-radius: var(--r-md); border: 1px solid var(--coral-line); background: linear-gradient(180deg, var(--coral-soft), transparent 70%), var(--surface-2); }
+</style>
+</head>
+<body data-page="life" data-crumb="生活 / 数字生活">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="sun-medium" class="ic-xs"></i>Digital Life Runtime · 社交与社区探索</div>
+      <h1>她的自主日程、好奇心与克制的社交边界</h1>
+      <p>数字生活不是无限循环的爬虫脚本——每项探索都有目标、预算与停止条件；默认先「只读 + 生成草稿」，绝不刷量、不随机评论、不绕过验证码。</p>
+    </div>
+    <div class="actions">
+      <button class="btn sm" data-toast="已暂停今天剩余全部自主探索任务" data-kind="warn"><i data-lucide="pause"></i>暂停探索</button>
+      <button class="btn sm primary" data-open="draftModal"><i data-lucide="file-pen-line"></i>待审批草稿 (2)</button>
+    </div>
+  </div>
+
+  <!-- 今日自主日程 + Browser/Lease 状态 -->
+  <div class="grid" style="grid-template-columns:1.35fr 1fr;margin-bottom:18px">
+    <section class="card rise rise-1">
+      <div class="card-h"><h3><i data-lucide="calendar-clock"></i>今日生活日程与预算窗口</h3><span class="tools"><span class="chip sm kelp">每日探索预算 ¥1.80 / ¥3.00</span></span></div>
+      <div class="card-b">
+        <div class="sched-row"><span class="mono tiny faint">09:00–11:30</span><div><b class="small">清晨读新闻与星露谷攻略</b><div class="tiny faint">只读 · 发现 SV 1.6 鱼塘新收益表</div></div><span class="chip sm kelp">已完成</span></div>
+        <div class="sched-row"><span class="mono tiny faint">14:00–16:00</span><div><b class="small">休息窗口 · 安静晒太阳</b><div class="tiny faint">主动休息，不触发网络任务</div></div><span class="chip sm">已休息</span></div>
+        <div class="sched-row"><span class="mono tiny t-accent">20:30–23:00</span><div><b class="small">夜间陪伴写代码 + 星露谷春 14 农务</b><div class="tiny faint">勿扰时段生效：不主动发声打断</div></div><span class="chip sm accent">进行中</span></div>
+        <div class="sched-row"><span class="mono tiny faint">23:30 后</span><div><b class="small">睡眠模式 · 记忆归档提炼</b><div class="tiny faint">停止外部浏览与发言，只跑本地 SQLite 整理</div></div><span class="chip sm">计划中</span></div>
+      </div>
+    </section>
+
+    <div class="col gap-16">
+      <section class="card pad rise rise-2">
+        <div class="row between" style="margin-bottom:10px"><h4 class="row gap-6"><i data-lucide="globe" class="ic-sm t-whale"></i>Browser Profile 隔离</h4><span class="chip sm kelp">Cookie 已隔离</span></div>
+        <p class="tiny muted" style="margin-bottom:10px">小鲸使用独立的 <span class="mono">profile_xj_readonly</span>，与你的个人日常浏览器完全分离，不混用登录态。</p>
+        <div class="row between tiny"><span>当前桌面 Computer Use 租约</span><span class="chip sm">未持有（仅浏览器 DOM 工具）</span></div>
+      </section>
+
+      <section class="card pad rise rise-2">
+        <div class="row between" style="margin-bottom:8px"><h4 class="row gap-6"><i data-lucide="shield-alert" class="ic-sm t-rose"></i>平台反自动化红线</h4><span class="chip sm rose">强制锁定</span></div>
+        <div class="stack-4 tiny muted">
+          <div>· 严禁绕过验证码、付费墙或访问控制</div>
+          <div>· 严禁批量点赞、关注、刷评论或冒充真人</div>
+          <div>· 所有对外评论/发布默认需人类审批 (P4)</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 平台能力矩阵 -->
+  <div class="sec"><h2>社交平台能力矩阵与实际验证状态</h2><span class="line"></span><span class="aside">不以第三方能做作为平台允许的证据</span></div>
+  <div class="card rise rise-3" style="margin-bottom:18px">
+    <table class="table">
+      <thead><tr><th>平台</th><th>绑定账号</th><th>实现方式</th><th>当前开放范围</th><th>最近验证</th><th>风险 / 状态</th></tr></thead>
+      <tbody>
+        <tr><td><b>Bilibili</b></td><td class="mono tiny">小鲸Official_dev</td><td><span class="chip sm sea">official_api + browser_ui</span></td><td>搜索、只读视频字幕/评论、生成草稿</td><td class="mono tiny">2026-11-24</td><td><span class="evi real">只读已验证</span> <span class="evi pending">写入待审</span></td></tr>
+        <tr><td><b>抖音 Douyin</b></td><td class="mono tiny">whale_isle_live</td><td><span class="chip sm plum">dyhub 开放能力</span></td><td>直播弹幕/关注/礼物接收（只读事件）</td><td class="mono tiny">2026-11-22</td><td><span class="evi pending">直播写入待验证</span></td></tr>
+        <tr><td><b>小红书</b></td><td class="mono tiny">未绑定写入账号</td><td><span class="chip sm">browser_ui 只读探索</span></td><td>公开图文摘要理解 · 禁止自动发帖与评论</td><td class="mono tiny">2026-11-20</td><td><span class="chip sm sun">写入受限 · 仅草稿</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 内容探索流 + 草稿审批 -->
+  <div class="grid" style="grid-template-columns:1.25fr 1fr">
+    <section class="col gap-12 rise rise-4">
+      <div class="sec" style="margin:0 0 4px"><h2>今日内容探索与兴趣演化</h2><span class="line"></span></div>
+      <article class="card feed-card">
+        <div class="row between"><span class="chip sm sea">Bilibili · 公开视频理解</span><span class="tiny faint mono">10:15</span></div>
+        <b>《星露谷 1.6 钓鱼全鱼王与鱼塘新布局》</b>
+        <p class="small muted">内容摘要：通过官方字幕 + 关键帧提取出「熏鱼机搭配传奇鱼」收益提升 2.1 倍。</p>
+        <div class="card sunken pad" style="padding:8px 11px"><span class="tiny"><b>她为什么感兴趣：</b>昨天在河口连续脱钩后想提高钓鱼回报，已作为参考存入语义知识库（置信 0.81）。</span></div>
+      </article>
+      <article class="card feed-card">
+        <div class="row between"><span class="chip sm plum">小红书 · 只读摘要</span><span class="tiny faint mono">16:40</span></div>
+        <b>《独立游戏像素角色三头身动态配色参考》</b>
+        <p class="small muted">提取了 4 组海蓝与暖米纸色调搭配，准备转发给「创作工坊」当作自制可商用素材包灵感。</p>
+      </article>
+    </section>
+
+    <section class="col gap-12 rise rise-4">
+      <div class="sec" style="margin:0 0 4px"><h2>P4 对外草稿审批</h2><span class="line"></span></div>
+      <div class="draft-box stack-12" id="draft1">
+        <div class="row between"><span class="perm p4">P4</span><b class="small">B 站评论草稿 · 需你确认才发送</b><span class="tiny faint">目标：BV1xx411c7mD</span></div>
+        <textarea class="textarea" style="min-height:66px;font-size:12.5px">（AI 笔记小鲸路过）原来 1.6 熏鱼机配秋天的虎纹鳟这么稳！谢谢 UP 主整理的表格，明天游戏里下雨我就去河口试试看～</textarea>
+        <div class="row gap-8" style="justify-content:flex-end">
+          <button class="btn xs danger-soft" onclick="WI.$('#draft1').style.opacity='.4';WI.toast('已拒绝并废弃该草稿','warn')">拒绝</button>
+          <button class="btn xs primary" onclick="WI.$('#draft1').style.opacity='.4';WI.toast('已批准发布该评论 · 审计日志已记录')">批准发送</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="modal" id="draftModal">
+  <div class="modal-h"><h3>待审批对外草稿 (2)</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="card sunken pad"><div class="row between"><b>B 站视频评论回复</b><span class="perm p4">P4</span></div><div class="tiny muted" style="margin-top:4px">明确声明 AI 身份，已通过平台规则预检。</div></div>
+    <div class="card sunken pad"><div class="row between"><b>本周鲸屿动态图文草稿</b><span class="perm p4">P4</span></div><div class="tiny muted" style="margin-top:4px">包含 1 张星露谷农场截图（待检查无非商用桌宠素材混入）。</div></div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>稍后</button><button class="btn sm primary" data-close data-toast="请逐条核对后发送">知道了</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>进化引擎 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .iso-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; }
+  .plane { padding: 16px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--surface); }
+  .plane.dev { border-color: var(--sun-line); background: linear-gradient(180deg, var(--sun-soft), transparent 60%), var(--surface); }
+  .ticket-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .tk-col { padding: 11px; border-radius: var(--r-md); background: var(--sunken); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .tk { padding: 10px 11px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: 12px; cursor: pointer; }
+  .tk:hover { border-color: var(--line-3); }
+  .gates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 1180px) { .iso-grid, .ticket-board, .gates { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="evolution" data-crumb="治理 / 进化引擎">
+<main class="page wide">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="dna" class="ic-xs"></i>Evolution World · 研发平面与运行平面物理隔离</div>
+      <h1>她可以发现自己的不足，在隔离区写补丁，但绝不能趁直播时改自己正在跑的代码</h1>
+      <p>Telemetry 经脱敏后进入独立 Worktree (`whale-isle-dev`)；所有 PR 须过四道确定性门禁与独立 Review；未完成真实宿主/真机验证的工单最高只能标 <span class="mono">IMPLEMENTED_UNVERIFIED</span>。</p>
+    </div>
+    <div class="actions">
+      <button class="btn sm" data-open="feedbackModal"><i data-lucide="flag"></i>提交「这里有问题」</button>
+      <button class="btn sm primary" data-open="prDrawer"><i data-lucide="git-pull-request"></i>审查 PR #218</button>
+    </div>
+  </div>
+
+  <!-- 双平面物理隔离 -->
+  <div class="iso-grid rise rise-1" style="margin-bottom:18px">
+    <div class="plane">
+      <div class="row between"><b class="small">Runtime Plane · 运行平面（只读消费配置）</b><span class="chip sm kelp">生产安全锁</span></div>
+      <div class="tiny muted" style="margin-top:6px">桌宠、星露谷、语音、直播正在运行。禁止模型自改业务源码、执行未授权 Shell 或自动合并分支。</div>
+    </div>
+    <div class="col" style="align-items:center;gap:4px">
+      <span class="chip sm">脱敏诊断事件 →</span>
+      <span class="chip sm">← PR / RC 灰度发布</span>
+    </div>
+    <div class="plane dev">
+      <div class="row between"><b class="small">Evolution Plane · 独立 Git Worktree (`whale-isle-dev`)</b><span class="chip sm sun">L1–L3 自动</span></div>
+      <div class="tiny muted" style="margin-top:6px">直播期间可分析与写测试；代码发布等待维护窗口。不传观众私信、Cookie 或密钥给研发 Agent。</div>
+    </div>
+  </div>
+
+  <!-- 12 阶段研发流水线 -->
+  <div class="card pad rise rise-2" style="margin-bottom:18px">
+    <div class="eyebrow" style="margin-bottom:10px">Evolution Pipeline · 当前推进 PR #218</div>
+    <div class="steps" style="overflow-x:auto;padding-bottom:4px">
+      <div class="step done"><span class="n">1</span>Telemetry</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">2</span>Triage</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">3</span>Plan</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">4</span>Worktree</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">5</span>Coding</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">6</span>4 Gates</div><div class="step-line done"></div>
+      <div class="step done"><span class="n">7</span>Review</div><div class="step-line done"></div>
+      <div class="step now"><span class="n">8</span>Approval</div><div class="step-line"></div>
+      <div class="step"><span class="n">9</span>RC 发布</div><div class="step-line"></div>
+      <div class="step"><span class="n">10</span>监控/回滚</div>
+    </div>
+  </div>
+
+  <!-- 7 态工单看板 -->
+  <div class="sec"><h2>7 态诚实工单流</h2><span class="line"></span><span class="aside">PENDING · NEXT · DOING · IMPLEMENTED_UNVERIFIED · BLOCKED · DONE · REOPENED</span></div>
+  <div class="ticket-board rise rise-3" style="margin-bottom:18px">
+    <div class="tk-col">
+      <div class="row between"><b class="tiny">NEXT / PENDING</b><span class="mono tiny faint">2</span></div>
+      <div class="tk"><b>T-M6-71 · 7 日 LLM 自主浸泡</b><div class="tiny faint" style="margin-top:3px">NEXT · 须跑完真实 7 游戏日</div></div>
+      <div class="tk"><b>T-M7-T6 · 泰拉瑞亚真机掩体</b><div class="tiny faint" style="margin-top:3px">PENDING · 等 Windows 节点</div></div>
+    </div>
+    <div class="tk-col">
+      <div class="row between"><b class="tiny">DOING (Worktree)</b><span class="mono tiny faint">1</span></div>
+      <div class="tk" data-open="prDrawer"><div class="row between"><b>PR #218 · 背包满评估建箱</b><span class="chip sm coral">待批准</span></div><div class="tiny faint" style="margin-top:3px">Codex 开发 + Claude 独立审查完成</div></div>
+    </div>
+    <div class="tk-col">
+      <div class="row between"><b class="tiny t-sun">IMPLEMENTED_UNVERIFIED</b><span class="mono tiny faint">2</span></div>
+      <div class="tk"><b>dyhub 直播间弹幕写入回复</b><div class="tiny faint" style="margin-top:3px">代码与单测已过，缺少真实直播间权限验证，严禁标 DONE</div></div>
+      <div class="tk"><b>T-M7-D5 · 饥荒本地集群</b><div class="tiny faint" style="margin-top:3px">BLOCKED · 需人类 Klei cluster_token</div></div>
+    </div>
+    <div class="tk-col">
+      <div class="row between"><b class="tiny t-kelp">DONE (门禁全绿)</b><span class="mono tiny faint">2</span></div>
+      <div class="tk"><b>T-M6-74 · 修复 IPv6 localhost</b><div class="tiny faint" style="margin-top:3px">127.0.0.1 直连真机已验</div></div>
+      <div class="tk"><b>T-M5-04 · 记忆图谱引擎</b><div class="tiny faint" style="margin-top:3px">真机回忆对话验证通过</div></div>
+    </div>
+  </div>
+
+  <!-- 自主等级与发布/回滚 -->
+  <div class="grid g2 rise rise-4">
+    <section class="card pad stack-12">
+      <h3>自主研发等级策略 (L1 – L5)</h3>
+      <div class="list" style="margin:0 -18px">
+        <div class="li"><div class="body"><b>L1–L3 · 发现、定位、隔离修改、测试与开 PR</b><span>默认自动运行</span></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+        <div class="li"><div class="body"><b>L4 · 自动合并极低风险文档/测试补丁</b><span>须全部门禁全绿且无安全变更</span></div><label class="switch sm"><input type="checkbox"><span class="tr"></span></label></div>
+        <div class="li"><div class="body"><b>L5 · 正式版本发布与高权限模块变更</b><span>强制人类明确审批，禁止直播期热替换核心代码</span></div><span class="chip sm rose">强制人工</span></div>
+      </div>
+    </section>
+
+    <section class="card pad stack-12">
+      <div class="row between"><h3>Release Candidate 与一键回滚</h3><span class="chip sm kelp">当前生产 v2.4.1</span></div>
+      <p class="small muted">灰度观察指标（动作成功率、语音延迟、插件崩溃率）若低于基线 3%，30 秒内自动或手动回滚至上一稳定版本。</p>
+      <div class="row gap-8">
+        <button class="btn sm" data-toast="已安排维护窗口：今日 03:00 自动应用已批准变更">排期到维护窗口</button>
+        <button class="btn sm danger-soft" data-toast="已触发回滚演示：回退到 v2.4.0 稳定镜像" data-kind="warn"><i data-lucide="rotate-ccw" class="ic-xs"></i>回滚至 v2.4.0</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- PR #218 详情抽屉 -->
+<div class="drawer lg" id="prDrawer">
+  <div class="drawer-h"><h3>PR #218 · fix(game): 背包满时评估建箱/整理</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="drawer-b stack-16">
+    <div class="callout info"><i data-lucide="info" class="ic-sm"></i><span class="tiny">「模型自称完成」不构成验收。下方四道门禁均为独立脚本实测结果：</span></div>
+    <div class="gates">
+      <div class="card sunken pad" style="padding:10px"><div class="tiny faint">Gate 1 · 类型边界</div><span class="receipt completed">PASS</span></div>
+      <div class="card sunken pad" style="padding:10px"><div class="tiny faint">Gate 2 · 许可密钥</div><span class="receipt completed">PASS</span></div>
+      <div class="card sunken pad" style="padding:10px"><div class="tiny faint">Gate 3 · 覆盖率</div><span class="receipt completed">92.4%</span></div>
+      <div class="card sunken pad" style="padding:10px"><div class="tiny faint">Gate 4 · 沙盒 E2E</div><span class="receipt completed">11.4s</span></div>
+    </div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:6px">独立 Review Agent (Claude Code) 结论</div>
+      <div class="card sunken pad tiny">已核对：未引入固定回家规则；已补充 3 个模拟背包满场景回归单测；未触及运行期目录或凭证代码。建议批准合入。</div>
+    </div>
+  </div>
+  <div class="drawer-f">
+    <button class="btn sm danger-soft" data-close data-toast="已打回 PR #218 要求补充真机回归" data-kind="warn">打回修改</button>
+    <button class="btn sm primary" data-close data-toast="已批准 PR #218，等待维护窗口发布">批准合入</button>
+  </div>
+</div>
+
+<!-- 运行时反馈模态 -->
+<div class="modal" id="feedbackModal">
+  <div class="modal-h"><h3>提交运行时「这里有问题」反馈</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="field"><label>问题描述</label><textarea class="textarea" placeholder="例如：小鲸在矿洞口站着发呆超过 20 秒…"></textarea></div>
+    <div class="tiny muted">系统将自动打包：版本信息、脱敏操作回执、游戏状态快照；<b>自动剔除观众个人信息与 API Key</b>。</div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>取消</button><button class="btn sm primary" data-close data-toast="已创建脱敏 Issue #221 并送入 Triage 队列">提交给进化引擎</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

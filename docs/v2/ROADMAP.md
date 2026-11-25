@@ -98,9 +98,9 @@
 - **测试方案**：记忆检索加权、模糊摘要与级联删除一致性单测。
 - **预计风险**：误删关键系统设定 → 强制隔离 `Self`/`Audit` 保护域。
 
-### `V2-P1-05`：Obsidian Tide 中控台重构与核心工作流界面
-- **状态**：`DONE`（2026-11-26 完成）
-- **目标**：按 Obsidian Tide（`design/v2-gemini/`）渐进拆分 1,466 行 `App.tsx`，交付真实控制权 HUD、四态回执芯片、许可徽章、声音/记忆/供应商与星露谷共玩主界面。
+### `V2-P1-05`：Obsidian Tide 中控台重构与核心工作流界面（后续按 `ADR-003` 演进为 Tidepaper 主基线 + 多主题）
+- **状态**：`DONE`（2026-11-26 完成；UI 主设计基线已于 `ADR-003` 修订为 `design/tidepaper/`，原 Obsidian Tide 保留为可选主题）
+- **目标**：先按 Obsidian Tide（原 `design/v2-gemini/`，现 `design/theme-obsidian-tide/`）渐进拆分 1,466 行 `App.tsx`，交付真实控制权 HUD、四态回执芯片、许可徽章、声音/记忆/供应商与星露谷共玩主界面；后续 P2–P4 新页面与默认主题Token 遵循 [ADR-003](./adr/ADR-003-uiux-tidepaper-primary-and-themes.md) 与 [DESIGN-SYSTEM.md](./DESIGN-SYSTEM.md) 以 `design/tidepaper/` 为主参考（原型仅供参考，按实际模块可用度渐进落地）。
 - **依赖**：`V2-P1-01`、`V2-P1-02`、`V2-P1-03`、`V2-P1-04`
 - **实现方案**：以功能模块组件替代巨型 `App.tsx`（1,466→914 行），落地四大签名组件、`system/dark/light` 三态主题、`F8/F9/F10/⌘K` 全局控制与「V2 生命中枢」面板，未实现能力页（P2/P3/P4）清晰标记 `StageBadge`。
 - **退役与回滚**：通过视图组件逐步替换，原有 E2E 选择器全量保留，可按提交独立回滚。

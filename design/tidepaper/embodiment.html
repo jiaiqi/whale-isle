@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>化身与动作库 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .emb-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .emb-card { padding: 13px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+  .emb-card.on { border-color: var(--accent-line); background: var(--surface-2); }
+  .lib-layout { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+  .clip-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .clip-btn { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); text-align: left; cursor: pointer; font-size: 12px; transition: all var(--t-fast); }
+  .clip-btn:hover { border-color: var(--line-3); background: var(--surface-2); }
+  .clip-btn.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--ink-1); font-weight: 600; }
+  .clip-btn .idx { font-family: var(--font-mono); font-size: 10px; color: var(--ink-3); width: 22px; }
+  .stage-pin { position: sticky; top: 18px; }
+  .stage-box { height: 280px; border-radius: var(--r-lg); border: 1px solid var(--line); background: radial-gradient(150px 55px at 50% 88%, var(--sea-soft), transparent), var(--sunken); position: relative; overflow: hidden; }
+  .stage-box video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.55) translateY(4%); }
+  .map-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .map-row:last-child { border-bottom: 0; }
+  @media (max-width: 1200px) { .emb-grid { grid-template-columns: repeat(2, 1fr); } .lib-layout { grid-template-columns: 1fr; } .clip-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body data-page="embodiment" data-crumb="化身 / 化身与动作库">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="shapes" class="ic-xs"></i>Embodiment World · 114/114 素材零闲置审计</div>
+      <h1>一个 AI，多种身体，114 个动作全利用</h1>
+      <p>所有形态共享同一颗大脑与记忆。左侧 114 个真实 VP9-Alpha webm 动作全部接入语义槽位、情绪映射与空闲随机池（悬停或点击即在右侧舞台预览，点击「投射到桌宠」实时同步）。</p>
+    </div>
+    <div class="actions">
+      <span class="lic devonly">DEV_ONLY_NON_COMMERCIAL · CC BY-NC-SA 4.0</span>
+      <button class="btn" data-open="replaceModal"><i data-lucide="package-plus"></i>替换自制素材包</button>
+      <a class="btn accent" href="pet-stage.html"><i data-lucide="app-window"></i>打开桌宠舞台</a>
+    </div>
+  </div>
+
+  <!-- 5 种化身总表 -->
+  <div class="emb-grid rise rise-1">
+    <div class="emb-card on">
+      <div class="row between"><div class="tile sm sea"><i data-lucide="app-window" class="ic-sm"></i></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+      <b>桌面桌宠 · desktop-2d</b>
+      <div class="tiny faint">WebmVideoRenderer · 脚底对齐 0.92</div>
+      <div class="row gap-6 tiny"><span class="chip sm kelp">运行中</span><span class="mono faint">v3.2</span></div>
+    </div>
+    <div class="emb-card on">
+      <div class="row between"><div class="tile sm kelp"><i data-lucide="gamepad-2" class="ic-sm"></i></div><label class="switch sm"><input type="checkbox" checked><span class="tr"></span></label></div>
+      <b>星露谷 · Level 1 像素</b>
+      <div class="tiny faint">stardew-avatar-sync · Content Patcher</div>
+      <div class="row gap-6 tiny"><span class="chip sm kelp">已同步</span><span class="mono faint">v1.4</span></div>
+    </div>
+    <div class="emb-card">
+      <div class="row between"><div class="tile sm plum"><i data-lucide="layers" class="ic-sm"></i></div><label class="switch sm"><input type="checkbox"><span class="tr"></span></label></div>
+      <b>Live2D · 参数接口</b>
+      <div class="tiny faint">预留 Cubism 扩展接口 · 尚未导入模型</div>
+      <div class="row gap-6 tiny"><span class="chip sm">预留</span><span class="mono faint">—</span></div>
+    </div>
+    <div class="emb-card">
+      <div class="row between"><div class="tile sm whale"><i data-lucide="box" class="ic-sm"></i></div><label class="switch sm"><input type="checkbox"><span class="tr"></span></label></div>
+      <b>VRM 3D · 虚拟舞台</b>
+      <div class="tiny faint">Hunyuan3D + Blender 后处理候选</div>
+      <div class="row gap-6 tiny"><span class="chip sm sun">制作中</span><span class="mono faint">draft</span></div>
+    </div>
+    <div class="emb-card">
+      <div class="row between"><div class="tile sm coral"><i data-lucide="video" class="ic-sm"></i></div><label class="switch sm"><input type="checkbox"><span class="tr"></span></label></div>
+      <b>OBS 透明舞台 · :18765</b>
+      <div class="tiny faint">共享表演引擎与歌词同步时钟</div>
+      <div class="row gap-6 tiny"><span class="chip sm">待开播</span><span class="mono faint">v2.1</span></div>
+    </div>
+  </div>
+
+  <!-- 动作库 + 预览舞台 -->
+  <div class="sec"><h2>114 个动作库全览与映射验证</h2><span class="line"></span><span class="aside">悬停 / 点击即播 · 覆盖率 114 / 114 (100%)</span></div>
+
+  <div class="lib-layout">
+    <div class="col gap-16">
+      <div class="card pad">
+        <div class="row wrap gap-10" style="margin-bottom:12px">
+          <div class="input-group" style="width:240px"><i data-lucide="search" class="ic-sm"></i><input id="clipSearch" placeholder="搜索动作名（如 钓鱼、水枪、饭）…"></div>
+          <div class="row wrap gap-6" data-chips="single" id="catChips"></div>
+        </div>
+        <div class="clip-grid" id="clipGrid"></div>
+      </div>
+
+      <!-- 三层映射表 -->
+      <div class="card">
+        <div class="card-h"><h3><i data-lucide="git-merge"></i>三层事件 → 动作映射（点击行即刻验证）</h3><span class="sub">唯一事实源驱动表现，不随机瞎播</span></div>
+        <div class="map-row"><span class="chip sm coral">情绪 · 傲娇生气</span><span>触发雷区词或生气情绪标签</span><button class="btn xs" data-test-clip="玩游戏气急败坏">玩游戏气急败坏.webm</button></div>
+        <div class="map-row"><span class="chip sm kelp">情绪 · 开心雀跃</span><span>完成目标或受到表扬</span><button class="btn xs" data-test-clip="工作状态-雀跃庆祝">工作状态-雀跃庆祝.webm</button></div>
+        <div class="map-row"><span class="chip sm sun">回执 · UNCERTAIN</span><span>游戏动作不确定，等待旁观校验</span><button class="btn xs" data-test-clip="工作状态-原地踱步张望">工作状态-原地踱步张望.webm</button></div>
+        <div class="map-row"><span class="chip sm whale">游戏 · TIMEOUT</span><span>长任务思考或寻找替代路线</span><button class="btn xs" data-test-clip="工作状态-思考冒泡">工作状态-思考冒泡.webm</button></div>
+        <div class="map-row"><span class="chip sm rose">饭碗 · 余额 &lt; 15%</span><span>预算告急提示投喂</span><button class="btn xs" data-test-clip="余额-分文不剩">余额-分文不剩.webm</button></div>
+        <div class="map-row"><span class="chip sm sea">休眠 · 3 段接力</span><span>开始 → 循环 → 醒来伸懒腰</span><button class="btn xs" data-test-clip="睡觉-循环">睡觉-循环.webm</button></div>
+      </div>
+    </div>
+
+    <!-- 右侧舞台 -->
+    <aside class="stage-pin col gap-16">
+      <div class="card pad">
+        <div class="row between" style="margin-bottom:10px">
+          <b class="small">动作预览舞台</b>
+          <span class="chip sm kelp" id="stageTag">待机 · idle</span>
+        </div>
+        <div class="stage-box">
+          <video id="stageVideo" data-clip="待机呼吸休闲" autoplay loop muted playsinline></video>
+          <div class="pet-ground"></div>
+        </div>
+        <div class="row between" style="margin-top:12px">
+          <div><b class="small mono" id="stageName">待机呼吸休闲.webm</b><div class="tiny faint" id="stageCat">分类：工作与日常 · 24fps · 640×360</div></div>
+          <button class="btn sm primary" id="sendToStage"><i data-lucide="send" class="ic-xs"></i>播 6 秒</button>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <h4 class="row gap-6" style="margin-bottom:10px"><i data-lucide="shuffle" class="ic-sm t-plum"></i>Ambient 空闲随机链</h4>
+        <p class="tiny muted" style="margin-bottom:10px">桌面无事件超过 30 秒后，按权重挑选动作播 6 秒回落 idle，保证 77 个空闲池素材全可达。</p>
+        <div class="stack-8 tiny">
+          <div class="row between"><span>吃喝美食池 (21)</span><input type="range" class="range" style="width:120px" value="35"></div>
+          <div class="row between"><span>趣味互动 / 玩乐 (24)</span><input type="range" class="range" style="width:120px" value="30"></div>
+          <div class="row between"><span>时令节日彩蛋 (14)</span><input type="range" class="range" style="width:120px" value="15"></div>
+          <div class="row between"><span>碎碎念与工作小动作 (18)</span><input type="range" class="range" style="width:120px" value="20"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<!-- 一键替换素材模态 -->
+<div class="modal" id="replaceModal">
+  <div class="modal-h"><h3>一键替换自制可商用素材包</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <div class="callout warn"><i data-lucide="alert-triangle" class="ic-sm"></i><span class="tiny">当前内置「大肥鱼」素材包授权为 <b>CC BY-NC-SA 4.0 (DEV_ONLY_NON_COMMERCIAL)</b>，公开发布或商业直播前必须替换为自有或已购商用许可素材包。</span></div>
+    <div class="field"><label>目标素材包路径 / 资产包</label><select class="select"><option>创作工坊自制包 · 小鲸 2026 原创版 (OWN_COMMERCIAL)</option><option>选择本地文件夹（须含 manifest.json 与 provenance.json）…</option></select></div>
+    <div class="tiny muted">替换管线将自动校验：11 个核心语义槽位齐全、脚底基准线 0.92 对齐、Alpha 透明通道完整。</div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>取消</button><button class="btn sm primary" data-close data-toast="已准备素材包切换校验（当前保留开发测试包）">校验并切换</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  const GROUPS = [
+    ['全部', []],
+    ['点击与工作', ['待机呼吸休闲','点击回应-傲娇生气','点击回应-元气挥手','点击回应-害羞惊讶','点击回应-开心跃动','点击回应-挠痒咯咯笑','被鼠标拖拽悬空反馈','工作状态-原地踱步张望','工作状态-垂头叹气冒汗','工作状态-忙碌点按','工作状态-思考冒泡','工作状态-清点归档','工作状态-雀跃庆祝','写代码','轻快记录','深度思考碎碎念','碎碎念-发呆碎碎念','碎碎念-对屏碎碎念','碎碎念-擦桌碎碎念']],
+    ['吃喝投喂', ['吃Token','吃冰淇淋融化','吃午餐','吃大闸蟹','吃年糕','吃早餐','吃晚餐','吃汤圆','吃白饭','吃粽子','吃糖葫芦','吃腊八粥','吃西瓜','吃重阳糕','吃长寿面','吃青团','吃饭·碗饭','吃饭团','吃饺子','大口吃零食','偷吃零食被抓住','期待开饭','是啊，吃什么','涮火锅']],
+    ['余额与睡眠', ['余额-分文不剩','余额-数金皱眉','余额-袋空如洗','余额-金袋叮当','余额-钱袋如常','余额-钱袋满溢','睡觉-开始','睡觉-循环','睡觉-起来','原地小憩沉眠','哈欠连天','打瞌睡被惊醒','超大伸懒腰','晨间刷牙']],
+    ['玩乐与舞蹈', ['优雅女仆舞','可爱宅舞','轻快摇摆舞','悠闲哼歌','小提琴演奏','吹笛子','女仆屈膝礼仪','三球抛接','下五子棋','玩水枪','玩游戏气急败坏','原地专心玩魔方','原地蹲下玩玩具汽车','扑克魔术','抽陀螺','吹气球','荡秋千','踢毽子','骑木马','撸猫','变鸽子','凭空生花','动物环绕','蝴蝶蜜蜂环绕头顶开花','鲸鱼吐泡泡特效','蓝鲸现世','萌化小幽灵']],
+    ['移动与反应', ['东张西望','侧身急躁跑','原地左转奔跑','原地敲击桌面互动','原地漂浮踏步','原地跳跃抓碎头顶物品','原地重力下蹲压缩','开心小跑','螃蟹走路','用鲸鱼尾巴拍打地面','被吓一跳','照镜子','整体换装试色','小幅度原地360度旋转展示']],
+    ['时节与节日', ['中秋赏月吃月饼','写福字','堆雪人','拆礼物','插茱萸赏菊','摇扇纳凉','收红包','放孔明灯','放河灯','放烟花','放风筝','穿针乞巧','舞狮头','被落叶淹没','装点圣诞树','讨糖南瓜灯']],
+  ];
+  const ALL = GROUPS.slice(1).flatMap((g) => g[1].map((n) => ({ n, g: g[0] })));
+  const catBox = WI.$('#catChips'), grid = WI.$('#clipGrid');
+  catBox.innerHTML = GROUPS.map((g, i) => `<span class="chip click ${i === 0 ? 'on' : ''}" data-v="${g[0]}">${g[0]} <span class="mono tiny" style="opacity:.65">${i === 0 ? ALL.length : g[1].length}</span></span>`).join('');
+
+  const sv = WI.$('#stageVideo'), sn = WI.$('#stageName'), sc = WI.$('#stageCat'), st = WI.$('#stageTag');
+  function playClip(name, cat = '预览') {
+    sv.src = WI.clip(name);
+    sn.textContent = name + '.webm';
+    sc.textContent = `分类：${cat} · 24fps · 640×360`;
+    st.textContent = '播放中';
+    WI.$$('.clip-btn').forEach((b) => b.classList.toggle('on', b.dataset.clip === name));
+  }
+
+  function renderGrid() {
+    const cat = WI.$('#catChips .chip.on').dataset.v;
+    const q = WI.$('#clipSearch').value.trim().toLowerCase();
+    const list = ALL.filter((x) => (cat === '全部' || x.g === cat) && (!q || x.n.toLowerCase().includes(q)));
+    grid.innerHTML = list.map((x, idx) => `<button class="clip-btn" data-clip="${x.n}" data-cat="${x.g}"><span class="idx">${String(idx + 1).padStart(3, '0')}</span><span class="ellipsis">${x.n}</span></button>`).join('');
+  }
+  renderGrid();
+
+  catBox.addEventListener('change', renderGrid);
+  WI.$('#clipSearch').addEventListener('input', renderGrid);
+  grid.addEventListener('click', (e) => { const b = e.target.closest('.clip-btn'); if (b) playClip(b.dataset.clip, b.dataset.cat); });
+  grid.addEventListener('mouseover', (e) => { const b = e.target.closest('.clip-btn'); if (b && b.dataset.clip !== sv.dataset.cur) { sv.dataset.cur = b.dataset.clip; playClip(b.dataset.clip, b.dataset.cat); } });
+  document.addEventListener('click', (e) => { const t = e.target.closest('[data-test-clip]'); if (t) { playClip(t.dataset.testClip, '映射验证'); WI.toast('触发映射预览：' + t.dataset.testClip, 'ok', 'play'); } });
+  WI.$('#sendToStage').onclick = () => {
+    WI.toast('已下发桌宠舞台播放 6 秒后回落 idle', 'ok', 'app-window');
+    setTimeout(() => playClip('待机呼吸休闲', '点击与工作'), 6000);
+  };
+</script>
+</body>
+</html>

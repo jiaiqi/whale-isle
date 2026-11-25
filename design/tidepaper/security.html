@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>安全与授权 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .p-matrix { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .p-box { padding: 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
+  @media (max-width: 1050px) { .p-matrix { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="security" data-crumb="治理 / 安全与授权">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="shield-check" class="ic-xs"></i>Policy Engine · Credential Vault · Audit</div>
+      <h1>最小权限、默认拒绝、密钥不入库</h1>
+      <p>任何插件、外部 MCP、社交账号或游戏高影响动作都受 P0–P5 权限分级约束。安全失败时只会安全降级或停止，绝不绕过策略。</p>
+    </div>
+    <div class="actions">
+      <button class="btn danger-soft" data-toast="已触发安全事件响应：撤销全部临时租约、隔离第三方插件并暂停对外写入" data-kind="err" data-icon="shield-alert"><i data-lucide="shield-alert"></i>一键紧急熔断</button>
+    </div>
+  </div>
+
+  <!-- 审批中心 -->
+  <div class="sec"><h2>待处理审批中心</h2><span class="line"></span><span class="aside" id="apprCount">3 条待处理</span></div>
+  <div class="card rise rise-1" style="margin-bottom:18px">
+    <div class="list" id="apprList">
+      <div class="li" data-aid="1">
+        <span class="perm p4">P4</span>
+        <div class="body"><b>B 站评论草稿发布请求</b><span>数字生活 · BV1xx411c7mD · 已声明 AI 身份</span></div>
+        <button class="btn xs danger-soft" onclick="handleAppr(1,0)">拒绝</button>
+        <button class="btn xs primary" onclick="handleAppr(1,1)">批准</button>
+      </div>
+      <div class="li" data-aid="2">
+        <span class="perm p3">P3</span>
+        <div class="body"><b>Evolution Engine · PR #218 合并审批</b><span>进化引擎 · 四道门禁全部 PASS · 仅改 game-planner.ts</span></div>
+        <a class="btn xs" href="evolution.html">看 Diff</a>
+        <button class="btn xs primary" onclick="handleAppr(2,1)">批准合并</button>
+      </div>
+      <div class="li" data-aid="3">
+        <span class="perm p5">P5</span>
+        <div class="body"><b>星露谷不可逆操作 · 出售「五彩碎片 ×1」</b><span>游戏控制安全拦截 · 属于稀有资源</span></div>
+        <button class="btn xs danger-soft" onclick="handleAppr(3,0)">拒绝并加锁</button>
+        <button class="btn xs danger" onclick="handleAppr(3,1)">单次确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- P0-P5 权限矩阵 -->
+  <div class="sec"><h2>P0–P5 分级策略矩阵</h2><span class="line"></span><span class="aside">用户授权不能让平台禁止的行为变成允许</span></div>
+  <div class="p-matrix rise rise-2" style="margin-bottom:18px">
+    <div class="p-box"><div class="row between"><span class="perm p0">P0</span><select class="select" style="width:130px;height:26px;font-size:11.5px"><option>自动允许</option><option>仅记录</option></select></div><b>读取本地非敏感状态</b><div class="tiny faint">游戏坐标、桌面窗口焦点、饭碗余额</div></div>
+    <div class="p-box"><div class="row between"><span class="perm p1">P1</span><select class="select" style="width:130px;height:26px;font-size:11.5px"><option>按账号作用域</option><option>需提示</option></select></div><b>读取公开 / 已授权内容</b><div class="tiny faint">Wiki 检索、B 站公开字幕、已绑账号只读</div></div>
+    <div class="p-box"><div class="row between"><span class="perm p2">P2</span><select class="select" style="width:130px;height:26px;font-size:11.5px"><option>自动生成草稿</option></select></div><b>生成草稿、计划与预览</b><div class="tiny faint">评论草稿、创作候选图、PR 方案</div></div>
+    <div class="p-box"><div class="row between"><span class="perm p3">P3</span><select class="select" style="width:130px;height:26px;font-size:11.5px"><option>按规则授权</option><option>每次确认</option></select></div><b>可撤销本地变更</b><div class="tiny faint">Worktree 修改代码、本地 SQLite 归档</div></div>
+    <div class="p-box"><div class="row between"><span class="perm p4">P4</span><select class="select" style="width:130px;height:26px;font-size:11.5px"><option>默认确认</option><option>白名单有限放行</option></select></div><b>对外评论、发布与互动</b><div class="tiny faint">B 站/社区评论、公开状态推送</div></div>
+    <div class="p-box" style="border-color:var(--rose-line)"><div class="row between"><span class="perm p5">P5</span><span class="chip sm rose">强制锁定：每次确认</span></div><b>私信、删除、账号安全、支付</b><div class="tiny faint">含游戏高影响不可逆消耗，不可设为全自动</div></div>
+  </div>
+
+  <!-- 凭证库 + 审计日志 -->
+  <div class="grid g2 rise rise-3">
+    <section class="card">
+      <div class="card-h"><h3><i data-lucide="key-round"></i>账号与加密凭证库 (OS Keychain)</h3><span class="sub">明文 Cookie / Key 永不进 JSON</span></div>
+      <table class="table">
+        <thead><tr><th>凭证引用 (Ref)</th><th>归属</th><th>存储位置</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td class="mono tiny">kc://wi/deepseek_main</td><td>Model Gateway</td><td>macOS Keychain</td><td><button class="btn xs" data-toast="凭证已轮换引用标识">轮换</button></td></tr>
+          <tr><td class="mono tiny">kc://wi/bili_readonly</td><td>profile_xj_readonly</td><td>加密凭证库</td><td><button class="btn xs danger-soft" data-toast="已撤销 B 站只读会话" data-kind="warn">撤销</button></td></tr>
+          <tr><td class="mono tiny">kc://wi/dyhub_live</td><td>douyin-dyhub</td><td>macOS Keychain</td><td><button class="btn xs" data-toast="Token 有效期正常">验证</button></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h3><i data-lucide="scroll-text"></i>不可删除审计日志（已脱敏）</h3>
+        <div class="tools"><select class="select" style="height:26px;font-size:11.5px;width:110px" id="auditFilter"><option value="all">全部级别</option><option value="p4">仅 P4/P5</option></select></div>
+      </div>
+      <div class="list" id="auditList">
+        <div class="li" data-lv="p4"><div class="body"><b>intercept.high_impact_sell</b><span>拦截出售「五彩碎片」· 等待人工确认 · 22:11</span></div><span class="perm p5">P5</span></div>
+        <div class="li" data-lv="p1"><div class="body"><b>browser.fetch_subtitles</b><span>Bilibili BV1xx… 只读字幕 · secret=*** · 21:40</span></div><span class="perm p1">P1</span></div>
+        <div class="li" data-lv="p4"><div class="body"><b>live.song_gate_block</b><span>拦截未授权曲目《晴天》进入演唱队列 · 20:15</span></div><span class="perm p4">P4</span></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  let left = 3;
+  window.handleAppr = function (id, ok) {
+    const row = WI.$(`#apprList [data-aid="${id}"]`);
+    if (row) row.remove();
+    left = Math.max(0, left - 1);
+    WI.$('#apprCount').textContent = left ? `${left} 条待处理` : '全部已处理';
+    WI.toast(ok ? '已批准并写入审计日志' : '已拒绝该请求并写入审计日志', ok ? 'ok' : 'warn');
+  };
+  WI.$('#auditFilter').onchange = (e) => {
+    WI.$$('#auditList .li').forEach((li) => li.classList.toggle('hidden', e.target.value !== 'all' && li.dataset.lv !== 'p4'));
+  };
+</script>
+</body>
+</html>

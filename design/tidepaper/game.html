@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>游戏共玩 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .game-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+  .g-tab { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 12.5px; }
+  .g-tab.on { border-color: var(--accent-line); background: var(--surface-2); box-shadow: var(--ring); font-weight: 600; }
+  .hud-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+  .prio-ladder { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 11.5px; }
+  .farm-map {
+    aspect-ratio: 16 / 10; border-radius: var(--r-md); border: 1px solid var(--line); overflow: hidden; position: relative;
+    background: linear-gradient(180deg, #D9E5C9 0%, #C8D9B0 100%);
+  }
+  [data-theme="dark"] .farm-map { background: linear-gradient(180deg, #1E2C22 0%, #17231A 100%); }
+  .farm-grid { position: absolute; inset: 14px; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(7, 1fr); gap: 3px; }
+  .tile-cell { border-radius: 3px; background: rgba(255,255,255,.22); border: 1px solid rgba(20,32,54,.08); position: relative; }
+  [data-theme="dark"] .tile-cell { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.06); }
+  .tile-cell.crop { background: rgba(60, 138, 88, 0.35); border-color: var(--kelp-line); }
+  .tile-cell.watered { background: rgba(29, 122, 138, 0.42); border-color: var(--sea-line); }
+  .tile-cell.rock { background: rgba(110, 116, 134, 0.48); }
+  .tile-cell.target { box-shadow: 0 0 0 2px var(--coral); }
+  .tile-cell.player { background: var(--coral); color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 700; box-shadow: 0 0 0 4px var(--coral-soft); z-index: 2; }
+  .cand-row { padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); display: flex; flex-direction: column; gap: 5px; }
+  .cand-row.win { border-color: var(--kelp-line); background: linear-gradient(90deg, var(--kelp-soft), transparent 65%), var(--surface-2); }
+  .coop-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .coop-col { padding: 12px; border-radius: var(--r-md); background: var(--sunken); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .coop-card { padding: 10px 12px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: 12px; }
+  @media (max-width: 1200px) { .hud-grid, .coop-cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="game" data-crumb="生活 / 游戏共玩">
+<main class="page wide">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="gamepad-2" class="ic-xs"></i>Blueprint 17 · 自主游戏智能与人机共玩</div>
+      <h1>不是规则脚本，是会思考、会协商的游戏伙伴</h1>
+      <p>没有写死「背包满就回家」「下雨天就钓鱼」的 if/else 规则树。AI 依据实时状态、兴趣与攻略独立决策；你的建议她会认真考虑，你的指令和急停拥有最高控制权。</p>
+    </div>
+    <div class="actions">
+      <button class="btn sm" id="toggleLlmFail"><i data-lucide="wifi-off" class="ic-sm"></i>模拟模型断连</button>
+      <button class="btn sm" data-open="highImpactModal"><i data-lucide="alert-octagon" class="ic-sm t-sun"></i>高影响操作确认</button>
+      <a class="btn sm primary" href="knowledge.html"><i data-lucide="book-open" class="ic-sm"></i>攻略与心得</a>
+    </div>
+  </div>
+
+  <!-- LLM 不可用安全暂停横幅 -->
+  <div class="callout danger hidden" id="llmFailBanner" style="margin-bottom:16px">
+    <i data-lucide="octagon-x" class="ic-sm"></i>
+    <div style="flex:1"><b>模型服务不可用 · 已安全暂停高级自主决策：</b>依据架构宪章（ADR-002 D-103），未检测到可用 LLM 推理节点，系统已自动停止发送非紧急动作并告知你——<b>绝不静默退化为固定规则机器人</b>。</div>
+    <button class="btn xs" onclick="WI.$('#llmFailBanner').classList.add('hidden');WI.toast('模型链路已恢复，回到协作模式')">恢复连接</button>
+  </div>
+
+  <!-- 三游戏选择 -->
+  <div class="game-tabs rise rise-1" id="gameTabs" style="margin-bottom:16px">
+    <div class="g-tab on" data-g="stardew"><span class="dot ok pulse"></span><b>星露谷物语</b><span class="mono tiny faint">BWF MCP :18088 (IPv4)</span><span class="evi real">REAL-DEVICE</span></div>
+    <div class="g-tab" data-g="terraria"><span class="dot info"></span><b>泰拉瑞亚 tModLoader</b><span class="mono tiny faint">terraria-bridge :18090</span><span class="evi sim">SIMULATION</span></div>
+    <div class="g-tab" data-g="dst"><span class="dot"></span><b>饥荒联机版 DST</b><span class="mono tiny faint">dst-sidecar :18100</span><span class="evi pending">待启动集群</span></div>
+  </div>
+
+  <!-- 控制权 HUD -->
+  <section class="card pad rise rise-2" style="margin-bottom:16px">
+    <div class="row wrap gap-12" style="margin-bottom:12px">
+      <div>
+        <div class="eyebrow">控制权仲裁 (Control Arbiter)</div>
+        <div class="row gap-8" style="margin-top:4px">
+          <div class="seg lg" id="ctrlSeg">
+            <button class="on" data-v="auto">自主模式</button>
+            <button data-v="coop">协作模式</button>
+            <button data-v="cmd">指令模式</button>
+            <button data-v="manual">手动接管</button>
+          </div>
+          <span class="small muted" id="ctrlDesc">AI 自己决定目标与行动，你可以随时聊天或提建议。</span>
+        </div>
+      </div>
+      <span class="spacer"></span>
+      <div class="row gap-6">
+        <button class="btn sm" data-toast="已下发 Pause AI · 暂停自主动作" data-kind="warn"><i data-lucide="pause" class="ic-xs"></i>暂停 <span class="kbd">F8</span></button>
+        <button class="btn sm" onclick="setMode('manual')"><i data-lucide="hand" class="ic-xs"></i>接管 <span class="kbd">T</span></button>
+        <button class="btn sm" onclick="setMode('coop')"><i data-lucide="play" class="ic-xs"></i>交还 <span class="kbd">R</span></button>
+        <button class="btn-stop" onclick="WI.halt()"><i data-lucide="octagon-x" class="ic-xs"></i>Stop <span class="kbd">⇧Esc</span></button>
+      </div>
+    </div>
+    <div class="row wrap between gap-12" style="padding-top:10px;border-top:1px solid var(--line)">
+      <div class="prio-ladder">
+        <span class="faint tiny">控制优先级：</span>
+        <span class="chip sm rose">1. Stop / 手动接管</span><i data-lucide="chevron-right" class="ic-xs faint"></i>
+        <span class="chip sm coral">2. 强制命令</span><i data-lucide="chevron-right" class="ic-xs faint"></i>
+        <span class="chip sm sun">3. 直接任务</span><i data-lucide="chevron-right" class="ic-xs faint"></i>
+        <span class="chip sm sea">4. 共同计划</span><i data-lucide="chevron-right" class="ic-xs faint"></i>
+        <span class="chip sm">5. AI 自主目标</span>
+      </div>
+      <div class="tiny faint mono">ControlLease: act_farm_14 · 租约剩余 14:22 · 阻塞/超时自动释放</div>
+    </div>
+  </section>
+
+  <!-- 中部主工作区：地图 + 候选方案评估 + 实时回执 -->
+  <div class="hud-grid rise rise-3">
+    <div class="col gap-16">
+      <section class="card">
+        <div class="card-h">
+          <h3><i data-lucide="map"></i>星露谷 · 鲸屿农场 (春 14 日 · 10:40 · 晴 / 明日雨)</h3>
+          <span class="tools"><span class="chip sm kelp">体力 64%</span><span class="chip sm sun">金币 1,840g</span></span>
+        </div>
+        <div class="card-b stack-12">
+          <div class="farm-map">
+            <div class="farm-grid" id="farmGrid"></div>
+            <div style="position:absolute;left:14px;bottom:12px" class="chip sm"><span class="dot live"></span>小鲸 (X:42, Y:19) → 东侧防风草第 19 格</div>
+          </div>
+          <div class="row wrap gap-6">
+            <span class="tiny faint">快捷命令：</span>
+            <button class="btn xs" data-toast="目标已切换为：跟随你"><i data-lucide="footprints" class="ic-xs"></i>Follow Me</button>
+            <button class="btn xs" data-toast="将在安全格原地等待"><i data-lucide="anchor" class="ic-xs"></i>Stay Here</button>
+            <button class="btn xs" data-toast="已设为直接目标：去钓鱼"><i data-lucide="fish" class="ic-xs"></i>Go Fish</button>
+            <button class="btn xs" data-toast="已设为直接目标：去矿洞"><i data-lucide="pickaxe" class="ic-xs"></i>Go Mine</button>
+            <button class="btn xs ghost" data-toast="当前动作：绕过石头浇水，因为前两步在田埂卡住"><i data-lucide="help-circle" class="ic-xs"></i>你在干嘛？</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 自主决策候选方案对比 -->
+      <section class="card">
+        <div class="card-h"><h3><i data-lucide="git-fork"></i>当前回合候选方案评估（为什么选这个？）</h3><span class="sub">动态评估收益 / 代价 / 风险 / 兴趣</span></div>
+        <div class="card-b stack-8">
+          <div class="cand-row win">
+            <div class="row between"><b>方案 A（已选）：浇完剩余 10 格 → 皮埃尔买花椰菜种子</b><span class="chip sm kelp">综合评分 0.89</span></div>
+            <div class="tiny muted">理由：明日天气预报下雨可省一天浇水，今日提前种下花椰菜刚好在春 27 成熟；后天全天精力下矿更划算。</div>
+            <div class="tiny faint">依据：<a class="t-accent" href="knowledge.html">《春季作物收益表》SV 1.6</a> (置信 0.82) + 天气预报观测</div>
+          </div>
+          <div class="cand-row">
+            <div class="row between"><b class="muted">方案 B：立刻下矿补铜矿石</b><span class="chip sm">评分 0.61</span></div>
+            <div class="tiny faint">放弃原因：与用户刚才「今晚别下矿」的建议相左，且明日下雨后天去时间更充裕。</div>
+          </div>
+          <div class="cand-row">
+            <div class="row between"><b class="muted">方案 C：在田边多做一个木箱清理背包</b><span class="chip sm">评分 0.54</span></div>
+            <div class="tiny faint">备选保留：当前背包 19/24 格尚可支撑，买完种子回农场再统一整理。</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右侧：多时间尺度目标栈 + 实时回执 + 聊天协商 -->
+    <div class="col gap-16">
+      <section class="card">
+        <div class="card-h"><h3><i data-lucide="layers"></i>多时间尺度目标栈</h3><span class="sub">可临时打断重排</span></div>
+        <div class="list">
+          <div class="li"><span class="chip sm coral">当前动作</span><div class="body"><b>绕行北侧空地浇水第 19 格</b><span>avoid_rock_detour · 预计 3s</span></div><span class="receipt progress">RUNNING</span></div>
+          <div class="li"><span class="chip sm sea">短期目标</span><div class="body"><b>17:00 前去皮埃尔买 12 颗花椰菜种</b><span>商店营业窗口约束</span></div><span class="tiny mono">排队</span></div>
+          <div class="li"><span class="chip sm">今日目标</span><div class="body"><b>确保全部防风草浇水并保留大嘴鲈鱼</b><span>含用户资源锁 ×1</span></div><span class="tiny mono">64%</span></div>
+          <div class="li"><span class="chip sm plum">自主兴趣</span><div class="body"><b>明天雨天去河口再战鲶鱼</b><span>连续脱钩后的个人执念</span></div><span class="tiny mono">待定</span></div>
+          <div class="li"><span class="chip sm kelp">共同目标</span><div class="body"><b>春季鱼类收集包（周末一起完成）</b><span>你已同意共同目标</span></div><span class="tiny mono">2 / 4</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h"><h3><i data-lucide="activity"></i>真实 Mod 回执流 (BWF :18088)</h3><span class="tools"><button class="btn xs ghost" id="addReceipt">+ 模拟新回执</button></span></div>
+        <div class="list" id="receiptList">
+          <div class="li"><div class="body"><b>water_tile (42, 19)</b><span>耗时 420ms · 土壤湿润度确认 true</span></div><span class="receipt completed">COMPLETED</span></div>
+          <div class="li"><div class="body"><b>move_to (42, 18)</b><span>碰撞检测：田埂石头，触发绕行</span></div><span class="receipt uncertain">UNCERTAIN · 1/3</span></div>
+          <div class="li"><div class="body"><b>lock_item (大嘴鲈鱼)</b><span>已锁入不可出售槽位</span></div><span class="receipt completed">COMPLETED</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h"><h3><i data-lucide="message-circle"></i>朋友式协商（建议 ≠ 命令）</h3></div>
+        <div class="card-b stack-8">
+          <div class="bubble user" style="max-width:92%;font-size:12.5px">要不现在去海边钓鱼算了，别管那几格防风草啦？</div>
+          <div class="bubble ai" style="max-width:92%;font-size:12.5px">我觉得还是把最后 10 格浇完比较好！今天不浇明天就会少长一天，反正只差两分钟，浇完再去买种子，明天雨天我一整天都陪你钓鱼～</div>
+          <div class="row gap-6" style="margin-top:4px">
+            <input class="input" id="coopIn" style="height:30px;font-size:12px" placeholder="提个建议，或用「必须…」下达指令…">
+            <button class="btn xs primary" id="coopSend">发送</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 共玩任务板 + 7 日浸泡指标 -->
+  <div class="sec"><h2>人机共玩分工与 7 日真机浸泡测试</h2><span class="line"></span><span class="aside">soak:real · 真实存档验收进度</span></div>
+  <div class="grid" style="grid-template-columns:1.6fr 1fr;gap:16px">
+    <div class="coop-cols">
+      <div class="coop-col">
+        <div class="row between"><b class="small">你的分工 (User)</b><span class="chip sm">探索 / 社交</span></div>
+        <div class="coop-card"><b>去矿洞 25 层找铜矿</b><div class="tiny faint" style="margin-top:3px">需要 15 个铜锭升级水壶</div></div>
+        <div class="coop-card"><b>给阿比盖尔送紫水晶</b><div class="tiny faint" style="margin-top:3px">好感度推进</div></div>
+      </div>
+      <div class="coop-col">
+        <div class="row between"><b class="small">小鲸分工 (AI)</b><span class="chip sm coral">农务 / 整理</span></div>
+        <div class="coop-card"><b>浇水 + 买花椰菜种子</b><div class="tiny faint" style="margin-top:3px">进行中 · 64%</div></div>
+        <div class="coop-card"><b>资源锁：大嘴鲈鱼 / 蓝莓</b><div class="tiny rose" style="margin-top:3px"><i data-lucide="lock" class="ic-xs" style="display:inline;vertical-align:-2px"></i> 禁止自动出货</div></div>
+      </div>
+      <div class="coop-col">
+        <div class="row between"><b class="small">共同目标 (Shared)</b><span class="chip sm kelp">社区中心</span></div>
+        <div class="coop-card"><b>春季作物与鱼类收集包</b><div class="meter thin kelp" style="--v:65%;margin-top:6px"><i></i></div><div class="tiny faint" style="margin-top:4px">还差 鲶鱼、花椰菜</div></div>
+      </div>
+    </div>
+
+    <div class="card pad">
+      <div class="row between" style="margin-bottom:10px"><h4 class="row gap-6"><i data-lucide="gauge" class="ic-sm t-kelp"></i>7 日无人干预浸泡 (T-M6-71)</h4><span class="evi real">REAL-DEVICE</span></div>
+      <div class="stack-8">
+        <div class="row between small"><span>当前连续运行天数</span><b class="mono">Day 4 / 7</b></div>
+        <div class="meter kelp" style="--v:57%"><i></i></div>
+        <div class="grid g2 tiny muted" style="margin-top:4px">
+          <div>动作真实成功率：<b class="mono t-ink-1">94.1%</b></div>
+          <div>卡死自恢复：<b class="mono">6 / 6 次</b></div>
+          <div>自主换策略：<b class="mono">14 次</b></div>
+          <div>硬编码规则数：<b class="mono t-kelp">0 条</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 高影响操作二次确认模态 -->
+<div class="modal" id="highImpactModal">
+  <div class="modal-h"><i data-lucide="alert-triangle" class="t-sun"></i><h3>高影响不可逆操作确认</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-12">
+    <p class="small">小鲸请求执行以下不可逆操作（依据 Blueprint 11 &amp; 17 §9.4 策略拦截等待确认）：</p>
+    <div class="card sunken pad">
+      <div class="row between"><b>出售背包内「五彩碎片 ×1」或消耗稀有物品</b><span class="perm p5">P5</span></div>
+      <div class="tiny muted" style="margin-top:6px">该物品属于稀有资源（可兑换银河剑），AI 已暂停该动作并保留现场。</div>
+    </div>
+  </div>
+  <div class="modal-f">
+    <button class="btn sm" data-close data-toast="已拒绝出售，小鲸已将其锁入箱子" data-kind="warn">拒绝并加锁</button>
+    <button class="btn sm danger" data-close data-toast="已单次放行该操作">确认允许一次</button>
+  </div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  // 农场小地图绘制
+  const fg = WI.$('#farmGrid');
+  let px = 4, py = 3;
+  function drawFarm() {
+    fg.innerHTML = '';
+    for (let y = 0; y < 7; y++) {
+      for (let x = 0; x < 12; x++) {
+        const d = document.createElement('div');
+        d.className = 'tile-cell';
+        if (x >= 2 && x <= 7 && y >= 2 && y <= 5) d.classList.add(y * 12 + x < py * 12 + px ? 'watered' : 'crop');
+        if (x === 5 && y === 3) d.className = 'tile-cell rock';
+        if (x === 6 && y === 3) d.classList.add('target');
+        if (x === px && y === py) { d.classList.add('player'); d.textContent = '鲸'; }
+        fg.appendChild(d);
+      }
+    }
+  }
+  drawFarm();
+
+  // 游戏选项卡
+  WI.$$('#gameTabs .g-tab').forEach((t) => t.addEventListener('click', () => {
+    WI.$$('#gameTabs .g-tab').forEach((x) => x.classList.remove('on'));
+    t.classList.add('on');
+    WI.toast('切换游戏适配视图：' + t.querySelector('b').textContent, 'info', 'gamepad-2');
+  }));
+
+  // 控制模式切换
+  const descs = {
+    auto: 'AI 自己决定目标与行动，你可以随时聊天或提建议。',
+    coop: '你和 AI 围绕共同目标协商分工，重要资源互锁。',
+    cmd: '优先完成你下达的明确任务，完成后自动回归约定模式。',
+    manual: '你已接管角色！AI 停止发送任何游戏控制动作，仅观察与建议。',
+  };
+  window.setMode = function (m) {
+    WI.$$('#ctrlSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === m));
+    WI.$('#ctrlDesc').textContent = descs[m];
+    WI.toast(descs[m], m === 'manual' ? 'warn' : 'ok');
+  };
+  WI.$('#ctrlSeg').addEventListener('change', (e) => { WI.$('#ctrlDesc').textContent = descs[e.detail]; });
+
+  WI.$('#toggleLlmFail').onclick = () => WI.$('#llmFailBanner').classList.toggle('hidden');
+
+  // 实时回执模拟
+  const samples = [
+    ['water_tile (43, 19)', '耗时 390ms · 土壤湿润度 true', 'completed', 'COMPLETED'],
+    ['path_step (44, 19)', '地形微凸，重新估算步长', 'uncertain', 'UNCERTAIN · 1/3'],
+    ['harvest_crop (41, 18)', '收获防风草 ×1，已入背包', 'completed', 'COMPLETED'],
+  ];
+  function pushReceipt() {
+    const s = WI.rnd(samples);
+    const list = WI.$('#receiptList');
+    const row = WI.h(`<div class="li" style="animation:rise .25s var(--ease-out)"><div class="body"><b>${s[0]}</b><span>${s[1]}</span></div><span class="receipt ${s[2]}">${s[3]}</span></div>`);
+    list.prepend(row);
+    if (list.children.length > 4) list.lastElementChild.remove();
+  }
+  WI.$('#addReceipt').onclick = pushReceipt;
+  setInterval(pushReceipt, 6500);
+
+  WI.$('#coopSend').onclick = () => {
+    const v = WI.$('#coopIn').value.trim(); if (!v) return;
+    WI.$('#coopIn').value = '';
+    WI.toast(/必须|立刻/.test(v) ? '识别为明确指令 · 已优先纳入执行队列' : '识别为普通建议 · 小鲸正在结合目标评估', 'ok', 'message-circle');
+  };
+</script>
+</body>
+</html>

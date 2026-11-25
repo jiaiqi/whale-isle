@@ -50,7 +50,7 @@
 | 阶段 | 核心退出标准 |
 | --- | --- |
 | **P0（已完成）** | `@workbench/runtime-core` 接入 Electron 主进程、`node:sqlite` 替换 `better-sqlite3`（迁移/事务/自愈/回滚 + 打包）、`Evolution Engine Lite` 隔离闭环与全量 V2 文档体系落盘。 |
-| **P1（单角色核心）** | `char_xiaojing` 12 域 + 最小 `LifeRuntime` + 跨平台真实说话/口型联动 + 诚实 4 级额度矩阵 + 五类记忆级联真删除 + Obsidian Tide 主界面 + 星露谷 AI-First 12 个场景与真实急停/接管 `[REAL-DEVICE]` 验证。 |
+| **P1（单角色核心）** | `char_xiaojing` 12 域 + 最小 `LifeRuntime` + 跨平台真实说话/口型联动 + 诚实 4 级额度矩阵 + 五类记忆级联真删除 + V2 壳层拆解与多主题底座（P1 落地 Obsidian Tide 壳层，后续按 `ADR-003` 以 Tidepaper 为主基线演进）+ 星露谷 AI-First 12 个场景与真实急停/接管 `[REAL-DEVICE]` 验证。 |
 | **P2（创作与真实联机）** | 攻略学习闭环 + 第三方插件独立进程隔离 + 双向 MCP/Skills + 生图/3D+Blender VRM/像素导出 + CrossPet 全量合法导入 + 人类与小鲸星露谷真实联机分工 `[REAL-DEVICE]`。 |
 | **P3（表演/直播/浏览器）** | SVS/SVC 多轨舞台表演 + 真实平台测试直播间闭环 + `ComputerUseLease` 与 Per-Character `BrowserProfile` 隔离 + Digital Life L1 + 多被动桌宠同屏。 |
 | **P4（完全闭环与自演进）** | 小鲸长时真实端到端稳定验收 + Social L2→L3 授权闭环 + Evolution Engine Full 脱敏遥测复现与灰度回滚。 |

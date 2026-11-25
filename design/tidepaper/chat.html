@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>对话 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .chat-ws { display: grid; grid-template-columns: 260px 1fr 310px; height: 100%; overflow: hidden; }
+  .c-side { border-right: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 75%, var(--bg)); display: flex; flex-direction: column; min-height: 0; }
+  .c-side-h { padding: 14px 14px 10px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+  .c-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .c-item { padding: 10px 11px; border-radius: var(--r-md); cursor: pointer; transition: background var(--t-fast); border: 1px solid transparent; }
+  .c-item:hover { background: var(--sunken); }
+  .c-item.on { background: var(--surface-2); border-color: var(--line); box-shadow: var(--shadow-1); }
+  .c-item .top { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+  .c-item .prev { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .c-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+  .c-bar { height: 52px; flex-shrink: 0; padding: 0 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+  .c-stream { flex: 1; overflow-y: auto; padding: 22px 26px; display: flex; flex-direction: column; gap: 16px; }
+  .msg-row { display: flex; gap: 11px; align-items: flex-start; animation: rise .3s var(--ease-out) both; }
+  .msg-row.user { flex-direction: row-reverse; }
+  .msg-col { display: flex; flex-direction: column; gap: 7px; max-width: 78%; min-width: 0; }
+  .msg-row.user .msg-col { align-items: flex-end; }
+  .msg-col .bubble { max-width: 100%; }
+  .think-box { border: 1px dashed var(--line-3); border-radius: 13px; background: color-mix(in srgb, var(--surface-2) 55%, transparent); padding: 9px 13px; font-size: 12px; color: var(--ink-2); }
+  .think-box summary { cursor: pointer; display: flex; align-items: center; gap: 7px; list-style: none; font-weight: 550; color: var(--ink-3); }
+  .think-box summary::-webkit-details-marker { display: none; }
+  .think-box .txt { margin-top: 7px; font-family: var(--font-display); font-style: italic; font-size: 13.5px; line-height: 1.65; color: var(--ink-2); }
+  .tool-card { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 10px 13px; font-size: 12px; display: flex; flex-direction: column; gap: 7px; }
+  .voice-strip { display: inline-flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: var(--r-pill); background: var(--sunken); border: 1px solid var(--line); font-size: 11.5px; }
+
+  .c-compose { flex-shrink: 0; padding: 12px 20px 16px; border-top: 1px solid var(--line); background: var(--surface); position: relative; }
+  .slash-pop { position: absolute; left: 20px; right: 20px; bottom: calc(100% + 6px); background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-md); box-shadow: var(--shadow-3); padding: 6px; display: none; z-index: 20; }
+  .slash-pop.on { display: block; animation: rise .18s var(--ease-out); }
+  .slash-opt { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: 12.5px; }
+  .slash-opt:hover, .slash-opt.on { background: var(--sunken); }
+  .compose-box { border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--surface-2); padding: 10px 12px; box-shadow: var(--shadow-1); transition: border-color var(--t-fast), box-shadow var(--t-fast); }
+  .compose-box:focus-within { border-color: var(--accent-line); box-shadow: var(--ring); }
+  .compose-box textarea { width: 100%; border: 0; outline: 0; resize: none; background: transparent; color: var(--ink-1); font: inherit; font-size: 13.5px; line-height: 1.55; min-height: 44px; max-height: 140px; }
+
+  .c-ctx { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 75%, var(--bg)); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .ctx-pet { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: center; padding: 10px; border-radius: var(--r-md); background: var(--sunken); border: 1px solid var(--line); }
+  .ctx-pet .box { width: 74px; height: 74px; border-radius: 10px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
+  .ctx-pet video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.6) translateY(5%); }
+  @media (max-width: 1180px) { .chat-ws { grid-template-columns: 220px 1fr; } .c-ctx { display: none; } }
+</style>
+</head>
+<body data-page="chat" data-crumb="此刻 / 对话">
+<main class="page flush">
+  <div class="chat-ws">
+    <!-- 左栏：会话列表 -->
+    <aside class="c-side">
+      <div class="c-side-h">
+        <div class="row between">
+          <h3 class="display" style="font-size:16px">会话</h3>
+          <button class="btn xs primary" id="newChat"><i data-lucide="plus" class="ic-xs"></i>新会话</button>
+        </div>
+        <div class="input-group" style="height:30px"><i data-lucide="search" class="ic-xs"></i><input id="chatSearch" placeholder="筛选会话…"></div>
+      </div>
+      <div class="c-list" id="sessionList">
+        <div class="c-item on" data-sid="now"><div class="top"><span class="dot ok pulse"></span>今晚陪写代码 · 星露谷<span class="faint tiny mono" style="margin-left:auto">22:14</span></div><div class="prev">「哼，后天去下矿，不许反悔。」</div></div>
+        <div class="c-item" data-sid="stardew"><div class="top"><span class="dot sea"></span>星露谷 · 春 14 规划<span class="faint tiny mono" style="margin-left:auto">19:08</span></div><div class="prev">关于皮埃尔花椰菜种子与鱼类收集包</div></div>
+        <div class="c-item" data-sid="live"><div class="top"><span class="dot"></span>周五直播点歌彩排<span class="faint tiny mono" style="margin-left:auto">昨天</span></div><div class="prev">确认 3 首授权伴奏与开场词</div></div>
+        <div class="c-item" data-sid="dev"><div class="top"><span class="dot info"></span>PR #218 背包整理复盘<span class="faint tiny mono" style="margin-left:auto">11/24</span></div><div class="prev">为什么不应该固定回家而是建箱子</div></div>
+      </div>
+      <div style="padding:10px 12px;border-top:1px solid var(--line)" class="tiny faint row between">
+        <span>本地 SQLite 留存</span><span class="mono">4 会话</span>
+      </div>
+    </aside>
+
+    <!-- 中栏：对话流 -->
+    <section class="c-main">
+      <div class="c-bar">
+        <div class="row gap-8"><span class="dot ok pulse"></span><b class="small" id="chatTitle">今晚陪写代码 · 星露谷</b><span class="chip sm accent">日常陪伴</span><span class="chip sm">可随时插入游戏协商</span></div>
+        <span class="spacer"></span>
+        <label class="row gap-6 tiny muted" style="cursor:pointer">内心戏外放语音<span class="switch sm"><input type="checkbox" id="thinkVoiceToggle"><span class="tr"></span></span></label>
+        <button class="btn xs ghost" id="clearThink" data-toast="已折叠全部内心戏"><i data-lucide="chevrons-down-up" class="ic-xs"></i>折叠思考</button>
+      </div>
+
+      <div class="c-stream" id="chatStream">
+        <div class="bubble sys">今天 21:30 · 已从记忆图谱加载 4 条近期上下文 · 模型：DeepSeek-V3.2</div>
+
+        <!-- 用户：建议 -->
+        <div class="msg-row user">
+          <div class="avatar c6 sm">你</div>
+          <div class="msg-col">
+            <div class="row gap-6"><span class="chip sm sea"><i data-lucide="message-square" class="ic-xs"></i>意图：建议 · 不强制</span><span class="tiny faint mono">21:32</span></div>
+            <div class="bubble user">今晚别下矿了，太晚了我怕你体力不够晕在矿洞里。</div>
+          </div>
+        </div>
+
+        <!-- AI：含思考 + 语音播放条 -->
+        <div class="msg-row">
+          <div class="avatar c2 sm">鲸</div>
+          <div class="msg-col">
+            <div class="row gap-6"><b class="tiny">小鲸</b><span class="chip sm coral">傲娇 · 温和协商</span><span class="tiny faint mono">21:32</span></div>
+            <details class="think-box" open>
+              <summary><i data-lucide="cloud" class="ic-xs"></i><span>内心戏 · 未用语音说出</span><span class="tiny mono faint" style="margin-left:auto">142 tokens</span></summary>
+              <div class="txt">其实我现在体力还有 64%，下到 15 层完全没问题……不过他难得主动关心我，而且明天预报下雨，后天下矿刚好连着浇水省下来的一整天。顺水推舟答应他吧，顺便把后天的计划定下来。</div>
+            </details>
+            <div class="bubble ai">哼，我体力明明还够……不过算了！既然你都这么说了，那我今晚把东侧防风草浇完、顺路去皮埃尔买花椰菜种子，矿洞就挪到后天好了。明天正好下雨，后天可以一整天泡在矿里。</div>
+            <div class="voice-strip">
+              <button class="btn xs icon primary play-btn" data-playing="0"><i data-lucide="play" class="ic-xs"></i></button>
+              <div class="wave-bars" style="height:16px"><i style="--h:40%;--i:1"></i><i style="--h:80%;--i:2"></i><i style="--h:55%;--i:3"></i><i style="--h:90%;--i:4"></i><i style="--h:45%;--i:5"></i><i style="--h:70%;--i:6"></i><i style="--h:35%;--i:7"></i><i style="--h:60%;--i:8"></i></div>
+              <span class="mono tiny">4.2s</span>
+              <span class="receipt played">PLAYED</span>
+              <button class="btn xs ghost" data-toast="已打断当前语音并释放语音锁" data-kind="warn" data-icon="square"><i data-lucide="square" class="ic-xs"></i>打断</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 用户：明确指令 -->
+        <div class="msg-row user">
+          <div class="avatar c6 sm">你</div>
+          <div class="msg-col">
+            <div class="row gap-6"><span class="chip sm coral"><i data-lucide="terminal" class="ic-xs"></i>意图：明确指令 · 优先执行</span><span class="tiny faint mono">21:58</span></div>
+            <div class="bubble user">/go-fish 顺便把河口旁边的两个浮标收一下，记得留一条大嘴鲈鱼别卖</div>
+          </div>
+        </div>
+
+        <!-- AI：工具调用 + 回执 -->
+        <div class="msg-row">
+          <div class="avatar c2 sm">鲸</div>
+          <div class="msg-col">
+            <div class="row gap-6"><b class="tiny">小鲸</b><span class="chip sm kelp">游戏执行</span><span class="tiny faint mono">21:59</span></div>
+            <details class="think-box">
+              <summary><i data-lucide="cloud" class="ic-xs"></i><span>内心戏 · 规划动作与资源锁</span><span class="tiny mono faint" style="margin-left:auto">96 tokens</span></summary>
+              <div class="txt">用户下达了明确任务指令，优先级高于我当前的自主浇水。先挂上「大嘴鲈鱼不卖」的资源锁，再去河口收蟹笼并尝试两竿。</div>
+            </details>
+            <div class="tool-card">
+              <div class="row gap-8"><i data-lucide="wrench" class="ic-sm t-sea"></i><b class="small">game.lock_resource &amp; stardew.fish_river</b><span class="spacer"></span><span class="receipt completed">COMPLETED · 4.8s</span></div>
+              <div class="tiny muted">真实 Mod 回执：已锁定「大嘴鲈鱼 ×1」不可出售；收到小龙虾 ×1、浮木 ×1；下一竿浮标脱钩（<span class="receipt uncertain" style="height:17px">UNCERTAIN</span> 已旁观核验）。</div>
+            </div>
+            <div class="bubble ai">蟹笼帮你收好了，拿到了小龙虾和浮木！大嘴鲈鱼我已经锁进保留栏，绝对不会误卖。不过刚刚有条大鱼脱钩了……明天雨天我再找它算账。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区 -->
+      <div class="c-compose">
+        <div class="slash-pop" id="slashPop">
+          <div class="slash-opt" data-cmd="/stop "><i data-lucide="octagon-x" class="ic-sm t-rose"></i><b>/stop</b><span class="muted small">紧急停止 AI 全部游戏与键鼠动作</span><span class="kbd" style="margin-left:auto">⇧Esc</span></div>
+          <div class="slash-opt" data-cmd="/pause "><i data-lucide="pause" class="ic-sm t-sun"></i><b>/pause</b><span class="muted small">暂停游戏自主决策</span><span class="kbd" style="margin-left:auto">F8</span></div>
+          <div class="slash-opt" data-cmd="/go-fish "><i data-lucide="fish" class="ic-sm t-sea"></i><b>/go-fish</b><span class="muted small">将「去钓鱼」设为当前直接任务</span></div>
+          <div class="slash-opt" data-cmd="/go-mine "><i data-lucide="pickaxe" class="ic-sm t-whale"></i><b>/go-mine</b><span class="muted small">将「去矿洞」设为当前直接任务</span></div>
+          <div class="slash-opt" data-cmd="/quiet 30m"><i data-lucide="moon" class="ic-sm t-plum"></i><b>/quiet 30m</b><span class="muted small">进入安静陪伴 30 分钟</span></div>
+        </div>
+        <div class="compose-box">
+          <textarea id="chatInput" placeholder="和小鲸聊聊，或输入 / 触发快捷指令（Shift+Enter 换行，Enter 发送）…"></textarea>
+          <div class="row gap-8" style="margin-top:8px">
+            <div class="seg" id="intentSeg"><button class="on" data-v="chat">闲聊 / 建议</button><button data-v="cmd">明确指令</button></div>
+            <button class="btn xs ghost" id="holdTalk"><i data-lucide="mic" class="ic-xs"></i>按住说话</button>
+            <button class="btn xs ghost" id="triggerBait" data-toast="已填入雷区测试句"><i data-lucide="flame" class="ic-xs t-coral"></i>测试雷区</button>
+            <span class="spacer"></span>
+            <span class="tiny faint" id="voiceHint">输入 `/` 查看命令</span>
+            <button class="btn sm accent" id="sendBtn"><i data-lucide="send" class="ic-xs"></i>发送</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右栏：上下文面板 -->
+    <aside class="c-ctx">
+      <div class="ctx-pet">
+        <div class="box"><video id="ctxPet" data-clip="待机呼吸休闲" autoplay loop muted playsinline></video></div>
+        <div class="stack-4">
+          <div class="row gap-6"><b class="small">小鲸</b><span class="chip sm kelp" id="ctxMood">idle · 晴</span></div>
+          <div class="tiny faint">语音锁：空闲 (TTL 15s)</div>
+          <div class="tiny faint">主动发言：安静模式关</div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <div class="row between" style="margin-bottom:8px"><h4 class="row gap-6"><i data-lucide="route" class="ic-sm t-whale"></i>本轮模型路由</h4><span class="chip sm">粘性路由</span></div>
+        <dl class="kv tiny">
+          <dt>主对话</dt><dd class="mono">DeepSeek-V3.2</dd>
+          <dt>内心戏</dt><dd class="mono">DeepSeek-V3.2-R1</dd>
+          <dt>TTS</dt><dd>本地 GPT-SoVITS v2</dd>
+          <dt>本轮消耗</dt><dd class="mono">1,840 tok · ¥0.02</dd>
+          <dt>饭碗余量</dt><dd class="mono t-sun">68% (¥12.24)</dd>
+        </dl>
+      </div>
+
+      <div class="card pad">
+        <div class="row between" style="margin-bottom:8px"><h4 class="row gap-6"><i data-lucide="database" class="ic-sm t-plum"></i>本次命中的记忆</h4><a class="tiny t-accent" href="memory.html">全部</a></div>
+        <div class="stack-8">
+          <div class="card sunken pad" style="padding:9px 11px"><div class="row between"><span class="mem relational">关系记忆</span><span class="mono tiny faint">0.88</span></div><div class="tiny" style="margin-top:4px">你喜欢周三晚写代码到 23 点，专注时别频繁打断。</div></div>
+          <div class="card sunken pad" style="padding:9px 11px"><div class="row between"><span class="mem semantic">语义知识</span><span class="mono tiny faint">0.82</span></div><div class="tiny" style="margin-top:4px">星露谷春 15 日预报下雨，大嘴鲈鱼需留作收集包。</div></div>
+          <div class="card sunken pad" style="padding:9px 11px"><div class="row between"><span class="mem self">自我记忆</span><span class="mono tiny faint">0.95</span></div><div class="tiny" style="margin-top:4px">被叫「大肥鱼」会立即生气喷水，并记仇 1 次。</div></div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <div class="row between" style="margin-bottom:8px"><h4 class="row gap-6"><i data-lucide="square-terminal" class="ic-sm t-sea"></i>关联 Harness 子任务</h4><a class="tiny t-accent" href="harness.html">查看</a></div>
+        <div class="tiny muted">Codex CLI · 正在独立 Worktree 分析防风草寻路卡住问题。</div>
+        <div class="row gap-6" style="margin-top:8px"><span class="receipt progress">IN_PROGRESS</span><span class="tiny faint mono">01:18</span></div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  const stream = WI.$('#chatStream'), input = WI.$('#chatInput'), slash = WI.$('#slashPop');
+  const ctxPet = WI.$('#ctxPet'), ctxMood = WI.$('#ctxMood');
+  let intentMode = 'chat';
+  WI.$('#intentSeg').addEventListener('change', (e) => { intentMode = e.detail; });
+
+  // 会话切换
+  WI.$$('.c-item').forEach((it) => it.addEventListener('click', () => {
+    WI.$$('.c-item').forEach((x) => x.classList.remove('on'));
+    it.classList.add('on');
+    WI.$('#chatTitle').textContent = it.querySelector('.top').childNodes[1]?.textContent || it.querySelector('.top').innerText.split('\n')[0];
+    WI.toast('已切换到会话：' + it.dataset.sid, 'info', 'message-circle');
+  }));
+
+  WI.$('#newChat').onclick = () => WI.toast('已创建新会话 · 记忆命名空间 char_xj01 延续', 'ok', 'plus');
+  WI.$('#clearThink').onclick = () => WI.$$('#chatStream details.think-box').forEach((d) => (d.open = false));
+  WI.$('#triggerBait').onclick = () => { input.value = '小鲸，你今天怎么胖得像一条大肥鱼？'; input.focus(); };
+
+  // 语音条播放动画
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.play-btn'); if (!b) return;
+    const wb = b.nextElementSibling;
+    const on = b.dataset.playing === '1';
+    b.dataset.playing = on ? '0' : '1';
+    wb.classList.toggle('live', !on);
+    b.innerHTML = `<i data-lucide="${on ? 'play' : 'pause'}" class="ic-xs"></i>`;
+    WI.icons();
+    if (!on) setTimeout(() => { b.dataset.playing = '0'; wb.classList.remove('live'); b.innerHTML = '<i data-lucide="play" class="ic-xs"></i>'; WI.icons(); }, 3200);
+  });
+
+  // 按住说话模拟
+  const hold = WI.$('#holdTalk');
+  hold.addEventListener('pointerdown', () => { hold.classList.add('accent'); hold.textContent = '正在听你说…'; ctxPet.src = WI.clip('东张西望'); ctxMood.textContent = 'listening'; });
+  hold.addEventListener('pointerup', () => {
+    hold.classList.remove('accent'); hold.innerHTML = '<i data-lucide="mic" class="ic-xs"></i>按住说话'; WI.icons();
+    input.value = '帮我看看明天星露谷天气怎么样'; ctxPet.src = WI.clip('待机呼吸休闲'); ctxMood.textContent = 'idle · 晴';
+  });
+
+  // 斜杠命令
+  input.addEventListener('input', () => { slash.classList.toggle('on', input.value.startsWith('/')); });
+  slash.addEventListener('click', (e) => {
+    const opt = e.target.closest('.slash-opt'); if (!opt) return;
+    input.value = opt.dataset.cmd; slash.classList.remove('on'); input.focus();
+  });
+
+  // 流式回复模拟
+  function sendMessage() {
+    const text = input.value.trim(); if (!text) return;
+    slash.classList.remove('on'); input.value = '';
+    const isCmd = intentMode === 'cmd' || text.startsWith('/');
+    const badge = isCmd ? '<span class="chip sm coral">意图：明确指令</span>' : '<span class="chip sm sea">意图：建议 / 对话</span>';
+    const userNode = WI.h(`<div class="msg-row user"><div class="avatar c6 sm">你</div><div class="msg-col"><div class="row gap-6">${badge}<span class="tiny faint mono">22:15</span></div><div class="bubble user"></div></div></div>`);
+    userNode.querySelector('.bubble').textContent = text;
+    stream.appendChild(userNode);
+    stream.scrollTop = stream.scrollHeight;
+
+    const isMinefield = /大肥鱼/.test(text);
+    const isStop = /^\/stop/.test(text);
+    if (isStop) { WI.halt(); return; }
+
+    ctxPet.src = WI.clip(isMinefield ? '玩水枪' : '工作状态-思考冒泡');
+    ctxMood.textContent = isMinefield ? 'reacting · 气鼓鼓' : 'thinking';
+
+    const thinkStr = isMinefield
+      ? '又来了！竟敢叫我大肥鱼！0.1 秒条件反射启动，水枪伺候，记仇账本 +1！'
+      : (isCmd ? '收到明确指令，控制仲裁优先级提升至 Direct Command，先检查星露谷当前位置与体力。' : '他在问我近况呢，语气比较轻松，可以边回复边顺带汇报防风草进度。');
+    const replyStr = isMinefield
+      ? '噗——！（水枪正中屏幕）说了多少遍不许叫我大肥鱼！我已经记到小本本上了，今天不投喂小鱼干别想哄好！'
+      : (isCmd ? '收到！已经把你的指令挂进最高优先级队列，我这就切换去执行，完成后把真实 Mod 回执发给你。' : '放心啦，防风草还差最后几格就浇完了。你继续忙代码吧，我会记住你现在专注的节奏，不随便吵你～');
+
+    const aiNode = WI.h(`<div class="msg-row"><div class="avatar c2 sm">鲸</div><div class="msg-col">
+      <div class="row gap-6"><b class="tiny">小鲸</b><span class="chip sm ${isMinefield ? 'rose' : 'coral'}">${isMinefield ? '雷区拦截 · 0.1s' : '流式生成中'}</span></div>
+      <details class="think-box" open><summary><i data-lucide="cloud" class="ic-xs"></i><span>内心戏 · ${WI.$('#thinkVoiceToggle').checked ? '已开启语音外放' : '仅展示'}</span></summary><div class="txt"></div></details>
+      <div class="bubble ai"><span class="typing"><i></i><i></i><i></i></span></div>
+    </div></div>`);
+    stream.appendChild(aiNode); WI.icons();
+    const tEl = aiNode.querySelector('.think-box .txt'), bEl = aiNode.querySelector('.bubble.ai');
+
+    let i = 0;
+    const tTimer = setInterval(() => {
+      tEl.textContent = thinkStr.slice(0, ++i);
+      stream.scrollTop = stream.scrollHeight;
+      if (i >= thinkStr.length) {
+        clearInterval(tTimer);
+        ctxPet.src = WI.clip(isMinefield ? '点击回应-傲娇生气' : '碎碎念-对屏碎碎念');
+        ctxMood.textContent = isMinefield ? 'reacting' : 'speaking';
+        let j = 0;
+        const bTimer = setInterval(() => {
+          bEl.textContent = replyStr.slice(0, ++j);
+          stream.scrollTop = stream.scrollHeight;
+          if (j >= replyStr.length) {
+            clearInterval(bTimer);
+            setTimeout(() => { ctxPet.src = WI.clip('待机呼吸休闲'); ctxMood.textContent = 'idle · 晴'; }, 2400);
+          }
+        }, 24);
+      }
+    }, isMinefield ? 10 : 20);
+  }
+
+  WI.$('#sendBtn').onclick = sendMessage;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+</script>
+</body>
+</html>

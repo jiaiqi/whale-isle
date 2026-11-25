@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>模型与服务商 — 大肥鱼工作台 v4</title>
 <link rel="stylesheet" href="tokens.css">
-<script src="vendor/lucide.min.js"></script>
+<script src="../vendor/lucide.min.js"></script>
 <script src="shell.js"></script>
 <style>
   .page { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
@@ -455,17 +455,17 @@
 
   /** 供应商官方 logo（2026-11-22 官网/GitHub 收集；无官方标识者回落 lucide，绝不生成替代图） */
   const LOGO = {
-    'opencode-go': '../apps/desktop-host/assets/brand/providers/opencode.svg',
-    'opencode-zen': '../apps/desktop-host/assets/brand/providers/opencode.svg',
-    'typesafe-jev': '../apps/desktop-host/assets/brand/providers/typesafe-jev.jpg',
-    'deepseek-official': '../apps/desktop-host/assets/brand/providers/deepseek-official.png',
-    siliconflow: '../apps/desktop-host/assets/brand/providers/siliconflow.png',
-    openrouter: '../apps/desktop-host/assets/brand/providers/openrouter.png',
-    'volcano-ark': '../apps/desktop-host/assets/brand/providers/volcano-ark.jpg',
-    openai: '../apps/desktop-host/assets/brand/providers/openai.svg',
-    anthropic: '../apps/desktop-host/assets/brand/providers/anthropic.png',
-    minimax: '../apps/desktop-host/assets/brand/providers/minimax.png',
-    'local-ollama': '../apps/desktop-host/assets/brand/providers/local-ollama.png',
+    'opencode-go': '../../apps/desktop-host/assets/brand/providers/opencode.svg',
+    'opencode-zen': '../../apps/desktop-host/assets/brand/providers/opencode.svg',
+    'typesafe-jev': '../../apps/desktop-host/assets/brand/providers/typesafe-jev.jpg',
+    'deepseek-official': '../../apps/desktop-host/assets/brand/providers/deepseek-official.png',
+    siliconflow: '../../apps/desktop-host/assets/brand/providers/siliconflow.png',
+    openrouter: '../../apps/desktop-host/assets/brand/providers/openrouter.png',
+    'volcano-ark': '../../apps/desktop-host/assets/brand/providers/volcano-ark.jpg',
+    openai: '../../apps/desktop-host/assets/brand/providers/openai.svg',
+    anthropic: '../../apps/desktop-host/assets/brand/providers/anthropic.png',
+    minimax: '../../apps/desktop-host/assets/brand/providers/minimax.png',
+    'local-ollama': '../../apps/desktop-host/assets/brand/providers/local-ollama.png',
   };
   const iconHtml = (p, cls) => LOGO[p.id]
     ? `<img src="${LOGO[p.id]}" alt="">`

@@ -90,14 +90,17 @@
 
 ### 2.1 设计稿对比与选型结论
 
-仓库中存在四代设计资产：
-1. **Obsidian v4（`design/`，当前运行中控台基线）**：`#050507` 纯黑曜石底 + Apple 玻璃材质 + 系统蓝 `#0a84ff` + 分组插件侧栏 + `⌘K` + `lucide-react` 零 emoji。
-2. **V2 入口原型（`whale-isle-v2-obsidian.html`）**：将 v4 壳层升级为 13 个 V2 页面框架（含角色创作工坊、声音身份、社区生活、自主进化），确立了「左侧导航 + 右侧 `GET_STATE` 实时监控 + 顶栏三开关」的信息结构。
-3. **Tide v5（`design/v2/`，12 文件）**：提出「深海屿光」视觉母题（鲸光青 `#3EE0CD`）、**六世界 × 十页面** IA，以及 **声呐环 / 回执芯片 / 许可徽章 / 控制权 HUD** 四个签名组件（注：该稿部分使用了“小莓”命名）。
-4. **Obsidian Tide（`design/v2-gemini/`，16 文件）**：融合 `whale-isle-v2-obsidian.html` 的曜石深海/晨汐瓷白双主题（含 `system` 跟随）与 `design/v2/` 的六世界十页 + 四个签名组件，锚定单一主角色 **小鲸**，明确 `pet-stage` 与 `tray-popover` 独立双窗硬件边界。
-5. **Tidepaper v3（`design/v3/`）**：暖白纸感 + 衬线数字的探索稿，气质偏向静态手账，对高频游戏状态与多工作流监控承载较弱。
+仓库中已整编为五组设计资产（统一门户入口见 `design/index.html` 与 `design/README.md`）：
+1. **Tidepaper 潮汐纸（`design/tidepaper/`，25 页全量原型）**：暖白纸面（晨雾 Light）+ 墨蓝字迹 + 珊瑚落日点睛 + 夜潮（Dark）双主题，衬线编辑感 +「角色先于功能」，覆盖从总览、对话、114 动作库、独立桌宠舞台/托盘、星露谷共玩、攻略心得、直播导演台/OBS、手机远程到创作工坊、资产门禁、插件/MCP/ACP、安全与进化引擎的完整交互原型。
+2. **Obsidian Tide（`design/theme-obsidian-tide/`，原 `design/v2-gemini/`，16 文件）**：融合 `whale-isle-v2-obsidian.html` 的曜石深海/晨汐瓷白双主题（含 `system` 跟随）与 `theme-tide-deep` 的六世界十页 + 四个签名组件，锚定单一主角色 **小鲸**，已在 `V2-P1-05` 率先落地为桌面中控台运行时壳层。
+3. **Tide Deep（`design/theme-tide-deep/`，原 `design/v2/`，12 文件）**：提出「深海屿光」视觉母题（鲸光青 `#3EE0CD`）、**六世界 × 十页面** IA，以及 **声呐环 / 回执芯片 / 许可徽章 / 控制权 HUD** 四个签名组件。
+4. **Obsidian v4（`design/theme-obsidian-v4/`，原 `design/`）**：`#050507` 纯黑曜石底 + Apple 玻璃材质 + 系统蓝 `#0a84ff` + 分组插件侧栏 + `⌘K` + `lucide-react` 零 emoji 的 V1 基线。
+5. **历史归档（`design/archive/`）**：收拢早期 `whale-isle-v2-obsidian.html` 单页与 `v1-v3-legacy/` 归档。
 
-**设计体系决策**：选用 **Obsidian Tide（`design/v2-gemini/` + `whale-isle-v2-obsidian.html`）** 作为 V2 目标设计体系——保留当前已落地的 Obsidian v4 Tailwind tokens 工程资产，按“先内核壳层、后语义组件、再逐世界迁移”渐进演进，零推倒浪费。
+**设计体系决策（2026-11-26 经 [ADR-003](./adr/ADR-003-uiux-tidepaper-primary-and-themes.md) 更新）**：
+- `V2-P1-05` 先期基于 **Obsidian Tide** 完成 1,466 行 `App.tsx` 的渐进拆解、四大签名组件与三态主题落地，保留既有工程资产零浪费；
+- **自 2026-11-26 起，正式确立 `design/tidepaper/`（潮汐纸 Tidepaper）为 V2 主 UI/UX 参考设计基线**，将 **Obsidian Tide**、**Tide Deep** 与 **Obsidian v4** 保留为**可选主题（Optional Themes）**，通过语义化 CSS Token 层兼容切换；
+- 所有原型仅作为高保真参考稿，实际开发中须结合各模块真实可用度、性能、多窗口硬件边界与渐进节奏灵活调整，严禁照搬未接线空壳。
 
 ### 2.2 CrossPet（`lokicorvus/crosspet` v1.4.1）深度审查
 

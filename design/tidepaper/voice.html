@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>声音与表演 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .style-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .style-btn { padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); text-align: left; cursor: pointer; transition: all var(--t-fast); }
+  .style-btn:hover { border-color: var(--line-2); }
+  .style-btn.on { border-color: var(--accent-line); background: var(--accent-soft); }
+  .style-btn b { display: block; font-size: 12.5px; }
+  .style-btn span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .arb-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); }
+  .arb-row .num-b { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 12px; font-weight: 700; background: var(--sunken); color: var(--ink-2); }
+  .arb-row.top .num-b { background: var(--rose-soft); color: var(--rose); }
+  .viseme-track { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 10px; }
+  .viseme-cell { padding: 6px 4px; border-radius: 6px; background: var(--sunken); border: 1px solid var(--line); text-align: center; font-family: var(--font-mono); font-size: 10.5px; transition: all .15s; }
+  .viseme-cell.lit { background: var(--accent); color: #fff; border-color: transparent; transform: translateY(-2px); }
+</style>
+</head>
+<body data-page="voice" data-crumb="角色 / 声音与表演">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="audio-lines" class="ic-xs"></i>Voice Identity &amp; Performance Engine</div>
+      <h1>小鲸的声音与身体表演</h1>
+      <p>说话（TTS）、歌声合成（SVS / SVC）与表演仲裁互相解耦——哪怕更换语音 Provider，也尽量保持同一个声音身份与动作节奏。</p>
+    </div>
+    <div class="actions">
+      <div class="chip lg"><span class="dot ok pulse"></span>audio-ai-worker · mps · 语音锁空闲</div>
+      <button class="btn danger-soft" data-toast="已清空语音排队并释放语音锁" data-kind="warn" data-icon="square"><i data-lucide="square"></i>打断当前播放</button>
+    </div>
+  </div>
+
+  <!-- 指标 -->
+  <div class="grid g4 rise rise-1">
+    <div class="card pad"><div class="stat"><span class="k"><i data-lucide="zap" class="ic-sm t-coral"></i>流式首包延迟</span><span class="v">412<small>ms</small></span><span class="d up">↓ 38ms · 本地 GPT-SoVITS v2</span></div></div>
+    <div class="card pad"><div class="stat"><span class="k"><i data-lucide="shield-check" class="ic-sm t-kelp"></i>声音资产授权</span><span class="v">5 / 5<small>参考音</small></span><span class="d">禁止未经授权克隆真人声线</span></div></div>
+    <div class="card pad"><div class="stat"><span class="k"><i data-lucide="lock" class="ic-sm t-whale"></i>单端语音锁 TTL</span><span class="v">15<small>秒</small></span><span class="d">防桌面 / 舞台双端叠音</span></div></div>
+    <div class="card pad"><div class="stat"><span class="k"><i data-lucide="volume-x" class="ic-sm t-sun"></i>今日主动沉默率</span><span class="v">64<small>%</small></span><span class="d">自然陪伴，非事件驱动乱说话</span></div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1.25fr 1fr;margin-top:18px">
+    <!-- 左：试听台 + 9 种说话风格 -->
+    <div class="col gap-16">
+      <section class="card rise rise-2">
+        <div class="card-h"><h3><i data-lucide="mic-vocal"></i>SpeechPerformancePlan 合成试听台</h3><span class="tools"><span class="receipt played" id="synthState">READY</span></span></div>
+        <div class="card-b stack-16">
+          <div class="field">
+            <label>台词文本</label>
+            <textarea class="textarea" id="synthText" style="min-height:66px">哼，这颗花椰菜种子我可是算准了雨天前种下的！你要是帮我把西边也浇一下，今晚就不笑话你的代码了。</textarea>
+          </div>
+          <div class="grid g3">
+            <div class="field"><label>表达风格</label><select class="select" id="synthStyle"><option>日常傲娇</option><option>开心雀跃</option><option>游戏专注</option><option>直播主持</option><option>温柔安慰</option><option>调侃</option><option>疲惫打哈欠</option></select></div>
+            <div class="field"><label>语速 (pace)</label><select class="select"><option>normal</option><option>slow</option><option>fast</option></select></div>
+            <div class="field"><label>情绪强度 <span class="mono tiny" id="intVal">75%</span></label><input type="range" class="range" min="10" max="100" value="75" data-out="#intVal" data-unit="%"></div>
+          </div>
+          <div class="card sunken pad">
+            <div class="row between" style="margin-bottom:8px">
+              <span class="tiny muted">实时音频波形 &amp; 口型 Viseme 时间轴（统一播放时钟）</span>
+              <span class="mono tiny faint" id="synthLat">首包预估 ~410ms</span>
+            </div>
+            <div class="wave-bars" id="synthWave" style="height:34px;justify-content:space-between">
+              <i style="--h:30%;--i:1"></i><i style="--h:55%;--i:2"></i><i style="--h:80%;--i:3"></i><i style="--h:45%;--i:4"></i><i style="--h:90%;--i:5"></i><i style="--h:60%;--i:6"></i><i style="--h:40%;--i:7"></i><i style="--h:85%;--i:8"></i><i style="--h:50%;--i:9"></i><i style="--h:70%;--i:10"></i><i style="--h:95%;--i:11"></i><i style="--h:60%;--i:12"></i><i style="--h:40%;--i:13"></i><i style="--h:75%;--i:14"></i><i style="--h:50%;--i:15"></i><i style="--h:85%;--i:16"></i><i style="--h:45%;--i:17"></i><i style="--h:65%;--i:18"></i><i style="--h:35%;--i:19"></i><i style="--h:75%;--i:20"></i><i style="--h:55%;--i:21"></i><i style="--h:40%;--i:22"></i><i style="--h:60%;--i:23"></i><i style="--h:30%;--i:24"></i>
+            </div>
+            <div class="viseme-track" id="visemes">
+              <div class="viseme-cell">a · 0.0s</div><div class="viseme-cell">o · 0.4s</div><div class="viseme-cell">i · 0.8s</div><div class="viseme-cell">u · 1.2s</div><div class="viseme-cell">e · 1.6s</div>
+              <div class="viseme-cell">sil · 2.0s</div><div class="viseme-cell">a · 2.3s</div><div class="viseme-cell">i · 2.7s</div><div class="viseme-cell">o · 3.1s</div><div class="viseme-cell">end</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-f">
+          <label class="row gap-6 tiny muted"><input type="checkbox" checked> 绑定动作手势 <span class="mono">gestureIds</span></label>
+          <span class="spacer"></span>
+          <button class="btn sm primary" id="playSynth"><i data-lucide="play" class="ic-sm"></i>合成并试听</button>
+        </div>
+      </section>
+
+      <section class="card rise rise-3">
+        <div class="card-h"><h3><i data-lucide="sparkles"></i>9 种说话风格矩阵</h3><span class="sub">同一 Voice Profile，不同表达方式</span></div>
+        <div class="card-b style-grid" id="styleGrid">
+          <button class="style-btn on" data-s="日常聊天"><b>日常聊天</b><span>轻快 · 尾音上扬</span></button>
+          <button class="style-btn" data-s="开心"><b>开心雀跃</b><span>高音域 · 气声足</span></button>
+          <button class="style-btn" data-s="认真解释"><b>认真解释</b><span>稳重 · 停顿清晰</span></button>
+          <button class="style-btn" data-s="游戏专注"><b>游戏专注</b><span>低声碎念 · 短句</span></button>
+          <button class="style-btn" data-s="直播主持"><b>直播主持</b><span>清晰响亮 · 互动感</span></button>
+          <button class="style-btn" data-s="安慰"><b>温柔安慰</b><span>放慢 15% · 轻柔</span></button>
+          <button class="style-btn" data-s="调侃"><b>傲娇调侃</b><span>先扬后抑 · 带笑意</span></button>
+          <button class="style-btn" data-s="疲惫"><b>疲惫犯困</b><span>气声重 · 语速慢</span></button>
+          <button class="style-btn" data-s="惊讶"><b>吓一跳</b><span>起音高 · 急促</span></button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 右：Voice Profile + 唱歌 + 动作仲裁 -->
+    <div class="col gap-16">
+      <section class="card rise rise-2">
+        <div class="card-h"><h3><i data-lucide="fingerprint"></i>Voice Profile · 音色与路由</h3><span class="tools"><span class="lic own">自有授权 · 禁商用克隆</span></span></div>
+        <div class="card-b stack-12">
+          <dl class="kv">
+            <dt>音色描述</dt><dd>清亮元气少女音 · 略带娇憨鼻音与咬字弹性</dd>
+            <dt>音域 / 语速</dt><dd class="mono">G3 – E5 · 4.3 字/秒</dd>
+            <dt>5 组参考音</dt><dd>开心 / 生气 / 安慰 / 困倦 / 平静（全部已签授权台账）</dd>
+            <dt>主 TTS 链路</dt><dd><span class="dot ok" style="margin-right:6px"></span>本地 GPT-SoVITS v2 (Apple MPS)</dd>
+            <dt>自动降级链</dt><dd><span class="dot info" style="margin-right:6px"></span>SiliconFlow 云端 TTS → 文本气泡兜底</dd>
+          </dl>
+          <hr style="margin:4px 0">
+          <div class="grid g2">
+            <div class="field"><label class="tiny">桌面陪伴输出设备</label><select class="select" style="height:30px;font-size:12px"><option>MacBook Pro 扬声器</option><option>AirPods Pro</option></select></div>
+            <div class="field"><label class="tiny">直播舞台输出设备</label><select class="select" style="height:30px;font-size:12px"><option>BlackHole 2ch (OBS 独立轨)</option><option>同桌面默认</option></select></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card rise rise-3">
+        <div class="card-h"><h3><i data-lucide="music"></i>唱歌系统 (Sing Engine)</h3><span class="sub">与普通 TTS 管线分离</span></div>
+        <div class="card-b stack-12">
+          <div class="row between card sunken pad" style="padding:10px 12px">
+            <div><b class="small">SVS · 歌声合成</b><div class="tiny faint">输入歌词 + MIDI 旋律 + 节奏 → 生成歌声</div></div>
+            <span class="chip sm kelp">就绪</span>
+          </div>
+          <div class="row between card sunken pad" style="padding:10px 12px">
+            <div><b class="small">SVC · 授权声音转换</b><div class="tiny faint">Demucs 伴奏分离 → RVC v2 转为小鲸音色</div></div>
+            <span class="chip sm sea">前 25s 先唱</span>
+          </div>
+          <div class="tiny muted">音域适配：<span class="mono">C4–F5</span> · 擅长度：City Pop / 轻摇滚 / 民谣。每首点歌须校验歌曲、伴奏与歌词直播授权。</div>
+        </div>
+      </section>
+
+      <section class="card rise rise-4">
+        <div class="card-h"><h3><i data-lucide="layers"></i>Performance Engine · 动作仲裁优先级</h3><span class="sub">避免眨眼/跳舞/说话冲突</span></div>
+        <div class="card-b stack-8">
+          <div class="arb-row top"><div class="num-b">1</div><div><b class="small">安全 / 系统状态</b><div class="tiny faint">紧急停止、断连提示、雷区 0.1s 喷水</div></div><span class="chip sm rose">最高</span></div>
+          <div class="arb-row"><div class="num-b">2</div><div><b class="small">当前交互或游戏关键动作</b><div class="tiny faint">被拖拽悬空、游戏中动作回执反馈</div></div><span class="chip sm coral">高</span></div>
+          <div class="arb-row"><div class="num-b">3</div><div><b class="small">说话 / 唱歌口型与歌词时钟</b><div class="tiny faint">Viseme / Live2D / VRM BlendShape</div></div><span class="chip sm sea">实时</span></div>
+          <div class="arb-row"><div class="num-b">4</div><div><b class="small">情绪动作</b><div class="tiny faint">开心雀跃、气鼓鼓、困倦打哈欠</div></div><span class="chip sm">中</span></div>
+          <div class="arb-row"><div class="num-b">5</div><div><b class="small">Idle 空闲随机氛围链</b><div class="tiny faint">30 秒无事件触发 ambientPool</div></div><span class="chip sm">兜底</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  WI.$$('#styleGrid .style-btn').forEach((b) => b.addEventListener('click', () => {
+    WI.$$('#styleGrid .style-btn').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    WI.$('#synthStyle').value = b.dataset.s;
+    playSynthAnim('已试听风格：' + b.dataset.s);
+  }));
+
+  let playTimer;
+  function playSynthAnim(msg) {
+    clearInterval(playTimer);
+    const wave = WI.$('#synthWave'), cells = WI.$$('#visemes .viseme-cell'), st = WI.$('#synthState');
+    wave.classList.add('live'); st.textContent = 'STREAMING'; st.className = 'receipt progress';
+    let idx = 0;
+    cells.forEach((c) => c.classList.remove('lit'));
+    playTimer = setInterval(() => {
+      cells.forEach((c, i) => c.classList.toggle('lit', i === idx));
+      idx++;
+      if (idx >= cells.length) {
+        clearInterval(playTimer);
+        wave.classList.remove('live');
+        cells.forEach((c) => c.classList.remove('lit'));
+        st.textContent = 'PLAYED · 3.6s'; st.className = 'receipt played';
+      }
+    }, 340);
+    if (msg) WI.toast(msg, 'ok', 'audio-lines');
+  }
+  WI.$('#playSynth').onclick = () => playSynthAnim('本地 GPT-SoVITS v2 合成完成 · 语音锁已自动释放');
+</script>
+</body>
+</html>

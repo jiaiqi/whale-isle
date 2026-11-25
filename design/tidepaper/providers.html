@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型与饭碗 · 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .bowl-hero { display: grid; grid-template-columns: 180px 1fr 240px; gap: 20px; align-items: center; }
+  .bowl-pet { height: 155px; border-radius: var(--r-lg); background: radial-gradient(100px 35px at 50% 86%, var(--sun-soft), transparent), var(--sunken); border: 1px solid var(--line); overflow: hidden; }
+  .bowl-pet video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.5) translateY(5%); }
+  .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .role-card { padding: 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
+  .plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .plan-btn { padding: 12px 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); text-align: left; cursor: pointer; }
+  .plan-btn.on { border-color: var(--accent-line); background: var(--accent-soft); }
+  @media (max-width: 1100px) { .bowl-hero, .role-grid, .plan-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="providers" data-crumb="能力 / 模型与饭碗">
+<main class="page">
+  <div class="page-head rise">
+    <div class="t">
+      <div class="eyebrow"><i data-lucide="bot" class="ic-xs"></i>Model Gateway · CC Switch × Magpie × 赛博饭碗</div>
+      <h1>模型是能力供应商，绝不是小鲸的身份</h1>
+      <p>支持 8 类 Provider 注册；单屏为 6 个大脑角色绑定主模型与回退链；所有密钥只存系统钥匙串，无法读取 官方额度时诚实标为「未知」。</p>
+    </div>
+    <div class="actions">
+      <button class="btn" data-toast="全部网关测试完成：DeepSeek 180ms · 本地 MPS 410ms"><i data-lucide="activity"></i>一键测速</button>
+      <button class="btn primary" data-open="ccModal"><i data-lucide="plus"></i>两步式添加 Provider</button>
+    </div>
+  </div>
+
+  <!-- 赛博饭碗 -->
+  <section class="card pad rise rise-1" style="margin-bottom:18px">
+    <div class="bowl-hero">
+      <div class="bowl-pet"><video id="bowlPet" data-clip="余额-金袋叮当" autoplay loop muted playsinline></video></div>
+      <div class="stack-12">
+        <div class="row gap-10">
+          <h2 class="display">今日赛博饭碗</h2>
+          <span class="chip sm sun" id="bowlTier">钱袋叮当 · 68% 剩余</span>
+          <span class="tiny faint" style="margin-left:auto">联动桌宠余额动画</span>
+        </div>
+        <div class="row gap-12">
+          <span class="num" style="font-size:34px" id="bowlPct">68%</span>
+          <div style="flex:1">
+            <div class="meter thick sun" id="bowlMeter" style="--v:68%"><i></i></div>
+            <div class="row between tiny faint" style="margin-top:6px"><span>今日已吃 ¥5.76 / 上限 ¥18.00</span><span>&lt;15% 自动切「分文不剩」</span></div>
+          </div>
+        </div>
+        <div class="row gap-10 tiny">
+          <span class="faint">拖动模拟余额联动桌宠：</span>
+          <input type="range" class="range" id="bowlSlider" min="5" max="100" value="68" style="width:220px">
+          <button class="btn xs" onclick="WI.$('#bowlSlider').value=90;WI.$('#bowlSlider').dispatchEvent(new Event('input'));WI.toast('投喂 +¥5！小鲸开心得晃尾巴')">投喂 +¥5</button>
+        </div>
+      </div>
+      <div class="card sunken pad">
+        <div class="eyebrow" style="margin-bottom:8px">7 日消耗趋势</div>
+        <svg viewBox="0 0 200 72" style="width:100%;height:72px">
+          <polyline fill="none" stroke="var(--coral)" stroke-width="2.2" points="8,54 38,44 70,48 102,30 134,36 166,22 192,40"/>
+          <circle cx="192" cy="40" r="3.5" fill="var(--coral)"/>
+        </svg>
+        <div class="row between tiny faint"><span>主耗：星露谷决策 (52%)</span><span class="mono">均 ¥7.8/天</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 干饭套餐 + 粘性路由 -->
+  <div class="grid" style="grid-template-columns:1.4fr 1fr;margin-bottom:18px">
+    <section class="card pad rise rise-2">
+      <div class="row between" style="margin-bottom:10px"><h3>干饭套餐（一键切换全角色模型档位）</h3><span class="tiny faint">支持粘性路由</span></div>
+      <div class="plan-grid" id="planGrid">
+        <button class="plan-btn" data-p="省钱"><b>素菜清粥 · 省钱</b><div class="tiny faint" style="margin-top:3px">日常走轻量模型，星露谷高频不肉疼</div></button>
+        <button class="plan-btn on" data-p="均衡"><b>一鱼两吃 · 均衡</b><div class="tiny faint" style="margin-top:3px">DeepSeek-V3.2 主力 + 思考开 R1</div></button>
+        <button class="plan-btn" data-p="豪华"><b>满汉全席 · 豪华</b><div class="tiny faint" style="margin-top:3px">关键剧情 / 直播切旗舰推理</div></button>
+      </div>
+    </section>
+
+    <section class="card pad rise rise-2 stack-12">
+      <div class="row between"><div><b class="small">会话粘性路由 (Sticky Routing)</b><div class="tiny faint">同一任务优先保留 Prompt Prefix 缓存</div></div><label class="switch"><input type="checkbox" checked><span class="tr"></span></label></div>
+      <div class="row between"><div><b class="small">出站日志隐私脱敏</b><div class="tiny faint">自动擦除 Cookie / 密钥 / 本地路径</div></div><label class="switch"><input type="checkbox" checked><span class="tr"></span></label></div>
+    </section>
+  </div>
+
+  <!-- Magpie 6 角色路由绑定 -->
+  <div class="sec"><h2>Magpie 单屏 6 角色路由绑定</h2><span class="line"></span><span class="aside">主模型 + 自动回退链</span></div>
+  <div class="role-grid rise rise-3" style="margin-bottom:18px">
+    <div class="role-card"><div class="row between"><b>1. 主对话 (Chat)</b><span class="chip sm kelp">主路由</span></div><select class="select"><option>DeepSeek-V3.2</option><option>Kimi K2</option><option>Claude Sonnet (Harness)</option></select><div class="tiny faint">回退：GLM-4.6 → 本地缓存回复</div></div>
+    <div class="role-card"><div class="row between"><b>2. 内心戏 (&lt;think&gt;)</b><span class="chip sm coral">流式剥离</span></div><select class="select"><option>DeepSeek-V3.2-R1</option><option>Qwen3-Thinking</option></select><div class="tiny faint">回退：关闭独立思考直出简短气泡</div></div>
+    <div class="role-card"><div class="row between"><b>3. 游戏自主决策</b><span class="chip sm sea">星露谷/泰拉/DST</span></div><select class="select"><option>DeepSeek-V3.2</option><option>Claude Sonnet</option></select><div class="tiny faint">断连时安全暂停，绝不静默降为规则脚本</div></div>
+    <div class="role-card"><div class="row between"><b>4. 记忆提炼与图谱</b><span class="chip sm plum">夜间批处理</span></div><select class="select"><option>Qwen3-32B</option><option>DeepSeek-V3.2</option></select><div class="tiny faint">回退：延后至下一空闲窗口</div></div>
+    <div class="role-card"><div class="row between"><b>5. 直播弹幕响应</b><span class="chip sm">低延迟</span></div><select class="select"><option>GLM-4.6-Flash</option><option>DeepSeek-V3.2</option></select><div class="tiny faint">回退：只保留礼物感谢模板</div></div>
+    <div class="role-card"><div class="row between"><b>6. 视觉复盘与切片</b><span class="chip sm">非实时游戏控制</span></div><select class="select"><option>Qwen2.5-VL-72B</option><option>GPT-4o</option></select><div class="tiny faint">仅事后复盘与 45s 高光切片</div></div>
+  </div>
+
+  <!-- Provider 注册表 -->
+  <div class="sec"><h2>多能力 Provider 注册表</h2><span class="line"></span><span class="aside">官方无额度接口时诚实标「未知」</span></div>
+  <div class="card rise rise-4">
+    <table class="table">
+      <thead><tr><th>Provider</th><th>能力类别</th><th>地域 / Plan 胶囊</th><th>密钥引用 (Keychain)</th><th>官方额度</th><th>状态 / 延迟</th></tr></thead>
+      <tbody>
+        <tr><td><b>DeepSeek Official</b></td><td>LLM / Thinking</td><td><span class="chip sm">CN</span> <span class="chip sm">按量</span></td><td class="mono tiny">kc://wi/deepseek_main</td><td class="mono">¥48.20</td><td><button class="btn xs" onclick="WI.toast('DeepSeek 连通正常 · 178ms')"><span class="dot ok" style="margin-right:4px"></span>178ms 测速</button></td></tr>
+        <tr><td><b>Moonshot (Kimi)</b></td><td>LLM</td><td><span class="chip sm">CN</span> <span class="chip sm">Coding Plan</span></td><td class="mono tiny">kc://wi/kimi_coding</td><td class="tiny faint">未知（无官方查询接口）</td><td><button class="btn xs" onclick="WI.toast('Kimi 连通正常 · 240ms')"><span class="dot ok" style="margin-right:4px"></span>240ms 测速</button></td></tr>
+        <tr><td><b>GPT-SoVITS v2 (Local)</b></td><td>TTS</td><td><span class="chip sm kelp">本机 MPS</span></td><td class="mono tiny">local://uv-audio-worker</td><td class="mono">本地免额度</td><td><span class="chip sm kelp">412ms 首包</span></td></tr>
+        <tr><td><b>Codex CLI + Hunyuan3D</b></td><td>Image / 3D</td><td><span class="chip sm">Local CLI / 云</span></td><td class="mono tiny">kc://wi/media_gw</td><td class="tiny faint">未知（按任务计费）</td><td><span class="chip sm sea">就绪</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- CC Switch 两步式添加模态 -->
+<div class="modal" id="ccModal">
+  <div class="modal-h"><h3>两步式添加 Provider (CC Switch 风格)</h3><span class="spacer"></span><button class="btn ghost icon sm" data-close><i data-lucide="x"></i></button></div>
+  <div class="modal-b stack-16">
+    <div class="field"><label>Step 1 · 选择预设与 Region / Plan</label>
+      <div class="row wrap gap-6" data-chips="single">
+        <span class="chip click on">DeepSeek CN</span><span class="chip click">OpenRouter Global</span><span class="chip click">SiliconFlow TTS</span><span class="chip click">Zhipu Coding Plan</span>
+      </div>
+    </div>
+    <div class="field"><label>Step 2 · 输入 API Key（直接写入 OS 钥匙串，不落明文配置）</label>
+      <input class="input mono" type="password" placeholder="sk-••••••••••••••••••••••">
+      <span class="hint">导出配置时默认自动剔除此字段，仅保留 kc:// 引用。</span>
+    </div>
+  </div>
+  <div class="modal-f"><button class="btn sm" data-close>取消</button><button class="btn sm primary" data-close data-toast="已写入系统钥匙串并完成连通性测试">保存并测试</button></div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  WI.$$('#planGrid .plan-btn').forEach((b) => b.addEventListener('click', () => {
+    WI.$$('#planGrid .plan-btn').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    WI.toast('已切换干饭套餐：' + b.dataset.p, 'ok', 'wheat');
+  }));
+
+  WI.$('#bowlSlider').addEventListener('input', (e) => {
+    const v = +e.target.value;
+    WI.$('#bowlPct').textContent = v + '%';
+    WI.$('#bowlMeter').style.setProperty('--v', v + '%');
+    let clip = '余额-钱袋如常', label = '钱袋如常';
+    if (v >= 85) { clip = '余额-钱袋满溢'; label = '钱袋满溢 · 干饭充足'; }
+    else if (v >= 60) { clip = '余额-金袋叮当'; label = '金袋叮当'; }
+    else if (v >= 30) { clip = '余额-数金皱眉'; label = '数金皱眉 · 精打细算'; }
+    else if (v >= 15) { clip = '余额-袋空如洗'; label = '袋空如洗 · 节省模式'; }
+    else { clip = '余额-分文不剩'; label = '分文不剩！求投喂'; }
+    WI.$('#bowlTier').textContent = `${label} · ${v}%`;
+    const pv = WI.$('#bowlPet');
+    if (pv.dataset.last !== clip) { pv.dataset.last = clip; pv.src = WI.clip(clip); }
+  });
+</script>
+</body>
+</html>

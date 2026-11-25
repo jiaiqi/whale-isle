@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBS 叠加层（独立窗口 :18765）· 鲸屿 Whale Isle</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { overflow-y: auto; }
+  .obs-wrap { min-height: 100vh; padding: 18px 24px 40px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .toolbar { width: min(1240px, 100%); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); }
+  .canvas {
+    width: min(1240px, 100%); aspect-ratio: 16 / 9; border-radius: var(--r-xl); overflow: hidden; position: relative;
+    border: 1px solid var(--line-2); box-shadow: var(--shadow-3);
+    background-image: linear-gradient(45deg, rgba(20,32,54,.04) 25%, transparent 25%), linear-gradient(-45deg, rgba(20,32,54,.04) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(20,32,54,.04) 75%), linear-gradient(-45deg, transparent 75%, rgba(20,32,54,.04) 75%);
+    background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  }
+  .canvas.game-bg {
+    background: radial-gradient(600px 340px at 45% 45%, rgba(60, 138, 88, 0.28), transparent 70%), linear-gradient(160deg, #1E2E23 0%, #15212B 100%);
+  }
+  .safe-guide { position: absolute; inset: 4%; border: 1px dashed rgba(229, 96, 63, 0.5); pointer-events: none; display: none; }
+  .safe-guide.on { display: block; }
+
+  /* OBS 图层元素 */
+  .o-pet { position: absolute; right: 24px; bottom: 18px; width: 250px; height: 220px; }
+  .o-pet video { width: 100%; height: 100%; object-fit: contain; transform: scale(1.4) translateY(5%); }
+  .o-badge { position: absolute; left: 26px; top: 24px; display: flex; gap: 8px; align-items: center; }
+  .o-song {
+    position: absolute; right: 26px; top: 24px; padding: 10px 14px; border-radius: 14px;
+    background: rgba(20, 32, 54, .82); backdrop-filter: blur(12px); color: #F6F2EA; border: 1px solid rgba(255,255,255,.14); min-width: 240px;
+  }
+  .o-lyrics {
+    position: absolute; left: 26px; right: 300px; bottom: 26px; padding: 14px 20px; border-radius: 16px;
+    background: rgba(20, 32, 54, .80); backdrop-filter: blur(14px); color: #F6F2EA; border: 1px solid rgba(255,255,255,.12);
+  }
+  .l-line { font-size: 13px; opacity: .55; transition: all .3s; }
+  .l-line.now { font-family: var(--font-display); font-size: 20px; opacity: 1; color: #FF7D5C; font-weight: 600; margin: 2px 0; }
+  .o-chat {
+    position: absolute; left: 26px; bottom: 140px; width: 320px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .o-dm { padding: 7px 11px; border-radius: 10px; background: rgba(20, 32, 54, .75); color: #F6F2EA; font-size: 12px; backdrop-filter: blur(10px); }
+  .o-gift {
+    position: absolute; left: 50%; top: 28px; transform: translateX(-50%); padding: 8px 16px; border-radius: var(--r-pill);
+    background: linear-gradient(90deg, #E5603F, #C98A1C); color: #fff; font-size: 12.5px; font-weight: 600; box-shadow: var(--shadow-2);
+  }
+</style>
+</head>
+<body data-shell="none">
+<div class="obs-wrap">
+  <div class="toolbar">
+    <a class="btn xs ghost" href="live.html"><i data-lucide="arrow-left" class="ic-xs"></i>回直播导演台</a>
+    <a class="btn xs ghost" href="index.html">目录</a>
+    <span class="mono tiny faint">:18765/overlay</span>
+    <div class="seg" id="presetSeg">
+      <button class="on" data-v="game">游戏陪玩布局</button>
+      <button data-v="sing">点歌舞台</button>
+      <button data-v="talk">夜话杂谈</button>
+    </div>
+    <label class="row gap-6 tiny"><input type="checkbox" id="bgSwitch"> 模拟游戏底图</label>
+    <label class="row gap-6 tiny"><input type="checkbox" id="safeSwitch"> 16:9 安全区线</label>
+    <label class="row gap-6 tiny"><input type="checkbox" id="lyricSwitch" checked> 歌词卡</label>
+    <span class="spacer"></span>
+    <span class="lic devonly">当前桌宠素材仅非商用测试</span>
+  </div>
+
+  <div class="canvas" id="obsCanvas">
+    <div class="safe-guide" id="safeGuide"></div>
+
+    <!-- AI 身份标识 & 控制状态 -->
+    <div class="o-badge">
+      <span class="chip ink"><span class="dot live pulse"></span>AI 伙伴 · 小鲸 (AI 生成内容)</span>
+      <span class="chip kelp">星露谷 · 协作模式</span>
+    </div>
+
+    <!-- 礼物合并横幅 -->
+    <div class="o-gift" id="giftToast"><i data-lucide="sparkles" class="ic-xs" style="display:inline;vertical-align:-2px;margin-right:5px"></i>感谢「海风吹麦浪」送出 小星星 ×3！</div>
+
+    <!-- 正在点歌 -->
+    <div class="o-song">
+      <div class="row between tiny" style="opacity:.7"><span>正在演唱 · SVC RVC v2</span><span>01:12 / 03:45</span></div>
+      <div style="font-weight:650;font-size:14px;margin-top:3px">潮汐与白帆</div>
+      <div class="tiny" style="opacity:.8;margin-top:2px">点歌：海风吹麦浪 · 礼物插队</div>
+    </div>
+
+    <!-- 弹幕精选 -->
+    <div class="o-chat">
+      <div class="o-dm"><b style="color:#3FC1C9">鲸鱼饲养员：</b>今天不敢喊那三个字了哈哈</div>
+      <div class="o-dm"><b style="color:#FF7D5C">海风吹麦浪：</b>前奏和声太好听啦！</div>
+    </div>
+
+    <!-- 双语歌词卡 -->
+    <div class="o-lyrics" id="lyricsCard">
+      <div class="l-line">海风在夜色里把船灯点亮 · Harbor lights glow softly in the dark</div>
+      <div class="l-line now" id="lNow">今晚的风穿过鲸屿的堤岸 · Tonight the tide drifts by</div>
+      <div class="l-line">明天晴或雨都一起去农场 · Rain or shine, we sail back to the farm</div>
+    </div>
+
+    <!-- 小鲸透明舞台位 -->
+    <div class="o-pet"><video id="obsPet" data-clip="悠闲哼歌" autoplay loop muted playsinline></video></div>
+  </div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="shell.js"></script>
+<script>
+  WI.$('#bgSwitch').onchange = (e) => WI.$('#obsCanvas').classList.toggle('game-bg', e.target.checked);
+  WI.$('#safeSwitch').onchange = (e) => WI.$('#safeGuide').classList.toggle('on', e.target.checked);
+  WI.$('#lyricSwitch').onchange = (e) => WI.$('#lyricsCard').classList.toggle('hidden', !e.target.checked);
+  const clipMap = { game: '待机呼吸休闲', sing: '悠闲哼歌', talk: '碎碎念-对屏碎碎念' };
+  WI.$('#presetSeg').addEventListener('change', (e) => { WI.$('#obsPet').src = WI.clip(clipMap[e.detail]); });
+
+  const lines = [
+    '今晚的风穿过鲸屿的堤岸 · Tonight the tide drifts by',
+    '明天晴或雨都一起去农场 · Rain or shine, we sail back to the farm',
+    '水花溅在帽檐也没关系呀 · Sea spray on my ribbon feels just fine',
+  ];
+  let idx = 0;
+  setInterval(() => { idx = (idx + 1) % lines.length; WI.$('#lNow').textContent = lines[idx]; }, 3600);
+</script>
+</body>
+</html>

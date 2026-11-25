@@ -29,26 +29,27 @@
 
 | 文档 | 作用 |
 | --- | --- |
-| [AGENTS.md](./AGENTS.md) | **AI 自治开发最高宪章**：五层铁笼、原子工单流、四道门禁、许可证红线 |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | **系统架构方案 v2**：C4 拓扑、ADR-1~ADR-10（多游戏/插件分层/WebUI+OBS 合并）与风险清单 |
-| [docs/PRODUCT-DESIGN.md](./docs/PRODUCT-DESIGN.md) | 产品功能设计总纲（桌宠语音/气泡、声音工坊、记忆日记、多游戏与直播） |
-| [docs/ROADMAP.md](./docs/ROADMAP.md) | M0~M8 全阶段工单清单与当前实时状态 |
-| [docs/VERIFY.md](./docs/VERIFY.md) | 验收矩阵（严格区分 `[SIMULATION]` / `[E2E-HOST]` 与 `[REAL-DEVICE]`） |
+| [AGENTS.md](./AGENTS.md) | **AI 自治开发最高宪章**：五层铁笼、原子工单流、四道门禁、许可证红线、§5 V2 增补规范 |
+| [docs/README.md](./docs/README.md) | **全仓文档分层导航**：区分 V2 现行真源、共享合规档案与 V1 历史留档 |
+| [docs/v2/README.md](./docs/v2/README.md) | **Whale Isle V2 唯一真源总索引**：产品、需求、架构、ADR、`ROADMAP.md`、`CURRENT.md` 与 `evidence/` |
+| [docs/v2/DESIGN-SYSTEM.md](./docs/v2/DESIGN-SYSTEM.md) | **UI/UX 设计规范**：**潮汐纸 Tidepaper 主基线** + Obsidian Tide 等多可选主题架构 |
+| [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md) | 第三方许可证与素材来源台账（Gate 2 强校验） |
 | [docs/REFERENCES.md](./docs/REFERENCES.md) | 开源参考项目代码级复评清单与规则 |
-| [docs/THIRD_PARTY_NOTICES.md](./docs/THIRD_PARTY_NOTICES.md) | 第三方许可证与素材来源台账 |
-| [design/index.html](./design/index.html) | v4「曜石」高保真交互原型总览（v3 备份位于 `design/v3-archive/`） |
+| [design/index.html](./design/index.html) | **UI/UX 设计中心**：[Tidepaper 主原型 25 页](./design/tidepaper/index.html) + 3 套可选主题（`design/README.md`） |
 
 ## 仓库结构
 
 ```text
-packages/   shared-protocol（69 域跨语言契约，2026-11-25 实测）· pet-renderer · model-gateway · persona-brain
-            game-bridge-mcp（多游戏 GameAdapter + 救援大脑）· memory-graph · live-stream-hub
-            plugin-kit（Cordis 兼容层）· local-store · agent-harness（ACP v1）· stardew-mods
+packages/   shared-protocol（按域拆分跨语言契约）· runtime-core（V2 微内核）· character-core（12 域与 LifeRuntime）
+            voice-runtime（VoiceProvider/口型/多轨混音）· pet-renderer · model-gateway · persona-brain
+            game-bridge-mcp（多游戏 GameAdapter + AI-First 规划）· memory-graph · live-stream-hub
+            plugin-kit（Worker 隔离 + Skills）· local-store（node:sqlite + Dexie）· agent-harness（ACP/MCP）· stardew-mods
 apps/       desktop-host（Electron 主进程 + 中控台 Shell + pet-stage 透明桌宠 + 内嵌 WebUI :18780）
 services/   audio-ai-worker（Python/uv：情绪 TTS + 声音工坊 + RVC）· dst-bridge-sidecar（DST 桥接 :18100）
 mods/       stardew-mcp-mod（星露谷 SMAPI）· terraria-bridge（泰拉瑞亚 tML :18090）· dst-bridge（DST Lua）
-tools/      mock-harness（三游戏仿真器 + 弹幕风暴 + 许可证扫描）· guide-forager（攻略采集）· scripts（门禁）
-design/     v4「曜石」10 页可交互高保真原型
+tools/      evolution-lite（隔离研发平面）· mock-harness（三游戏仿真器 + 弹幕风暴 + 许可证扫描）· guide-forager · scripts
+docs/       docs/v2/（V2 现行真源 + ADR-000~003 + 蓝图/证据）· 合规/参考档案 · V1 历史文档
+design/     tidepaper/（主 UI/UX 参考 25 页）· theme-obsidian-tide/ · theme-tide-deep/ · theme-obsidian-v4/ · archive/
 ```
 
 ## 快速开始
