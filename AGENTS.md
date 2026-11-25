@@ -146,3 +146,23 @@ AI 只能在开发期修改仓库代码；软件编译运行后，线上环境�
 | **长时直播防呆、节目状态机** | `Dsh_douyin` (`REFERENCE-dsh-douyin.md`)、`dsh-livestream` | 仅参考节目状态机思想（打游戏 ↔ 点歌 ↔ 杂谈），防止游戏卡住变成无意义重复动作；严禁抄袭源码 |
 | **高光切片、翻车复盘、视觉理解** | `dsh-video-storyboard` (`REFERENCE-dsh-video-storyboard.md`) | 视觉仅用于事后复盘与 45s 环形缓存切片生成，实时游戏控制 100% 走 MCP 文本结构化状态 |
 | **断线恢复、观察模式、自治记忆** | `feiyu-os` (`REFERENCE-feiyu-os.md`) | 吸收确定性准入与断线恢复状态机；剔除常驻 20 分钟唤醒与私有 SQLite 耦合 |
+
+---
+
+## 5. Whale Isle V2 开发宪章增补（与 Blueprint 15 & ADR-002 对齐）
+
+> 在 `feat/whale-isle-v2` 及后续 V2 分支上，以下规则与 §§0–4 共同作为强制工程纪律；V2 唯一工单与进度真源位于 `docs/v2/`。
+
+1. **完整 7 态工单状态机与诚实验收口径**：
+   - 工单状态统一为 `PENDING | NEXT | DOING | IMPLEMENTED_UNVERIFIED | BLOCKED | DONE | REOPENED`。
+   - 凡涉及真实游戏客户端、真实直播平台、真实硬件语音或跨设备联机的工单，若仅完成代码、单测、Replay 或 Electron E2E，**最高只能标记为 `IMPLEMENTED_UNVERIFIED`**（或在依赖缺失时标 `BLOCKED`），并写明阻塞条件，严禁标为 `DONE`。
+2. **跨会话进度与需求同步铁律**：
+   - 每个工单完成后（或遇到阻塞停止时），必须同步更新：`docs/v2/ROADMAP.md`、`docs/v2/REQUIREMENTS-MATRIX.md`、`docs/v2/PROGRESS.md` 及相关架构文档，确保任意新 Agent 不依赖聊天历史即可接手。
+3. **AI-First 游戏智能红线（ADR-002 D-103）**：
+   - 严禁把游戏情景策略写死为固定 if/else 规则树；程序只做观察、前置条件、互斥执行、超时取消与真实回执验证。
+   - 模型不可用或异常时，默认安全暂停高级自主决策并告知用户，**严禁未经用户选择静默退化为规则机器人**。
+4. **插件隔离与防架构腐化红线**：
+   - 不可信第三方插件必须走向独立 Worker/进程隔离与真实权限执行边界，严禁将进程内 Capability Injection 当作安全沙箱。
+   - 严禁把 `WhaleKernel` 做成新 God Object、禁止新旧双写状态长期并存、禁止用 `EventBus` 替代明确业务接口、禁止用内存 RingBuffer 冒充持久存储；每个渐进重构工单必须附带**退役条件与回滚方案**。
+5. **Evolution Plane 与 Runtime Plane 物理隔离**：
+   - 研发 Agent（`tools/evolution-lite` 及后续 Evolution Engine）只能在独立 Git Worktree 运行，严禁修改运行期目录源码、篡改自身权限或跳过门禁直接合入主线。

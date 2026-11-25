@@ -1,165 +1,158 @@
-# Whale Isle V2 开发路线图（任务 D · 唯一工单真源）
+# Whale Isle V2 完整开发路线图（P0–P5 · 唯一工单真源）
 
-> **状态机**：`PENDING` → `NEXT`（全仓唯一激活）→ `DOING` → `DONE`（`pnpm verify:gate` 全绿 + 真实运行验证 + 文档同步）  
-> **规则**：单角色（小鲸 `char_xiaojing`）优先跑通端到端真实闭环，严禁先写多角色/多账号复杂度；Mock/仿真验收绝不冒充真机验收。
+> **工单状态机（7 态唯一流转）**：  
+> `PENDING` → `NEXT`（全局唯一激活待办）→ `DOING` → `IMPLEMENTED_UNVERIFIED`（代码与单测/仿真通过，待真机/真实平台验证） / `BLOCKED`（依赖或外部阻塞） → `DONE`（全部验收标准 + 真实验证证据齐全） | `REOPENED`（复测退回重开）  
+> **铁律**：每完成一个工单必须同步更新本文件、[REQUIREMENTS-MATRIX.md](./REQUIREMENTS-MATRIX.md) 与 [PROGRESS.md](./PROGRESS.md)；不得用 Mock/仿真通过冒充真机/真实平台 `DONE`。
 
 ---
 
-## P0：基础工程与架构冻结（必须首先完成）
+## P0：工程底座、架构纠偏、数据库迁移与最小研发闭环
 
-### `V2-P0-01`：V1 全仓审计、V2 架构冻结与路线图立项
-- **状态**：**DONE**（本轮完成）
-- **目标**：盘清 V1 资产与技术债，确立 V2 分支 `feat/whale-isle-v2`、设计体系与架构蓝图。
-- **依赖**：无。
-- **实现方案**：产出 `docs/v2/TAKEOVER-AUDIT.md`、`docs/v2/ARCHITECTURE.md`、`docs/v2/ROADMAP.md`、`docs/v2/ADR-001-v2-foundation.md`。
-- **验收标准**：全部设计、选型与真实能力边界有代码与门禁实证支撑。
-- **测试方案**：文档交叉核对 + `pnpm verify:gate` 基线全绿。
-- **预计风险**：V1 文档口径与代码漂移 → 以代码和真实命令输出为准。
+### `V2-P0-01`：V1 全仓审计、V2 首轮架构设计与接管文档
+- **状态**：`DONE`
+- **目标**：盘清 V1 代码资产、技术债、CrossPet/开源许可证边界，输出审计与基线架构。
+- **依赖**：无
+- **实现方案**：产出 [TAKEOVER-AUDIT.md](./TAKEOVER-AUDIT.md) 与 [ADR-001](./ADR-001-v2-foundation.md)。
+- **验收标准**：所有现状数据有代码行号与命令实测支撑，区分真实可用与 Stub。
+- **测试方案**：`pnpm verify:gate` 全绿。
+- **预计风险**：旧文档口径失真 → 已以源码实读校验。
 
 ### `V2-P0-02`：V2 运行时微内核 `@workbench/runtime-core` 与宿主接线
-- **状态**：**DONE**（本轮完成）
-- **目标**：建立插件化桌面平台底座——统一生命周期、Typed 事件总线、分级脱敏日志、配置与凭据接口、`CharacterCore` 统一身份/情绪/控制权状态与急停仲裁，并接入真实 `desktop-host`。
-- **依赖**：`V2-P0-01`、`@workbench/shared-protocol`、`@workbench/plugin-kit`。
-- **实现方案**：新建 `packages/runtime-core`（`WhaleKernel` / `RuntimeEventBus` / `StructuredLogger` / `WhaleError` / `ConfigStore` & `SecretVaultPort` / `CharacterRegistryCore`）；新增 `apps/desktop-host/src/main/v2-kernel-host.ts` 接入 Electron 主进程与 preload。
-- **验收标准**：Electron 启动后 `WhaleKernel` 进入 `running` 状态，内置诊断插件可调用，急停信号即时冻结控制态并广播事件。
-- **测试方案**：`packages/runtime-core` 单元测试分支覆盖率 ≥90%；`pnpm verify:gate` 7/7 通过；真实 Electron E2E 启动通过。
-- **预计风险**：`dependency-cruiser` 或覆盖率阈值不达标 → 严格遵守架构边界与单测边界覆盖。
+- **状态**：`DONE`
+- **目标**：建立 V2 微内核骨架（Typed 事件总线、分级脱敏日志、配置与凭据接口、`CharacterCore` 基础态、急停与插件容器接线）并跑通真实 Electron 启动。
+- **依赖**：`V2-P0-01`
+- **实现方案**：新建 [packages/runtime-core](file:///Users/jiaqi/Documents/vibe/ai-vtuber-workbench/packages/runtime-core/package.json) 与 [v2-kernel-host.ts](file:///Users/jiaqi/Documents/vibe/ai-vtuber-workbench/apps/desktop-host/src/main/v2-kernel-host.ts)。
+- **退役与回滚**：作为 Strangler 底座增量接入，零破坏 V1 功能；回滚仅需移除宿主调用。
+- **验收标准**：`WhaleKernel` 在 Electron 45 中进入 `running`，急停生效。
+- **测试方案**：单包分支覆盖率 ≥90%，`verify:gate` 7/7 + `v2-kernel.e2e.spec.ts` 通过。
+- **预计风险**：微内核膨胀 → 严格限制职责，禁止吞入业务域逻辑。
 
-### `V2-P0-03`：存储层收敛（移除 `better-sqlite3` 双引擎分裂）
-- **状态**：**NEXT**（下一激活工单）
-- **目标**：将 `packages/local-store/src/sqlite.ts` 从原生模块 `better-sqlite3` 迁移至 Node/Electron 内置 `node:sqlite`，彻底消除原生 ABI 冲突与打包重编译脆弱性。
-- **依赖**：`V2-P0-02`。
-- **实现方案**：保留 `SqliteStore` 公共接口与表结构，底层改用 `node:sqlite` `DatabaseSync`（参考同包 `friendship.ts`）；清理冗余原生构建配置。
-- **验收标准**：`local-store` 所有既有单测与 Gate 4 回环通过，且 Electron 打包后无原生模块加载报错。
-- **测试方案**：`pnpm test` + `desktop-host build` + Gate 4 回环。
-- **预计风险**：SQLite 事务语法微小差异 → 通过完整单元测试对齐。
+### `V2-P0-04`：完整需求追踪矩阵、架构纠偏（ADR-002）与开发宪章同步
+- **状态**：`DONE`（本轮完成）
+- **目标**：对齐 Blueprint 01–17 与第一轮审查 15 项指令，补全 `LifeRuntime`、12 域 `CharacterCore`、AI-first 游戏智能、`CoopRuntime`、完整 `Creative Studio`、多轨声音表演、直播与社区 L1–L3、类人记忆、额度矩阵、Evolution Lite 与插件真隔离。
+- **依赖**：`V2-P0-02`
+- **实现方案**：新建 [REQUIREMENTS-MATRIX.md](./REQUIREMENTS-MATRIX.md)、[ADR-002](./ADR-002-v2-architecture-revision.md)、[PROGRESS.md](./PROGRESS.md)，修订 `ARCHITECTURE.md`、`ROADMAP.md` 与 `AGENTS.md` §5。
+- **验收标准**：Blueprint 全部领域无遗漏映射，每项工单包含完整验收与回滚约束。
+- **测试方案**：文档交叉审查 + 门禁校验。
+- **预计风险**：需求范围大 → 通过 P0–P5 清晰分期与单角色先闭环管控复杂度。
 
----
+### `V2-P0-03`：SQLite 存储收敛至内置 `node:sqlite`（含迁移/事务/恢复/打包验证）
+- **状态**：`NEXT`
+- **目标**：将 `@workbench/local-store` 从 `better-sqlite3` 迁移至 Node/Electron 内置 `node:sqlite`，彻底消除原生模块 ABI 冲突。
+- **依赖**：`V2-P0-02`、`V2-P0-04`
+- **实现方案**：重写 `packages/local-store/src/sqlite.ts` 使用 `DatabaseSync`；自动检测旧版 v1 库并备份后事务性升级 Schema；提供 `runInTransaction`、`checkIntegrity`、`openSqliteStoreWithRecovery` 与 `rollbackDatabaseFile`；移除 `better-sqlite3` 依赖与构建钩子。
+- **退役与回滚**：保留旧 `.v1-backup.*.bak` 备份文件，失败时可调用 `rollbackDatabaseFile` 秒级回退数据，代码层可独立 revert 本次提交。
+- **验收标准**：旧库数据零丢失迁移、事务错误回滚生效、损坏库自动备份重建、真实 Electron 进程内文件库读写与完整性自检通过。
+- **测试方案**：`sqlite.spec.ts` 全量单测（含真实旧版库迁移/事务/损坏恢复）+ `desktop-host build` + `verify:gate` + Electron E2E。
+- **预计风险**：`node:sqlite` 与 `better-sqlite3` 返回数值类型（如 `bigint` changes）差异 → 显式 `Number()` 转换并在单测覆盖。
 
-## P1：第一个可运行核心闭环（小鲸完整链路）
-
-> **核心验收链路**：打开鲸屿 → 工作台 → 配模型供应商 → 小鲸聊天并入记忆 → 启动星露谷 → 实时观察与自主分析游玩 → 桌宠同步动作情绪 → 聊天建议/强制命令动态调计划 → 事件日记与记忆可查。
-
-### `V2-P1-01`：统一 `CharacterCore` 与 V1 `character-registry` / `persona` / `rice-bowl` 融合
-- **目标**：将分散在主进程多处的角色切换、人设、情绪、饭碗状态收口到 `WhaleKernel.characters` 单点事实源。
-- **依赖**：`V2-P0-02`。
-- **实现方案**：主进程 `character-registry` 与 `autodrive-host` 订阅 `CharacterCore` 状态与事件，消除多份状态副本。
-- **验收标准**：切换模型、切换角色外观不丢失小鲸 Identity 与记忆；桌面窗口与游戏代理读到同一 `characterId` 与情绪状态。
-- **测试方案**：角色切换与状态同步集成测试 + Electron E2E。
-- **预计风险**：旧 IPC 字段兼容问题 → 保留兼容投影层并逐步切换。
-
-### `V2-P1-02`：模型供应商额度四级诚实查询器与健康网关
-- **目标**：完善 `model-gateway` 额度查询规范，严格区分官方 API、可验证第三方 API、CLI 可读取状态与未知/不可查询状态，严禁编造余额。
-- **依赖**：`V2-P0-02`。
-- **实现方案**：在 `shared-protocol` 定义 `ProviderQuotaReport`（含 `verifiability` 枚举），改造 `provider-vault` 余额探针与 UI 展示。
-- **验收标准**：DeepSeek/OpenRouter/OpenCode Go 显示真实查询结果与来源标记；Anthropic/未知端点显示「不可查询」，无模拟数字。
-- **测试方案**：网关契约单测（覆盖四类状态）+ UI 状态截图核验。
-- **预计风险**：上游厂商余额接口非标准变更 → 失败时降级为结构化 `unknown` + 原始状态码提示。
-
-### `V2-P1-03`：中控台 UI Obsidian Tide 壳层重构（六世界 × 十页面渐进迁移）
-- **目标**：拆分 1466 行 `App.tsx`，落地 `design/v2-gemini` Obsidian Tide 壳层（生命体/能力面/系统面导航、全局控制权 HUD、四态回执芯片、授权徽章）并保留真实 IPC。
-- **依赖**：`V2-P1-01`。
-- **实现方案**：基于 Zustand/React Context 分拆页面组件，先落总览/聊天、游戏共玩、模型供应商、记忆与日记四核心页，未接线模块显式标「未接线」。
-- **验收标准**：深浅双主题与系统跟随正常，`⌘K`、`F8` 急停可用，无假数据按钮。
-- **测试方案**：Playwright Electron E2E 遍历核心页面与控制流。
-- **预计风险**：旧样式冲突 → 隔离迁移 CSS 变量，逐页验证。
-
-### `V2-P1-04`：星露谷自主游戏 × 桌宠联动 × 记忆日记全链路真机闭环
-- **目标**：确保「启动星露谷 → LLM 自主探索/整理背包/钓鱼下矿 → 桌宠同步开心/思考/急躁动作 → 用户建议/强制命令动态调计划 → 自动换日日记与可检索经验」在真机流畅跑通。
-- **依赖**：`V2-P1-01`、`V2-P1-03`。
-- **实现方案**：修复 `T-M6-71` 遗留的星露谷真机连续 2~7 日 LLM 浸泡与体验问题，补全 `autodrive-host` 经 `RuntimeEventBus` 向 `pet-stage` 与 `memory-graph` 的标准事件投递，在界面开放“日记 + 经验心得 + 记忆纠正/删除”闭环。
-- **验收标准**：真人开启真实星露谷 + 真实模型 Key 跑通完整链路（含建议协商、`/` 强制指令、手动接管恢复、换日日记生成）。
-- **测试方案**：`soak:real --llm` 真机浸泡报告 + 模拟剧本 `S01–S07` 全绿。
-- **预计风险**：长时游戏卡顿或剧情界面盲区 → 依靠 `S01–S07` 回归护栏与一键人工接管兜底。
+### `V2-P0-05`：Evolution Engine Lite 隔离研发闭环落地
+- **状态**：`PENDING`
+- **目标**：在 P0 即落地轻量级隔离研发引擎，支持唯一工单调度、生产目录外独立 Git Worktree、Coding Agent CLI 适配、自动化门禁、独立 Diff/安全审查、PR 草案生成、失败报告与跨会话状态恢复。
+- **依赖**：`V2-P0-03`
+- **实现方案**：新建 `tools/evolution-lite`（Zero external deps beyond `zod`），实现 `EvolutionStateStore`、`GitWorktreeManager`（严格校验路径在生产仓外且禁止动 `main`）、`CliCodingAgentAdapter`、`IndependentReviewer`、`EvolutionLiteOrchestrator` 与 `pnpm evolution:lite` CLI。
+- **退役与回滚**：纯独立工具包，不修改运行期 `apps/desktop-host`，可独立停用。
+- **验收标准**：在真实临时 Git 仓库创建外部 Worktree 修改文件而不污染主仓，门禁/审查失败立即中止且不产 PR 草案，跨会话可恢复任务进度。
+- **测试方案**：真实 `git init` 临时仓库 Worktree 集成测试 + 全流程编排单测（分支覆盖率 ≥90%）+ `verify:gate`。
+- **预计风险**：不同系统 git worktree 路径软链接解析差异（macOS `/var` → `/private/var`）→ 使用 `realpathSync` 规范化路径比对。
 
 ---
 
-## P2：核心体验完善（声音、插件生态与创作基石）
+## P1：单角色核心闭环（身份、真实语音、桌宠、记忆、供应商与星露谷 AI 自主共玩）
 
-### `V2-P2-01`：跨平台 `VoiceProvider` 与真实情绪 TTS 引擎接入
-- **目标**：替换 `audio-ai-worker` 的 440Hz WAV stub，抽象统一 `VoiceProvider` 接口（支持云端高质量情绪 TTS 与本地推理，macOS/Windows 均可用），实现说话口型与桌宠音频租约联动。
-- **依赖**：`V2-P1-01`。
-- **实现方案**：重构 `voice-host.ts` 与 `services/audio-ai-worker`，增加 Windows SAPI / 云端流式音频兜底与实时音量包络口型输出。
-- **验收标准**：移除 `mcode-tools` 硬绑定后仍可稳定发声，延迟可观测，口型包络实时驱动桌宠表情。
-- **测试方案**：Python pytest 真实音频流测试 + TS 语音租约/打断测试 + 双平台人工听感验收。
-- **预计风险**：本地 GPU/内存占用过高 → 默认优先轻量云端/流式 TTS，本地大模型作为可选增强。
+### `V2-P1-01`：模块化 `CharacterCore`（12 域）与最小 `LifeRuntime`
+- **状态**：`PENDING`
+- **目标**：落盘 12 域分权存储与 `LifeRuntime` 最小活动协调器，让小鲸拥有统一身份、目标、承诺、日程与偏好成长模型。
+- **依赖**：`V2-P0-03`、`V2-P0-05`
+- **实现方案**：拆出 `CharacterProfile`、`GoalManager`、`CommitmentLedger` 与 `LifeRuntime` 活动状态仲裁器；迁移 V1 `character-registry` / `character-persona` 至同一权威源，消除主进程双写。
+- **退役与回滚**：保留旧 IPC 只读投影直到 `V2-P1-05` 切换完毕；异常可切回旧读路径。
+- **验收标准**：切换模型/外观不丢失 `char_xiaojing` 身份与目标；游戏与桌宠消费同一活动态与情绪态。
+- **测试方案**：12 域契约与状态一致性测试 + Electron E2E。
+- **预计风险**：V1 `character-registry` 多宠字段兼容 → 通过映射适配器平顺过渡。
 
-### `V2-P2-02`：统一开放接入层（MCP Client/Server + Skills + ACP Harness）
-- **目标**：将外部 MCP 工具接入、鲸屿能力对外暴露为 MCP 工具、Agent Skills 规范装载与 ACP Harness 收敛到统一插件与权限门控下。
-- **依赖**：`V2-P0-02`。
-- **实现方案**：在 `agent-harness` 与 `plugin-kit` 之上建立统一 `ToolRegistry` 与 `P0–P5` 审批流，所有高危工具（外部写入、Shell）必须经过审批中心。
-- **验收标准**：可挂载一个真实外部 MCP Server 供小鲸调用；拒绝审批时工具不执行并回喂模型。
-- **测试方案**：MCP stdio/HTTP 集成测试 + Y/N/A 审批 E2E。
-- **预计风险**：外部 MCP 工具返回非预期大文本撑爆上下文 → 增加统一输出截断与摘要保护。
+### `V2-P1-02`：真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`
+- **状态**：`PENDING`
+- **目标**：P1 即交付真实可用角色语音与口型联动（不捆绑重型本地模型），改造 `AudioLeaseManager` 解除单音轨对伴奏/音效的阻塞。
+- **依赖**：`V2-P1-01`
+- **实现方案**：抽象 `VoiceProvider`（真实云端情绪 TTS API + 本地 Worker 接入，macOS `say`/Win SAPI 仅标为降级方案）；拆分发言权（Speech Floor）与 `AudioMixer` 多轨播放；输出音量包络/Viseme 驱动桌宠嘴型。
+- **退役与回滚**：保留 `mcode-tools`/`say` 降级通道作为故障兜底。
+- **验收标准**：真实语音流生成并驱动桌宠口型动画；说话与背景音不互锁；Windows/macOS 均有明确可用后端或诚实降级提示。
+- **测试方案**：TTS Provider 契约与音频流测试 + 语音抢占与口型帧率测试 + 真机人工听感验收。
+- **预计风险**：云端 TTS 首包延迟波动 → 流式分句预取与超时取消。
 
-### `V2-P2-03`：桌宠舞台 2D 资产规范化与商业清源工具链
-- **目标**：梳理 CrossPet / 绿幕转 WebM / 像素精灵图管线，建立统一 `AssetRegistry` 与 `licenseScope` 强门禁，确保商用/直播前可一键替换为自制或授权素材。
-- **依赖**：`V2-P1-03`。
-- **实现方案**：统一素材元数据校验（尺寸/帧率/Alpha/Provenance），把现有生图与抠像流程接入标准资产发布状态机。
-- **验收标准**：`DEV_ONLY_NON_COMMERCIAL` 素材进入直播输出预览时产生显性提示与拦截；能成功导入并切换一套自制素材。
-- **测试方案**：素材校验单测 + 创作工坊 E2E。
-- **预计风险**：生成资产质量波动 → 引入候选评分与人工确认闸门（`review_required`）。
+### `V2-P1-03`：模型供应商与四级诚实额度矩阵（DeepSeek / MiniMax / Kimi / OpenCode 等）
+- **状态**：`PENDING`
+- **目标**：完善供应商网关与精细化额度中心，覆盖平衡/5h/周/月/Token/次数/套餐/重置时间，并如实记录来源、更新时间与不可查标记。
+- **依赖**：`V2-P0-02`
+- **实现方案**：参考 Magpie / Pi / 成熟 Harness，在 `shared-protocol` 新增 `ProviderQuotaReport` Schema，在主进程实现各主流厂商实测探针（DeepSeek/OpenRouter/OpenCode/MiniMax/Kimi/本地 CLI 状态），未实测字段强制标记 `unknown`。
+- **验收标准**：已支持厂商返回实测额度与元信息；不可查询厂商不编造任何数值。
+- **测试方案**：协议与解析器单测 + 真实脱敏 Key 隔离集成验证。
+- **预计风险**：厂商私有接口变更 → Schema 宽松容错并在 UI 显示原始失败原因。
+
+### `V2-P1-04`：类人五类记忆与经验成长（模糊印象、情绪关联、级联真删除）
+- **状态**：`PENDING`
+- **目标**：在 `memory-graph` 上实现 Working/Episodic/Semantic/Relational/Self 五分域、情绪加权回忆、模糊印象归纳、不确定性表达与覆盖衍生索引的真删除。
+- **依赖**：`V2-P1-01`、`V2-P0-03`
+- **实现方案**：升级图谱节点分类与巩固任务；区分自然衰减遗忘与显式删除（删除同步清理 SQLite 关联账本、图谱摘要与检索索引，保留审计条目）。
+- **验收标准**：可记住“某人常来”而自然淡忘旧单句；主动删除后检索与日记不再出现被删内容。
+- **测试方案**：记忆检索加权、模糊摘要与级联删除一致性单测。
+- **预计风险**：误删关键系统设定 → 强制隔离 `Self`/`Audit` 保护域。
+
+### `V2-P1-05`：Obsidian Tide 中控台重构与核心工作流界面
+- **状态**：`PENDING`
+- **目标**：按 Obsidian Tide（`design/v2-gemini/`）渐进拆分 1,466 行 `App.tsx`，交付真实控制权 HUD、四态回执芯片、许可徽章、声音/记忆/供应商与星露谷共玩主界面。
+- **依赖**：`V2-P1-01`、`V2-P1-02`、`V2-P1-03`、`V2-P1-04`
+- **实现方案**：以功能模块组件替代巨型 `App.tsx`，保持对真实 IPC 订阅，未实现能力页（如 L2/L3 社区）清晰标记开发阶段状态。
+- **退役与回滚**：通过路由开关逐页切换，确认稳定后移除旧面板冗余代码。
+- **验收标准**：零假数据按钮、深浅及跟随系统主题可用、控制台可触发真急停与接管。
+- **测试方案**：Playwright Electron UI 全页遍历 E2E。
+- **预计风险**：状态订阅重渲染卡顿 → 按切片订阅 + 虚拟列表。
+
+### `V2-P1-06`：星露谷 AI-First 自主游玩与控制权执行闭环（纠偏核心）
+- **状态**：`PENDING`
+- **目标**：彻底清除星露谷默认流程中的静默规则代驾与硬编码情景决策，跑通“自主决策 → 真实执行 → 桌宠同步 → 朋友协商/强制指令/急停/接管/取消 → 经验进记忆”完整真实闭环。
+- **依赖**：`V2-P1-01`、`V2-P1-05`
+- **实现方案**：修改 `BrainSwitch` 与 `LlmPlanner`：缺 Key 或 LLM 异常默认安全暂停并告知主人（`RulePlanner` 仅作用户显式开启或测试模式）；完善在飞动作取消、过期指令拒绝（`generation/sessionId`）与控制权租约。
+- **退役与回滚**：`RulePlanner` 保留作 `opt-in` 测试与离线手动模式。
+- **验收标准**：通过 Blueprint 17 §12 全部 12 个验收场景（满包自决、自主改变计划、建议协商、强制命令、Stop/Pause/Takeover 真游戏生效）与真机连续浸泡验证。
+- **测试方案**：仿真剧本 `S01–S07` + 新增 LLM 安全停机单测 + 真机星露谷验证（未跑真机前最多标 `IMPLEMENTED_UNVERIFIED`）。
+- **预计风险**：大模型输出偶发不稳定 → 通过结构化输出校验与动作前置条件拦截兜底。
 
 ---
 
-## P3：扩展功能（多宠、多设备、直播舞台与唱歌）
+## P2：攻略增强、开放生态、完整创作工坊与真实人机联机
 
-### `V2-P3-01`：多桌宠同屏与主从隔离（Primary + Passive Pets）
-- **目标**：支持小鲸（Primary）与其他被动桌宠（如 CrossPet / 自制形象）同屏陪伴、互动与各自独立音频/表现配置，主角色核心状态不受影响。
-- **依赖**：`V2-P1-01`、`V2-P2-03`。
-- **实现方案**：复用并收敛现有 `PetWindowManager` 与 `CharacterRegistryCore`，区分 `primary` 与 `passive` 生命周期。
-- **验收标准**：同时开启 ≥2 个桌宠窗口互不抢麦、各自独立动作与记忆隔离。
-- **测试方案**：多窗 Electron E2E。
-- **预计风险**：多透明窗口 GPU 合成性能开销 → 闲置/遮挡降帧。
-
-### `V2-P3-02`：直播中控真实闭环（弹幕接入 + OBS 舞台 + 点歌与歌词）
-- **目标**：接通真实直播弹幕源（`dyhub` 或合规适配器）、OBS `/obs` 舞台、三级注意力队列与点歌版权校验，替换现有 `live-host` 回放桩。
-- **依赖**：`V2-P2-01`、`V2-P2-03`。
-- **实现方案**：扩展 `live-stream-hub`，打通弹幕 → 记仇账本/记忆 → 语音/动作/OBS 歌词同步闭环；点歌接入授权清单门禁。
-- **验收标准**：连入测试直播流可实时过滤违禁弹幕、按优先级播报并同步 OBS 画面；未授权歌曲被拦截。
-- **测试方案**：`danmaku-storm-replay` 压测 + OBS 本地渲染 E2E + 真实测试直播间验证。
-- **预计风险**：直播平台协议变动 → 适配器隔离 + 降级文字/离线陪聊模式。
-
-### `V2-P3-03`：跨设备状态同步与游戏协作（DeviceRegistry + ControlLease）
-- **目标**：支持局域网/自建节点间的状态同步与游戏分工（如一台机器运行星露谷，另一台展示桌宠或协作操控）。
-- **依赖**：`V2-P1-04`。
-- **实现方案**：在 `runtime-core` 接入设备注册表、基于鉴权 WS 的事件镜像与单主控租约。
-- **验收标准**：双端连接后实时同步小鲸心情与游戏动作回执，断连自动安全退回单机接管。
-- **测试方案**：双进程回环仿真 + 局域网实测。
-- **预计风险**：网络抖动引发状态乱序 → 基于事件单调 `seq` 与租约过期自动释放。
+- **`V2-P2-01`：攻略学习闭环增强**（来源/版本/Mod 条件/置信度/实玩验证/反例更新，不把攻略当命令）
+- **`V2-P2-02`：开放生态与插件进程隔离**（双向 MCP Client/Server + Skills 注册表 + 多 Harness 执行级适配 + 不可信插件独立进程沙箱）
+- **`V2-P2-03`：`MediaGenerationGateway` 与图片生成流水线**（本地生图 Agent + 在线图片 API，候选区审查隔离）
+- **`V2-P2-04`：3D 大模型生成与 Blender 自动化后处理流水线**（Hunyuan3D 等网格生成 + Blender UV/骨骼/BlendShapes/VRM 导出与 QA）
+- **`V2-P2-05`：Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入**（完整支持 CrossPet 角色导入、严格授权标签与商业隔离）
+- **`V2-P2-06`：游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证**（11 步像素流水线 + `stardew-avatar-sync` 导出与游戏内外观核验）
+- **`V2-P2-07`：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚**（10 态资产发布、Hash 校验、非商业阻断与一键回滚）
+- **`V2-P2-08`：真实星露谷人机联机协作（`CoopRuntime` v1）**（人类玩家 + 小鲸各自控制独立角色联机分工、任务板、资源锁、Mod 兼容检测、掉线恢复）
 
 ---
 
-## P4：长期愿景（数字生活、2D/3D 进阶与自主研发 Agent）
+## P3：统一 2D/3D 表演舞台、自主直播、受控浏览器/桌面与被动多宠
 
-### `V2-P4-01`：Browser Use & Computer Use 受控运行时
-- **目标**：引入独立的浏览器 Profile 隔离与系统级 Computer Use 单主控互斥锁，支持浏览社区与辅助桌面操作。
-- **依赖**：`V2-P2-02`。
-- **实现方案**：Browser Use 仅限角色专属隔离 Profile；Computer Use 获取 `ControlLease` 且遇验证码/支付立即暂停交还人类。
-- **验收标准**：两个 Agent 同时申请桌面操控时第二个被互斥锁拒绝；敏感页自动停止。
-- **测试方案**：并发锁单测 + 本地网页沙盒测试。
-- **预计风险**：系统权限与反自动化风控 → 默认只读浏览，写入强制 P4/P5 审批。
+- **`V2-P3-01`：统一表演系统（Sing Engine SVS/SVC + 舞蹈 + 歌词时钟 + 2D/3D StageRuntime）**
+- **`V2-P3-02`：LifeRuntime 驱动的直播中控与 OBS 舞台（真实平台流接入 + 曲库版权门禁）**
+- **`V2-P3-03`：受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**
+- **`V2-P3-04`：Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**
+- **`V2-P3-05`：多被动桌宠同屏展示（独立形象/动作/基础音色，主从隔离）**
 
-### `V2-P4-02`：社区 Digital Life（B站 / 抖音 / 小红书拟人化浏览与草稿互动）
-- **目标**：让小鲸按兴趣与作息浏览社区内容并沉淀记忆，生成互动草稿，经主人审批后发布（严格遵守平台规则与账号隔离）。
-- **依赖**：`V2-P4-01`。
-- **实现方案**：分平台适配器 + 只读浏览优先 + P4 审批收件箱。
-- **验收标准**：浏览内容可进入记忆与聊天谈资，外部评论/点赞默认进待审批队列。
-- **测试方案**：平台只读沙盒 + 审批流 E2E。
-- **预计风险**：平台风控封号与接口变更 → 严格限频与人工授权门禁。
+---
 
-### `V2-P4-03`：3D 舞台（VRM / Live2D）与通用多游戏适配器解耦
-- **目标**：实现 `Live2DRenderer` 与 `Vrm3dRenderer` 接入 `IPetAvatarRenderer`，并按需恢复泰拉瑞亚/饥荒 DST 的真机验收与更多游戏接入。
-- **依赖**：`V2-P2-03`、`V2-P1-04`。
-- **实现方案**：扩展渲染抽象层与 `GameAdapter` 规范，保持上层人格与记忆协议不变。
-- **验收标准**：同一小鲸身份无缝切换 WebM / Live2D / 3D 表现。
-- **测试方案**：渲染器契约测试 + 真机帧率基准。
-- **预计风险**：3D 资产骨骼绑定与性能开销 → 按硬件能力自动降级渲染档位。
+## P4：单角色全功能闭环、自主社区交互与 Evolution Engine Full
 
-### `V2-P4-04`：Evolution Engine（隔离自主研发 Agent）
-- **目标**：建立与生产运行时完全隔离的研发工作流：分析脱敏日志 → 生成工单 → 创建独立 Git Worktree → 编排编码 Agent 修复 → 跑通 `verify:gate` 与 E2E → 提交待审查 PR。
-- **依赖**：`V2-P0-02`、`V2-P2-02`。
-- **实现方案**：独立研发宿主进程 + Worktree 管理器 + 禁用运行期自改锁；所有代码合并与版本发布必须经过人类审查或灰度回滚门禁。
-- **验收标准**：从一条模拟异常日志触发完整 PR 闭环，运行中的小鲸全程零中断、零热改代码。
-- **测试方案**：沙盒仓库端到端 PR 演练。
-- **预计风险**：Agent 生成低质量补丁 → 强制 `verify:gate` + 人工审批门。
+- **`V2-P4-01`：单角色“小鲸”全产品链路端到端整合与长时真机验收**
+- **`V2-P4-02`：Social Digital Life L2 → L3（草稿审核到规则与授权边界内自主社交互动发布）**
+- **`V2-P4-03`：Evolution Engine Full（脱敏遥测、问题自动复现回放、策略化合并与灰度回滚）**
+
+---
+
+## P5：多自主 AI 角色、多设备协作与扩展游戏生态
+
+- **`V2-P5-01`：多完整自主 AI 角色运行时、独立账号与记忆空间隔离**
+- **`V2-P5-02`：跨设备 `DeviceRegistry` 与多 AI 多人联机游戏协作（`CoopRuntime` Full）**
+- **`V2-P5-03`：多游戏适配器真机解冻与扩展（Terraria / Don't Starve Together / Minecraft）**

@@ -1,235 +1,236 @@
-# Whale Isle V2 总体技术架构（任务 C）
+# Whale Isle V2 总体技术架构（修订版 · v2.1）
 
-> **核心定位**：AI 不只是聊天机器人，而是拥有统一数字身份、人格、记忆、情绪、声音、身体与行动能力的数字生命平台。  
-> **演进方式**：基于现有 `whale-isle`（V1）采用绞杀者模式（Strangler Pattern）渐进重构，核心运行时与业务能力插件严格分离。
+> **上游依据**：`docs/Whale-Isle-V2-Blueprint/`（01–17 + MASTER）、用户第一轮架构审查反馈、[ADR-001](./ADR-001-v2-foundation.md)、[ADR-002](./ADR-002-v2-architecture-revision.md)。  
+> **核心理念**：AI 不只是聊天机器人，而是一个拥有统一数字身份、人格、记忆、情绪、声音、身体和自主生活能力的数字生命平台。  
+> **架构原则**：Modular Monolith + 独立 Worker 起步；**先用一个主 AI 角色（小鲸）跑通全量产品闭环**；生产运行平面与 Evolution 研发平面严格物理隔离。
 
 ---
 
-## 一、系统总体架构图
+## 一、三平面总体架构（Three-Plane Architecture）
 
 ```mermaid
 flowchart TB
-  subgraph Surfaces["用户与外部交互面 (Presentation & IO)"]
-    Director["中控台 Shell (React 19 + Obsidian Tide)"]
-    PetStage["透明桌宠窗 (pet-stage: WebM / Spritesheet / Live2D / 3D)"]
-    Tray["托盘快捷浮窗 (tray-popover)"]
-    WebUI["内嵌 WebUI & OBS 透明源 (:18780 /ui, /obs)"]
+  subgraph Surfaces["交互与表现表面 (Presentation Surfaces)"]
+    Director["中控台 Shell (Obsidian Tide · React 19)"]
+    PetStage["透明桌宠窗 (WebM / Spritesheet / Live2D / VRM-3D)"]
+    Tray["托盘快捷浮窗 (Tray Popover)"]
+    WebObs["内嵌 WebUI & OBS 舞台输出 (:18780 /ui, /obs)"]
   end
 
-  subgraph Kernel["鲸屿 V2 微内核 (@workbench/runtime-core)"]
-    WhaleKernel["WhaleKernel 生命周期与健康中心"]
-    EventBus["RuntimeEventBus (Typed + Wildcard + RingBuffer)"]
-    CharCore["CharacterRegistryCore (Identity / Mood / Expression / ControlMode / Halt)"]
-    ConfigVault["ConfigStore (Zod) + SecretVaultPort (safeStorage)"]
-    Logger["StructuredLogger (Secret Redaction) + WhaleError"]
-    PluginMgr["PluginRegistry & Policy Gate (wrap @workbench/plugin-kit)"]
+  subgraph RuntimePlane["生产运行平面 (Product Runtime Plane)"]
+    LifeRT["LifeRuntime (活动选择 / 日程 / 目标 / 预算 / 注意力 / 承诺)"]
+    CharCore["CharacterCore 12域体系 (Identity / Personality / Mood / Goals...)"]
+    AgentRT["Agent Runtime (思考与规划 ↔ Policy 仲裁 ↔ 工具执行)"]
+    PerfDir["PerformanceDirector (Speech / Singing SVS+SVC / Dance / LipSync / AudioMixer)"]
+    GameCoop["GameRuntime (AI自主决策) + CoopRuntime (多人联机分工)"]
+    DigitalLife["LiveRuntime + SocialRuntime (L1→L3) + Creative Studio"]
   end
 
-  subgraph Domain["核心能力域 (Domain Engines)"]
-    AgentRT["Agent Runtime (Planner ↔ Executor 分离)"]
-    MemorySys["Memory System (5类记忆 + 图谱 + 换日日记)"]
-    ModelGW["Model Gateway (路由 / 脱敏 / 真实额度)"]
-    VoiceRT["Voice Runtime (语音租约 / 情绪TTS / 未来SVC)"]
-    GameRT["Game Runtime (GameAdapter + 攻略心得 + 人机共玩)"]
-    LiveSocial["Live & Social Hub (未来扩展: 弹幕/OBS/社区)"]
+  subgraph PlatformPlane["平台服务与微内核底座 (Platform Services & Microkernel)"]
+    Kernel["@workbench/runtime-core (生命周期 / Typed EventBus / Logger / Config)"]
+    ModelGW["ModelGateway (路由 / 脱敏 / 四级诚实额度矩阵)"]
+    MediaGW["MediaGenerationGateway + AssetRegistry (版本/Hash/授权门禁)"]
+    MemorySys["MemorySystem (5类记忆 / 情绪 / 模糊印象 / 级联真删除)"]
+    Storage["node:sqlite + JSONL 持久存储 + OS 钥匙串 Vault"]
+    ExtAdapters["开放适配层 (MCP 双向 / Skills / ACP / Browser & Computer Use / 进程隔离插件)"]
   end
 
-  subgraph Adapters["开放适配层 (External Connectors)"]
-    MCP["MCP Client / Server"]
-    Skills["Agent Skills Registry"]
-    ACP["ACP Harness (gemini / dsh / claude)"]
-    Automation["Browser Use / Computer Use (单主控租约)"]
-    GameBridge["Stardew SMAPI/BWF (:18088) / Terraria / DST"]
-    AudioSidecar["audio-ai-worker (:18790)"]
+  subgraph DevPlane["独立研发平面 (Development Plane · 严禁热改运行期代码)"]
+    EvoLite["Evolution Engine Lite (P0): 工单调度 / 独立Worktree / Agent / Gate / 审查 / PR"]
+    EvoFull["Evolution Engine Full (P4): 脱敏遥测 / 复现回放 / 自动修复与灰度回滚"]
   end
 
-  subgraph Isolation["隔离面 (Isolated Planes)"]
-    DevPlane["Evolution Engine 独立 Worktree (仅产出 PR, 禁止热改运行期代码)"]
-  end
-
-  Director <-->|Preload IPC| Kernel
-  PetStage <-->|Preload IPC| Kernel
-  Tray <-->|Preload IPC| Kernel
-  WebUI <-->|Auth Token WS/HTTP| Kernel
-
-  WhaleKernel --> EventBus
-  WhaleKernel --> CharCore
-  WhaleKernel --> ConfigVault
-  WhaleKernel --> Logger
-  WhaleKernel --> PluginMgr
-
-  Kernel <--> Domain
-  Domain <--> Adapters
-  DevPlane -.->|脱敏日志/只读遥测| Kernel
+  Surfaces <-->|Preload IPC / Token WS| Kernel
+  Kernel <--> RuntimePlane
+  RuntimePlane <--> PlatformPlane
+  PlatformPlane -.->|仅脱敏诊断与只读trace| DevPlane
+  DevPlane -.->|PR / 审查后发布候选| RuntimePlane
 ```
 
 ---
 
-## 二、模块依赖关系图
+## 二、模块依赖与边界治理
 
 ```mermaid
 flowchart LR
-  SP["@workbench/shared-protocol<br/>(Zod 契约 / JSON Schema / Pydantic)"]
-  PK["@workbench/plugin-kit<br/>(Cordis 语义容器 / defineTool)"]
-  RC["@workbench/runtime-core<br/>(WhaleKernel / EventBus / CharCore / Logger / VaultPort)"]
+  SP["@workbench/shared-protocol<br/>(按域拆分 Zod 契约)"]
+  PK["@workbench/plugin-kit<br/>(插件契约与容器)"]
+  RC["@workbench/runtime-core<br/>(微内核 / 事件总线 / 脱敏日志)"]
+  LS["@workbench/local-store<br/>(node:sqlite + Dexie)"]
 
-  MG["@workbench/model-gateway"]
-  PB["@workbench/persona-brain"]
-  MEM["@workbench/memory-graph"]
-  LS["@workbench/local-store"]
-  PR["@workbench/pet-renderer"]
-  GB["@workbench/game-bridge-mcp"]
-  AH["@workbench/agent-harness"]
-  LSH["@workbench/live-stream-hub"]
-  SM["@workbench/stardew-mods"]
+  CC["character-core & life-runtime"]
+  MG["model-gateway"]
+  MEM["memory-graph"]
+  GB["game-bridge-mcp & coop-runtime"]
+  PERF["pet-renderer & performance-director"]
+  EXT["agent-harness & mcp-gateway"]
+  LIVE["live-stream-hub & social-runtime"]
 
-  HOST["apps/desktop-host<br/>(组合根 + Electron 主进程 + 渲染层)"]
+  HOST["apps/desktop-host (Electron 组合根与 UI)"]
+  EVO["tools/evolution-lite (独立研发平面)"]
 
   PK --> SP
   RC --> PK
   RC --> SP
-
+  CC --> RC
+  CC --> SP
   MG --> SP
-  PB --> SP
   MEM --> SP
-  PR --> SP
   GB --> SP
-  AH --> SP
-  LSH --> SP
-  SM --> SP
-
+  PERF --> SP
+  EXT --> SP
+  LIVE --> SP
   HOST --> RC
-  HOST --> MG
-  HOST --> PB
-  HOST --> MEM
+  HOST --> CC
   HOST --> LS
-  HOST --> PR
+  HOST --> MG
+  HOST --> MEM
   HOST --> GB
-  HOST --> AH
-  HOST --> LSH
-  HOST --> SM
+  HOST --> PERF
+  HOST --> EXT
+  HOST --> LIVE
 ```
 
-> **依赖铁律（`dependency-cruiser` 机器强制）**：
-> - `shared-protocol` 与 `runtime-core` 严禁依赖业务领域包（游戏、直播、渲染、UI）。
-> - `apps/desktop-host/src/renderer/**` 严禁直接访问 SQLite、明文 Key 或外部大模型 API，所有外部调用经 `preload` → 主进程组合根完成。
+**反腐败与防漂移红线**：
+1. 禁止把 `WhaleKernel` 做成新的 God Object：内核只托管生命周期、插件容器、事件总线、配置/凭据接口与分级日志；角色逻辑、生活调度、游戏规划留在各自独立包中。
+2. 禁止新旧双写状态长期并存：每个 Strangler 重构工单必须明确**唯一事实源归属、兼容适配期、旧代码退役条件与回滚方案**。
+3. 禁止用 `EventBus` 替代强契约接口：查询与需要强一致性结果的动作走明确 Typed Service 接口，事件仅广播已发生事实。
+4. 禁止把内存 `RingBuffer` 误当持久事件存储：需要跨会话保留的诊断与审计事件必须追加落盘（JSONL / SQLite）。
+5. `shared-protocol` 随领域增长按域文件拆分（`character.ts`、`game.ts`、`voice.ts`、`asset.ts`、`quota.ts`、`coop.ts`），保持单文件可读性。
 
 ---
 
-## 三、十二大子系统架构设计
+## 三、`LifeRuntime` 与 `CharacterCore` 12 域模型
 
-### 3.1 系统上下文与进程拓扑
+### 3.1 `LifeRuntime`（数字生活运行时）
+- **定位**：角色统一的日常生命协调器。游戏、直播、社区、创作、学习与桌面陪伴都是角色下的能力活动，而非各自拥有独立大脑。
+- **核心职责**：
+  1. **自主活动选择与日程**：结合角色兴趣、时段、用户勿扰设置与近期经历决定当前活动。
+  2. **多时间尺度目标与承诺**：协调长期愿望、当日计划、实时动作及与用户/他人的约定。
+  3. **注意力与上下文切换**：处理活动中断、暂停、恢复（例如从游戏切去回应重要消息后再回游戏）。
+  4. **资源与预算约束**：受每日 Token 饭碗、设备负载、网络与用户授权限制，拒绝无意义死循环。
 
-- **Electron 主进程（Control Plane）**：唯一持有 `WhaleKernel`、SQLite、JSONL 记忆库、`safeStorage` 凭据库、模型网关、游戏 HTTP 桥与内置 WebUI/WS 服务器（`127.0.0.1:18780`）。
-- **渲染进程（View Plane）**：`director`（中控台）、`pet-stage`（透明穿透桌宠窗）、`tray-popover`（托盘浮窗），全部运行在 `contextIsolation: true` 下，通过类型化 `preload` 桥通信。
-- **外部 Sidecar / Mod 进程**：Python `audio-ai-worker`（`uv` 托管，`:18790`）、星露谷 BWF SMAPI Mod（`:18088`）、后续游戏 Sidecar。主进程通过超时控制与健康探针隔离其故障，Sidecar 崩溃不拖垮宿主。
+### 3.2 `CharacterCore` 12 域数据所有权矩阵
 
-### 3.2 模块边界与契约先行
+为防止 `CharacterCore` 演变为巨型单类，将 12 个域按所有权拆分为协作的轻量模块，以不可变 `characterId`（第一阶段主角色 `char_xiaojing`）串联全平台：
 
-- 所有跨进程、跨语言数据结构均在 `packages/shared-protocol`（及 `runtime-core` 契约）中以 Zod 定义，通过 `pnpm gen:contracts` 同步输出 JSON Schema 与 Python Pydantic 模型。
-- **反幻觉铁律**：所有外部动作（游戏操作、语音播放、插件执行）均需返回结构化回执（`COMPLETED | IN_PROGRESS | UNCERTAIN | FAILED`），严禁将 LLM 文本宣称当作执行成功。
+| 域 | 职责与演进规则 | 权威存储归属 |
+| --- | --- | --- |
+| **1. Identity** | `characterId`、名称、角色类型（`primary`/`passive`）、基础设定引用 | `CharacterRegistry` |
+| **2. Personality** | 稳定特质（好奇、傲娇、耐心等）与行为红线，随重大经历微调 | `PersonaProfileStore` |
+| **3. Preferences** | 对游戏、音乐、话题、玩法的长期喜好，保留变化来源 | `PreferenceStore` |
+| **4. Emotion** | 短期 `valence / arousal / label` 情绪状态，**严禁提升工具权限** | `EmotionStateEngine` |
+| **5. Motivation** | 当前驱动力（好奇探索 / 陪伴主人 / 达成某目标） | `LifeRuntime` |
+| **6. Goals** | 当前动作 / 短期 / 阶段 / 长期 / 共同目标栈 | `GoalManager` |
+| **7. Commitments** | 与主人或联机伙伴达成的约定（如“先去矿洞再钓鱼”） | `CommitmentLedger` |
+| **8. Relationships** | 与主人、NPC、直播常客、其他角色的关系及边界 | `local-store` / `memory-graph` |
+| **9. Memory** | 五类记忆与个人经历索引（含模糊印象与真删除级联） | `MemorySystem` |
+| **10. Voice Identity** | 独立声线、语言习惯、说话风格与唱歌风格（与具体 TTS 解耦） | `VoiceProfileStore` |
+| **11. Embodiment** | 桌面 2D/Live2D/VRM、游戏像素化身、舞台槽位映射 | `EmbodimentRegistry` |
+| **12. Activity State** | 当前活跃模式（闲聊/游戏/直播/创作/安静休息）与控制权租约 | `LifeRuntime` + Control Arbiter |
 
-### 3.3 插件系统设计
+---
 
-- **内核层（`packages/runtime-core` + `packages/plugin-kit`）**：
-  - 生命周期：`register` → `enable(setup)` → `disable(LIFO disposables)`，支持父子级联禁用与崩溃回滚。
-  - **能力注入（Capability Injection）**：插件 `setup(api)` 仅能获得受作用域限制的 `logger`、子集 `events`、只读 `config`/`character` 快照、`defineTool` 与授权允许的 `petApi`。
-  - **扩展点**：`sidebar.item`、`panel.route`、`aside.card`、`pet.animation`、`pet.line`、`overlay.widget`、`tool`。
-  - **外部生态适配**：提供 `dsh` 插件适配器（`adaptDshPlugin`），并将 MCP、Agent Skills、ACP Harness、Browser Use 与 Computer Use 作为标准插件能力接入。
+## 四、AI 自主游戏架构与 `CoopRuntime` 多人联机
 
-### 3.4 Agent Runtime 设计（规划与执行严格分离）
+### 4.1 AI-First 游戏智能（绝对禁止硬编码情景策略）
 
 ```mermaid
-sequenceDiagram
-  autonumber
-  participant User as 用户 / 聊天 / 快捷键
-  participant Char as CharacterCore
-  participant Plan as AI Planner (LLM)
-  participant Policy as Policy & Control Gate
-  participant Exec as Tool Executor / GameAdapter
-  participant Pet as PetStage (桌宠身体)
-
-  User->>Char: 发送建议 / 强制命令 / F8 急停
-  Char->>Pet: 更新 ExpressionState (listening / thinking)
-  Plan->>Char: 请求人格、记忆与当前控制模式
-  Plan->>Policy: 提交候选动作 + Intent + Why
-  alt 处于 manual_takeover 或 halted
-    Policy-->>Plan: 拒绝执行 (RUNTIME_HALTED)
-  else 权限校验通过
-    Policy->>Exec: 下发受控工具调用 (带互斥锁)
-    Exec-->>Policy: 返回真实回执 (COMPLETED/UNCERTAIN/FAILED)
-    Policy->>Char: 发布事件 & 经验摘要
-    Char->>Pet: 同步动作/情绪气泡/语音播报
-  end
+flowchart TD
+  OBS["GameAdapter 真实状态观察"] --> WM["WorldModel & 前置条件校验"]
+  WM --> MEM["检索个人经验与攻略知识 (带版本/置信度)"]
+  MEM --> PLAN["AI 自主决策 (目标/候选比较/兴趣/协商)"]
+  PLAN --> ARB{"控制权仲裁 Control Arbiter<br/>(急停/接管 > 强制命令 > 共同计划 > AI自主)"}
+  ARB -->|模型不可用| SAFE["安全暂停高级自主决策并通知用户<br/>(禁止静默切回 RulePlanner)"]
+  ARB -->|通过| EXEC["ActionExecutor 互斥短动作 + 取消支持"]
+  EXEC --> VER["真实回执验证 (COMPLETED/UNCERTAIN/FAILED)"]
+  VER --> REFLECT["反思与经验知识更新"]
+  REFLECT --> OBS
 ```
 
-- **单一 Primary Runtime 先行**：第一阶段仅小鲸（`char_xiaojing`）运行完整的自主思考-规划-记忆闭环；其他桌宠以 `passive` 模式运行（仅形象、动画与基础交互）。
-- **规划与执行分离**：AI Planner 仅产生结构化意图与工具参数，Tool Executor 负责白名单校验、动作互斥锁、超时看门狗与真实回执核验。
+- **职责硬边界**：程序层只提供可靠观察、寻路、动作执行、前置条件检查、超时取消、过期指令拒绝（`sessionId`/`generation`）与真实回执验证；**一切策略选择（满包处理、天气响应、体力分配、采矿/钓鱼/种田切换）必须由 AI 结合实时状态、目标与知识自主决定**。
+- **`RulePlanner` 定位**：仅保留给确定性单元测试、协议兼容性回归或用户显式手动启用；**LLM 故障/缺 Key 时默认暂停自主决策，绝不未经用户同意静默切换为规则机器人**。
+- **攻略学习闭环**：每条游戏知识记录 `sourceType`、`gameVersion`、`modContext`、`applicability`、`confidence` 与 `verificationStatus`，作为参考依据而非强制指令。
 
-### 3.5 AI 角色与记忆系统设计
+### 4.2 多人游戏与协作架构（`CoopRuntime`）
 
-- **统一身份模型（`CharacterCore`）**：
-  - `CharacterIdentity`（不可变 ID `char_xiaojing`、显示名、人设 ID、声线 ID、化身列表）完全独立于底层 LLM 模型、Harness 或当前皮肤。
-  - `MoodState`（`valence`, `arousal`, `label`）为短期状态，不覆盖核心人格、不越权提升工具权限。
-  - `ControlMode`（`autonomous` | `coop` | `command` | `manual_takeover`）与全局 `halted` 标志提供统一的控制权仲裁。
-- **五类记忆架构**（基于 `packages/memory-graph` 演进）：
-  - **Working**（短期对话与当前局内上下文）
-  - **Episodic**（游戏回执、日常事件、换日日记）
-  - **Semantic**（攻略知识库与经验心得 `StrategyNotebook`）
-  - **Relational**（与主人、游戏 NPC、直播常客的好感与印象账本）
-  - **Self**（自我认知、雷区偏好与成长摘要）
-- **记忆治理**：每条记忆保留来源事件、重要度、置信度与 `pinned` 标志；支持用户查看、手动纠正与一键真删除（审计日志保留留痕）。
+真正的多人协作独立于跨设备同步，支持：
+1. **同机多 AI 游戏角色**（多实例/Mod 分身路由与各自控制权）；
+2. **多机联机同一世界**（多设备上的不同 AI 加入同一联机房间）；
+3. **人机联机共玩**（用户与 AI 分别操作各自游戏角色共同探索、分工）；
+4. **协作与冲突解决**：`SharedGoal`、`CoopTaskBoard`、农场箱子/作物 `ResourceReservation`、任务交接、**联机客户端 Mod/自定义外观兼容性预检**（不假设本机像素替换自动同步至其他玩家）、断线重连与状态恢复。
 
-### 3.6 游戏 Agent 设计（第一阶段重点：星露谷物语）
+### 4.3 三层控制权租约模型（严格分离）
 
-- **集成方式**：采用 **SMAPI Mod（BlindWhaleFarmer HTTP/MCP + 自研 `WhaleIsleAvatar` 像素外观同步 Mod）**，避免 fragile 的纯图像识别操控。
-- **自主与规则边界**：
-  - 核心思考、目标设定、换季/赚钱/交友策略由 `LlmPlanner` 自主决定，参考 `guide-forager` 与 `StrategyNotebook` 经验但不死板照搬。
-  - 确定性护栏仅兜底安全底线（动作互斥锁、防止 0 体力硬死、满包急救阶梯、离线无 Key 规则代驾、连续相同卡死自动停顿）。
-- **人机协作控制阶梯**：`紧急停止 / F8` > `手动接管 / F9` > `强制命令 (/cmd)` > `协商目标` > `AI 自主目标` > `待机`。
+1. **设备级 `ComputerUseLease`**：同一主机同一时刻仅允许一个前台自动化控制者，用户键鼠输入立即夺回。
+2. **游戏角色级 `GameCharacterControlLease`**：绑定至具体 `gameInstanceId + playerRoleId`，支持 `Stop / Pause / Takeover / Release`、在飞动作即时 `cancel_action` 与过期指令拒绝。
+3. **角色活动级 `LifeActivityAuthority`**：由 `LifeRuntime` 裁决角色当前是专注于游戏、切换去回消息，还是进入休息。
 
-### 3.7 桌宠状态联动设计
+---
 
-- **九态表现矩阵（`ExpressionState`）**：`idle`、`listening`、`thinking`、`speaking`、`singing`、`dancing`、`gaming`、`reacting`、`resting`。
-- **渲染多态**：统一消费 `IPetAvatarRenderer` 接口，当前支持 `WebmVideoRenderer`（VP9-Alpha 双 `<video>` 零黑帧）、`SpritesheetRenderer`（WebP 精灵图）与 `PoseSkin`（CrossPet 静态立绘+特效），接口预留 Live2D 与 VRM-3D。
-- **单端语音锁与唇形**：`AudioLeaseManager` 保证同一时刻最多一个音轨播放，P0 雷区反射可抢占打断，TTS 结束回执精确驱动桌宠气泡收起与动作恢复。
+## 五、统一声音、唱歌、舞蹈与表演系统
 
-### 3.8 模型网关与真实额度查询设计
+```mermaid
+flowchart LR
+  CharIntent["角色表达意图 / 沉默决策"] --> PD["PerformanceDirector (动作与说话时机仲裁)"]
+  PD --> Speech["SpeechRuntime (TTS + 说话风格)"]
+  PD --> Sing["SingingRuntime (SVS 歌声合成 / SVC 授权转换)"]
+  PD --> Lyrics["LyricsEngine (播放时钟驱动双语时间轴)"]
+  PD --> Dance["Dance / AnimationRuntime"]
+  Speech --> Mixer["AudioMixer (多轨混音与设备路由)"]
+  Sing --> Mixer
+  Bgm["伴奏 / 音效轨道"] --> Mixer
+  Mixer --> LipSync["LipSync (音量包络 / Viseme)"]
+  LipSync --> Stage["桌面 / 2D / 3D / OBS 统一舞台"]
+  Dance --> Stage
+```
 
-- **多供应商统一网关**：支持 OpenAI 兼容、Anthropic Messages 与 TypeSafe System One 协议；支持按槽位（主脑、内心戏、游戏规划、记忆提炼、弹幕、视觉复盘）路由与 100ms 内静默 failover。
-- **四级诚实额度分类（绝不编造余额）**：
-  1. **Official Verifiable API**：如 DeepSeek `/user/balance`、OpenRouter `/key`、OpenCode `/v1/usage`。
-  2. **Verifiable 3rd-Party API**：带明确响应 Schema 校验的兼容端点。
-  3. **CLI Readable Status**：本地 Harness（如 Codex/Claude/Gemini CLI）可解析的官方状态输出。
-  4. **Unknown / Unverifiable**：明确展示 `未知 / 不可查询`，禁止估算或编造剩余额度。
+- **解耦单音轨瓶颈**：将 V1 的 `AudioLeaseManager` 升级为 **Speech Floor（说话发言权，防止同时说两句话）+ Performance Session + Audio Device Routing + Multi-Track `AudioMixer`**，确保角色说话/唱歌时伴奏、游戏音效与后续合唱不会互相阻塞。
+- **TTS / SVS / SVC 严禁混为一谈**：普通 TTS 只负责自然对话；唱歌由 `SingingRuntime` 明确区分歌声合成（SVS：歌词+旋律）与歌声转换（SVC：授权音色转换），且均须经过歌曲、伴奏与歌词授权门禁。
+- **自然感与沉默权**：角色有权在陪伴或专注时保持沉默；桌宠气泡展示可读意图与简短行动理由，不依赖隐藏思维链。
 
-### 3.9 统一事件总线设计（`RuntimeEventBus`）
+---
 
-- 所有核心域变更统一封装为 `RuntimeEventEnvelope<T>`（含单调递增 `seq`、UUID `id`、标准命名 `domain:action`、`source`、`characterId`、`timestamp`、`payload`）。
-- 支持精确订阅、`domain:*` 尾通配、`*` 全监听、`once` 自动注销、异常隔离（单个监听崩溃不影响其余监听）与有界环形历史（支持渲染窗刷新水合与 WebUI 晚连回放）。
+## 六、完整 `Creative Studio` 与资产管线
 
-### 3.10 数据存储方案
+- **`MediaGenerationGateway`**：统一任务排队、进度、预算与失败重试，解耦生图/3D/音频引擎：
+  - **图片生成**：接入本地具备图像能力的 Coding Agent（如 Codex）或在线图片模型 API；
+  - **3D 生成**：优先调用 3D 生成大模型（如 Hunyuan3D）产出网格与材质，**Blender 专职自动化后处理（法线、UV、减面、骨骼绑定、BlendShapes、VRM 导出与 QA）**。
+- **Character Bible 与全流程工作室**：
+  - 统一三视图、配色、特征约束，确保跨桌面、2D/Live2D、3D VRM 与星露谷像素化身一致性；
+  - 覆盖 Character Design / 2D & CrossPet 全量合法导入 / 3D & VRM / Animation / Game Pixel & `stardew-avatar-sync` 导出真机验证 / Scene & Voice 创作；
+  - **十态 `AssetRegistry`**：`draft → generating → candidate → processing → validation_failed | review_required → approved → published → deprecated / restricted`，强制记录来源、Hash 与许可范围，非商用资产进入商用/直播上下文即拦截。
 
-| 数据类型 | V2 目标引擎 | 存储位置 | 生命周期与安全 |
-| --- | --- | --- | --- |
-| **V2 内核配置** | Zod 校验 JSON（原子写） | `userData/v2-runtime-config.json` | 损坏自动安全回退默认值 |
-| **UI 偏好与供应商目录** | Dexie (IndexedDB) | 渲染进程 | 与主进程网关按配置同步 |
-| **API Key 与平台凭据** | Electron `safeStorage` | `userData/provider-vault.json` | 明文仅主进程内存瞬间存在，v2 身份隔离 |
-| **结构化账本（友谊/常客/资产注册/点歌缓存）** | `node:sqlite` (统一收敛) | `userData/*.sqlite` | 支持按角色隔离与一键隐私擦除 |
-| **记忆图谱 / Token 流水 / 审计日志** | JSONL Append-Only | `userData/memory/`, `meter/` | 墓碑压实，不可篡改审计流 |
+---
 
-### 3.11 安全、权限与治理设计
+## 七、直播、社区数字生活（L1–L3）与记忆增长
 
-- **P0–P5 权限阶梯**：
-  - `P0` 读本地非敏感状态（自动放行）
-  - `P1` 读公开/已授权外部内容
-  - `P2` 生成本地草稿/资产候选
-  - `P3` 可撤销本地变更（需规则或会话授权）
-  - `P4` 对外互动/发布（默认必须人类确认）
-  - `P5` 私信/删数/支付/敏感凭据（每次显式确认；插件清单声明 `vault://*` 或 `shell://*` 硬拒）
-- **Computer Use 单主控锁**：同一主机同一时间只允许一个 Agent 持有桌面键鼠控制租约（`ControlLease`），支持硬件级/全局快捷键随时强制收回。
-- **双平面隔离（Runtime Plane vs Evolution Plane）**：线上运行的小鲸严禁自修改生产代码或执行未受控 Shell；未来 Evolution Engine 仅在独立 Git Worktree 运行测试并提交 PR，需审核通过后才可灰度发布。
+- **LiveRuntime**：由 `LifeRuntime` 按意愿与授权调度开播；弹幕经去重、过滤、合并与三级注意力调度避免压垮大模型；逐平台核对官方 API 许可。
+- **Social Digital Life 三阶段演进**：
+  - **L1（只读学习）**：自主浏览感兴趣内容、理解吸收并更新兴趣与记忆；
+  - **L2（草稿审核）**：生成评论、回复或作品草稿，经用户确认后执行；
+  - **L3（受限自主）**：在平台官方规则与用户明确白名单授权范围内自主互动与维护关系。
+  - 每个角色独立账号与独立 Browser Profile；绝不绕过验证码、访问控制或反自动化限制。
+- **类人五类记忆**：保留 `Working / Episodic / Semantic / Relational / Self`，引入情绪关联权重、模糊印象归纳、主动回忆巩固与自然衰减；**区分自然遗忘与用户主动删除**（主动删除须同步擦除衍生摘要与索引并保留不可删除的删除审计）。
 
-### 3.12 多设备扩展设计（架构预留）
+---
 
-- 通过 `DeviceRegistry`（`deviceId`, `hostName`, `capabilities`: desktop/game/browser/gpu）与 `ControlLease`（租约持有者、心跳、TTL、自动释放）为跨设备游戏协作（例如 PC 跑星露谷 + Mac 跑桌面陪玩与中控台）预留协议接口；底层传输复用带设备 Token 鉴权的 WebSocket 事件总线镜像。
+## 八、模型供应商与四级诚实额度矩阵
+
+- 支持供应商：**DeepSeek、MiniMax、Kimi（Moonshot）、OpenCode（Go/Console）、OpenRouter、OpenAI/Anthropic 兼容、TypeSafe Jev、Ollama/本地引擎**；参考 Magpie / Pi / 成熟 Harness 的路由、脱敏与本地探测机制。
+- **额度查询精细模型**：
+  - **维度**：账户余额、5 小时窗口配额、周额度、月额度、剩余 Token、请求次数、套餐权益、重置时间；
+  - **元信息**：`source`（`official_api` | `verifiable_third_party` | `cli_status` | `unknown`）、`fetchedAt`、`scope`、`authState`、`errorDetail`；
+  - **诚实铁律**：未经实测可用的接口严禁编造余额，统一标为 `未知 / 不可查询`。
+
+---
+
+## 九、安全边界、插件隔离与 `Evolution Engine`
+
+- **插件真实隔离**：
+  - 内置可信插件运行于受控内核上下文；
+  - **第三方不可信插件**运行在独立 Worker/子进程沙箱中，所有文件、网络、系统与账号调用经主进程 Policy Broker 真实拦截校验（P0–P5 权限阶梯 + `vault://*` / `shell://*` 硬拒）。
+- **Evolution Engine 双阶段架构**：
+  - **Lite（P0/P1）**：`tools/evolution-lite` —— 唯一工单状态机、生产仓库外独立 Git Worktree 隔离、Coding Agent CLI 适配器、自动化门禁运行器、独立 Diff/安全审查器、PR 草案与失败停机报告、跨会话进度恢复；
+  - **Full（P4）**：接入生产脱敏诊断遥测、问题自动复现回放、优化提案、低风险策略自动合并与灰度回滚。
+  - **不可逾越铁律**：运行中的小鲸可提交脱敏反馈，但**严禁直接修改生产工作目录源码、篡改自身权限或跳过质量门禁**。
