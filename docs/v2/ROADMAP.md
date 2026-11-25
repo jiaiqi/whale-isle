@@ -123,8 +123,8 @@
 ## P2：攻略增强、开放生态、完整创作工坊与真实人机联机
 
 - **`V2-P2-01`（`IMPLEMENTED_UNVERIFIED`）：攻略学习闭环增强**（`GameKnowledgeItem` / `GuideProvenance` / `GameRuntimeContext`、`GuideLibrary` 版本与 Mod 兼容检查、`StrategyNotebook` 置信度与反例积累、`LlmPlanner` 实玩回执验真与夜间复盘全通；`verify:gate` 7/7 + 64 专项单测 + Electron 45 E2E 全绿，详见 [P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md)；待真实《星露谷》多日实机校验）
-- **`V2-P2-02`（`NEXT`）：开放生态与插件进程隔离**（双向 MCP Client/Server + Skills 注册表 + 多 Harness 执行级适配 + 不可信插件独立进程沙箱）
-- **`V2-P2-03`：`MediaGenerationGateway` 与图片生成流水线**（本地生图 Agent + 在线图片 API，候选区审查隔离）
+- **`V2-P2-02`（`IMPLEMENTED_UNVERIFIED`）：开放生态与插件进程隔离**（第三方插件主进程直连已退役、Worker Isolate 沙箱与 `PolicyBroker` P0–P5 达成 `REQ-SEC-01 DONE`；双向 MCP HTTP/STDIO、受控脱敏 Server、`SkillRegistry` 与 7 家 Harness 执行器完备，`verify:gate` 7/7 与 Electron 45 E2E 全绿，详见 [P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md)；待外部新 CLI 真机实测）
+- **`V2-P2-03`（`NEXT`）：`MediaGenerationGateway` 与图片生成流水线**（本地生图 Agent + 在线图片 API，候选区审查隔离）
 - **`V2-P2-04`：3D 大模型生成与 Blender 自动化后处理流水线**（Hunyuan3D 等网格生成 + Blender UV/骨骼/BlendShapes/VRM 导出与 QA）
 - **`V2-P2-05`：Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入**（完整支持 CrossPet 角色导入、严格授权标签与商业隔离）
 - **`V2-P2-06`：游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证**（11 步像素流水线 + `stardew-avatar-sync` 导出与游戏内外观核验）

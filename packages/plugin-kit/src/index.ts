@@ -9,3 +9,4 @@ export * from './define-tool';
 export * from './event-bus';
 export * from './plugin-host';
 export * from './dsh-bridge';
+export * from './v2-sandbox-skills';

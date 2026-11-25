@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-02`：开放生态与插件进程隔离 — `REQ-SEC-01 DONE` / `REQ-EXT-01 IMPLEMENTED_UNVERIFIED`）
+
+- **生态与隔离契约** `packages/shared-protocol/src/{ecosystem.ts,ecosystem.spec.ts,index.ts}`：定义 `PluginTrustLevel`、`ToolRiskTier`（`P0_READ`–`P5_FORBIDDEN`）、`PluginSandboxHealth`、`AgentSkillManifest`、双向 MCP 描述/审计及 Harness 集成等级契约。
+- **Worker Isolate 插件沙箱、`PolicyBroker` 与 `SkillRegistry`** `packages/plugin-kit/src/{v2-sandbox-skills.ts,v2-sandbox-skills.spec.ts,index.ts}`：实现剥离宿主机敏感 `process.env`、限堆内存、死循环超时 `worker.terminate()` 强杀与跨线程 Broker 的 `IsolatedPluginRunner`；实现 P0–P5 与 `vault://`/`shell://` 硬拒审计 `PolicyBroker`；实现解析 `SKILL.md` 与静态危险脚本扫描拦截的 `SkillRegistry`。
+- **宿主退役主进程第三方插件直连装载** `apps/desktop-host/src/main/plugin-host.ts`：全面切换为 `IsolatedPluginRunner` + `PolicyBroker`，通过 Electron 45 E2E 外部插件发现→启用→审批→调用验收。
+- **双向 MCP 与多 Harness 扩展** `packages/agent-harness/src/{mcp-bridge.ts,mcp-bridge.spec.ts,providers.ts,index.ts}`：实现 `WhaleMcpClient`（Streamable HTTP + STDIO）、受控鉴权与递归脱敏 `WhaleMcpServer`、执行级隔离器 `executeHarnessTask` 及 Codex/OpenCode/Pi/OpenHands 预设。`pnpm verify:gate`（7/7）与 4 个 Electron 45 E2E 套件全绿。
+
 ### Added / Changed（`V2-P2-01`：攻略学习闭环增强 — `IMPLEMENTED_UNVERIFIED`）
 
 - **攻略知识与兼容契约** `packages/shared-protocol/src/{knowledge.ts,knowledge.spec.ts,index.ts}`：定义 `GameKnowledgeItem`、`GuideProvenance`、`GameRuntimeContext` 与 `GuideCompatibilityReport` Zod 契约。

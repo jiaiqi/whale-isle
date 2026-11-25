@@ -3,9 +3,9 @@
 > 本文件是面向任何新接手 Coding Agent 的跨会话单点进度恢复文件（不依赖聊天上下文）。每次完成或阻塞工单必须更新本文件。
 
 - **当前开发分支**：`feat/whale-isle-v2`（上游基线 `main` @ `f1ce271`）
-- **当前唯一激活工单**：`V2-P2-02`（开放生态与插件进程隔离）
-- **刚完成待真机补验工单**：`V2-P1-06` / `V2-P2-01`（`IMPLEMENTED_UNVERIFIED` — 缺真实《星露谷》+ SMAPI 客户端联调与多日实测）
-- **下一排队工单**：`V2-P2-03`（`MediaGenerationGateway` 与图片生成流水线）
+- **当前唯一激活工单**：`V2-P2-03`（`MediaGenerationGateway` 与图片生成流水线）
+- **刚完成待真机补验工单**：`V2-P1-06` / `V2-P2-01` / `V2-P2-02`（`IMPLEMENTED_UNVERIFIED` — 缺真实游戏与新增外部 CLI 真机联调；`V2-P2-02` 中 `REQ-SEC-01` 已达 `DONE`）
+- **下一排队工单**：`V2-P2-04`（3D 大模型生成与 Blender 自动化后处理流水线）
 
 ## 1. 工单状态快照
 
@@ -22,8 +22,9 @@
 | `V2-P1-04` | `DONE` | `@workbench/memory-graph` 五类记忆、情绪加权回忆、模糊印象归纳、手动纠正与级联真删除（覆盖 SQLite `deleteViewerByUid` + 磁盘 JSONL 重写 + 无明文审计）及宿主 IPC 完成（commit `319c350`）；37 单测、`verify:gate` 7/7 与 Electron 45 E2E 2/2 通过，详见 [P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md) |
 | `V2-P1-05` | `DONE` | Obsidian Tide 中控台重构、`App.tsx` Strangler 拆解（1,466→914 行）、四大签名组件、`system/dark/light` 三态主题、`F8/F9/F10/⌘K` 与「V2 生命中枢」面板完成（commit `a9a5786`）；`verify:gate` 7/7 + 4 个 Electron 45 E2E 套件全绿，详见 [P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md) |
 | `V2-P1-06` | `IMPLEMENTED_UNVERIFIED` | AI-First 纠偏（`GameCharacterControlLease`、`PausedBrainPlanner` 清除默认静默规则代驾、13 项控制指令与 12 项 Blueprint 17 §12 仿真验收，commit `833bd0c`）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》+ SMAPI 真机联调与浸泡，详见 [P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) |
-| `V2-P2-01` | `IMPLEMENTED_UNVERIFIED` | 攻略学习闭环增强（`@workbench/shared-protocol/knowledge`、版本/Mod 兼容检查、实玩置信度演进与反例积累、复盘与 `LlmPlanner` 回执闭环）、64 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》多日实测，详见 [P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) |
-| `V2-P2-02` | `NEXT` | 开放生态与插件进程隔离（双向 MCP Client/Server + Skills 注册表 + 多 Harness 执行级适配 + 不可信插件独立进程沙箱） |
+| `V2-P2-01` | `IMPLEMENTED_UNVERIFIED` | 攻略学习闭环增强（`@workbench/shared-protocol/knowledge`、版本/Mod 兼容检查、实玩置信度演进与反例积累、复盘与 `LlmPlanner` 回执闭环，commit `c31271f`）、64 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》多日实测，详见 [P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) |
+| `V2-P2-02` | `IMPLEMENTED_UNVERIFIED` | 开放生态与插件进程隔离（`IsolatedPluginRunner` Worker Isolate 沙箱、`PolicyBroker` P0–P5、`SkillRegistry`、双向 MCP HTTP/STDIO、受控脱敏 MCP Server 与 7 家 Harness 执行器）、退役主进程第三方直连 `import` 达成 `REQ-SEC-01 DONE`，`verify:gate` 7/7 与 Electron 45 E2E 全绿；新增外部 CLI 真机实测待验，详见 [P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md) |
+| `V2-P2-03` | `NEXT` | `MediaGenerationGateway` 与图片生成流水线（本地生图 Agent + 在线图片 API，候选区审查隔离） |
 
 ## 2. 新会话接手必查项
 

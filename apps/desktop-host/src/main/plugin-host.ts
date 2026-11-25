@@ -1,28 +1,33 @@
 /**
- * 外部插件生产链路（T-M6-31 切片一）：把 plugin-kit 从「库」接到宿主进程。
+ * 外部插件生产链路（V2-P2-02 进程隔离升级）：把 plugin-kit 与 Worker Isolate 沙箱接到宿主进程。
  *
  * 发现规则（唯一入口，禁止绕过）：
  *   <userData>/plugins/<id>/manifest.json  —— 清单，必须过 PluginManifestSchema，且 id === 目录名
  *   <userData>/plugins/<id>/index.mjs      —— dsh 形态 ESM 模块：export default { name, apply(ctx) }
  *
- * 安全边界（如实声明）：
- *   - 插件是用户本机放置的可信代码；一旦 import 就运行在 main 进程，Policy **不是 JS 沙箱**。
- *   - 硬拒：manifest 声明 vault://*（密钥单咽喉）或 shell://*（审批 UI 未接线）→ 不装载。
- *   - 工具策略：allow 直接执行；ask 必须先经 plugin:approve（本次会话内授权）；deny 永拒。
- *   - 崩溃隔离：setup 抛错由 PluginHost 回滚；tool invoke 异常统一 {ok:false}；错误写入 errors。
+ * 安全边界（REQ-SEC-01 真实隔离）：
+ *   - 退役主进程 `import(moduleUrl)`：所有第三方外部插件一律跑在剥离宿主机敏感 `process.env`
+ *     且带 V8 堆限制、超时硬终止的独立 Worker Isolate（`IsolatedPluginRunner`）。
+ *   - 硬拒：manifest 声明 `vault://*` 或 `shell://*` → 不装载；工具/Broker 调用经 `PolicyBroker` 校验与审计。
+ *   - 工具策略：allow 直接执行；ask 必须先经 `plugin:approve`（本次会话内授权）；deny 永拒。
+ *   - 崩溃/超时隔离：setup 或工具执行超时/抛错由沙箱与 PluginHost 回滚，绝不拖垮主进程。
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join, resolve, sep } from 'node:path';
 import { ipcMain, type WebContents } from 'electron';
+import { z } from 'zod';
 import {
-  adaptDshPlugin,
+  IsolatedPluginRunner,
   PluginHost,
+  PolicyBroker,
   parsePluginManifest,
   type PluginError,
   type PluginManifest,
+  type PluginSetup,
+  type Tool,
+  type ToolResult,
 } from '@workbench/plugin-kit';
-import type { ToolResult, Tool } from '@workbench/plugin-kit';
+import type { PluginSandboxStatus, PluginTrustLevel } from '@workbench/shared-protocol';
 
 export interface PluginViewEntry {
   id: string;
@@ -31,6 +36,9 @@ export interface PluginViewEntry {
   description: string;
   enabled: boolean;
   tools: string[];
+  isolated?: boolean;
+  trustLevel?: PluginTrustLevel;
+  sandboxStatus?: PluginSandboxStatus;
   error?: string;
 }
 
@@ -72,7 +80,9 @@ function isInside(root: string, candidate: string): boolean {
 export function createPluginHost(options: {
   userDataDir: string;
   windows: () => WebContents[];
-  /** T-M6-49：声明 pet:control 权限的插件可拿到的桌宠驱动口 */
+  /** 沙箱执行硬超时（ms），默认 5000ms */
+  sandboxTimeoutMs?: number;
+  /** T-M6-49：声明 pet:control 权限的插件可经 Broker 调用桌宠驱动口 */
   petApi?: {
     state(agentId: string): unknown;
     say(agentId: string, text: string, request: { scene: 'normal' | 'inner' | 'p0'; wake: boolean }): { ok: boolean; error?: string };
@@ -83,20 +93,9 @@ export function createPluginHost(options: {
   const settingsPath = join(options.userDataDir, SETTINGS_FILE);
   mkdirSync(pluginsRoot, { recursive: true });
 
-  const host = new PluginHost({
-    // 只有清单显式声明 { resource: 'pet:control', policy: 'allow' } 才注入；其余 undefined
-    petApiFor: (manifest) => {
-      if (options.petApi === undefined) return undefined;
-      const granted = manifest.permissions.some((permission) => permission.resource === 'pet:control' && permission.policy === 'allow');
-      if (!granted) return undefined;
-      const api = options.petApi;
-      return {
-        state: async (agentId) => api.state(agentId),
-        say: async (agentId, text, request) => api.say(agentId, text, { scene: request?.scene ?? 'normal', wake: request?.wake === true }),
-        action: async (agentId, actionState, durationMs) => api.action(agentId, actionState, durationMs ?? 6000),
-      };
-    },
-  });
+  const host = new PluginHost();
+  const policyBroker = new PolicyBroker();
+  const runners = new Map<string, IsolatedPluginRunner>();
   const windows: WebContents[] = [];
   const approvedTools = new Set<string>();
   const failures = new Map<string, string>();
@@ -155,27 +154,91 @@ export function createPluginHost(options: {
     return found;
   }
 
-  /** 装载单个插件：import ESM 模块 → dsh 适配 → PluginHost.register（setup 崩溃被隔离） */
+  /** 在独立 Worker Isolate 沙箱内装载第三方插件，并向宿主注册 Broker 代理工具 */
   async function activate(item: Discovery): Promise<void> {
     if (host.isEnabled(item.id)) return;
+    const timeoutMs = options.sandboxTimeoutMs ?? 5_000;
+    const runner = new IsolatedPluginRunner({
+      pluginId: item.id,
+      modulePath: item.modulePath,
+      manifest: item.manifest,
+      setupTimeoutMs: timeoutMs,
+      invokeTimeoutMs: timeoutMs,
+      onEvent: (event, payload) => {
+        host.emit(event, payload);
+      },
+      onBrokerCall: async (req) => {
+        const check = policyBroker.evaluate({
+          pluginId: req.pluginId,
+          manifest: item.manifest,
+          resource: req.capability,
+          riskTier: req.method === 'state' ? 'P0_READ' : 'P2_REVERSIBLE_WRITE',
+        });
+        if (!check.allowed) throw new Error(`${check.reason}: ${req.capability}`);
+        if (options.petApi === undefined) throw new Error('PET_API_UNAVAILABLE');
+        const agentId = String(req.args[0] ?? 'char_xiaojing');
+        if (req.method === 'state') return options.petApi.state(agentId);
+        if (req.method === 'say') {
+          const reqObj = (typeof req.args[2] === 'object' && req.args[2] !== null ? req.args[2] : {}) as {
+            scene?: 'normal' | 'inner' | 'p0';
+            wake?: boolean;
+          };
+          return options.petApi.say(agentId, String(req.args[1] ?? ''), {
+            scene: reqObj.scene ?? 'normal',
+            wake: reqObj.wake === true,
+          });
+        }
+        return options.petApi.action(agentId, String(req.args[1] ?? 'idle'), Number(req.args[2] ?? 6000));
+      },
+    });
+
     try {
-      // 查询参数破缓存：禁用→启用之间改了 index.mjs 也能生效
-      const moduleUrl = `${pathToFileURL(item.modulePath).href}?v=${Date.now()}`;
-      const loaded = (await import(moduleUrl)) as { default?: unknown; plugin?: unknown };
-      const candidate = (loaded.default ?? loaded.plugin) as { name?: string; apply?: unknown } | undefined;
-      if (candidate === null || typeof candidate !== 'object' || typeof candidate.apply !== 'function') {
-        throw new Error(`${MODULE_FILE} 必须 export default { name, apply(ctx) }`);
+      const started = await runner.start();
+      runners.set(item.id, runner);
+      const setupProxy: PluginSetup = (ctx) => {
+        for (const toolName of started.tools) {
+          ctx.defineTool({
+            name: toolName,
+            description: `[isolated] ${toolName}`,
+            schema: z.record(z.string(), z.unknown()).default({}),
+            policy: 'ask',
+            execute: async (args) => {
+              const active = runners.get(item.id);
+              if (active === undefined) throw new Error(`插件沙箱未运行：${item.id}`);
+              const res = await active.invoke(toolName, args);
+              if (!res.ok) throw new Error(res.error ?? 'PLUGIN_TOOL_ERROR');
+              return res.result;
+            },
+          });
+        }
+        ctx.effect(() => () => {
+          const active = runners.get(item.id);
+          if (active !== undefined) {
+            runners.delete(item.id);
+            void active.stop();
+          }
+        });
+      };
+
+      if (host.get(item.id) === undefined) {
+        host.register(
+          {
+            ...item.manifest,
+            id: item.id,
+            extensions: [...item.manifest.extensions],
+            permissions: [...item.manifest.permissions],
+            dshCompatible: true,
+          },
+          setupProxy,
+        );
+      } else {
+        host.enable(item.id);
       }
-      const adapted = adaptDshPlugin(candidate as { name: string; apply(ctx: never): void }, {
-        icon: item.manifest.icon,
-        extensions: [...item.manifest.extensions],
-        permissions: [...item.manifest.permissions],
-      });
-      // 清单 id 是宿主寻址的唯一事实源；dsh 模块自带 name 可能含 scope/下划线，不得覆盖目录 id
-      host.register({ ...adapted.manifest, id: item.id }, adapted.setup);
       failures.delete(item.id);
     } catch (error) {
-      failures.set(item.id, `装载失败：${error instanceof Error ? error.message : String(error)}`);
+      runners.delete(item.id);
+      await runner.stop();
+      failures.set(item.id, `沙箱装载失败：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -189,15 +252,21 @@ export function createPluginHost(options: {
   host.on('*', (payload) => broadcast('bus', payload));
 
   function view(): PluginViewEntry[] {
-    return [...discoveries.values()].map((item) => ({
-      id: item.id,
-      name: item.manifest.name,
-      version: item.manifest.version,
-      description: item.manifest.description,
-      enabled: host.isEnabled(item.id),
-      tools: host.tools.list(item.id).map((tool: Tool) => tool.name),
-      ...(failures.has(item.id) ? { error: failures.get(item.id) } : {}),
-    }));
+    return [...discoveries.values()].map((item) => {
+      const runnerHealth = runners.get(item.id)?.health();
+      return {
+        id: item.id,
+        name: item.manifest.name,
+        version: item.manifest.version,
+        description: item.manifest.description,
+        enabled: host.isEnabled(item.id),
+        tools: host.tools.list(item.id).map((tool: Tool) => tool.name),
+        isolated: true,
+        trustLevel: 'third-party-isolated',
+        sandboxStatus: runnerHealth?.status ?? 'idle',
+        ...(failures.has(item.id) ? { error: failures.get(item.id) } : {}),
+      };
+    });
   }
 
   ipcMain.handle('plugin:list', async () => {
@@ -214,6 +283,7 @@ export function createPluginHost(options: {
       if (!host.isEnabled(id)) return { ok: false, error: failures.get(id) ?? '启用失败' };
     } else {
       host.disable(id);
+      policyBroker.revokePlugin(id);
       approvedTools.clear();
     }
     settings[id] = enabled;
@@ -241,6 +311,7 @@ export function createPluginHost(options: {
     if (!tool) return { ok: false, error: `未知工具：${name}` };
     if (tool.policy !== 'ask') return { ok: true };
     approvedTools.add(name);
+    policyBroker.approve(tool.pluginId, name);
     broadcast('approve', { name });
     return { ok: true };
   });
@@ -261,18 +332,26 @@ export function createPluginHost(options: {
       const tool = host.tools.get(name);
       if (!tool) return { ok: false, error: `未知工具：${name}` };
       approvedTools.add(name);
+      policyBroker.approve(tool.pluginId, name);
       return { ok: true };
     },
     errors: () => [
       ...host.errors,
       ...[...failures].map(([id, error]) => ({ id, error, phase: 'enable' as const })),
     ],
-    clearErrors: () => host.clearErrors(),
-    emit: (event, payload) => host.emit(event, payload),
+    clearErrors: () => { host.clearErrors(); failures.clear(); },
+    emit: (event, payload) => {
+      host.emit(event, payload);
+      for (const r of runners.values()) r.dispatchEvent(event, payload);
+    },
     setTargets(targets) { windows.length = 0; windows.push(...targets); },
     stopAll() {
       for (const item of discoveries.values()) {
         if (host.get(item.id)?.enabled === true) host.disable(item.id);
+      }
+      for (const [id, runner] of runners.entries()) {
+        runners.delete(id);
+        void runner.stop();
       }
     },
   };
