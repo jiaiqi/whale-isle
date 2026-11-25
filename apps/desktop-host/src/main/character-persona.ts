@@ -21,6 +21,7 @@ function defaultPersonaConfig(): PetPersonaConfig {
 }
 
 let current = DEFAULT_PERSONA;
+let characterCorePromptProvider: (() => string) | null = null;
 const BASE_WHALE_PERSONA = loadPersona(defaultPersonaConfig());
 let currentPersona = BASE_WHALE_PERSONA;
 let currentCharacterId = 'blue-whale-maid';
@@ -125,6 +126,11 @@ export function currentPersonaReflex(text: string): ReflexHit | null {
   return personaFor(currentCharacterId).reflex(text);
 }
 
+/** V2-P1-01：绑定 CharacterCore 权威上下文投影，消除与 V1 全局变量的双写分裂 */
+export function bindCharacterCorePrompt(provider: (() => string) | null): void {
+  characterCorePromptProvider = provider;
+}
+
 export function currentPersonaPrompt(): string {
-  return current;
+  return characterCorePromptProvider?.() ?? current;
 }

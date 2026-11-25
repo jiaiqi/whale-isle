@@ -13,3 +13,4 @@
 | 证据文件 | 覆盖范围 | 结论口径 |
 | --- | --- | --- |
 | [P0-foundation-verification.md](./P0-foundation-verification.md) | `V2-P0-01` ~ `V2-P0-05` | 自动化门禁、单测覆盖率、`node:sqlite` 迁移恢复、`electron-builder` 打包与 Electron 45 E2E 实测通过；外部 CLI 自动调用与 V1 旧库真机抽检诚实标注待验 |
+| [P1-character-life-verification.md](./P1-character-life-verification.md) | `V2-P1-01` | 12 域 `CharacterCore` 与 `LifeRuntime`（`92.33%` 分支覆盖）、`verify:gate` 7/7、Electron 45 E2E 实测通过 |

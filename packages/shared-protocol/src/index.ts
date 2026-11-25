@@ -1498,3 +1498,5 @@ export const WorkFollowStatusSchema = z.object({
   activeOrigins: z.record(z.string(), WorkFollowOriginSchema).default({}),
 });
 export type WorkFollowStatus = z.infer<typeof WorkFollowStatusSchema>;
+
+export * from './character';

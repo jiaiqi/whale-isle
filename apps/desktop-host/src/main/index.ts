@@ -17,7 +17,7 @@ import { bwfMcpEndpoint } from './bwf-settings';
 import { createPetPrefsStore } from './pet-prefs';
 import { PetWindowManager, type ManagedPetWindow, type PetWindowCreateInput, type WindowBounds } from './pet-window-manager';
 import { createCharacterRegistry } from './character-registry';
-import { characterPokeLine, setCurrentPersonaCharacter, setCurrentPersonaPrompt } from './character-persona';
+import { bindCharacterCorePrompt, characterPokeLine, setCurrentPersonaCharacter, setCurrentPersonaPrompt } from './character-persona';
 import { createCoopHost } from './coop-host';
 import { createProviderImportHost } from './provider-import-host';
 import { createAutodriveHost } from './autodrive-host';
@@ -319,7 +319,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     userDataDir: app.getPath('userData'),
     vaultPath,
   });
-  app.on('will-quit', () => { void v2KernelHost.stop(); });
+  bindCharacterCorePrompt(() => v2KernelHost.characterCore.buildRuntimeContextPrompt());
+  app.on('will-quit', () => {
+    bindCharacterCorePrompt(null);
+    void v2KernelHost.stop();
+  });
   // Magpie / CC Switch 只读导入（T-M6-09）：扫描只回掩码，导入时主进程直接加密写 vault
   createProviderImportHost(vaultPath);
   // 星露谷 Mod 管理（T-M6-06）：只读写玩家 Mods 目录，配置落 userData
@@ -370,6 +374,15 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     prefs.patch({ characterId: id });
     const next = characters.selected();
     setCurrentPersonaCharacter(next.id, next.personaPrompt);
+    v2KernelHost.characterCore.applyLegacyAppearance({
+      id: next.id,
+      displayName: next.displayName,
+      manifestPath: next.manifestPath,
+      anchorRatio: next.anchorRatio,
+      licenseScope: next.licenseScope,
+      voiceId: next.voiceId,
+      personaPrompt: next.personaPrompt,
+    });
     // 全局角色快切只作用于 default 主桌宠；其他联机桌宠角色由各自 pet:window-open(agentId, characterId) 固定
     petWindowManager?.patch('default', { characterId: next.id });
     petWindowManager?.sendAgent('default', 'pet:character-changed', { ...next });

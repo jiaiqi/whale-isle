@@ -1,8 +1,8 @@
 /**
- * Whale Isle V2 内核宿主接线（V2-P0-02）：
- * - 在 Electron 主进程启动并维护 WhaleKernel 单例
+ * Whale Isle V2 内核宿主接线（V2-P0-02 → V2-P1-01）：
+ * - 在 Electron 主进程启动并维护 WhaleKernel 单例与 12 域 CharacterCore / LifeRuntime
  * - 复用 provider-vault.ts 的 safeStorage 凭据库作为 SecretVaultPort，绝不重复造钥匙串逻辑
- * - 注册内置诊断插件 core-diagnostics，并将 V1 autodrive/voice 关键状态事件同步到 CharacterCore
+ * - 注册内置诊断插件 core-diagnostics，并将 V1 autodrive/voice 关键状态事件同步到 CharacterCore & LifeRuntime
  */
 import { join } from 'node:path';
 import { ipcMain } from 'electron';
@@ -15,6 +15,14 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
+import { CharacterCore, type SelectActivityInput } from '@workbench/character-core';
+import {
+  GoalHorizonSchema,
+  GoalOriginSchema,
+  LifeActivityKindSchema,
+  PreferenceCategorySchema,
+  type CharacterCoreSnapshot,
+} from '@workbench/shared-protocol';
 import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
 import type { VoiceHost } from './voice-host';
@@ -51,9 +59,43 @@ function createElectronVaultPort(vaultPath: string): SecretVaultPort {
 
 export interface V2KernelHost {
   readonly kernel: WhaleKernel;
+  readonly characterCore: CharacterCore;
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost }): void;
   stop(): Promise<void>;
 }
+
+const AddGoalInputSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  horizon: GoalHorizonSchema.optional(),
+  origin: GoalOriginSchema.optional(),
+  priority: z.number().int().min(0).max(100).optional(),
+  relatedActivity: LifeActivityKindSchema.optional(),
+});
+
+const AddCommitmentInputSchema = z.object({
+  partnerId: z.string().min(1),
+  partnerName: z.string().min(1).optional(),
+  title: z.string().min(1).max(200),
+  detail: z.string().max(1000).optional(),
+  dueAt: z.number().int().nonnegative().optional(),
+});
+
+const RecordPreferenceInputSchema = z.object({
+  category: PreferenceCategorySchema,
+  key: z.string().min(1),
+  delta: z.number(),
+  source: z.string().min(1),
+  reason: z.string().min(1),
+  confidence: z.number().min(0).max(1).optional(),
+});
+
+const SelectActivityInputSchema = z.object({
+  mode: LifeActivityKindSchema,
+  reason: z.string().min(1),
+  source: z.enum(['life_runtime', 'user_command', 'emergency_halt', 'manual_takeover']).optional(),
+  force: z.boolean().optional(),
+});
 
 export async function createV2KernelHost(options: {
   userDataDir: string;
@@ -98,21 +140,75 @@ export async function createV2KernelHost(options: {
 
   await kernel.start();
 
+  const characterCore = new CharacterCore({
+    events: kernel.events,
+    registryCore: kernel.characters,
+    filePath: join(options.userDataDir, 'v2-character-core.json'),
+  });
+
   let stopFn: (() => void) | null = null;
   const unsubscribers: Array<() => void> = [];
 
   ipcMain.handle('v2:kernel-health', () => kernel.health());
   ipcMain.handle('v2:kernel-logs', (_e, limit = 50) => kernel.logger.recent(typeof limit === 'number' ? limit : 50));
   ipcMain.handle('v2:character-state', () => kernel.characters.primaryState());
+  ipcMain.handle('v2:character-snapshot', (): CharacterCoreSnapshot => characterCore.snapshot());
+  ipcMain.handle('v2:character-goal-add', (_e, rawInput: unknown) => {
+    const parsed = AddGoalInputSchema.parse(rawInput);
+    return characterCore.goals.addGoal({
+      title: parsed.title,
+      ...(parsed.description === undefined ? {} : { description: parsed.description }),
+      ...(parsed.horizon === undefined ? {} : { horizon: parsed.horizon }),
+      ...(parsed.origin === undefined ? {} : { origin: parsed.origin }),
+      ...(parsed.priority === undefined ? {} : { priority: parsed.priority }),
+      ...(parsed.relatedActivity === undefined ? {} : { relatedActivity: parsed.relatedActivity }),
+    });
+  });
+  ipcMain.handle('v2:character-commitment-add', (_e, rawInput: unknown) => {
+    const parsed = AddCommitmentInputSchema.parse(rawInput);
+    return characterCore.commitments.create({
+      partnerId: parsed.partnerId,
+      title: parsed.title,
+      ...(parsed.partnerName === undefined ? {} : { partnerName: parsed.partnerName }),
+      ...(parsed.detail === undefined ? {} : { detail: parsed.detail }),
+      ...(parsed.dueAt === undefined ? {} : { dueAt: parsed.dueAt }),
+    });
+  });
+  ipcMain.handle('v2:character-preference-record', (_e, rawInput: unknown) => {
+    const parsed = RecordPreferenceInputSchema.parse(rawInput);
+    return characterCore.preferences.recordExperience({
+      category: parsed.category,
+      key: parsed.key,
+      delta: parsed.delta,
+      source: parsed.source,
+      reason: parsed.reason,
+      ...(parsed.confidence === undefined ? {} : { confidence: parsed.confidence }),
+    });
+  });
+  ipcMain.handle('v2:character-model-bind', (_e, modelRef: string | null) =>
+    characterCore.life.bindModel(typeof modelRef === 'string' ? modelRef : null),
+  );
+  ipcMain.handle('v2:life-activity-select', (_e, rawInput: unknown) => {
+    const parsed = SelectActivityInputSchema.parse(rawInput);
+    const input: SelectActivityInput = {
+      mode: parsed.mode,
+      reason: parsed.reason,
+      ...(parsed.source === undefined ? {} : { source: parsed.source }),
+      ...(parsed.force === undefined ? {} : { force: parsed.force }),
+    };
+    return characterCore.life.selectActivity(input);
+  });
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     stopFn?.();
-    return kernel.characters.emergencyHalt(
+    characterCore.life.emergencyHalt(
       typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止',
     );
+    return kernel.characters.primaryState();
   });
-  ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') =>
-    kernel.characters.resume(mode ?? 'autonomous'),
-  );
+  ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
+    characterCore.life.resume(mode ?? 'autonomous');
+    return kernel.characters.primaryState();
+  });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');
@@ -136,6 +232,7 @@ export async function createV2KernelHost(options: {
 
   return {
     kernel,
+    characterCore,
     attachV1Bridges({ autodrive, voice }) {
       stopFn = () => {
         if (autodrive.runner.isRunning()) autodrive.runner.stop();
@@ -144,13 +241,25 @@ export async function createV2KernelHost(options: {
       const unsub = autodrive.subscribe((event) => {
         const primaryId = kernel.characters.primaryState().identity.characterId;
         if (event.type === 'decision') {
-          kernel.characters.setExpression(primaryId, 'gaming', `游戏决策：${event.tool}`);
+          characterCore.life.selectActivity({
+            mode: 'gaming',
+            expression: 'gaming',
+            reason: `游戏决策：${event.tool}`,
+            source: 'life_runtime',
+          });
         } else if (event.type === 'receipt') {
+          characterCore.emotion.applyStimulus(
+            event.status === 'FAILED'
+              ? { deltaValence: -0.08, deltaArousal: 0.12, label: '懊恼', ttlMs: 120_000 }
+              : { deltaValence: 0.05, deltaArousal: 0.02, label: '认真', ttlMs: 120_000 },
+          );
           const nextExpr = event.status === 'FAILED' ? 'reacting' : 'idle';
           kernel.characters.setExpression(primaryId, nextExpr, `回执：${event.status}`);
         } else if (event.type === 'human-control') {
-          if (event.active) kernel.characters.setControlMode(primaryId, 'manual_takeover', '游戏内或用户接管');
-          else kernel.characters.setControlMode(primaryId, 'autonomous', '恢复托管');
+          characterCore.life.setControlMode(
+            event.active ? 'manual_takeover' : 'autonomous',
+            event.active ? '游戏内或用户接管' : '恢复托管',
+          );
         }
       });
       unsubscribers.push(unsub);
@@ -158,6 +267,7 @@ export async function createV2KernelHost(options: {
     async stop() {
       for (const unsub of unsubscribers) unsub();
       unsubscribers.length = 0;
+      characterCore.save();
       await kernel.stop();
     },
   };

@@ -35,6 +35,9 @@ importers:
       '@workbench/agent-harness':
         specifier: workspace:*
         version: link:../../packages/agent-harness
+      '@workbench/character-core':
+        specifier: workspace:*
+        version: link:../../packages/character-core
       '@workbench/game-bridge-mcp':
         specifier: workspace:*
         version: link:../../packages/game-bridge-mcp
@@ -123,6 +126,18 @@ importers:
 
   packages/agent-harness:
     dependencies:
+      '@workbench/shared-protocol':
+        specifier: workspace:*
+        version: link:../shared-protocol
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+
+  packages/character-core:
+    dependencies:
+      '@workbench/runtime-core':
+        specifier: workspace:*
+        version: link:../runtime-core
       '@workbench/shared-protocol':
         specifier: workspace:*
         version: link:../shared-protocol

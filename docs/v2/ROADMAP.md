@@ -61,7 +61,7 @@
 ## P1：单角色核心闭环（身份、真实语音、桌宠、记忆、供应商与星露谷 AI 自主共玩）
 
 ### `V2-P1-01`：模块化 `CharacterCore`（12 域）与最小 `LifeRuntime`
-- **状态**：`NEXT`
+- **状态**：`DONE`（2026-11-25 完成）
 - **目标**：落盘 12 域分权存储与 `LifeRuntime` 最小活动协调器，让小鲸拥有统一身份、目标、承诺、日程与偏好成长模型。
 - **依赖**：`V2-P0-03`、`V2-P0-05`
 - **实现方案**：拆出 `CharacterProfile`、`GoalManager`、`CommitmentLedger` 与 `LifeRuntime` 活动状态仲裁器；迁移 V1 `character-registry` / `character-persona` 至同一权威源，消除主进程双写。
@@ -71,7 +71,7 @@
 - **预计风险**：V1 `character-registry` 多宠字段兼容 → 通过映射适配器平顺过渡。
 
 ### `V2-P1-02`：真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`
-- **状态**：`PENDING`
+- **状态**：`NEXT`
 - **目标**：P1 即交付真实可用角色语音与口型联动（不捆绑重型本地模型），改造 `AudioLeaseManager` 解除单音轨对伴奏/音效的阻塞。
 - **依赖**：`V2-P1-01`
 - **实现方案**：抽象 `VoiceProvider`（真实云端情绪 TTS API + 本地 Worker 接入，macOS `say`/Win SAPI 仅标为降级方案）；拆分发言权（Speech Floor）与 `AudioMixer` 多轨播放；输出音量包络/Viseme 驱动桌宠嘴型。

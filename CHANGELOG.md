@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-25
 
+### Added（`V2-P1-01`：模块化 12 域 `CharacterCore` 与最小 `LifeRuntime`）
+
+- **12 域共享契约** `packages/shared-protocol/src/{character.ts,character.spec.ts,index.ts}`：定义 `Identity` / `Personality` / `Preferences` / `Emotion` / `Motivation` / `Goals` / `Commitments` / `Relationships` 引用 / `Memory` 引用 / `VoiceIdentity` / `Embodiment` / `ActivityState` 与 `CharacterCoreSnapshotSchema`。
+- **独立域核心包 `@workbench/character-core`** `packages/character-core/src/`：拆分为 `PersonaProfileStore`、`PreferenceStore`、`EmbodimentRegistry`、`EmotionStateEngine`、`GoalManager`、`CommitmentLedger`、`LifeRuntime` 与组合根 `CharacterCore`；支持原子落盘（`v2-character-core.json`）与损坏快照隔离恢复；`dependency-cruiser` 新增 `character-core-boundary` 边界规则。
+- **Electron 宿主单源接线** `apps/desktop-host/src/{main/v2-kernel-host.ts,main/index.ts,main/character-persona.ts,preload/index.ts}`：`switchDefaultCharacter` 切外观时仅更新 `char_xiaojing` 的 `desktop-2d` Embodiment，保留身份、目标、约定与人格演进；`autodrive` 决策、回执情绪刺激与手动接管同步至 `LifeRuntime` 与 `CharacterCore`；扩展 `v2-kernel.e2e.spec.ts` 真机 Electron 45 E2E 校验。
+
 ### Fixed（推理模型 `reasoning_effort` 与输出令牌预算适配）
 
 - **`ModelGateway.chat()` 透传 `reasoning_effort` 与 `cached_tokens`** `packages/model-gateway/src/{gateway.ts,presets.ts}`：OpenAI 兼容请求支持可选 `reasoningEffort`（`'minimal' | 'low' | 'medium' | 'high'`）并兼容读取 `usage.prompt_tokens_details.cached_tokens` 计入 `cachedInputTokens`；`minimax` 预设新增 `MiniMax-M3.1-Flash`（`reasoning: true`）。

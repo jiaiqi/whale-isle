@@ -101,6 +101,13 @@ module.exports = {
       to: { path: '^(apps|services)/|^packages/(?!shared-protocol|plugin-kit|runtime-core)' },
     },
     {
+      name: 'character-core-boundary',
+      severity: 'error',
+      comment: '12 域角色核心与 LifeRuntime 仅允许依赖 shared-protocol 与 runtime-core，严禁反向依赖宿主或其他业务域包',
+      from: { path: '^packages/character-core' },
+      to: { path: '^(apps|services)/|^packages/(?!shared-protocol|runtime-core|character-core)' },
+    },
+    {
       name: 'evolution-lite-isolated-plane',
       severity: 'error',
       comment: 'Evolution Plane 与 Runtime Plane 物理隔离：tools/evolution-lite 严禁引入运行期宿主或业务包',

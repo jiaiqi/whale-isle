@@ -1,0 +1,24 @@
+{
+  "name": "@workbench/character-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[V2-P1-01] Whale Isle V2 12 域模块化 CharacterCore 与最小 LifeRuntime 协调器",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@workbench/runtime-core": "workspace:*",
+    "@workbench/shared-protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

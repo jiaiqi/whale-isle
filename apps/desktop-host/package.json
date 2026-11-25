@@ -72,6 +72,7 @@
   },
   "dependencies": {
     "@workbench/agent-harness": "workspace:*",
+    "@workbench/character-core": "workspace:*",
     "@workbench/game-bridge-mcp": "workspace:*",
     "@workbench/live-stream-hub": "workspace:*",
     "@workbench/local-store": "workspace:*",

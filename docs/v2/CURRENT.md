@@ -3,8 +3,8 @@
 > 本文件是面向任何新接手 Coding Agent 的跨会话单点进度恢复文件（不依赖聊天上下文）。每次完成或阻塞工单必须更新本文件。
 
 - **当前开发分支**：`feat/whale-isle-v2`（上游基线 `main` @ `f1ce271`）
-- **当前唯一激活工单**：`V2-P1-01`（模块化 `CharacterCore` 12 域与最小 `LifeRuntime`）
-- **下一排队工单**：`V2-P1-02`（真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`）
+- **当前唯一激活工单**：`V2-P1-02`（真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`）
+- **下一排队工单**：`V2-P1-03`（模型供应商与四级诚实额度矩阵）
 
 ## 1. 工单状态快照
 
@@ -15,7 +15,8 @@
 | `V2-P0-04` | `DONE` | 完成 Blueprint 01–17 全量需求追踪矩阵、[ADR-000](./adr/ADR-000-product-charter-and-risks.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)、完整 `docs/v2/` 文档真源与 `AGENTS.md` §5（`801394f`、`e637def` 及蓝图融合提交） |
 | `V2-P0-03` | `DONE` | `@workbench/local-store` 全量迁移至 `node:sqlite` 并移除 `better-sqlite3`（commit `fabf298`）；26/26 单测 + Electron 45 `v2StorageCheck()` + `electron-builder --mac dir` 通过 |
 | `V2-P0-05` | `DONE` | `tools/evolution-lite` 落地（commit `5e4ed16`）：唯一工单队列、隔离 Git Worktree、CLI 适配、门禁、独立审查、PR 草案与跨会话恢复；`verify:gate` 7/7 通过，详见证据 [P0-foundation-verification.md](./evidence/P0-foundation-verification.md) |
-| `V2-P1-01` | `NEXT` | 模块化 `CharacterCore`（12 域）与最小 `LifeRuntime` |
+| `V2-P1-01` | `DONE` | `@workbench/character-core`（12 域分权存储 + `LifeRuntime`）与 Electron 主进程单源接线完成；`character-core` 92.33% 分支覆盖、`verify:gate` 7/7 + Electron 45 E2E 2/2 通过，详见证据 [P1-character-life-verification.md](./evidence/P1-character-life-verification.md) |
+| `V2-P1-02` | `NEXT` | 真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer` |
 
 ## 2. 新会话接手必查项
 
