@@ -223,3 +223,19 @@
 | 8 家 CLI 钩子 | 按 `tools/hooks/work-follow-hook.mjs` 接入 Claude Code / Codex / DeepSeek / Gemini / Cursor / Qwen / Kimi / Grok，确认只读事件进入 Tab 4、≥8 工具戴皇冠、单宠/多 AI 模式切换符合预期 | ⏳ |
 | 安装包断网 | 断网启动 DMG：9 角色与皮肤彩蛋全部可用、动作原声可播、`/api/pet/default/say` 从本机脚本可调通 | ⏳ |
 | 卡死修复真机复验（2026-11-24） | 重启后同一存档（第1年夏2日 Beach、背包里没有鱼竿）启动自驾：不应再出现连续「失败 钓鱼 (fish)」刷屏；最多两次 fish 失败后应看到替代动作（采集/去镇上/买鱼竿），或规则日程转采集/清地；聊天下单失败应看到「chat_order FAILED｜没办成：原因」与桌宠如实说明 | ⏳ |
+
+## 2026-11-26 批次（单桌宠链路优先 / P3-06 缺陷①）
+
+### Mock / 沙盒验证已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `V2-P3-06` 缺陷① BWF 就绪竞态 | `[SIMULATION]` 单测 + 全仓门禁 | `autodrive.spec.ts` **77/77**：重探后成功（ping 序列 false/false/true → 3 次 ping、2 条「启动竞态」watchdog 事件、假时钟 4s）、6s 窗口耗尽仍抛 `unreachableMessage` 且 `isRunning=false`、等待中 `stop()` 安静取消；原有单 ping 失败即抛错用例在默认 `readyTimeoutMs=0` 下继续通过；`pnpm verify:gate` **7 过 / 0 跳过 / 0 待接线** | 2026-11-26 |
+| planner 语义留痕 | `[SIMULATION]` 单测 | `planner-utils.spec.ts` 13 例锁定两处现状（`NON_SELLABLE` 不含「木箱」、`pickTrashableFallback` 后命中覆盖前命中），实现未改，结论见 [P3-planner-semantics-findings.md](./v2/evidence/P3-planner-semantics-findings.md) | 2026-11-26 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| P3-06 缺陷① 真机冷启动 | 退出游戏后立刻点中控台顶栏「启动」：应看到「游戏/Mod 尚未就绪（启动竞态）：第 N 次重探…」事件而不是「BWF MCP 不可达」失败；游戏就绪后自动驾驶自动接管 | ⏳ |
+| P3-06 缺陷② 窗口前台 | 该缺陷只影响自动验收脚本坐标点击（产品内按钮由人点）；如需自动化点击自家按钮，先 `bringToFront`，或另立「按 AX 元素点击」工单 | ⏳ 待 owner 决定是否立项 |
