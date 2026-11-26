@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `2026-11-22-showhud-settings.patch` | 2026-11-22 | `showHud` 进 `/settings` 远程设置：`ModEntry.ApplyRemoteSettings` 支持远程改 `Config.ShowHud`（`DrawHud` 每帧读取 → 运行时即时生效，且 `Helper.WriteConfig` 自动落盘持久）；`McpServer.SettingsSnapshot` 上报 `showHud` 供回读验证。鲸屿中控台「游戏内提示」开关（T-M6-16）依赖此补丁；**未打补丁的旧 DLL 会静默忽略该键**，宿主端按「需重启游戏换新 DLL」如实提示。 |
 | `2026-11-25-player-in-control-settings.patch` | 2026-11-25 | `playerInControl` 进 `/settings`：`ApplyRemoteSettings` 收到该键时切主线程调上游已有的 `SetPlayerInControl(bool)`（该方法本就实现了「取消在跑动作 + 停下内置 AI + 解冻时间 + 恢复玩家移动 + HUD 提示」，原先只由 F7 触发）；`SettingsSnapshot` 上报 `playerInControl` 供宿主回读。鲸屿「我来操作 / 交还给 AI」开关（T-M6-73）依赖此补丁；**未打补丁时宿主开关仍会停掉自己的 runner，但游戏内角色可能继续行动**，宿主如实提示按 F7。顺序要求：先打 `2026-11-22-showhud-settings.patch`，本补丁基于其后的文件状态。 |
+| `2026-11-26-auto-new-save-and-lan-status.patch` | 2026-11-26 | `V2-P3-07B` 从 0 自动建档/建角色（单机 + 联机房主）、中文首启双保险与 LAN 房主状态上报：① `ModEntry` 支持环境变量 `WHALE_BWF_MCP_PORT`（仅内存覆盖端口）与 `WHALE_STARDEW_LANG`（标题画面语言加载完成后调用 `EnsureLanguage()` 同步目标语言）、`BootTransitionUntilUtc` 防止后台建档/读档被 `pauseWhenOutOfFocus` 冻结、`RuntimeSnapshot()` 采集 `capabilities` 与 `lan`（`isHost` / `serverRunning` / `lanListening` / `lanPort=24642` / `startingCabins` / `availableFarmhandSlots` / `languageCode` 等）；② `McpServer` 新增 `create_new_save`（100% Stardew 1.6 公开 API 跳过开场、设农夫/农场/喜好/8 种农场与 Mod 农场/小屋数与布局/外观/联机房主模式并进场第 1 天）、扩展 `load_save` 支持 `coopHost` 与 `language`、`GET /settings` 附带 `runtime` 与 `lan` 快照供宿主能力探测与房主就绪门禁。顺序要求：依次打 `2026-11-22` → `2026-11-25` → 本补丁。 |
 
 ## 构建与安装（本机实测流程）
 
