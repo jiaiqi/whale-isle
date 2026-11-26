@@ -1798,6 +1798,13 @@ class BubbleFontScale(RootModel[float]):
     root: Annotated[float, Field(ge=0.7, le=1.6)] = None
 
 
+class BubbleFontId(StrEnum):
+    shangshou_gummy = 'shangshou-gummy'
+    handwriting = 'handwriting'
+    rounded = 'rounded'
+    formal = 'formal'
+
+
 class PetDesktopPrefs(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1817,6 +1824,7 @@ class PetDesktopPrefs(BaseModel):
     followFrontApp: bool | None = False
     windowLayer: WindowLayer | None = 'always'
     bubbleFontScale: BubbleFontScale | None = None
+    bubbleFontId: BubbleFontId | None = 'shangshou-gummy'
     patrolEnabled: bool | None = True
     notebookFontId: str | None = 'auto'
     randomEggEnabled: bool | None = True

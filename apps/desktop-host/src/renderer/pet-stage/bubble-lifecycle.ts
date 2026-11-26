@@ -1,10 +1,14 @@
 /**
- * 对话气泡生命周期纯状态机（T-M6-44）。
+ * 气泡生命周期纯状态机（T-M6-44 + 多类型自动隐藏扩展）。
  *
- * 生命周期只由语音租约事件驱动：
+ * 对话语音轨仍严格由语音租约事件驱动：
  *   show → waiting → speaking → (completed=hidden | failed/timeout=muted + 文字保留)
  * speaking 中绝不因普通 idle 定时器收起；60s TTL 是合成卡死的兜底。
+ *
+ * 多类型调度槽位为各语义气泡提供差异化默认显示时长（6s~16s）。
  */
+import type { BubbleKind } from './widgets/bubble-types';
+
 export type BubblePhase = 'hidden' | 'waiting' | 'speaking' | 'muted';
 export type SpeechResultKind = 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled';
 
@@ -23,6 +27,78 @@ export interface BubbleEffect {
 }
 
 export const BUBBLE_TTL_MS = 60_000;
+
+export const BUBBLE_KIND_TTL_MS: Record<BubbleKind, number> = {
+  thought: 12_000,
+  dialog: 10_000,
+  status: 16_000,
+  notice: 8_000,
+  reaction: 6_000,
+  hint: 9_000,
+  legacy: 10_000,
+};
+
+export interface BubbleSlotEntry {
+  kind: BubbleKind;
+  text: string;
+  shownAt: number;
+  /** null 表示由语音租约托管（不走普通自动隐藏超时） */
+  expiresAt: number | null;
+}
+
+export type BubbleScheduleState = Partial<Record<BubbleKind, BubbleSlotEntry>>;
+
+export function ttlForBubbleKind(kind: BubbleKind, overrideMs?: number): number {
+  if (typeof overrideMs === 'number' && Number.isFinite(overrideMs) && overrideMs > 0) {
+    return Math.min(BUBBLE_TTL_MS, Math.max(1_500, Math.round(overrideMs)));
+  }
+  return BUBBLE_KIND_TTL_MS[kind];
+}
+
+export function createBubbleSchedule(): BubbleScheduleState {
+  return {};
+}
+
+export function scheduleBubbleSlot(
+  state: BubbleScheduleState,
+  kind: BubbleKind,
+  text: string,
+  now: number,
+  opts?: { ttlMs?: number; voiceManaged?: boolean },
+): BubbleScheduleState {
+  const next: BubbleScheduleState = { ...state };
+  if (text.trim() === '') {
+    delete next[kind];
+    return next;
+  }
+  const expiresAt = opts?.voiceManaged === true ? null : now + ttlForBubbleKind(kind, opts?.ttlMs);
+  next[kind] = { kind, text, shownAt: now, expiresAt };
+  return next;
+}
+
+export function cancelBubbleSlot(state: BubbleScheduleState, kind: BubbleKind): BubbleScheduleState {
+  if (state[kind] === undefined) return state;
+  const next: BubbleScheduleState = { ...state };
+  delete next[kind];
+  return next;
+}
+
+export function tickBubbleSchedule(
+  state: BubbleScheduleState,
+  now: number,
+): { state: BubbleScheduleState; expired: BubbleKind[] } {
+  const expired: BubbleKind[] = [];
+  const next: BubbleScheduleState = {};
+  for (const entry of Object.values(state)) {
+    if (entry === undefined) continue;
+    if (entry.expiresAt !== null && now >= entry.expiresAt) {
+      expired.push(entry.kind);
+    } else {
+      next[entry.kind] = entry;
+    }
+  }
+  return { state: expired.length === 0 ? state : next, expired };
+}
 
 export function createBubbleLifecycle(): BubbleLifecycleState {
   return { phase: 'hidden', text: '', startedAt: 0, muted: false };

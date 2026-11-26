@@ -105,4 +105,10 @@ cpSync(
   join(appRoot, 'dist/renderer/pet-stage/assets'), // pet-stage html 在子目录，./assets 相对该目录解析
   { recursive: true },
 );
-console.log('desktop-host build ✓（main / preload / pet-stage / director + pet assets + illustrations）');
+// 气泡随包商用开源字体（SIL OFL 1.1）：assets/fonts → dist/renderer/pet-stage/fonts
+cpSync(
+  join(appRoot, 'assets/fonts'),
+  join(stageDir, 'fonts'),
+  { recursive: true },
+);
+console.log('desktop-host build ✓（main / preload / pet-stage / director + pet assets + fonts + illustrations）');

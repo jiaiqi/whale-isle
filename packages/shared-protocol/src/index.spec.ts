@@ -16,6 +16,11 @@ import {
   WorkbenchRoleSlotSchema,
   PetCustomCharacterSchema,
   StardewAvatarSyncSchema,
+  PetBubbleKindSchema,
+  PetBubbleMoodSchema,
+  PetBubbleFontIdSchema,
+  PetBubbleEventSchema,
+  PetDesktopPrefsSchema,
   statusLabelZh,
   toolLabelZh,
   WORKBENCH_STATUS_LABELS_ZH,
@@ -406,5 +411,32 @@ describe('星露谷外观同步契约（T-M6-62）', () => {
     expect(StardewAvatarSyncSchema.safeParse({ version: 2, characterId: 'x', displayName: 'x', preset: {} }).success).toBe(false);
     expect(StardewAvatarSyncSchema.safeParse({ version: 1, characterId: 'x', displayName: 'x', preset: { hairColor: 'blue' } }).success).toBe(false);
     expect(StardewAvatarSyncSchema.parse({ version: 1, characterId: 'x', displayName: 'x', preset: {} }).preset.hatId).toBe(-1);
+  });
+});
+
+describe('桌宠多语义气泡契约', () => {
+  it('7 种语义、7 种情绪与 4 种字体枚举全量通过；非法值拒绝', () => {
+    for (const kind of ['thought', 'dialog', 'status', 'notice', 'reaction', 'hint', 'legacy'] as const) {
+      expect(PetBubbleKindSchema.parse(kind)).toBe(kind);
+    }
+    for (const mood of ['happy', 'angry', 'sleepy', 'surprised', 'thinking', 'coquettish', 'shy'] as const) {
+      expect(PetBubbleMoodSchema.parse(mood)).toBe(mood);
+    }
+    for (const font of ['shangshou-gummy', 'handwriting', 'rounded', 'formal'] as const) {
+      expect(PetBubbleFontIdSchema.parse(font)).toBe(font);
+    }
+    expect(PetBubbleKindSchema.safeParse('unknown').success).toBe(false);
+    expect(PetBubbleMoodSchema.safeParse('bored').success).toBe(false);
+    expect(PetBubbleFontIdSchema.safeParse('comic-sans').success).toBe(false);
+    expect(PetDesktopPrefsSchema.parse({}).bubbleFontId).toBe('shangshou-gummy');
+  });
+
+  it('PetBubbleEventSchema 默认值、mood 与 ttlMs 边界校验', () => {
+    const basic = PetBubbleEventSchema.parse({ text: '鱼片晚上好' });
+    expect(basic).toEqual({ agentId: 'default', text: '鱼片晚上好', kind: 'dialog' });
+    const withTtl = PetBubbleEventSchema.parse({ agentId: 'whale-2', text: '打卡', kind: 'legacy', mood: 'happy', ttlMs: 8000 });
+    expect(withTtl).toEqual({ agentId: 'whale-2', text: '打卡', kind: 'legacy', mood: 'happy', ttlMs: 8000 });
+    expect(PetBubbleEventSchema.safeParse({ text: 'bad', ttlMs: 0 }).success).toBe(false);
+    expect(PetBubbleEventSchema.safeParse({ text: 'bad', ttlMs: 60_001 }).success).toBe(false);
   });
 });

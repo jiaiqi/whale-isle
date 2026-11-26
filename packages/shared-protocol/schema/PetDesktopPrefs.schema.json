@@ -103,6 +103,16 @@
             }
           ]
         },
+        "bubbleFontId": {
+          "default": "shangshou-gummy",
+          "type": "string",
+          "enum": [
+            "shangshou-gummy",
+            "handwriting",
+            "rounded",
+            "formal"
+          ]
+        },
         "patrolEnabled": {
           "default": true,
           "type": "boolean"

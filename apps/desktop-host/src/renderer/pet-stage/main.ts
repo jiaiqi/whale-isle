@@ -4,7 +4,7 @@
  */
 import { mergePoseEffects, normalizePoseEffect, PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
-import type { PetActionState, PetAvatarClip } from '@workbench/shared-protocol';
+import type { PetActionState, PetAvatarClip, PetBubbleKind, PetBubbleMood } from '@workbench/shared-protocol';
 import { ALPHA_THRESHOLD, createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
 import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, settleWorkGrudge, shouldBlockWhileAsleep, shouldEnterPowerSaver, type ShakeContext } from './interaction';
@@ -14,7 +14,20 @@ import { resolveHitZone } from './hit-zones';
 import { createPatrolState, stepPatrol, type PatrolState } from './patrol-controller';
 import type { PetDesktopPrefs } from '@workbench/shared-protocol';
 import { AudioLeaseManager } from './audio-lease';
-import { mountBubbleWidgets } from './widgets/bubbles';
+import {
+  ALL_BUBBLE_KINDS,
+  moodForTrigger,
+  mountBubbleWidgets,
+  type BubbleFontId,
+  type BubbleKind,
+  type BubbleRect,
+  type BubbleStageContext,
+  type BubbleWidgets,
+  type CharacterFacing,
+  type ScreenEdgeHint,
+  type ShowBubbleOptions,
+  type StageBox,
+} from './widgets/bubbles';
 import { mountRiceBowlWidget } from './widgets/rice-bowl-widget';
 import { buildPlaybackLease, sampleVisemeTimeline, type SpeakRequest } from './tts-router';
 import { pickIdleMix } from './idle-mix';
@@ -44,7 +57,7 @@ interface PetStageBridge {
   onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }) => void): () => void;
   onLipSync?(handler: (event: { agentId: string; frame: { viseme: string; amplitude: number } }) => void): () => void;
   onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
-  onPetBubble?(handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void;
+  onPetBubble?(handler: (event: { agentId: string; text: string; kind?: PetBubbleKind; mood?: PetBubbleMood; ttlMs?: number }) => void): void;
   onPetState?(handler: (event: { agentId: string; state?: unknown }) => void): void;
   onScaleChanged?(handler: (scale: number) => void): void;
   characterManifest(id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
@@ -129,8 +142,9 @@ let lastActivityAt = Date.now();
 let powerSaver = false;
 let bubbleState: BubbleLifecycleState = createBubbleLifecycle();
 let bubbleVoiceEnabled = true;
-/** T-M6-63：气泡字号独立缩放（null=跟随人物 scale）与窗口显示层级 */
+/** T-M6-63：气泡字号独立缩放（null=跟随人物 scale）、随包气泡字体与窗口显示层级 */
 let bubbleFontScalePref: number | null = null;
+let bubbleFontIdPref: BubbleFontId = 'shangshou-gummy';
 let currentWindowLayer: 'always' | 'follow-ai' | 'normal' = 'always';
 /** T-M6-64：自主巡逻 / 工作忙碌 / 任务卡 */
 let patrolEnabled = true;
@@ -153,6 +167,73 @@ const isEventForThisPet = (agentId: string | undefined): boolean =>
   agentId === undefined ? petContext.agentId === 'default' : agentId === '*' || agentId === petContext.agentId;
 const stage = document.getElementById('stage') as HTMLDivElement;
 const badgeEl = document.getElementById('dev-badge') as HTMLDivElement;
+let widgets: BubbleWidgets | null = null;
+let bubbleFacing: CharacterFacing = 'center';
+let bubbleEdgeHint: ScreenEdgeHint = null;
+let bubbleWorkCardCount = 0;
+let bubbleRiceVisible = false;
+let bubbleFontScale = 1;
+
+function syncBubbleContext(): void {
+  if (widgets === null) return;
+  const stageW = BASE_STAGE.width * petScale;
+  const stageH = BASE_STAGE.height * petScale;
+  const occupied: BubbleRect[] = [];
+  if (bubbleWorkCardCount > 0) {
+    occupied.push({
+      x: Math.max(0, stageW - 158),
+      y: 4,
+      width: 156,
+      height: Math.min(132, bubbleWorkCardCount * 28 + 12),
+    });
+  }
+  if (bubbleRiceVisible) {
+    occupied.push({
+      x: Math.max(0, Math.round(stageW / 2 - 64)),
+      y: Math.max(0, stageH - 32),
+      width: 128,
+      height: 30,
+    });
+  }
+  widgets.setContext({
+    anchor: { xRatio: 0.5, headYRatio: 0.34, facing: bubbleFacing },
+    edgeHint: bubbleEdgeHint,
+    occupied,
+    fontScale: bubbleFontScale,
+  });
+}
+
+function updateEdgeHint(winX: number, wb: { minX: number; maxX: number }, docked: 'left' | 'right' | null): void {
+  const next: ScreenEdgeHint = docked !== null
+    ? docked
+    : winX <= wb.minX + 48
+      ? 'left'
+      : winX >= wb.maxX - 48
+        ? 'right'
+        : null;
+  if (next !== bubbleEdgeHint) {
+    bubbleEdgeHint = next;
+    syncBubbleContext();
+  }
+}
+
+function updateFacingFromSprite(flip: boolean, walkingDir?: -1 | 1): void {
+  let next: CharacterFacing = 'center';
+  if (renderer instanceof SpritesheetRenderer) {
+    const raw = renderer.activeClip()?.facing ?? null;
+    if (raw === 'left' || raw === 'right') {
+      next = flip ? (raw === 'left' ? 'right' : 'left') : raw;
+    } else if (walkingDir !== undefined) {
+      next = walkingDir < 0 ? 'left' : 'right';
+    }
+  } else if (walkingDir !== undefined) {
+    next = walkingDir < 0 ? 'left' : 'right';
+  }
+  if (next !== bubbleFacing) {
+    bubbleFacing = next;
+    syncBubbleContext();
+  }
+}
 
 // ---- RendererHost（真实 DOM） ----
 const host: RendererHost = {
@@ -461,23 +542,19 @@ function playGreeting(characterId: string): void {
         }
       }
       if (greeting.line !== '') {
-        widgets.showDialog(greeting.line);
-        setTimeout(() => widgets.hideDialog(), 9_000);
+        widgets?.show('hint', greeting.line, { ttlMs: 9_000, mood: moodForTrigger('greeting') });
       }
       lastEventAt = Date.now();
       return;
     }
     const line = await bridge.friendMeet?.(characterId).catch(() => '') ?? '';
     if (line === '') return;
-    widgets.showDialog(line);
-    setTimeout(() => widgets.hideDialog(), 9_000);
+    widgets?.show('hint', line, { ttlMs: 9_000, mood: moodForTrigger('greeting') });
   })();
 }
 
 // ---- T-M5-16（D16）：动作库预览 + ambient 空闲随机链 + 三层情绪映射 ----
 let lastEventAt = Date.now();
-let thoughtTimer: ReturnType<typeof setTimeout> | undefined;
-let dialogTimer: ReturnType<typeof setTimeout> | undefined;
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
 const AMBIENT_IDLE_MS = 30_000;   // 空闲 30s 播一条氛围动作
 const AMBIENT_PLAY_MS = 6_000;    // 播 6s 回 idle
@@ -534,8 +611,13 @@ function refreshRiceWidget(ratio?: number): void {
     lastRiceRatio = Math.min(Math.max(ratio, 0), 1);
     riceBowlWidget.setRatio(lastRiceRatio);
   }
-  if (hoverOnPet || lastRiceRatio < 0.15) riceBowlWidget.show();
+  const visible = hoverOnPet || lastRiceRatio < 0.15;
+  if (visible) riceBowlWidget.show();
   else riceBowlWidget.hide();
+  if (bubbleRiceVisible !== visible) {
+    bubbleRiceVisible = visible;
+    syncBubbleContext();
+  }
 }
 if (petStageBridge?.onPetRice) {
   petStageBridge.onPetRice((detail) => {
@@ -604,8 +686,7 @@ bridge.onPetPose?.((payload) => {
     if (isReadingOrSearchingPose(payload.pose)) showGlyphs();
     else if (payload.pose === 'idle') clearGlyphs();
     if (payload.line !== undefined && payload.line !== '') {
-      widgets.showDialog(payload.line);
-      setTimeout(() => widgets.hideDialog(), 8_000);
+      widgets?.show('hint', payload.line, { ttlMs: 8_000 });
     }
     lastEventAt = Date.now();
   }).catch(() => undefined);
@@ -684,16 +765,17 @@ bridge.onPetBump?.((payload) => {
     [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }],
     { duration: 260, iterations: 2 },
   );
-  widgets.showDialog(`哎呀，撞到${payload.partnerName}了，你走路不看路呀！`);
-  setTimeout(() => widgets.hideDialog(), 6_000);
+  widgets?.show('reaction', `哎呀，撞到${payload.partnerName}了，你走路不看路呀！`, {
+    ttlMs: 6_000,
+    mood: moodForTrigger('bump'),
+  });
   lastEventAt = Date.now();
 });
-// T-M6-49：本机驱动口 say / wake / 工作跟随戴皇冠
+// T-M6-49：本机驱动口 say（保留原右下角经典半透蓝泡） / wake / 工作跟随戴皇冠
 bridge.onPetSay?.((payload) => {
   wakeUp();
-  widgets.showDialog(payload.text);
+  widgets?.show('legacy', payload.text, { ttlMs: 8_000 });
   void renderer.play('happy_maid').catch(() => undefined);
-  setTimeout(() => widgets.hideDialog(), 8_000);
   lastEventAt = Date.now();
 });
 bridge.onPetWake?.(() => { wakeUp(); });
@@ -705,8 +787,7 @@ stage.appendChild(crownLayer);
 bridge.onPetCrown?.((payload) => {
   crownLayer.style.display = payload.on ? 'block' : 'none';
   if (payload.on) {
-    widgets.showDialog('大活干完啦，戴上小皇冠！');
-    setTimeout(() => widgets.hideDialog(), 8_000);
+    widgets?.show('notice', '大活干完啦，戴上小皇冠！', { ttlMs: 8_000 });
   }
 });
 
@@ -731,6 +812,11 @@ function renderWorkCards(cards: Array<{ sessionId: string; title: string; state:
   const visible = cards.length >= 2 || cards.some((card) => card.state === 'asking');
   workCardsLayer.style.display = visible ? 'flex' : 'none';
   workCardsLayer.replaceChildren();
+  const nextCount = visible ? Math.min(4, cards.length) : 0;
+  if (nextCount !== bubbleWorkCardCount) {
+    bubbleWorkCardCount = nextCount;
+    syncBubbleContext();
+  }
   if (!visible) return;
   for (const card of cards.slice(0, 4)) {
     const row = document.createElement('div');
@@ -756,8 +842,7 @@ function settleAfterWork(): void {
   }
   const line = poseConfig?.lines?.[grudge]?.[0];
   if (line !== undefined) {
-    widgets.showDialog(line);
-    setTimeout(() => widgets.hideDialog(), 8_000);
+    widgets?.show('reaction', line, { ttlMs: 8_000, mood: moodForTrigger('grudge') });
   }
   lastEventAt = Date.now();
 }
@@ -828,19 +913,20 @@ if (window.directorBridge?.onAutodriveEvent) {
       latestGeneration = event.generation;
     }
     lastEventAt = Date.now();
-    // 双轨气泡（设计稿 §L1/L2）：decision 意图 → 紫云朵内心戏；回话/反射 → 正式对话泡
+    // 多语义气泡：decision 意图 → thought；chat_reply → dialog；chat_order → legacy；反射吐槽 → reaction；游戏时钟 → status
     if (event.type === 'decision' && typeof event.intent === 'string' && event.intent.length > 0) {
-      widgets.showThought(event.intent);
-      clearTimeout(thoughtTimer);
-      thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
+      widgets?.show('thought', event.intent, { mood: moodForTrigger('decision') });
     }
-    if (event.type === 'receipt' && (event.tool === 'chat_reply' || (typeof event.tool === 'string' && event.tool.startsWith('reflex_')) || event.tool === 'chat_order') && event.summary) {
+    if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'chat_order') && event.summary) {
       const voiceBridge = (window as unknown as { directorBridge?: { voiceConfigGet?: () => Promise<{ enabled: boolean }> } }).directorBridge;
       void voiceBridge?.voiceConfigGet?.().then((config) => { bubbleVoiceEnabled = config.enabled; }).catch(() => undefined);
       const effect = showBubble(bubbleState, event.summary, Date.now(), bubbleVoiceEnabled);
       bubbleState = effect.state;
-      widgets.showDialog(event.summary);
-      widgets.setDialogMuted(effect.muted);
+      const bubbleKind: BubbleKind = event.tool === 'chat_order' ? 'legacy' : 'dialog';
+      widgets?.show(bubbleKind, event.summary, { voiceManaged: true });
+      widgets?.setDialogMuted(effect.muted);
+    } else if (event.type === 'receipt' && typeof event.tool === 'string' && event.tool.startsWith('reflex_') && event.summary) {
+      widgets?.show('reaction', event.summary, { ttlMs: 7_000, mood: moodForTrigger('reflex') });
     }
     if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
       const kind = classifyAutodriveReceipt(event.status, event.tool ?? '', event.summary ?? '');
@@ -849,7 +935,7 @@ if (window.directorBridge?.onAutodriveEvent) {
     }
     if (event.type === 'decision') void renderer.play('game_focus');
     if (event.type === 'state' && typeof event.clock === 'string') {
-      widgets.showThought(`星露谷 ${event.clock}`);
+      widgets?.show('status', `星露谷 ${event.clock}`);
     }
   });
 }
@@ -874,7 +960,7 @@ bridge.onCoopSpeaker?.((event) => {
   } else {
     const effect = speakerIdle(bubbleState);
     bubbleState = effect.state;
-    if (effect.hide) widgets.hideDialog();
+    if (effect.hide) widgets?.hideDialog();
     if (listeningToTeammate) {
       listeningToTeammate = false;
       void renderer.play('idle').catch(() => undefined);
@@ -885,8 +971,8 @@ bridge.onSpeechResult?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
   const effect = speechResult(bubbleState, event.status);
   bubbleState = effect.state;
-  if (effect.hide) widgets.hideDialog();
-  widgets.setDialogMuted(effect.muted);
+  if (effect.hide) widgets?.hideDialog();
+  widgets?.setDialogMuted(effect.muted);
   document.documentElement.dataset.viseme = 'closed';
   document.documentElement.style.setProperty('--pet-lip-amplitude', '0');
 });
@@ -903,20 +989,19 @@ bridge.onPetAction?.((event) => {
 bridge.onPetBubble?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
   lastEventAt = Date.now();
-  if (event.kind === 'thought') {
-    widgets.showThought(event.text);
-    clearTimeout(thoughtTimer);
-    thoughtTimer = setTimeout(() => widgets.hideThought(), 12_000);
-  } else {
-    widgets.showDialog(event.text);
-    clearTimeout(dialogTimer);
-    dialogTimer = setTimeout(() => widgets.hideDialog(), 10_000);
-  }
+  widgets?.show(
+    event.kind ?? 'dialog',
+    event.text,
+    {
+      ...(event.ttlMs !== undefined ? { ttlMs: event.ttlMs } : {}),
+      ...(event.mood !== undefined ? { mood: event.mood } : {}),
+    },
+  );
 });
 bridge.onPetState?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
   lastEventAt = Date.now();
-  if (typeof event.state === 'string') widgets.showThought(event.state);
+  if (typeof event.state === 'string') widgets?.show('status', event.state);
 });
 
 // ---- alpha 穿透探针 ----
@@ -955,12 +1040,16 @@ function applyStageScale(): void {
     img.style.height = `${BASE_STAGE.height * petScale}px`;
   }
   applyBubbleFontScale();
+  widgets?.setStageBox({ width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+  syncBubbleContext();
 }
 
 /** T-M6-63：气泡字号 = 独立倍率优先，否则跟随人物 scale（CSS 变量由气泡样式消费）。 */
 function applyBubbleFontScale(): void {
-  const scale = bubbleFontScalePref ?? petScale;
-  document.documentElement.style.setProperty('--pet-bubble-font-scale', String(Math.min(1.6, Math.max(0.7, scale))));
+  const scale = Math.min(1.6, Math.max(0.7, bubbleFontScalePref ?? petScale));
+  document.documentElement.style.setProperty('--pet-bubble-font-scale', String(scale));
+  bubbleFontScale = scale;
+  syncBubbleContext();
 }
 
 /** 当前可见的姿势图（交叉淡入期间取透明度最高的那张）。 */
@@ -1112,8 +1201,7 @@ const playPokePose = (): void => {
 const showPokeLine = (): void => {
   void bridge.pokeLine?.(dockedAgentId).then((result) => {
     if (result.ok && result.line !== undefined) {
-      widgets.showDialog(result.line);
-      setTimeout(() => widgets.hideDialog(), 10_000);
+      widgets?.show('reaction', result.line, { ttlMs: 10_000, mood: moodForTrigger('poke') });
     }
   }).catch(() => undefined);
 };
@@ -1125,7 +1213,10 @@ const patHeadOnce = (): void => {
   void bridge.friendRecord?.(currentCharacterId, 'pat').catch(() => undefined);
   // 串门彩蛋：CrossPet egg-* 与 userData 里 egg:true 的自定义角色被点中都逃跑（关窗）
   if (poseConfig?.egg === true || currentCharacterId.startsWith('crosspet-egg-')) {
-    widgets.showDialog('被抓住了！下次再来串门～');
+    widgets?.show('reaction', '被抓住了！下次再来串门～', {
+      ttlMs: 4_000,
+      mood: moodForTrigger('egg'),
+    });
     setTimeout(() => { void bridge.petFlee?.(dockedAgentId).catch(() => undefined); }, 900);
     return;
   }
@@ -1136,8 +1227,7 @@ const patHeadOnce = (): void => {
     }
     const line = poseConfig?.lines?.[pat.stage]?.[0];
     if (line !== undefined) {
-      widgets.showDialog(line);
-      setTimeout(() => widgets.hideDialog(), 8_000);
+      widgets?.show('hint', line, { ttlMs: 8_000, mood: moodForTrigger('coax') });
     }
     return;
   }
@@ -1248,7 +1338,7 @@ stage.addEventListener('dblclick', (event) => {
 setInterval(() => {
   const bubbleEffect = bubbleTick(bubbleState, Date.now());
   bubbleState = bubbleEffect.state;
-  if (bubbleEffect.hide) widgets.hideDialog();
+  if (bubbleEffect.hide) widgets?.hideDialog();
   const idle = Date.now() - lastActivityAt;
   const next = shouldEnterPowerSaver(lastActivityAt, Date.now(), powerSaverEnabled, 30_000);
   if (next !== powerSaver) {
@@ -1258,17 +1348,21 @@ setInterval(() => {
     if (next && glyphActive) clearGlyphs();
   }
   if (interaction.asleep && idle > 90_000 && Math.random() < 0.05) {
-    widgets.showDialog('唔……梦里也有好多米饭……');
-    setTimeout(() => widgets.hideDialog(), 6_000);
+    widgets?.show('thought', '唔……梦里也有好多米饭……', {
+      ttlMs: 6_000,
+      mood: moodForTrigger('sleep'),
+    });
   }
 }, 5_000);
 const applyGlobalPrefs = (p: PetDesktopPrefs): void => {
   powerSaverEnabled = p.powerSaverEnabled;
   sfxVolume = p.sfxVolume;
   bubbleFontScalePref = p.bubbleFontScale ?? null;
+  bubbleFontIdPref = p.bubbleFontId ?? 'shangshou-gummy';
   currentWindowLayer = p.windowLayer;
   patrolEnabled = p.patrolEnabled;
   applyBubbleFontScale();
+  widgets?.setFont(bubbleFontIdPref);
   if (renderer instanceof SpritesheetRenderer) {
     renderer.setSfxEnabled(p.sfxEnabled);
     renderer.setSfxVolume(p.sfxVolume);
@@ -1351,8 +1445,7 @@ window.addEventListener('mousemove', (event) => {
       lastWorkShakeLineAt = nowMs;
       const line = poseConfig?.lines?.[shakeResult]?.[0];
       if (line !== undefined) {
-        widgets.showDialog(line);
-        setTimeout(() => widgets.hideDialog(), 5_000);
+        widgets?.show('reaction', line, { ttlMs: 5_000, mood: moodForTrigger('shake') });
       }
     }
   } else if (shakeResult !== lastDizzyVisual) {
@@ -1374,6 +1467,7 @@ async function applyDockEdge(position: [number, number]): Promise<void> {
     dockHomeEdge = edge;
     await bridge.dockWindow?.(dockedAgentId, edge);
   }
+  updateEdgeHint(position[0], wb, edge);
 }
 
 function scheduleDockBack(edge: 'left' | 'right'): void {
@@ -1467,12 +1561,16 @@ function findPatrolClip(): AmbientManifestClip | null {
   return withMoving.find((clip) => clip.category === '移动' || /走|跑|巡|散步|踏步/.test(clip.clipId)) ?? withMoving[0] ?? null;
 }
 function applyPatrolFlip(flip: boolean): void {
-  if (patrolFlipped === flip) return;
+  if (patrolFlipped === flip) {
+    updateFacingFromSprite(flip, patrolState.status === 'walking' ? patrolState.direction : undefined);
+    return;
+  }
   patrolFlipped = flip;
   // 只镜像精灵元素；#stage 与气泡文字绝不翻转
   for (const el of stage.querySelectorAll<HTMLElement>('video, canvas, img')) {
     el.style.transform = flip ? 'scaleX(-1)' : '';
   }
+  updateFacingFromSprite(flip, patrolState.status === 'walking' ? patrolState.direction : undefined);
 }
 function playPatrolClip(): void {
   const clip = findPatrolClip();
@@ -1519,6 +1617,7 @@ async function patrolTick(): Promise<void> {
   patrolState = result.state;
   if (result.started) playPatrolClip();
   if (result.stopped) stopPatrolClip();
+  updateEdgeHint(position[0], wb, dockedEdge);
   if (result.walking) {
     applyPatrolFlip(result.flipX);
     if (result.dx !== 0) void bridge.dragTo(position[0] + result.dx, position[1]);
@@ -1574,13 +1673,21 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
   });
   if (granted === 'queued') {
     // 排队中：气泡先显示，说话到点再播（dsh-pet「气泡会等语音」语义）
-    widgets.showDialog(request.text);
+    widgets?.show('dialog', request.text, { voiceManaged: true });
   }
 }
 
-// ---- UI 挂件（T-M1-05）：双轨气泡 + 赛博饭碗 ----
+// ---- UI 挂件（T-M1-05）：多语义智能气泡 + 赛博饭碗 ----
 // 舞台 CSS 实际 400×260（窗口 400×284 留脚线 21px 余量）；旧代码按 440×300 算气泡会贴出窗右缘
-const widgets = mountBubbleWidgets(stage, { width: 400, height: 260 });
+widgets = mountBubbleWidgets(stage, { width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+widgets.setFont(bubbleFontIdPref);
+syncBubbleContext();
+void Promise.all([bridge.winPosition(), bridge.screenBounds()]).then(([pos, bounds]) => {
+  if (pos !== null) {
+    const wb = bounds.windowBounds ?? bounds;
+    updateEdgeHint(pos[0], wb, dockedEdge);
+  }
+}).catch(() => undefined);
 const riceBowlWidget = mountRiceBowlWidget(stage);
 // T-M6-63：点饭碗挂件 → 按当前档位播一次「余额-*」动画（没有对应素材则安静不播）
 riceBowlWidget.onClick(() => {
@@ -1624,14 +1731,29 @@ void bridge.appMeta().then((meta) => {
   if (meta.testMode) {
     (window as unknown as { __petStageTest: object }).__petStageTest = {
       showBubbles(input: { thought: string; dialog: string }) {
-        widgets.showThought(input.thought);
-        widgets.showDialog(input.dialog);
+        widgets?.showThought(input.thought);
+        widgets?.showDialog(input.dialog);
       },
       hideBubbles() {
-        widgets.hideThought();
-        widgets.hideDialog();
+        widgets?.hideAll();
       },
-      bubbleRects: () => widgets.rects(),
+      showBubble(kind: BubbleKind, text: string, opts?: ShowBubbleOptions) {
+        return widgets?.show(kind, text, opts) ?? false;
+      },
+      hideBubble(kind: BubbleKind) {
+        widgets?.hide(kind);
+      },
+      setBubbleContext(ctx: BubbleStageContext) {
+        widgets?.setContext(ctx);
+      },
+      setBubbleStageBox(next: StageBox) {
+        widgets?.setStageBox(next);
+      },
+      setBubbleFont(fontId: BubbleFontId) {
+        bubbleFontIdPref = fontId;
+        widgets?.setFont(fontId);
+      },
+      bubbleRects: () => widgets?.rects(),
       setRiceRatio: (ratio: number) => refreshRiceWidget(ratio), // 饿态（<15%）测试自动亮灯，与线上行为一致
       riceRatio: () => riceBowlWidget.ratio(),
       riceVisible: () => riceBowlWidget.visible(),
@@ -1639,6 +1761,35 @@ void bridge.appMeta().then((meta) => {
         thought: document.querySelector('.pet-bubble--thought')?.getBoundingClientRect().toJSON() ?? null,
         dialog: document.querySelector('.pet-bubble--dialog')?.getBoundingClientRect().toJSON() ?? null,
       }),
+      allBubbleElements: () => {
+        const out: Record<string, {
+          rect: unknown;
+          tail: string;
+          mood: string;
+          fontFamily: string;
+          hasShellSvg: boolean;
+          pointerEvents: string;
+          zIndex: string;
+        } | null> = {};
+        for (const kind of ALL_BUBBLE_KINDS) {
+          const el = document.querySelector(`.pet-bubble--${kind}`) as HTMLElement | null;
+          if (el === null || el.style.display === 'none') {
+            out[kind] = null;
+          } else {
+            const cs = getComputedStyle(el);
+            out[kind] = {
+              rect: el.getBoundingClientRect().toJSON(),
+              tail: el.dataset.tail ?? 'none',
+              mood: el.dataset.bubbleMood ?? '',
+              fontFamily: cs.fontFamily,
+              hasShellSvg: el.querySelector('.pet-bubble__shell path') !== null,
+              pointerEvents: cs.pointerEvents,
+              zIndex: cs.zIndex,
+            };
+          }
+        }
+        return out;
+      },
     };
   }
 });

@@ -131,11 +131,14 @@ describe('[E2E-HOST] 桌宠深度体验三阶段', () => {
       const egg = await stage.evaluate(() => (window as unknown as { petStage: PetStageBridge }).petStage.petEggTheater());
       if (egg.ok) {
         expect(egg.agentId).toBeTruthy();
-        const eggWindow = await waitForWindow(app, `agentId=${encodeURIComponent(egg.agentId!)}`, 20_000);
+        const eggUrlPart = `agentId=${encodeURIComponent(egg.agentId!)}`;
+        const eggWindow = await waitForWindow(app, eggUrlPart, 20_000);
         await eggWindow.waitForLoadState('domcontentloaded').catch(() => undefined);
         const caught = await stage.evaluate(() => (window as unknown as { petStage: PetStageBridge }).petStage.eggCatch());
         expect(caught).toMatchObject({ ok: true, caught: true });
-        await waitFor(app, async () => app.windows().filter((candidate) => candidate.url().includes('pet-stage')).length === 1, 15_000);
+        // 仅断言本次打开的彩蛋窗自身收口关闭：共享 e2e-profile 下若开发机同时运行 AI CLI，
+        // cliLogWatcher 会自动召唤跨 AI 工作跟随窗，按全部 pet-stage 窗口数 === 1 会误报。
+        await waitFor(app, async () => app.windows().every((candidate) => !candidate.url().includes(eggUrlPart)), 15_000);
       } else {
         expect(egg.error ?? '').toContain('彩蛋');
       }
