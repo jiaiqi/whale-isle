@@ -59,6 +59,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
     ipcRenderer.invoke('game:health', gameId, endpoint),
   // DST 状态快照（补齐 T-M7-D5 面板缺失的 /state 注入）
   gameDstState: (): Promise<unknown> => ipcRenderer.invoke('game:dst-state'),
+  // V2-P3-05 星露谷一键启动：启动/查询进度/取消（E2E 下主进程装配假启动器）
+  stardewLaunch: (options?: { port?: number; timeoutMs?: number; autoLoadSave?: boolean; strategy?: 'auto' | 'smapi' | 'steam' }): Promise<unknown> =>
+    ipcRenderer.invoke('stardew:launch', options ?? {}),
+  stardewLaunchStatus: (): Promise<unknown> => ipcRenderer.invoke('stardew:launch-status'),
+  stardewLaunchCancel: (): Promise<unknown> => ipcRenderer.invoke('stardew:launch-cancel'),
   // harness（T-M6-02）：ACP agents 统管
   harnessPresets: (): Promise<Array<{ id: string; label: string; command: string | null; authHint: string }>> =>
     ipcRenderer.invoke('harness:presets'),

@@ -129,6 +129,25 @@ export interface ProbeOptions {
   fetchImpl?: typeof fetch;
 }
 
+/**
+ * BWF 在标题画面/读档过程中也会回 HTTP 200 且 `isError:false`，正文却是「游戏还没有进入存档」。
+ * 这不是就绪——启动器若把它当 online 就会编造 ready（2026-11-26 真机踩到）。
+ */
+const NOT_IN_SAVE_TEXT_RE = /还没有进入存档|请玩家先读取存档|正在加载存档|标题画面/;
+
+/** 从 MCP tools/call 的 result 里取文本（兼容 content[] 与直接字符串）。 */
+function mcpResultText(result: unknown): string {
+  if (typeof result === 'string') return result;
+  if (typeof result !== 'object' || result === null) return '';
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((item) => (typeof item === 'object' && item !== null && typeof (item as { text?: unknown }).text === 'string'
+      ? (item as { text: string }).text
+      : ''))
+    .join('\n');
+}
+
 /** 星露谷：BWF MCP（18080/mcp）——get_state 能应答即视为就绪 */
 async function probeStardew(endpoint: string, timeoutMs: number, fetchImpl: typeof fetch): Promise<Omit<GameHealthReport, 'gameId' | 'endpoint' | 'guidance' | 'checkedAt'>> {
   const startedAt = Date.now();
@@ -152,6 +171,16 @@ async function probeStardew(endpoint: string, timeoutMs: number, fetchImpl: type
       return { status: 'reachable', ok: false, latencyMs, detail: 'Mod 在运行但未就绪', error: rpcErrorText(rpc.error) };
     }
     if (rpc.result == null) return { status: 'reachable', ok: false, latencyMs, detail: 'MCP 返回空结果' };
+    const resultText = mcpResultText(rpc.result);
+    if (NOT_IN_SAVE_TEXT_RE.test(resultText)) {
+      return {
+        status: 'reachable',
+        ok: false,
+        latencyMs,
+        detail: 'MCP 已应答，但游戏还在标题画面/正在读档（尚未进入存档）',
+        error: resultText.slice(0, 200),
+      };
+    }
     return { status: 'online', ok: true, latencyMs, detail: 'BWF MCP 在线 · get_state 正常应答' };
   } catch (error) {
     const latencyMs = Date.now() - startedAt;

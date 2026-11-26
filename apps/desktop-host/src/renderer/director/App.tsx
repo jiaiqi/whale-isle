@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
-  Activity, Brain, Hand, Monitor, Moon, OctagonAlert, Play, Radio, RotateCcw,
+  Activity, Brain, Hand, Monitor, Moon, OctagonAlert, Play, Radio, Rocket, RotateCcw,
   ShieldAlert, Sparkles, Square, Volume2, VolumeX, Wheat,
 } from 'lucide-react';
 import {
@@ -150,6 +150,10 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [driveError, setDriveError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [cmdkOpen, setCmdkOpen] = useState(false);
+  /** V2-P3-05：顶栏启动自动驾驶时，若星露谷未运行，是否直接代启动（持久化到 localStorage） */
+  const [stardewAutoLaunch, setStardewAutoLaunch] = useState<boolean>(() => localStorage.getItem('wb-stardew-auto-launch') === '1');
+  const [launchPromptOpen, setLaunchPromptOpen] = useState(false);
+  const [launchingGame, setLaunchingGame] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
   const [skin, setSkin] = useState<ThemeSkin>(initialSkin);
   const [accent, setAccent] = useState<TideAccent>(initialAccent);
@@ -551,8 +555,60 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     return () => document.removeEventListener('keydown', onKey);
   }, [emergencyHalt, toggleTakeover, toggleSleep]);
 
+  /**
+   * V2-P3-05：等待星露谷真正就绪（主进程 MCP get_state 应答）。
+   * 未安装 / 启动失败 / 超时都如实 toast，绝不把「进程起来了」当成「已就绪」。
+   */
+  const waitForStardewReady = useCallback(async (): Promise<boolean> => {
+    try {
+      const first = await window.directorBridge.stardewLaunch();
+      if (first.state === 'ready') return true;
+      if (first.state === 'not_installed' || first.state === 'failed') {
+        toast.error(first.message || '《星露谷物语》启动失败', { description: first.hint || undefined });
+        return false;
+      }
+      const deadline = Date.now() + Math.max(10_000, first.timeoutMs + 10_000);
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const next = await window.directorBridge.stardewLaunchStatus();
+        if (next.state === 'ready') return true;
+        if (next.state === 'not_installed' || next.state === 'failed' || next.state === 'timeout') {
+          toast.error(next.message || '《星露谷物语》未能就绪', { description: next.hint || undefined });
+          return false;
+        }
+      }
+      toast.error('等待《星露谷物语》就绪超时');
+      return false;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '《星露谷物语》启动失败');
+      return false;
+    }
+  }, []);
+
+  const launchStardewOnly = async (): Promise<void> => {
+    setLaunchingGame(true);
+    toast('正在启动《星露谷物语》…');
+    const ok = await waitForStardewReady();
+    setLaunchingGame(false);
+    if (ok) toast.success('《星露谷物语》已就绪');
+  };
+
   const start = async (): Promise<void> => {
     setDriveError(null);
+    // 星露谷需要游戏 + BWF MCP 在线才能接管；未运行先给出「先启动游戏」选择。
+    if (activeGame === 'stardew') {
+      const health = await window.directorBridge.gameHealth('stardew').catch(() => null);
+      if (health?.status !== 'online') {
+        if (!stardewAutoLaunch) {
+          setLaunchPromptOpen(true);
+          return;
+        }
+        setLaunchingGame(true);
+        const ready = await waitForStardewReady();
+        setLaunchingGame(false);
+        if (!ready) return;
+      }
+    }
     const res = await window.directorBridge.autodriveStart(activeGame);
     if (res.ok) {
       setRunning(true);
@@ -737,6 +793,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       { id: 'act:sleep', label: asleep ? '唤醒小鲸' : '进入睡眠安静模式', group: '控制权', icon: Moon, hint: 'F10', run: () => void toggleSleep() },
       { id: 'act:life', label: '打开 V2 生命中枢', group: '页面', icon: Sparkles, hint: '12域', run: () => setTab('life') },
       { id: 'act:drive', label: running ? '停止自动驾驶' : '启动自动驾驶', group: '全局动作', icon: running ? Square : Play, hint: '当前游戏', run: () => void (running ? stop() : start()) },
+      { id: 'act:launch-stardew', label: launchingGame ? '正在启动星露谷…' : '启动星露谷', group: '全局动作', icon: Rocket, hint: 'SMAPI', run: () => void launchStardewOnly() },
       { id: 'act:brain', label: brain.mode === 'llm' ? '切换规则日程' : '切换 LLM 大脑', group: '全局动作', icon: Brain, hint: brain.mode, run: () => void switchBrain() },
       { id: 'act:voice', label: voiceOn ? '静音语音' : '开启语音', group: '全局动作', icon: voiceOn ? VolumeX : Volume2, run: () => void toggleVoice() },
       { id: 'act:feed', label: '投喂 5,000 粒米', group: '全局动作', icon: Wheat, hint: '饭碗', run: () => void feedRice() },
@@ -752,7 +809,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     ];
     return [...pages, ...actions];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plugins, running, humanControl, asleep, v2Snapshot?.activityState.controlMode, brain.mode, voiceOn, resolvedTheme]);
+  }, [plugins, running, humanControl, asleep, v2Snapshot?.activityState.controlMode, brain.mode, voiceOn, resolvedTheme, launchingGame]);
 
   return (
     <div
@@ -961,6 +1018,60 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           </div>
         )}
       </main>
+
+      {launchPromptOpen && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center px-6"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          data-stardew-launch-prompt
+        >
+          <div className="card w-full max-w-[440px] px-5 py-4" role="dialog" aria-modal="true" aria-label="启动星露谷物语">
+            <h3 className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>《星露谷物语》还没启动</h3>
+            <p className="mt-1.5 text-[12px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+              启动自动驾驶需要游戏与 BWF MCP 在线。可以现在由鲸屿代你启动（优先 SMAPI，确保 Mod 被加载），
+              也可以先去游戏标题画面手动选择存档。
+            </p>
+            <label className="mt-3 flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-2)' }}>
+              <input
+                type="checkbox"
+                data-stardew-auto-launch
+                checked={stardewAutoLaunch}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setStardewAutoLaunch(next);
+                  localStorage.setItem('wb-stardew-auto-launch', next ? '1' : '0');
+                }}
+              />
+              以后自动启动（记住这个选择）
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                data-stardew-launch-cancel-prompt
+                className="btn-pill ghost"
+                onClick={() => setLaunchPromptOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                data-stardew-launch-confirm
+                className="btn-pill primary"
+                disabled={launchingGame}
+                onClick={() => {
+                  setLaunchPromptOpen(false);
+                  void (async () => {
+                    setLaunchingGame(true);
+                    const ready = await waitForStardewReady();
+                    setLaunchingGame(false);
+                    if (ready) await start();
+                  })();
+                }}
+              >
+                <Rocket size={11} />{launchingGame ? '启动中…' : '先启动游戏'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CommandPalette open={cmdkOpen} onOpenChange={setCmdkOpen} actions={paletteActions} />
       <Toaster

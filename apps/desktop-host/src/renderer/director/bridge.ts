@@ -307,6 +307,38 @@ export interface GameHealthView {
   checkedAt: number;
 }
 
+/** V2-P3-05 星露谷启动器视图（主进程真实状态机的渲染层镜像） */
+export type StardewLaunchStateView = 'not_installed' | 'launching' | 'waiting_mcp' | 'ready' | 'timeout' | 'failed';
+
+export interface StardewInstallInfoView {
+  gameInstalled: boolean;
+  smapiInstalled: boolean;
+  bwfInstalled: boolean;
+  steamAppPresent: boolean;
+  gameDir: string;
+  executableDir: string;
+  smapiBinary: string;
+  modsDir: string;
+}
+
+export interface StardewLaunchStatusView {
+  state: StardewLaunchStateView;
+  install: StardewInstallInfoView;
+  strategy: 'smapi' | 'steam' | null;
+  fallbackStrategy: 'smapi' | 'steam' | null;
+  endpoint: string;
+  mcpPort: number;
+  gameRunning: boolean;
+  saveLoadRequested: boolean;
+  autoLoadSave: boolean;
+  attempts: number;
+  startedAt: number | null;
+  elapsedMs: number;
+  timeoutMs: number;
+  message: string;
+  hint: string;
+}
+
 export interface AutodriveEventView {
   type: 'state' | 'decision' | 'receipt' | 'watchdog' | 'cycle-end' | 'user' | 'objective' | 'human-control';
   clock?: string;
@@ -369,6 +401,10 @@ export interface DirectorBridge {
   gameHealth(gameId: GameId, endpoint?: string): Promise<GameHealthView>;
   // DST 状态快照（T-M7-D5 面板补齐 /state 注入）
   gameDstState(): Promise<{ ok: boolean; snapshot?: import('@workbench/shared-protocol').DstStateSnapshot; error?: string }>;
+  // V2-P3-05 星露谷一键启动（主进程探测安装 → SMAPI/Steam 启动 → 轮询 MCP）
+  stardewLaunch(options?: { port?: number; timeoutMs?: number; autoLoadSave?: boolean; strategy?: 'auto' | 'smapi' | 'steam' }): Promise<StardewLaunchStatusView>;
+  stardewLaunchStatus(): Promise<StardewLaunchStatusView>;
+  stardewLaunchCancel(): Promise<StardewLaunchStatusView>;
   harnessPresets(): Promise<HarnessPresetInfo[]>;
   harnessStart(presetId: string): Promise<{ ok: boolean; error?: string; authMethods?: string[] }>;
   harnessPrompt(presetId: string, text: string): Promise<{ ok: boolean; error?: string; sessionId?: string }>;

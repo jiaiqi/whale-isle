@@ -39,7 +39,7 @@ import { createCliLogWatcher } from './cli-log-watcher';
 import { createWorkFollowInstaller } from './work-follow-installer';
 import { createStardewAvatarHost, isSafeCharacterId } from './stardew-avatar-host';
 import { createFrontAppWatcher } from './front-app-watcher';
-import { PetApiStateSchema } from '@workbench/shared-protocol';
+import { PetApiStateSchema, StardewLaunchOptionsSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
@@ -48,6 +48,7 @@ import { createV2KernelHost, type V2KernelHost } from './v2-kernel-host';
 import { LipSyncTimelinePlayer, synthesizeTextLipSyncFrames } from '@workbench/voice-runtime';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
+import { createFakeStardewLauncher, createStardewLauncher } from './stardew-launcher';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
 import { createTrayHost, shouldHideDirectorOnClose, shouldQuitOnAllWindowsClosed, type TrayHost } from './tray-host';
@@ -1147,6 +1148,16 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     }
   });
   ipcMain.handle('game:dst-state', async () => fetchDstSnapshot());
+  // V2-P3-05 星露谷一键启动：探测安装 → SMAPI 启动（回退 Steam）→ 轮询 BWF MCP → 真实 ready。
+  // E2E 装配假启动器，绝不真的打开游戏。
+  const stardewLauncher = TEST_MODE ? createFakeStardewLauncher() : createStardewLauncher();
+  ipcMain.handle('stardew:launch', async (_event, options?: unknown) => {
+    const parsed = StardewLaunchOptionsSchema.safeParse(options ?? {});
+    return stardewLauncher.launch(parsed.success ? parsed.data : {});
+  });
+  ipcMain.handle('stardew:launch-status', () => stardewLauncher.status());
+  ipcMain.handle('stardew:launch-cancel', () => stardewLauncher.cancel());
+  app.on('will-quit', () => stardewLauncher.dispose());
   // WebUI 形态（T-M6-04）：本机浏览器复核口（HTTP/WS + 远程审批）。
   // 包裹 try/catch：WebUI 起不来只告警，绝不拖垮 Electron 主进程。
   try {

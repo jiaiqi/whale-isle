@@ -778,6 +778,86 @@ export const StardewModsConfigSchema = z.object({
 });
 export type StardewModsConfig = z.infer<typeof StardewModsConfigSchema>;
 
+// ───────────────────── 星露谷一键启动器（V2-P3-05） ─────────────────────
+/**
+ * 启动状态机：只按真实探测结果推进，`ready` 必须由 MCP `get_state` 真实应答触发。
+ * - not_installed：没找到游戏目录
+ * - launching：已 spawn，尚未开始轮询 MCP
+ * - waiting_mcp：进程/端口在，但 MCP 尚未就绪（常见于标题画面）
+ * - ready：MCP `get_state` 正常应答
+ * - timeout：超过等待上限仍未就绪
+ * - failed：spawn 失败或游戏在但 SMAPI/Mod 缺失
+ */
+export const StardewLaunchStateSchema = z.enum([
+  'not_installed',
+  'launching',
+  'waiting_mcp',
+  'ready',
+  'timeout',
+  'failed',
+]);
+export type StardewLaunchState = z.infer<typeof StardewLaunchStateSchema>;
+
+/** 启动方式：smapi=直接 spawn SMAPI 可执行文件；steam=open steam://rungameid/413150 */
+export const StardewLaunchStrategySchema = z.enum(['smapi', 'steam']);
+export type StardewLaunchStrategy = z.infer<typeof StardewLaunchStrategySchema>;
+
+export const StardewInstallInfoSchema = z.object({
+  /** 游戏目录存在（即使 SMAPI 缺失） */
+  gameInstalled: z.boolean(),
+  /** SMAPI 可执行文件存在（缺失时无法保证 Mod 被加载） */
+  smapiInstalled: z.boolean(),
+  /** BWF Mod 的 manifest 存在 */
+  bwfInstalled: z.boolean(),
+  /** Steam appmanifest_413150.acf 存在 */
+  steamAppPresent: z.boolean().default(false),
+  /** 游戏根目录（macOS 为 `.../Stardew Valley`，Windows/Linux 为安装目录） */
+  gameDir: z.string().default(''),
+  /** 可执行文件目录（macOS 为 `.../Stardew Valley/Contents/MacOS`） */
+  executableDir: z.string().default(''),
+  smapiBinary: z.string().default(''),
+  modsDir: z.string().default(''),
+});
+export type StardewInstallInfo = z.infer<typeof StardewInstallInfoSchema>;
+
+export const StardewLaunchStatusSchema = z.object({
+  state: StardewLaunchStateSchema,
+  install: StardewInstallInfoSchema,
+  /** 本次实际使用的启动方式（已在运行时为 null） */
+  strategy: StardewLaunchStrategySchema.nullable().default(null),
+  /** 主方式失败后回退到的方式（未回退为 null） */
+  fallbackStrategy: StardewLaunchStrategySchema.nullable().default(null),
+  /** MCP 端点（始终 127.0.0.1，见 T-M6-74） */
+  endpoint: z.string().default(''),
+  mcpPort: z.number().int().default(DEFAULT_BWF_MCP_PORT),
+  /** 探测时游戏进程是否已在运行（避免重复启动） */
+  gameRunning: z.boolean().default(false),
+  /** 是否已向 BWF 发送 load_save */
+  saveLoadRequested: z.boolean().default(false),
+  autoLoadSave: z.boolean().default(true),
+  /** MCP 轮询次数（真实探测） */
+  attempts: z.number().int().default(0),
+  startedAt: z.number().nullable().default(null),
+  elapsedMs: z.number().int().default(0),
+  timeoutMs: z.number().int().default(120_000),
+  /** 人类可读的一行状态 */
+  message: z.string().default(''),
+  /** 失败/超时时的下一步提示（标题画面、Mod 缺失等） */
+  hint: z.string().default(''),
+});
+export type StardewLaunchStatus = z.infer<typeof StardewLaunchStatusSchema>;
+
+export const StardewLaunchOptionsSchema = z.object({
+  port: z.number().int().min(1024).max(65535).optional(),
+  /** 等待 MCP 就绪的上限（毫秒），默认 120s */
+  timeoutMs: z.number().int().min(5_000).max(600_000).optional(),
+  /** 是否在 MCP 可达但未就绪时调用 BWF `load_save`，默认 true */
+  autoLoadSave: z.boolean().optional(),
+  /** auto=smapi 失败后回退 steam；smapi=只直接 spawn；steam=只走 Steam */
+  strategy: z.enum(['auto', 'smapi', 'steam']).optional(),
+});
+export type StardewLaunchOptions = z.infer<typeof StardewLaunchOptionsSchema>;
+
 // ───────────────────────── 记忆图谱视图（T-M6-07 UI v4 记忆页） ─────────────────────────
 /** 记忆节点视图（渲染层/Dexie 只读镜像；正文已消毒） */
 export const MemoryNodeViewSchema = z.object({
