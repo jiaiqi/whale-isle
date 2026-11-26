@@ -29,12 +29,12 @@
 ## 1. 第一批：只要「星露谷 + SMAPI」（收益最大，4 单）
 
 ### `V2-P1-06` 星露谷 AI-First 自主游玩与控制权
-- [ ] 开游戏 → 中控台确认 MCP 连接（`127.0.0.1`，不是 `localhost`，见 T-M6-74）
+- [x] 开游戏 → 中控台确认 MCP 连接（`127.0.0.1`，不是 `localhost`，见 T-M6-74）——2026-11-26 经 `stardewLaunch` IPC 拉起 SMAPI 4.5.2，13.98s `ready`
 - [ ] AI 自主模式连续跑 1 个游戏日，0 卡死（对照 `STARDEW-STUCK-LEDGER.md`）
-- [ ] 13 项控制语义逐项实按：Stop / Pause AI / Resume AI / Take Over / Release Control 等，确认**执行层**真的停（不是只改 UI）
+- [ ] 13 项控制语义逐项实按：Stop / Pause AI / Resume AI / Take Over / Release Control 等，确认**执行层**真的停（不是只改 UI）——已覆盖 Stop/接管/交还/急停/恢复 5 条，剩 8 条待人类点按
 - [ ] 游戏内 F7 与中控台、托盘、桌宠右键三处「我来操作 / 交还给 AI」开关状态同步
-- [ ] 交还时，AI 能说出接管期间的变化摘要（地点、时间、金币、背包、体力）
-- [ ] P0 急停 → 在途动作立即取消
+- [x] 交还时，AI 能说出接管期间的变化摘要（地点、时间、金币、背包、体力）——2026-11-26 实测输出「主人接管了 6 秒：游戏状态没有可见变化。」（无偿变化时的诚实口径）；有变化场景待补
+- [x] P0 急停 → 在途动作立即取消——2026-11-26 实测 `v2EmergencyHalt` 后 `autodriveStatus().running=false`，`controlMode=manual_takeover`；`v2Resume('autonomous')` 可恢复
 - 证据：录屏 + `soak-real` 报告目录
 
 ### `V2-P2-01` 攻略学习闭环

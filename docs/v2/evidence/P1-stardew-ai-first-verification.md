@@ -21,3 +21,24 @@
 | 透明窗 / V2 内核 / Obsidian UI E2E | `[E2E-HOST]` | `pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/desktop.e2e.spec.ts apps/desktop-host/e2e/v2-kernel.e2e.spec.ts apps/desktop-host/e2e/v2-obsidian-ui.e2e.spec.ts` | **3/3 PASS**（7.07s） |
 | 中控台全链路 UI E2E | `[E2E-HOST]` | `pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/ui.e2e.spec.ts` | **8/8 PASS**（12.53s） |
 | 真实《星露谷》+ SMAPI 客户端联调 | `[REAL-DEVICE]` | 待真机环境人工开游联调 | **UNVERIFIED**（本环境无星露谷客户端进程与 SMAPI 运行时；游戏内实按 `F7` 接管与真机连续浸泡待补） |
+
+## 三、2026-11-26 真机补充（`[REAL-DEVICE]`，经中控台 IPC/CDP 驱动，非物理 F7）
+
+> 环境：macOS 27.2 / Apple Silicon；Stardew Valley 1.6.15 + SMAPI 4.5.2 + BlindWhaleFarmer 1.1.27（已含 `playerInControl` 远程设置）+ WhaleIsleAvatar 0.3.0-dev.1。
+> 驱动方式：`electron --remote-debugging-port=9333` 启动 `apps/desktop-host/dist/main/index.js`，CDP `Runtime.evaluate` 调用 `window.directorBridge.*`——与中控台按钮走同一条 preload/IPC 通道，因此可作执行层证据，但不等于「人手动点击 UI」。
+
+| 检查项 | 实测结果 |
+| --- | --- |
+| 中控台启动器拉起真实游戏 | `stardewLaunch({strategy:'smapi'})` → `launching`（pid 71062）→ **`ready` 13.98s**，`saveLoadRequested=true`，`attempts=6`，`message="BWF MCP 已就绪：get_state 正常应答"`；安装探测四项全 `true` |
+| 自主驾驶启动 | `autodriveStart('stardew')` → `{ok:true}`，`autodriveStatus().running=true`，事件流出现 `state` |
+| 主人接管（游戏侧同步） | `autodriveSetHumanControl(true)` → `humanControl=true`，`gameSync={applied:true, reachable:true, supported:true, playerInControl:true}` —— 证明装好的 BWF 确实接受 `playerInControl` 远程设置 |
+| 交还摘要 | `autodriveSetHumanControl(false)` → 摘要 **「主人接管了 6 秒：游戏状态没有可见变化。」**（无变化时如实说无变化），`gameSync.playerInControl=false`，事件流出现 `human-control active=true/false` 两条 |
+| P0 急停执行层 | `v2EmergencyHalt('CDP 真机验收：P0 急停')` → `halted=true`、`controlMode=manual_takeover`、**`autodriveStatus().running=false`**（真的停了，不只是改 UI） |
+| 急停恢复 | `v2Resume('autonomous')` → `halted=false`、`controlMode=autonomous` |
+
+**仍未验证（保持 `IMPLEMENTED_UNVERIFIED`）**：
+
+- 物理按 `F7` 触发的接管，以及中控台 / 托盘 / 桌宠右键三处开关的状态同步（需人在游戏内实按）。
+- 13 项控制语义逐项手动点按（本次只覆盖启动、接管、交还、急停、恢复 5 条）。
+- 连续 1 个游戏日 0 卡死的浸泡观察与 `soak-real` 长跑。
+- 交还摘要在「接管期间确有变化」时的文案质量（本次接管 6 秒无动作）。

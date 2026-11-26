@@ -128,3 +128,13 @@ BWF `load_save` 回执（`artifacts/p3-stardew-launcher/bwf-load-save-smapi.log`
 - Steam 回退方式在本机可用，但会打开 Terminal；若用户在 Steam 里设置了别的启动项，回退路径可能不再指向 SMAPI——启动器仍会以 MCP 是否真实就绪为准，不会假报成功。
 - 本机只验证了 macOS 默认 Steam 库；Windows/Linux 路径只做了纯函数单测，未真机。
 - 冒烟期间关闭了游戏；证据文件保存在 `artifacts/p3-stardew-launcher/`（`artifacts/` 按仓库约定不入库）。
+
+## 5. 中控台 IPC 通道复测（2026-11-26，合入 V2 后）
+
+> 目的：确认启动器合入主线后，从真实桌面端（`electron --remote-debugging-port=9333 apps/desktop-host/dist/main/index.js`）经 `window.directorBridge` 触发的路径仍然可用。
+
+- `stardewLaunchStatus()` 初始 `state=not_installed`（尚未探测），调用 `stardewLaunch({strategy:'smapi'})` 后安装探测四项全 `true`，`gameRunning=true`，`message="已通过 SMAPI 启动（pid 71062），等待 MCP 端口 18088…"`。
+- 22 秒内轮询状态：**`state=ready`**，`elapsedMs=13976`、`attempts=6`、`saveLoadRequested=true`，`message="BWF MCP 已就绪：BWF MCP 在线 · get_state 正常应答"`。
+- 与第 2 节真机冒烟的 14.1s 一致，说明合流后的构建产物没有回退。
+
+**剩余缺口**：中控台按钮的鼠标点击路径未单独录屏（本次走的是同一条 preload/IPC）；Windows / Linux 仍只有纯函数单测。
