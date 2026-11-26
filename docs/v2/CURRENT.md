@@ -1,40 +1,27 @@
-# Whale Isle V2 跨会话交接进度（Progress Checkpoint）
+# CURRENT — V2 跨会话唯一交接检查点
 
-> 本文件是面向任何新接手 Coding Agent 的跨会话单点进度恢复文件（不依赖聊天上下文）。每次完成或阻塞工单必须更新本文件。
+> 任何新 AI 会话接手前只看本文件与 [ROADMAP.md](./ROADMAP.md)，严禁依赖对话历史猜测进度。每次完成或阻塞工单时必须同步更新。
 
-- **当前开发分支**：`feat/whale-isle-v2`（上游基线 `main` @ `f1ce271`）
-- **当前唯一激活工单**：`V2-P2-05`（Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入）
-- **刚完成待真机补验工单**：`V2-P1-06` / `V2-P2-01` / `V2-P2-02` / `V2-P2-03` / `V2-P2-04`（`IMPLEMENTED_UNVERIFIED` — 缺真实游戏、外部 CLI、云端生图 Key 与本机 Blender/Hunyuan3D 实测；`V2-P2-02` 中 `REQ-SEC-01` 已达 `DONE`）
-- **下一排队工单**：`V2-P2-06`（游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证）
+## 1. 当前进度锚点
 
-## 1. 工单状态快照
+- **当前分支**：`feat/whale-isle-v2`（P0 & P1 全部核心工单已交付；P2 `V2-P2-01`..`V2-P2-05` 已交付为 `IMPLEMENTED_UNVERIFIED` 或部分 `DONE`）
+- **上一已完成/交接工单**：`V2-P2-05` — **Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入**（状态：`IMPLEMENTED_UNVERIFIED`）
+- **当前唯一激活 `NEXT` 工单**：**`V2-P2-06` — 游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证**（11 步像素流水线 + `stardew-avatar-sync` 导出与游戏内外观核验）
+- **同步UI/设计基准约束（`ADR-003`）**：[design/tidepaper/](../../design/tidepaper/) 为 V2 首选 UI/UX 参考基线（`SPEC.md` + 25 页原型），Obsidian Tide / Tide Deep / Obsidian v4 保留为可选主题；渐进落地时须保留现有 React/IPC 真实绑定与诚实阶段标注。
 
-| 工单 | 状态 | 说明与证据 |
-| --- | --- | --- |
-| `V2-P0-01` | `DONE` | 全仓审计与参考审查完成，产物 [TAKEOVER-AUDIT.md](./TAKEOVER-AUDIT.md) |
-| `V2-P0-02` | `DONE` | `@workbench/runtime-core` 落地并接入 Electron 主进程，commit `8369185`，`verify:gate` 7/7 + `v2-kernel.e2e.spec.ts` 通过 |
-| `V2-P0-04` | `DONE` | 完成 Blueprint 01–17 全量需求追踪矩阵、[ADR-000](./adr/ADR-000-product-charter-and-risks.md)、[ADR-002](./adr/ADR-002-v2-architecture-revision.md)、完整 `docs/v2/` 文档真源与 `AGENTS.md` §5（`801394f`、`e637def` 及蓝图融合提交） |
-| `V2-P0-03` | `DONE` | `@workbench/local-store` 全量迁移至 `node:sqlite` 并移除 `better-sqlite3`（commit `fabf298`）；26/26 单测 + Electron 45 `v2StorageCheck()` + `electron-builder --mac dir` 通过 |
-| `V2-P0-05` | `DONE` | `tools/evolution-lite` 落地（commit `5e4ed16`）：唯一工单队列、隔离 Git Worktree、CLI 适配、门禁、独立审查、PR 草案与跨会话恢复；`verify:gate` 7/7 通过，详见证据 [P0-foundation-verification.md](./evidence/P0-foundation-verification.md) |
-| `V2-P1-01` | `DONE` | `@workbench/character-core`（12 域分权存储 + `LifeRuntime`）与 Electron 主进程单源接线完成（commit `fb86b24`）；`character-core` 92.33% 分支覆盖、`verify:gate` 7/7 + Electron 45 E2E 2/2 通过，详见证据 [P1-character-life-verification.md](./evidence/P1-character-life-verification.md) |
-| `V2-P1-02` | `IMPLEMENTED_UNVERIFIED` | `@workbench/voice-runtime`（真实 `VoiceProvider`、独立 `VoiceIdentity`、WAV/文本口型同步、`SpeechFloorArbiter` + 多轨 `AudioMixer`）与宿主接线完成（commit `fe59ece`）；`verify:gate` 7/7 + Electron 45 E2E 2/2 通过，待真机人工听感、云端 TTS Key 与 Windows SAPI 硬件验收，详见 [P1-voice-mixer-verification.md](./evidence/P1-voice-mixer-verification.md) |
-| `V2-P1-03` | `IMPLEMENTED_UNVERIFIED` | 四级诚实额度契约与探针矩阵（DeepSeek / Kimi / OpenRouter / SiliconFlow / OpenCode Go / MiniMax Coding Plan / Ollama / CLI）接入主进程 IPC（commit `b2348b0`）；`quota-probes.ts` 90.86% 分支覆盖、`verify:gate` 7/7 + Electron 45 E2E 2/2 通过，待 Kimi / MiniMax Coding Plan 真实 Key 实测，详见 [P1-provider-quota-verification.md](./evidence/P1-provider-quota-verification.md) |
-| `V2-P1-04` | `DONE` | `@workbench/memory-graph` 五类记忆、情绪加权回忆、模糊印象归纳、手动纠正与级联真删除（覆盖 SQLite `deleteViewerByUid` + 磁盘 JSONL 重写 + 无明文审计）及宿主 IPC 完成（commit `319c350`）；37 单测、`verify:gate` 7/7 与 Electron 45 E2E 2/2 通过，详见 [P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md) |
-| `V2-P1-05` | `DONE` | Obsidian Tide 中控台重构、`App.tsx` Strangler 拆解（1,466→914 行）、四大签名组件、`system/dark/light` 三态主题、`F8/F9/F10/⌘K` 与「V2 生命中枢」面板完成（commit `a9a5786`）；`verify:gate` 7/7 + 4 个 Electron 45 E2E 套件全绿，详见 [P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md) |
-| `V2-P1-06` | `IMPLEMENTED_UNVERIFIED` | AI-First 纠偏（`GameCharacterControlLease`、`PausedBrainPlanner` 清除默认静默规则代驾、13 项控制指令与 12 项 Blueprint 17 §12 仿真验收，commit `833bd0c`）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》+ SMAPI 真机联调与浸泡，详见 [P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) |
-| `V2-P2-01` | `IMPLEMENTED_UNVERIFIED` | 攻略学习闭环增强（`@workbench/shared-protocol/knowledge`、版本/Mod 兼容检查、实玩置信度演进与反例积累、复盘与 `LlmPlanner` 回执闭环，commit `c31271f`）、64 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿；待真实《星露谷》多日实测，详见 [P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) |
-| `V2-P2-02` | `IMPLEMENTED_UNVERIFIED` | 开放生态与插件进程隔离（`IsolatedPluginRunner` Worker Isolate 沙箱、`PolicyBroker` P0–P5、`SkillRegistry`、双向 MCP HTTP/STDIO、受控脱敏 MCP Server 与 7 家 Harness 执行器，commit `bf779a4`）、退役主进程第三方直连 `import` 达成 `REQ-SEC-01 DONE`，`verify:gate` 7/7 与 Electron 45 E2E 全绿；新增外部 CLI 真机实测待验，详见 [P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md) |
-| `V2-P2-03` | `IMPLEMENTED_UNVERIFIED` | `MediaGenerationGateway` 与图片生成流水线（`@workbench/shared-protocol/media`、诚实能力探测、Character Bible 一致性、候选区审查隔离、SHA-256 校验与 5 路 V2 IPC，commit `2673c7f`），33 专项单测、`verify:gate` 7/7 与 Electron 45 E2E 全绿；待真实云端生图 Key 联调，详见 [P2-media-gateway-verification.md](./evidence/P2-media-gateway-verification.md) |
-| `V2-P2-04` | `IMPLEMENTED_UNVERIFIED` | 3D 大模型生成与 Blender 自动化后处理流水线（3D/VRM 契约、`inspectGlbOrVrm` 二进制骨骼/口型检查、`detectBlenderToolchain` + 无头后处理脚本与 4 路 V2 IPC），`verify:gate` 7/7 与 Electron 45 E2E 全绿；本机缺 Blender 与 Hunyuan3D 服务待真机验收，详见 [P2-3d-blender-pipeline-verification.md](./evidence/P2-3d-blender-pipeline-verification.md) |
-| `V2-P2-05` | `NEXT` | Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入（完整支持 CrossPet 角色导入、严格授权标签与商业隔离） |
+## 2. 本次 `V2-P2-05` 实际交付与验证证据
 
-## 2. 新会话接手必查项
+- **契约先行** [packages/shared-protocol/src/media.ts](../../packages/shared-protocol/src/media.ts)：新增 `CharacterBibleUpsertRequestSchema`、`CharacterBibleAttachRefRequestSchema`、`Live2dLayerRoleSchema`、`Live2dAssetInspectionSchema`、`AssetDistributionChannelSchema`、`LicenseDistributionCheckSchema`、`Asset2dStudioPackageSchema`、`CrossPetImportRequestSchema`、`CrossPetImportedEntrySchema`、`CrossPetImportResultSchema`。
+- **核心引擎与合规导入** [apps/desktop-host/src/main/character-studio-v2.ts](../../apps/desktop-host/src/main/character-studio-v2.ts)：
+  - `CharacterBibleStore`：持久化 `<userData>/character-bibles/`、参考图 QA 与候选区审批晋升（联动 `MediaGenerationGateway`）；
+  - `inspectLive2dOrLayered2d`：Cubism `model3.json`/`.moc3`/纹理/`cdi3.json`/口型 `LipSync` 与 2D 分层包质检 + 路径防穿越；
+  - `evaluateAssetDistributionPolicy`：`CC BY-NC-SA 4.0` / `DEV_ONLY` / 未审图本机个人允许且附署名，公开直播/商用/再分发全链路硬阻断；
+  - `CharacterStudioV2.importCrossPetPack`：真实扫描并合法导入随包 `assets/pet-packs/crosspet/characters` 全部 30 角色（8 基础 + 7 皮肤 + 15 彩蛋），写入 `.provenance.json`、注册 2D 包并绑定 8 个基础 Character Bible。
+- **宿主接线**：[v2-kernel-host.ts](../../apps/desktop-host/src/main/v2-kernel-host.ts)、[preload/index.ts](../../apps/desktop-host/src/preload/index.ts)、[bridge.ts](../../apps/desktop-host/src/renderer/director/bridge.ts) 接入 10 路 V2 IPC。
+- **真实验证**：`character-studio-v2.spec.ts` **5/5 PASS**（含真实 30 角色全量导入）、`desktop-host build` 0 错误、`pnpm verify:gate` **7/7 PASS**、Electron 45 E2E Part 1 **3/3 PASS** + Part 2 `ui.e2e` **8/8 PASS**，详见证据 [P2-character-studio-crosspet-verification.md](./evidence/P2-character-studio-crosspet-verification.md)。
+- **为什么不是 `DONE`**：真机外部 Cubism Live2D `.moc3` 舞台切换与在线 AI 生图 2D 分层实产尚未真机验证（Live2D 运行时渲染器与舞台统一切换将于 `V2-P3-01` 落地）。
 
-1. 阅读 [AGENTS.md](../../AGENTS.md)（含 §5 V2 增补宪章）。
-2. 阅读 [ROADMAP.md](./ROADMAP.md) 确认唯一 `NEXT` / `DOING` 工单，不跨工单抢跑。
-3. 阅读 [README.md](./README.md)、[PRODUCT.md](./PRODUCT.md)、[REQUIREMENTS.md](./REQUIREMENTS.md)、[TRACEABILITY.md](./TRACEABILITY.md)、[ARCHITECTURE.md](./ARCHITECTURE.md) 与 [EVALUATION.md](./EVALUATION.md) 确认产品范围、接口边界与真实验证口径（UI/UX 设计规范见 [DESIGN-SYSTEM.md](./DESIGN-SYSTEM.md) 与 [ADR-003](./adr/ADR-003-uiux-tidepaper-primary-and-themes.md)，开源合规见 [OPEN-SOURCE.md](./OPEN-SOURCE.md)）。
-4. 运行 `git status --short` 确认工作区状态（设计原型已整编为 `design/tidepaper/` 主基线、`design/theme-obsidian-tide/`、`design/theme-tide-deep/`、`design/theme-obsidian-v4/` 可选主题与 `design/archive/` 归档，原始蓝图位于 `docs/v2/blueprint/`）。
-5. 常用校验指令：
-   - 构建：`pnpm --filter @workbench/desktop-host build`
-   - 门禁：`pnpm verify:gate`
-   - Electron E2E：`pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/desktop.e2e.spec.ts apps/desktop-host/e2e/v2-kernel.e2e.spec.ts`
+## 3. 下一步行动（Next Agent 从这里接手）
+
+1. 检查并认领 **`V2-P2-06`（游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证）**：先读取 `apps/desktop-host/src/main/pixel-sprite-pipeline.ts`、`apps/desktop-host/src/main/stardew-avatar-host.ts`、`mods/stardew-avatar-sync/` 与 `docs/v2/blueprint/06-AI创作工坊与资产流水线.md` 像素节，先核实本机是否有 `stardew-avatar-sync` 产物与星露谷 Mods 目录，按原子工单（≤8 业务文件）完善 11 步像素流水线 QA、Character Bible 联动与 `stardew-avatar-sync` 导出闭环（若缺真实星露谷客户端则诚实标为 `IMPLEMENTED_UNVERIFIED` 并附编译/导出/单测/E2E 实证）。
+2. 每完成一个工单后保持 `pnpm verify:gate` 7/7、Electron 45 E2E 全绿，并同步更新 V2 文档矩阵。

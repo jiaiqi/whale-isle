@@ -365,6 +365,16 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v23dJobs: (characterId?: string): Promise<unknown[]> => ipcRenderer.invoke('v2:3d-jobs', characterId),
   v23dSubmit: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:3d-submit', input),
   v23dReview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:3d-review', input),
+  v2BibleList: (): Promise<unknown[]> => ipcRenderer.invoke('v2:bible-list'),
+  v2BibleGet: (characterId: string): Promise<unknown> => ipcRenderer.invoke('v2:bible-get', characterId),
+  v2BibleUpsert: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:bible-upsert', input),
+  v2BibleAttachRef: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:bible-attach-ref', input),
+  v2BiblePromoteJob: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:bible-promote-job', input),
+  v22dInspect: (targetPath: string): Promise<unknown> => ipcRenderer.invoke('v2:2d-inspect', targetPath),
+  v22dRegister: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:2d-register', input),
+  v22dList: (characterId?: string): Promise<unknown[]> => ipcRenderer.invoke('v2:2d-list', characterId),
+  v22dCheckDistribution: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:2d-check-distribution', input),
+  v2CrossPetImport: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:crosspet-import', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

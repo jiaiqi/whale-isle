@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-05`：Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入 — `IMPLEMENTED_UNVERIFIED`）
+
+- **Character Bible / Live2D / 授权拦截 / CrossPet 导入契约** `packages/shared-protocol/src/media.ts`：新增 `CharacterBibleUpsertRequest`、`CharacterBibleAttachRefRequest`、`Live2dLayerRole`、`Live2dAssetInspection`、`AssetDistributionChannel`、`LicenseDistributionCheck`、`Asset2dStudioPackage`、`CrossPetImportRequest`、`CrossPetImportedEntry` 与 `CrossPetImportResult`。
+- **Character Bible、2D/Live2D 质检与 CrossPet 全量合法导入** `apps/desktop-host/src/main/{character-studio-v2.ts,character-studio-v2.spec.ts,v2-kernel-host.ts}` & `apps/desktop-host/src/{preload/index.ts,renderer/director/bridge.ts}`：实现 `CharacterBibleStore`（参考图 QA 与候选区审批晋升联动）、`inspectLive2dOrLayered2d`（Cubism `model3.json`/`.moc3`/纹理/口型与 2D 分层完整度质检）、`evaluateAssetDistributionPolicy`（强制阻断 `CC BY-NC-SA 4.0` / `DEV_ONLY` / 未审图进入公开直播或商用分发）与 `CharacterStudioV2.importCrossPetPack`（实测随包 30 个 CrossPet 角色全量合法导入与 Bible 建档），接入 10 路 `v2:bible-*` / `v2:2d-*` / `v2:crosspet-import` IPC，通过 `verify:gate` 7/7 与 Electron 45 E2E 全套。
+
 ### Added / Changed（`V2-P2-04`：3D 大模型生成与 Blender 自动化后处理流水线 — `IMPLEMENTED_UNVERIFIED`）
 
 - **3D / VRM 质检契约** `packages/shared-protocol/src/{media.ts,media.spec.ts}`：新增 `Mesh3dProviderProtocol`、`BlenderToolchainStatus`、`VrmInspectionReport`、`Pipeline3dRequest` 与 `Pipeline3dJobSnapshot` Zod 契约。

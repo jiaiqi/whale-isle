@@ -225,3 +225,152 @@ export const Pipeline3dJobSnapshotSchema = z.object({
   updatedAt: z.string().min(1),
 });
 export type Pipeline3dJobSnapshot = z.infer<typeof Pipeline3dJobSnapshotSchema>;
+
+/** V2-P2-05：Character Bible 更新与参考图挂载契约 */
+export const CharacterBibleUpsertRequestSchema = z.object({
+  characterId: z.string().min(1),
+  displayName: z.string().min(1),
+  referenceImages: z.array(CharacterBibleRefSchema).optional(),
+  traits: z
+    .object({
+      hairstyle: z.string().default(''),
+      eyes: z.string().default(''),
+      palette: z.array(z.string()).default([]),
+      outfit: z.string().default(''),
+      proportions: z.string().default('2.5头身 Q 版'),
+      signatureAccessories: z.array(z.string()).default([]),
+    })
+    .default({
+      hairstyle: '',
+      eyes: '',
+      palette: [],
+      outfit: '',
+      proportions: '2.5头身 Q 版',
+      signatureAccessories: [],
+    }),
+  expressionRules: z.array(z.string()).default([]),
+  styleConstraints: z.array(z.string()).default([]),
+  forbiddenChanges: z.array(z.string()).default([]),
+});
+export type CharacterBibleUpsertRequest = z.infer<typeof CharacterBibleUpsertRequestSchema>;
+
+export const CharacterBibleAttachRefRequestSchema = z.object({
+  characterId: z.string().min(1),
+  role: z.enum(['front', 'side', 'back', 'portrait', 'sheet']),
+  path: z.string().min(1),
+  approved: z.boolean().default(false),
+});
+export type CharacterBibleAttachRefRequest = z.infer<typeof CharacterBibleAttachRefRequestSchema>;
+
+/** V2-P2-05：Live2D / 2D 分层资产质检与商业隔离契约 */
+export const Live2dLayerRoleSchema = z.enum([
+  'hair_front',
+  'hair_back',
+  'eyes',
+  'brows',
+  'mouth',
+  'face',
+  'body',
+  'outfit',
+  'accessory',
+  'other',
+]);
+export type Live2dLayerRole = z.infer<typeof Live2dLayerRoleSchema>;
+
+export const Live2dAssetInspectionSchema = z.object({
+  valid: z.boolean(),
+  format: z.enum(['cubism-model3', 'layered-2d-pack', 'unknown']),
+  model3Path: z.string().optional(),
+  mocPath: z.string().optional(),
+  textures: z.array(z.string()).default([]),
+  detectedLayers: z.array(Live2dLayerRoleSchema).default([]),
+  missingRecommendedLayers: z.array(Live2dLayerRoleSchema).default([]),
+  expressions: z.array(z.string()).default([]),
+  motions: z.array(z.string()).default([]),
+  parameters: z.array(z.string()).default([]),
+  hasMouthOpenParam: z.boolean(),
+  hasEyeBlinkParams: z.boolean(),
+  hasHeadAngleParams: z.boolean(),
+  lipSyncReady: z.boolean(),
+  physicsPresent: z.boolean(),
+  sha256: z.string().min(1),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+});
+export type Live2dAssetInspection = z.infer<typeof Live2dAssetInspectionSchema>;
+
+export const AssetDistributionChannelSchema = z.enum([
+  'local_personal',
+  'livestream_public',
+  'commercial_distribution',
+  'redistribution',
+]);
+export type AssetDistributionChannel = z.infer<typeof AssetDistributionChannelSchema>;
+
+export const LicenseDistributionCheckSchema = z.object({
+  allowed: z.boolean(),
+  channel: AssetDistributionChannelSchema,
+  license: z.string().min(1),
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY', 'REVIEW_REQUIRED']),
+  reason: z.string().min(1),
+  attributionRequired: z.boolean(),
+  attributionText: z.string().optional(),
+});
+export type LicenseDistributionCheck = z.infer<typeof LicenseDistributionCheckSchema>;
+
+export const Asset2dStudioPackageSchema = z.object({
+  packageId: z.string().min(1),
+  characterId: z.string().min(1),
+  displayName: z.string().min(1),
+  kind: z.enum(['live2d', 'layered-2d', 'sprite-2d', 'crosspet-import']),
+  rootDir: z.string().min(1),
+  status: AssetPipelineStatusSchema,
+  provenance: AssetProvenanceSchema,
+  live2dInspection: Live2dAssetInspectionSchema.optional(),
+  poseCount: z.number().int().nonnegative().default(0),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+export type Asset2dStudioPackage = z.infer<typeof Asset2dStudioPackageSchema>;
+
+/** V2-P2-05：CrossPet 全量合法导入契约 */
+export const CrossPetImportRequestSchema = z.object({
+  sourceDir: z.string().min(1).optional(),
+  characterIds: z.array(z.string().min(1)).optional(),
+  overwrite: z.boolean().default(false),
+  includeSkins: z.boolean().default(true),
+  includeEggs: z.boolean().default(true),
+  bindCharacterBible: z.boolean().default(true),
+});
+export type CrossPetImportRequest = z.infer<typeof CrossPetImportRequestSchema>;
+
+export const CrossPetImportedEntrySchema = z.object({
+  slug: z.string().min(1),
+  customId: z.string().min(1),
+  characterId: z.string().min(1),
+  displayName: z.string().min(1),
+  category: z.enum(['base', 'skin', 'egg']),
+  poseCount: z.number().int().nonnegative(),
+  skipped: z.boolean(),
+  reason: z.string().optional(),
+  licenseScope: z.literal('DEV_ONLY_NON_COMMERCIAL'),
+  attribution: z.string().min(1),
+  bibleUpdated: z.boolean(),
+  provenance: AssetProvenanceSchema,
+});
+export type CrossPetImportedEntry = z.infer<typeof CrossPetImportedEntrySchema>;
+
+export const CrossPetImportResultSchema = z.object({
+  ok: z.boolean(),
+  sourceDir: z.string().min(1),
+  licenseFileFound: z.boolean(),
+  licenseTextSummary: z.string(),
+  totalDiscovered: z.number().int().nonnegative(),
+  importedCount: z.number().int().nonnegative(),
+  skippedCount: z.number().int().nonnegative(),
+  failedCount: z.number().int().nonnegative(),
+  entries: z.array(CrossPetImportedEntrySchema),
+  errors: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type CrossPetImportResult = z.infer<typeof CrossPetImportResultSchema>;

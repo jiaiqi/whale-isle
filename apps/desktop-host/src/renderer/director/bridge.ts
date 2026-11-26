@@ -3,21 +3,31 @@
  * 明文 key 只上行；渲染进程永远只见掩码（运行期安全锁）。
  */
 import type {
+  Asset2dStudioPackage,
+  AssetDistributionChannel,
+  AssetProvenance,
   AudioMixerSnapshot,
   AudioTrackKind,
   AudioTrackState,
   BlenderToolchainStatus,
+  CharacterBible,
+  CharacterBibleAttachRefRequest,
+  CharacterBibleUpsertRequest,
   CharacterCommitment,
   CharacterControlMode,
   CharacterCoreSnapshot,
   CharacterExpression,
   CharacterGoal,
   CoopSpeakerEvent,
+  CrossPetImportRequest,
+  CrossPetImportResult,
   FuzzyImpression,
   GoalHorizon,
   GoalOrigin,
+  LicenseDistributionCheck,
   LifeActivityKind,
   LipSyncFrame,
+  Live2dAssetInspection,
   McpEndpoint,
   MediaJobSnapshot,
   MediaJobSubmitRequest,
@@ -667,6 +677,28 @@ export interface DirectorBridge {
   v23dJobs(characterId?: string): Promise<Pipeline3dJobSnapshot[]>;
   v23dSubmit(input: Pipeline3dRequest): Promise<{ ok: boolean; error?: string; job?: Pipeline3dJobSnapshot }>;
   v23dReview(input: { jobId: string; decision: 'approve' | 'reject'; note?: string }): Promise<{ ok: boolean; error?: string; job?: Pipeline3dJobSnapshot }>;
+  v2BibleList(): Promise<CharacterBible[]>;
+  v2BibleGet(characterId: string): Promise<CharacterBible | null>;
+  v2BibleUpsert(input: CharacterBibleUpsertRequest): Promise<{ ok: boolean; error?: string; bible?: CharacterBible }>;
+  v2BibleAttachRef(input: CharacterBibleAttachRefRequest): Promise<{ ok: boolean; error?: string; bible?: CharacterBible }>;
+  v2BiblePromoteJob(input: {
+    characterId: string;
+    jobId: string;
+    role?: 'front' | 'side' | 'back' | 'portrait' | 'sheet';
+  }): Promise<{ ok: boolean; error?: string; published?: string[]; bible?: CharacterBible }>;
+  v22dInspect(targetPath: string): Promise<Live2dAssetInspection>;
+  v22dRegister(input: {
+    packageId?: string;
+    characterId: string;
+    displayName: string;
+    kind: Asset2dStudioPackage['kind'];
+    rootDir: string;
+    provenance: AssetProvenance;
+    poseCount?: number;
+  }): Promise<{ ok: boolean; error?: string; pkg?: Asset2dStudioPackage }>;
+  v22dList(characterId?: string): Promise<Asset2dStudioPackage[]>;
+  v22dCheckDistribution(input: { packageId: string; channel: AssetDistributionChannel }): Promise<{ ok: boolean; error?: string; check?: LicenseDistributionCheck }>;
+  v2CrossPetImport(input?: Partial<CrossPetImportRequest>): Promise<{ ok: boolean; error?: string; result?: CrossPetImportResult }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

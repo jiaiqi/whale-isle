@@ -65,6 +65,14 @@ interface DirectorV2Window {
     v2MediaJobs(characterId?: string): Promise<Array<{ jobId: string; status: string }>>;
     v23dToolchain(): Promise<{ available: boolean; binary: string | null; installHint: string }>;
     v23dJobs(characterId?: string): Promise<Array<{ jobId: string; stage: string }>>;
+    v2BibleUpsert(input: { characterId: string; displayName: string; traits?: { outfit?: string } }): Promise<{ ok: boolean; bible?: { characterId: string; version: number } }>;
+    v2BibleList(): Promise<Array<{ characterId: string; displayName: string }>>;
+    v22dList(characterId?: string): Promise<Array<{ packageId: string; characterId: string; kind: string }>>;
+    v22dCheckDistribution(input: { packageId: string; channel: string }): Promise<{ ok: boolean; check?: { allowed: boolean; licenseScope: string; reason: string } }>;
+    v2CrossPetImport(input?: { characterIds?: string[]; overwrite?: boolean }): Promise<{
+      ok: boolean;
+      result?: { ok: boolean; importedCount: number; skippedCount: number; entries: Array<{ customId: string; licenseScope: string }> };
+    }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -306,6 +314,45 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(typeof res3d.toolchain.available).toBe('boolean');
       expect(typeof res3d.toolchain.installHint).toBe('string');
       expect(Array.isArray(res3d.jobs3d)).toBe(true);
+
+      // V2-P2-05：验证 Character Bible、CrossPet 合法导入与商业/直播许可隔离门禁
+      const p205 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const bibleUpsert = await bridge.v2BibleUpsert({
+          characterId: 'char_xiaojing',
+          displayName: '小鲸',
+          traits: { outfit: '深海女仆装' },
+        });
+        const bibles = await bridge.v2BibleList();
+        const imported = await bridge.v2CrossPetImport({
+          characterIds: ['deepseek', 'deepseek-pajamas', 'egg-deepseek'],
+          overwrite: true,
+        });
+        const pkgs = await bridge.v22dList('custom-cp-deepseek');
+        const localCheck = await bridge.v22dCheckDistribution({
+          packageId: 'crosspet-import-cp-deepseek',
+          channel: 'local_personal',
+        });
+        const liveCheck = await bridge.v22dCheckDistribution({
+          packageId: 'crosspet-import-cp-deepseek',
+          channel: 'livestream_public',
+        });
+        const commercialCheck = await bridge.v22dCheckDistribution({
+          packageId: 'crosspet-import-cp-deepseek',
+          channel: 'commercial_distribution',
+        });
+        return { bibleUpsert, bibles, imported, pkgs, localCheck, liveCheck, commercialCheck };
+      });
+      expect(p205.bibleUpsert.ok).toBe(true);
+      expect(p205.bibles.some((b) => b.characterId === 'char_xiaojing')).toBe(true);
+      expect(p205.imported.ok).toBe(true);
+      expect(p205.imported.result?.ok).toBe(true);
+      expect(p205.imported.result?.importedCount).toBe(3);
+      expect(p205.imported.result?.entries.every((e) => e.licenseScope === 'DEV_ONLY_NON_COMMERCIAL')).toBe(true);
+      expect(p205.pkgs).toHaveLength(1);
+      expect(p205.localCheck.check?.allowed).toBe(true);
+      expect(p205.liveCheck.check?.allowed).toBe(false);
+      expect(p205.commercialCheck.check?.allowed).toBe(false);
     } finally {
       await app.close();
     }

@@ -84,3 +84,10 @@
 10. **手动接管**：人类接管或物理键鼠操作后，AI 绝不争抢同一游戏角色。
 11. **任务结束与过期隔离**：任务完成/取消后退回约定模式；旧会话/旧世代在途指令被拒绝。
 12. **版本变化识别**：针对旧游戏版本的攻略显式标记适用性不确定，而非当成当前事实。
+
+---
+
+## 六、P2 阶段近期实测状态快照（随工单推进滚动更新）
+
+- **`V2-P2-01`..`V2-P2-04`**：均已通过 `pnpm verify:gate` 7/7 与 Electron 45 E2E，因缺少真实星露谷联机客户端、外部新 CLI、在线生图 Key 或本机 Blender 二进制，诚实保持 `IMPLEMENTED_UNVERIFIED`。
+- **`V2-P2-05`（Character Bible、2D/Live2D QA 与 CrossPet 全量导入）**：`character-studio-v2.spec.ts`（含随包 30 角色真实目录全量导入、`.provenance.json`、`CC BY-NC-SA 4.0` 直播/商用拦截）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；外部真实 Cubism `.moc3` 舞台渲染切换待 `V2-P3-01` 实机补验，状态记为 `IMPLEMENTED_UNVERIFIED`。

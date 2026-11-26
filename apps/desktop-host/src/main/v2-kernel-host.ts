@@ -6,8 +6,9 @@
  */
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import { ipcMain } from 'electron';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { app, ipcMain } from 'electron';
 import { z } from 'zod';
 import {
   createDefaultRuntimeConfig,
@@ -31,6 +32,8 @@ import {
 } from '@workbench/shared-protocol';
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
+import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
+import { resolvePetPacksDir } from './pet-packs';
 import {
   formatMemoryContext,
   retrieve,
@@ -218,6 +221,7 @@ function hasCliBinary(binary: string): boolean {
 export async function createV2KernelHost(options: {
   userDataDir: string;
   vaultPath: string;
+  packsRoot?: string;
 }): Promise<V2KernelHost> {
   const configStore = new JsonFileConfigStore(
     join(options.userDataDir, 'v2-runtime-config.json'),
@@ -551,6 +555,91 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:3d-review', (_e, rawInput: { jobId: string; decision: 'approve' | 'reject'; note?: string }) =>
     pipeline3d.reviewJob(rawInput),
   );
+  // V2-P2-05：Character Bible、2D/Live2D 质检与 CrossPet 全量合法导入 IPC
+  const hereDir = dirname(fileURLToPath(import.meta.url));
+  const packsRoot =
+    options.packsRoot ??
+    resolvePetPacksDir({
+      isPackaged: typeof app?.isPackaged === 'boolean' ? app.isPackaged : false,
+      resourcesPath: process.resourcesPath ?? '',
+      repoRoot: resolve(hereDir, '../../../..'),
+    });
+  const studioV2 = new CharacterStudioV2({
+    userDataDir: options.userDataDir,
+    packsRoot,
+  });
+  ipcMain.handle('v2:bible-list', () => studioV2.bibles.list());
+  ipcMain.handle('v2:bible-get', (_e, characterId: string) =>
+    studioV2.bibles.get(String(characterId ?? '')),
+  );
+  ipcMain.handle('v2:bible-upsert', (_e, rawInput: unknown) => {
+    try {
+      return { ok: true, bible: studioV2.bibles.upsert(rawInput) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:bible-attach-ref', (_e, rawInput: unknown) => {
+    try {
+      return { ok: true, bible: studioV2.bibles.attachReference(rawInput) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:bible-promote-job', async (_e, rawInput: {
+    characterId: string;
+    jobId: string;
+    role?: 'front' | 'side' | 'back' | 'portrait' | 'sheet';
+  }) => {
+    try {
+      return await studioV2.bibles.promoteFromMediaJob(
+        String(rawInput.characterId ?? ''),
+        mediaGateway,
+        String(rawInput.jobId ?? ''),
+        rawInput.role ?? 'portrait',
+      );
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:2d-inspect', (_e, targetPath: string) =>
+    inspectLive2dOrLayered2d(String(targetPath ?? '')),
+  );
+  ipcMain.handle('v2:2d-register', (_e, rawInput: {
+    packageId?: string;
+    characterId: string;
+    displayName: string;
+    kind: 'live2d' | 'layered-2d' | 'sprite-2d' | 'crosspet-import';
+    rootDir: string;
+    provenance: Parameters<CharacterStudioV2['register2dPackage']>[0]['provenance'];
+    poseCount?: number;
+  }) => {
+    try {
+      return { ok: true, pkg: studioV2.register2dPackage(rawInput) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:2d-list', (_e, characterId?: string) =>
+    studioV2.list2dPackages(typeof characterId === 'string' && characterId !== '' ? characterId : undefined),
+  );
+  ipcMain.handle('v2:2d-check-distribution', (_e, rawInput: {
+    packageId: string;
+    channel: 'local_personal' | 'livestream_public' | 'commercial_distribution' | 'redistribution';
+  }) => {
+    try {
+      return { ok: true, check: studioV2.check2dDistribution(String(rawInput.packageId ?? ''), rawInput.channel) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:crosspet-import', (_e, rawInput?: unknown) => {
+    try {
+      return { ok: true, result: studioV2.importCrossPetPack(rawInput ?? {}) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');
