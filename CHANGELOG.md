@@ -5,6 +5,20 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P3-06`：星露谷一键启动器与真实就绪探活 — `IMPLEMENTED_UNVERIFIED`）
+
+- **启动器状态机** `apps/desktop-host/src/main/stardew-launcher.ts`：`not_installed → launching → waiting_mcp → ready / timeout / failed`，`ready` 只由 BWF MCP `get_state` 真实应答触发；已在运行（端口可达或 `pgrep StardewModdingAPI`）不重复启动；子进程 `detached + stdio:'ignore' + unref()`，PPID=1 不随宿主退出；主方式直接 spawn `Contents/MacOS/StardewModdingAPI`，回退 `open steam://rungameid/413150`；标题画面自动 `load_save({})`，失败如实提示手动读档；端口一律 `127.0.0.1`（T-M6-74）。
+- **修复编造就绪缺陷** `apps/desktop-host/src/main/game-health.ts`：BWF 在标题画面返回 `HTTP 200 + isError:false +「游戏还没有进入存档」`，旧探活判为 `online`；现按正文识别为 `reachable`，并补 `game-health.spec.ts` 锁定真机文案。
+- **共玩页入口** `apps/desktop-host/src/renderer/director/{App.tsx,game-panel.tsx,bridge.ts}` 与 `preload/index.ts`、`packages/shared-protocol/src/index.ts`、`packages/stardew-mods/src/paths.ts`：启动入口、启动状态条与「以后自动启动」记忆；安装路径探测复用 `stardew-mods` 纯函数。
+- **真机验证**：两种启动方式均实测拉起 SMAPI 4.5.2 并进档（直接 spawn 14.1s / Steam 14.0s），证据 [P3-stardew-launcher-verification.md](./docs/v2/evidence/P3-stardew-launcher-verification.md)；剩余缺口为中控台按钮路径未单独录屏、Windows/Linux 仅纯函数单测。
+
+### Added / Changed（Tidepaper 空状态插画与桌面租约 HUD 映射）
+
+- **空状态插画** `apps/desktop-host/src/renderer/director/shell/empty-illustration.tsx` 与 `design-tokens.css`：明暗两套 WebP 同时渲染、由 `:root.dark` 切换；接入对话空态（`empty-chat`）、游戏回执空态（`game-offline`）、未开播（`live-offline`）、记忆无命中（`empty-memory`）与急停横幅（`halted`）。
+- **控制权 HUD 桌面租约** `apps/desktop-host/src/renderer/director/App.tsx`：`computerLease` 改由 `buildComputerLeaseView()` 从 `BrowserComputerSnapshot` 推导人类优先 / 急停 / 抢占 / 权限拒绝 / 空闲五态，不再只传 `active` 布尔。
+- **构建** `apps/desktop-host/scripts/build.mjs`：把 `assets/illustrations` 复制到 `dist/renderer/illustrations`。
+- **验证**：`tsc -b`、desktop-host build、`ui.e2e` 9/9 与 `v2-obsidian-ui.e2e` 1/1 通过。
+
 ### Added / Changed（`V2-P3-03`：受控 Browser Use 与 Computer Use — `IMPLEMENTED_UNVERIFIED`）
 
 - **浏览器/桌面操控契约** `packages/shared-protocol/src/{browser-computer.ts,index.ts}`：定义账号与 Profile、`ComputerUseLease`、浏览器任务与 runner report、人机交接（`awaiting_human`）、P5 一次性确认 token、OS 输入执行器与用户输入监控状态、`BrowserComputerSnapshot` Zod 契约（Zod 4 默认值使用 `.prefault({})`）。

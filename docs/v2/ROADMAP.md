@@ -140,6 +140,7 @@
 - **`V2-P3-03`（`IMPLEMENTED_UNVERIFIED`）：受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**（`packages/shared-protocol/src/browser-computer.ts` 契约、`AccountVault` / `BrowserProfileMgr` 按角色隔离与级联删除、`ComputerUseLeaseManager` 设备级单主控 + 心跳/TTL + 用户物理输入 ≤1s 抢占、`DeterministicBrowserRunner` 确定性动作与逐步 guard、CAPTCHA/登录挑战 `awaiting_human` 人工交接、P5 一次性确认 token、提示词注入按数据处理不提权、`powerMonitor` 输入监控与 feature flag 默认关闭的 OS 输入执行器骨架，及宿主 `v2:auto-*` IPC 与 HUD 双租约胶囊；ADR-004 回归验证游戏租约不受用户输入影响；runtime-core `90.16%` 分支 + `verify:gate` 7/7 + Electron 45 E2E 3/3 与 `ui.e2e` 9/9 全绿，详见 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)；真实 CGEvent/SendInput 注入、macOS TCC 打包态授权与真实站点风控待 `[REAL-DEVICE]`）
 - **`V2-P3-04`（`NEXT`）：Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**
 - **`V2-P3-05`：多被动桌宠同屏展示（独立形象/动作/基础音色，主从隔离）**
+- **`V2-P3-06`（`IMPLEMENTED_UNVERIFIED`）：星露谷一键启动器与真实就绪探活**（`stardew-launcher.ts` 实现「安装探测 → 直接 spawn SMAPI → 等 BWF `get_state` 真实应答才置 `ready`」，已在运行去重、子进程 detached 不随宿主退出；回退 `open steam://rungameid/413150`；标题画面自动 `load_save({})`；顺带修复 `game-health.ts` 把「标题画面返回 200 + isError:false」误判为 `online` 的编造就绪缺陷。真机两种启动方式均实测进档，见 [P3-stardew-launcher-verification.md](./evidence/P3-stardew-launcher-verification.md)；剩余缺口：中控台按钮触发路径未单独录屏、Windows/Linux 仅纯函数单测、Steam 回退会打开 Terminal）
 
 ---
 

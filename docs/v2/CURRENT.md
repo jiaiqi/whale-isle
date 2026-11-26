@@ -4,7 +4,7 @@
 
 ## 1. 当前进度锚点
 
-- **当前分支**：`feat/whale-isle-v2`（已发布并推送至 `origin/feat/whale-isle-v2`；已完成 P0 & P1、P2 全部 8 单、`V2-P3-01`、`ADR-003` Tidepaper 主视觉升级、`V2-P3-02` 及 **`V2-P3-03`**）
+- **当前分支**：`feat/whale-isle-v2`（已发布并推送至 `origin/feat/whale-isle-v2`；已完成 P0 & P1、P2 全部 8 单、`V2-P3-01`、`ADR-003` Tidepaper 主视觉升级、`V2-P3-02`、**`V2-P3-03`**，并已合入 `feat/stardew-launcher`（`V2-P3-06` 一键启动器）与 `feat/tidepaper-v3.1`（Tidepaper v3.1 外壳 + 空状态插画））
 - **上一已完成/交接工单**：`V2-P3-03` — **受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**（状态：`IMPLEMENTED_UNVERIFIED`）
 - **当前唯一激活 `NEXT` 工单**：**`V2-P3-04` — Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**
 - **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01`/`V2-P3-02`/`V2-P3-03` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
@@ -22,5 +22,13 @@
 
 ## 3. 下一步行动（Next Agent 从这里接手）
 
-1. 认领 **`V2-P3-04`（Digital Life L1：自主浏览、多模态内容理解、兴趣形成与日常调度）**：查阅 `docs/v2/blueprint/08-Digital-Life社交浏览与记忆.md`、[REQUIREMENTS.md](./REQUIREMENTS.md)（`REQ-SOC-01`）、[ADR-004](./adr/ADR-004-input-preemption-scope.md)，复用本工单的 `BrowserRuntime` / `AccountVault` / `BrowserProfileMgr` / 确定性 runner 与 `awaiting_human` 交接，禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
-2. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
+1. **先清真机验收积压，再开新工单**：`V2-P1-06` / `V2-P2-01` / `V2-P2-06` 三单只需要星露谷 + SMAPI（本机已具备），按 [REAL-DEVICE-CHECKLIST.md](./evidence/REAL-DEVICE-CHECKLIST.md) 第一批执行，通过后把对应工单从 `IMPLEMENTED_UNVERIFIED` 改为 `DONE` 并补 `[REAL-DEVICE]` 段落。
+2. 认领 **`V2-P3-04`（Digital Life L1：自主浏览、多模态内容理解、兴趣形成与日常调度）**：查阅 `docs/v2/blueprint/08-Digital-Life社交浏览与记忆.md`、[REQUIREMENTS.md](./REQUIREMENTS.md)（`REQ-SOC-01`）、[ADR-004](./adr/ADR-004-input-preemption-scope.md)，复用本工单的 `BrowserRuntime` / `AccountVault` / `BrowserProfileMgr` / 确定性 runner 与 `awaiting_human` 交接，禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
+3. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
+
+## 4. 2026-11-26 合流记录（两条支线已回流主线）
+
+- **`feat/stardew-launcher` → V2**（合并提交 `19f2258`）：`V2-P3-06` 一键启动器 + `game-health` 「标题画面误判 online」真实缺陷修复；真机证据 [P3-stardew-launcher-verification.md](./evidence/P3-stardew-launcher-verification.md)。
+- **`feat/tidepaper-v3.1` → V2**（合并提交 `0878d91`）：Tidepaper v3.1 外壳、三层租约 HUD 与急停横幅、中控台 IA 重组；补完空状态插画接入（对话 / 游戏回执 / 未开播 / 记忆无命中 / 急停）与 `buildComputerLeaseView()` 五态映射。
+- 合并后 `pnpm verify:gate` **7/7 PASS**，`ui.e2e` **9/9**、`v2-obsidian-ui.e2e` **1/1** PASS。
+- 合并期间发现的环境坑：`-launch` worktree 残留的 Electron 占着 `e2e-profile` 的 LevelDB 锁，会让 `ui.e2e` 的服务商页用例超时假失败；跑 E2E 前先 `pgrep -f e2e-profile` 清理。
