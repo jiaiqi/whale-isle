@@ -157,6 +157,11 @@ let directorWindow: BrowserWindow | null = null;
 let petWindowManager: PetWindowManager | null = null;
 /** T-M6-60：托盘常驻宿主 + 真正退出标志（决定中控台关闭是隐藏还是销毁）。 */
 let trayHost: TrayHost | null = null;
+/** E2E 就绪门：tray-popover 测试 handler 提前注册后，'open'/'hide' 必须等 trayHost 建好（成败都落定，绝不悬挂） */
+let trayHostReadyResolve!: () => void;
+const trayHostReady = new Promise<void>((resolve) => {
+  trayHostReadyResolve = resolve;
+});
 let webuiRef: { port: number; token: string } | null = null;
 let isQuitting = false;
 /** agentId → 真实 BrowserWindow：旧 IPC 仍需要默认主窗，协作主机按 id 定向投递。 */
@@ -1232,6 +1237,18 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     plugins.setTargets(targets);
     live.setTargets(targets);
   };
+  if (TEST_MODE) {
+    // E2E：无头环境没有真实 Tray，直接打开/隐藏复用浮窗，并回报真实坐标。
+    // 提前注册（boot 顶部、任何 await 之前）：preload 暴露 directorBridge 时 handler 必须已就位，
+    // 否则 renderer 偶尔跑赢 boot 报「无 handler」竞态；内部 await trayHostReady，
+    // 保证 'open'/'hide' 调用时 trayHost 已建好（不成活则静默 no-op + 假 ok 超时）。
+    ipcMain.handle('test:tray-popover', async (_event, action: 'open' | 'hide' | 'bounds') => {
+      await trayHostReady;
+      if (action === 'open') trayHost?.showPopover();
+      else if (action === 'hide') trayHost?.hidePopover();
+      return { ok: true, bounds: trayHost?.lastBounds() ?? null, visible: trayHost?.isPopoverVisible() ?? false };
+    });
+  }
   // 中控台先立即可用；默认桌宠需要在 loadFile 完成后才出现在窗口列表，避免 UI 空等。
   directorWindow = createDirectorWindow();
   const openedDefault = await petWindowManager.open('default', prefs.get().characterId);
@@ -1487,15 +1504,6 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     Menu.buildFromTemplate(template as MenuItemConstructorOptions[]).popup({ window: win });
     return { ok: true };
   });
-  if (TEST_MODE) {
-    // E2E：无头环境没有真实 Tray，直接打开/隐藏复用浮窗，并回报真实坐标。
-    ipcMain.handle('test:tray-popover', (_event, action: 'open' | 'hide' | 'bounds') => {
-      if (action === 'open') trayHost?.showPopover();
-      else if (action === 'hide') trayHost?.hidePopover();
-      return { ok: true, bounds: trayHost?.lastBounds() ?? null, visible: trayHost?.isPopoverVisible() ?? false };
-    });
-  }
-
   try {
     trayHost = await createTrayHost({
       platform: process.platform,
@@ -1515,8 +1523,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       petState: () => ({ anyHidden: petWindowManager?.anyHidden() === true }),
       onQuit: quitApp,
     });
+    trayHostReadyResolve();
   } catch (error) {
     console.warn('[tray] 托盘创建失败（应用继续运行）:', error);
+    // 失败同样落定就绪门：测试 handler 拿到 trayHost=null 的如实回报，绝不悬挂
+    trayHostReadyResolve();
   }
 
   app.on('activate', () => {
