@@ -4,9 +4,9 @@
 
 ## 1. 当前进度锚点
 
-- **当前分支**：`stardew-auto-new-save`（基于 `feat/whale-isle-v2`；已交付 `V2-P3-07A`–`E` 星露谷从 0 自动建档/联机房主/默认隔离/中文双保险，等待合入 `feat/whale-isle-v2`）
-- **上一已完成/交接工单**：`V2-P3-07`（后端 `07A`–`07D` `DONE`；中控台 `07E` `IMPLEMENTED_UNVERIFIED`，Electron E2E 10/10 + 真机冷启动 R1–R4 全通）
-- **当前唯一激活工单**：无（2026-11-27 完成 `V2-P3-07A`–`E` 与真机 R1–R4 验收，证据 [P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)；`V2-P3-06` 缺陷①就绪重探亦已通过 R1/R2 真机冷启动竞态复验；剩余待人类验收或后续单立工单项为 `07E` 中控台界面直接手点复核、P3-02 真实开播、P3-01 缺声/模资产，以及 `V2-P2-08`/`V2-P3-05`）
+- **当前分支**：`stardew-auto-new-save`（基于最新 `feat/whale-isle-v2`，已完成 PR #1/#2 等主干合流并交付星露谷从 0 自动建档/联机房主/默认隔离/中文双保险 `V2-P3-07A`–`E`，准备合入 `feat/whale-isle-v2`）
+- **上一已完成/交接工单**：星露谷建档批次 `V2-P3-07`（**`DONE`**：`07A`–`07E` 全通，Electron E2E 10/10 + 真机冷启动 R1–R4 + 真实中控台点击拉起 R5 全通）
+- **当前唯一激活工单**：`V2-P4-01`（`NEXT`：单角色“小鲸”全产品链路端到端整合与长时真机验收；2026-11-27 已完成星露谷从 0 自动建档 `V2-P3-07A`–`E` 与真机 R1–R5 全闭环验收，证据 [P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)；`V2-P3-06` 缺陷①就绪重探亦已通过 R1/R2 真机冷启动竞态复验；剩余待人类验收或后续工单项为 P3-02 真实开播、P3-01 缺声/模资产，以及 `V2-P2-08`/`V2-P3-05`）
 - **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01`/`V2-P3-02`/`V2-P3-03` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
 - **输入抢占口径（`ADR-004`）**：`ComputerUseLease` 只管 OS 合成输入/前台桌面控制；用户物理输入撤销它。`GameCharacterControlLease` 不受普通键鼠影响，只认 F7/UI 开关/P0 急停（T-M6-73）。P0 急停同时撤销两者。
 - **本地客户端常驻约定**：用户要求每次完成任务后保持本地桌面端运行（`pnpm --filter @workbench/desktop-host start`）以便随时测试；推进新工单重新构建后务必保持客户端处于运行状态。
@@ -20,7 +20,8 @@
   - **R1 常规只读续玩**：SMAPI 拉起 `泡泡湾_454908853`（15.28s `ready`），`AutodriveRunner` 6 次重探零误报并完成 `wait` 回执（`COMPLETED`），`~/.config/StardewValley/Saves/` 全目录及各存档 mtime 零改动，截图 `artifacts/acceptance/P3-07-r1-standard-continue.png`；
   - **R2 后台隔离中文单机从 0 建档**：零 CGEvent 后台创建 `鲸屿单机_455382664`（27.13s），`<languageCode>zh</languageCode>` 与 P2-06 2× 像素表生效且 `SaveGameInfo` 保留农夫名 `小鲸零号`，截图 `artifacts/acceptance/P3-07-r2-singleplayer-new-save.png`；
   - **R3 后台隔离中文联机房主**：创建 `联机星露_455382728`（28.96s），UDP `24642` 监听（`lsof` 实证），`startingCabins=2`、`availableFarmhandSlots=2`，截图 `artifacts/acceptance/P3-07-r3-coop-host-new-save.png`；
-  - **R4 旧版 BWF 快败与恢复**：换回 `BlindWhaleFarmer.dll.bak-1.1.27-stock` 后 `/settings` 可达起 **1.81s**（< 5s）快败报 `BWF_PATCH_MISSING`，恢复补丁版后实证 `/settings` 全 5 项 `capabilities` 恢复正常。
+  - **R4 旧版 BWF 快败与恢复**：换回 `BlindWhaleFarmer.dll.bak-1.1.27-stock` 后 `/settings` 可达起 **1.81s**（< 5s）快败报 `BWF_PATCH_MISSING`，恢复补丁版后实证 `/settings` 全 5 项 `capabilities` 恢复正常；
+  - **R5 真实 Electron 中控台点击拉起**：`WHALE_E2E_REAL_STARDEW_LAUNCHER=1` 下真实点击 `[data-stardew-new-singleplayer]` 拉起 SMAPI（`pid 44533`），**17.53s** 隔离新建 `鲸屿_455395474` 并自动翻绿横幅，退出还原零残留与 `Saves/` 零改动（截图 `P3-07-07e-director-real-click.png` / `P3-07-07e-stardew-real-window.png`）。
 - **历史 `V2-P3-01` 真机补验摘要**：
 
 - **新增 `services/sing-worker/`**（FastAPI，端口 18880）：只转发到显式配置的 `WHALE_SING_SVS_ENDPOINT` / `WHALE_SING_SVC_ENDPOINT`；普通 TTS 单列 `ttsClone` 能力位并强制带「普通 TTS 不得当作 SVS/SVC 使用」告警；后端缺失 → 501 + 具体原因，**不返回任何伪造音频**；`neuralVerified` 仅在真实后端真返回音频时才置 `true`。

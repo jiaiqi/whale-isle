@@ -12,7 +12,7 @@
 - **就绪探测硬化（`V2-P3-07C`，`6a746bc`）**：`BwfMcpClient.ping()`（`mcp-client.ts` 分支覆盖 `92.59%`）拒绝标题画面文本与 `isError=true`，消除 `AutodriveRunner` 启动竞态误判；`game-health.ts` 新增 `probeBwfRuntime()` 与 `requireLanHost` 门禁。
 - **启动器编排与默认隔离+中文双保险（`V2-P3-07D`，`3ff7e8b`）**：新增 `stardew-launch-prefs.ts` 默认使用鲸屿专属 `XDG` 隔离目录与中文（`zh`）并初始化隔离 `startup_preferences`，`stardew-launcher.ts` 支持 `always_new`/`continue_or_create`/`load_only`/`manual`、瞬态错误重试、`BWF_PATCH_MISSING` 快败与 `coop_host` LAN 监听等待，升级宿主 IPC（不再吞 `safeParse` 错误）/preload/bridge。
 - **中控台一键 UI 与 E2E（`V2-P3-07E`，`cceccd6`）**：共玩页横幅、启动弹窗与 `⌘K` 补齐「从 0 单机开玩」「从 0 联机房主开玩」、存储模式切换与可折叠建档配置表单；Electron E2E `stardew-launcher.e2e` + `ui.e2e` 10/10 全绿；`pnpm verify:gate` 7/7 通过。
-- **真机 R1–R4 全套验收通过**（[P3-stardew-auto-new-save-verification.md](./docs/v2/evidence/P3-stardew-auto-new-save-verification.md)）：R1 常规只读续玩 `泡泡湾_454908853`（15.28s，`Saves/` 全目录与 mtime 零变动）、R2 后台隔离中文单机从 0 建档+P2-06 2× 形象（27.13s，农夫名未被覆写）、R3 后台隔离中文联机房主+UDP 24642+2/2 小屋（28.96s）、R4 旧版 BWF 1.81s 快败 `BWF_PATCH_MISSING` 并验证补丁恢复。
+- **真机 R1–R5 全套验收通过**（[P3-stardew-auto-new-save-verification.md](./docs/v2/evidence/P3-stardew-auto-new-save-verification.md)）：R1 常规只读续玩 `泡泡湾_454908853`（15.28s，`Saves/` 全目录与 mtime 零变动）、R2 后台隔离中文单机从 0 建档+P2-06 2× 形象（27.13s，农夫名未被覆写）、R3 后台隔离中文联机房主+UDP 24642+2/2 小屋（28.96s）、R4 旧版 BWF 1.81s 快败 `BWF_PATCH_MISSING` 并验证补丁恢复、R5 真实 Electron 中控台（`WHALE_E2E_REAL_STARDEW_LAUNCHER=1`）点击「从 0 单机开玩」17.53s 真实拉起隔离建档并翻绿横幅后干净还原；`V2-P3-07A`–`07E` 全部 `DONE`。
 
 ### Added（02 / 08 / 12 候选参考资产，默认档未动）
 

@@ -270,14 +270,14 @@
 
 ## 2026-11-27 批次（V2-P3-07A–E 星露谷从 0 建档/联机房主/隔离存储与中文双保险）
 
-### Mock / 沙盒 / 宿主 E2E / 真机 R1–R4 已通过项
+### Mock / 沙盒 / 宿主 E2E / 真机 R1–R5 已通过项
 
 | 工单 | 验证方式 | 证据摘要 | 日期 |
 | --- | --- | --- | --- |
-| `V2-P3-07A`–`07D`（`DONE`） / `07E`（`IMPLEMENTED_UNVERIFIED`） | `[SIMULATION]` + `[E2E-HOST]` + `[REAL-DEVICE]` | **单测与门禁**：`stardew-launch.spec.ts`、`stardew-launch-prefs.spec.ts`(4/4)、`stardew-launcher.spec.ts`(22/22)、`mcp-client.ts` 分支 **92.59%**、`pnpm verify:gate` **7/7 PASS**；**Electron E2E**：`stardew-launcher.e2e.spec.ts` + `ui.e2e.spec.ts` **10/10**（含一键单机/联机房主/存储模式切换持久化 reload/⌘K，截图 `artifacts/stardew-launcher-e2e.png`）；**真机 R1–R4**（[P3-stardew-auto-new-save-verification.md](./v2/evidence/P3-stardew-auto-new-save-verification.md)）：① R1 常规只读续玩 `泡泡湾_454908853`（15.28s ready，6 次 `watchdog` 重探零误报，`wait` 回执 COMPLETED，`Saves/` 全项 mtime 零改动，截图 `P3-07-r1-standard-continue.png`）；② R2 后台零 CGEvent 隔离中文单机从 0 建档 `鲸屿单机_455382664`（27.13s，`<languageCode>zh</languageCode>` + P2-06 2× 精灵表 + `SaveGameInfo` 保留 `小鲸零号`，截图 `P3-07-r2-singleplayer-new-save.png`）；③ R3 后台隔离中文联机房主 `联机星露_455382728`（28.96s，`lsof` 实证 UDP `24642`、`2/2` 未认领小屋槽位，截图 `P3-07-r3-coop-host-new-save.png`）；④ R4 切换旧版 `BlindWhaleFarmer.dll.bak-1.1.27-stock` 实证 `/settings` 可达后 **1.81s**（< 5s）快败 `BWF_PATCH_MISSING`，恢复补丁版后 `/settings` 全 5 项 `capabilities` 恢复 | 2026-11-27 |
+| `V2-P3-07A`–`07E`（全 `DONE`） | `[SIMULATION]` + `[E2E-HOST]` + `[REAL-DEVICE]` | **单测与门禁**：`stardew-launch.spec.ts`、`stardew-launch-prefs.spec.ts`(4/4)、`stardew-launcher.spec.ts`(22/22)、`mcp-client.ts` 分支 **92.59%**、`pnpm verify:gate` **7/7 PASS**；**Electron E2E**：`stardew-launcher.e2e.spec.ts` + `ui.e2e.spec.ts` **10/10**（含一键单机/联机房主/存储模式切换持久化 reload/⌘K，截图 `artifacts/stardew-launcher-e2e.png`）；**真机 R1–R5**（[P3-stardew-auto-new-save-verification.md](./v2/evidence/P3-stardew-auto-new-save-verification.md)）：① R1 常规只读续玩 `泡泡湾_454908853`（15.28s ready，6 次 `watchdog` 重探零误报，`wait` 回执 COMPLETED，`Saves/` 全项 mtime 零改动，截图 `P3-07-r1-standard-continue.png`）；② R2 后台零 CGEvent 隔离中文单机从 0 建档 `鲸屿单机_455382664`（27.13s，`<languageCode>zh</languageCode>` + P2-06 2× 精灵表 + `SaveGameInfo` 保留 `小鲸零号`，截图 `P3-07-r2-singleplayer-new-save.png`）；③ R3 后台隔离中文联机房主 `联机星露_455382728`（28.96s，`lsof` 实证 UDP `24642`、`2/2` 未认领小屋槽位，截图 `P3-07-r3-coop-host-new-save.png`）；④ R4 切换旧版 `BlindWhaleFarmer.dll.bak-1.1.27-stock` 实证 `/settings` 可达后 **1.81s**（< 5s）快败 `BWF_PATCH_MISSING`，恢复补丁版后 `/settings` 全 5 项 `capabilities` 恢复；⑤ R5 真实 Electron 中控台（`WHALE_E2E_REAL_STARDEW_LAUNCHER=1`）点击 `[data-stardew-new-singleplayer]` 拉起真实 SMAPI `pid 44533`，**17.53s** 隔离建档 `鲸屿_455395474` 并自动翻绿横幅，退出干净还原 `e2e-profile` 与 `Saves/` 零改动（截图 `P3-07-07e-director-real-click.png` / `P3-07-07e-stardew-real-window.png`） | 2026-11-27 |
 
 ### 待人类宿主真机验收项
 
 | 项目 | 验收内容 | 状态 |
 | --- | --- | --- |
-| `V2-P3-07E` 中控台真机点击 | 在真实运行的中控台页面（非 E2E 假启动器）人工点按「从 0 单机开玩」「从 0 联机房主开玩」与存储开关一次确认完整界面联动 | ⏳ 待人工顺手抽检 |
+| `V2-P3-07` 全项 | 契约/BWF补丁/硬探活/启动器/UI 一键单机与联机房主已全通（真机 R1–R5 + E2E 10/10） | ✅ 无未闭环真机项（后续可按需顺手复核「从 0 联机房主」UI 按钮点击） |

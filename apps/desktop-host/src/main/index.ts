@@ -1244,10 +1244,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     }
   });
   ipcMain.handle('game:dst-state', async () => fetchDstSnapshot());
-  // V2-P3-05 / V2-P3-07 星露谷启动与从 0 建档（默认隔离目录 + 中文 + 像素形象同步不改名；E2E 装配假启动器）
+  // V2-P3-05 / V2-P3-07 星露谷启动与从 0 建档（默认隔离目录 + 中文 + 像素形象同步不改名；E2E 默认装配假启动器，显式 WHALE_E2E_REAL_STARDEW_LAUNCHER=1 时直通真实启动器）
   const stardewLaunchPrefs = createStardewLaunchPrefs(app.getPath('userData'));
   const stardewIsolatedDir = defaultIsolatedDataDir(app.getPath('userData'));
-  const stardewLauncher = TEST_MODE
+  const useFakeStardewLauncher = TEST_MODE && process.env.WHALE_E2E_REAL_STARDEW_LAUNCHER !== '1';
+  const stardewLauncher = useFakeStardewLauncher
     ? createFakeStardewLauncher({ defaultIsolateDataDir: stardewIsolatedDir })
     : createStardewLauncher({
       defaultIsolateDataDir: stardewIsolatedDir,

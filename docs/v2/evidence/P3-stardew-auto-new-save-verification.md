@@ -2,7 +2,7 @@
 
 > 工单范围：`V2-P3-07`（拆分为 `V2-P3-07A` → `(07B ∥ 07C)` → `07D` → `07E` 及 `fix(mods)` 1.6 小屋槽位修补）  
 > 分支：`stardew-auto-new-save`（基于 `feat/whale-isle-v2`）  
-> 结论：**契约、BWF C# 1.6 公开 API 建档/房主补丁、就绪判定硬化、启动器隔离+中文双保险、`[E2E-HOST]` UI 状态机（10/10）与 `[REAL-DEVICE]` 真机 R1–R4 全套冷启动验收全部实测通过；owner 常规存档 `~/.config/StardewValley/Saves/` 与 `startup_preferences` 全程零写入、零改写。**
+> 结论：**契约、BWF C# 1.6 公开 API 建档/房主补丁、就绪判定硬化、默认隔离+中文双保险、 UI 状态机（10/10）以及  真机冷启动 R1–R4 与真实 Electron 中控台点击拉起 R5 全部实测通过； 全系列（–）全部达成 ，owner 常规存档  与  全程零写入、零改写。**
 
 ---
 
@@ -14,7 +14,7 @@
 | `V2-P3-07B` + 1.6 修补 | `2f9d7e8` + `f8d7d2a` | 仓外 MIT BWF 第 3 份补丁 `mods/bwf-patches/2026-11-26-auto-new-save-and-lan-status.patch`（`WHALE_BWF_MCP_PORT`/`WHALE_STARDEW_LANG`、`EnsureLanguage()`、`create_new_save`、`load_save` 扩展、`GET /settings` 带 `runtime`/`lan` 与 `isUnclaimedFarmhand` 空余小屋计数）；`mods/stardew-avatar-sync/ModEntry.cs` `SyncDisplayName` 防覆写 | **`DONE`** |
 | `V2-P3-07C` | `6a746bc` | `packages/game-bridge-mcp/src/mcp-client.ts`（`BwfMcpClient.ping()` 拒绝标题画面提示与 `isError=true`）+ `apps/desktop-host/src/main/game-health.ts`（`probeBwfRuntime()` 与 `requireLanHost` 门禁） | **`DONE`** |
 | `V2-P3-07D` | `3ff7e8b` | `stardew-launch-prefs.ts`（默认 `isolated` 隔离目录 + `zh` 中文 XML 双保险）+ `stardew-launcher.ts`（`always_new`/`continue_or_create`/`load_only`/`manual`、重试 `LANGUAGE_LOADING`/`TITLE_NOT_READY`、快败 `BWF_PATCH_MISSING`、`coop_host` LAN 等待）+ `stardew-avatar-host.ts` + 宿主 IPC/preload/bridge | **`DONE`** |
-| `V2-P3-07E` | `cceccd6` | 中控台 `game-panel.tsx` / `App.tsx` / `views/stardew-view.tsx`（保留 `[data-stardew-launch]`，新增一键「从 0 单机开玩」「从 0 联机房主开玩」、存储模式切换与折叠表单、`⌘K` 与启动弹窗入口）+ `e2e/stardew-launcher.e2e.spec.ts` | **`IMPLEMENTED_UNVERIFIED`**（Electron E2E 10/10 + 后端启动器 R1–R4 全绿；中控台前端页面真机点击触发真实拉起待人工端到端复核） |
+| `V2-P3-07E` | `cceccd6` + R5 直通开关 | 中控台 `game-panel.tsx` / `App.tsx` / `views/stardew-view.tsx`（保留 `[data-stardew-launch]`，新增一键「从 0 单机开玩」「从 0 联机房主开玩」、存储模式切换与折叠表单、`⌘K` 与启动弹窗入口）、`WHALE_E2E_REAL_STARDEW_LAUNCHER=1` 真机 E2E 直通开关与 `e2e/stardew-launcher.e2e.spec.ts` | **`DONE`** |
 
 ---
 
@@ -91,3 +91,12 @@ PET_STAGE_E2E=1 pnpm exec vitest run --config vitest.e2e.config.mts \
   - 恢复补丁版 `BlindWhaleFarmer.dll` 后校验体积 `1,098,240B`、sha256 `4a07f7ab856a...` 与原件 100% 一致，`BlindWhaleFarmer.dll.bak-1.1.27-stock` 等备份完好保留；
   - 重启一次隔离 SMAPI 实测恢复后的 `GET http://127.0.0.1:18088/settings`：`runtime.capabilities = ["load_save", "host_load_save", "create_new_save", "lan_status", "language_sync"]` 全部恢复；
   - 结束时全部 `StardewModdingAPI` 测试进程已退出，`~/.config/StardewValley/Saves/` 与 `startup_preferences` 与初始基线 100% 一致。
+
+### 3.5 R5：真实 Electron 中控台点击「从 0 单机开玩」→ 真实拉起与隔离建档端到端闭环（`[REAL-DEVICE]` + `[E2E-HOST]`）
+- **触发配置**：编译后的 `apps/desktop-host/dist/main/index.js` 在 `PET_STAGE_E2E=1 WHALE_E2E_REAL_STARDEW_LAUNCHER=1` 下启动（仍使用独立 `e2e-profile` 与常驻客户端 `PID 38542` 互不碰撞，但直通生产级 `createStardewLauncher()`），在真实中控台共玩页点击 `[data-stardew-new-singleplayer]`（「从 0 单机开玩」）。
+- **实测结果（通过）**：
+  - 点击按钮后拉起真实 `StardewModdingAPI`（`pid 44533`，隔离目录 `.../Whale Isle/e2e-profile/stardew-isolated`，`zh`），经 `launching → waiting_bwf → waiting_title (TITLE_NOT_READY 重试) → creating_save → waiting_world → ready` 耗时 **`17.53s`**（`elapsedMs=17526`, `createdSaveSlot='鲸屿_455395474'`）；
+  - 中控台横幅自动刷新翻绿为 `[data-game-conn-banner][data-game-conn="online"]`（`《星露谷物语》已连接 BWF MCP 在线 · get_state 正常应答`）；
+  - 隔离目录实测写入 `<languageCode>zh</languageCode>` 与 `Saves/鲸屿_455395474/SaveGameInfo`（含 `<farmName>` 与 `<name>`）；
+  - 双截图留证并经目视核验：[P3-07-07e-director-real-click.png](../../../artifacts/acceptance/P3-07-07e-director-real-click.png) 与 [P3-07-07e-stardew-real-window.png](../../../artifacts/acceptance/P3-07-07e-stardew-real-window.png)；
+  - 清理退出测试游戏 `pid 44533` 与测试 Electron，删除 `e2e-profile/stardew-isolated` 与 `stardew-launch-prefs.json` 还原至点击前态；复核 `Post-cleanup Stardew PIDs: []`、`Resident Electron PID 38542 alive after: true`、`Saves/` 全目录与各子项 `mtime` 100% 零改动；同时重跑默认假启动器 E2E `stardew-launcher.e2e.spec.ts` **1/1（7.15s）** 零回归。
