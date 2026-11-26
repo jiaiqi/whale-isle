@@ -12,6 +12,22 @@
 - **Electron 隐藏窗口引擎、宿主 IPC 与 HUD** `apps/desktop-host/src/{main/electron-browser-engine.ts,main/v2-kernel-host.ts,preload/index.ts,renderer/director/bridge.ts,renderer/director/v2/signature-widgets.tsx,renderer/director/App.tsx,renderer/director/views/life-console-view.tsx}`：按角色/账号隔离 partition、`v2:auto-*` 浏览器/租约/P5/交接/清理 IPC、游戏租约与桌面租约双胶囊 HUD、生命总览 P3-03 面板；新增 ADR-004 强制回归测试。
 - **验证**：P3-03 专项单测 22/22、runtime-core 90.16% 分支、`verify:gate` 7/7、`desktop-host build` 与 Electron 45 E2E 3/3 + `ui.e2e` 9/9 全绿；真实 OS 注入与 TCC 打包态授权待 `[REAL-DEVICE]`。
 
+### Fixed（Tidepaper v3.1 验收修正 — `DONE`）
+
+- **夜潮急停对比度** `apps/desktop-host/src/renderer/director/design-tokens.css`：暗色主题的急停横幅与「急停 F8」按钮由 `--rose` + 白字（实测 2.74:1）改为 `--halt-bg`（`color-mix(in srgb, var(--rose) 68%, #000)`），白字提升至 5.43:1；键帽改为黑 18% 底、白字 7.29:1；急停态「恢复自主」改白底深 rose 字 5.43:1。晨雾保持 5.82:1。
+- **急停对比度回归断言** `apps/desktop-host/e2e/ui.e2e.spec.ts`：在既有主题对比度用例内按实际计算色（含半透明叠层合成）校验 `.btn-stop`、`.btn-stop .kbd`、`.wb-halt-copy`、`[data-v2-hud-resume]` ≥4.5:1，晨雾 / 夜潮各一轮。
+- **生命中枢列表截断** `apps/desktop-host/src/renderer/director/views/life-console-view.tsx`：活跃目标与主仆约定条目改为标题单行省略 + 右侧状态 chip，列表禁用横向滚动，长标题不再撑破卡片。
+
+### Added / Changed（`REQ-UI-01`：Tidepaper v3.1「潮汐纸 · 精修」中控台外壳 — `DONE`）
+
+- **纸面材质与外壳令牌** `apps/desktop-host/src/renderer/director/{design-tokens.css,styles.css}`：`.card` 改为实底 + 细边 + 极轻阴影，玻璃模糊仅保留给 `obsidian-tide` / `tide-deep`；新增静态海图等高线 `--map-contour` 与 feTurbulence 纸纹 `--paper-noise`，移除 ambient 漂移动画；新增 56px 顶栏、统一页头、`.kbd`、`.seg`、急停按钮、焦点环 `--ring` 与纸面滚动条。
+- **信息架构与角色卡** `apps/desktop-host/src/renderer/director/shell/sidebar.tsx`：导航重组为 此刻 / 角色 / 化身 / 生活 / 能力 / 治理（空组自动隐藏）；墨色方块品牌区；底部角色卡播放真实待机 WebM，向上弹出角色菜单并保留 `[data-character-switch]` / `[data-character-option]` / `aria-checked`。
+- **顶栏在场胶囊与外观分段容器** `apps/desktop-host/src/renderer/director/shell/topbar.tsx`：新增仅由真实数据驱动的桌面/直播/游戏在场胶囊；皮肤、明暗、跟随系统合入 `.wb-appearance` 分段容器，全部既有 `data-*` 选择器与点击行为保持不变。
+- **三层控制权 HUD 与急停横幅** `apps/desktop-host/src/renderer/director/v2/signature-widgets.tsx`：展示 活动 · LifeActivity / 游戏角色 · GameCharacter / 桌面键鼠 · ComputerUse 三层租约；`ComputerUseLease` 未接线时如实标注「未接入 · P3」；急停态改为整条 rose 横幅与白色声呐。
+- **PageHead 与四页落地** `apps/desktop-host/src/renderer/director/{shell/page-head.tsx,views/life-console-view.tsx,memory-panel.tsx,plugins-panel.tsx,providers-panel.tsx}`：新增统一页头组件；生命中枢、记忆、插件、模型页切换为眉标 + 衬线标题；记忆图谱 Canvas 颜色改为运行时解析主题 token。
+- **`⌘K` 直达小鲸** `apps/desktop-host/src/renderer/director/{shell/command-palette.tsx,App.tsx}`：输入以 `>` 开头时顶部渲染「发给小鲸：…」并回车发送；新增底部快捷键提示条与纸面 Toast。
+- **验证**：`pnpm typecheck` 退出码 0、`pnpm verify:gate` 7/7、desktop-host build 成功、Electron 45 E2E 第一组 3/3 与第二组 8/8 通过；浅/深 × Tidepaper / Obsidian / Tide Deep 截图见 `artifacts/tidepaper-v3.1/`；证据文档 `docs/v2/evidence/P3-tidepaper-v3.1-shell-verification.md`。
+
 ### Added / Changed（`V2-P3-02`：`LifeRuntime` 驱动的直播中控与 OBS 舞台 — `IMPLEMENTED_UNVERIFIED`）
 
 - **直播中控与 OBS 舞台契约** `packages/shared-protocol/src/{live.ts,index.ts}`：定义 `LivePlatformId`、`LiveConnectionState`、`LivePlatformAdapterStatus`、`LiveSongQueueItem`、`LiveGiftThankBatch`、`LiveObsStagePayload`、`LiveSessionSummary` 与 `LiveRuntimeSnapshot` Zod 契约。

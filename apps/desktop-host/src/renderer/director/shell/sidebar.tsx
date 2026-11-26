@@ -1,11 +1,13 @@
 /**
- * v4 Shell 左侧栏（设计稿：分组插件导航 + 赛博饭碗 footer）。
- * 插件启停会过滤这里的入口 —— 与「插件与权限」页联动（localStorage 持久）。
+ * Tidepaper v3.1 侧栏：
+ * - 墨色方块 mark + 衬线「鲸屿」+ 小型大写「WHALE ISLE · V2」
+ * - IA 按 此刻 / 角色 / 化身 / 生活 / 能力 / 治理 分组（只放已实现页，空组自动隐藏）
+ * - 底部 rail-me：小鲸待机动画角色卡，点击向上弹出角色菜单 + 紧凑赛博饭碗
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-  AudioLines, Blocks, Brain, ChevronDown, Cpu, Fish, Gamepad2, MessageSquare, MonitorPlay, Plus,
-  Search, Sparkles, Terminal, Users, Wheat,
+  AudioLines, Bot, ChevronsUpDown, Compass, Database, Gamepad2, MessageCircle, Plus, Puzzle,
+  Radio, Search, Shapes, SquareTerminal, Users, Wheat,
   type LucideIcon,
 } from 'lucide-react';
 import { APP_NAME, APP_TAGLINE, whaleMarkPaths } from '../../../shared/brand';
@@ -26,47 +28,99 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: '此刻',
     items: [
-      { id: 'chat', label: '对话 · 小鲸', icon: MessageSquare, group: '此刻' },
-      { id: 'life', label: 'V2 生命中枢', icon: Sparkles, group: '此刻' },
+      { id: 'life', label: '生命中枢', icon: Compass, group: '此刻' },
+      { id: 'chat', label: '对话', icon: MessageCircle, group: '此刻' },
     ],
   },
   {
-    label: '角色与化身',
+    label: '角色',
     items: [
-      { id: 'voice', label: '声音与表演', icon: AudioLines, group: '角色与化身' },
-      { id: 'memory', label: '记忆图谱', icon: Brain, group: '角色与化身' },
-      { id: 'pet', label: '桌宠工坊', icon: Fish, group: '角色与化身' },
+      { id: 'voice', label: '声音与表演', icon: AudioLines, group: '角色' },
+      { id: 'memory', label: '记忆', icon: Database, group: '角色' },
     ],
   },
   {
-    label: '生活与舞台',
+    label: '化身',
     items: [
-      { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '生活与舞台', live: true },
-      { id: 'coop', label: '联机协作', icon: Users, group: '生活与舞台' },
-      { id: 'obs', label: 'OBS 舞台', icon: MonitorPlay, group: '生活与舞台' },
+      { id: 'pet', label: '桌宠工坊', icon: Shapes, group: '化身' },
     ],
   },
   {
-    label: '能力与治理',
+    label: '生活',
     items: [
-      { id: 'providers', label: '模型与饭碗', icon: Cpu, group: '能力与治理' },
-      { id: 'harness', label: 'Harness', icon: Terminal, group: '能力与治理' },
-      { id: 'plugins', label: '扩展与权限', icon: Blocks, group: '能力与治理' },
+      { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '生活', live: true },
+      { id: 'coop', label: '联机协作', icon: Users, group: '生活' },
+      { id: 'obs', label: '直播与 OBS', icon: Radio, group: '生活' },
     ],
   },
+  {
+    label: '能力',
+    items: [
+      { id: 'providers', label: '模型与饭碗', icon: Bot, group: '能力' },
+      { id: 'plugins', label: '插件 · MCP · 技能', icon: Puzzle, group: '能力' },
+      { id: 'harness', label: 'Harness 智能体', icon: SquareTerminal, group: '能力' },
+    ],
+  },
+  // 治理：P3-03 设备与租约、P4 安全与授权 / 进化引擎落地后放入；组内无项时自动隐藏
+  { label: '治理', items: [] },
 ];
 
 const MARK = whaleMarkPaths();
+const PET_ASSET = '../pet-stage/assets/blue-whale-maid/';
+const IDLE_CLIP = `${PET_ASSET}${encodeURIComponent('待机呼吸休闲')}.webm`;
 
-const WHALE_SVG = (
-  <svg style={{ width: 22, height: 22, flexShrink: 0 }} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d={MARK.tail} fill="var(--blue)" />
-    <path d={MARK.body} fill="var(--blue)" />
-    <path d={MARK.band} stroke="#F6FAFF" strokeWidth="1.7" strokeLinecap="round" />
-    <circle cx={MARK.eye.cx} cy={MARK.eye.cy} r={MARK.eye.r} fill="#06182E" />
-    <circle cx={MARK.glint.cx} cy={MARK.glint.cy} r={MARK.glint.r} fill="#FFFFFF" />
-  </svg>
-);
+function BrandMark(): React.JSX.Element {
+  return (
+    <span className="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d={MARK.tail} fill="currentColor" />
+        <path d={MARK.body} fill="currentColor" />
+        <path d={MARK.band} stroke="var(--inverse)" strokeWidth={1.7} strokeLinecap="round" />
+        <circle cx={MARK.eye.cx} cy={MARK.eye.cy} r={MARK.eye.r} fill="var(--inverse)" />
+        <circle cx={MARK.glint.cx} cy={MARK.glint.cy} r={MARK.glint.r} fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+/** 底部角色卡的小鲸待机动画；加载失败或减少动效时回退为首字头像 */
+function RailAvatar({ name }: { name: string }): React.JSX.Element {
+  const [failed, setFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = (): void => {
+      const video = videoRef.current;
+      if (video === null) return;
+      if (mq.matches) video.pause();
+      else void video.play().catch(() => undefined);
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  return (
+    <span className="pv" aria-hidden="true">
+      {failed
+        ? <span className="fallback">{name.slice(0, 1)}</span>
+        : (
+          <video
+            ref={videoRef}
+            src={IDLE_CLIP}
+            muted
+            loop
+            autoPlay
+            playsInline
+            preload="metadata"
+            onError={() => setFailed(true)}
+          />
+        )}
+    </span>
+  );
+}
 
 export interface SidebarProps {
   tab: Tab;
@@ -93,7 +147,9 @@ export function Sidebar({
 }: SidebarProps): React.JSX.Element {
   const pct = Math.min(100, Math.round((rice / riceCap) * 100));
   const [characterMenuOpen, setCharacterMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ left: number; bottom: number } | null>(null);
   const characterMenuRef = useRef<HTMLDivElement>(null);
+  const switchRef = useRef<HTMLButtonElement>(null);
   const selectedCharacter = characters.find((character) => character.id === characterId);
 
   useEffect(() => {
@@ -111,50 +167,28 @@ export function Sidebar({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [characterMenuOpen]);
+
+  const toggleCharacterMenu = (): void => {
+    if (characters.length === 0) return;
+    if (characterMenuOpen) {
+      setCharacterMenuOpen(false);
+      return;
+    }
+    const rect = switchRef.current?.getBoundingClientRect();
+    if (rect !== undefined) {
+      setMenuPos({ left: Math.max(8, rect.left), bottom: window.innerHeight - rect.top + 8 });
+    }
+    setCharacterMenuOpen(true);
+  };
+
   return (
     <aside className="wb-side">
-      <div className="wb-brand">
-        {WHALE_SVG}
-        <span className="t" title={APP_TAGLINE} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{APP_NAME}</span>
-        <div ref={characterMenuRef} style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0 }}>
-          <button
-            type="button"
-            data-character-switch
-            aria-label={`切换陪伴角色，当前${selectedCharacter?.displayName ?? '未选择'}`}
-            aria-haspopup="menu"
-            aria-expanded={characterMenuOpen}
-            disabled={characters.length === 0}
-            onClick={() => setCharacterMenuOpen((open) => !open)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 108, padding: '5px 7px', borderRadius: 999, border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 10.5, whiteSpace: 'nowrap', opacity: characters.length === 0 ? 0.6 : 1 }}
-          >
-            <Fish size={12} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedCharacter?.displayName ?? '角色'}</span>
-            <ChevronDown size={11} />
-          </button>
-          {characterMenuOpen && (
-            <div
-              role="menu"
-              aria-label="选择陪伴角色"
-              className="card"
-              style={{ position: 'absolute', zIndex: 60, top: 'calc(100% + 6px)', right: 0, width: 190, maxHeight: 280, overflowY: 'auto', padding: 5, background: 'var(--surface-solid)', boxShadow: 'var(--shadow-2)' }}
-            >
-              {characters.map((character) => (
-                <button
-                  key={character.id}
-                  type="button"
-                  role="menuitemradio"
-                  data-character-option={character.id}
-                  aria-checked={characterId === character.id}
-                  onClick={() => { onSelectCharacter(character.id); setCharacterMenuOpen(false); }}
-                  style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '8px 9px', border: 0, borderRadius: 8, background: characterId === character.id ? 'var(--blue-dim)' : 'transparent', color: characterId === character.id ? 'var(--blue)' : 'var(--text-1)', textAlign: 'left', fontSize: 11.5 }}
-                >
-                  <span>{character.displayName}</span>
-                  {characterId === character.id && <span aria-hidden="true">当前</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className="wb-brand" title={APP_TAGLINE}>
+        <BrandMark />
+        <span className="t">
+          {APP_NAME}
+          <small>Whale Isle · V2</small>
+        </span>
       </div>
       <div className="wb-nav-scroll">
         {NAV_GROUPS.map((group) => {
@@ -192,30 +226,69 @@ export function Sidebar({
         })}
       </div>
       <div className="wb-side-foot">
-        <div className="mb-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5" style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)' }}>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: 'var(--text-1)' }}>
-              <span className="truncate">{selectedCharacter?.displayName ?? '小鲸'}</span>
-              <span className="mono rounded-full px-1.5 py-0.5 text-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent-line)' }}>主角色</span>
+        <div ref={characterMenuRef}>
+          <button
+            ref={switchRef}
+            type="button"
+            data-character-switch
+            className="rail-me"
+            aria-label={`切换陪伴角色，当前${selectedCharacter?.displayName ?? '未选择'}`}
+            aria-haspopup="menu"
+            aria-expanded={characterMenuOpen}
+            disabled={characters.length === 0}
+            onClick={toggleCharacterMenu}
+          >
+            <RailAvatar name={selectedCharacter?.displayName ?? '鲸'} />
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <b>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedCharacter?.displayName ?? '小鲸'}
+                </span>
+              </b>
+              <span className="sub">
+                <span className="role-tag">主角色</span>
+                <span className="sub-text">{presenceSummary ?? '桌面陪伴中 · 本地运行'}</span>
+              </span>
+            </span>
+            <ChevronsUpDown size={13} className="chev" />
+          </button>
+          {characterMenuOpen && menuPos !== null && (
+            <div
+              role="menu"
+              aria-label="选择陪伴角色"
+              className="rail-me-menu"
+              style={{ left: menuPos.left, bottom: menuPos.bottom }}
+            >
+              <div className="menu-eyebrow">切换角色</div>
+              {characters.map((character) => (
+                <button
+                  key={character.id}
+                  type="button"
+                  role="menuitemradio"
+                  data-character-option={character.id}
+                  aria-checked={characterId === character.id}
+                  onClick={() => { onSelectCharacter(character.id); setCharacterMenuOpen(false); }}
+                >
+                  <span>{character.displayName}</span>
+                  {characterId === character.id && <span className="ml-auto text-[10px]">当前</span>}
+                </button>
+              ))}
             </div>
-            <div className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
-              {presenceSummary ?? '桌面陪伴中 · 本地运行'}
-            </div>
-          </div>
+          )}
         </div>
-        <div className="wb-rice-row">
+        <div className="wb-rice-row" style={{ marginTop: 8 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Wheat size={14} style={{ color: 'var(--amber)' }} />赛博饭碗
+            <Wheat size={13} style={{ color: 'var(--amber)' }} />赛博饭碗
           </span>
           <b style={{ color: pct <= 15 ? 'var(--amber)' : 'var(--green)' }}>{rice.toLocaleString()} 粒</b>
         </div>
         <div className="wb-rice-bar"><i style={{ width: `${Math.max(4, pct)}%` }} /></div>
         <div className="wb-foot-actions">
           <button className="wb-foot-btn" onClick={onFeed} title="投喂 5,000 粒米">
-            <Plus size={12} />投喂 5k
+            <Plus size={12} />投喂
           </button>
           <button className="wb-foot-btn" onClick={onOpenCommandPalette} title="打开命令面板（⌘K）">
-            <Search size={12} />命令
+            <Search size={12} />⌘K
           </button>
         </div>
       </div>

@@ -13,6 +13,7 @@ import {
   Activity,
   AudioLines,
   Brain,
+  Compass,
   Database,
   Gamepad2,
   Gauge,
@@ -52,6 +53,8 @@ import type {
   VoiceProviderStatus,
 } from '@workbench/shared-protocol';
 import type { V2MemoryQueryResult } from '../bridge';
+import { PageHead } from '../shell/page-head';
+import { EmptyIllustration } from '../shell/empty-illustration';
 import { LicenseBadge, SonarRing, StageBadge } from '../v2/signature-widgets';
 
 const ACTIVITIES: Array<{ mode: LifeActivityKind; label: string }> = [
@@ -524,20 +527,25 @@ export function LifeConsoleView({
   const activeEmbodiment = snapshot?.embodiments.find((e) => e.active) ?? snapshot?.embodiments[0];
 
   return (
-    <div data-v2-life-console className="mx-auto max-w-[1360px] space-y-4 px-6 py-5 rise">
-      {/* Tidepaper Character-First Editorial Hero */}
-      <section className="card flex flex-wrap items-center gap-4 px-6 py-5">
-        <SonarRing
-          expression={snapshot?.activityState.expression ?? 'idle'}
-          halted={snapshot?.activityState.halted ?? false}
-          size={42}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="wb-eyebrow mb-1">Whale Isle · Character First · 潮汐纸生命总览</div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="wb-display text-2xl">
-              {snapshot?.identity.displayName ?? '小鲸'} · 数字生命与统一舞台
-            </h1>
+    <div data-v2-life-console className="wb-page space-y-4 rise">
+      <PageHead
+        eyebrow="此刻 · 生命中枢"
+        eyebrowIcon={Compass}
+        title={<>{snapshot?.identity.displayName ?? '小鲸'} · 数字生命与统一舞台</>}
+        description={(
+          <>
+            12 域单一事实源（活动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.activityState.mode ?? 'companion'}</b> ·
+            情绪：<b style={{ color: 'var(--text-1)' }}>{snapshot?.emotion.label ?? '平静'}</b> ·
+            驱动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.motivation.reason ?? '桌面陪伴'}</b>）—— 全量直连 Electron 主进程，无虚假数值。
+          </>
+        )}
+        meta={(
+          <>
+            <SonarRing
+              expression={snapshot?.activityState.expression ?? 'idle'}
+              halted={snapshot?.activityState.halted ?? false}
+              size={22}
+            />
             <span className="mono pill">{snapshot?.identity.characterId ?? 'char_xiaojing'}</span>
             {activeEmbodiment && <LicenseBadge scope={activeEmbodiment.licenseScope} compact />}
             {storageInfo && (
@@ -546,21 +554,18 @@ export function LifeConsoleView({
                 {storageInfo.engine} · v{storageInfo.schemaVersion ?? '?'} · {storageInfo.integrity}
               </span>
             )}
-          </div>
-          <p className="mt-1.5 text-xs" style={{ color: 'var(--text-2)' }}>
-            12 域单一事实源（活动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.activityState.mode ?? 'companion'}</b> ·
-            情绪：<b style={{ color: 'var(--text-1)' }}>{snapshot?.emotion.label ?? '平静'}</b> ·
-            驱动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.motivation.reason ?? '桌面陪伴'}</b>）—— 全量直连 Electron 主进程，无虚假数值。
-          </p>
-        </div>
-        <button
-          type="button"
-          className="btn-pill ghost"
-          onClick={() => { void onSnapshotChanged(); void loadAll(); }}
-        >
-          <RefreshCw size={12} />刷新全舱
-        </button>
-      </section>
+          </>
+        )}
+        actions={(
+          <button
+            type="button"
+            className="btn-pill ghost"
+            onClick={() => { void onSnapshotChanged(); void loadAll(); }}
+          >
+            <RefreshCw size={12} />刷新全舱
+          </button>
+        )}
+      />
 
       {/* Grid 1: CharacterCore & LifeRuntime + Multi-Track Voice */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -596,7 +601,7 @@ export function LifeConsoleView({
 
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Goals */}
-            <div className="inset space-y-2 p-3">
+            <div className="inset min-w-0 space-y-2 p-3">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span>活跃目标栈（Goals）</span>
                 <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
@@ -624,11 +629,11 @@ export function LifeConsoleView({
                   <Plus size={11} />添加
                 </button>
               </div>
-              <div className="max-h-36 space-y-1 overflow-y-auto">
+              <div className="max-h-36 min-w-0 space-y-1 overflow-y-auto overflow-x-hidden">
                 {(snapshot?.goals ?? []).slice(-6).reverse().map((g) => (
-                  <div key={g.goalId} data-v2-goal-item className="rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
-                    <span className="font-medium">{g.title}</span>
-                    <span className="mono ml-1.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>[{g.status}]</span>
+                  <div key={g.goalId} data-v2-goal-item className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
+                    <span className="min-w-0 flex-1 truncate font-medium" title={g.title}>{g.title}</span>
+                    <span className="mono shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px]" style={{ color: 'var(--text-3)', background: 'var(--inset)', whiteSpace: 'nowrap' }}>{g.status}</span>
                   </div>
                 ))}
                 {(snapshot?.goals.length ?? 0) === 0 && (
@@ -638,7 +643,7 @@ export function LifeConsoleView({
             </div>
 
             {/* Commitments */}
-            <div className="inset space-y-2 p-3">
+            <div className="inset min-w-0 space-y-2 p-3">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span>主仆约定账本（Commitments）</span>
                 <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
@@ -666,11 +671,11 @@ export function LifeConsoleView({
                   <Plus size={11} />记下
                 </button>
               </div>
-              <div className="max-h-36 space-y-1 overflow-y-auto">
+              <div className="max-h-36 min-w-0 space-y-1 overflow-y-auto overflow-x-hidden">
                 {(snapshot?.commitments ?? []).slice(-6).reverse().map((c) => (
-                  <div key={c.commitmentId} data-v2-commitment-item className="rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
-                    <span className="font-medium">{c.title}</span>
-                    <span className="mono ml-1.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>{c.status}</span>
+                  <div key={c.commitmentId} data-v2-commitment-item className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
+                    <span className="min-w-0 flex-1 truncate font-medium" title={c.title}>{c.title}</span>
+                    <span className="mono shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px]" style={{ color: 'var(--text-3)', background: 'var(--inset)', whiteSpace: 'nowrap' }}>{c.status}</span>
                   </div>
                 ))}
                 {(snapshot?.commitments.length ?? 0) === 0 && (
@@ -910,6 +915,12 @@ export function LifeConsoleView({
                 场次摘要 {liveSnap?.summaryCount ?? 0} · 拦截点歌 {liveSnap?.blockedSongLog.length ?? 0}
               </span>
             </div>
+            {!liveSnap?.active && (
+              <div className="flex flex-col items-center gap-1.5 py-2 text-center">
+                <EmptyIllustration name="live-offline" alt="尚未开播" width={140} />
+                <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>未开播：可先开本地回放会话；真实平台流需要先完成授权配置。</span>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {!liveSnap?.active ? (
                 <button
@@ -1271,6 +1282,12 @@ export function LifeConsoleView({
         </div>
 
         <div className="space-y-1.5">
+          {memHits.length === 0 && (
+            <div className="flex flex-col items-center gap-2 py-3 text-center">
+              <EmptyIllustration name="empty-memory" alt="暂无记忆命中" width={160} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>还没有命中：换一个检索词，或先写入一条记忆。</span>
+            </div>
+          )}
           {memHits.map((hit) => (
             <div
               key={hit.id}

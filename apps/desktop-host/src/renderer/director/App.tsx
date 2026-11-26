@@ -38,7 +38,7 @@ import { toolLabel, useGameHealth, type ReceiptFilter } from './game-panel';
 import { NAV_GROUPS, Sidebar, type Tab } from './shell/sidebar';
 import { Topbar, type ThemeMode, type ThemeSkin, type TideAccent } from './shell/topbar';
 import { CommandPalette, type CommandAction } from './shell/command-palette';
-import { ControlOwnershipHud } from './v2/signature-widgets';
+import { ControlOwnershipHud, type ComputerLeaseView } from './v2/signature-widgets';
 import { ChatAside, ChatView, parseDirective } from './views/chat-view';
 import { GameWorkspaceView, type AvatarSyncViewState } from './views/stardew-view';
 import { LifeConsoleView } from './views/life-console-view';
@@ -116,6 +116,49 @@ function initialAccent(): TideAccent {
   const saved = localStorage.getItem('wb-accent');
   if (saved === 'coral' || saved === 'sea' || saved === 'whale' || saved === 'kelp' || saved === 'plum') return saved;
   return 'coral';
+}
+
+/** ADR-004：把 P3-03 的 BrowserComputerSnapshot 映射为 HUD 的桌面租约视图；读取失败时返回 null 显示未接入 */
+function buildComputerLeaseView(snapshot: BrowserComputerSnapshot): ComputerLeaseView {
+  const deviceId = 'host-primary';
+  const lease = snapshot.activeLeases.find((item) => item.deviceId === deviceId);
+  const humanOverride = snapshot.humanOverrideDevices.includes(deviceId);
+  const pendingHandoffs = snapshot.pendingHandoffs.filter((item) => item.status === 'awaiting_human').length;
+  const inputMode = snapshot.inputExecutor.mode;
+  const base = { humanOverride, inputMode, pendingHandoffs, halted: snapshot.halted };
+
+  if (humanOverride) {
+    return {
+      ...base,
+      state: 'preempted',
+      label: '人类优先',
+      detail: '检测到用户物理输入 ≤1s，桌面租约已退回人类',
+      holderId: null,
+    };
+  }
+  if (snapshot.halted) {
+    return { ...base, state: 'halted', label: '已急停锁定', detail: 'P0 急停已撤销桌面租约' };
+  }
+  if (lease?.status === 'preempted_by_human') {
+    return { ...base, state: 'preempted', label: `人类已抢占 · ${lease.holderId}`, detail: lease.purpose, holderId: lease.holderId };
+  }
+  if (lease?.status === 'halted') {
+    return { ...base, state: 'halted', label: '已急停锁定', detail: lease.purpose, holderId: lease.holderId };
+  }
+  if (lease?.status === 'active') {
+    return {
+      ...base,
+      state: 'held',
+      label: `${lease.holderKind === 'human' ? '人类持有' : 'AI 持有'} · ${lease.holderId}`,
+      detail: lease.purpose,
+      holderId: lease.holderId,
+      purpose: lease.purpose,
+    };
+  }
+  if (snapshot.inputExecutor.permission === 'denied') {
+    return { ...base, state: 'permission_denied', label: '权限未授予', detail: 'OS 输入权限被拒绝，桌面租约不可用' };
+  }
+  return { ...base, state: 'free', label: '空闲 · 无人持有', detail: '当前没有桌面键鼠租约' };
 }
 
 export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {
@@ -879,17 +922,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         brainMode={brain.mode}
         asleep={asleep}
         busy={hudBusy}
-        computerLease={
-          autoSnap
-            ? {
-                active: autoSnap.activeLeases.length > 0,
-                holderId: autoSnap.activeLeases[0]?.holderId ?? null,
-                humanOverride: autoSnap.humanOverrideDevices.length > 0,
-                pendingHandoffs: autoSnap.pendingHandoffs.length,
-                runnerReady: true,
-              }
-            : null
-        }
+        computerLease={autoSnap === null ? null : buildComputerLeaseView(autoSnap)}
         onEmergencyHalt={() => void emergencyHalt('ControlOwnershipHud 急停')}
         onToggleTakeover={() => void toggleTakeover()}
         onResumeAutonomous={() => void resumeAutonomous()}
@@ -1073,11 +1106,11 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         </div>
       )}
 
-      <CommandPalette open={cmdkOpen} onOpenChange={setCmdkOpen} actions={paletteActions} />
+      <CommandPalette open={cmdkOpen} onOpenChange={setCmdkOpen} actions={paletteActions} onSay={sendText} />
       <Toaster
         theme={resolvedTheme}
         position="bottom-right"
-        toastOptions={{ style: { background: 'var(--surface-solid)', color: 'var(--text-1)', border: '1px solid var(--stroke-2)' } }}
+        toastOptions={{ className: 'wb-toast-item', style: { border: '1px solid transparent' } }}
       />
     </div>
   );

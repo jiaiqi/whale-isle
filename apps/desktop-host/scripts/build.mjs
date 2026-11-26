@@ -96,10 +96,13 @@ copyFileSync(join(appRoot, 'src/renderer/tray-popover/index.html'), join(popover
 // 品牌资源（应用图标 / 侧栏 favicon / WebUI logo）：assets/brand → dist/renderer/brand
 cpSync(join(appRoot, 'assets/brand'), join(appRoot, 'dist/renderer/brand'), { recursive: true });
 
+// 空状态插画（Codex @illustrations）：assets/illustrations → dist/renderer/illustrations
+cpSync(join(appRoot, 'assets/illustrations'), join(appRoot, 'dist/renderer/illustrations'), { recursive: true });
+
 // pet 素材（D14 随包分发）：pet-renderer/assets → dist/renderer/assets
 cpSync(
   join(repoRoot, 'packages/pet-renderer/assets'),
   join(appRoot, 'dist/renderer/pet-stage/assets'), // pet-stage html 在子目录，./assets 相对该目录解析
   { recursive: true },
 );
-console.log('desktop-host build ✓（main / preload / pet-stage / director + pet assets）');
+console.log('desktop-host build ✓（main / preload / pet-stage / director + pet assets + illustrations）');

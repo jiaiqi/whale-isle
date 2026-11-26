@@ -12,13 +12,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, Info, Server, SlidersHorizontal, TriangleAlert } from 'lucide-react';
+import { Bot, CheckCircle2, Download, Info, Server, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import {
   type DiningProfilePreset,
   type ModelProviderConfig,
   type WorkbenchRoleSlot,
 } from '@workbench/shared-protocol';
 import type { DirectorStore } from '@workbench/local-store/dexie';
+import { PageHead } from './shell/page-head';
 import type { ImportApplyView, ImportScanView, VaultStatusView } from './bridge';
 import { KEY_URL, SLOT_META, parsePastedEndpoint, shortError } from './providers/catalog';
 import { CustomProviderDialog, ImportDialog } from './providers/dialogs';
@@ -869,23 +870,30 @@ export function ProvidersPanel({ profiles, slotLabels, providers, store }: Props
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-4 px-6 py-3.5" style={{ borderBottom: '1px solid var(--stroke)' }}>
-        <div>
-          <h1 className="text-base font-semibold">模型与服务商</h1>
-          <div className="mt-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>内置主流服务商 + OpenCode Go + 自定义兼容端点 · 取消三档切换，改完即生效</div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button className="btn-pill ghost" onClick={openImport} data-provider-import>
-            <Download size={13} />导入 Magpie / CC Switch
-          </button>
-          <div className="seg-tabs">
-            <button className={`seg-tab${tab === 'providers' ? ' on' : ''}`} data-ptab="providers" onClick={() => setTab('providers')}>
-              <Server size={12} />服务商配置
-            </button>
-            <button className={`seg-tab${tab === 'defaults' ? ' on' : ''}`} data-ptab="defaults" onClick={() => setTab('defaults')}>
-              <SlidersHorizontal size={12} />默认模型 (6)
-            </button>
-          </div>
+      <div style={{ borderBottom: '1px solid var(--stroke)', flexShrink: 0 }}>
+        <div className="wb-page" style={{ padding: '18px 28px 14px' }}>
+          <PageHead
+            eyebrow="能力 · 模型"
+            eyebrowIcon={Bot}
+            title="模型与饭碗"
+            description="内置主流服务商 + OpenCode Go + 自定义兼容端点 · 取消三档切换，改完即生效"
+            compact
+            actions={(
+              <>
+                <button className="btn-pill ghost" onClick={openImport} data-provider-import>
+                  <Download size={13} />导入 Magpie / CC Switch
+                </button>
+                <div className="seg">
+                  <button className={tab === 'providers' ? 'on' : ''} data-ptab="providers" onClick={() => setTab('providers')}>
+                    <Server size={12} />服务商配置
+                  </button>
+                  <button className={tab === 'defaults' ? 'on' : ''} data-ptab="defaults" onClick={() => setTab('defaults')}>
+                    <SlidersHorizontal size={12} />默认模型 (6)
+                  </button>
+                </div>
+              </>
+            )}
+          />
         </div>
       </div>
 

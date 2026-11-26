@@ -8,6 +8,7 @@ import {
   AudioLines, Blocks, Brain, Cpu, Fish, Flame, MessageSquare, MonitorPlay, Package, Play, RefreshCw, ShieldCheck, Sprout, Swords, Terminal,
   type LucideIcon,
 } from 'lucide-react';
+import { PageHead } from './shell/page-head';
 
 export interface PluginCatalogItem {
   id: string;
@@ -108,14 +109,13 @@ export function PluginsPanel({ enabled, onToggle }: PluginsPanelProps): React.JS
     setBusy(null);
   };
   return (
-    <div className="mx-auto max-w-[1000px] px-6 py-5">
-      <header className="mb-4">
-        <h1 className="flex items-center gap-2 text-xl font-semibold"><Blocks size={18} /> 插件与权限策略</h1>
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
-          {activeCount} enabled / {PLUGIN_CATALOG.length - activeCount} disabled ·
-          插件启停即时影响侧栏与页面可见性（运行期热插拔由 plugin-kit 承接）
-        </p>
-      </header>
+    <div className="wb-page">
+      <PageHead
+        eyebrow="能力 · 插件"
+        eyebrowIcon={Blocks}
+        title="插件 · MCP · 技能"
+        description={`${activeCount} enabled / ${PLUGIN_CATALOG.length - activeCount} disabled · 插件启停即时影响侧栏与页面可见性（运行期热插拔由 plugin-kit 承接）`}
+      />
 
       <div className="card mb-4 overflow-hidden">
         {PLUGIN_CATALOG.map((p) => {

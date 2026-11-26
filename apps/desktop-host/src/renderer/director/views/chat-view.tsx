@@ -6,10 +6,11 @@
 import type { RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Brain, Radio, Send, ShieldAlert, Target, Zap } from 'lucide-react';
+import { Brain, Send, ShieldAlert, Target, Zap } from 'lucide-react';
 import type { AutodriveEventView } from '../bridge';
 import { GAME_STATUS_COLOR, decisionBadgeOf, statusLabel, toolLabel } from '../game-panel';
 import { ReceiptChip, StageBadge } from '../v2/signature-widgets';
+import { EmptyIllustration } from '../shell/empty-illustration';
 import type { Tab } from '../shell/sidebar';
 
 export const SLASH_COMMANDS = [
@@ -148,7 +149,7 @@ export function ChatView(props: {
         <div className="stagger mx-auto max-w-3xl">
           {events.length === 0 && (
             <div className="card mt-10 px-6 py-8 text-center">
-              <Radio size={22} className="floaty mx-auto mb-3" style={{ color: 'var(--blue)' }} />
+              <EmptyIllustration name="empty-chat" alt="小鲸在纸面码头待命" width={200} className="mb-3" />
               <p className="text-sm font-semibold">小鲸待命中</p>
               <p className="mt-1.5 text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
                 点右上「启动自动驾驶」接管星露谷（需游戏 + BWF Mod MCP 就绪）<br />

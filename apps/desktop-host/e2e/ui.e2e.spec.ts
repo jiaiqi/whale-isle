@@ -206,14 +206,83 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
           green: contrast(css.getPropertyValue('--green'), surface),
         };
       });
+
+      // 急停横幅与「急停 F8」按钮：按实际计算色（含半透明叠层）校验 ≥4.5:1。
+      const readHaltContrast = async () => director.evaluate(() => {
+        const parseColor = (value: string): [number, number, number, number] => {
+          const match = /^rgba?\(([^)]+)\)$/i.exec(value.trim());
+          if (match === null) return [0, 0, 0, 1];
+          const parts = (match[1] ?? '').split(',').map((part) => Number.parseFloat(part.trim()));
+          return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 1];
+        };
+        const composite = (foreground: readonly number[], background: readonly number[]): number[] => {
+          const alpha = foreground[3] ?? 1;
+          return [0, 1, 2].map((index) => (foreground[index] ?? 0) * alpha + (background[index] ?? 0) * (1 - alpha));
+        };
+        const effectiveBackground = (element: Element): number[] => {
+          const layers: number[][] = [];
+          let node: Element | null = element;
+          while (node !== null) {
+            const color = parseColor(getComputedStyle(node).backgroundColor);
+            if ((color[3] ?? 1) > 0) layers.push(color);
+            if ((color[3] ?? 1) >= 1) break;
+            node = node.parentElement;
+          }
+          let resolved = [255, 255, 255];
+          for (let index = layers.length - 1; index >= 0; index -= 1) {
+            const layer = layers[index];
+            if (layer !== undefined) resolved = composite(layer, resolved);
+          }
+          return resolved;
+        };
+        const linear = (channel: number): number => {
+          const value = channel / 255;
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        };
+        const luminance = (color: readonly number[]): number =>
+          0.2126 * linear(color[0] ?? 0) + 0.7152 * linear(color[1] ?? 0) + 0.0722 * linear(color[2] ?? 0);
+        const contrast = (element: Element, backgroundElement: Element = element): number => {
+          const foreground = parseColor(getComputedStyle(element).color);
+          const background = effectiveBackground(backgroundElement);
+          const first = luminance(foreground);
+          const second = luminance(background);
+          return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+        };
+        const stop = document.querySelector('.btn-stop');
+        const halted = document.querySelector('.wb-hud.is-halted');
+        const haltCopy = document.querySelector('.wb-halt-copy');
+        const resume = document.querySelector('[data-v2-hud-resume]');
+        const kbd = stop?.querySelector('.kbd');
+        return {
+          stop: stop === null ? 0 : contrast(stop),
+          stopKbd: stop === null || kbd === null ? 0 : contrast(kbd, stop),
+          halted: halted === null || haltCopy === null ? 0 : contrast(haltCopy, halted),
+          resume: resume === null ? 0 : contrast(resume),
+        };
+      });
+      const assertHaltContrast = async (): Promise<void> => {
+        const normal = await readHaltContrast();
+        expect(normal.stop).toBeGreaterThanOrEqual(4.5);
+        expect(normal.stopKbd).toBeGreaterThanOrEqual(4.5);
+        await director.click('[data-v2-hud-halt]');
+        await director.waitForSelector('.wb-hud.is-halted', { timeout: 5_000 });
+        const halted = await readHaltContrast();
+        expect(halted.halted).toBeGreaterThanOrEqual(4.5);
+        expect(halted.resume).toBeGreaterThanOrEqual(4.5);
+        await director.click('[data-v2-hud-resume]');
+        await director.waitForSelector('[data-v2-hud-halt]', { timeout: 5_000 });
+      };
+
       const firstTheme = await readThemeContrast();
       expect(firstTheme.tertiary).toBeGreaterThanOrEqual(4.5);
       expect(firstTheme.green).toBeGreaterThanOrEqual(4.5);
+      await assertHaltContrast();
       await director.click('[data-theme-toggle]');
       await director.waitForFunction((wasDark) => document.documentElement.classList.contains('dark') !== wasDark, firstTheme.isDark, { timeout: 5_000 });
       const secondTheme = await readThemeContrast();
       expect(secondTheme.tertiary).toBeGreaterThanOrEqual(4.5);
       expect(secondTheme.green).toBeGreaterThanOrEqual(4.5);
+      await assertHaltContrast();
       await director.click('[data-theme-toggle]');
       await director.waitForFunction((wasDark) => document.documentElement.classList.contains('dark') === wasDark, firstTheme.isDark, { timeout: 5_000 });
 

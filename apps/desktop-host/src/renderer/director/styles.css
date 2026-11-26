@@ -50,6 +50,7 @@
 @source "./shell/sidebar.tsx";
 @source "./shell/topbar.tsx";
 @source "./shell/command-palette.tsx";
+@source "./shell/page-head.tsx";
 @source "./v2/signature-widgets.tsx";
 @source "./views/chat-view.tsx";
 @source "./views/stardew-view.tsx";
