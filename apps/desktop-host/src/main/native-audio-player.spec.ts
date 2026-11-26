@@ -177,17 +177,17 @@ describe('ensureNativeAudioHelper', () => {
       return { ok: true };
     };
     const cacheDir = join(workDir, 'cache');
-    const first = ensureNativeAudioHelper({ appPath, cacheDir, compile });
+    const first = ensureNativeAudioHelper({ appPath, cacheDir, compile, platform: 'darwin' });
     expect(first.ok).toBe(true);
     expect(compiles).toHaveLength(1);
 
-    const second = ensureNativeAudioHelper({ appPath, cacheDir, compile });
+    const second = ensureNativeAudioHelper({ appPath, cacheDir, compile, platform: 'darwin' });
     expect(second.ok).toBe(true);
     expect(second.helperPath).toBe(first.helperPath);
     expect(compiles).toHaveLength(1);
 
     writeFileSync(source, '// v2\n');
-    const third = ensureNativeAudioHelper({ appPath, cacheDir, compile });
+    const third = ensureNativeAudioHelper({ appPath, cacheDir, compile, platform: 'darwin' });
     expect(third.ok).toBe(true);
     expect(third.helperPath).not.toBe(first.helperPath);
     expect(compiles).toHaveLength(2);
@@ -196,7 +196,7 @@ describe('ensureNativeAudioHelper', () => {
   it('编译失败与源码缺失都如实返回不可用', () => {
     workDir = mkdtempSync(join(tmpdir(), 'whale-audio-helper-'));
     const appPath = join(workDir, 'app');
-    expect(ensureNativeAudioHelper({ appPath, cacheDir: join(workDir, 'c') }).ok).toBe(false);
+    expect(ensureNativeAudioHelper({ appPath, cacheDir: join(workDir, 'c'), platform: 'darwin' }).ok).toBe(false);
 
     mkdirSync(join(workDir, 'tools', 'native'), { recursive: true });
     writeFileSync(join(workDir, 'tools', 'native', 'macos-audio-helper.swift'), '// v1\n');
@@ -204,8 +204,23 @@ describe('ensureNativeAudioHelper', () => {
       appPath,
       cacheDir: join(workDir, 'c'),
       compile: () => ({ ok: false, stderr: 'swiftc missing' }),
+      platform: 'darwin',
     });
     expect(failed.ok).toBe(false);
     expect(failed.reason).toContain('compile_failed');
+  });
+
+  it('非 darwin 平台一律如实报 unsupported_platform（CI 上可复跑）', () => {
+    workDir = mkdtempSync(join(tmpdir(), 'whale-audio-helper-'));
+    mkdirSync(join(workDir, 'tools', 'native'), { recursive: true });
+    writeFileSync(join(workDir, 'tools', 'native', 'macos-audio-helper.swift'), '// v1\n');
+    const result = ensureNativeAudioHelper({
+      appPath: join(workDir, 'app'),
+      cacheDir: join(workDir, 'c'),
+      compile: () => ({ ok: true }),
+      platform: 'linux',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('unsupported_platform');
   });
 });

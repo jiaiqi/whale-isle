@@ -50,8 +50,11 @@ export function ensureNativeAudioHelper(options: {
   appPath: string;
   cacheDir: string;
   compile?: (source: string, out: string) => { ok: boolean; stderr?: string };
+  /** 测试可注入；生产固定 process.platform（非 darwin 一律如实报不可用） */
+  platform?: NodeJS.Platform;
 }): NativeAudioHelperInfo {
-  if (process.platform !== 'darwin') return { ok: false, reason: 'unsupported_platform' };
+  const platform = options.platform ?? process.platform;
+  if (platform !== 'darwin') return { ok: false, reason: 'unsupported_platform' };
   const source = locateAudioHelperSource(options.appPath);
   if (source === null) return { ok: false, reason: 'source_not_found' };
 
