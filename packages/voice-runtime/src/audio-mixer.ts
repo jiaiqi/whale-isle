@@ -98,7 +98,8 @@ export class SpeechFloorArbiter {
       return true;
     }
     if (this.active?.request.leaseId === leaseId) {
-      this.finishActive('INTERRUPTED_BY_P0');
+      // 显式取消不是 P0 抢占：如实标记 CANCELLED
+      this.finishActive('CANCELLED');
       this.dequeue();
       return true;
     }
@@ -108,7 +109,7 @@ export class SpeechFloorArbiter {
   stopAll(): void {
     this.queue = [];
     if (this.active !== null) {
-      this.finishActive('INTERRUPTED_BY_P0');
+      this.finishActive('CANCELLED');
     }
   }
 

@@ -516,7 +516,8 @@ describe('SpeechFloorArbiter & multi-track AudioMixer (V2-P1-02)', () => {
       abort: () => undefined,
     });
     expect(mixer.speechFloor.cancel('active-1')).toBe(true);
-    expect(receipts).toContain('active-1:INTERRUPTED_BY_P0');
+    // 主动取消如实标 CANCELLED（此前误标 INTERRUPTED_BY_P0 并被本断言固化）
+    expect(receipts).toContain('active-1:CANCELLED');
 
     await vi.advanceTimersByTimeAsync(10);
     expect(receipts).toContain('queued-normal:COMPLETED');
