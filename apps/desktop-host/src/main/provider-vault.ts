@@ -301,6 +301,33 @@ function saveVaultEntries(vaultPath: string, entries: Record<string, VaultEntry>
 }
 
 /**
+ * 删除指定凭据并落盘（2026-11-26 补上：此前 V2 内核 `SecretVaultPort.delete` 是空操作，
+ * AccountVault 的级联吊销因此静默失效、密文永久残留）。
+ * 仅供主进程内部（AccountVault 级联删除）使用，不经任何 `providers:*` IPC 暴露。
+ */
+export function deleteVaultKey(vaultPath: string, providerId: string): boolean {
+  const entries = loadVaultEntries(vaultPath);
+  if (!(providerId in entries)) return false;
+  delete entries[providerId];
+  saveVaultEntries(vaultPath, entries);
+  return true;
+}
+
+/**
+ * 账号保险箱命名空间（V2-P3-03 `AccountVault` 的 `account:*` 条目与供应商 Key 共用同一 vault 文件）。
+ * 供应商通道的全部 IPC 一律拒绝该前缀：否则渲染进程可借 `providers:copy-key` 把社交凭据写入剪贴板，
+ * 或借 `providers:discover-models` / `check-balance` / `test-chat` 把凭据作为 Bearer 发到任意 baseUrl，
+ * 击穿「凭据永不下行明文」的安全边界。
+ */
+const ACCOUNT_SCOPE_PREFIX = 'account:';
+
+function isAccountScopedId(id: unknown): id is string {
+  return typeof id === 'string' && id.startsWith(ACCOUNT_SCOPE_PREFIX);
+}
+
+const ACCOUNT_SCOPE_ERROR = '该标识属于账号保险箱，不能经供应商通道访问';
+
+/**
  * safeStorage 在 macOS 上产出 `v10` 前缀的 AES-CBC 密文（无认证标签）：用错钥匙时可能不抛错、
  * 直接返回乱码。API Key 实际都是可打印 ASCII 且不含空白，这里显式校验，避免把乱码当 Key 使用。
  */
@@ -636,7 +663,7 @@ const KEY_CONSOLE_HOSTS: ReadonlySet<string> = new Set([
 export function registerProviderVaultIpc(vaultPath: string): void {
   ipcMain.handle('providers:vault-status', (_event, providerIds?: unknown): VaultStatusReport => {
     const ids = Array.isArray(providerIds)
-      ? providerIds.filter((id): id is string => typeof id === 'string' && id !== '')
+      ? providerIds.filter((id): id is string => typeof id === 'string' && id !== '' && !isAccountScopedId(id))
       : undefined;
     return inspectVault(vaultPath, ids);
   });
@@ -658,17 +685,20 @@ export function registerProviderVaultIpc(vaultPath: string): void {
     if (typeof providerId !== 'string' || typeof plainKey !== 'string' || plainKey.trim() === '') {
       return { ok: false, error: 'providerId 与 key 均不能为空' };
     }
+    if (isAccountScopedId(providerId)) return { ok: false, error: ACCOUNT_SCOPE_ERROR };
     const written = writeVaultKey(vaultPath, providerId, plainKey);
     if (!written.ok) return written;
     return { ok: true, mask: written.mask };
   });
 
   ipcMain.handle('providers:key-mask', (_event, providerId: string): VaultResult => {
+    if (isAccountScopedId(providerId)) return { ok: false, error: ACCOUNT_SCOPE_ERROR };
     const resolved = resolveProviderKey(vaultPath, providerId);
     return { ok: true, mask: resolved.key === null ? '' : (resolved.mask ?? maskKey(resolved.key)) };
   });
 
   ipcMain.handle('providers:discover-models', async (_event, args: DiscoverModelsArgs & { protocol?: 'openai' | 'anthropic' }): Promise<VaultResult> => {
+    if (isAccountScopedId(args?.providerId)) return { ok: false, error: ACCOUNT_SCOPE_ERROR };
     const key = readVaultKey(vaultPath, args.providerId);
     if (key === null && !isLoopbackUrl(args.baseUrl)) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };
     if (args.protocol === 'anthropic') return { ok: false, error: 'Anthropic 协议不提供 /models 列表，请手动添加模型 ID' };
@@ -683,6 +713,7 @@ export function registerProviderVaultIpc(vaultPath: string): void {
   // 复制已保存 Key 到系统剪贴板（2026-11-22 用户指令）：明文只在主进程内存→剪贴板，绝不回传渲染进程
   ipcMain.handle('providers:copy-key', (_event, providerId: string): VaultResult => {
     if (typeof providerId !== 'string' || providerId.trim() === '') return { ok: false, error: 'providerId 不能为空' };
+    if (isAccountScopedId(providerId)) return { ok: false, error: ACCOUNT_SCOPE_ERROR };
     const key = readVaultKey(vaultPath, providerId);
     if (key === null) return { ok: false, error: '该供应商尚未保存 API Key' };
     clipboard.writeText(key);
@@ -692,6 +723,7 @@ export function registerProviderVaultIpc(vaultPath: string): void {
   // 查询余额/额度（Magpie keybalance 思想）：主进程持 key 请求各厂商公开余额 API，渲染层只拿可读文案
   ipcMain.handle('providers:check-balance', async (_event, providerId: string): Promise<VaultResult> => {
     if (typeof providerId !== 'string' || providerId.trim() === '') return { ok: false, error: 'providerId 不能为空' };
+    if (isAccountScopedId(providerId)) return { ok: false, error: ACCOUNT_SCOPE_ERROR };
     const probe = BALANCE_PROBES[providerId];
     if (probe === undefined) return { ok: false, error: '该服务商暂无公开余额 API（OpenAI/Anthropic/MiniMax/火山方舟均不提供）' };
     const key = readVaultKey(vaultPath, providerId);
@@ -713,6 +745,7 @@ export function registerProviderVaultIpc(vaultPath: string): void {
   });
 
   ipcMain.handle('providers:test-chat', async (_event, args: TestChatArgs): Promise<VaultResult> => {
+    if (isAccountScopedId(args?.providerId)) return { ok: false, error: ACCOUNT_SCOPE_ERROR };
     const key = readVaultKey(vaultPath, args.providerId);
     // 本地引擎（loopback）无需凭据；云端必须先存 Key
     if (key === null && !isLoopbackUrl(args.baseUrl)) return { ok: false, error: '该供应商尚未保存 API Key，先在卡片里保存' };

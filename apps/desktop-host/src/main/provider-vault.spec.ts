@@ -54,6 +54,7 @@ vi.mock('electron', () => ({
 }));
 
 import {
+  deleteVaultKey,
   hasVaultKey,
   inspectVault,
   isMockKeychainLaunch,
@@ -61,6 +62,7 @@ import {
   maskKey,
   providerKeyEnvVar,
   readVaultKey,
+  registerProviderVaultIpc,
   resolveVaultPath,
   vaultFileName,
   writeVaultKey,
@@ -263,5 +265,67 @@ describe('日志零明文', () => {
     expect(output).not.toContain(envKey);
     expect(output).not.toContain(realKey.slice(0, 8));
     expect(report.providers.some((p) => p.mask !== undefined)).toBe(true);
+  });
+});
+
+describe('账号保险箱命名空间隔离（V2-P3-03 安全回归，2026-11-26）', () => {
+  it('deleteVaultKey 真实删除并幂等', () => {
+    expect(writeVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1', 'acct-secret-12345').ok).toBe(true);
+    expect(hasVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1')).toBe(true);
+    expect(deleteVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1')).toBe(true);
+    expect(hasVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1')).toBe(false);
+    expect(deleteVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1')).toBe(false);
+  });
+
+  it('供应商 IPC 通道拒绝 account: 前缀：凭据不进剪贴板、不外发任意 baseUrl、不可被覆盖', async () => {
+    const { ipcMain, clipboard } = await import('electron');
+    const secret = 'acct-token-topsecret-9988';
+    expect(writeVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1', secret).ok).toBe(true);
+
+    registerProviderVaultIpc(vaultPath);
+    const calls = vi.mocked(ipcMain.handle).mock.calls as Array<[string, (...args: never[]) => unknown]>;
+    const handlers = new Map<string, (...args: never[]) => unknown>(calls);
+    const invoke = (channel: string, ...args: unknown[]): Promise<unknown> | unknown =>
+      (handlers.get(channel) as (...a: unknown[]) => unknown)({}, ...args);
+
+    // copy-key：剪贴板绝不能拿到账号凭据
+    const copied = invoke('providers:copy-key', 'account:char_xiaojing:bilibili:acct-1') as { ok: boolean; error?: string };
+    expect(copied.ok).toBe(false);
+    expect(copied.error).toContain('账号保险箱');
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+
+    // save-key：供应商通道不得覆盖账号凭据
+    const saved = invoke('providers:save-key', 'account:char_xiaojing:bilibili:acct-1', 'overwrite-attempt') as { ok: boolean };
+    expect(saved.ok).toBe(false);
+    expect(readVaultKey(vaultPath, 'account:char_xiaojing:bilibili:acct-1')).toBe(secret);
+
+    // discover-models / check-balance / test-chat：凭据不得发往攻击者控制的 baseUrl
+    for (const channel of ['providers:discover-models', 'providers:check-balance', 'providers:test-chat'] as const) {
+      const arg = channel === 'providers:check-balance'
+        ? 'account:char_xiaojing:bilibili:acct-1'
+        : { providerId: 'account:char_xiaojing:bilibili:acct-1', baseUrl: 'https://evil.example.com/v1', modelId: 'm' };
+      const res = (await invoke(channel, arg)) as { ok: boolean; error?: string };
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('账号保险箱');
+    }
+
+    // key-mask：掩码也不许借道供应商 IPC
+    const masked = invoke('providers:key-mask', 'account:char_xiaojing:bilibili:acct-1') as { ok: boolean };
+    expect(masked.ok).toBe(false);
+
+    // vault-status：account:* 从查询列表中被过滤，不暴露存在性
+    const status = invoke('providers:vault-status', ['account:char_xiaojing:bilibili:acct-1', 'deepseek-official']) as { providers: Array<{ providerId: string }> };
+    expect(status.providers.some((p) => p.providerId.startsWith('account:'))).toBe(false);
+  });
+
+  it('正常供应商 id 不受守门影响', async () => {
+    const { ipcMain, clipboard } = await import('electron');
+    writeVaultKey(vaultPath, 'deepseek-official', 'sk-normal-provider-0001');
+    registerProviderVaultIpc(vaultPath);
+    const calls = vi.mocked(ipcMain.handle).mock.calls as Array<[string, (...args: never[]) => unknown]>;
+    const handlers = new Map<string, (...args: never[]) => unknown>(calls);
+    const copy = handlers.get('providers:copy-key') as (e: unknown, id: string) => { ok: boolean };
+    expect(copy({}, 'deepseek-official').ok).toBe(true);
+    expect(clipboard.writeText).toHaveBeenCalledWith('sk-normal-provider-0001');
   });
 });

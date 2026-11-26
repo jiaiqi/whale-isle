@@ -93,6 +93,7 @@ import type { AutodriveHost } from './autodrive-host';
 import type { MemoryHost } from './memory-host';
 import type { VoiceHost } from './voice-host';
 import {
+  deleteVaultKey,
   hasVaultKey,
   inspectVault,
   readVaultKey,
@@ -118,7 +119,7 @@ function createElectronVaultPort(vaultPath: string): SecretVaultPort {
     has: (id: string) => hasVaultKey(vaultPath, id),
     mask: (id: string) => resolveProviderKey(vaultPath, id).mask ?? null,
     set: (id: string, plainSecret: string) => writeVaultKey(vaultPath, id, plainSecret),
-    delete: () => false, // 删除操作仍由 provider-vault IPC 统一管理
+    delete: (id: string) => deleteVaultKey(vaultPath, id),
     resolve: (id: string) => readVaultKey(vaultPath, id),
   };
 }
