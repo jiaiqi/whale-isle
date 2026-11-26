@@ -502,11 +502,17 @@ export function VoiceCenterPanel(props: {
                 「锁定」会用这条描述现场生成一条参考音频，再走 VoiceClone 锁声线（每次一次 API 调用）
               </span>
             </div>
+            <p className="mt-1 text-[10px]" style={{ color: 'var(--amber)' }} data-voice-timbre-notice>
+              07 是当前默认声线，但 owner 听过锁定版后判定「音色不对味」；02 / 08 / 12 为待选候选。
+              等 owner 听定一条再做一次性切换，现在不要当最终版。
+            </p>
             <div className="mt-1.5 grid gap-1">
               {MIMO_TIMBRE_PRESETS.map((timbre) => (
                 <div key={timbre.id} className="flex flex-wrap items-center gap-1.5" data-voice-timbre={timbre.id}>
                   <span className="text-[10.5px] font-semibold" style={{ color: 'var(--text-2)' }}>{timbre.label}</span>
-                  {timbre.isDefault && <span className="pill pill-blue" style={{ fontSize: 10 }}>默认</span>}
+                  {timbre.isDefault
+                    ? <span className="pill pill-blue" style={{ fontSize: 10 }}>默认 · 待复核</span>
+                    : <span className="pill" style={{ fontSize: 10 }}>候选</span>}
                   <span className="truncate text-[10px]" style={{ color: 'var(--text-3)' }} title={timbre.description}>{timbre.description}</span>
                   <button
                     type="button"

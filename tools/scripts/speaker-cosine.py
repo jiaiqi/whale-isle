@@ -65,6 +65,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument(
+        "--against",
+        default=None,
+        help="逐条与这个 wav 比（打印每条的余弦），用于「克隆输出 vs 设计版原样本」这类对照",
+    )
     parser.add_argument("wavs", nargs="+")
     args = parser.parse_args()
 
@@ -110,6 +115,24 @@ def main() -> int:
     if len(embeddings) < 2:
         print("可用嵌入少于 2 条，无法比较", file=sys.stderr)
         return 2
+
+    if args.against is not None:
+        against = Path(args.against)
+        if against.name not in names:
+            print(f"--against 的文件没进比较集合：{against}", file=sys.stderr)
+            return 2
+        idx = names.index(against.name)
+        base = embeddings[idx]
+        rows = [(name, cosine(base, emb)) for name, emb in zip(names, embeddings)]
+        print(f"对照基准：{against.name}")
+        for name, value in rows:
+            print(f"  {name}: {value:.4f}")
+        vals = [v for _, v in rows if not np.isnan(v)]
+        if vals:
+            print(f"余弦 均值 {statistics.fmean(vals):.4f} · 最小 {min(vals):.4f} · 最大 {max(vals):.4f} · "
+                  f"标准差 {statistics.pstdev(vals):.4f}（n={len(vals)}）")
+        print("（只反映音色/说话人相似度，不反映情感与听感）")
+        return 0
 
     pairs = [
         (names[i], names[j], cosine(embeddings[i], embeddings[j]))

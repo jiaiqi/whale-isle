@@ -12,6 +12,18 @@
 | 许可 | **DEV_ONLY_NON_COMMERCIAL**：上游 MiMo TTS 官方标价「限时免费」且页面无任何商用条款，因此这条音频只能用于开发与内部验证；商用前必须换用有明确商用授权的 TTS（并重做这条参考音频） |
 | 复现 | `WHALE_MIMO_VOICE_DESCRIPTION="软糯黏糊但带笑意的女声，撒娇里藏着坏主意，尾音轻轻上翘；自然地说，不要播音腔" npx tsx tools/scripts/bench-tts-ab.mts --provider mimo-voicedesign --consistency 1 --emotion none --from-vault --out artifacts/tts-ab/mimo-reference` |
 
+## 候选参考资产（02 / 08 / 12）
+
+| 文件 | 对应声线 | 状态 |
+| --- | --- | --- |
+| `xiaojing-02-yujie-leng.wav` | 02 御姐冷·年轻 | 候选，**默认档未引用** |
+| `xiaojing-08-nianhu-banshui.wav` | 08 黏糊·半睡 | 候选，**默认档未引用** |
+| `xiaojing-12-hanhan-difa.wav` | 12 憨憨·偏低发呆 | 候选，**默认档未引用** |
+
+三条与 07 同法生成（同句、中性自然语气），2026-11-27 用来做「设计版 vs 克隆版」对照与三候选锁定回归，
+数据见 `docs/v2/evidence/mimo-tts-candidate-integration.md` §2.15。许可同上（自产文本 + MiMo 生成，`DEV_ONLY_NON_COMMERCIAL`）。
+owner 听定之前，默认档仍指向 07 那条。
+
 ## 换声线时怎么做
 
 1. 语音中心「声线来源 → 声线库」里挑一条（02 / 07 / 08 / 12）；
