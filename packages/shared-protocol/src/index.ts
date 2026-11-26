@@ -1626,3 +1626,4 @@ export * from './live';
 export * from './browser-computer';
 export * from './model';
 export * from './social';
+export * from './song-console';

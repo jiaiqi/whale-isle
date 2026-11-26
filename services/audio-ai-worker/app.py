@@ -200,6 +200,8 @@ async def ws_audio(websocket: WebSocket) -> None:
 # ---------------------------------------------------------------------------
 # 声音工坊子路由（T-M5-17）
 # ---------------------------------------------------------------------------
+from song_pipeline import router as song_pipeline_router
 from voice_studio import router as voice_studio_router
 
 app.include_router(voice_studio_router)
+app.include_router(song_pipeline_router)

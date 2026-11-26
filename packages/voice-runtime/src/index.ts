@@ -5,3 +5,4 @@ export * from './lip-sync';
 export * from './providers';
 export * from './audio-mixer';
 export * from './performance';
+export * from './song-console';
