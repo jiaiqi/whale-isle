@@ -5,6 +5,14 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed（批次 B：审计遗留 4 个低危 bug 清零）
+
+- **Cookie 单向导入不回写** `electron-browser-engine.ts`：dispose 时把 Chromium partition 现状按 origin 分组原子回写 cookies.json（与导入互逆），人工交接登录态跨任务存活；补首批引擎单测 3 例。
+- **cancel 误标 INTERRUPTED_BY_P0**（两处实现）：`AudioPlaybackReceipt.status` 契约新增 `CANCELLED`（Zod + JSON Schema + Pydantic 同步生成）；主进程 `GlobalAudioLeaseManager` 与 `voice-runtime AudioMixer` 的 cancel/stopAll 如实标 CANCELLED，P0 抢占语义不变；气泡生命周期 cancelled 同 completed 收泡；`voice-runtime.spec.ts` 固化误标的断言已纠正；补主进程租约管理器首批单测 6 例。
+- **租约审计不落盘** `automation-security.ts`：`ComputerUseLeaseManager` 新增 `auditFilePath`，内存环形缓冲外逐条追加 JSONL（装配到 `userData/lease-audit.jsonl`），写失败只告警不炸业务；补单测。
+- **级联删除只展开一层** `memory-graph/store.ts`：`hardDelete` 衍生集改 BFS 不动点展开，二级衍生（摘要的摘要）不再漏删成孤儿；补二级衍生断言。
+- **附带**：契约生成物积压漂移（windowLayer/bubbleFontScale/facing/moving 等历史 Zod 改动漏跑 gen:contracts）已独立 chore 提交一次性补齐。
+
 ### Fixed（弹层 portal 统一收尾 + E2E 环境确定性）
 
 - **剩余 4 处弹层 portal 化**：`providers/dialogs.tsx`（导入外部配置、添加自定义服务商）与 `pet-studio/`（验收台、创作中心）统一 `createPortal` 到 body，摆脱 `.wb-main` 层叠上下文困局；App.tsx 启动弹窗经核实挂载在 `.wb-main` 之外、层叠正常，未动。
