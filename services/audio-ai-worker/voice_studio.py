@@ -389,7 +389,8 @@ def audition_svc(
 
 
 def _pet_voices_dir(pet_id: str) -> Path:
-    d = Path(__file__).parent / "assets" / "pets" / pet_id / "voices"
+    assets_root = Path(os.environ.get("WHALE_VOICE_ASSETS_ROOT", str(Path(__file__).parent / "assets")))
+    d = assets_root / "pets" / pet_id / "voices"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
