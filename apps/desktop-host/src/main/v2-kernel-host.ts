@@ -687,8 +687,9 @@ export async function createV2KernelHost(options: {
       platformReady: socialCapabilitiesStore
         .get()
         .entries.some((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public'),
-      // L1 浏览执行器已接线，但还没有「已实测的真实平台候选源」：不发起，避免空会话白吃预算。
-      // 真实平台浏览一律等 owner 逐项声明能力矩阵并实测后再接（来源表为空 = runnable false）。
+      // 注意：这里恒 false 是**有意**的，不是漏接线——执行器已接线（socialExecutor 就在上面构造），
+      // 但候选来源表为空，「没有可跑的来源」比「执行器不存在」更准确。
+      // 等 owner 授权首个真实平台并实测后，改成 socialExecutor.status().runnable 一行即可打通。
       executorReady: false,
       modelReady: autodriveRef?.getBrainMode().llmReady ?? false,
       activeSessionId: active?.sessionId ?? null,

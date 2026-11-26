@@ -120,8 +120,17 @@ owner 点名要求的四类全覆盖，另加六例：
 
 `pnpm verify:gate` → **7 过 / 0 跳过 / 0 待接线**；`pnpm typecheck` 零错误。
 
-### 6.5 仍然缺的
+### 6.5 证据等级
+
+| 项 | 等级 |
+| --- | --- |
+| 执行器四段端口与双门禁 | `[SIMULATION]`（`social-executor.spec.ts` 12 例） |
+| 宿主 `allowLocalFixture=false` + 空来源表 | `[TYPE-ONLY]`（构造与类型层面；未起 Electron 验证） |
+| 生活页执行器文案 | `[TYPE-ONLY]` |
+| 真实平台浏览 | **不存在**（未实现、未授权、未实测） |
+
+### 6.6 仍然缺的
 
 1. **没有任何真实平台候选源**：执行器不会真跑；首个真实平台须等 owner 逐项授权并实测。
-2. **`[E2E-HOST]` 未做**：生活页执行器文案只有类型与构建层面证据，无 Electron 截图断言。
+2. **`[E2E-HOST]` 未做**，该段文案证据等级为 **`[TYPE-ONLY]`**：只有类型检查与构建层面证据，无 Electron 截图断言。owner 2026-11-26 批示：为一段静态文案单起 Electron 断言不值当，等真实来源落地时同批做。
 3. **理解端到端未接**：`SocialBrowseUnderstander` 由宿主注入，目前尚无调用方把 `ContentUnderstandingPipeline` + `InterestSink` 串起来（等真实来源落地时同批接）。
