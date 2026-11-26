@@ -5,4 +5,6 @@ export * from './profile-stores';
 export * from './goals-commitments';
 export * from './life-runtime';
 export * from './social-runtime';
+export * from './content-understanding';
+export * from './interest-sink';
 export * from './character-core';

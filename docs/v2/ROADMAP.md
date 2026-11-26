@@ -142,8 +142,8 @@
   - `P3-04A`（`DONE`）：契约先行——`social.ts` L1 只读浏览会话/平台能力矩阵/内容理解/兴趣信号 + `model.ts` 多模态消息 parts（9 例契约单测，纯本地可验）
   - `P3-04B`（`DONE`）：model-gateway 多模态映射与脱敏（OpenAI image_url / Anthropic image block 双协议映射、文本与图片 URL 脱敏、supportsVision=false 预检跳过、入站契约校验；6 例新单测，包分支覆盖 94.27%；真实供应商多模态调用联调随 P3-04 整链验收）
   - `P3-04C`（`DONE`）：SocialRuntime L1 只读浏览内核（会话状态机 planned→active⇄paused/awaiting_human→completed/aborted、能力矩阵门禁「授权+已实测」双条件、L1 互动能力契约外再拦、maxItems/maxDurationMs 预算自动收官、事实事件广播；5 例单测，social-runtime.ts 分支覆盖 93.33%；runner 抓取接线归入 P3-04D 管线）
-  - `P3-04D`（`DOING`）：内容理解管线与兴趣沉淀
-  - `P3-04E`（`PENDING`）：日程调度接线与状态可见
+  - `P3-04D`（`DONE`）：内容理解管线与兴趣沉淀（`content-understanding.ts` 窄网关端口 + 多模态消息编排 + JSON 抽取 Zod 终审 + modelId 取回执真实路由；`interest-sink.ts` 兴趣信号确定性映射 ±0.5 封顶 + 噪声门槛 + PreferenceStore(topics) 带来源历史 + 记忆窄端口 event/concept 派生链；dependency-cruiser 边界经端口注入反转保持；8 例单测）
+  - `P3-04E`（`DOING`）：日程调度接线与状态可见
   - `P3-04F`（`PENDING`）：mock-harness 站点仿真与 E2E 验收
 - **`V2-P3-05`：多被动桌宠同屏展示（独立形象/动作/基础音色，主从隔离）**
 - **`V2-P3-06`（`IMPLEMENTED_UNVERIFIED`）：星露谷一键启动器与真实就绪探活**（`stardew-launcher.ts` 实现「安装探测 → 直接 spawn SMAPI → 等 BWF `get_state` 真实应答才置 `ready`」，已在运行去重、子进程 detached 不随宿主退出；回退 `open steam://rungameid/413150`；标题画面自动 `load_save({})`；顺带修复 `game-health.ts` 把「标题画面返回 200 + isError:false」误判为 `online` 的编造就绪缺陷。真机两种启动方式均实测进档，见 [P3-stardew-launcher-verification.md](./evidence/P3-stardew-launcher-verification.md)；剩余缺口：中控台按钮触发路径未单独录屏、Windows/Linux 仅纯函数单测、Steam 回退会打开 Terminal）

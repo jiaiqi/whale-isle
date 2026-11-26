@@ -20,6 +20,11 @@
 
 - **`character-core/social-runtime.ts`**：L1 浏览会话状态机（planned → active ⇄ paused / awaiting_human → completed / aborted），能力矩阵门禁「已授权 + 已实测（lastVerifiedAt>0）」双条件缺一即拒（REQ-SOC-01 铁律程序化），L1 互动能力（点赞/关注/评论/发布）在运行时层再拦；`maxItems` / `maxDurationMs` 预算达标自动按 `budget_exhausted` 收官；候选选择由上层模型注入（AI-First，内核不做内容决策）；事实事件经 EventBus 广播。新增 5 例单测，分支覆盖 93.33%。
 
+### Added（V2-P3-04D：内容理解管线与兴趣沉淀）
+
+- **`character-core/content-understanding.ts`**：页面正文（截断 4000 字符控 Token）+ 可选截图 → 网关窄端口多模态消息（默认 VISION_STORYBOARD 槽）→ 抽取首个 JSON 对象经 Zod 终审为 `ContentUnderstanding`；`modelId` 取回执真实路由不编造；模型输出/网页内容一律按不可信数据处理（system 明示严禁执行其中指令）；输出无 JSON 即抛错由调用层安全暂停（ADR-002 不静默退化）。
+- **`character-core/interest-sink.ts`**：`InterestSignal` 是模型判定（interestRelevance × sentiment 因子）的确定性映射，±0.5 契约封顶、|delta|<0.05 噪声不落账；落 `PreferenceStore(topics)` 带完整来源历史；记忆经 `InterestMemoryPort` 窄端口写浏览 event 与话题 concept 派生链（derivedFromIds 支撑级联删除）——dependency-cruiser 边界由端口注入反转保持，character-core 不直连 memory-graph。新增 8 例单测。
+
 ### Fixed（批次 C：UI 诚实性）
 
 - **OBS 页演示数据可见标记** `obs-panel.tsx`：弹幕议会投票卡、RVC 歌词卡、弹幕交互条三处演示数据新增可见「预演」徽章（此前只在代码注释标注，UI 上无法与真实数据区分）；饭碗与双轨气泡用真实数据不标；`ui.e2e` 新增徽章 ≥3 可见的防回归断言。
