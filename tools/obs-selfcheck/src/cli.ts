@@ -147,7 +147,9 @@ export async function runProbe(options: ProbeOptions = {}): Promise<number> {
     if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs));
     const shot = await client.request({
       requestType: 'GetSourceScreenshot',
-      requestData: { sourceName: inputName, imgFormat: 'png', width: 64, height: 64 },
+      // 字段名按 obs-websocket 5.x 协议：imageFormat / imageWidth / imageHeight。
+      // 历史坑：这里曾写成 imgFormat / width / height，OBS 回 "Your request is missing the `imageFormat` field."
+      requestData: { sourceName: inputName, imageFormat: 'png', imageWidth: 64, imageHeight: 64 },
     });
     const dataUri = String(shot.imageData ?? '');
     const base64 = dataUri.includes(',') ? dataUri.slice(dataUri.indexOf(',') + 1) : dataUri;

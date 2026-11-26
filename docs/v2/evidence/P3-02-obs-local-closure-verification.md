@@ -211,3 +211,40 @@
 **同类病根**：两次错误的共同形态是「实现读错协议 → 假服务端照抄实现 → 测试只验证自洽」。所以从现在起，凡涉及外部协议的常量与公式，假服务端必须按协议**独立实现**，并用字面量向量钉住。
 
 `obs-selfcheck` 全量 **58 例通过**，`pnpm verify:gate` 7/7。
+
+### 7.5 请求字段名读错：GetSourceScreenshot 要 imageFormat/imageWidth/imageHeight（2026-11-26，owner 真机定位）
+
+**症状**：连上并认证通过后，`GetSourceScreenshot` 被 OBS 拒绝，原文 `Your request is missing the \`imageFormat\` field.`
+
+**根因**：请求体写成 `{ sourceName, imgFormat, width, height }`，协议字段是 `imageFormat` / `imageWidth` / `imageHeight`。
+
+**修复**：`cli.ts` 改为协议字段名。注意 `CreateInput.inputSettings` 里的 `width` / `height` 是浏览器源自己的设置字段，本来就对，未改动。
+
+**为什么又是「一路绿到真机」**：假服务端收到什么请求都照单全收。前三次真机失败（认证公式、RequestResponse opcode、本次字段名）的共同根子就是这个。
+
+**这次把洞补上**：
+
+- 假服务端按协议维护**必填字段表**（`GetVersion` / `GetSceneList` 无、`CreateScene` sceneName、`CreateInput` sceneName + inputName + inputKind、`GetSourceScreenshot` sourceName + imageFormat、`RemoveInput` inputName、`RemoveScene` sceneName），缺字段即回 OBS 原话式错误（`result: false` + `comment: "Your request is missing the \`X\` field."`）。
+- 新增回归：缺 `imageFormat`（含旧写法 `imgFormat`/`width`/`height`）必须被拒且文案点名 `imageFormat`；协议字段名必须通过；`CreateScene` / `CreateInput` 缺必填同样被拒。
+- 新增回归：`runProbe` 发出的 `GetSourceScreenshot.requestData` 必须精确等于协议字段，且**不得存在** `imgFormat` / `width` / `height`——这条在旧实现下必红。
+
+**本站点用到的 OBS 协议字段逐条核对清单**（协议出处：obs-websocket 5.x `protocol/requests/*.json`）：
+
+| 请求 | 发出字段 | 读取的响应字段 | 结论 |
+| --- | --- | --- | --- |
+| `GetVersion` | 无 | `obsVersion`、`obsWebSocketVersion` | 一致 |
+| `CreateScene` | `sceneName` | 无 | 一致 |
+| `CreateInput` | `sceneName`、`inputName`、`inputKind`、`inputSettings{url,width,height,shutdown_source_when_inactive}` | 无 | 一致（`inputSettings` 内是浏览器源自身设置字段，非 OBS 请求字段） |
+| `GetSourceScreenshot` | `sourceName`、`imageFormat`、`imageWidth`、`imageHeight` | `imageData` | **本次修复点** |
+| `RemoveInput` | `inputName` | 无 | 一致 |
+| `RemoveScene` | `sceneName` | 无 | 一致 |
+
+`png-decode.ts` 是纯 PNG 解码，不涉及任何 OBS 协议字段；`config-probe.ts` 读的是 `global.ini` 的 `BrowserHWAccel` 与插件 `config.json` 的 `server_enabled` / `server_port` / `server_password`，与协议无关。
+
+`obs-selfcheck` 全量 **62 例通过**。
+
+### 7.6 真机事实：节目场景是空的（owner 2026-11-26 提供）
+
+owner 在真实 OBS 上执行 `GetSceneItemList` 确认：当前节目场景「场景」里**一个源都没有**，三个输入源（麦克风/辅助音频、macOS 屏幕采集、窗口采集）都不在任何场景中。
+
+因此 `V2-P3-02` 的「画面侧」阻塞条件不只是缺浏览器源——整个节目场景是空的，真实开播前需要 owner 自己决定节目构成（这属于账号与内容决策，不由 AI 代做）。

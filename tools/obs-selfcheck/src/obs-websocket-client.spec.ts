@@ -26,6 +26,36 @@ interface FakeObsOptions {
 
 const openServers: WebSocketServer[] = [];
 
+/**
+ * 假服务端按 obs-websocket 5.x 协议维护的**必填字段表**。
+ *
+ * 为什么要有它：前三次真机失败（认证公式、RequestResponse opcode、GetSourceScreenshot 字段名）
+ * 全都是「实现读错协议 + 假服务端照单全收」一路绿到真机。假服务端必须像真服务端一样挑错，
+ * 否则单测只能证明「自己和自己一致」。字段名出处：obs-websocket 5.x `protocol/requests/*.json`。
+ */
+const REQUIRED_REQUEST_FIELDS: Record<string, readonly string[]> = {
+  GetVersion: [],
+  GetSceneList: [],
+  CreateScene: ['sceneName'],
+  CreateInput: ['sceneName', 'inputName', 'inputKind'],
+  GetSourceScreenshot: ['sourceName', 'imageFormat'],
+  RemoveInput: ['inputName'],
+  RemoveScene: ['sceneName'],
+};
+
+/** 按 OBS 原话风格报缺字段（真机文案：Your request is missing the `imageFormat` field.） */
+function missingFieldError(requestType: string, data: Record<string, unknown>): string | null {
+  const required = REQUIRED_REQUEST_FIELDS[requestType];
+  if (required === undefined) return null;
+  for (const field of required) {
+    if (data[field] === undefined || data[field] === null || data[field] === '') {
+      return `Your request is missing the \`${field}\` field.`;
+    }
+  }
+  return null;
+}
+
+
 async function startFakeObs(options: FakeObsOptions = {}): Promise<FakeObsServer> {
   const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   openServers.push(server);
@@ -60,10 +90,23 @@ async function startFakeObs(options: FakeObsOptions = {}): Promise<FakeObsServer
       if (message.op === 6) {
         const d = message.d;
         if (options.onRequest !== undefined) {
+          // onRequest 由用例全权接管应答（含自定义失败码）；需要协议校验的用例走默认分支
           options.onRequest(socket, {
             requestId: String(d.requestId),
             requestType: String(d.requestType),
           });
+          return;
+        }
+        const missing = missingFieldError(String(d.requestType), (d.requestData as Record<string, unknown> | undefined) ?? {});
+        if (missing !== null) {
+          socket.send(JSON.stringify({
+            op: 7,
+            d: {
+              requestType: d.requestType,
+              requestId: d.requestId,
+              requestStatus: { result: false, code: 300, comment: missing },
+            },
+          }));
           return;
         }
         socket.send(JSON.stringify({
@@ -399,6 +442,47 @@ describe('obs-websocket opcode 表（Protocol.md）', () => {
     const client = new ObsWebsocketClient(server.url);
     await client.connect();
     await expect(client.request({ requestType: 'GetVersion', timeoutMs: 500 })).resolves.toEqual({ via: 'op7' });
+    client.close();
+  });
+});
+
+/**
+ * 请求体字段名回归（owner 2026-11-26 第三次定点修复）。
+ *
+ * 真机文案：`Your request is missing the \`imageFormat\` field.`
+ * 根子仍是「假服务端照单全收」——所以这条跑在**会校验必填字段**的假服务端上。
+ */
+describe('obs-websocket 请求字段名（假服务端按协议校验）', () => {
+  it('GetSourceScreenshot 缺 imageFormat → 被拒绝，错误文案点名 imageFormat', async () => {
+    const server = await startFakeObs();
+    const client = new ObsWebsocketClient(server.url);
+    await client.connect();
+    await expect(client.request({
+      requestType: 'GetSourceScreenshot',
+      requestData: { sourceName: 'x', imgFormat: 'png', width: 64, height: 64 },
+    })).rejects.toThrow(/missing the `imageFormat` field/);
+    client.close();
+  });
+
+  it('GetSourceScreenshot 用协议字段名（imageFormat/imageWidth/imageHeight）→ 通过', async () => {
+    const server = await startFakeObs();
+    const client = new ObsWebsocketClient(server.url);
+    await client.connect();
+    await expect(client.request({
+      requestType: 'GetSourceScreenshot',
+      requestData: { sourceName: 'x', imageFormat: 'png', imageWidth: 64, imageHeight: 64 },
+    })).resolves.toBeDefined();
+    client.close();
+  });
+
+  it('CreateInput 缺 inputKind / CreateScene 缺 sceneName 同样被拒绝', async () => {
+    const server = await startFakeObs();
+    const client = new ObsWebsocketClient(server.url);
+    await client.connect();
+    await expect(client.request({ requestType: 'CreateScene', requestData: {} }))
+      .rejects.toThrow(/missing the `sceneName` field/);
+    await expect(client.request({ requestType: 'CreateInput', requestData: { sceneName: 's', inputName: 'i' } }))
+      .rejects.toThrow(/missing the `inputKind` field/);
     client.close();
   });
 });

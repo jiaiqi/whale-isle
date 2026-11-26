@@ -266,6 +266,30 @@ describe('runProbe', () => {
     expect(lines.join('\n')).not.toContain('请求超时');
   });
 
+  it('GetSourceScreenshot 请求体用协议字段名 imageFormat/imageWidth/imageHeight（旧实现发 imgFormat 必红）', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
+    const client = new FakeClient({ screenshot: colorPngDataUri([204, 0, 0]) });
+    const code = await runProbe({
+      configPaths: paths,
+      log: () => undefined,
+      settleMs: 0,
+      startRedPage: async () => fakeRedPage,
+      createClient: () => client.asClient(),
+    });
+    expect(code).toBe(PROBE_EXIT.OK);
+    const shot = client.requests.find((r) => r.requestType === 'GetSourceScreenshot');
+    expect(shot?.requestData).toEqual({
+      sourceName: expect.stringContaining('WhaleIsle-SelfCheck-'),
+      imageFormat: 'png',
+      imageWidth: 64,
+      imageHeight: 64,
+    });
+    // 旧写法（imgFormat / width / height）必须彻底消失
+    expect(shot?.requestData).not.toHaveProperty('imgFormat');
+    expect(shot?.requestData).not.toHaveProperty('width');
+    expect(shot?.requestData).not.toHaveProperty('height');
+  });
+
   it('渲染全黑 → 退出码 1，且临时场景与临时输入都被删除', async () => {
     const paths = writeConfigs('[General]\nBrowserHWAccel=true\n', { server_enabled: true, server_port: 4455 });
     const client = new FakeClient({ screenshot: colorPngDataUri([0, 0, 0]) });
