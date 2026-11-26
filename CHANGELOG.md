@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P3-03`：受控 Browser Use 与 Computer Use — `IMPLEMENTED_UNVERIFIED`）
+
+- **浏览器/桌面操控契约** `packages/shared-protocol/src/{browser-computer.ts,index.ts}`：定义账号与 Profile、`ComputerUseLease`、浏览器任务与 runner report、人机交接（`awaiting_human`）、P5 一次性确认 token、OS 输入执行器与用户输入监控状态、`BrowserComputerSnapshot` Zod 契约（Zod 4 默认值使用 `.prefault({})`）。
+- **租约、账号隔离与确定性浏览器运行时** `packages/runtime-core/src/{automation-security.ts,browser-runner.ts,human-input-monitor.ts,input-executor.ts,index.ts}`：实现 `AccountVault` 掩码/轮换/级联删除、Per-Character Browser Profile 路径越界拒绝、`ComputerUseLeaseManager` 设备级单主控 + TTL/心跳 + 用户物理输入抢占与自动恢复 + P0 双撤销、`DeterministicBrowserRunner`（`BrowserEnginePort`、逐步 guard、CAPTCHA 交接、页面注入只记录不提权）、`HumanInputMonitor`（`powerMonitor` idle + 合成事件排除）与 feature flag 默认关闭的真实 OS 输入执行器骨架（dry-run / `permission_denied` / `not_implemented` 诚实回执）。
+- **Electron 隐藏窗口引擎、宿主 IPC 与 HUD** `apps/desktop-host/src/{main/electron-browser-engine.ts,main/v2-kernel-host.ts,preload/index.ts,renderer/director/bridge.ts,renderer/director/v2/signature-widgets.tsx,renderer/director/App.tsx,renderer/director/views/life-console-view.tsx}`：按角色/账号隔离 partition、`v2:auto-*` 浏览器/租约/P5/交接/清理 IPC、游戏租约与桌面租约双胶囊 HUD、生命总览 P3-03 面板；新增 ADR-004 强制回归测试。
+- **验证**：P3-03 专项单测 22/22、runtime-core 90.16% 分支、`verify:gate` 7/7、`desktop-host build` 与 Electron 45 E2E 3/3 + `ui.e2e` 9/9 全绿；真实 OS 注入与 TCC 打包态授权待 `[REAL-DEVICE]`。
+
 ### Added / Changed（`V2-P3-02`：`LifeRuntime` 驱动的直播中控与 OBS 舞台 — `IMPLEMENTED_UNVERIFIED`）
 
 - **直播中控与 OBS 舞台契约** `packages/shared-protocol/src/{live.ts,index.ts}`：定义 `LivePlatformId`、`LiveConnectionState`、`LivePlatformAdapterStatus`、`LiveSongQueueItem`、`LiveGiftThankBatch`、`LiveObsStagePayload`、`LiveSessionSummary` 与 `LiveRuntimeSnapshot` Zod 契约。

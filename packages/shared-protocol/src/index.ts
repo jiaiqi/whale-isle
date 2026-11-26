@@ -1508,3 +1508,4 @@ export * from './ecosystem';
 export * from './media';
 export * from './coop';
 export * from './live';
+export * from './browser-computer';

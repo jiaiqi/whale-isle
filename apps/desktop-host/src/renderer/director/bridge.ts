@@ -3,6 +3,7 @@
  * 明文 key 只上行；渲染进程永远只见掩码（运行期安全锁）。
  */
 import type {
+  AccountVaultEntry,
   Asset2dStudioPackage,
   AssetDistributionChannel,
   AssetIntegrityCheck,
@@ -15,6 +16,11 @@ import type {
   AudioTrackKind,
   AudioTrackState,
   BlenderToolchainStatus,
+  BrowserComputerSnapshot,
+  BrowserHumanHandoff,
+  BrowserProfile,
+  BrowserTaskOutcome,
+  BrowserTaskRequestInput,
   CharacterBible,
   CharacterBibleAttachRefRequest,
   CharacterBibleUpsertRequest,
@@ -31,9 +37,12 @@ import type {
   CoopRuntimeSnapshot,
   CoopSpeakerEvent,
   CoopTaskItem,
+  ComputerUseLease,
+  ComputerInputExecutorStatus,
   CrossPetImportRequest,
   CrossPetImportResult,
   DanceRoutineInput,
+  HumanInputMonitorStatus,
   FuzzyImpression,
   GoalHorizon,
   GoalOrigin,
@@ -899,6 +908,62 @@ export interface DirectorBridge {
   v2LiveSongRequest(input: LiveSongRequestInput & { autoPerform?: boolean }): Promise<{ ok: boolean; item?: LiveSongQueueItem; singingStarted?: boolean; snapshot?: LiveRuntimeSnapshot; error?: string }>;
   v2LiveObsStage(): Promise<LiveObsStagePayload>;
   v2LiveSummaries(): Promise<LiveSessionSummary[]>;
+  v2AutoSnapshot(): Promise<BrowserComputerSnapshot>;
+  v2AutoAccountRegister(input: {
+    accountId?: string;
+    characterId: string;
+    platform: string;
+    username: string;
+    plainSecret: string;
+    expiresAt?: number | null;
+  }): Promise<{ ok: boolean; entry?: AccountVaultEntry; error?: string }>;
+  v2AutoProfileEnsure(input: {
+    profileId?: string;
+    characterId: string;
+    accountId: string;
+  }): Promise<{ ok: boolean; profile?: BrowserProfile; error?: string }>;
+  v2AutoProfileCookies(input: {
+    action: 'set' | 'read';
+    profileId: string;
+    characterId: string;
+    origin?: string;
+    cookieKey?: string;
+    cookieVal?: string;
+  }): Promise<{ ok: boolean; error?: string; cookies?: Record<string, Record<string, string>>; profile?: BrowserProfile }>;
+  v2AutoBrowserExec(input: BrowserTaskRequestInput): Promise<BrowserTaskOutcome>;
+  v2AutoLease(input: {
+    action: 'acquire' | 'heartbeat' | 'release' | 'human_input' | 'release_human';
+    deviceId?: string;
+    holderId?: string;
+    characterId?: string;
+    purpose?: string;
+    leaseId?: string;
+    ttlMs?: number;
+    reason?: string;
+  }): Promise<{ ok: boolean; reason?: string; lease?: ComputerUseLease; currentHolder?: ComputerUseLease; preemptedLease?: ComputerUseLease | null }>;
+  v2AutoAccountExport(): Promise<{ exportedAt: number; accounts: AccountVaultEntry[]; secretsRedacted: true }>;
+  v2AutoP5Confirm(input: { taskId: string; action: string; url: string }): Promise<{ ok: boolean; token?: string; expiresAt?: number; error?: string }>;
+  v2AutoHandoffs(): Promise<BrowserHumanHandoff[]>;
+  v2AutoHandoffComplete(handoffId: string, outcome?: 'completed' | 'cancelled'): Promise<{ ok: boolean; handoff?: BrowserHumanHandoff; error?: string }>;
+  v2AutoCharacterPurge(characterId: string): Promise<{ accountsRemoved: number; profilesRemoved: number }>;
+  v2AutoInputStatus(): Promise<{
+    monitor: HumanInputMonitorStatus;
+    executor: ComputerInputExecutorStatus;
+    realOsInputEnabled: boolean;
+  }>;
+  v2AutoInputSimulate(deviceId?: string): Promise<{ ok: boolean; preemptedLease: ComputerUseLease | null }>;
+  v2AutoExecInput(input: {
+    leaseId?: string | null;
+    step?: { kind?: string; x?: number; y?: number; text?: string; key?: string; deltaY?: number; detail?: string };
+  }): Promise<{
+    ok: boolean;
+    executed: boolean;
+    mode: 'dry_run' | 'live';
+    code: string;
+    detail: string;
+    intentAt: number;
+    leaseId: string | null;
+  }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

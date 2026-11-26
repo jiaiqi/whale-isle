@@ -1,7 +1,7 @@
 # Whale Isle V2 — 质量评估与真实验收规范（Evaluation & Verification）
 
 > **铁律**：严禁把静态代码阅读、单元测试、Mock Replay 或无头 E2E 冒充为真机/真实平台验收通过；每完成一个工单，必须在此体系下如实归档证据。  
-> **证据归档目录**：[evidence/README.md](./evidence/README.md) · **P0 实测证据**：[evidence/P0-foundation-verification.md](./evidence/P0-foundation-verification.md) · **P1 实测证据**：[evidence/P1-character-life-verification.md](./evidence/P1-character-life-verification.md) · [evidence/P1-voice-mixer-verification.md](./evidence/P1-voice-mixer-verification.md) · [evidence/P1-provider-quota-verification.md](./evidence/P1-provider-quota-verification.md) · [evidence/P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md) · [evidence/P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md) · [evidence/P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) · **P2 实测证据**：[evidence/P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) · [evidence/P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md) · [evidence/P2-media-gateway-verification.md](./evidence/P2-media-gateway-verification.md) · [evidence/P2-3d-blender-pipeline-verification.md](./evidence/P2-3d-blender-pipeline-verification.md)
+> **证据归档目录**：[evidence/README.md](./evidence/README.md) · **P0 实测证据**：[evidence/P0-foundation-verification.md](./evidence/P0-foundation-verification.md) · **P1 实测证据**：[evidence/P1-character-life-verification.md](./evidence/P1-character-life-verification.md) · [evidence/P1-voice-mixer-verification.md](./evidence/P1-voice-mixer-verification.md) · [evidence/P1-provider-quota-verification.md](./evidence/P1-provider-quota-verification.md) · [evidence/P1-memory-growth-verification.md](./evidence/P1-memory-growth-verification.md) · [evidence/P1-obsidian-ui-verification.md](./evidence/P1-obsidian-ui-verification.md) · [evidence/P1-stardew-ai-first-verification.md](./evidence/P1-stardew-ai-first-verification.md) · **P2 实测证据**：[evidence/P2-guide-learning-verification.md](./evidence/P2-guide-learning-verification.md) · [evidence/P2-ecosystem-isolation-verification.md](./evidence/P2-ecosystem-isolation-verification.md) · [evidence/P2-media-gateway-verification.md](./evidence/P2-media-gateway-verification.md) · [evidence/P2-3d-blender-pipeline-verification.md](./evidence/P2-3d-blender-pipeline-verification.md) · [evidence/P2-character-studio-crosspet-verification.md](./evidence/P2-character-studio-crosspet-verification.md) · [evidence/P2-pixel-stardew-avatar-verification.md](./evidence/P2-pixel-stardew-avatar-verification.md) · [evidence/P2-asset-registry-stage-sound-verification.md](./evidence/P2-asset-registry-stage-sound-verification.md) · [evidence/P2-coop-runtime-v1-verification.md](./evidence/P2-coop-runtime-v1-verification.md)
 
 ---
 
@@ -65,7 +65,7 @@
 | 命令 | 真实执行层语义（禁止仅改 UI 状态） |
 | --- | --- |
 | `Stop` / `Pause AI` / `Resume AI` | 立即取消在飞动作并停发控制写入 / 暂停自主循环 / 恢复协同自主模式 |
-| `Take Over` / `Release Control` | 人类接管控制租约（键鼠输入同样触发）/ 释放并归还 AI |
+| `Take Over` / `Release Control` | 人类接管游戏角色控制租约（仅 `Take Over` / UI 开关 / `F7`；普通物理键鼠不触发，见 `ADR-004`）/ 释放并归还 AI |
 | `Follow Me` / `Stay Here` | 尝试跟随人类玩家 / 在安全可行位置待命 |
 | `Do This` / `Go Fish` / `Go Mine` / `Cancel Task` | 下发直接任务指令（优先于 AI 偏好但受规则/权限约束）/ 取消当前任务并交还租约 |
 | `What Are You Doing?` / `Show Plan` | 查询当前目标、动作、简短理由、备选方案及正在参考的知识来源与置信度 |
@@ -81,7 +81,7 @@
 7. **建议协商**：用户提出普通建议（如去钓鱼），AI 可结合当前计划同意、婉拒或提出折中方案。
 8. **明确指令**：用户下达明确任务指令（如去矿洞），AI 优先完成并在结束后交还控制模式。
 9. **紧急停止**：触发 `Stop` 后立即取消当前动作且不再发送新的控制动作。
-10. **手动接管**：人类接管或物理键鼠操作后，AI 绝不争抢同一游戏角色。
+10. **手动接管**：人类通过 `Take Over` / `F7` 明确接管后，AI 绝不争抢同一游戏角色；普通物理键鼠输入不改变 `GameCharacterControlLease`（`ADR-004` / T-M6-73），但会撤销 OS 级 `ComputerUseLease`。
 11. **任务结束与过期隔离**：任务完成/取消后退回约定模式；旧会话/旧世代在途指令被拒绝。
 12. **版本变化识别**：针对旧游戏版本的攻略显式标记适用性不确定，而非当成当前事实。
 
@@ -100,3 +100,4 @@
 - **`V2-P3-01`（统一表演系统：`SingEngine` SVS/SVC + 歌词时钟 + 舞蹈 + 2D/3D `StageRuntime`）**：`performance.spec.ts` + `stage-runtime.spec.ts`（6/6 PASS，合并 90.88% 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md)；真实神经 SVS/SVC Worker 推理听感与外部 Cubism `.moc3` / WebGL VRM 真机画布渲染待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。
 - **`ADR-003` UI/UX Tidepaper 主基线升级（`REQ-UI-01`）**：工作台已切换为潮汐纸 Tidepaper（晨雾 Mist 默认 + 夜潮 Night Tide + 5 强调色）并保留 Obsidian Tide / Tide Deep 可选切换，接入 V2-P2 与 V2-P3-01 实盘操作面板；`verify:gate` 7/7 与 Electron 45 E2E 4 套件（含 WCAG AA 4.5:1 对比度校验）全绿，详见 [P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)。
 - **`V2-P3-02`（`LifeRuntime` 驱动的直播中控与 OBS 舞台）**：`live-runtime.spec.ts`（`91.66%` 分支覆盖，100% Funcs/Lines）、四重版权点歌拦截、礼物合并、OBS 舞台同步、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿，详见 [P3-live-runtime-obs-verification.md](./evidence/P3-live-runtime-obs-verification.md)；真实线上直播间测试账号与 OBS Studio 实机开播待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。
+- **`V2-P3-03`（受控 Browser Use 与 Computer Use）**：`AccountVault` / Per-Character Browser Profile 隔离、`ComputerUseLease` 设备级单主控与用户物理输入 ≤1s 抢占、确定性浏览器 runner、CAPTCHA `awaiting_human` 交接、P5 一次性 token；P3-03 专项单测 **22/22 PASS**、runtime-core **`90.16%` 分支**、`verify:gate` 7/7 与 Electron 45 E2E Part 1 **3/3** + `ui.e2e` **9/9** 全绿，含 ADR-004 强制回归（游戏租约不受用户输入影响），详见 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)；真实 CGEvent/SendInput 注入、macOS TCC 打包态授权与真实站点风控待 `[REAL-DEVICE]`（3c 真实注入 `PENDING`），状态记为 `IMPLEMENTED_UNVERIFIED`。

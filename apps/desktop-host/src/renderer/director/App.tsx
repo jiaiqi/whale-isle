@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import {
   ModelProviderConfigSchema,
+  type BrowserComputerSnapshot,
   type CharacterCoreSnapshot,
   type DiningProfilePreset,
   type ModelProviderConfig,
@@ -172,6 +173,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   // V2 内核与 CharacterCore 实时快照（ControlOwnershipHud & V2 生命中枢单点数据源）
   const [v2Snapshot, setV2Snapshot] = useState<CharacterCoreSnapshot | null>(null);
+  const [autoSnap, setAutoSnap] = useState<BrowserComputerSnapshot | null>(null);
   const [asleep, setAsleep] = useState(false);
   const [hudBusy, setHudBusy] = useState(false);
 
@@ -181,6 +183,15 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       setV2Snapshot(snap);
     } catch {
       // 主进程未就绪时保持上次状态，绝不伪造默认值
+    }
+  }, []);
+
+  // ADR-004：人类物理输入窗口只有 ≤1s 抢占 + 2s 保持，HUD 必须用更高频率轮询才看得见
+  const refreshAutoSnapshot = useCallback(async (): Promise<void> => {
+    try {
+      setAutoSnap(await window.directorBridge.v2AutoSnapshot());
+    } catch {
+      // P3-03 快照不可用时保持上次状态
     }
   }, []);
 
@@ -202,12 +213,19 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   useEffect(() => {
     void refreshV2Snapshot();
+    void refreshAutoSnapshot();
     void window.directorBridge.petSleepStatus().then((s) => setAsleep(s.asleep)).catch(() => undefined);
     const timer = setInterval(() => {
       void refreshV2Snapshot();
     }, 5000);
-    return () => clearInterval(timer);
-  }, [refreshV2Snapshot]);
+    const autoTimer = setInterval(() => {
+      void refreshAutoSnapshot();
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(autoTimer);
+    };
+  }, [refreshV2Snapshot, refreshAutoSnapshot]);
 
   useEffect(() => {
     window.directorBridge.onAutodriveEvent((event) => {
@@ -804,6 +822,17 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         brainMode={brain.mode}
         asleep={asleep}
         busy={hudBusy}
+        computerLease={
+          autoSnap
+            ? {
+                active: autoSnap.activeLeases.length > 0,
+                holderId: autoSnap.activeLeases[0]?.holderId ?? null,
+                humanOverride: autoSnap.humanOverrideDevices.length > 0,
+                pendingHandoffs: autoSnap.pendingHandoffs.length,
+                runnerReady: true,
+              }
+            : null
+        }
         onEmergencyHalt={() => void emergencyHalt('ControlOwnershipHud 急停')}
         onToggleTakeover={() => void toggleTakeover()}
         onResumeAutonomous={() => void resumeAutonomous()}

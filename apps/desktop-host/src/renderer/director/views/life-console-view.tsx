@@ -16,12 +16,16 @@ import {
   Database,
   Gamepad2,
   Gauge,
+  Hand,
+  KeyRound,
   Layers,
+  Monitor,
   Music2,
   Play,
   Plus,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Square,
   Trash2,
@@ -30,6 +34,8 @@ import {
 import type {
   AudioMixerSnapshot,
   BlenderToolchainStatus,
+  BrowserComputerSnapshot,
+  BrowserTaskOutcome,
   CharacterCoreSnapshot,
   CoopModCompatibilityReport,
   CoopRuntimeSnapshot,
@@ -127,9 +133,13 @@ export function LifeConsoleView({
     compatReport: CoopModCompatibilityReport | null;
   }>({ blender: null, bibleCount: 0, assetCount: 0, coopRoom: null, compatReport: null });
   const [liveSnap, setLiveSnap] = useState<LiveRuntimeSnapshot | null>(null);
+  // V2-P3-03 受控 Browser Use / Computer Use
+  const [autoSnap, setAutoSnap] = useState<BrowserComputerSnapshot | null>(null);
+  const [lastBrowserOutcome, setLastBrowserOutcome] = useState<BrowserTaskOutcome | null>(null);
+  const [acctDraft, setAcctDraft] = useState({ characterId: 'char_xiaojing', platform: 'bilibili', username: '', secret: '' });
 
   const loadAll = useCallback(async (): Promise<void> => {
-    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop, liveRes] = await Promise.all([
+    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop, liveRes, auto] = await Promise.all([
       window.directorBridge.v2StorageCheck().catch(() => null),
       window.directorBridge.v2VoiceProviders().catch(() => []),
       window.directorBridge.v2VoiceMixerState().catch(() => null),
@@ -140,6 +150,7 @@ export function LifeConsoleView({
       window.directorBridge.v2AssetList().catch(() => []),
       window.directorBridge.v2CoopSnapshot().catch(() => null),
       window.directorBridge.v2LiveSnapshot().catch(() => null),
+      window.directorBridge.v2AutoSnapshot().catch(() => null),
     ]);
     if (storage !== null) setStorageInfo(storage);
     setVoiceProviders(providers);
@@ -151,6 +162,7 @@ export function LifeConsoleView({
       setSingBackends(perfRes.singBackends);
     }
     if (liveRes !== null) setLiveSnap(liveRes);
+    if (auto !== null) setAutoSnap(auto);
     setP2Summary((prev) => ({
       ...prev,
       blender,
@@ -400,6 +412,113 @@ export function LifeConsoleView({
     }
     setP2Summary((prev) => ({ ...prev, compatReport: res.report ?? null }));
     toast.success(`星露谷 Mods 扫描完成：BWF ${res.report.bwfReady ? '就绪' : '缺件'} · 发现 ${res.report.hostModCount} 个 Mod`);
+  };
+
+  const refreshAuto = async (): Promise<void> => {
+    setAutoSnap(await window.directorBridge.v2AutoSnapshot());
+  };
+
+  const handleRegisterAccount = async (): Promise<void> => {
+    const { characterId, platform, username, secret } = acctDraft;
+    if (characterId.trim() === '' || platform.trim() === '' || username.trim() === '' || secret.trim() === '') {
+      toast.warning('请填写角色、平台、账号与凭据（凭据只在主进程加密保存）');
+      return;
+    }
+    const registered = await window.directorBridge.v2AutoAccountRegister({
+      characterId: characterId.trim(),
+      platform: platform.trim(),
+      username: username.trim(),
+      plainSecret: secret,
+    });
+    setAcctDraft((prev) => ({ ...prev, secret: '', username: '' }));
+    if (!registered.ok) {
+      toast.error(registered.error ?? '账号写入失败');
+      return;
+    }
+    const accountId = registered.entry?.accountId;
+    if (accountId) {
+      const profile = await window.directorBridge.v2AutoProfileEnsure({ characterId: characterId.trim(), accountId });
+      if (!profile.ok) toast.error(profile.error ?? '隔离 Profile 创建失败');
+    }
+    await refreshAuto();
+    toast.success(`账号已写入隔离库（${registered.entry?.maskedSecret ?? '••••'}），明文不会下行`);
+  };
+
+  const handleAcquireDesktopLease = async (): Promise<void> => {
+    const res = await window.directorBridge.v2AutoLease({
+      action: 'acquire',
+      deviceId: 'host-primary',
+      holderId: 'director-ui',
+      characterId: snapshot?.identity.characterId ?? 'char_xiaojing',
+      purpose: '中控台手动申请桌面租约',
+    });
+    await refreshAuto();
+    if (!res.ok) toast.warning(`桌面租约申请被拒绝：${res.reason ?? '未知'}`);
+    else toast.success(`已获得桌面独占租约：${res.lease?.leaseId ?? ''}`);
+  };
+
+  const handleSimulateHumanInput = async (): Promise<void> => {
+    const res = await window.directorBridge.v2AutoInputSimulate('host-primary');
+    await refreshAuto();
+    toast(
+      res.preemptedLease
+        ? `已模拟用户物理输入：桌面租约 ${res.preemptedLease.leaseId} 被撤销（游戏租约不受影响）`
+        : '已模拟用户物理输入：当前没有桌面租约可撤销',
+    );
+  };
+
+  const handleDryRunInput = async (): Promise<void> => {
+    const res = await window.directorBridge.v2AutoExecInput({
+      leaseId: autoSnap?.activeLeases[0]?.leaseId ?? null,
+      step: { kind: 'click', x: 10, y: 10, detail: '中控台 OS 输入 dry-run' },
+    });
+    await refreshAuto();
+    toast(`OS 输入执行器：${res.code} · ${res.detail}`);
+  };
+
+  const handleRunBrowserRead = async (): Promise<void> => {
+    const profile = autoSnap?.profiles[0];
+    if (!profile) {
+      toast.warning('请先注册账号并创建隔离 Profile');
+      return;
+    }
+    const outcome = await window.directorBridge.v2AutoBrowserExec({
+      taskId: `ui-read-${Date.now().toString(36)}`,
+      characterId: profile.characterId,
+      profileId: profile.profileId,
+      url: 'https://example.com/',
+      action: 'read',
+    });
+    setLastBrowserOutcome(outcome);
+    await refreshAuto();
+    toast[outcome.ok ? 'success' : 'warning'](
+      outcome.ok ? `确定性读取完成：${outcome.runner.engine}` : `浏览器任务暂停：${outcome.pauseReason}`,
+    );
+  };
+
+  const handleCompleteHandoff = async (handoffId: string): Promise<void> => {
+    const res = await window.directorBridge.v2AutoHandoffComplete(handoffId, 'completed');
+    await refreshAuto();
+    if (!res.ok) toast.error(res.error ?? '交接单处理失败');
+    else toast.success('已确认人类完成验证，Profile 恢复可用');
+  };
+
+  const handleP5Confirm = async (): Promise<void> => {
+    const res = await window.directorBridge.v2AutoP5Confirm({
+      taskId: 'ui-p5-demo',
+      action: 'payment',
+      url: 'https://example.com/checkout',
+    });
+    await refreshAuto();
+    if (!res.ok || !res.token) toast.error(res.error ?? 'P5 令牌签发失败');
+    else toast.success(`已签发一次性 P5 确认令牌（${Math.round(((res.expiresAt ?? 0) - Date.now()) / 1000)}s 内有效，单次消费）`);
+  };
+
+  const handlePurgeCharacter = async (): Promise<void> => {
+    const characterId = snapshot?.identity.characterId ?? 'char_xiaojing';
+    const res = await window.directorBridge.v2AutoCharacterPurge(characterId);
+    await refreshAuto();
+    toast.success(`已级联清理 ${characterId}：账号 ${res.accountsRemoved} 个 / Profile ${res.profilesRemoved} 个（租约审计保留）`);
   };
 
   const activeEmbodiment = snapshot?.embodiments.find((e) => e.active) ?? snapshot?.embodiments[0];
@@ -831,6 +950,149 @@ export function LifeConsoleView({
           </div>
         </section>
       </div>
+
+      {/* Section B3: V2-P3-03 受控 Browser Use / Computer Use（ADR-004 双租约分离） */}
+      <section className="card space-y-3 px-5 py-4" data-v2-browser-section>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <ShieldCheck size={14} style={{ color: 'var(--green)' }} />
+            受控 Browser Use 与 Computer Use（P3-03 实盘）
+          </h2>
+          <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+            桌面租约 {autoSnap?.activeLeases.length ?? 0} · 待人工交接 {autoSnap?.pendingHandoffs.length ?? 0} ·
+            OS 输入 {autoSnap?.inputExecutor.mode ?? 'disabled'}
+          </span>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-auto-accounts>
+            <div className="font-semibold" style={{ color: 'var(--text-1)' }}>
+              <KeyRound size={11} className="inline" /> 账号凭据（仅掩码，明文永不下行）
+            </div>
+            {(autoSnap?.accounts.length ?? 0) === 0 ? (
+              <div style={{ color: 'var(--text-3)' }}>暂无账号，注册后自动创建按角色隔离的 Profile。</div>
+            ) : (
+              autoSnap!.accounts.map((acc) => (
+                <div key={acc.accountId} className="flex flex-wrap items-center gap-1.5" data-v2-auto-account={acc.accountId}>
+                  <span className="pill pill-green mono" style={{ fontSize: 10 }}>{acc.platform}</span>
+                  <span>{acc.username}</span>
+                  <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{acc.maskedSecret || '已撤销'}</span>
+                </div>
+              ))
+            )}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <input
+                data-v2-auto-character-input
+                value={acctDraft.characterId}
+                onChange={(e) => setAcctDraft((prev) => ({ ...prev, characterId: e.target.value }))}
+                placeholder="characterId"
+                className="w-32 rounded-lg px-2 py-1 text-[11px] outline-none"
+                style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+              />
+              <input
+                data-v2-auto-platform-input
+                value={acctDraft.platform}
+                onChange={(e) => setAcctDraft((prev) => ({ ...prev, platform: e.target.value }))}
+                placeholder="平台"
+                className="w-24 rounded-lg px-2 py-1 text-[11px] outline-none"
+                style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+              />
+              <input
+                data-v2-auto-username-input
+                value={acctDraft.username}
+                onChange={(e) => setAcctDraft((prev) => ({ ...prev, username: e.target.value }))}
+                placeholder="账号名"
+                className="w-28 rounded-lg px-2 py-1 text-[11px] outline-none"
+                style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+              />
+              <input
+                data-v2-auto-secret-input
+                type="password"
+                value={acctDraft.secret}
+                onChange={(e) => setAcctDraft((prev) => ({ ...prev, secret: e.target.value }))}
+                placeholder="凭据（只上行）"
+                className="w-32 rounded-lg px-2 py-1 text-[11px] outline-none"
+                style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+              />
+              <button type="button" data-v2-auto-account-register onClick={() => void handleRegisterAccount()} className="btn-pill green" style={{ padding: '4px 10px', fontSize: 11 }}>
+                <Plus size={11} />注册
+              </button>
+            </div>
+          </div>
+
+          <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-auto-profiles>
+            <div className="font-semibold" style={{ color: 'var(--text-1)' }}>
+              <Monitor size={11} className="inline" /> 隔离 Profile 与双租约
+            </div>
+            {(autoSnap?.profiles.length ?? 0) === 0 ? (
+              <div style={{ color: 'var(--text-3)' }}>暂无隔离 Profile。</div>
+            ) : (
+              autoSnap!.profiles.map((profile) => (
+                <div key={profile.profileId} className="flex flex-wrap items-center gap-1.5" data-v2-auto-profile={profile.profileId}>
+                  <span className="pill mono" style={{ fontSize: 10 }}>{profile.profileId}</span>
+                  <span className="pill pill-blue" style={{ fontSize: 10 }}>{profile.status}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>Cookie {profile.cookieCount} · 独立目录 {profile.isolatedFromUserDaily ? '是' : '否'}</span>
+                </div>
+              ))
+            )}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <button type="button" data-v2-auto-lease-acquire onClick={() => void handleAcquireDesktopLease()} className="btn-pill primary" style={{ padding: '4px 10px', fontSize: 11 }}>
+                <Hand size={11} />申请桌面租约
+              </button>
+              <button type="button" data-v2-auto-human-simulate onClick={() => void handleSimulateHumanInput()} className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }}>
+                模拟用户键鼠输入
+              </button>
+              <button type="button" data-v2-auto-dry-run onClick={() => void handleDryRunInput()} className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }}>
+                OS 输入 dry-run
+              </button>
+              <button type="button" data-v2-auto-browser-read onClick={() => void handleRunBrowserRead()} className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }}>
+                <Play size={11} />确定性读取
+              </button>
+            </div>
+            <div className="text-[10.5px]" style={{ color: 'var(--text-2)' }}>
+              OS 输入执行器：{autoSnap?.inputExecutor.enabled ? '已开启' : '默认关闭（dry-run）'} ·
+              权限 {autoSnap?.inputExecutor.permission ?? 'unknown'} · dry-run {autoSnap?.inputExecutor.dryRunCount ?? 0} 次 ·
+              检测器 {autoSnap?.inputMonitor.running ? '运行中' : '未运行'}（已识别 {autoSnap?.inputMonitor.detected ?? 0} 次，
+              排除合成事件 {autoSnap?.inputMonitor.syntheticExcluded ?? 0} 次）
+            </div>
+            <div className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+              桌面租约只管 OS 合成键鼠与前台窗口；游戏角色租约只认 F7 / 界面开关 / P0 急停。外部 Harness 不受本租约约束。
+            </div>
+          </div>
+        </div>
+
+        {(autoSnap?.pendingHandoffs.length ?? 0) > 0 && (
+          <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-auto-handoffs>
+            <div className="font-semibold" style={{ color: 'var(--amber)' }}>
+              <ShieldAlert size={11} className="inline" /> 待人类处理（验证码/登录/风控，绝不自动绕过）
+            </div>
+            {autoSnap!.pendingHandoffs.map((handoff) => (
+              <div key={handoff.handoffId} className="flex flex-wrap items-center gap-2" data-v2-auto-handoff={handoff.handoffId}>
+                <span className="pill pill-amber mono" style={{ fontSize: 10 }}>{handoff.reason}</span>
+                <span className="min-w-0 flex-1 truncate">{handoff.url}</span>
+                <button type="button" data-v2-auto-handoff-complete={handoff.handoffId} onClick={() => void handleCompleteHandoff(handoff.handoffId)} className="btn-pill green" style={{ padding: '3px 9px', fontSize: 10 }}>
+                  人类已完成
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 text-[10.5px]" style={{ color: 'var(--text-2)' }}>
+          <button type="button" data-v2-auto-p5-confirm onClick={() => void handleP5Confirm()} className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }}>
+            <KeyRound size={11} />签发一次性 P5 确认（{autoSnap?.p5ConfirmationCount ?? 0} 待用）
+          </button>
+          <button type="button" data-v2-auto-character-purge onClick={() => void handlePurgeCharacter()} className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }}>
+            <Trash2 size={11} />级联清理当前角色账号与 Profile
+          </button>
+          {lastBrowserOutcome && (
+            <span data-v2-auto-last-outcome className="mono" style={{ color: 'var(--text-3)' }}>
+              最近任务：{lastBrowserOutcome.pauseReason} · {lastBrowserOutcome.runner.engine}/{lastBrowserOutcome.runner.status}
+              {lastBrowserOutcome.runner.injectionSignals.length > 0 ? ` · 注入特征 ${lastBrowserOutcome.runner.injectionSignals.join('/')}` : ''}
+            </span>
+          )}
+        </div>
+      </section>
 
       {/* Section C: Four-Level Honest Quota Matrix */}
       <section className="card space-y-3 px-5 py-4" data-v2-quota-section>

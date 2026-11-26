@@ -9,19 +9,28 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, powerMonitor, systemPreferences } from 'electron';
 import { z } from 'zod';
 import {
+  AccountVault,
+  BrowserProfileMgr,
+  BrowserRuntime,
+  ComputerInputExecutor,
+  ComputerUseLeaseManager,
+  DeterministicBrowserRunner,
+  HumanInputMonitor,
   createDefaultRuntimeConfig,
   JsonFileConfigStore,
   RuntimeConfigSchema,
   WhaleKernel,
+  type InputPermissionState,
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
 import { CharacterCore, type SelectActivityInput } from '@workbench/character-core';
 import {
   AudioTrackKindSchema,
+  type BrowserTaskRequestInput,
   GoalHorizonSchema,
   GoalOriginSchema,
   LifeActivityKindSchema,
@@ -42,6 +51,7 @@ import {
   type StageBackendKind,
 } from '@workbench/shared-protocol';
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
+import { ElectronBrowserEngine } from './electron-browser-engine';
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
@@ -121,6 +131,8 @@ export interface V2KernelHost {
   readonly performanceDirector: PerformanceDirector;
   readonly stageRuntime: StageRuntime;
   readonly liveRuntime: LiveRuntimeV2;
+  readonly computerLeaseMgr: ComputerUseLeaseManager;
+  readonly browserRuntime: BrowserRuntime;
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost; memory?: MemoryHost }): void;
   stop(): Promise<void>;
 }
@@ -431,6 +443,45 @@ export async function createV2KernelHost(options: {
       voiceConsentSource: 'test-consent',
     },
   });
+  const accountVault = new AccountVault(kernel.secrets, {
+    filePath: join(options.userDataDir, 'account-vault-index.json'),
+  });
+  const browserProfiles = new BrowserProfileMgr({
+    rootDir: join(options.userDataDir, 'browser-profiles'),
+  });
+  const computerLeaseMgr = new ComputerUseLeaseManager({ events: kernel.events });
+  const inputMonitor = new HumanInputMonitor({
+    readIdleSeconds: () => {
+      // powerMonitor.getSystemIdleTime() 精度约 1s；只用来撤销桌面租约，不接游戏租约（ADR-004）
+      return powerMonitor.getSystemIdleTime();
+    },
+    onHumanInput: ({ idleSeconds }) => {
+      computerLeaseMgr.notifyHumanInput('host-primary', `检测到用户物理键鼠输入（idle=${idleSeconds}s，≤1s 抢占）`);
+    },
+  });
+  const inputPermissionProbe = (): InputPermissionState => {
+    if (process.platform !== 'darwin') return 'unknown';
+    try {
+      return systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied';
+    } catch {
+      return 'unknown';
+    }
+  };
+  const inputExecutor = new ComputerInputExecutor({
+    leases: computerLeaseMgr,
+    enabled: process.env.WHALE_ENABLE_OS_INPUT === '1',
+    permissionProbe: inputPermissionProbe,
+    onSyntheticInput: (at) => inputMonitor.noteSyntheticInput(at),
+  });
+  const browserRunner = new DeterministicBrowserRunner({
+    engineFactory: (profile) => new ElectronBrowserEngine({ profile }),
+  });
+  const browserRuntime = new BrowserRuntime(browserProfiles, computerLeaseMgr, {
+    runner: browserRunner,
+    executor: inputExecutor,
+    monitor: inputMonitor,
+  });
+  if (process.env.WHALE_DISABLE_INPUT_MONITOR !== '1') inputMonitor.start();
 
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     const haltReason = typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止';
@@ -439,6 +490,7 @@ export async function createV2KernelHost(options: {
     performanceDirector.emergencyHalt(haltReason);
     stageRuntime.stopPerformance(haltReason);
     liveRuntime.emergencyHalt(haltReason);
+    computerLeaseMgr.emergencyHalt(haltReason);
     coopRuntime.emergencyHaltAll(haltReason);
     characterCore.life.emergencyHalt(haltReason);
     return kernel.characters.primaryState();
@@ -446,6 +498,7 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
     performanceDirector.resumeFromHalt();
     liveRuntime.resumeFromHalt();
+    computerLeaseMgr.resumeFromHalt();
     characterCore.life.resume(mode ?? 'autonomous');
     return kernel.characters.primaryState();
   });
@@ -1189,6 +1242,121 @@ export async function createV2KernelHost(options: {
     });
   });
   ipcMain.handle('v2:live-summaries', () => liveRuntime.listSummaries());
+  // V2-P3-03：受控 Browser Use、ComputerUseLease 单主控与 Per-Character Profile/AccountVault 隔离
+  ipcMain.handle('v2:auto-snapshot', () => browserRuntime.snapshot(accountVault));
+  ipcMain.handle('v2:auto-account-register', (_e, rawInput: {
+    accountId?: string;
+    characterId: string;
+    platform: string;
+    username: string;
+    plainSecret: string;
+    expiresAt?: number | null;
+  }) => accountVault.registerAccount(rawInput));
+  ipcMain.handle('v2:auto-profile-ensure', (_e, rawInput: {
+    profileId?: string;
+    characterId: string;
+    accountId: string;
+  }) => browserProfiles.createOrGetProfile({ ...rawInput, accountVault }));
+  ipcMain.handle('v2:auto-profile-cookies', (_e, rawInput: {
+    action: 'set' | 'read';
+    profileId: string;
+    characterId: string;
+    origin?: string;
+    cookieKey?: string;
+    cookieVal?: string;
+  }) => {
+    if (rawInput.action === 'set') {
+      return browserProfiles.setOriginCookie(
+        rawInput.profileId,
+        rawInput.characterId,
+        String(rawInput.origin ?? ''),
+        String(rawInput.cookieKey ?? ''),
+        String(rawInput.cookieVal ?? ''),
+      );
+    }
+    return browserProfiles.readCookies(rawInput.profileId, rawInput.characterId);
+  });
+  ipcMain.handle('v2:auto-browser-exec', async (_e, rawReq: BrowserTaskRequestInput) => {
+    try {
+      return await browserRuntime.executeTask(rawReq);
+    } catch (err) {
+      return {
+        ok: false,
+        taskId: String((rawReq as { taskId?: string })?.taskId ?? 'invalid'),
+        strategyUsed: 'deterministic_dom',
+        pauseReason: 'runner_unavailable',
+        requiresHumanHandoff: false,
+        detail: err instanceof Error ? err.message : String(err),
+        profileDir: '',
+        runner: { engine: 'none', status: 'runner_unavailable', detail: '请求解析失败', stepCount: 0, pageTextChars: 0, injectionSignals: [] },
+        handoff: null,
+      };
+    }
+  });
+  ipcMain.handle('v2:auto-lease', (_e, rawInput: {
+    action: 'acquire' | 'heartbeat' | 'release' | 'human_input' | 'release_human';
+    deviceId?: string;
+    holderId?: string;
+    characterId?: string;
+    purpose?: string;
+    leaseId?: string;
+    ttlMs?: number;
+    reason?: string;
+  }) => {
+    if (rawInput.action === 'acquire') {
+      return computerLeaseMgr.acquireLease({
+        ...(rawInput.deviceId ? { deviceId: rawInput.deviceId } : {}),
+        holderId: String(rawInput.holderId ?? 'agent'),
+        characterId: String(rawInput.characterId ?? 'char_xiaojing'),
+        purpose: String(rawInput.purpose ?? 'automation'),
+        ...(rawInput.ttlMs ? { ttlMs: rawInput.ttlMs } : {}),
+      });
+    }
+    if (rawInput.action === 'heartbeat') {
+      return computerLeaseMgr.heartbeat(String(rawInput.leaseId ?? ''), rawInput.ttlMs);
+    }
+    if (rawInput.action === 'release') {
+      return { ok: computerLeaseMgr.releaseLease(String(rawInput.leaseId ?? ''), rawInput.holderId) };
+    }
+    if (rawInput.action === 'human_input') {
+      return { ok: true, ...computerLeaseMgr.notifyHumanInput(rawInput.deviceId, rawInput.reason) };
+    }
+    computerLeaseMgr.releaseHumanOverride(rawInput.deviceId);
+    return { ok: true };
+  });
+  ipcMain.handle('v2:auto-account-export', () => accountVault.exportPublicConfig());
+  ipcMain.handle('v2:auto-p5-confirm', (_e, rawInput: { taskId: string; action: string; url: string }) =>
+    browserRuntime.issueP5Confirmation({
+      taskId: String(rawInput?.taskId ?? ''),
+      action: String(rawInput?.action ?? ''),
+      url: String(rawInput?.url ?? ''),
+    }));
+  ipcMain.handle('v2:auto-handoffs', () => browserRuntime.listHandoffs(true));
+  ipcMain.handle('v2:auto-handoff-complete', (_e, handoffId: string, outcome?: 'completed' | 'cancelled') =>
+    browserRuntime.completeHandoff(String(handoffId ?? ''), outcome === 'cancelled' ? 'cancelled' : 'completed'));
+  ipcMain.handle('v2:auto-character-purge', (_e, characterId: string) =>
+    browserRuntime.deleteCharacter(accountVault, String(characterId ?? '')));
+  ipcMain.handle('v2:auto-input-status', () => ({
+    monitor: inputMonitor.status(),
+    executor: inputExecutor.status(),
+    realOsInputEnabled: process.env.WHALE_ENABLE_OS_INPUT === '1',
+  }));
+  ipcMain.handle('v2:auto-input-simulate', (_e, deviceId?: string) => ({
+    ok: true,
+    ...computerLeaseMgr.notifyHumanInput(deviceId, '测试注入：模拟用户物理输入'),
+  }));
+  ipcMain.handle('v2:auto-exec-input', (_e, rawInput: {
+    leaseId?: string | null;
+    step?: { kind?: string; x?: number; y?: number; text?: string; key?: string; deltaY?: number; detail?: string };
+  }) => inputExecutor.execute(rawInput?.leaseId ?? null, {
+    kind: (rawInput?.step?.kind ?? 'click') as 'click' | 'move' | 'type_text' | 'key' | 'scroll' | 'screenshot',
+    ...(typeof rawInput?.step?.x === 'number' ? { x: rawInput.step.x } : {}),
+    ...(typeof rawInput?.step?.y === 'number' ? { y: rawInput.step.y } : {}),
+    ...(typeof rawInput?.step?.text === 'string' ? { text: rawInput.step.text } : {}),
+    ...(typeof rawInput?.step?.key === 'string' ? { key: rawInput.step.key } : {}),
+    ...(typeof rawInput?.step?.deltaY === 'number' ? { deltaY: rawInput.step.deltaY } : {}),
+    ...(typeof rawInput?.step?.detail === 'string' ? { detail: rawInput.step.detail } : {}),
+  }));
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');
@@ -1218,9 +1386,12 @@ export async function createV2KernelHost(options: {
     performanceDirector,
     stageRuntime,
     liveRuntime,
+    computerLeaseMgr,
+    browserRuntime,
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
       stopFn = () => {
+        inputMonitor.stop();
         void autodrive.runner.emergencyStop('V2 紧急停止');
         voice.stopAll();
       };

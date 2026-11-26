@@ -1,4 +1,6 @@
 import { _electron as electron } from 'playwright-core';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -191,6 +193,40 @@ interface DirectorV2Window {
       ok: boolean;
       summary?: { songBlockedCount: number; songAcceptedCount: number; danmakuCount: number; giftCount: number } | null;
     }>;
+    v2AutoAccountRegister(input: { accountId?: string; characterId: string; platform: string; username: string; plainSecret: string }): Promise<{
+      ok: boolean;
+      entry?: { accountId: string; maskedSecret: string };
+    }>;
+    v2AutoProfileEnsure(input: { profileId?: string; characterId: string; accountId: string }): Promise<{
+      ok: boolean;
+      profile?: { profileId: string; profileDir: string; isolatedFromUserDaily: boolean };
+    }>;
+    v2AutoProfileCookies(input: { action: 'set' | 'read'; profileId: string; characterId: string; origin?: string; cookieKey?: string; cookieVal?: string }): Promise<{
+      ok: boolean;
+      error?: string;
+    }>;
+    v2AutoBrowserExec(input: { taskId: string; characterId: string; profileId: string; url: string; action: string; riskLevel?: string; confirmToken?: string }): Promise<{
+      ok: boolean;
+      pauseReason: string;
+      requiresHumanHandoff: boolean;
+      runner: { engine: string; status: string; pageTextChars: number; injectionSignals: string[] };
+    }>;
+    v2AutoLease(input: { action: string; deviceId?: string; holderId?: string; characterId?: string; purpose?: string; leaseId?: string }): Promise<{
+      ok: boolean;
+      reason?: string;
+      lease?: { leaseId: string };
+      preemptedLease?: { status: string } | null;
+    }>;
+    v2AutoAccountExport(): Promise<{ secretsRedacted: boolean; accounts: Array<{ maskedSecret: string }> }>;
+    v2AutoHandoffs(): Promise<Array<{ handoffId: string; taskId: string; reason: string; status: string }>>;
+    v2AutoHandoffComplete(handoffId: string, outcome?: 'completed' | 'cancelled'): Promise<{ ok: boolean; handoff?: { status: string } }>;
+    v2AutoInputStatus(): Promise<{
+      monitor: { running: boolean; detected: number };
+      executor: { enabled: boolean; mode: string; permission: string };
+      realOsInputEnabled: boolean;
+    }>;
+    v2AutoExecInput(input: { leaseId?: string | null; step?: { kind?: string; x?: number; y?: number } }): Promise<{ ok: boolean; code: string; executed: boolean; mode: string }>;
+    v2AutoP5Confirm(input: { taskId: string; action: string; url: string }): Promise<{ ok: boolean; token?: string; expiresAt?: number }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -210,7 +246,19 @@ async function waitForDirector(app: import('playwright-core').ElectronApplicatio
 }
 
 describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
-  it('启动后 WhaleKernel 进入 running，支持角色状态读取、紧急停止与恢复', { timeout: 60_000 }, async () => {
+  it('启动后 WhaleKernel 进入 running，支持角色状态读取、紧急停止与恢复', { timeout: 120_000 }, async () => {
+    // P3-03 本地确定性浏览器页面（不访问公网）：普通页 / CAPTCHA 页
+    const pageServer = createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      if ((req.url ?? '').includes('captcha')) {
+        res.end('<html><head><title>Human check</title></head><body><p>Please complete the captcha to continue</p></body></html>');
+        return;
+      }
+      res.end('<html><head><title>鲸屿本地测试页</title></head><body><h1>本地确定性页面</h1><p id="v">确定性读取成功</p><input id="q"></body></html>');
+    });
+    await new Promise<void>((resolve) => pageServer.listen(0, '127.0.0.1', resolve));
+    const localPort = (pageServer.address() as AddressInfo).port;
+    const localUrl = `http://127.0.0.1:${localPort}/article`;
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
@@ -749,8 +797,134 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(p302.obs.recentGifts.length).toBeGreaterThanOrEqual(1);
       expect(p302.ended.summary?.songBlockedCount).toBeGreaterThanOrEqual(1);
       expect(p302.ended.summary?.songAcceptedCount).toBeGreaterThanOrEqual(1);
+
+      // V2-P3-03：验证 AccountVault / Per-Character BrowserProfile 隔离、CAPTCHA 人机交还与 ComputerUseLease 单主控
+      const p303 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const secretValue = 'e2e-plain-secret-token-should-never-leak';
+        const acct = await bridge.v2AutoAccountRegister({
+          accountId: 'e2e-acct-xj',
+          characterId: 'char_xiaojing',
+          platform: 'bilibili',
+          username: 'xiaojing_e2e',
+          plainSecret: secretValue,
+        });
+        const prof = await bridge.v2AutoProfileEnsure({
+          profileId: 'e2e-prof-xj',
+          characterId: 'char_xiaojing',
+          accountId: 'e2e-acct-xj',
+        });
+        await bridge.v2AutoProfileCookies({
+          action: 'set',
+          profileId: 'e2e-prof-xj',
+          characterId: 'char_xiaojing',
+          origin: 'https://example.com',
+          cookieKey: 'sid',
+          cookieVal: 'xj-cookie',
+        });
+        const crossCharRead = await bridge.v2AutoProfileCookies({
+          action: 'read',
+          profileId: 'e2e-prof-xj',
+          characterId: 'char_intruder',
+        });
+        const captchaExec = await bridge.v2AutoBrowserExec({
+          taskId: 'e2e-cap',
+          characterId: 'char_xiaojing',
+          profileId: 'e2e-prof-xj',
+          url: 'https://example.com/captcha-verify',
+          action: 'click_selector',
+        });
+        const lease1 = await bridge.v2AutoLease({
+          action: 'acquire',
+          deviceId: 'host-primary',
+          holderId: 'agent-xj',
+          characterId: 'char_xiaojing',
+          purpose: 'E2E 主控租约',
+        });
+        const lease2 = await bridge.v2AutoLease({
+          action: 'acquire',
+          deviceId: 'host-primary',
+          holderId: 'agent-second',
+          characterId: 'char_other',
+          purpose: 'E2E 并发抢占',
+        });
+        const humanPreempt = await bridge.v2AutoLease({ action: 'human_input', deviceId: 'host-primary' });
+        await bridge.v2AutoLease({ action: 'release_human', deviceId: 'host-primary' });
+        const exported = await bridge.v2AutoAccountExport();
+        return { acct, prof, crossCharRead, captchaExec, lease1, lease2, humanPreempt, exported, secretValue };
+      });
+      expect(p303.acct.ok).toBe(true);
+      expect(p303.acct.entry?.maskedSecret).not.toContain(p303.secretValue);
+      expect(JSON.stringify(p303.exported)).not.toContain(p303.secretValue);
+      expect(p303.prof.profile?.isolatedFromUserDaily).toBe(true);
+      expect(p303.crossCharRead.ok).toBe(false);
+      expect(p303.crossCharRead.error).toContain('PROFILE_ISOLATION_VIOLATION');
+      expect(p303.captchaExec.ok).toBe(false);
+      expect(p303.captchaExec.pauseReason).toBe('captcha_required');
+      expect(p303.captchaExec.requiresHumanHandoff).toBe(true);
+      expect(p303.lease1.ok).toBe(true);
+      expect(p303.lease2.ok).toBe(false);
+      expect(p303.lease2.reason).toBe('DEVICE_LEASE_BUSY');
+      expect(p303.humanPreempt.preemptedLease?.status).toBe('preempted_by_human');
+
+      // V2-P3-03b：Electron 隐藏窗口确定性读取（本地页面）+ 页面 CAPTCHA 交接 + P5 一次性令牌 + dry-run 默认关闭
+      const p303b = await director.evaluate(async (url) => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        await bridge.v2AutoProfileEnsure({ profileId: 'e2e-prof-read', characterId: 'char_xiaojing', accountId: 'e2e-acct-xj' });
+        const read = await bridge.v2AutoBrowserExec({
+          taskId: 'e2e-local-read',
+          characterId: 'char_xiaojing',
+          profileId: 'e2e-prof-read',
+          url,
+          action: 'read',
+        });
+        const captcha = await bridge.v2AutoBrowserExec({
+          taskId: 'e2e-page-cap',
+          characterId: 'char_xiaojing',
+          profileId: 'e2e-prof-read',
+          url: url.replace('/article', '/captcha'),
+          action: 'read',
+        });
+        const handoffs = await bridge.v2AutoHandoffs();
+        const handoffId = handoffs.find((h) => h.taskId === 'e2e-page-cap' && h.status === 'awaiting_human')?.handoffId;
+        const completed = handoffId ? await bridge.v2AutoHandoffComplete(handoffId) : null;
+        const inputStatus = await bridge.v2AutoInputStatus();
+        const dryRun = await bridge.v2AutoExecInput({ leaseId: null, step: { kind: 'click', x: 1, y: 1 } });
+        const token = await bridge.v2AutoP5Confirm({ taskId: 'e2e-p5', action: 'payment', url });
+        const p5Blocked = await bridge.v2AutoBrowserExec({
+          taskId: 'e2e-p5', characterId: 'char_xiaojing', profileId: 'e2e-prof-read', url, action: 'payment', riskLevel: 'P5',
+        });
+        const p5Ok = token.token
+          ? await bridge.v2AutoBrowserExec({
+              taskId: 'e2e-p5', characterId: 'char_xiaojing', profileId: 'e2e-prof-read', url, action: 'payment', riskLevel: 'P5', confirmToken: token.token,
+            })
+          : null;
+        const p5Replay = token.token
+          ? await bridge.v2AutoBrowserExec({
+              taskId: 'e2e-p5', characterId: 'char_xiaojing', profileId: 'e2e-prof-read', url, action: 'payment', riskLevel: 'P5', confirmToken: token.token,
+            })
+          : null;
+        return { read, captcha, handoffId, completed, inputStatus, dryRun, p5Blocked, p5Ok, p5Replay };
+      }, localUrl);
+      expect(p303b.read.ok).toBe(true);
+      expect(p303b.read.runner.engine).toBe('electron');
+      expect(p303b.read.runner.status).toBe('executed');
+      expect(p303b.read.runner.pageTextChars).toBeGreaterThan(0);
+      expect(p303b.read.runner.injectionSignals).toEqual([]);
+      expect(p303b.captcha.ok).toBe(false);
+      expect(p303b.captcha.pauseReason).toBe('captcha_required');
+      expect(p303b.handoffId).toBeTruthy();
+      expect(p303b.completed?.handoff?.status).toBe('completed');
+      expect(p303b.inputStatus.executor.enabled).toBe(false);
+      expect(p303b.inputStatus.executor.mode).toBe('disabled');
+      expect(p303b.inputStatus.realOsInputEnabled).toBe(false);
+      expect(p303b.dryRun).toMatchObject({ ok: true, executed: false, mode: 'dry_run', code: 'feature_disabled' });
+      expect(p303b.p5Blocked.pauseReason).toBe('p5_explicit_confirm');
+      expect(p303b.p5Ok?.ok).toBe(true);
+      expect(p303b.p5Replay?.pauseReason).toBe('p5_explicit_confirm');
     } finally {
       await app.close();
+      await new Promise<void>((resolve) => pageServer.close(() => resolve()));
     }
   });
 });

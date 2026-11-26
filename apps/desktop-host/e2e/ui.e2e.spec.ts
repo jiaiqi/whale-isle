@@ -703,4 +703,77 @@ export default {
       rmSync(manifestDir, { recursive: true, force: true });
     }
   }, 90_000);
+
+  /** [E2E-HOST] V2-P3-03：生命中枢的受控浏览器面板、双租约 HUD 与账号掩码注册。 */
+  it('受控 Browser Use 面板：账号掩码注册、桌面租约抢占与 HUD 双租约分离显示', { timeout: 90_000 }, async () => {
+    const app = await electron.launch({
+      args: ['--use-mock-keychain', mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const page = await waitForWindow(app, 'director', 40_000);
+      await page.waitForFunction(
+        () => Boolean((window as unknown as { directorBridge?: { v2AutoSnapshot?: unknown } }).directorBridge?.v2AutoSnapshot),
+        { timeout: 30_000 },
+      );
+      await page.evaluate(() => localStorage.setItem('wb-tab', 'life'));
+      await page.reload();
+      await page.waitForSelector('[data-v2-life-console]', { timeout: 30_000 });
+      await page.waitForSelector('[data-v2-browser-section]', { timeout: 20_000 });
+
+      // ADR-004：HUD 必须分开展示游戏角色租约与桌面租约
+      expect(await page.locator('[data-v2-game-lease]').count()).toBe(1);
+      expect(await page.locator('[data-v2-computer-lease]').count()).toBe(1);
+
+      // 账号注册：明文只上行，界面仅显示掩码
+      const secret = 'ui-e2e-plain-secret-123456';
+      await page.fill('[data-v2-auto-character-input]', 'char_xiaojing');
+      await page.fill('[data-v2-auto-platform-input]', 'e2eui');
+      await page.fill('[data-v2-auto-username-input]', 'ui-e2e-user');
+      await page.fill('[data-v2-auto-secret-input]', secret);
+      await page.click('[data-v2-auto-account-register]');
+      await page.waitForFunction(
+        () => document.querySelector('[data-v2-auto-accounts]')?.textContent?.includes('ui-e2e-user') ?? false,
+        { timeout: 20_000 },
+      );
+      const accountsText = await page.locator('[data-v2-auto-accounts]').innerText();
+      expect(accountsText).not.toContain(secret);
+      expect(accountsText).toContain('••••');
+
+      // 申请桌面租约 → HUD 显示 AI 独占；模拟用户输入 → 人类优先
+      await page.click('[data-v2-auto-lease-acquire]');
+      await page.waitForFunction(
+        () => document.querySelector('[data-v2-computer-lease]')?.getAttribute('data-v2-computer-lease') === 'ai',
+        { timeout: 15_000 },
+      );
+      await page.click('[data-v2-auto-human-simulate]');
+      await page.waitForFunction(
+        () => document.querySelector('[data-v2-computer-lease]')?.getAttribute('data-v2-computer-lease') === 'human',
+        { timeout: 15_000 },
+      );
+
+      // OS 输入执行器默认关闭：dry-run 只记录意图
+      await page.click('[data-v2-auto-dry-run]');
+      const status = await page.evaluate(() => (window as unknown as {
+        directorBridge: { v2AutoInputStatus(): Promise<{ executor: { enabled: boolean }; realOsInputEnabled: boolean }> };
+      }).directorBridge.v2AutoInputStatus());
+      expect(status.executor.enabled).toBe(false);
+      expect(status.realOsInputEnabled).toBe(false);
+
+      // P5 一次性确认令牌可签发
+      await page.click('[data-v2-auto-p5-confirm]');
+      await page.waitForFunction(
+        () => document.querySelector('[data-v2-browser-section]')?.textContent?.includes('1 待用') ?? false,
+        { timeout: 15_000 },
+      ).catch(() => undefined);
+      const after = await page.evaluate(() => (window as unknown as {
+        directorBridge: { v2AutoSnapshot(): Promise<{ p5ConfirmationCount: number; accounts: Array<{ username: string; maskedSecret: string }> }> };
+      }).directorBridge.v2AutoSnapshot());
+      expect(after.p5ConfirmationCount).toBeGreaterThanOrEqual(1);
+      expect(after.accounts.find((a) => a.username === 'ui-e2e-user')?.maskedSecret).not.toContain(secret);
+    } finally {
+      await app.close();
+    }
+  }, 90_000);
 });

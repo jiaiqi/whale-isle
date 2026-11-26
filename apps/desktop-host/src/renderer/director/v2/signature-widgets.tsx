@@ -15,6 +15,7 @@ import {
   Hand,
   HelpCircle,
   Layers,
+  Monitor,
   Moon,
   OctagonAlert,
   Play,
@@ -254,6 +255,14 @@ export interface ControlOwnershipHudProps {
   brainMode: string;
   asleep: boolean;
   busy: boolean;
+  /** ADR-004：桌面级 ComputerUseLease 与游戏级 GameCharacterControlLease 分开显示 */
+  computerLease?: {
+    active: boolean;
+    holderId: string | null;
+    humanOverride: boolean;
+    pendingHandoffs: number;
+    runnerReady: boolean;
+  } | null;
   onEmergencyHalt: () => void;
   onToggleTakeover: () => void;
   onResumeAutonomous: () => void;
@@ -274,6 +283,7 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
     brainMode,
     asleep,
     busy,
+    computerLease,
     onEmergencyHalt,
     onToggleTakeover,
     onResumeAutonomous,
@@ -322,6 +332,31 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
       <span className={`pill ${ctrl.toneClass}`} style={{ fontSize: 10 }}>
         {isTakeover ? <Hand size={10} /> : <Cpu size={10} />}
         <span>控制权：{ctrl.label}</span>
+      </span>
+
+      {/* ADR-004：游戏角色租约与桌面租约分开表达，绝不合并成一个「控制权」标签 */}
+      <span
+        className="pill pill-blue"
+        data-v2-game-lease={humanControl ? 'human' : brainMode === 'paused' ? 'paused' : running ? 'ai' : 'idle'}
+        style={{ fontSize: 10 }}
+        title="GameCharacterControlLease：只认 F7、界面开关与 P0 急停；普通键鼠输入不影响它（T-M6-73）"
+      >
+        <Gamepad2 size={10} />
+        <span>游戏角色：{humanControl ? '人类接管' : brainMode === 'paused' ? 'AI 安全暂停' : running ? 'AI 自主' : '未运行'}</span>
+      </span>
+
+      <span
+        className="pill"
+        data-v2-computer-lease={computerLease?.humanOverride ? 'human' : computerLease?.active ? 'ai' : 'idle'}
+        style={{ fontSize: 10 }}
+        title="ComputerUseLease：设备级桌面键鼠/前台窗口租约；用户物理输入 ≤1s 抢占。外部 Harness 不受其约束"
+      >
+        <Monitor size={10} />
+        <span>
+          桌面租约：{computerLease?.humanOverride ? '人类优先' : computerLease?.active ? `AI 独占${computerLease.holderId ? ` · ${computerLease.holderId}` : ''}` : '空闲'}
+          {computerLease && computerLease.pendingHandoffs > 0 ? ` · 待人工 ${computerLease.pendingHandoffs}` : ''}
+          {computerLease?.runnerReady === false ? ' · 引擎未接线' : ''}
+        </span>
       </span>
 
       <span className="pill" style={{ fontSize: 10 }} title={`当前 LifeRuntime 活动与表达态：${actLabel} / ${exprMeta.label}`}>

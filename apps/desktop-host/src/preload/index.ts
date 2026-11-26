@@ -412,6 +412,21 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2LiveSongRequest: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:live-song-request', input),
   v2LiveObsStage: (): Promise<unknown> => ipcRenderer.invoke('v2:live-obs-stage'),
   v2LiveSummaries: (): Promise<unknown[]> => ipcRenderer.invoke('v2:live-summaries'),
+  v2AutoSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:auto-snapshot'),
+  v2AutoAccountRegister: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-account-register', input),
+  v2AutoProfileEnsure: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-profile-ensure', input),
+  v2AutoProfileCookies: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-profile-cookies', input),
+  v2AutoBrowserExec: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-browser-exec', input),
+  v2AutoLease: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-lease', input),
+  v2AutoAccountExport: (): Promise<unknown> => ipcRenderer.invoke('v2:auto-account-export'),
+  v2AutoP5Confirm: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-p5-confirm', input),
+  v2AutoHandoffs: (): Promise<unknown[]> => ipcRenderer.invoke('v2:auto-handoffs'),
+  v2AutoHandoffComplete: (handoffId: string, outcome?: 'completed' | 'cancelled'): Promise<unknown> =>
+    ipcRenderer.invoke('v2:auto-handoff-complete', handoffId, outcome),
+  v2AutoCharacterPurge: (characterId: string): Promise<unknown> => ipcRenderer.invoke('v2:auto-character-purge', characterId),
+  v2AutoInputStatus: (): Promise<unknown> => ipcRenderer.invoke('v2:auto-input-status'),
+  v2AutoInputSimulate: (deviceId?: string): Promise<unknown> => ipcRenderer.invoke('v2:auto-input-simulate', deviceId),
+  v2AutoExecInput: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-exec-input', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

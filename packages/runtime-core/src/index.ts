@@ -7,3 +7,7 @@ export * from './event-bus';
 export * from './config-secrets';
 export * from './character-state';
 export * from './kernel';
+export * from './automation-security';
+export * from './browser-runner';
+export * from './human-input-monitor';
+export * from './input-executor';
