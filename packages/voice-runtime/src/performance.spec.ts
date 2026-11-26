@@ -139,7 +139,24 @@ describe('[SIMULATION] V2-P3-01 SingEngine、歌词时钟与 PerformanceDirector
     expect(svcMissingRef.ok).toBe(false);
     expect(svcMissingRef.error).toContain('referenceVocalPath');
 
-    // 模拟外部 SVS Worker 在线与异常降级
+    // V2-P3-01：Worker 能力明细回传（未就绪时把后端原因如实带回，不笼统写「未启用」）
+    const detailFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      svs: false,
+      svc: false,
+      backends: [
+        { name: 'svs', kind: 'singing_voice_synthesis', ready: false, detail: '未配置 svs 后端（WHALE_SING_SVS_ENDPOINT 为空）' },
+        { name: 'svc', kind: 'singing_voice_conversion', ready: false, detail: '未配置 svc 后端（WHALE_SING_SVC_ENDPOINT 为空）' },
+      ],
+      ttsClone: { ready: true, detail: 'tts 后端在线' },
+    }), { status: 200 }));
+    const detailEngine = new SingEngine({ workerEndpoint: 'http://127.0.0.1:19880', fetchImpl: detailFetch });
+    const detailStatuses = await detailEngine.probeBackends();
+    expect(detailStatuses[0]?.available).toBe(false);
+    expect(detailStatuses[0]?.detail).toContain('WHALE_SING_SVS_ENDPOINT');
+    expect(detailStatuses[0]?.detail).toContain('普通 TTS 不得当作 SVS/SVC 使用');
+    expect(detailStatuses[1]?.detail).toContain('WHALE_SING_SVC_ENDPOINT');
+
+    // V2-P3-01：只有 Worker 明确回执真实神经推理才置 realNeuralInferenceVerified
     const wavBytes = buildGuideToneWav(600, 120);
     const wavB64 = Buffer.from(wavBytes).toString('base64');
     const mockFetch = vi.fn<typeof fetch>()
@@ -165,6 +182,8 @@ describe('[SIMULATION] V2-P3-01 SingEngine、歌词时钟与 PerformanceDirector
     expect(svsOk.ok).toBe(true);
     expect(svsOk.backendMode).toBe('worker_svs');
     expect(svsOk.lipFrames.length).toBeGreaterThan(0);
+    // Worker 未回执 neuralVerified → 不得自我宣称真实神经推理
+    expect(svsOk.realNeuralInferenceVerified).toBe(false);
 
     // probe HTTP 非 200（消费掉第 3 个 mock 500）与异常
     const probeFail500 = await workerEngine.probeBackends();
@@ -367,5 +386,24 @@ describe('[SIMULATION] V2-P3-01 SingEngine、歌词时钟与 PerformanceDirector
     });
     expect(okDance.ok).toBe(true);
     expect(okDance.snapshot.mode).toBe('dancing');
+  });
+
+  it('V2-P3-01：Worker 回执 neuralVerified=true 时才置真（真实神经推理）', async () => {
+    const wavBytes = buildGuideToneWav(600, 120);
+    const wavB64 = Buffer.from(wavBytes).toString('base64');
+    const verifiedFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      audioBase64: wavB64, durationMs: 600, sampleRate: 32000, neuralVerified: true,
+    }), { status: 200 }));
+    const engine = new SingEngine({ workerEndpoint: 'http://127.0.0.1:19880', fetchImpl: verifiedFetch });
+    const result = await engine.synthesize({
+      requestId: 'sing-neural-verified',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      mode: 'svs',
+      channel: 'livestream_public',
+      song: makeSong(),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.realNeuralInferenceVerified).toBe(true);
   });
 });

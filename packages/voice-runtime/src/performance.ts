@@ -311,6 +311,14 @@ interface WorkerSingPayload {
   durationMs?: number;
   sampleRate?: number;
   lipFrames?: LipSyncFrame[];
+  /** Worker 回执：本次输出确实来自真实神经推理（缺失或 false 一律不置真） */
+  neuralVerified?: boolean;
+}
+
+/** Worker /sing/health 的能力明细（可选字段，缺失时不影响既有解析） */
+interface WorkerHealthBackends {
+  backends?: Array<{ name?: string; kind?: string; ready?: boolean; detail?: string }>;
+  ttsClone?: { ready?: boolean; detail?: string };
 }
 
 /** 歌声引擎（SVS / SVC）：严格与普通 TTS 说话管线分离，绝不用 TTS 冒充唱歌 */
@@ -363,21 +371,28 @@ export class SingEngine {
           },
         ];
       }
-      const data = await res.json() as { svs?: boolean; svc?: boolean };
+      const data = await res.json() as { svs?: boolean; svc?: boolean } & WorkerHealthBackends;
+      const detailOf = (name: string, fallback: string): string => {
+        const hit = data.backends?.find((b) => b.name === name);
+        return hit?.detail && hit.detail.trim() !== '' ? hit.detail : fallback;
+      };
+      const ttsNote = data.ttsClone?.ready
+        ? '（Worker 另报普通 TTS 可用，但普通 TTS 不得当作 SVS/SVC 使用）'
+        : '';
       return [
         {
           mode: 'svs',
           backend: data.svs ? 'worker_svs' : 'unavailable',
           available: Boolean(data.svs),
           endpoint: this.workerEndpoint,
-          detail: data.svs ? 'SVS 歌声合成后端在线' : 'Worker 在线但未启用 SVS 能力',
+          detail: data.svs ? 'SVS 歌声合成后端在线' : `Worker 在线但 SVS 能力未就绪：${detailOf('svs', '未启用 SVS 能力')}${ttsNote}`,
         },
         {
           mode: 'svc',
           backend: data.svc ? 'worker_svc' : 'unavailable',
           available: Boolean(data.svc),
           endpoint: this.workerEndpoint,
-          detail: data.svc ? 'SVC 音色转换后端在线' : 'Worker 在线但未启用 SVC 能力',
+          detail: data.svc ? 'SVC 音色转换后端在线' : `Worker 在线但 SVC 能力未就绪：${detailOf('svc', '未启用 SVC 能力')}${ttsNote}`,
         },
       ];
     } catch (err) {
@@ -455,7 +470,8 @@ export class SingEngine {
             sampleRate: body.sampleRate ?? 24_000,
             ...(body.audioBase64 ? { audioBase64: body.audioBase64 } : {}),
             lipFrames,
-            realNeuralInferenceVerified: false,
+            // 只有 Worker 明确回执真实神经推理才置真；缺失即不置真（绝不自我宣称）
+            realNeuralInferenceVerified: body.neuralVerified === true,
           });
         }
       } catch {

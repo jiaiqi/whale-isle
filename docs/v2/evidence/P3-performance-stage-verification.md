@@ -1,7 +1,7 @@
 # P3-01 实测证据 — 统一表演系统（`V2-P3-01`：`SingEngine` SVS/SVC + 歌词时钟 + 舞蹈 + 2D/Live2D/VRM `StageRuntime`）
 
 > **关联需求**：`REQ-VOX-02`（说话 / SVS / SVC 分离与曲库版权门禁）、`REQ-PERF-01`（统一 `PerformanceDirector` 与自然沉默权）、`REQ-EMB-02`（2D / Live2D / VRM 3D / OBS 舞台同一 `characterId` 无缝切换）。  
-> **诚实结论口径**：**`IMPLEMENTED_UNVERIFIED`** —— 共享契约、`SingEngine`（SVS/SVC 与 `preview_guide_tone`）、`evaluateSongRights`、`LyricsClockSync`、`PerformanceDirector`、多后端 `StageRuntime`、宿主 8 路 V2 IPC、完整门禁（7/7）及 Electron 45 全量 E2E 已实测通过；因本机未部署真实神经 SVS/SVC 推理 Worker、未接入真实外部 `.moc3` Cubism 运行时与 WebGL VRM 画布实机目视听感，按宪章标记 `IMPLEMENTED_UNVERIFIED`。
+> **诚实结论口径**：**`IMPLEMENTED_UNVERIFIED`** —— 共享契约、`SingEngine`（SVS/SVC 与 `preview_guide_tone`）、`evaluateSongRights`、`LyricsClockSync`、`PerformanceDirector`、多后端 `StageRuntime`、宿主 8 路 V2 IPC、完整门禁（7/7）及 Electron 45 全量 E2E 已实测通过；**2026-11-26 真机补验已额外完成**歌词时钟偏差程序度量、舞台画布 CDP 采集、跨后端状态保留实测，并部署 `services/sing-worker` 把 `SingEngine` 的 `workerEndpoint` 真正接上后端做真实探测（详见第 3 节）；因本机**未部署真实神经 SVS/SVC 推理后端**、**无合法 `.moc3` / `.vrm` 资产**（桌宠窗实为 WebM 视频渲染，非画布），按宪章仍标记 `IMPLEMENTED_UNVERIFIED`。
 
 ---
 
@@ -45,7 +45,122 @@
 
 ---
 
-## 3. 尚未完成的真机实测缺口（`IMPLEMENTED_UNVERIFIED` 原因）
+## 3. 真机补验（2026-11-26，`[REAL-DEVICE]`）——能自动的都已自动做完
 
-1. **真实神经 SVS / SVC 音频推理与人工听感验收 `[REAL-DEVICE]`**：本机未运行独立的 SVS/SVC 神经推理服务，当前实测覆写了在线 Worker HTTP 契约模拟与确定性 `preview_guide_tone` 导唱波形合成（`realNeuralInferenceVerified: false`）。
-2. **真机图形画布渲染验收 `[REAL-DEVICE]`**：Live2D（外部合法 `.moc3` + Cubism Web SDK）与 WebGL VRM 3D 实际桌面可见画布帧率与视觉观感（`realDeviceRenderVerified: false`）待安装真实 3D/Live2D 资产后人工目视验收。
+> 本节只记录**真机/真实后端**实测。凡属仿真或契约模拟的证据一律留在第 2 节，不混写。
+> 诚实结论：**P3-01 仍为 `IMPLEMENTED_UNVERIFIED`**，原因见第 4 节（缺 SVS/SVC 后端与 Live2D/VRM 合法资产）。
+
+### 3.1 歌词时钟偏差程序度量 `[REAL-DEVICE]`
+
+度量脚本 `tools/scripts/measure-lyrics-clock-drift.mts`（新增，随本工单入库），用真实墙钟 `process.hrtime.bigint` 以 25ms 采样驱动 `LyricsClockSync`，记录每行**实际高亮时刻**与**声明 startMs** 的偏差：
+
+| 指标 | 实测值 |
+| --- | --- |
+| 行数 / 被测行 | 4 / 4 |
+| max 偏差 | **25 ms** |
+| mean 偏差 | 17 ms |
+| P95 偏差 | 25 ms |
+| 容差 | 60 ms |
+| 判定 | **pass = true** |
+| `afplay` 进程启动延迟 | 2.02 ms |
+
+逐行明细：第 0 行声明 0ms / 实测 0ms（偏差 0），第 1 行声明 2200ms / 实测 2225ms（偏差 25），第 2 行声明 6000ms / 实测 6013ms（偏差 13），第 3 行声明 9800ms / 实测 9805ms（偏差 5）。
+
+**诚实口径（脚本 `honestNote` 原文）**：本度量检验的是 `LyricsClockSync` 在真实墙钟驱动下的切换精度（时钟自身是否引入漂移）；`desktop-host` 当前由手动 IPC tick 喂 `positionMs`，**尚未把 `positionMs` 绑定到真实音频播放位置**，该绑定属后续工单，故本报告**不等于**「歌词已绑定真实音频时钟」。
+
+### 3.2 舞台画布 CDP 采集 `[REAL-DEVICE]`
+
+Playwright over CDP 连接真实 Electron（`127.0.0.1:9333`），枚举 `pet-stage` 窗口内全部媒体元素并实测渲染循环帧率：
+
+| 采集项 | 实测结果 |
+| --- | --- |
+| `<canvas>` 数量 | **0** |
+| `<video>` 数量 | 1 —— `待机呼吸.webm`（`blue-whale-maid` 资产包），`paused=false`、`readyState=4`、640×360 |
+| Live2D 运行时存在 | **false**（无 `Live2DCubismCore`，无 `[data-live2d-runtime]`） |
+| VRM 运行时存在 | **false**（无 `[data-vrm-runtime]`，`window.THREE` 未定义） |
+| rAF 帧率 | **60.4 FPS**（121 帧 / 2002ms） |
+| 帧间隔 | median 16.7ms / P95 18.3ms / max 18.6ms |
+| 掉帧（>50ms） | **0** |
+
+**结论**：桌宠窗当前是 **VP9-Alpha `.webm` 双 `<video>` 渲染**（与宪章 §1.1 一致），**不是** canvas / WebGL 画布，因此「Live2D / VRM 画布帧率与目视观感」这一项在当前资产状态下**无法在真机上成立**——不是没测，是被测对象不存在。StageRuntime 的 `desktop-2d / live2d / vrm-3d / obs-stage` 四个后端**切换 API 全部 `ok=true`**、`realDeviceRenderVerified` 恒为 `false`（如实标记，不冒充已目视验收）。
+
+### 3.3 跨后端状态保留 `[REAL-DEVICE]`
+
+走中控台真实试演链路（`v2PerfSingStart` → `v2PerfTick(2500)` → `v2StageSwitchBackend`），在唱歌进行中依次切换 4 个后端：
+
+| 后端 | ok | characterId | 歌词行 | 口型 | 表情 | 舞蹈动作 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 切换前（基准） | — | char_xiaojing | index 1「小鲸为你点亮海图的星光」 | `round` / 0.3233 | `singing` | `dance_spin` |
+| `live2d` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
+| `vrm-3d` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
+| `obs-stage` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
+| `desktop-2d` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
+
+`retained = true`。`PerformanceDirector` 快照同步显示 `mode = singing_and_dancing`、`positionMs = 2500`、`activeDanceCue = c2`、活跃图层含 `vocal_lipsync: sing:*` 与 `performance_choreo: dance:*`。
+
+### 3.4 `sing-worker` 真实后端探测接线 `[REAL-DEVICE]`
+
+**本次新增** `services/sing-worker/`（FastAPI，端口 18880），作为 Electron 与真实歌声后端之间的适配层，并新增 `SingEngine` 的 `workerEndpoint` 接线（原实现**根本没传** `workerEndpoint`，`probeBackends` 必然返回 svs/svc 双 unavailable，探测是假的）。
+
+三层链路真实跑通：`Electron → sing-worker(18880) → GPT-SoVITS(9880)`。
+
+真实探测输出（`GET http://127.0.0.1:18880/sing/health`）：
+
+```json
+{
+  "svs": false,
+  "svc": false,
+  "backends": [
+    { "name": "svs", "kind": "singing_voice_synthesis", "ready": false, "detail": "未配置 svs 后端（WHALE_SING_SVS_ENDPOINT 为空）" },
+    { "name": "svc", "kind": "singing_voice_conversion", "ready": false, "detail": "未配置 svc 后端（WHALE_SING_SVC_ENDPOINT 为空）" }
+  ],
+  "ttsClone": { "name": "tts", "kind": "text_to_speech", "ready": true, "detail": "tts 后端在线（http://127.0.0.1:9880/docs）（普通 TTS，不得当作 SVS/SVC 使用）" }
+}
+```
+
+Electron 侧真实消费（`v2PerfSnapshot().singBackends`，真机读取，非 mock）：
+
+```json
+[
+  { "mode": "svs", "backend": "unavailable", "available": false, "endpoint": "http://127.0.0.1:18880",
+    "detail": "Worker 在线但 SVS 能力未就绪：未配置 svs 后端（WHALE_SING_SVS_ENDPOINT 为空）（Worker 另报普通 TTS 可用，但普通 TTS 不得当作 SVS/SVC 使用）" },
+  { "mode": "svc", "backend": "unavailable", "available": false, "endpoint": "http://127.0.0.1:18880",
+    "detail": "Worker 在线但 SVC 能力未就绪：未配置 svc 后端（WHALE_SING_SVC_ENDPOINT 为空）（Worker 另报普通 TTS 可用，但普通 TTS 不得当作 SVS/SVC 使用）" }
+]
+```
+
+中控台 UI 标签同步显示 `SVS: unavailable` / `SVC: unavailable`。
+
+**关键设计决定（诚实红线）**：本机已装并在跑的 **GPT-SoVITS 是 TTS / 音色克隆，不是歌声合成（SVS）**。把它接到 svs/svc 端点上就是「用 TTS 冒充唱歌」，违反 `SingEngine` 的设计意图与宪章 §2.2「真实执行回执铁律」。因此：
+
+- `sing-worker` **只**转发到显式配置的 `WHALE_SING_SVS_ENDPOINT` / `WHALE_SING_SVC_ENDPOINT`，**不会**把普通 TTS 顶上去；
+- 普通 TTS 单独作为 `ttsClone` 能力位如实上报，且 `detail` 里强制带上「普通 TTS 不得当作 SVS/SVC 使用」的显式警告；
+- 后端缺失 → HTTP 501 + 具体原因，**不返回任何伪造音频**；
+- `neuralVerified` **只在真实后端真的返回了音频时**才置 `true`；Electron 侧 `SingRenderResult.realNeuralInferenceVerified` 严格取后端回执，缺失或 `false` 一律不置真。
+
+配套单测：`packages/voice-runtime/src/performance.spec.ts` **5/5 PASS**（新增「Worker 能力明细回传」与「`neuralVerified=true` 时才置真」两例），`services/sing-worker/test_sing_worker.py` **4/4 PASS**（无后端时 health 双 false 且 `ttsClone.detail` 含禁用告警；`/sing/svs` 与 `/sing/svc` 无后端返回 501 且**不含** `audioBase64`；`/health` 与唱歌能力解耦）。
+
+### 3.5 GPT-SoVITS 真实推理实测（**TTS，不是唱歌**）`[REAL-DEVICE]`
+
+直连 `http://127.0.0.1:9880/tts`（权重 `gsv-v2final-pretrained`，参考音频 `packages/pet-renderer/assets/voice-refs/genki_ref.wav`）：
+
+| 项 | 实测值 |
+| --- | --- |
+| HTTP | 200（`content-type: audio/wav`） |
+| 推理耗时 | **1.01 s** |
+| 音频 | 单声道 / 32000 Hz / 82560 帧 / **2580 ms** |
+| 产物 | `/tmp/p3-01-gpt-sovits-out.wav`（本地证据，不入库） |
+
+**这条只证明「真实神经 TTS 推理在本机跑得通」**，与 SVS/SVC 无关，故 `SingEngine` 仍判定 `backendMode = preview_guide_tone`、`realNeuralInferenceVerified = false`（真机 `v2PerfSingStart` 实测输出）。
+
+---
+
+## 4. 尚未完成的真机实测缺口（`IMPLEMENTED_UNVERIFIED` 原因，需 owner 提供前置）
+
+1. **真实神经 SVS / SVC 音频推理与人工听感验收 `[REAL-DEVICE]`**：本机**没有**歌声合成（SVS）与音色转换（SVC）后端。`sing-worker` 已就位且会如实回报 unavailable，但真实演唱仍无法产生。**需要 owner 提供**：合法的歌声合成后端（如 DiffSinger / RVC 系服务的可授权部署）与索引文件（`.pth` + `.index`）、以及用于比对的授权曲库。
+2. **Live2D / VRM 真机画面与听感验收 `[REAL-DEVICE]`**：当前**没有任何** `.moc3` / `.vrm` 资产（`live2dRuntimePresent=false`、`vrmRuntimePresent=false`），桌宠窗实为 WebM 视频渲染。**需要 owner 提供**：授权的 Cubism `.moc3` + `.model3.json`、`.vrm` 模型与对应 three-vrm 运行时许可；本工单只预留接口，**不得**自行抓取来源不明的模型。
+3. **情绪参考音频补齐**：现仅 `genki_ref.wav`（1 组），缺 `tsundere_refuse` / `rage_spray` / `lazy_yawn` / `happy_rice` 共 4 组。
+4. **点歌台管线未落地**：Demucs v4 伴奏分离 → 前 25 秒切片 → RVC2 / RMVPE → 流式预缓冲 → 后台补齐拼接 → songs 缓存池，仍在计划中，repo 内无实现。
+5. **`positionMs` ↔ 真实音频播放位置绑定**：`LyricsClockSync` 精度已验（第 3.1 节），但宿主仍靠手动 IPC tick 喂时钟，尚未绑定真实音频播放头。
+
+> 上述 1~4 项均为**外部素材 / 后端 / 人工听感**依赖，Agent 无法自行获取或代为听感确认；按调度要求已单列清单报 owner，不阻塞其余工单推进。

@@ -1,0 +1,19 @@
+[project]
+name = "sing-worker"
+version = "0.1.0"
+description = "[Python 独立推理进程] 鲸屿歌声引擎 Worker：SVS/SVC 真实后端适配与能力探测（V2-P3-01）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "httpx>=0.27",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]

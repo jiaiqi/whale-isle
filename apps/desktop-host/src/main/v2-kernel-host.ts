@@ -399,7 +399,11 @@ export async function createV2KernelHost(options: {
     return characterCore.life.selectActivity(input);
   });
   const coopRuntime = new CoopRuntimeV1();
-  const singEngine = new SingEngine();
+  // V2-P3-01：歌声 Worker 端点（WHALE_SING_WORKER，如 http://127.0.0.1:18880）。
+  // 未配置时 SingEngine 如实回报 svs/svc unavailable，绝不假装有真实歌声后端。
+  const singEngine = new SingEngine({
+    ...(process.env.WHALE_SING_WORKER ? { workerEndpoint: process.env.WHALE_SING_WORKER } : {}),
+  });
   const performanceDirector = new PerformanceDirector({
     characterId: 'char_xiaojing',
     audioMixer,
