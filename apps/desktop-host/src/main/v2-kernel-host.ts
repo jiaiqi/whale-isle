@@ -33,6 +33,7 @@ import {
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
+import { PixelAvatarPipelineV2 } from './pixel-avatar-v2';
 import { resolvePetPacksDir } from './pet-packs';
 import {
   formatMemoryContext,
@@ -640,6 +641,40 @@ export async function createV2KernelHost(options: {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
+  // V2-P2-06：11 步像素精灵流水线与 Stardew Avatar Mod 导出核验 IPC
+  const pixelPipeline = new PixelAvatarPipelineV2({
+    userDataDir: options.userDataDir,
+    repoRoot: resolve(hereDir, '../../../..'),
+    bibles: studioV2.bibles,
+  });
+  ipcMain.handle('v2:pixel-jobs', (_e, characterId?: string) =>
+    pixelPipeline.listJobs(typeof characterId === 'string' && characterId !== '' ? characterId : undefined),
+  );
+  ipcMain.handle('v2:pixel-run', (_e, rawInput: unknown) => {
+    try {
+      return { ok: true, job: pixelPipeline.run11StepPipeline(rawInput) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:pixel-review', (_e, rawInput: { jobId: string; decision: 'approve' | 'reject'; note?: string }) =>
+    pixelPipeline.reviewJob(rawInput),
+  );
+  ipcMain.handle('v2:pixel-export-stardew', (_e, rawInput: {
+    jobId: string;
+    modsDir?: string;
+    profileModsDir?: string;
+    installModIfMissing?: boolean;
+  }) => {
+    try {
+      return pixelPipeline.exportToStardew(rawInput);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:pixel-verify-stardew', (_e, modsDir?: string) =>
+    pixelPipeline.verifyExport(typeof modsDir === 'string' && modsDir !== '' ? modsDir : undefined),
+  );
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');

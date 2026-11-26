@@ -375,6 +375,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v22dList: (characterId?: string): Promise<unknown[]> => ipcRenderer.invoke('v2:2d-list', characterId),
   v22dCheckDistribution: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:2d-check-distribution', input),
   v2CrossPetImport: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:crosspet-import', input),
+  v2PixelJobs: (characterId?: string): Promise<unknown[]> => ipcRenderer.invoke('v2:pixel-jobs', characterId),
+  v2PixelRun: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:pixel-run', input),
+  v2PixelReview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:pixel-review', input),
+  v2PixelExportStardew: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:pixel-export-stardew', input),
+  v2PixelVerifyStardew: (modsDir?: string): Promise<unknown> => ipcRenderer.invoke('v2:pixel-verify-stardew', modsDir),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

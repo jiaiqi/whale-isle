@@ -73,6 +73,13 @@ interface DirectorV2Window {
       ok: boolean;
       result?: { ok: boolean; importedCount: number; skippedCount: number; entries: Array<{ customId: string; licenseScope: string }> };
     }>;
+    v2PixelJobs(characterId?: string): Promise<Array<{ jobId: string; status: string }>>;
+    v2PixelVerifyStardew(modsDir?: string): Promise<{
+      ok: boolean;
+      modDir: string;
+      realDeviceInGameVisualVerified: boolean;
+      issues: string[];
+    }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -353,6 +360,18 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(p205.localCheck.check?.allowed).toBe(true);
       expect(p205.liveCheck.check?.allowed).toBe(false);
       expect(p205.commercialCheck.check?.allowed).toBe(false);
+
+      // V2-P2-06：验证像素人物流水线任务查询与 Stardew Avatar Mod 导出核验 IPC
+      const p206 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        return {
+          jobs: await bridge.v2PixelJobs(),
+          verify: await bridge.v2PixelVerifyStardew(),
+        };
+      });
+      expect(Array.isArray(p206.jobs)).toBe(true);
+      expect(typeof p206.verify.modDir).toBe('string');
+      expect(p206.verify.realDeviceInGameVisualVerified).toBe(false);
     } finally {
       await app.close();
     }

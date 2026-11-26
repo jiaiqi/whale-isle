@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-06`：游戏像素人物流水线与 Stardew Avatar Mod 导出核验 — `IMPLEMENTED_UNVERIFIED`）
+
+- **11 步像素流水线与 Stardew 导出核验契约** `packages/shared-protocol/src/media.ts`：新增 `PixelPipelineStep`、`PixelSpriteQaReport`、`PixelAvatarJobRequest`、`PixelAvatarJobSnapshot` 与 `StardewAvatarExportVerification` Zod 契约。
+- **纯 Node PNG 编解码、11 步流水线与 `WhaleIsleAvatar` 导出一致性校验** `apps/desktop-host/src/main/{pixel-avatar-v2.ts,pixel-avatar-v2.spec.ts,v2-kernel-host.ts}` & `apps/desktop-host/src/{preload/index.ts,renderer/director/bridge.ts}`：实现内置 `node:zlib` 8-bit RGB/RGBA PNG 编解码（支持 Filter 0–4）、`PixelAvatarPipelineV2`（贯通 CharacterBible 锁定、4×6 投影切格、脚底对齐 1×/2×/4× 缩放、白边清理、调色板量化、空帧超限 QA、SHA-256 溯源、审批门禁与单人/联机 profile 原子导出）及 `verifyStardewAvatarExport`，接入 5 路 `v2:pixel-*` IPC；实测 `dotnet build`（0 警告）暂存 `WhaleIsleAvatar.dll`、`verify:gate` 7/7 与 Electron 45 E2E 全绿（星露谷实机画面目视确认待人类补验）。
+
 ### Added / Changed（`V2-P2-05`：Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入 — `IMPLEMENTED_UNVERIFIED`）
 
 - **Character Bible / Live2D / 授权拦截 / CrossPet 导入契约** `packages/shared-protocol/src/media.ts`：新增 `CharacterBibleUpsertRequest`、`CharacterBibleAttachRefRequest`、`Live2dLayerRole`、`Live2dAssetInspection`、`AssetDistributionChannel`、`LicenseDistributionCheck`、`Asset2dStudioPackage`、`CrossPetImportRequest`、`CrossPetImportedEntry` 与 `CrossPetImportResult`。

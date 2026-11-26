@@ -374,3 +374,86 @@ export const CrossPetImportResultSchema = z.object({
   warnings: z.array(z.string()),
 });
 export type CrossPetImportResult = z.infer<typeof CrossPetImportResultSchema>;
+
+/** V2-P2-06：11 步游戏像素人物流水线与 Stardew Avatar Mod 导出核验契约 */
+export const PixelPipelineStepSchema = z.object({
+  step: z.number().int().min(1).max(11),
+  id: z.string().min(1),
+  label: z.string().min(1),
+  status: z.enum(['ok', 'warn', 'failed', 'skipped']),
+  detail: z.string(),
+});
+export type PixelPipelineStep = z.infer<typeof PixelPipelineStepSchema>;
+
+export const PixelSpriteQaReportSchema = z.object({
+  valid: z.boolean(),
+  tier: z.enum(['1x', '2x', '4x']),
+  width: z.number().int().nonnegative(),
+  height: z.number().int().nonnegative(),
+  cols: z.number().int().nonnegative(),
+  rows: z.number().int().nonnegative(),
+  cellWidth: z.number().int().nonnegative(),
+  cellHeight: z.number().int().nonnegative(),
+  emptyCells: z.number().int().nonnegative(),
+  opaquePixels: z.number().int().nonnegative(),
+  colorCount: z.number().int().nonnegative(),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+});
+export type PixelSpriteQaReport = z.infer<typeof PixelSpriteQaReportSchema>;
+
+export const PixelAvatarJobRequestSchema = z.object({
+  characterId: z.string().min(1),
+  displayName: z.string().min(1),
+  sourcePngPath: z.string().min(1),
+  tier: z.enum(['1x', '2x', '4x']).default('2x'),
+  sourceType: z.enum(['ai-generated', 'user-upload', 'third-party-import']).default('user-upload'),
+  license: z.string().min(1).default('SELF_OWNED_COMMERCIAL'),
+  allowCommercial: z.boolean().default(true),
+  allowLivestream: z.boolean().default(true),
+  allowRedistribution: z.boolean().default(false),
+  author: z.string().optional(),
+  maxEmptyCells: z.number().int().min(0).max(24).default(4),
+});
+export type PixelAvatarJobRequest = z.infer<typeof PixelAvatarJobRequestSchema>;
+
+export const PixelAvatarJobSnapshotSchema = z.object({
+  jobId: z.string().min(1),
+  characterId: z.string().min(1),
+  displayName: z.string().min(1),
+  tier: z.enum(['1x', '2x', '4x']),
+  status: AssetPipelineStatusSchema,
+  compiledPrompt: z.string().min(1),
+  sourcePngPath: z.string().min(1),
+  outputPngPath: z.string().optional(),
+  qa: PixelSpriteQaReportSchema.optional(),
+  provenance: AssetProvenanceSchema.optional(),
+  steps: z.array(PixelPipelineStepSchema),
+  exportedModsDir: z.string().optional(),
+  error: z.string().optional(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+export type PixelAvatarJobSnapshot = z.infer<typeof PixelAvatarJobSnapshotSchema>;
+
+export const StardewAvatarExportVerificationSchema = z.object({
+  ok: z.boolean(),
+  modDir: z.string().min(1),
+  modInstalled: z.boolean(),
+  dllCompiled: z.boolean(),
+  dllSha256: z.string().optional(),
+  dllMatchesPublish: z.boolean().optional(),
+  manifestVersion: z.string().optional(),
+  uniqueId: z.string().optional(),
+  activeAvatarValid: z.boolean(),
+  syncedCharacterId: z.string().optional(),
+  spriteValid: z.boolean(),
+  spriteFile: z.string().optional(),
+  spriteTier: z.enum(['1x', '2x', '4x']).optional(),
+  spriteWidth: z.number().int().nonnegative().optional(),
+  spriteHeight: z.number().int().nonnegative().optional(),
+  realDeviceInGameVisualVerified: z.literal(false),
+  issues: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type StardewAvatarExportVerification = z.infer<typeof StardewAvatarExportVerificationSchema>;

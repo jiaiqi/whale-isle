@@ -127,8 +127,8 @@
 - **`V2-P2-03`（`IMPLEMENTED_UNVERIFIED`）：`MediaGenerationGateway` 与图片生成流水线**（`@workbench/shared-protocol/media` 十态资产与溯源、`MediaGenerationGateway` 诚实探测+Character Bible+候选区审查隔离+磁盘恢复与宿主 IPC 完成，`verify:gate` 7/7 + 33 专项单测 + Electron 45 E2E 全绿，详见 [P2-media-gateway-verification.md](./evidence/P2-media-gateway-verification.md)；待真实在线生图 Key / 已登录 Codex 出图实测）
 - **`V2-P2-04`（`IMPLEMENTED_UNVERIFIED`）：3D 大模型生成与 Blender 自动化后处理流水线**（`@workbench/shared-protocol/media` 3D/VRM 契约、`inspectGlbOrVrm` 二进制骨骼/口型质检、`detectBlenderToolchain` + 无头后处理脚本与 `Pipeline3dManager` 4 路 V2 IPC 完成，`verify:gate` 7/7 + 6 专项单测 + Electron 45 E2E 全绿，详见 [P2-3d-blender-pipeline-verification.md](./evidence/P2-3d-blender-pipeline-verification.md)；本机缺 Blender 与 Hunyuan3D 服务待真机验收）
 - **`V2-P2-05`（`IMPLEMENTED_UNVERIFIED`）：Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入**（`@workbench/shared-protocol/media` Character Bible / Live2D QA / 授权门禁 / CrossPet 契约、`CharacterBibleStore` + `inspectLive2dOrLayered2d` + `evaluateAssetDistributionPolicy` + `CharacterStudioV2.importCrossPetPack` 10 路 IPC 完成，`verify:gate` 7/7 + 30 角色真实 CrossPet 全量导入单测 + Electron 45 E2E 全绿，详见 [P2-character-studio-crosspet-verification.md](./evidence/P2-character-studio-crosspet-verification.md)；外部 `.moc3` 真机舞台渲染待 `V2-P3-01` 与实机素材验收）
-- **`V2-P2-06`（`NEXT`）：游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证**（11 步像素流水线 + `stardew-avatar-sync` 导出与游戏内外观核验）
-- **`V2-P2-07`：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚**（10 态资产发布、Hash 校验、非商业阻断与一键回滚）
+- **`V2-P2-06`（`IMPLEMENTED_UNVERIFIED`）：游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证**（`@workbench/shared-protocol/media` 像素与导出核验契约、纯 Node PNG 编解码、`PixelAvatarPipelineV2` 11 步流水线与候选审批导出、`verifyStardewAvatarExport`、`WhaleIsleAvatar.dll` Release 编译暂存、`verify:gate` 7/7 + Electron 45 E2E 全绿，详见 [P2-pixel-stardew-avatar-verification.md](./evidence/P2-pixel-stardew-avatar-verification.md)；星露谷进图内外观目视核验待 `[REAL-DEVICE]`）
+- **`V2-P2-07`（`NEXT`）：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚**（10 态资产发布、Hash 校验、非商业阻断与一键回滚）
 - **`V2-P2-08`：真实星露谷人机联机协作（`CoopRuntime` v1）**（人类玩家 + 小鲸各自控制独立角色联机分工、任务板、资源锁、Mod 兼容检测、掉线恢复）
 
 ---

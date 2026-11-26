@@ -37,11 +37,14 @@ import type {
   MemoryUncertaintyLevel,
   PetDesktopPrefs,
   PetWindowView,
+  PixelAvatarJobRequest,
+  PixelAvatarJobSnapshot,
   Pipeline3dJobSnapshot,
   Pipeline3dRequest,
   PreferenceCategory,
   ProviderQuotaMatrix,
   ProviderQuotaReport,
+  StardewAvatarExportVerification,
   TeamBlackboardSnapshot,
   TeamCommsMessage,
   TeamGoal,
@@ -699,6 +702,16 @@ export interface DirectorBridge {
   v22dList(characterId?: string): Promise<Asset2dStudioPackage[]>;
   v22dCheckDistribution(input: { packageId: string; channel: AssetDistributionChannel }): Promise<{ ok: boolean; error?: string; check?: LicenseDistributionCheck }>;
   v2CrossPetImport(input?: Partial<CrossPetImportRequest>): Promise<{ ok: boolean; error?: string; result?: CrossPetImportResult }>;
+  v2PixelJobs(characterId?: string): Promise<PixelAvatarJobSnapshot[]>;
+  v2PixelRun(input: PixelAvatarJobRequest): Promise<{ ok: boolean; error?: string; job?: PixelAvatarJobSnapshot }>;
+  v2PixelReview(input: { jobId: string; decision: 'approve' | 'reject'; note?: string }): Promise<{ ok: boolean; error?: string; job?: PixelAvatarJobSnapshot }>;
+  v2PixelExportStardew(input: {
+    jobId: string;
+    modsDir?: string;
+    profileModsDir?: string;
+    installModIfMissing?: boolean;
+  }): Promise<{ ok: boolean; error?: string; job?: PixelAvatarJobSnapshot; verification?: StardewAvatarExportVerification }>;
+  v2PixelVerifyStardew(modsDir?: string): Promise<StardewAvatarExportVerification>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

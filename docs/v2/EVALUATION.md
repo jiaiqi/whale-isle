@@ -91,3 +91,4 @@
 
 - **`V2-P2-01`..`V2-P2-04`**：均已通过 `pnpm verify:gate` 7/7 与 Electron 45 E2E，因缺少真实星露谷联机客户端、外部新 CLI、在线生图 Key 或本机 Blender 二进制，诚实保持 `IMPLEMENTED_UNVERIFIED`。
 - **`V2-P2-05`（Character Bible、2D/Live2D QA 与 CrossPet 全量导入）**：`character-studio-v2.spec.ts`（含随包 30 角色真实目录全量导入、`.provenance.json`、`CC BY-NC-SA 4.0` 直播/商用拦截）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；外部真实 Cubism `.moc3` 舞台渲染切换待 `V2-P3-01` 实机补验，状态记为 `IMPLEMENTED_UNVERIFIED`。
+- **`V2-P2-06`（11 步游戏像素流水线与 Stardew Avatar Mod 导出）**：`dotnet build` Release 编译暂存 `WhaleIsleAvatar.dll`（0 警告）、`pixel-avatar-v2.spec.ts`（4/4 PASS）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；因尚未人工启动星露谷 GUI 进图目视核验，`realDeviceInGameVisualVerified` 诚实保持 `false`，状态记为 `IMPLEMENTED_UNVERIFIED`。
