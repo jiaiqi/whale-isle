@@ -93,9 +93,15 @@ voice when teased, then deflates within two seconds.
 - 正文内联标签（`(sighs deeply)` + `(pauses for a moment)`）一次成功，音频 7.04s。
 - VoiceDesign 按第 2 节的音色描述一次成功（1972ms / 5.6s）。
 
+已定稿的漂移结论（实测，证据 §2.8）：
+
+- **VoiceDesign 同一描述连跑 10 次，说话人余弦最小 0.4145**——漂移是实的，不能当角色固定声线。
+- 推荐路径：**VoiceDesign 出候选 → 人工挑一条 → 用自产音频走 VoiceClone 锁死**；
+  参考音频必须是自产或已获授权的录音，不碰他人声音。
+
 仍未实测（不许写成已支持）：
 
-- 情绪稳定性（同指令连跑 ≥10 次的分布）、唱歌听感、VoiceClone 克隆一致性（缺合法参考音频）。
+- 情绪稳定性（同指令连跑 ≥10 次的分布）、唱歌听感、VoiceClone 克隆一致性（在跑，用自产 `consistency-1.wav` 当参考音频）。
 - MiMo 流式（`pcm16`）**未实现**，`supportsStreaming` 固定 `false`。
 - OpenRouter Gemini 3.8 Flash TTS 的情绪控制方式官方没有说法，一律按"未验证"处理；要试就在 bench 单开实验组。
 - 音高偏移是 mcode 链路的参数，**不能**直接套到 MiMo / OpenRouter 上：它们的 API 没有 pitch 字段。

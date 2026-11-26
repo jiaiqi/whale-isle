@@ -5,6 +5,18 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Fixed（bench 音色占位串 + MiniMax emotion 枚举，参数层实测）
+
+- **`voiceRef: 'bench_voice'`**：bench 给所有 provider 统一传占位串，MiniMax 25/25 报 `voice id not exist`。改为 `--voice <id>` 覆盖 + 各 provider 默认音色：MiniMax → `qiaopi_mengmei`（账号已注册定制音色）、OpenAI → `alloy`、`mimo-tts` → `mimo_default`。
+- **`voice_setting.emotion`**：`MiniMaxTtsProvider` 把 app 自定义键（`sweet_normal` 等）直接传进请求，服务端拒掉（`invalid params: voice_setting emotion`）。新增 `MINIMAX_EMOTION_MAP`（app 五档 → MiniMax 闭合枚举），未知情绪**直接不传这个字段**。
+- **`group_id` 确认不需要**：服务端能返回业务错误码，说明 Bearer 鉴权已覆盖 group。MiniMax 第三层错误是 Token Plan 用量用尽（账单问题，非代码问题）。
+- **诚实性修正**：MiniMax 与 OpenAI 的 `supportsStreaming` 此前硬编码 `true`，适配器是非流式的，已改为 `false`（与 MiMo 同一口径）。
+
+### Validated（VoiceDesign 音色漂移 `[REAL-DEVICE]`：不能当固定声线）
+
+- **`--provider mimo-voicedesign --consistency 10 --from-vault`**：10/10 成功（wall 1630–2445ms），说话人余弦（CAM++，45 对）均值 0.7124 / 中位 0.7368 / **最小 0.4145** / 最大 0.8407 / 标准差 0.0862；对照 ZipVoice 同音色基线（均值 0.8563 / 最小 0.7545）。最小 0.4145 已是「听着不是同一个人」量级。
+- **产品路径写死**：VoiceDesign 出候选 → 人工挑一条 → 用自产音频走 VoiceClone 锁死。音色设计台 UI 已加实测提醒；VoiceClone 锁定稳定性由编排方在跑（自产 `consistency-1.wav` 当参考音频），结果回填证据文档。
+
 ### Added（MiMo/OpenRouter 真机实连 + 凭据库 bench + 音色设计台 + 供应商分组 UI）
 
 - **真机实测**（2026-11-27 01:29–01:47，产物 `artifacts/tts-ab/`）：`mimo-tts` 5/5（1048–1733ms）、`mimo-voicedesign` 5/5（1361–2799ms）、`openrouter-gemini` 3/3（2437–4487ms）；编排方探针另录 6/6（`artifacts/tts-ab/mimo-real/`）与同一句话六种控制（时长 +41%、F0 中位 216.2–255.3 Hz，tsundere 一次 8055ms 的方差如实记录，听感未下结论）。

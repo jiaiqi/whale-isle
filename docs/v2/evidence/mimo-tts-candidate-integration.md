@@ -167,14 +167,46 @@ VoiceDesign：用 `docs/v2/VOICE-PERSONA-xiaojing.md` 的音色描述，1972ms /
 | `mimo-voicedesign` | 5/5 | 1361–2799ms | `artifacts/tts-ab/mimo-voicedesign/`（覆盖旧 fake 数据） |
 | `openrouter-gemini` | 3/3 | 2437–4487ms | `artifacts/tts-ab/openrouter-gemini/` |
 
+### 2.7 bench 自身的两个 bug（已修，MiniMax 参数层实测）
+
+`--provider minimax --from-vault` 最初 **25/25 报 `voice id not exist`**：bench 给所有 provider 统一传 `voiceRef: 'bench_voice'`，
+MiniMax 把它直接当 `voice_id` 打进请求，账号里没这个音色。修法（只在 bench 改，不去 provider 里猜默认值）：
+
+- `--voice <id>` 可覆盖；各 provider 默认值：MiniMax → `qiaopi_mengmei`（账号里已注册的定制音色，owner 确认）；
+  OpenAI → `alloy`；`mimo-tts` → `mimo_default`；voicedesign / voiceclone 不使用 voiceRef。
+- 修完第二层错误浮出：`invalid params: voice_setting emotion`——`MiniMaxTtsProvider` 把 app 自己的情绪键
+  （`sweet_normal` 等）直接传进 `voice_setting.emotion`，MiniMax 只认闭合枚举（happy/sad/angry/…）。
+  修法：新增 `MINIMAX_EMOTION_MAP`（app 五档 → MiniMax 枚举），未知情绪**直接不传这个字段**。
+- **`group_id` 坑已确认不存在**：服务端能返回业务错误码（`voice id not exist` / `invalid params` / 用量上限），
+  说明 Bearer 鉴权已覆盖 group，本链路不需要 `group_id`。
+- 参数层修好后第三层错误：**Token Plan 用量已用尽**（`已达到 Token Plan 用量上限`），MiniMax 当前账号不可用。
+  这是账单问题不是代码问题；MiniMax 的对拍继续记为未实测。
+- 顺带纠正两处旧谎报：`MiniMaxTtsProvider` 与 `CloudOpenAiTtsProvider` 的 `supportsStreaming` 此前硬编码 `true`，
+  适配器是非流式的，已改为 `false`（与 MiMo 同一口径）。
+
+### 2.8 VoiceDesign 音色漂移（已实测，结论：**不能当固定声线**）
+
+`--provider mimo-voicedesign --consistency 10 --from-vault`，10/10 成功（wall 1630–2445ms）。
+说话人嵌入余弦（CAM++，两两 45 对），产物 `artifacts/tts-ab/mimo-voicedesign-consistency/`：
+
+| | 均值 | 中位 | 最小 | 最大 | 标准差 |
+| --- | --- | --- | --- | --- | --- |
+| MiMo VoiceDesign（同一描述 ×10） | 0.7124 | 0.7368 | **0.4145** | 0.8407 | 0.0862 |
+| ZipVoice 同音色基线（15 条） | 0.8563 | 0.8589 | 0.7545 | — | 0.027 |
+
+**结论：VoiceDesign 同一段描述的漂移是实的**。最小 0.4145 已经是「听着不是同一个人」的量级（参照同音色基线 0.75+），
+不能拿来做角色的固定声线。**推荐路径：VoiceDesign 出候选 → 人工挑一条 → VoiceClone 拿自产音频锁死**。
+「音色设计台」的「设为桌宠声线」按钮因此只做候选写入，界面里明确提示漂移与锁声线路径。
+VoiceClone 的锁定稳定性（同一参考音频 ×10 的余弦）由编排方在跑，结果出来再回填。
+
 ---
 
 ## 3. 未实测（逐项写清，不许拿估算值填）
 
 | 项 | 状态 | 缺什么 |
 | --- | --- | --- |
-| VoiceDesign 音色漂移（同描述 10 次） | **未实测** | 跑 `--from-vault --provider mimo-voicedesign --consistency 10` 后用 `speaker-cosine.py` 算 |
-| VoiceClone 克隆一致性 | **未实测** | 缺一段自制或已授权的参考音频（`WHALE_MIMO_VOICE_SAMPLE`） |
+| VoiceDesign 音色漂移 | ✅ **已实测**（§2.8）：最小 0.4145，不能当固定声线 | 漂移路径已写死为「候选→人工挑→VoiceClone 锁死」 |
+| VoiceClone 克隆一致性 | **在跑**（编排方用自产 `consistency-1.wav` 当参考音频，×10） | 结果出来回填 |
 | 五情绪指令 / 前缀标签 / 内联标签的**稳定性**（多次重复） | **未实测（只有一次迹象）** | 同描述连跑 ≥10 次 |
 | 唱歌前缀听感 | **未实测** | 跑 `--from-vault --provider mimo-tts`，styleMode=singing 单独实验 |
 | OpenRouter 情绪控制方式 | **未实测（官方无说法）** | 只能单开实验组，不进能力声明 |
@@ -187,11 +219,11 @@ VoiceDesign：用 `docs/v2/VOICE-PERSONA-xiaojing.md` 的音色描述，1972ms /
 
 | 供应商 | 一句话整句耗时 | 首包 | 成功率 | 音色一致性 | 一句花费 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
-| MiniMax T2A v2 | **未实测** | 未实测 | 未实测 | 不适用（指定 voice_id） | 未实测 | 库里有 `minimax`，当前实例读不到 |
+| MiniMax T2A v2 | **未实测（Token Plan 用量已用尽）** | 未实测 | 0/5（账单层失败，参数层已修） | 不适用（指定 voice_id） | 未实测 | `bench_voice` 与 emotion 两处参数 bug 已修（§2.7） |
 | OpenAI 兼容 TTS | **未实测** | 未实测 | 未实测 | 不适用（指定 voice） | 未实测 | 缺 `openai-tts` 凭据 |
 | OpenRouter Gemini TTS | **2437–4487ms**（n=3） | =整句（非流式） | 3/3 | 不适用（预置音色） | 未实测（按 token） | 第四家候选 |
 | MiMo 内置音色 | **1048–1733ms**（适配器 n=5；探针另有 tsundere 8055ms 的方差实例） | =整句（非流式） | 5/5（探针 6/6） | 未实测 | 限时免费 | 9 内置音色 |
-| MiMo VoiceDesign | **1361–2799ms**（n=5）；探针单次 1972ms | =整句（非流式） | 5/5 | 未实测 | 限时免费 | 需音色描述 |
+| MiMo VoiceDesign | **1361–2799ms**（n=5）；探针单次 1972ms | =整句（非流式） | 5/5 + 10/10（漂移组） | **已实测：余弦最小 0.4145，不能当固定声线** | 限时免费 | 需音色描述 |
 | MiMo VoiceClone | **未实测** | 未实测 | 未实测 | 未实测 | 限时免费 | 需合法参考音频 |
 
 听感结论不下，留给 owner 自己听。

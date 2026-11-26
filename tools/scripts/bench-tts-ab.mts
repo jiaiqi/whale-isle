@@ -266,6 +266,27 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
   }
 }
 
+/** 每个 provider 的 bench 音色：--voice 覆盖 > 环境变量 > 账号里已注册/内置的默认值 */
+const voiceOverride = arg('voice');
+
+function resolveVoiceRef(key: ProviderKey): string {
+  if (voiceOverride !== undefined && voiceOverride.trim() !== '') return voiceOverride.trim();
+  switch (key) {
+    // MiniMax 定制音色 qiaopi_mengmei 是账号里已注册的 voice_id（2026-11-27 owner 确认）
+    case 'minimax':
+      return process.env.MINIMAX_VOICE_ID?.trim() || 'qiaopi_mengmei';
+    // OpenAI 内置音色名；alloy 是平台默认可用的一个
+    case 'openai':
+      return process.env.OPENAI_TTS_VOICE?.trim() || 'alloy';
+    // mimo-tts 只认 9 个内置音色之一，未知 id 会静默回落 mimo_default
+    case 'mimo-tts':
+      return process.env.WHALE_MIMO_VOICE?.trim() || 'mimo_default';
+    // voicedesign/voiceclone 不使用 voiceRef；openrouter 走 provider 的 voice 选项，这里只是占位
+    default:
+      return 'bench_voice';
+  }
+}
+
 async function main(): Promise<void> {
   const fake = flag('fake');
   fromVault = flag('from-vault');
@@ -316,6 +337,11 @@ async function main(): Promise<void> {
       ? Array.from({ length: consistency }, () => ({ emotion: 'consistency', text: SENTENCES[0]!.text }))
       : SENTENCES.slice(0, limit);
 
+    /**
+     * 音色按 provider 给，不许统一传占位串：MiniMax 把 voiceRef 直接当 voice_id 打进请求，
+     * 账号里没有 `bench_voice` 就 25/25 全拒（2026-11-27 实测）。--voice 可覆盖，环境变量次之。
+     */
+    const voiceRef = resolveVoiceRef(key);
     for (const [i, row] of rows.entries()) {
       const n = i + 1;
       const started = Date.now();
@@ -323,7 +349,7 @@ async function main(): Promise<void> {
         const out = await built.provider.synthesize({
           requestId: `bench-${built.name}-${n}`,
           characterId: 'char_xiaojing',
-          voiceRef: 'bench_voice',
+          voiceRef,
           text: row.text,
           emotion: row.emotion,
           styleMode: 'normal',

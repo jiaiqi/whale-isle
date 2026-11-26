@@ -347,6 +347,9 @@ export function VoiceDesignLab(): React.JSX.Element {
         </button>
         <p className="mt-1.5 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
           走 `mimo-v2.5-tts-voicedesign`，Key 从凭据库取（providerId `mimo-tts`）；未配置会如实报错，不会用假音频顶替。
+          <br />
+          实测提醒：同一描述连跑 10 次的说话人余弦最小 0.4145——漂移是实的，不能当固定声线。
+          路径：这里出候选 → 人工挑一条 → 用自产音频走 VoiceClone 锁死（漂移实验见证据文档 §2.8）。
         </p>
       </section>
     </div>

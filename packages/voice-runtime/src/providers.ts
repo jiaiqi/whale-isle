@@ -168,9 +168,9 @@ export class CloudOpenAiTtsProvider implements VoiceProvider {
       degraded: false,
       platform: process.platform,
       detail: hasKey
-        ? `OpenAI 兼容 TTS 已配置 (${this.model})`
+        ? `OpenAI 兼容 TTS 已配置 (${this.model}) · 非流式（流式未实现）`
         : '未配置 OpenAI 兼容 TTS 凭据',
-      supportsStreaming: true,
+      supportsStreaming: false,
       supportsEmotion: true,
     });
   }
@@ -236,6 +236,24 @@ export interface MiniMaxTtsOptions {
 }
 
 /** MiniMax T2A v2 真实云端情绪 TTS 供应商 */
+/**
+ * MiniMax `voice_setting.emotion` 是闭合枚举（官方文档：happy/sad/angry/fearful/disgusted/surprised/neutral）。
+ * 2026-11-27 实测：传 app 自己的键（sweet_normal/daily/…）会被服务端拒掉
+ * （`invalid params: voice_setting emotion`）。所以映射进枚举，未知情绪**直接不传这个字段**，不硬编。
+ */
+export const MINIMAX_EMOTION_MAP: Record<string, string> = {
+  daily: 'happy',
+  bright: 'happy',
+  tsundere: 'angry',
+  sleepy: 'neutral',
+  surprised: 'surprised',
+  sweet_normal: 'happy',
+  tsundere_refuse: 'angry',
+  rage_spray: 'angry',
+  lazy_yawn: 'neutral',
+  clumsy_panic: 'fearful',
+};
+
 export class MiniMaxTtsProvider implements VoiceProvider {
   readonly kind = 'minimax-tts' as const;
   private readonly baseUrl: string;
@@ -256,8 +274,10 @@ export class MiniMaxTtsProvider implements VoiceProvider {
       available: hasKey,
       degraded: false,
       platform: process.platform,
-      detail: hasKey ? `MiniMax T2A v2 已配置 (${this.model})` : '未配置 MiniMax API Key',
-      supportsStreaming: true,
+      detail: hasKey
+        ? `MiniMax T2A v2 已配置 (${this.model}) · 非流式（流式未实现）`
+        : '未配置 MiniMax API Key',
+      supportsStreaming: false,
       supportsEmotion: true,
     });
   }
@@ -285,7 +305,7 @@ export class MiniMaxTtsProvider implements VoiceProvider {
             speed: request.speed,
             vol: request.volume,
             pitch: Math.round(request.pitchShiftSemitones),
-            emotion: request.emotion,
+            ...(MINIMAX_EMOTION_MAP[request.emotion] === undefined ? {} : { emotion: MINIMAX_EMOTION_MAP[request.emotion] }),
           },
           audio_setting: {
             sample_rate: 24_000,
