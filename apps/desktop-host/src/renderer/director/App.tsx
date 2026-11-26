@@ -31,6 +31,7 @@ import { HarnessPanel } from './harness-panel';
 import { VoiceCenterPanel } from './voice-center-panel';
 import { MemoryPanel } from './memory-panel';
 import { ObsPanel } from './obs-panel';
+import { SongConsolePanel } from './song-console-panel';
 import { PluginsPanel } from './plugins-panel';
 import { PetStudioPanel } from './pet-studio';
 import { CoopPanel } from './coop-panel';
@@ -89,7 +90,9 @@ function isGameId(value: string | null): value is GameId {
 }
 
 function isTabEnabled(tab: Tab, enabledPlugins: Set<string>): boolean {
-  if (tab === 'coop' || tab === 'life') return true;
+  // 点歌台与协作/生命中枢同属常驻页：老用户本地已存的插件开关集合里没有 'song'，
+  // 若按插件集合过滤会让点歌台对已存在的用户凭空消失。
+  if (tab === 'coop' || tab === 'life' || tab === 'song') return true;
   if (tab === 'stardew') return GAME_OPTIONS.some((game) => enabledPlugins.has(game.id)) || enabledPlugins.has('mods');
   return enabledPlugins.has(tab);
 }
@@ -1028,6 +1031,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           />
         )}
         {tab === 'obs' && <div className="h-full overflow-y-auto"><ObsPanel rice={rice} riceCap={riceCap} events={events} /></div>}
+        {tab === 'song' && <div className="h-full overflow-y-auto"><SongConsolePanel /></div>}
         {tab === 'harness' && <div className="h-full overflow-y-auto"><HarnessPanel /></div>}
         {tab === 'providers' && (
           <div className="h-full overflow-y-auto">

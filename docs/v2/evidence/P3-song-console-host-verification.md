@@ -98,4 +98,43 @@
 3. **首切片真实播放未实测**：`afplay` 挂载分支未被真实音频触发（E2E 明确断言 `lastPlayback === null`）。
 4. **真实音频路径的延迟指标未测**：「缓存命中 <50ms」只有 `cacheLookupMs` 度量字段，无真实曲库样本支撑。
 5. **`positionMs` ↔ 真实播放头仍未闭环**：与 P3-01 的歌词时钟缺口同源，属实现缺口而非素材缺口。
-6. **中控台尚无点歌 UI 面板**：IPC 与类型已通，界面按后续工单接入（当前只能由 E2E / 脚本调用）。
+6. ~~中控台尚无点歌 UI 面板~~ → 已于 2026-11-26 以独立原子工单接入（见第 6 节）。
+
+---
+
+## 6. 中控台最小点歌面板（2026-11-26，`[E2E-HOST]`）
+
+### 6.1 改动范围（3 个业务源码文件 + 1 个 E2E + CI 列表）
+
+| 文件 | 改动 |
+| --- | --- |
+| `apps/desktop-host/src/renderer/director/song-console-panel.tsx`（新建） | 能力状态 / 提交 / 取消 / 管线状态 / 真实播放回执五块，全部走 `window.directorBridge.v2Song*` 真实 IPC |
+| `apps/desktop-host/src/renderer/director/shell/sidebar.tsx` | `Tab` 增 `song`，导航「生活」组增「点歌台」（`Music4`） |
+| `apps/desktop-host/src/renderer/director/App.tsx` | 渲染分支接入面板；`isTabEnabled` 把 `song` 与 `coop`/`life` 一样列为常驻页（老用户本地已存的插件集合里没有 `song`，按集合过滤会让新页凭空消失） |
+| `apps/desktop-host/e2e/song-console.e2e.spec.ts`（新建） | 真实 Electron 渲染下的三条诚实断言 |
+| `.github/workflows/ci.yml` | macOS E2E 列表增该 spec |
+
+### 6.2 面板做的事与不做的事
+
+- **做**：展示宿主 `v2:song-capabilities` 的四个原子能力真实 `ready/detail/hint`；提交一次点歌（曲目/伴奏/歌词三档许可 + 声线授权来源 + RVC 模型/索引路径）；对当前 `requestId` 发 `v2:song-cancel`；轮询 `v2:song-snapshot`（仅在 `preparing/streaming/completing` 时 1s 一次，终态即停）并渲染管线阶段、缓存键、缓存命中、切片进度、缺口明细、首切片/成品路径与播放回执流水。
+- **不做**：不伪造任何"已唱"状态；没有真实首切片就只显示空态文案；提交前若既未勾选声线授权也未填授权来源，直接在前端拦下并提示（宿主门禁同样会拒，前端只是提前说清楚）。
+
+### 6.3 真实渲染验证（`[E2E-HOST]`）
+
+`pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/song-console.e2e.spec.ts` —— **1/1 PASS（1.58s）**，环境变量 `WHALE_AUDIO_WORKER=http://127.0.0.1:9` 保证「后端不可达」确定性：
+
+| 断言 | 实测 |
+| --- | --- |
+| 能力状态 | 卡片出现 `missing`，文案含 `audio-ai-worker`，**不出现「全部就绪」** |
+| 未勾选声线授权 → 提交 | 管线 `state=rejected`，拒绝原因含「角色声音模型未经授权，禁止歌声合成或音色转换」 |
+| 勾选授权后 → 提交 | 管线 `state=unavailable`，含「缺失能力」逐项缺口，**不出现 `completed`** |
+| 播放回执区 | 空态文案「还没有真实播放回执（首切片就绪并播放后才会写入）」 |
+| 宿主快照 | `v2SongSnapshot().status.state === 'unavailable'`，与 UI 一致 |
+| 渲染进程报错 | `pageErrors` 为空 |
+
+门禁：`pnpm verify:gate` **7 过 / 0 跳过 / 0 待接线**。
+
+### 6.4 仍未验证
+
+1. **真唱**：本机无 Demucs/RVC 后端与授权声线权重，面板只验证了「缺能力如实报缺」。
+2. **真实播放头**：`positionMs` 仍未被绑定到真实音频播放位置（`afplay` 不回报进度），面板只能显示播放回执的开始/结束与时长；该缺口单独立工单（Swift 播放器回报真实播放头）。

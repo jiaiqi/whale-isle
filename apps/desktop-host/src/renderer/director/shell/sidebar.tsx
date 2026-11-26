@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
-  AudioLines, Bot, ChevronsUpDown, Compass, Database, Gamepad2, MessageCircle, Plus, Puzzle,
+  AudioLines, Bot, ChevronsUpDown, Compass, Database, Gamepad2, MessageCircle, Music4, Plus, Puzzle,
   Radio, Search, Shapes, SquareTerminal, Users, Wheat,
   type LucideIcon,
 } from 'lucide-react';
@@ -14,7 +14,7 @@ import { APP_NAME, APP_TAGLINE, whaleMarkPaths } from '../../../shared/brand';
 import type { CharacterSummary } from '../bridge';
 
 export type Tab =
-  | 'chat' | 'life' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'coop' | 'obs' | 'harness' | 'providers' | 'plugins';
+  | 'chat' | 'life' | 'memory' | 'voice' | 'pet' | 'stardew' | 'terraria' | 'dst' | 'mods' | 'coop' | 'obs' | 'song' | 'harness' | 'providers' | 'plugins';
 
 export interface NavItem {
   id: Tab;
@@ -51,6 +51,7 @@ export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '生活', live: true },
       { id: 'coop', label: '联机协作', icon: Users, group: '生活' },
       { id: 'obs', label: '直播与 OBS', icon: Radio, group: '生活' },
+      { id: 'song', label: '点歌台', icon: Music4, group: '生活' },
     ],
   },
   {
