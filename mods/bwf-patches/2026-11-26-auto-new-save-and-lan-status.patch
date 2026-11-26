@@ -582,7 +582,7 @@ index 875ba8d..ffc9b7e 100644
 +                    if (!building.isCabin)
 +                        continue;
 +                    cabinCount++;
-+                    if (building.GetIndoors() is StardewValley.Locations.Cabin cabin && !cabin.HasOwner)
++                    if (building.GetIndoors() is StardewValley.Locations.Cabin cabin && (!cabin.HasOwner || cabin.owner?.isUnclaimedFarmhand == true))
 +                        freeCount++;
 +                }
 +                startingCabins = cabinCount;
