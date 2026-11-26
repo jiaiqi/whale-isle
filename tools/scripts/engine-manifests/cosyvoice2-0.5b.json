@@ -1,0 +1,35 @@
+{
+  "engineId": "cosyvoice2",
+  "version": "0.5b-eec1ae6c",
+  "displayName": "CosyVoice 2 (0.5B)",
+  "repoId": "FunAudioLLM/CosyVoice2-0.5B",
+  "revision": "eec1ae6c79877dbd9379285cf8789c9e0879293d",
+  "license": {
+    "code": "Apache-2.0",
+    "weights": "apache-2.0",
+    "source": "https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B (HF API cardData.license, 核对于 2026-11-26)",
+    "redistribution": "允许商用与再分发，保留 LICENSE 与 NOTICE"
+  },
+  "notes": [
+    "只取最小运行集：llm.pt / flow.pt / hift.pt / campplus.onnx / speech_tokenizer_v2.onnx / CosyVoice-BlankEN 文本前端 + 配置。",
+    "刻意不取 flow.decoder.estimator.fp32.onnx（286.3 MB）与 speech_tokenizer_v2.batch.onnx（496.1 MB）：单句推理不需要 batch 版，需要时可另立清单增补。",
+    "sha256 取自 HuggingFace LFS 元数据（api/models?blobs=true 的 lfs.sha256）；非 LFS 小文件留空，由下载器本地计算并写入 installed.json。"
+  ],
+  "files": [
+    { "path": "llm.pt", "bytes": 2023316821, "sha256": "b144ef55b51ce8cfb79a73c90dbba0bdaba4e451c0ebcfab20f769264f84a608" },
+    { "path": "flow.pt", "bytes": 450575567, "sha256": "ff4c2f867674411e0a08cee702996df13fa67c1cd864c06108da88d16d088541" },
+    { "path": "hift.pt", "bytes": 83390254, "sha256": "3386cc880324d4e98e05987b99107f49e40ed925b8ecc87c1f4939432d429879" },
+    { "path": "campplus.onnx", "bytes": 28303423, "sha256": "a6ac6a63997761ae2997373e2ee1c47040854b4b759ea41ec48e4e42df0f4d73" },
+    { "path": "speech_tokenizer_v2.onnx", "bytes": 496082973, "sha256": "d43342aa12163a80bf07bffb94c9de2e120a8df2f9917cd2f642e7f4219c6f71" },
+    { "path": "CosyVoice-BlankEN/model.safetensors", "bytes": 988097824, "sha256": "130282af0dfa9fe5840737cc49a0d339d06075f83c5a315c3372c9a0740d0b96" },
+    { "path": "CosyVoice-BlankEN/config.json", "bytes": 659, "sha256": "" },
+    { "path": "CosyVoice-BlankEN/generation_config.json", "bytes": 242, "sha256": "" },
+    { "path": "CosyVoice-BlankEN/merges.txt", "bytes": 1402109, "sha256": "" },
+    { "path": "CosyVoice-BlankEN/tokenizer_config.json", "bytes": 1287, "sha256": "" },
+    { "path": "CosyVoice-BlankEN/vocab.json", "bytes": 2776833, "sha256": "" },
+    { "path": "config.json", "bytes": 2, "sha256": "" },
+    { "path": "configuration.json", "bytes": 47, "sha256": "" },
+    { "path": "cosyvoice2.yaml", "bytes": 7330, "sha256": "" }
+  ],
+  "expectedBytes": 4073955371
+}
