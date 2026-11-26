@@ -1393,6 +1393,30 @@ input[type='range'].wb-range::-webkit-slider-thumb {
   background: var(--amber);
   color: var(--inverse-ink);
 }
+/* 空状态插画：明暗两套 WebP 由 .dark 切换，尺寸受 max-width 约束 */
+.wb-ill {
+  display: block;
+  width: 100%;
+  margin: 0 auto;
+}
+.wb-ill img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+.wb-ill-dark { display: none; }
+:root.dark .wb-ill-light { display: none; }
+:root.dark .wb-ill-dark { display: block; }
+.wb-ill--banner { margin: 0; flex-shrink: 0; }
+.wb-halt-ill {
+  margin: 0;
+  flex-shrink: 0;
+  width: 64px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+}
 .wb-lease-item.on { background: var(--surface-solid); color: var(--text-1); }
 .wb-lease-item.on .lb { color: var(--accent); }
 .wb-lease-item.pending .vl { color: var(--text-3); font-weight: 500; }

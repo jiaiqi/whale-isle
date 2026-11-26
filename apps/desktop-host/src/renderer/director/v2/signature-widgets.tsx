@@ -25,6 +25,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { CharacterControlMode, CharacterExpression, LifeActivityKind } from '@workbench/shared-protocol';
+import { EmptyIllustration } from '../shell/empty-illustration';
 
 // ── 1. SonarRing（声呐环） ────────────────────────────────────────────────────
 
@@ -343,6 +344,7 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
           <span className="wb-hud-name">{displayName}</span>
           <span className="wb-hud-id">{characterId}</span>
         </button>
+        <EmptyIllustration name="halted" alt="急停锁定" width={64} className="wb-halt-ill" />
         <span className="wb-halt-copy">
           <OctagonAlert size={14} />
           <span>紧急停止已生效：AI 不再发送新的游戏控制、键鼠或对外发布动作。</span>

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, PlugZap, RefreshCw, Square } from 'lucide-react';
 import { summarizeAutodriveQuality, formatRate } from '@workbench/game-bridge-mcp/metrics';
 import type { AutodriveEventView, GameHealthView, GameId } from './bridge';
+import { EmptyIllustration } from './shell/empty-illustration';
 
 /** 回执状态色（语义色 token，深浅主题通用） */
 export const GAME_STATUS_COLOR: Record<string, { bg: string; line: string; text: string }> = {
@@ -335,7 +336,12 @@ export function GameReceiptTimeline({
             </div>
           );
         })}
-        {receipts.length === 0 && <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{emptyHint}</span>}
+        {receipts.length === 0 && (
+          <div className="flex flex-col items-center gap-2 py-3 text-center">
+            <EmptyIllustration name="game-offline" alt="游戏尚未连接" width={180} />
+            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{emptyHint}</span>
+          </div>
+        )}
       </div>
     </section>
   );

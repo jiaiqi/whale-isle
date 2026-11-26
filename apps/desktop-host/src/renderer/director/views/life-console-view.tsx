@@ -54,6 +54,7 @@ import type {
 } from '@workbench/shared-protocol';
 import type { V2MemoryQueryResult } from '../bridge';
 import { PageHead } from '../shell/page-head';
+import { EmptyIllustration } from '../shell/empty-illustration';
 import { LicenseBadge, SonarRing, StageBadge } from '../v2/signature-widgets';
 
 const ACTIVITIES: Array<{ mode: LifeActivityKind; label: string }> = [
@@ -914,6 +915,12 @@ export function LifeConsoleView({
                 场次摘要 {liveSnap?.summaryCount ?? 0} · 拦截点歌 {liveSnap?.blockedSongLog.length ?? 0}
               </span>
             </div>
+            {!liveSnap?.active && (
+              <div className="flex flex-col items-center gap-1.5 py-2 text-center">
+                <EmptyIllustration name="live-offline" alt="尚未开播" width={140} />
+                <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>未开播：可先开本地回放会话；真实平台流需要先完成授权配置。</span>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {!liveSnap?.active ? (
                 <button
@@ -1275,6 +1282,12 @@ export function LifeConsoleView({
         </div>
 
         <div className="space-y-1.5">
+          {memHits.length === 0 && (
+            <div className="flex flex-col items-center gap-2 py-3 text-center">
+              <EmptyIllustration name="empty-memory" alt="暂无记忆命中" width={160} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>还没有命中：换一个检索词，或先写入一条记忆。</span>
+            </div>
+          )}
           {memHits.map((hit) => (
             <div
               key={hit.id}
