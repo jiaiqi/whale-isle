@@ -261,6 +261,9 @@ describe('ObsWebsocketClient · 连接阶段失败必须立刻抛错（禁止无
     socket.emit('close', { code: 4009, reason: 'Authentication failed.' });
     await expect(connecting).rejects.toThrow(/认证失败：密码不正确/);
     await expect(connecting).rejects.toThrow(/4009/);
+    // 处置建议必须跟着错误一起来：owner 在密码上卡了两轮，下一步提示比错误码有用
+    await expect(connecting).rejects.toThrow(/OBS → 设置 → WebSocket 服务器设置里重设服务器密码/);
+    await expect(connecting).rejects.toThrow(/别丢首字符/);
   });
 
   it('对端异常断开（CLOSE 1006）→ 报「连接已断开」，退出路径同样落错', async () => {
@@ -313,6 +316,7 @@ describe('ObsWebsocketClient · 连接阶段失败必须立刻抛错（禁止无
   it('describeClose 文案：4009 与其它关闭码给出不同且可读的说明', async () => {
     const { describeClose } = await import('./obs-websocket-client.js');
     expect(describeClose(4009, 'Authentication failed.')).toContain('密码不正确');
+    expect(describeClose(4009, 'Authentication failed.')).toContain('别丢首字符');
     expect(describeClose(1006, '')).toContain('连接已断开');
   });
 });

@@ -41,11 +41,12 @@ interface PendingRequest {
 
 type SocketFactory = (url: string) => WebSocket;
 
-/** 关闭码 → 能直接给 owner 看的文案 */
+/** 关闭码 → 能直接给 owner 看的文案（含处置建议，500 字符以内的行动指引比错误码有用） */
 export function describeClose(code: number, reason?: string): string {
   const suffix = reason !== undefined && reason !== '' ? `，${reason}` : '';
   if (code === AUTH_FAILED_CLOSE_CODE || /auth/i.test(reason ?? '')) {
-    return `OBS WebSocket 认证失败：密码不正确（服务端关闭码 ${code}${suffix}）`;
+    return `OBS WebSocket 认证失败：密码不正确（服务端关闭码 ${code}${suffix}）。`
+      + '请在 OBS → 设置 → WebSocket 服务器设置里重设服务器密码，注意复制时别丢首字符。';
   }
   return `obs-websocket 连接已断开（关闭码 ${code}${suffix}）`;
 }
