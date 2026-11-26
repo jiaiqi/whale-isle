@@ -47,9 +47,9 @@
 | # | 缺口 | 状态 | 说明 |
 | --- | --- | --- | --- |
 | 1 | P3-06 缺陷① BWF 就绪竞态 | ✅ 已修（本日） | `readyTimeoutMs`/`readyPollMs` 就绪重探 + `stop()` 安静取消；单测 3 例 `[SIMULATION]`，真机冷启动待复验 |
-| 2 | P3-06 缺陷② CGEvent 点击依赖前台窗口 | 待做 | 方向：`whale-input-helper.swift` 增 `axpress`（`AXUIElementCopyElementAtPosition` 命中 + `kAXPressAction`），坐标不变但不再要求前台；AX 不可用时回退现有坐标点击并如实标注；改完需真机复验 |
-| 3 | P3-04E 遗留：scheduler tick 自动发起社交会话的循环 | 待做 | 当前只有手动/事件驱动；可先接确定性 tick 循环 + 预算/急停守卫 + 单测，真实平台交互仍 `BLOCKED` |
-| 4 | 单桌宠全链路单一剧本 E2E | 待做 | 现有 E2E 分散在 ui / v2-kernel / social-life 各子系统；缺一条「启动 → 就绪 → 自动驾驶 → 台词 → 语音锁释放 → 记忆落盘」的端到端剧本，用 `[SIMULATION]` 沙盒，断言只走 IPC/状态层（不碰 bubble 内部实现，避免与 item 7 的 `threadfin` worktree 冲突） |
+| 2 | P3-06 缺陷② CGEvent 点击依赖前台窗口 | 降级为验收基建（不影响产品链路） | 该缺陷只影响「自动验收脚本用坐标点自家按钮」，产品里按钮由人点。真解需要 `AXUIElementCopyElementAtPosition` **按目标 pid 作用域**命中（而不是 systemWide，后者仍会被遮挡窗吃掉）+ `kAXPressAction`，但这套能力在通用坐标点击路径上没有合法生产者（`ComputerInputStep` 不带 pid），硬接会变成死代码；建议验收脚本侧先 `bringToFront` 保证前台，或等真有「按元素点击」需求时单立工单 |
+| 3 | P3-04E 遗留：scheduler tick 自动发起社交会话的循环 | 待做（属产品增强，需先定自治口径） | 当前只有手动/事件驱动；接确定性 tick 循环不难，但「多久自动发起、预算多少、急停怎么算」是 owner 可感知的自治行为，建议先出方案再实现，避免替 owner 定产品口径 |
+| 4 | 单桌宠全链路单一剧本 E2E | 待做 | 现有 E2E 分散在 ui / v2-kernel / social-life 各子系统，游戏侧另有 `rule-7day` / `stuck-regressions` 用真实 `AutodriveRunner` 跑活农场仿真；缺一条「启动 → 就绪 → 自动驾驶 → 台词 → 语音锁释放 → 记忆落盘」的端到端剧本。注意：宿主当前**没有假 BWF 适配器**（只有假启动器），要跑这条链需要先给宿主加一个受 `PET_STAGE_E2E` 管控的仿真 BWF 端点，属独立工单量级 |
 
 **必须等 owner 的（不自行推进）**：
 
