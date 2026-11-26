@@ -107,3 +107,12 @@
 2. **macOS TCC 双身份验证 `[REAL-DEVICE]`**：开发态与打包 `.app` 的辅助功能/屏幕录制授权需分别验证，见真机清单。
 3. **真实社交站点 `[REAL-DEVICE]`**：真实登录、Cookie 过期、平台风控页与验证码样式需逐站点复核；不得使用任何打码服务。
 4. **Playwright 适配器**：当前 `BrowserEnginePort` 已有 `playwright` 类型位，但未引入依赖、未接线；Electron 隐藏窗口为默认可执行引擎。
+
+## 安全复核补记（2026-11-26，`fix(security)` 提交 `27127d5`）
+
+独立代码审计发现并已修复两处承诺与实现的落差：
+
+1. **凭据命名空间击穿（已修）**：`AccountVault` 与供应商 Key 共用同一 vault 文件，而 `providers:copy-key` / `discover-models` / `check-balance` / `test-chat` 等 IPC 不校验 providerId 命名空间，渲染进程可借 `account:*` 标识下行明文或把凭据发往任意 baseUrl。已在 `provider-vault.ts` 对全部供应商通道 IPC 加 `account:` 前缀守门（vault-status 同步过滤存在性），回归测试 3 例锁定。
+2. **级联删除密钥层空操作（已修）**：`createElectronVaultPort` 的 `delete: () => false` 使 `revokeAccount` / `deleteCharacter` 静默失败、密文永久残留。已新增 `deleteVaultKey()` 并真实接线。
+
+剩余未修（下批）：Cookie 单向导入不回写（`electron-browser-engine.ts`）、用户主动 cancel 误标 `INTERRUPTED_BY_P0`（`audio-mixer.ts:101`）、租约审计仅内存环形不落盘、级联删除只展开一层。

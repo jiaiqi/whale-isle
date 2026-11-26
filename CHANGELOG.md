@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed（安全：供应商凭据通道命名空间击穿 + 账号级联删除空操作）
+
+- **`provider-vault.ts`**：`providers:save-key` / `key-mask` / `discover-models` / `copy-key` / `check-balance` / `test-chat` 全部拒绝 `account:` 前缀（账号保险箱条目），`vault-status` 过滤该前缀不暴露存在性；修复渲染进程可借通用供应商 IPC 把社交凭据写入剪贴板或发往任意 baseUrl 的边界击穿。
+- **`provider-vault.ts` / `v2-kernel-host.ts`**：新增 `deleteVaultKey()` 真实删除并落盘；`SecretVaultPort.delete` 不再是 `() => false` 空操作，`AccountVault.revokeAccount` / `deleteCharacter` 的级联吊销真实生效。
+- **CI**：`.github/workflows/ci.yml` 触发电门加入 `feat/whale-isle-v2`——此前该分支 44 个提交从未经过 CI，门禁结果全靠本机自证。
+
 ### Added / Changed（`V2-P3-06`：星露谷一键启动器与真实就绪探活 — `IMPLEMENTED_UNVERIFIED`）
 
 - **启动器状态机** `apps/desktop-host/src/main/stardew-launcher.ts`：`not_installed → launching → waiting_mcp → ready / timeout / failed`，`ready` 只由 BWF MCP `get_state` 真实应答触发；已在运行（端口可达或 `pgrep StardewModdingAPI`）不重复启动；子进程 `detached + stdio:'ignore' + unref()`，PPID=1 不随宿主退出；主方式直接 spawn `Contents/MacOS/StardewModdingAPI`，回退 `open steam://rungameid/413150`；标题画面自动 `load_save({})`，失败如实提示手动读档；端口一律 `127.0.0.1`（T-M6-74）。
