@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P3-02`：`LifeRuntime` 驱动的直播中控与 OBS 舞台 — `IMPLEMENTED_UNVERIFIED`）
+
+- **直播中控与 OBS 舞台契约** `packages/shared-protocol/src/{live.ts,index.ts}`：定义 `LivePlatformId`、`LiveConnectionState`、`LivePlatformAdapterStatus`、`LiveSongQueueItem`、`LiveGiftThankBatch`、`LiveObsStagePayload`、`LiveSessionSummary` 与 `LiveRuntimeSnapshot` Zod 契约。
+- **`LiveRuntimeV2` 核心运行时与版权门禁** `packages/live-stream-hub/src/{live-runtime.ts,live-runtime.spec.ts,index.ts}`：复用 `LiveEventHub` 护栏/去重/注意力调度，新增 `checkLivestreamSongRights`（四重版权拦截 `dev_only_non_commercial`/`unlicensed`）、`probeLivePlatformEndpoint`（绝不虚构在线状态）、礼物/进场/点赞合并防爆麦、点歌优先级排麦、OBS 舞台同步与场次总结。
+- **宿主 7 路 IPC 与 Tidepaper 直播控件** `apps/desktop-host/src/{main/v2-kernel-host.ts,preload/index.ts,renderer/director/bridge.ts,renderer/director/views/life-console-view.tsx}`：挂载 `v2:live-*` 7 路 IPC 联动 `CharacterCore`/`PerformanceDirector`/`StageRuntime` 与 P0 急停，并在 Tidepaper 生命总览接入开播/下播/点歌拦截按钮，通过 `verify:gate` 7/7 与 Electron 45 E2E 4 套件。
+
 ### Added / Changed（`ADR-003` / `REQ-UI-01`：Tidepaper 潮汐纸主 UI/UX 升级与 P2/P3 实盘控制台 — `DONE`）
 
 - **Tidepaper 多主题令牌系统** `apps/desktop-host/src/renderer/director/{design-tokens.css,styles.css}`：确立潮汐纸 Tidepaper（晨雾 Mist 暖白纸面 `#F3EFE7` + 墨蓝 `#142036` + 珊瑚落日 `#D14D2C` / 夜潮 `#0D1220`）为默认主界面并满足 WCAG AA ≥4.5:1 对比度，完整保留 Obsidian Tide 与 Tide Deep 可选主题及 5 种强调色（`coral/sea/whale/kelp/plum`）。

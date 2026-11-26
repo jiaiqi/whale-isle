@@ -41,6 +41,12 @@ import type {
   LifeActivityKind,
   LipSyncFrame,
   Live2dAssetInspection,
+  LiveObsStagePayload,
+  LiveRuntimeSnapshot,
+  LiveSessionStartInput,
+  LiveSessionSummary,
+  LiveSongQueueItem,
+  LiveSongRequestInput,
   LyricsDisplayPolicyInput,
   McpEndpoint,
   MediaJobSnapshot,
@@ -886,6 +892,13 @@ export interface DirectorBridge {
     animationId?: string;
     lyricsPolicy?: LyricsDisplayPolicyInput;
   }): Promise<{ ok: boolean; error?: string; stage?: StageRuntimeSnapshot; policy?: unknown }>;
+  v2LiveSnapshot(): Promise<LiveRuntimeSnapshot>;
+  v2LiveSessionStart(input?: LiveSessionStartInput): Promise<{ ok: boolean; error?: string; snapshot?: LiveRuntimeSnapshot }>;
+  v2LiveSessionEnd(reason?: string): Promise<{ ok: boolean; summary?: LiveSessionSummary | null; snapshot?: LiveRuntimeSnapshot }>;
+  v2LiveIngest(input: { event: unknown; flush?: boolean }): Promise<{ ok: boolean; outcome?: unknown; songItem?: LiveSongQueueItem; flushedBatch?: unknown; snapshot?: LiveRuntimeSnapshot }>;
+  v2LiveSongRequest(input: LiveSongRequestInput & { autoPerform?: boolean }): Promise<{ ok: boolean; item?: LiveSongQueueItem; singingStarted?: boolean; snapshot?: LiveRuntimeSnapshot; error?: string }>;
+  v2LiveObsStage(): Promise<LiveObsStagePayload>;
+  v2LiveSummaries(): Promise<LiveSessionSummary[]>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

@@ -34,6 +34,7 @@ import type {
   CoopModCompatibilityReport,
   CoopRuntimeSnapshot,
   LifeActivityKind,
+  LiveRuntimeSnapshot,
   MemoryCategory,
   MemoryDeletionAudit,
   PerformanceSnapshot,
@@ -125,9 +126,10 @@ export function LifeConsoleView({
     coopRoom: CoopRuntimeSnapshot | null;
     compatReport: CoopModCompatibilityReport | null;
   }>({ blender: null, bibleCount: 0, assetCount: 0, coopRoom: null, compatReport: null });
+  const [liveSnap, setLiveSnap] = useState<LiveRuntimeSnapshot | null>(null);
 
   const loadAll = useCallback(async (): Promise<void> => {
-    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop] = await Promise.all([
+    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop, liveRes] = await Promise.all([
       window.directorBridge.v2StorageCheck().catch(() => null),
       window.directorBridge.v2VoiceProviders().catch(() => []),
       window.directorBridge.v2VoiceMixerState().catch(() => null),
@@ -137,6 +139,7 @@ export function LifeConsoleView({
       window.directorBridge.v2BibleList().catch(() => []),
       window.directorBridge.v2AssetList().catch(() => []),
       window.directorBridge.v2CoopSnapshot().catch(() => null),
+      window.directorBridge.v2LiveSnapshot().catch(() => null),
     ]);
     if (storage !== null) setStorageInfo(storage);
     setVoiceProviders(providers);
@@ -147,6 +150,7 @@ export function LifeConsoleView({
       setStageSnap(perfRes.stage);
       setSingBackends(perfRes.singBackends);
     }
+    if (liveRes !== null) setLiveSnap(liveRes);
     setP2Summary((prev) => ({
       ...prev,
       blender,
@@ -776,6 +780,54 @@ export function LifeConsoleView({
                 点击「扫描本机联机 Mods」读取本地星露谷 SMAPI Mods 目录兼容性。
               </div>
             )}
+          </div>
+
+          <div className="inset space-y-2 p-3 text-[11.5px]" data-v2-live-section>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold" style={{ color: 'var(--text-1)' }}>
+                V2-P3-02 直播中控：{liveSnap?.active ? `${liveSnap.adapter.platform} · ${liveSnap.adapter.connectionState}` : '未开播'}
+              </span>
+              <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                场次摘要 {liveSnap?.summaryCount ?? 0} · 拦截点歌 {liveSnap?.blockedSongLog.length ?? 0}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {!liveSnap?.active ? (
+                <button
+                  type="button"
+                  data-v2-live-start
+                  onClick={() => void window.directorBridge.v2LiveSessionStart({ platform: 'local_replay', roomId: 'tide-room-1' }).then((r) => {
+                    if (r.snapshot) setLiveSnap(r.snapshot);
+                    void onSnapshotChanged();
+                    toast.success('已开启本地回放直播会话（SIMULATION）');
+                  })}
+                  className="btn-pill primary"
+                  style={{ padding: '4px 10px', fontSize: 11 }}
+                >开启直播中控</button>
+              ) : (
+                <button
+                  type="button"
+                  data-v2-live-end
+                  onClick={() => void window.directorBridge.v2LiveSessionEnd('manual_end').then((r) => {
+                    if (r.snapshot) setLiveSnap(r.snapshot);
+                    void onSnapshotChanged();
+                    toast.success(`已下播并归档场次摘要（共 ${r.summary?.totalEvents ?? 0} 条事件）`);
+                  })}
+                  className="btn-pill ghost"
+                  style={{ padding: '4px 10px', fontSize: 11 }}
+                >下播归档</button>
+              )}
+              <button
+                type="button"
+                data-v2-live-song-nc
+                onClick={() => void window.directorBridge.v2LiveSongRequest({ title: '大肥鱼非商用曲', requesterUid: 'ui', requesterName: '观众', autoPerform: true }).then((r) => {
+                  if (r.snapshot) setLiveSnap(r.snapshot);
+                  if (!r.ok) toast.warning(`点歌已拦截：${r.item?.rightsReasons.join('；') ?? '版权不符'}`);
+                })}
+                className="btn-pill ghost"
+                style={{ padding: '4px 10px', fontSize: 11 }}
+              >点歌拦截测试</button>
+            </div>
           </div>
         </section>
       </div>

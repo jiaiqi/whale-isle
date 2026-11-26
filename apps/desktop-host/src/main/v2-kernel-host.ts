@@ -34,11 +34,14 @@ import {
   type CharacterCoreSnapshot,
   type DanceRoutineInput,
   type ImageGenProviderDescriptor,
+  type LiveSessionStartInput,
+  type LiveSongRequestInput,
   type LyricsDisplayPolicyInput,
   type SingRequestInput,
   type SpeechPerformancePlanInput,
   type StageBackendKind,
 } from '@workbench/shared-protocol';
+import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
@@ -117,6 +120,7 @@ export interface V2KernelHost {
   readonly voiceRouter: VoiceProviderRouter;
   readonly performanceDirector: PerformanceDirector;
   readonly stageRuntime: StageRuntime;
+  readonly liveRuntime: LiveRuntimeV2;
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost; memory?: MemoryHost }): void;
   stop(): Promise<void>;
 }
@@ -397,6 +401,36 @@ export async function createV2KernelHost(options: {
     licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
     capabilities: ['webm-alpha', 'spritesheet', 'footline-align'],
   });
+  const liveRuntime = new LiveRuntimeV2({ characterId: 'char_xiaojing' });
+  liveRuntime.registerCatalogSong({
+    songId: 'tidepaper-morning-song',
+    title: '鲸屿晨雾',
+    durationMs: 6000,
+    accompanimentTrackPath: 'assets/audio/tide-accomp.wav',
+    lyrics: [
+      { index: 0, startMs: 0, endMs: 2200, primaryText: '潮汐漫过晨雾里的石阶', secondaryText: 'Tide laps gently across misty stone steps' },
+      { index: 1, startMs: 2200, endMs: 6000, primaryText: '小鲸为你点亮海图的星光', secondaryText: 'Xiaojing lights up starlight on the sea chart' },
+    ],
+    rights: {
+      songLicense: 'original_owned',
+      accompanimentLicense: 'original_owned',
+      lyricsLicense: 'original_owned',
+      voiceModelAuthorized: true,
+      voiceConsentSource: 'whale-isle-original',
+    },
+  });
+  liveRuntime.registerCatalogSong({
+    songId: 'nc-demo-song',
+    title: '大肥鱼非商用曲',
+    durationMs: 4000,
+    rights: {
+      songLicense: 'dev_only_non_commercial',
+      accompanimentLicense: 'original_owned',
+      lyricsLicense: 'original_owned',
+      voiceModelAuthorized: true,
+      voiceConsentSource: 'test-consent',
+    },
+  });
 
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     const haltReason = typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止';
@@ -404,12 +438,14 @@ export async function createV2KernelHost(options: {
     audioMixer.stopAll();
     performanceDirector.emergencyHalt(haltReason);
     stageRuntime.stopPerformance(haltReason);
+    liveRuntime.emergencyHalt(haltReason);
     coopRuntime.emergencyHaltAll(haltReason);
     characterCore.life.emergencyHalt(haltReason);
     return kernel.characters.primaryState();
   });
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
     performanceDirector.resumeFromHalt();
+    liveRuntime.resumeFromHalt();
     characterCore.life.resume(mode ?? 'autonomous');
     return kernel.characters.primaryState();
   });
@@ -1068,6 +1104,91 @@ export async function createV2KernelHost(options: {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   });
+  // V2-P3-02：LifeRuntime 驱动的直播中控与 OBS 舞台投影
+  ipcMain.handle('v2:live-snapshot', () => liveRuntime.snapshot());
+  ipcMain.handle('v2:live-session-start', async (_e, rawInput?: LiveSessionStartInput) => {
+    const lifeRes = characterCore.life.selectActivity({
+      mode: 'streaming',
+      reason: '开启直播中控会话',
+      source: 'user_command',
+    });
+    if (!lifeRes.accepted) {
+      return { ok: false, error: `LifeRuntime 拒绝开播：${lifeRes.reason ?? 'unknown'}`, snapshot: liveRuntime.snapshot() };
+    }
+    const res = await liveRuntime.startSession(rawInput ?? {});
+    if (res.ok) {
+      stageRuntime.loadScene({
+        sceneId: res.snapshot.obsStage.sceneId,
+        title: 'OBS 透明直播舞台',
+        transparentBackground: true,
+        lightingPreset: 'concert_neon',
+      });
+    }
+    return res;
+  });
+  ipcMain.handle('v2:live-session-end', (_e, reason?: string) => {
+    performanceDirector.stopPerformance(reason ?? 'live_ended');
+    stageRuntime.stopPerformance(reason ?? 'live_ended');
+    const summary = liveRuntime.endSession(reason ?? 'live_ended');
+    characterCore.life.selectActivity({
+      mode: 'companion',
+      reason: '下播恢复桌面陪伴',
+      source: 'life_runtime',
+    });
+    return { ok: true, summary, snapshot: liveRuntime.snapshot() };
+  });
+  ipcMain.handle('v2:live-ingest', (_e, rawInput: { event: unknown; flush?: boolean }) => {
+    const ingested = liveRuntime.ingestEvent(rawInput.event);
+    const flushed = rawInput.flush === true ? (liveRuntime.flushGiftThanks() ?? ingested.flushedBatch) : ingested.flushedBatch;
+    return {
+      ok: ingested.outcome.status !== 'rejected',
+      outcome: ingested.outcome,
+      ...(ingested.songItem ? { songItem: ingested.songItem } : {}),
+      ...(flushed ? { flushedBatch: flushed } : {}),
+      snapshot: liveRuntime.snapshot(),
+    };
+  });
+  ipcMain.handle('v2:live-song-request', async (_e, rawInput: LiveSongRequestInput & { autoPerform?: boolean }) => {
+    try {
+      const item = liveRuntime.requestSong(rawInput);
+      let singingStarted = false;
+      if (rawInput.autoPerform && item.rightsAllowed) {
+        const next = liveRuntime.popNextAuthorizedSong();
+        if (next) {
+          const singRes = await performanceDirector.startSinging({
+            requestId: `live-sing-${next.item.queueId}`,
+            characterId: 'char_xiaojing',
+            voiceProfileId: characterCore.profile.voiceIdentity().voiceProfileId,
+            mode: 'svs',
+            channel: 'livestream_public',
+            song: next.song,
+          });
+          if (singRes.ok) {
+            singingStarted = true;
+            stageRuntime.startSinging(next.song.songId, singRes.snapshot.lyrics, false);
+            liveRuntime.updateStageOverlay({
+              expression: 'singing',
+              activeSongTitle: next.song.title,
+              lyrics: singRes.snapshot.lyrics,
+            });
+          }
+        }
+      }
+      return { ok: item.rightsAllowed, item, singingStarted, snapshot: liveRuntime.snapshot() };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err), snapshot: liveRuntime.snapshot() };
+    }
+  });
+  ipcMain.handle('v2:live-obs-stage', () => {
+    const perf = performanceDirector.snapshot();
+    const stage = stageRuntime.snapshot();
+    return liveRuntime.updateStageOverlay({
+      expression: stage.expression,
+      lyrics: perf.lyrics.songId ? perf.lyrics : null,
+      activeSongTitle: perf.activeSongId ? (liveRuntime.snapshot().obsStage.activeSongTitle ?? perf.activeSongId) : null,
+    });
+  });
+  ipcMain.handle('v2:live-summaries', () => liveRuntime.listSummaries());
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');
@@ -1096,6 +1217,7 @@ export async function createV2KernelHost(options: {
     voiceRouter,
     performanceDirector,
     stageRuntime,
+    liveRuntime,
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
       stopFn = () => {
@@ -1131,6 +1253,9 @@ export async function createV2KernelHost(options: {
     async stop() {
       for (const unsub of unsubscribers) unsub();
       unsubscribers.length = 0;
+      if (liveRuntime.snapshot().active) {
+        liveRuntime.endSession('kernel_stop');
+      }
       performanceDirector.stopPerformance('kernel_stop');
       stageRuntime.stopPerformance('kernel_stop');
       audioMixer.stopAll();

@@ -171,6 +171,26 @@ interface DirectorV2Window {
         adapterState: Record<string, unknown>;
       };
     }>;
+    v2LiveSessionStart(input?: { platform?: string; roomId?: string }): Promise<{
+      ok: boolean;
+      snapshot?: { active: boolean; adapter: { connectionState: string; realPlatformVerified: boolean } };
+    }>;
+    v2LiveSongRequest(input: { title: string; autoPerform?: boolean }): Promise<{
+      ok: boolean;
+      item?: { status: string; rightsAllowed: boolean };
+      singingStarted?: boolean;
+    }>;
+    v2LiveIngest(input: { event: unknown; flush?: boolean }): Promise<{ ok: boolean }>;
+    v2LiveObsStage(): Promise<{
+      liveActive: boolean;
+      activeSongTitle: string | null;
+      recentDanmaku: Array<{ text: string }>;
+      recentGifts: Array<{ count: number }>;
+    }>;
+    v2LiveSessionEnd(reason?: string): Promise<{
+      ok: boolean;
+      summary?: { songBlockedCount: number; songAcceptedCount: number; danmakuCount: number; giftCount: number } | null;
+    }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -682,6 +702,53 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(p301.vrmSwitch.stage?.lyrics?.activeIndex).toBe(1);
       expect(p301.afterHalt.performance.halted).toBe(true);
       expect(p301.afterHalt.performance.mode).toBe('halted');
+
+      // V2-P3-02：验证 LifeRuntime 直播中控（诚实降级探测 + 点歌版权门禁 + 弹幕/礼物批次 + OBS 舞台投影 + 下播摘要）
+      const p302 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const startDegraded = await bridge.v2LiveSessionStart({ platform: 'douyin_dyhub', roomId: 'room-e2e' });
+        const blockedSong = await bridge.v2LiveSongRequest({ title: '大肥鱼非商用曲', autoPerform: true });
+        const okSong = await bridge.v2LiveSongRequest({ title: '鲸屿晨雾', autoPerform: true });
+        await bridge.v2LiveIngest({
+          event: {
+            eventId: crypto.randomUUID(),
+            platform: 'douyin',
+            eventType: 'DANMAKU',
+            sender: { uid: 'e2e-u1', nickname: '小潮', intimacyScore: 5, grudgeTags: [] },
+            payload: { rawText: 'OBS 歌词同步不错', mergedCount: 1 },
+            assignedPriority: 'P1_CADENCE',
+            timestamp: Date.now(),
+          },
+        });
+        await bridge.v2LiveIngest({
+          event: {
+            eventId: crypto.randomUUID(),
+            platform: 'douyin',
+            eventType: 'GIFT',
+            sender: { uid: 'e2e-u2', nickname: '海风', intimacyScore: 8, grudgeTags: [] },
+            payload: { giftName: '珊瑚玫瑰', giftDiamondValue: 19, mergedCount: 1 },
+            assignedPriority: 'P1_CADENCE',
+            timestamp: Date.now(),
+          },
+          flush: true,
+        });
+        const obs = await bridge.v2LiveObsStage();
+        const ended = await bridge.v2LiveSessionEnd('e2e_done');
+        return { startDegraded, blockedSong, okSong, obs, ended };
+      });
+      expect(p302.startDegraded.ok).toBe(true);
+      expect(p302.startDegraded.snapshot?.adapter.connectionState).toBe('degraded');
+      expect(p302.startDegraded.snapshot?.adapter.realPlatformVerified).toBe(false);
+      expect(p302.blockedSong.ok).toBe(false);
+      expect(p302.blockedSong.item?.status).toBe('blocked_rights');
+      expect(p302.okSong.ok).toBe(true);
+      expect(p302.okSong.singingStarted).toBe(true);
+      expect(p302.obs.liveActive).toBe(true);
+      expect(p302.obs.activeSongTitle).toBe('鲸屿晨雾');
+      expect(p302.obs.recentDanmaku.some((d) => d.text.includes('OBS 歌词同步不错'))).toBe(true);
+      expect(p302.obs.recentGifts.length).toBeGreaterThanOrEqual(1);
+      expect(p302.ended.summary?.songBlockedCount).toBeGreaterThanOrEqual(1);
+      expect(p302.ended.summary?.songAcceptedCount).toBeGreaterThanOrEqual(1);
     } finally {
       await app.close();
     }

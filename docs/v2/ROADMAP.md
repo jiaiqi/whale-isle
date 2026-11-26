@@ -136,8 +136,8 @@
 ## P3：统一 2D/3D 表演舞台、自主直播、受控浏览器/桌面与被动多宠
 
 - **`V2-P3-01`（`IMPLEMENTED_UNVERIFIED`）：统一表演系统（Sing Engine SVS/SVC + 舞蹈 + 歌词时钟 + 2D/3D StageRuntime）**（`packages/shared-protocol/src/voice` 契约、`evaluateSongRights` 四重授权门禁、`LyricsClockSync` / `parseBilingualLrc`、`SingEngine` 严格区分 SVS/SVC 与普通 TTS、`PerformanceDirector` 6 层仲裁与自然沉默权、`StageRuntime` 跨 `desktop-2d / live2d / vrm-3d / obs-stage` 无缝保留角色/歌词/口型切换与宿主 8 路 `v2:perf-*` / `v2:stage-*` IPC 完成；`verify:gate` 7/7 + Electron 45 E2E 4 套件全绿，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md)；真实神经 SVS/SVC 推理与 Cubism/VRM 画布真机观感待 `[REAL-DEVICE]`）
-- **`V2-P3-02`（`NEXT`）：LifeRuntime 驱动的直播中控与 OBS 舞台（真实平台流接入 + 曲库版权门禁）**
-- **`V2-P3-03`：受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**
+- **`V2-P3-02`（`IMPLEMENTED_UNVERIFIED`）：LifeRuntime 驱动的直播中控与 OBS 舞台（真实平台流接入 + 曲库版权门禁）**（`packages/shared-protocol/src/live` 契约、`LiveRuntimeV2` 弹幕去重护栏/礼物合并/四重版权点歌门禁/`probeLivePlatformEndpoint` 诚实降级探测、OBS 舞台同步、场次摘要、宿主 7 路 `v2:live-*` IPC 与 Tidepaper 中控控件完成；`live-runtime.ts` `91.66%` 分支 + `verify:gate` 7/7 + Electron 45 E2E 4 套件全绿，详见 [P3-live-runtime-obs-verification.md](./evidence/P3-live-runtime-obs-verification.md)；真实抖音/B站/YouTube 测试直播间开播实测待 `[REAL-DEVICE]`）
+- **`V2-P3-03`（`NEXT`）：受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**
 - **`V2-P3-04`：Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**
 - **`V2-P3-05`：多被动桌宠同屏展示（独立形象/动作/基础音色，主从隔离）**
 

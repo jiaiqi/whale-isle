@@ -405,6 +405,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2PerfStop: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:perf-stop', reason),
   v2StageSwitchBackend: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:stage-switch-backend', input),
   v2StageCommand: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:stage-command', input),
+  v2LiveSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:live-snapshot'),
+  v2LiveSessionStart: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:live-session-start', input),
+  v2LiveSessionEnd: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:live-session-end', reason),
+  v2LiveIngest: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:live-ingest', input),
+  v2LiveSongRequest: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:live-song-request', input),
+  v2LiveObsStage: (): Promise<unknown> => ipcRenderer.invoke('v2:live-obs-stage'),
+  v2LiveSummaries: (): Promise<unknown[]> => ipcRenderer.invoke('v2:live-summaries'),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE
