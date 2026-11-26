@@ -5158,7 +5158,7 @@
           ]
         },
         "voiceCommercialProvider": {
-          "default": "mimo-tts",
+          "default": "mimo-tts-voiceclone",
           "type": "string",
           "enum": [
             "minimax-tts",

@@ -1848,7 +1848,7 @@ class PetDesktopPrefs(BaseModel):
     peakOutfitDay: str | None = 'crosspet-deepseek'
     peakOutfitOffPeak: str | None = 'crosspet-deepseek-pajamas'
     voiceEngineTier: VoiceEngineTier | None = 'commercial_default'
-    voiceCommercialProvider: VoiceCommercialProvider | None = 'mimo-tts'
+    voiceCommercialProvider: VoiceCommercialProvider | None = 'mimo-tts-voiceclone'
     voiceOpenRouterModel: Annotated[str | None, Field(min_length=1)] = (
         'google/gemini-3.8-flash-tts'
     )
