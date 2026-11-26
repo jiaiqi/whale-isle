@@ -31,7 +31,10 @@
           "enum": [
             "start",
             "tool",
-            "stop"
+            "stop",
+            "asking",
+            "compact",
+            "error"
           ]
         },
         "toolName": {
@@ -53,6 +56,16 @@
           "default": 0,
           "type": "integer",
           "minimum": 0
+        },
+        "origin": {
+          "default": "hook",
+          "type": "string",
+          "enum": [
+            "hook",
+            "log-watch",
+            "acp",
+            "manual"
+          ]
         }
       },
       "required": [

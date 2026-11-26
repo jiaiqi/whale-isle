@@ -384,6 +384,39 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "facing": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "moving": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            ],
+            "additionalItems": false,
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "category": {
+          "type": "string"
         }
       },
       "required": [
@@ -552,6 +585,39 @@
                       "type": "number",
                       "minimum": 0,
                       "maximum": 1
+                    },
+                    "facing": {
+                      "type": "string",
+                      "enum": [
+                        "left",
+                        "right"
+                      ]
+                    },
+                    "moving": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        ],
+                        "additionalItems": false,
+                        "minItems": 3,
+                        "maxItems": 3
+                      }
+                    },
+                    "category": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -634,6 +700,36 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 100
+              },
+              "facing": {
+                "type": "string",
+                "enum": [
+                  "left",
+                  "right"
+                ]
+              },
+              "moving": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  ],
+                  "additionalItems": false,
+                  "minItems": 3,
+                  "maxItems": 3
+                }
               }
             },
             "required": [
@@ -4212,6 +4308,12 @@
         "bwfShowHud": {
           "default": false,
           "type": "boolean"
+        },
+        "bwfMcpPort": {
+          "default": 18088,
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
         }
       },
       "additionalProperties": false
@@ -4292,6 +4394,52 @@
         "followFrontApp": {
           "default": false,
           "type": "boolean"
+        },
+        "windowLayer": {
+          "default": "always",
+          "type": "string",
+          "enum": [
+            "always",
+            "follow-ai",
+            "normal"
+          ]
+        },
+        "bubbleFontScale": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0.7,
+              "maximum": 1.6
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "patrolEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "notebookFontId": {
+          "default": "auto",
+          "type": "string"
+        },
+        "randomEggEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "peakOutfitEnabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "peakOutfitDay": {
+          "default": "crosspet-deepseek",
+          "type": "string"
+        },
+        "peakOutfitOffPeak": {
+          "default": "crosspet-deepseek-pajamas",
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -6142,6 +6290,18 @@
         "spriteSheetPath": {
           "type": "string",
           "maxLength": 260
+        },
+        "spriteTier": {
+          "type": "string",
+          "enum": [
+            "1x",
+            "2x",
+            "4x"
+          ]
+        },
+        "liveliness": {
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [
@@ -6300,7 +6460,10 @@
           "enum": [
             "start",
             "tool",
-            "stop"
+            "stop",
+            "asking",
+            "compact",
+            "error"
           ]
         },
         "toolName": {
@@ -6322,6 +6485,16 @@
           "default": 0,
           "type": "integer",
           "minimum": 0
+        },
+        "origin": {
+          "default": "hook",
+          "type": "string",
+          "enum": [
+            "hook",
+            "log-watch",
+            "acp",
+            "manual"
+          ]
         }
       },
       "required": [
@@ -6426,6 +6599,35 @@
               "kind"
             ],
             "additionalProperties": false
+          }
+        },
+        "presencePolicy": {
+          "default": "idle-leave",
+          "type": "string",
+          "enum": [
+            "idle-leave",
+            "app-exit",
+            "always-with-app"
+          ]
+        },
+        "logWatchEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "activeOrigins": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "hook",
+              "log-watch",
+              "acp",
+              "manual"
+            ]
           }
         }
       },

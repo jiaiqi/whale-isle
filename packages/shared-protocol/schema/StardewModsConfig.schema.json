@@ -14,6 +14,12 @@
         "bwfShowHud": {
           "default": false,
           "type": "boolean"
+        },
+        "bwfMcpPort": {
+          "default": 18088,
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
         }
       },
       "additionalProperties": false

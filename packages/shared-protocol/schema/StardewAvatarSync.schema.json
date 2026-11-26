@@ -64,6 +64,18 @@
         "spriteSheetPath": {
           "type": "string",
           "maxLength": 260
+        },
+        "spriteTier": {
+          "type": "string",
+          "enum": [
+            "1x",
+            "2x",
+            "4x"
+          ]
+        },
+        "liveliness": {
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [

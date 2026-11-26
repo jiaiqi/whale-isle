@@ -80,6 +80,52 @@
         "followFrontApp": {
           "default": false,
           "type": "boolean"
+        },
+        "windowLayer": {
+          "default": "always",
+          "type": "string",
+          "enum": [
+            "always",
+            "follow-ai",
+            "normal"
+          ]
+        },
+        "bubbleFontScale": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0.7,
+              "maximum": 1.6
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "patrolEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "notebookFontId": {
+          "default": "auto",
+          "type": "string"
+        },
+        "randomEggEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "peakOutfitEnabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "peakOutfitDay": {
+          "default": "crosspet-deepseek",
+          "type": "string"
+        },
+        "peakOutfitOffPeak": {
+          "default": "crosspet-deepseek-pajamas",
+          "type": "string"
         }
       },
       "additionalProperties": false

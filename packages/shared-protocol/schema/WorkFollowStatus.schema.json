@@ -100,6 +100,35 @@
             ],
             "additionalProperties": false
           }
+        },
+        "presencePolicy": {
+          "default": "idle-leave",
+          "type": "string",
+          "enum": [
+            "idle-leave",
+            "app-exit",
+            "always-with-app"
+          ]
+        },
+        "logWatchEnabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "activeOrigins": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "hook",
+              "log-watch",
+              "acp",
+              "manual"
+            ]
+          }
         }
       },
       "additionalProperties": false

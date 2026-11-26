@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 
 
 class PetRendererType(StrEnum):
@@ -45,6 +45,25 @@ class Sprite(BaseModel):
     sampleFps: Annotated[float | None, Field(gt=0.0, le=120.0)] = 12
 
 
+class Facing(StrEnum):
+    left = 'left'
+    right = 'right'
+
+
+class MovingItemItem(RootModel[int]):
+    root: Annotated[int, Field(ge=0)]
+
+
+class MovingItemItem2(RootModel[float]):
+    root: Annotated[float, Field(gt=0.0)]
+
+
+class MovingItem(RootModel[list[MovingItemItem | MovingItemItem2]]):
+    root: Annotated[
+        list[MovingItemItem | MovingItemItem2], Field(max_length=3, min_length=3)
+    ]
+
+
 class PetAvatarClip(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -59,6 +78,9 @@ class PetAvatarClip(BaseModel):
     playbackRate: Annotated[float | None, Field(ge=0.1, le=4.0)] = 1
     fps: Annotated[int | None, Field(ge=1, le=120)] = 30
     weight: Annotated[float | None, Field(ge=0.0, le=1.0)] = 1
+    facing: Facing | None = None
+    moving: list[MovingItem] | None = None
+    category: str | None = None
 
 
 class Renderer(StrEnum):
@@ -101,6 +123,20 @@ class ActionState(StrEnum):
     sleep_mute = 'sleep_mute'
 
 
+class MovingItem1Item(RootModel[int]):
+    root: Annotated[int, Field(ge=0)]
+
+
+class MovingItem1Item2(RootModel[float]):
+    root: Annotated[float, Field(gt=0.0)]
+
+
+class MovingItem1(RootModel[list[MovingItem1Item | MovingItem1Item2]]):
+    root: Annotated[
+        list[MovingItem1Item | MovingItem1Item2], Field(max_length=3, min_length=3)
+    ]
+
+
 class Clip(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -115,6 +151,9 @@ class Clip(BaseModel):
     playbackRate: Annotated[float | None, Field(ge=0.1, le=4.0)] = 1
     fps: Annotated[int | None, Field(ge=1, le=120)] = 30
     weight: Annotated[float | None, Field(ge=0.0, le=1.0)] = 1
+    facing: Facing | None = None
+    moving: list[MovingItem1] | None = None
+    category: str | None = None
 
 
 class Action(BaseModel):
@@ -123,6 +162,20 @@ class Action(BaseModel):
     )
     actionState: ActionState
     clips: Annotated[list[Clip], Field(min_length=1)]
+
+
+class MovingItem2Item(RootModel[int]):
+    root: Annotated[int, Field(ge=0)]
+
+
+class MovingItem2Item2(RootModel[float]):
+    root: Annotated[float, Field(gt=0.0)]
+
+
+class MovingItem2(RootModel[list[MovingItem2Item | MovingItem2Item2]]):
+    root: Annotated[
+        list[MovingItem2Item | MovingItem2Item2], Field(max_length=3, min_length=3)
+    ]
 
 
 class AmbientPoolItem(BaseModel):
@@ -137,6 +190,8 @@ class AmbientPoolItem(BaseModel):
     audioPath: str | None = None
     category: str | None = '小动作'
     weight: Annotated[float | None, Field(ge=0.0, le=100.0)] = 10
+    facing: Facing | None = None
+    moving: list[MovingItem2] | None = None
 
 
 class PetAvatarManifest(BaseModel):
@@ -776,11 +831,6 @@ class Position(BaseModel):
     )
     x: float
     y: float
-
-
-class Facing(StrEnum):
-    left = 'left'
-    right = 'right'
 
 
 class Buff(BaseModel):
@@ -1462,6 +1512,7 @@ class StardewModsConfig(BaseModel):
     )
     modsDir: str | None = ''
     bwfShowHud: bool | None = False
+    bwfMcpPort: Annotated[int | None, Field(ge=1024, le=65535)] = 18088
 
 
 class Position12(BaseModel):
@@ -1477,6 +1528,16 @@ class DragBehavior(StrEnum):
     stick = 'stick'
     glide = 'glide'
     gravity = 'gravity'
+
+
+class WindowLayer(StrEnum):
+    always = 'always'
+    follow_ai = 'follow-ai'
+    normal = 'normal'
+
+
+class BubbleFontScale(RootModel[float]):
+    root: Annotated[float, Field(ge=0.7, le=1.6)] = None
 
 
 class PetDesktopPrefs(BaseModel):
@@ -1496,6 +1557,14 @@ class PetDesktopPrefs(BaseModel):
     sfxEnabled: bool | None = True
     sfxVolume: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.7
     followFrontApp: bool | None = False
+    windowLayer: WindowLayer | None = 'always'
+    bubbleFontScale: BubbleFontScale | None = None
+    patrolEnabled: bool | None = True
+    notebookFontId: str | None = 'auto'
+    randomEggEnabled: bool | None = True
+    peakOutfitEnabled: bool | None = False
+    peakOutfitDay: str | None = 'crosspet-deepseek'
+    peakOutfitOffPeak: str | None = 'crosspet-deepseek-pajamas'
 
 
 class Kind(StrEnum):
@@ -2159,6 +2228,12 @@ class Preset(BaseModel):
     hatId: Annotated[int | None, Field(ge=-1, le=300)] = -1
 
 
+class SpriteTier(StrEnum):
+    field_1x = '1x'
+    field_2x = '2x'
+    field_4x = '4x'
+
+
 class StardewAvatarSync(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -2168,6 +2243,8 @@ class StardewAvatarSync(BaseModel):
     displayName: Annotated[str, Field(max_length=40, min_length=1)]
     preset: Preset
     spriteSheetPath: Annotated[str | None, Field(max_length=260)] = None
+    spriteTier: SpriteTier | None = None
+    liveliness: bool | None = True
 
 
 class Scene(StrEnum):
@@ -2223,6 +2300,16 @@ class Kind5(StrEnum):
     start = 'start'
     tool = 'tool'
     stop = 'stop'
+    asking = 'asking'
+    compact = 'compact'
+    error = 'error'
+
+
+class Origin(StrEnum):
+    hook = 'hook'
+    log_watch = 'log-watch'
+    acp = 'acp'
+    manual = 'manual'
 
 
 class WorkFollowEvent(BaseModel):
@@ -2236,6 +2323,7 @@ class WorkFollowEvent(BaseModel):
     modelName: Annotated[str | None, Field(max_length=120)] = ''
     taskTitle: Annotated[str | None, Field(max_length=120)] = ''
     ts: Annotated[int | None, Field(ge=0)] = 0
+    origin: Origin | None = 'hook'
 
 
 class Mode1(StrEnum):
@@ -2269,6 +2357,19 @@ class RecentItem(BaseModel):
     at: Annotated[int | None, Field(ge=0)] = 0
 
 
+class PresencePolicy(StrEnum):
+    idle_leave = 'idle-leave'
+    app_exit = 'app-exit'
+    always_with_app = 'always-with-app'
+
+
+class ActiveOrigins(StrEnum):
+    hook = 'hook'
+    log_watch = 'log-watch'
+    acp = 'acp'
+    manual = 'manual'
+
+
 class WorkFollowStatus(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -2276,6 +2377,9 @@ class WorkFollowStatus(BaseModel):
     mode: Mode1 | None = 'multi'
     sessions: Annotated[list[Session] | None, Field(validate_default=True)] = []
     recent: Annotated[list[RecentItem] | None, Field(validate_default=True)] = []
+    presencePolicy: PresencePolicy | None = 'idle-leave'
+    logWatchEnabled: bool | None = True
+    activeOrigins: dict[str, ActiveOrigins] | None = {}
 
 
 class AIWorkbenchContracts(BaseModel):

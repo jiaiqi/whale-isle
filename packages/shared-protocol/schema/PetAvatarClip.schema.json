@@ -78,6 +78,39 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "facing": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "moving": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            ],
+            "additionalItems": false,
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "category": {
+          "type": "string"
         }
       },
       "required": [
