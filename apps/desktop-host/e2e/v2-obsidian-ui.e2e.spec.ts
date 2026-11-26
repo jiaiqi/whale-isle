@@ -83,7 +83,23 @@ describe('[E2E-HOST] V2-P1-05 Obsidian Tide 中控台全页遍历与控制权联
       ).toBe('manual_takeover');
       await director.click('[data-v2-hud-resume]');
 
-      // 4. 三态主题（system / dark / light）
+      // 4. Tidepaper 主皮肤 + 多可选主题（obsidian-tide / tide-deep）+ 三态明暗切换
+      expect(await director.locator('.wb-shell').getAttribute('data-skin')).toBe('tidepaper');
+      expect(await director.locator('.wb-shell').getAttribute('data-accent')).toBe('coral');
+      await director.click('[data-skin-picker]');
+      await director.click('[data-skin-option="obsidian-tide"]');
+      expect(await director.locator('.wb-shell').getAttribute('data-skin')).toBe('obsidian-tide');
+      await director.click('[data-skin-picker]');
+      await director.click('[data-skin-option="tide-deep"]');
+      expect(await director.locator('.wb-shell').getAttribute('data-skin')).toBe('tide-deep');
+      await director.click('[data-skin-picker]');
+      await director.click('[data-accent-option="sea"]');
+      expect(await director.locator('.wb-shell').getAttribute('data-accent')).toBe('sea');
+      await director.click('[data-accent-option="coral"]');
+      await director.click('[data-skin-option="tidepaper"]');
+      expect(await director.locator('.wb-shell').getAttribute('data-skin')).toBe('tidepaper');
+      expect(await director.locator('.wb-shell').getAttribute('data-accent')).toBe('coral');
+
       await director.click('[data-theme-system]');
       expect(await director.locator('.wb-shell').getAttribute('data-theme-mode')).toBe('system');
       await director.click('[data-theme-toggle]');
@@ -96,8 +112,17 @@ describe('[E2E-HOST] V2-P1-05 Obsidian Tide 中控台全页遍历与控制权联
         expect(await director.locator(`[data-tab="${id}"]`).getAttribute('data-active')).toBe('true');
       }
 
-      // 6. V2 生命中枢真实交互验证
+      // 6. V2 生命中枢 + P3-01 表演舞台与 P2 实盘摘要交互验证
       await director.waitForSelector('[data-v2-life-console]', { timeout: 10_000 });
+      await director.waitForSelector('[data-v2-perf-section]', { timeout: 5_000 });
+      await director.waitForSelector('[data-v2-p2-summary]', { timeout: 5_000 });
+      await director.click('[data-v2-stage-backend="vrm-3d"]');
+      await director.click('[data-v2-perf-demo-sing]');
+      await expect.poll(
+        () => director!.locator('[data-v2-perf-section]').innerText(),
+        { timeout: 10_000 },
+      ).toContain('小鲸为你点亮海图的星光');
+      await director.click('[data-v2-perf-stop]');
       expect(await director.locator('[data-v2-stage-badge="P3"]').count()).toBeGreaterThanOrEqual(1);
       expect(await director.locator('[data-v2-license-badge]').count()).toBeGreaterThanOrEqual(1);
 

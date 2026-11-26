@@ -35,7 +35,7 @@ import { PetStudioPanel } from './pet-studio';
 import { CoopPanel } from './coop-panel';
 import { toolLabel, useGameHealth, type ReceiptFilter } from './game-panel';
 import { NAV_GROUPS, Sidebar, type Tab } from './shell/sidebar';
-import { Topbar, type ThemeMode } from './shell/topbar';
+import { Topbar, type ThemeMode, type ThemeSkin, type TideAccent } from './shell/topbar';
 import { CommandPalette, type CommandAction } from './shell/command-palette';
 import { ControlOwnershipHud } from './v2/signature-widgets';
 import { ChatAside, ChatView, parseDirective } from './views/chat-view';
@@ -102,7 +102,19 @@ function initialTab(): Tab {
 function initialThemeMode(): ThemeMode {
   const saved = localStorage.getItem('wb-theme');
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
-  return 'dark';
+  return 'light';
+}
+
+function initialSkin(): ThemeSkin {
+  const saved = localStorage.getItem('wb-skin');
+  if (saved === 'tidepaper' || saved === 'obsidian-tide' || saved === 'tide-deep') return saved;
+  return 'tidepaper';
+}
+
+function initialAccent(): TideAccent {
+  const saved = localStorage.getItem('wb-accent');
+  if (saved === 'coral' || saved === 'sea' || saved === 'whale' || saved === 'kelp' || saved === 'plum') return saved;
+  return 'coral';
 }
 
 export function App({ profiles, slotLabels, providers, store, storeKey }: AppProps): React.JSX.Element {
@@ -138,6 +150,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [input, setInput] = useState('');
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(initialThemeMode);
+  const [skin, setSkin] = useState<ThemeSkin>(initialSkin);
+  const [accent, setAccent] = useState<TideAccent>(initialAccent);
   const [systemDark, setSystemDark] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -374,8 +388,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+    document.documentElement.dataset.skin = skin;
+    document.documentElement.dataset.accent = accent;
     localStorage.setItem('wb-theme', themeMode);
-  }, [resolvedTheme, themeMode]);
+    localStorage.setItem('wb-skin', skin);
+    localStorage.setItem('wb-accent', accent);
+  }, [resolvedTheme, themeMode, skin, accent]);
 
   useEffect(() => {
     localStorage.setItem('wb-plugins-v4', JSON.stringify([...plugins]));
@@ -495,9 +513,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         setCmdkOpen((v) => !v);
         return;
       }
-      if (e.key === 'F8') {
+      if (e.key === 'F8' || (e.shiftKey && e.key === 'Escape')) {
         e.preventDefault();
-        void emergencyHalt('快捷键 F8 急停');
+        void emergencyHalt(e.key === 'F8' ? '快捷键 F8 急停' : '快捷键 Shift+Esc 急停');
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -704,8 +722,11 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       { id: 'act:brain', label: brain.mode === 'llm' ? '切换规则日程' : '切换 LLM 大脑', group: '全局动作', icon: Brain, hint: brain.mode, run: () => void switchBrain() },
       { id: 'act:voice', label: voiceOn ? '静音语音' : '开启语音', group: '全局动作', icon: voiceOn ? VolumeX : Volume2, run: () => void toggleVoice() },
       { id: 'act:feed', label: '投喂 5,000 粒米', group: '全局动作', icon: Wheat, hint: '饭碗', run: () => void feedRice() },
-      { id: 'act:theme', label: resolvedTheme === 'dark' ? '切到浅色主题' : '切到深色主题', group: '主题', icon: RotateCcw, run: () => setThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark') },
+      { id: 'act:theme', label: resolvedTheme === 'dark' ? '切到晨雾浅色模式' : '切到夜潮深色模式', group: '主题', icon: RotateCcw, run: () => setThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark') },
       { id: 'act:theme-sys', label: '主题跟随系统浅深色', group: '主题', icon: Monitor, hint: 'system', run: () => setThemeMode('system') },
+      { id: 'act:skin-tidepaper', label: '外观切换：潮汐纸 Tidepaper', group: '主题', icon: Sparkles, run: () => setSkin('tidepaper') },
+      { id: 'act:skin-obsidian', label: '外观切换：曜潮 Obsidian Tide', group: '主题', icon: Sparkles, run: () => setSkin('obsidian-tide') },
+      { id: 'act:skin-deep', label: '外观切换：深海屿光 Tide Deep', group: '主题', icon: Sparkles, run: () => setSkin('tide-deep') },
       { id: 'act:fish', label: '插队：钓鱼', group: '快捷指令', icon: Radio, hint: '/fish 5', run: () => sendText('/fish 5') },
       { id: 'act:sleep-game', label: '插队：回家睡觉', group: '快捷指令', icon: Radio, hint: '/sleep', run: () => sendText('/sleep') },
       { id: 'act:state', label: '播报当前状态', group: '快捷指令', icon: Activity, hint: '/state', run: () => sendText('/state') },
@@ -720,6 +741,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       className={`wb-shell${tab === 'chat' ? ' has-aside' : ''} h-screen w-screen`}
       data-theme={resolvedTheme}
       data-theme-mode={themeMode}
+      data-skin={skin}
+      data-accent={accent}
     >
       <div className="ambient" />
       <Sidebar
@@ -734,6 +757,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         characters={characters}
         characterId={characterId}
         onSelectCharacter={(id) => void selectCharacter(id)}
+        presenceSummary={`${v2Snapshot?.activityState.mode ?? 'companion'} · ${v2Snapshot?.emotion.label ?? '平静'}`}
         badges={{
           memory: memoryStats !== null ? `${memoryStats.nodes} 节点` : undefined,
           life: v2Snapshot?.activityState.halted ? '急停' : undefined,
@@ -752,6 +776,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         running={running}
         theme={resolvedTheme}
         themeMode={themeMode}
+        skin={skin}
+        accent={accent}
         onOpenCommandPalette={() => setCmdkOpen(true)}
         onToggleVoice={() => void toggleVoice()}
         onSwitchBrain={() => {
@@ -762,6 +788,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         onToggleDrive={() => void (running ? stop() : start())}
         onToggleTheme={() => setThemeMode(resolvedTheme === 'dark' ? 'light' : 'dark')}
         onSelectSystemTheme={() => setThemeMode('system')}
+        onSelectSkin={setSkin}
+        onSelectAccent={setAccent}
       />
 
       <ControlOwnershipHud

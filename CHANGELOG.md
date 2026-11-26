@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`ADR-003` / `REQ-UI-01`：Tidepaper 潮汐纸主 UI/UX 升级与 P2/P3 实盘控制台 — `DONE`）
+
+- **Tidepaper 多主题令牌系统** `apps/desktop-host/src/renderer/director/{design-tokens.css,styles.css}`：确立潮汐纸 Tidepaper（晨雾 Mist 暖白纸面 `#F3EFE7` + 墨蓝 `#142036` + 珊瑚落日 `#D14D2C` / 夜潮 `#0D1220`）为默认主界面并满足 WCAG AA ≥4.5:1 对比度，完整保留 Obsidian Tide 与 Tide Deep 可选主题及 5 种强调色（`coral/sea/whale/kelp/plum`）。
+- **工作台壳层与 V2 生命中枢升级** `apps/desktop-host/src/renderer/director/{App.tsx,shell/sidebar.tsx,shell/topbar.tsx,v2/signature-widgets.tsx,views/life-console-view.tsx}`：对齐 Tidepaper「此刻 / 角色与化身 / 生活与舞台 / 能力与治理」导航、顶栏视觉主题与强调色选择器（`[data-skin-picker]`）、`Shift+Esc`/`F8` 双急停绑定，以及接入 `V2-P3-01` 表演舞台（2D/Live2D/VRM/OBS 切换、唱跳双语歌词与 NC 版权拦截）和 `V2-P2` 创作工坊/星露谷联机 Mods 实盘预检；通过 `verify:gate` 7/7 与 Electron 45 E2E 全套。
+
 ### Added / Changed（`V2-P3-01`：统一表演系统 `SingEngine` / `PerformanceDirector` / `StageRuntime` — `IMPLEMENTED_UNVERIFIED`）
 
 - **歌唱授权、双语歌词时钟、舞蹈与舞台切换契约** `packages/shared-protocol/src/voice.ts`：定义 `PerformanceChannel`、`SongRights` / `SongRightsCheck`、`SingMode` / `SingBackendMode` / `SingRequest` / `SingRenderResult`、`BilingualLyricLine` / `LyricsClockFrame`、`DanceRoutine`、`SpeechPerformancePlan` / `SilenceDecision` / `PerformanceSnapshot` 与 `StageBackendKind` / `StageCharacterBinding` / `StageRuntimeSnapshot` Zod 契约。

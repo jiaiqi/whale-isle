@@ -24,34 +24,34 @@ export interface NavItem {
 
 export const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
-    label: '交互中枢',
+    label: '此刻',
     items: [
-      { id: 'chat', label: '聊天 · 小鲸', icon: MessageSquare, group: '交互中枢' },
-      { id: 'life', label: 'V2 生命中枢', icon: Sparkles, group: '交互中枢' },
-      { id: 'memory', label: '记忆图谱与日记', icon: Brain, group: '交互中枢' },
+      { id: 'chat', label: '对话 · 小鲸', icon: MessageSquare, group: '此刻' },
+      { id: 'life', label: 'V2 生命中枢', icon: Sparkles, group: '此刻' },
     ],
   },
   {
-    label: '桌宠与声音',
+    label: '角色与化身',
     items: [
-      { id: 'pet', label: '桌宠工坊', icon: Fish, group: '桌宠与声音' },
-      { id: 'voice', label: '语音中心', icon: AudioLines, group: '桌宠与声音' },
+      { id: 'voice', label: '声音与表演', icon: AudioLines, group: '角色与化身' },
+      { id: 'memory', label: '记忆图谱', icon: Brain, group: '角色与化身' },
+      { id: 'pet', label: '桌宠工坊', icon: Fish, group: '角色与化身' },
     ],
   },
   {
-    label: '游戏与直播',
+    label: '生活与舞台',
     items: [
-      { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '游戏与直播', live: true },
-      { id: 'coop', label: '联机协作', icon: Users, group: '游戏与直播' },
-      { id: 'obs', label: 'OBS 挂件', icon: MonitorPlay, group: '游戏与直播' },
+      { id: 'stardew', label: '游戏共玩', icon: Gamepad2, group: '生活与舞台', live: true },
+      { id: 'coop', label: '联机协作', icon: Users, group: '生活与舞台' },
+      { id: 'obs', label: 'OBS 舞台', icon: MonitorPlay, group: '生活与舞台' },
     ],
   },
   {
-    label: '平台与底层',
+    label: '能力与治理',
     items: [
-      { id: 'harness', label: 'Harness', icon: Terminal, group: '平台与底层' },
-      { id: 'providers', label: '模型服务商', icon: Cpu, group: '平台与底层' },
-      { id: 'plugins', label: '扩展与权限', icon: Blocks, group: '平台与底层' },
+      { id: 'providers', label: '模型与饭碗', icon: Cpu, group: '能力与治理' },
+      { id: 'harness', label: 'Harness', icon: Terminal, group: '能力与治理' },
+      { id: 'plugins', label: '扩展与权限', icon: Blocks, group: '能力与治理' },
     ],
   },
 ];
@@ -83,11 +83,13 @@ export interface SidebarProps {
   onSelectCharacter: (id: string) => void;
   /** 动态 badge 文案（如记忆节点数） */
   badges?: Partial<Record<Tab, string>>;
+  /** 主角色当前活动/心情摘要 */
+  presenceSummary?: string;
 }
 
 export function Sidebar({
   tab, onSelect, running, rice, riceCap, onFeed, onOpenCommandPalette, isPluginEnabled,
-  characters, characterId, onSelectCharacter, badges,
+  characters, characterId, onSelectCharacter, badges, presenceSummary,
 }: SidebarProps): React.JSX.Element {
   const pct = Math.min(100, Math.round((rice / riceCap) * 100));
   const [characterMenuOpen, setCharacterMenuOpen] = useState(false);
@@ -190,6 +192,17 @@ export function Sidebar({
         })}
       </div>
       <div className="wb-side-foot">
+        <div className="mb-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5" style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)' }}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: 'var(--text-1)' }}>
+              <span className="truncate">{selectedCharacter?.displayName ?? '小鲸'}</span>
+              <span className="mono rounded-full px-1.5 py-0.5 text-[9px]" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', border: '1px solid var(--accent-line)' }}>主角色</span>
+            </div>
+            <div className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
+              {presenceSummary ?? '桌面陪伴中 · 本地运行'}
+            </div>
+          </div>
+        </div>
         <div className="wb-rice-row">
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Wheat size={14} style={{ color: 'var(--amber)' }} />赛博饭碗

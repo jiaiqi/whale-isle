@@ -304,18 +304,18 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
           ? 'color-mix(in srgb, var(--red) 10%, var(--bg))'
           : isTakeover
             ? 'color-mix(in srgb, var(--amber) 10%, var(--bg))'
-            : 'color-mix(in srgb, var(--bg) 52%, transparent)',
-        backdropFilter: 'blur(20px)',
+            : 'color-mix(in srgb, var(--surface) 74%, var(--bg))',
+        backdropFilter: 'blur(16px)',
       }}
     >
       <button
         type="button"
         onClick={onOpenLifeConsole}
         className="flex items-center gap-2 rounded-full px-1.5 py-0.5 transition hover:bg-[var(--surface-2)]"
-        title="点击打开 V2 生命中枢（12 域快照 / 语音混音 / 额度矩阵 / 记忆控制）"
+        title="点击打开 V2 生命中枢（12 域快照 / 统一表演舞台 / 额度矩阵 / 记忆控制）"
       >
         <SonarRing expression={expression} halted={halted} size={22} label={`${displayName} · ${exprMeta.label}`} />
-        <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{displayName}</span>
+        <span className="wb-display text-[13px] font-semibold" style={{ color: 'var(--text-1)' }}>{displayName}</span>
         <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{characterId}</span>
       </button>
 

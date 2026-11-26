@@ -98,3 +98,4 @@
 ## 七、P3 阶段近期实测状态快照
 
 - **`V2-P3-01`（统一表演系统：`SingEngine` SVS/SVC + 歌词时钟 + 舞蹈 + 2D/3D `StageRuntime`）**：`performance.spec.ts` + `stage-runtime.spec.ts`（6/6 PASS，合并 90.88% 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md)；真实神经 SVS/SVC Worker 推理听感与外部 Cubism `.moc3` / WebGL VRM 真机画布渲染待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。
+- **`ADR-003` UI/UX Tidepaper 主基线升级（`REQ-UI-01`）**：工作台已切换为潮汐纸 Tidepaper（晨雾 Mist 默认 + 夜潮 Night Tide + 5 强调色）并保留 Obsidian Tide / Tide Deep 可选切换，接入 V2-P2 与 V2-P3-01 实盘操作面板；`verify:gate` 7/7 与 Electron 45 E2E 4 套件（含 WCAG AA 4.5:1 对比度校验）全绿，详见 [P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)。

@@ -55,6 +55,25 @@
 @source "./views/stardew-view.tsx";
 @source "./views/life-console-view.tsx";
 
+/* 潮汐纸 Tidepaper 排版辅助类（衬线标题 / 眉标 / 内心戏引文 / 强调色圆点） */
+.wb-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.wb-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 650;
+}
+.wb-serif-quote {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--text-2);
+}
+
 /* 圆角节奏：Tailwind rounded-lg/md 统一为设计稿的连续曲率 */
 @layer utilities {
   .rounded-lg { border-radius: var(--r-lg) !important; }

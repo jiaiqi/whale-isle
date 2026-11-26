@@ -14,7 +14,10 @@ import {
   AudioLines,
   Brain,
   Database,
+  Gamepad2,
   Gauge,
+  Layers,
+  Music2,
   Play,
   Plus,
   RefreshCw,
@@ -22,15 +25,23 @@ import {
   Sparkles,
   Square,
   Trash2,
+  Wand2,
 } from 'lucide-react';
 import type {
   AudioMixerSnapshot,
+  BlenderToolchainStatus,
   CharacterCoreSnapshot,
+  CoopModCompatibilityReport,
+  CoopRuntimeSnapshot,
   LifeActivityKind,
   MemoryCategory,
   MemoryDeletionAudit,
+  PerformanceSnapshot,
   ProviderQuotaMatrix,
   ProviderQuotaReport,
+  SingProviderStatus,
+  StageBackendKind,
+  StageRuntimeSnapshot,
   VoiceProviderStatus,
 } from '@workbench/shared-protocol';
 import type { V2MemoryQueryResult } from '../bridge';
@@ -102,17 +113,47 @@ export function LifeConsoleView({
   const [audits, setAudits] = useState<MemoryDeletionAudit[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // V2-P3-01 表演总控 & 2D/Live2D/VRM/OBS StageRuntime 实时状态
+  const [perfSnap, setPerfSnap] = useState<PerformanceSnapshot | null>(null);
+  const [stageSnap, setStageSnap] = useState<StageRuntimeSnapshot | null>(null);
+  const [singBackends, setSingBackends] = useState<SingProviderStatus[]>([]);
+  // V2-P2 创作工坊 & 联机协作实时基数
+  const [p2Summary, setP2Summary] = useState<{
+    blender: BlenderToolchainStatus | null;
+    bibleCount: number;
+    assetCount: number;
+    coopRoom: CoopRuntimeSnapshot | null;
+    compatReport: CoopModCompatibilityReport | null;
+  }>({ blender: null, bibleCount: 0, assetCount: 0, coopRoom: null, compatReport: null });
+
   const loadAll = useCallback(async (): Promise<void> => {
-    const [storage, providers, mix, auditRows] = await Promise.all([
+    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop] = await Promise.all([
       window.directorBridge.v2StorageCheck().catch(() => null),
       window.directorBridge.v2VoiceProviders().catch(() => []),
       window.directorBridge.v2VoiceMixerState().catch(() => null),
       window.directorBridge.v2MemoryDeletionAudits().catch(() => []),
+      window.directorBridge.v2PerfSnapshot().catch(() => null),
+      window.directorBridge.v23dToolchain().catch(() => null),
+      window.directorBridge.v2BibleList().catch(() => []),
+      window.directorBridge.v2AssetList().catch(() => []),
+      window.directorBridge.v2CoopSnapshot().catch(() => null),
     ]);
     if (storage !== null) setStorageInfo(storage);
     setVoiceProviders(providers);
     if (mix !== null) setMixer(mix);
     setAudits(auditRows);
+    if (perfRes !== null) {
+      setPerfSnap(perfRes.performance);
+      setStageSnap(perfRes.stage);
+      setSingBackends(perfRes.singBackends);
+    }
+    setP2Summary((prev) => ({
+      ...prev,
+      blender,
+      bibleCount: bibles.length,
+      assetCount: assets.length,
+      coopRoom: coop,
+    }));
   }, []);
 
   useEffect(() => {
@@ -255,21 +296,124 @@ export function LifeConsoleView({
     toast.success(`模糊印象归纳完成：新增/更新 ${res.impressions.length} 条关系印象`);
   };
 
+  const handleSwitchStageBackend = async (backend: StageBackendKind): Promise<void> => {
+    const res = await window.directorBridge.v2StageSwitchBackend({ backend });
+    if (!res.ok || !res.stage) {
+      toast.error(res.error ?? '舞台维度切换失败');
+      return;
+    }
+    setStageSnap(res.stage);
+    toast.success(`已无缝切换至 ${backend}（保留角色与歌词状态）`);
+  };
+
+  const handleDemoSingAndDance = async (): Promise<void> => {
+    const startRes = await window.directorBridge.v2PerfSingStart({
+      request: {
+        requestId: `ui-sing-${Date.now().toString(36)}`,
+        characterId: snapshot?.identity.characterId ?? 'char_xiaojing',
+        voiceProfileId: snapshot?.voiceIdentity.voiceProfileId ?? 'qiaopi_mengmei',
+        mode: 'svs',
+        channel: 'livestream_public',
+        song: {
+          songId: 'tidepaper-morning-song',
+          title: '鲸屿晨雾',
+          durationMs: 6000,
+          accompanimentTrackPath: 'assets/audio/tide-accomp.wav',
+          lyrics: [
+            { index: 0, startMs: 0, endMs: 2200, primaryText: '潮汐漫过晨雾里的石阶', secondaryText: 'Tide laps gently across misty stone steps' },
+            { index: 1, startMs: 2200, endMs: 6000, primaryText: '小鲸为你点亮海图的星光', secondaryText: 'Xiaojing lights up starlight on the sea chart' },
+          ],
+          rights: {
+            songLicense: 'original_owned',
+            accompanimentLicense: 'original_owned',
+            lyricsLicense: 'original_owned',
+            voiceModelAuthorized: true,
+            voiceConsentSource: 'whale-isle-original',
+          },
+        },
+      },
+      danceRoutine: {
+        routineId: 'tide-wave-dance',
+        title: '晨汐挥手舞',
+        durationMs: 6000,
+        cues: [
+          { cueId: 'cue-wave', atMs: 0, durationMs: 2200, poseId: 'wave_arms', vrmMotionTag: 'dance_wave', expressionId: 'happy' },
+          { cueId: 'cue-spin', atMs: 2200, durationMs: 3800, poseId: 'spin_smile', vrmMotionTag: 'dance_spin', expressionId: 'singing' },
+        ],
+      },
+    });
+    if (!startRes.ok) {
+      toast.error(startRes.error ?? '试演启动失败');
+      return;
+    }
+    const ticked = await window.directorBridge.v2PerfTick(2500);
+    setPerfSnap(ticked.performance);
+    setStageSnap(ticked.stage);
+    setMixer(ticked.performance.mixer);
+    toast.success(`已同步唱跳与双语歌词（后端模式：${startRes.result?.backendMode ?? 'preview_guide_tone'}）`);
+  };
+
+  const handleTestNcBlock = async (): Promise<void> => {
+    const res = await window.directorBridge.v2PerfSingStart({
+      request: {
+        requestId: `ui-nc-${Date.now().toString(36)}`,
+        characterId: snapshot?.identity.characterId ?? 'char_xiaojing',
+        voiceProfileId: snapshot?.voiceIdentity.voiceProfileId ?? 'qiaopi_mengmei',
+        mode: 'svs',
+        channel: 'livestream_public',
+        song: {
+          songId: 'nc-demo-song',
+          title: '非商用曲目测试',
+          durationMs: 3000,
+          rights: {
+            songLicense: 'dev_only_non_commercial',
+            accompanimentLicense: 'original_owned',
+            lyricsLicense: 'original_owned',
+            voiceModelAuthorized: true,
+            voiceConsentSource: 'test-consent',
+          },
+        },
+      },
+    });
+    if (!res.ok) {
+      toast.warning(`版权门禁已生效阻断：${res.result?.rightsCheck.reasons.join('；') ?? res.error ?? '禁止进入公开直播'}`);
+    }
+  };
+
+  const handleStopPerformance = async (): Promise<void> => {
+    const res = await window.directorBridge.v2PerfStop('ui_stop');
+    setPerfSnap(res.performance);
+    setStageSnap(res.stage);
+    setMixer(res.performance.mixer);
+    toast('表演已停演归零');
+  };
+
+  const handleScanCoopMods = async (): Promise<void> => {
+    const res = await window.directorBridge.v2CoopModCompat();
+    if (!res.ok || !res.report) {
+      toast.warning(res.error ?? '未检测到星露谷 Mods 目录');
+      return;
+    }
+    setP2Summary((prev) => ({ ...prev, compatReport: res.report ?? null }));
+    toast.success(`星露谷 Mods 扫描完成：BWF ${res.report.bwfReady ? '就绪' : '缺件'} · 发现 ${res.report.hostModCount} 个 Mod`);
+  };
+
   const activeEmbodiment = snapshot?.embodiments.find((e) => e.active) ?? snapshot?.embodiments[0];
 
   return (
-    <div data-v2-life-console className="mx-auto max-w-[1320px] space-y-4 px-6 py-5">
-      {/* Header Summary Card */}
-      <section className="card flex flex-wrap items-center gap-3 px-5 py-4">
+    <div data-v2-life-console className="mx-auto max-w-[1360px] space-y-4 px-6 py-5 rise">
+      {/* Tidepaper Character-First Editorial Hero */}
+      <section className="card flex flex-wrap items-center gap-4 px-6 py-5">
         <SonarRing
           expression={snapshot?.activityState.expression ?? 'idle'}
           halted={snapshot?.activityState.halted ?? false}
-          size={36}
+          size={42}
         />
-        <div>
+        <div className="min-w-0 flex-1">
+          <div className="wb-eyebrow mb-1">Whale Isle · Character First · 潮汐纸生命总览</div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-lg font-semibold">
-              {snapshot?.identity.displayName ?? '小鲸'} · V2 生命中枢
+            <h1 className="wb-display text-2xl">
+              {snapshot?.identity.displayName ?? '小鲸'} · 数字生命与统一舞台
             </h1>
             <span className="mono pill">{snapshot?.identity.characterId ?? 'char_xiaojing'}</span>
             {activeEmbodiment && <LicenseBadge scope={activeEmbodiment.licenseScope} compact />}
@@ -280,11 +424,12 @@ export function LifeConsoleView({
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
-            统一 12 域身份/人格/目标/约定/声音/记忆事实源 —— 所有数值均实时取自 Electron 主进程内核，无任何伪造指标。
+          <p className="mt-1.5 text-xs" style={{ color: 'var(--text-2)' }}>
+            12 域单一事实源（活动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.activityState.mode ?? 'companion'}</b> ·
+            情绪：<b style={{ color: 'var(--text-1)' }}>{snapshot?.emotion.label ?? '平静'}</b> ·
+            驱动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.motivation.reason ?? '桌面陪伴'}</b>）—— 全量直连 Electron 主进程，无虚假数值。
           </p>
         </div>
-        <div className="flex-1" />
         <button
           type="button"
           className="btn-pill ghost"
@@ -486,9 +631,151 @@ export function LifeConsoleView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <StageBadge stage="P3" label="SVS 歌声与版权曲库未接线" />
-            <StageBadge stage="P2" label="3D VRM 与 Blender 管线规划中" />
+            <StageBadge stage="P3" label="统一舞台与导唱已接线 · 待实机神经歌声与3D画布" />
+            <StageBadge stage="P2" label="创作工坊与人机联机已接线 · 待实机客户端" />
             <StageBadge stage="P4" label="Social L2→L3 社区发布未开启" />
+          </div>
+        </section>
+      </div>
+
+      {/* Section B2: V2-P3-01 PerformanceDirector & Unified 2D/Live2D/VRM Stage + P2 Studio/Coop */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="card space-y-3 px-5 py-4" data-v2-perf-section>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Music2 size={14} style={{ color: 'var(--accent)' }} />
+              统一表演舞台（SingEngine SVS/SVC · 双语歌词 · 2D/Live2D/VRM）
+            </h2>
+            <span className="pill mono" style={{ fontSize: 10 }}>
+              舞台模式：{perfSnap?.mode ?? 'idle'} · 渲染：{stageSnap?.activeBackend ?? 'desktop-2d'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {(['desktop-2d', 'live2d', 'vrm-3d', 'obs-stage'] as const).map((backend) => {
+              const active = stageSnap?.activeBackend === backend;
+              return (
+                <button
+                  key={backend}
+                  type="button"
+                  data-v2-stage-backend={backend}
+                  onClick={() => void handleSwitchStageBackend(backend)}
+                  className={`pill cursor-pointer mono ${active ? 'pill-blue' : ''}`}
+                  style={{ fontSize: 10.5 }}
+                >
+                  <Layers size={10} />
+                  <span>{backend}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-v2-perf-demo-sing
+              onClick={() => void handleDemoSingAndDance()}
+              className="btn-pill primary"
+              style={{ padding: '4.5px 12px', fontSize: 11.5 }}
+            >
+              <Play size={11} />试演原创唱跳 + 双语歌词
+            </button>
+            <button
+              type="button"
+              data-v2-perf-nc-test
+              onClick={() => void handleTestNcBlock()}
+              className="btn-pill ghost"
+              style={{ padding: '4.5px 11px', fontSize: 11 }}
+            >
+              测试 NC 直播版权拦截
+            </button>
+            <button
+              type="button"
+              data-v2-perf-stop
+              onClick={() => void handleStopPerformance()}
+              className="btn-pill ghost"
+              style={{ padding: '4.5px 11px', fontSize: 11 }}
+            >
+              <Square size={10} />停演归零
+            </button>
+          </div>
+
+          <div className="inset space-y-1.5 p-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              {singBackends.map((b) => (
+                <span key={b.mode} className="pill mono" style={{ fontSize: 10 }} title={b.detail}>
+                  {b.mode.toUpperCase()}: {b.backend}
+                </span>
+              ))}
+              {stageSnap?.devWatermarkActive && (
+                <span className="pill pill-amber mono" style={{ fontSize: 10 }}>DEV 水印保护激活</span>
+              )}
+            </div>
+            {perfSnap?.lyrics.activeLine ? (
+              <div className="pt-1">
+                <div className="wb-display text-sm" style={{ color: 'var(--text-1)' }}>
+                  {perfSnap.lyrics.activeLine.primaryText}
+                </div>
+                {perfSnap.lyrics.activeLine.secondaryText && (
+                  <div className="wb-serif-quote text-[11.5px]">{perfSnap.lyrics.activeLine.secondaryText}</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                当前未在唱歌：可点击「试演原创唱跳」或切换 2D/Live2D/VRM/OBS 化身检验跨维度状态保留。
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="card space-y-3 px-5 py-4" data-v2-p2-summary>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <Wand2 size={14} style={{ color: 'var(--sea, var(--blue))' }} />
+              创作工坊资产与星露谷联机协作态势（V2-P2 实盘数据）
+            </h2>
+            <button
+              type="button"
+              data-v2-coop-compat-btn
+              onClick={() => void handleScanCoopMods()}
+              className="btn-pill ghost"
+              style={{ padding: '4px 10px', fontSize: 11 }}
+            >
+              <Gamepad2 size={11} />扫描本机联机 Mods
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="inset p-2.5">
+              <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>Character Bible</div>
+              <div className="wb-display text-lg">{p2Summary.bibleCount}</div>
+            </div>
+            <div className="inset p-2.5">
+              <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>十态 AssetRegistry</div>
+              <div className="wb-display text-lg">{p2Summary.assetCount}</div>
+            </div>
+            <div className="inset p-2.5">
+              <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>Blender 3D 工具链</div>
+              <div className="mono mt-1 text-[11px]" style={{ color: p2Summary.blender?.available ? 'var(--green)' : 'var(--amber)' }}>
+                {p2Summary.blender?.available ? '已安装就绪' : '本机未安装'}
+              </div>
+            </div>
+          </div>
+
+          <div className="inset space-y-1 p-3 text-[11.5px]" style={{ color: 'var(--text-2)' }}>
+            <div>
+              联机房间：<b>{p2Summary.coopRoom?.roomId ?? '待开房'}</b> · 状态：<b>{p2Summary.coopRoom?.status ?? 'idle'}</b>
+            </div>
+            {p2Summary.compatReport ? (
+              <div>
+                本机 Mods 预检：BWF {p2Summary.compatReport.bwfReady ? '就绪' : '缺失'} ·
+                已安装 {p2Summary.compatReport.hostModCount} 个 Mod · 可联机：{p2Summary.compatReport.canStartCoop ? '是' : '否'}
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-3)' }}>
+                点击「扫描本机联机 Mods」读取本地星露谷 SMAPI Mods 目录兼容性。
+              </div>
+            )}
           </div>
         </section>
       </div>

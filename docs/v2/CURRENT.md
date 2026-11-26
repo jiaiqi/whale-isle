@@ -5,9 +5,10 @@
 ## 1. 当前进度锚点
 
 - **当前分支**：`feat/whale-isle-v2`（P0 & P1 核心、**P2 全部 8 个工单**、以及 P3 首单 **`V2-P3-01`** 已交付验证闭环）
-- **上一已完成/交接工单**：`V2-P3-01` — **统一表演系统（Sing Engine SVS/SVC + 舞蹈 + 歌词时钟 + 2D/3D StageRuntime）**（状态：`IMPLEMENTED_UNVERIFIED`）
+- **上一已完成/交接工单**：`V2-P3-01` — **统一表演系统**（`IMPLEMENTED_UNVERIFIED`）+ **Tidepaper（潮汐纸）主基线 UI/UX 升级与 P2/P3 实盘控制台接线**（`REQ-UI-01 DONE`）
 - **当前唯一激活 `NEXT` 工单**：**`V2-P3-02` — LifeRuntime 驱动的直播中控与 OBS 舞台（真实平台流接入 + 曲库版权门禁）**
-- **同步 UI/设计基准约束（`ADR-003`）**：[design/tidepaper/](../../design/tidepaper/) 为 V2 首选 UI/UX 参考基线（`SPEC.md` + 25 页原型），Obsidian Tide / Tide Deep / Obsidian v4 保留为可选主题；渐进落地时须保留现有 React/IPC 真实绑定与诚实阶段标注。
+- **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
+- **本地客户端常驻约定**：用户要求每次完成任务后保持本地桌面端运行（`pnpm --filter @workbench/desktop-host start`）以便随时测试；推进新工单导致源码改动并重新构建前，如需重启加载新产物，务必重启保持客户端处于运行状态。
 
 ## 2. 本次 `V2-P3-01` 实际交付与验证证据
 
