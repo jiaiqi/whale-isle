@@ -41,7 +41,7 @@
 | **研发 Harness** | **OpenHands / Codex CLI / Claude Code / Gemini CLI** | Evolution Engine 执行驱动 | 通过 [agent-adapter.ts](file:///Users/jiaqi/Documents/vibe/ai-vtuber-workbench/tools/evolution-lite/src/agent-adapter.ts) 可插拔调用，禁止绑定单一供应商 |
 | **Browser / Computer Use** | **Playwright / Browser Use / Stagehand / OS UI Automation** | 确定性与语义浏览 | 确定性 Playwright 优先；受 `ComputerUseLease` 与独立 `BrowserProfile` 严格约束 |
 | **图片与 3D 管线** | **在线图片 API / 本地 Agent（Codex）、Hunyuan3D、Blender、VRM Add-on** | 生成与绑定导出 | 核对 Hunyuan3D 具体权重/API 商用条款；ComfyUI 仅作可选外部工作流避免捆绑传染 |
-| **语音与歌声** | **CosyVoice / MOSS-TTS / 实时云端 API / SVS / SVC / FFmpeg** | 真实说话与唱歌 | 严禁把普通 TTS 冒充 SVS/SVC；基础语音 P1 优先通过 `VoiceProvider` 接入而非打包数 GB 推理栈 |
+| **语音与歌声** | **CosyVoice / MOSS-TTS / 实时云端 API / SVS / SVC / FFmpeg** | 真实说话与唱歌 | 严禁把普通 TTS 冒充 SVS/SVC；基础语音 P1 优先通过 `VoiceProvider` 接入而非打包数 GB 推理栈。**权重按逐文件口径判定**（[O5-svs-svc-weight-license-per-file.md](./evidence/O5-svs-svc-weight-license-per-file.md)）：许可干净的只有 HuBERT(Apache-2.0)、FCPE/CREPE(MIT)；RVC 官方底模带「仅供研究使用」条款、OpenVPI 声码器 CC BY-NC-SA、DiffSinger 官方 checkpoint 权重许可未声明、RMVPE 无 LICENSE |
 | **社交平台能力** | 官方开放平台 API 优先；社区 MCP/Skills 仅作参考或实验 | 抖音 / B 站 / 小红书 | 严禁将非官方逆向爬虫当生产依赖；逐平台核验规则与授权 |
 
 ---

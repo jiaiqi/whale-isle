@@ -1,6 +1,7 @@
 # 真正 SVS / SVC 可部署候选与本机条件核实（item 5 调研，2026-11-26）
 
 > 性质：**外部资料核实 + 本机条件盘点**，不是推理实测。未下载权重、未购买、未注册、未接受任何在线协议、未上传任何声音。
+> **2026-11-26 修订**：本文早期版本把「RVC 的 HF 权重仓」笼统写成 MIT、把「无独立权重许可」当成「可非商用验证」，两处都已纠正。**逐文件许可结论以 [O5-svs-svc-weight-license-per-file.md](./O5-svs-svc-weight-license-per-file.md) 为准**，本文只保留候选对比。
 > 本机：Mac mini M4（10 核）/ 32GB 统一内存 / 1.4TB 可用；Python 3.13（无 torch）；ffmpeg 9.0.1。
 > 适用：`V2-P3-01` 点歌台与唱歌链路。**GPT-SoVITS 是 TTS，不是 SVS/SVC，不得冒充**（既有结论不变）。
 
@@ -10,7 +11,7 @@
 | --- | --- | --- | --- | --- | --- |
 | SVS | **OpenVPI DiffSinger + OpenUtau** | 乐谱（MIDI/USTX）+ 歌词/音素 | OpenUtau 有 `osx-arm64.dmg`（0.1.576），默认 CPU 渲染，CoreML 可选；DiffSinger 需 macOS 11+ | 代码 DiffSinger Apache-2.0、OpenUtau MIT、MakeDiffSinger BSD-3、SingingVocoders MIT；官方 OpenCpop 检查点与社区声码器权重非商用 | **首选可部署**；商用需自训声库与声码器 |
 | SVS | NNSVS（+ ENUNU） | HTS full-context / MusicXML + 歌词 | 官方支持 macOS；训练以 CUDA/CPU 为主，MPS 未确认 | 代码 MIT；**无官方预训练权重**；ENUNU 声库逐角色条款 | 备选，需自训 |
-| SVC | **RVC** | 源演唱干声 + `.pth` + `.index` | 上游仅 Windows/Linux，macOS 靠社区分支 | 代码 MIT；HF 权重仓 MIT；底模 VCTK CC BY 4.0；HuBERT Apache-2.0 | **首选可部署**；macOS 需选 MIT 分支，音色必须授权 |
+| SVC | **RVC** | 源演唱干声 + `.pth` + `.index` | 上游仅 Windows/Linux，macOS 靠社区分支 | 代码 MIT；但官方权重仓根目录 LICENSE 带「**仅供研究使用**」条款（与 README 的 `license: mit` 冲突）；底模训练数据 VCTK CC BY 4.0；HuBERT Apache-2.0、FCPE/CREPE MIT；RMVPE 上游无 LICENSE | **首选可部署**；macOS 需选 MIT 分支（`qingbo1011`，AGPL 分支排除）；底模只能研究用途，商用须重训 |
 | SVC | DDSP-SVC | 源演唱 WAV + `.pt` | README 仅 Windows/Linux | 代码 MIT；默认声码器 CC BY-NC-SA 4.0；RMVPE 来源未闭合 | 备选，轻量 |
 | 排除 | GPT-SoVITS | 文本 + 参考音 | 已实测 | 仅 TTS/音色克隆 | 不得当 SVS/SVC |
 | 排除 | so-vits-svc（AGPL-3.0，已归档）、Seed-VC（GPL-3.0，已归档）、`openvpi/vocoders` 代码仓（AGPL-3.0） | — | — | 传染性红线 | 禁入主线 |
@@ -20,8 +21,8 @@
 | 层级 | 结论 |
 | --- | --- |
 | 代码 | MIT / Apache-2.0 可商用；AGPL/GPL 一律排除（含部分 RVC macOS 分支：`audiohacking/RVC-MacOS`、`RTCK-DEV/RVC-WebUI-MacOS-app` 为 AGPL-3.0；`qingbo1011/RVC-WebUI-MacOS` 为 MIT） |
-| 权重 | RVC HF 权重 MIT、VCTK CC BY 4.0、HuBERT Apache-2.0；DiffSinger 官方 OpenCpop 检查点**无独立权重许可**；OpenVPI 声码器 **CC BY-NC-SA 4.0**；RMVPE 上游 `yxlllc/RMVPE` **无 LICENSE**（可用 MIT 的 FCPE/CREPE 替代） |
-| 数据 | OpenCpop 官方仓库无 LICENSE、官方页证书过期，HF 镜像卡 metadata（GPL-2.0）与正文（CC BY-NC-ND 4.0）冲突 → 取得书面确认前按**非商用**处理；VCTK CC BY 4.0 |
+| 权重 | 只有 HuBERT（Apache-2.0）、FCPE/CREPE（MIT）许可干净；RVC 官方底模受「仅供研究使用」条款（`lj1995/VoiceConversionWebUI` 根目录中文 LICENSE 原文），**不是 MIT 可商用权重**；DiffSinger 官方 OpenCpop 检查点**权重许可未声明**（release 正文无 license 段落）→ 默认不可用，也不能当「非商用验证」依据；OpenVPI 声码器 **CC BY-NC-SA 4.0**；RMVPE 上游 **无 LICENSE** 且训练数据含 M4Singer(NC-SA)，可用 FCPE/CREPE 替代 |
+| 数据 | OpenCpop 官方页明确 **CC BY-NC-ND 4.0**（商用须邮件申请），GitHub 仓无 LICENSE，HF 镜像另有 GPL-2.0 与「须获团队授权」两处冲突 → **ND 禁止衍生，默认不可用**；M4Singer **CC BY-NC-SA 4.0**；VCTK / LibriTTS CC BY 4.0、LJSpeech 公有领域可用 |
 | 声音 | 模型许可不授予真人声音人格权；克隆/训练/商用直播/再分发均需声音权利人**书面授权**；不得用公众人物或来源不明音色；不得上传参考音到外部服务 |
 
 **合成输出再训练**：不自动获得商用权，须同时满足原模型条款 + 训练数据许可 + 声音授权；建议每条输出留存「模型版本 + 权重许可 + 声音授权 + 数据来源」元数据。
@@ -50,8 +51,9 @@
 
 ## 5. 落地顺序（建议）
 
-1. 非商用验证：OpenUtau（macOS arm64）+ DiffSinger 官方声库跑「谱 + 歌词」SVS 听感；RVC MIT 分支 + 授权测试音色跑「源演唱 → 目标音色」SVC 听感。
-2. 商用 clean-room：OpenVPI DiffSinger + MakeDiffSinger + SingingVocoders 自训；RVC/DDSP-SVC 用授权数据自训并替换 RMVPE 与 NC 声码器；许可与授权分别留档。
+0. **先读逐文件许可结论**：[O5-svs-svc-weight-license-per-file.md](./O5-svs-svc-weight-license-per-file.md)。当前**没有任何许可明确、来源可核、可直接用于中文桌宠直播唱歌的现成音色权重**；中文声线须 owner 提供自录/书面授权声源（含商用直播 + 衍生模型 + 再分发三项）。
+1. 非商用验证（仅验证链路连通，不得上线）：OpenUtau（macOS arm64）+ **许可干净的权重**跑 SVS 听感；RVC MIT 分支 + `ampixa` CC BY 4.0 音色样本（只作洁净性样本）跑「源演唱 → 目标音色」SVC 听感。
+2. 商用 clean-room：DiffSinger 代码（Apache-2.0）+ MakeDiffSinger + **自训声码器**（SingingVocoders 代码 MIT，但不得沿用 OpenVPI 的 NC 权重）；RVC/DDSP-SVC 用 **VCTK 或自录**数据重训底模，内容编码器换 HuBERT、音高换 FCPE/CREPE；许可与声音授权分别留档。
 3. 不做：GPT-SoVITS 冒充 SVS；AGPL/GPL 分支进主线；OpenCpop 检查点商用；未授权音色；上传声音到外部服务。
 
 ## 6. 来源
