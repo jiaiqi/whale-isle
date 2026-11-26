@@ -33,6 +33,7 @@ export default defineConfig({
         '**/live-stream-hub/src/index.ts', // 纯 re-export 桶
         '**/stardew-mods/src/index.ts', // 纯 re-export 桶
         '**/evolution-lite/src/index.ts', // 纯 re-export 桶
+        '**/dst-bridge-sidecar/src/index.ts', // 进程装配入口（main() + SIGINT/SIGTERM），由进程级运行覆盖
         '**/desktop-host/src/preload/**',
         '**/desktop-host/src/renderer/pet-stage/main.ts',
         '**/desktop-host/src/renderer/pet-stage/widgets/bubbles.ts',
