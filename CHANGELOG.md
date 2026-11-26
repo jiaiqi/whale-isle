@@ -12,6 +12,12 @@
 - **Electron 隐藏窗口引擎、宿主 IPC 与 HUD** `apps/desktop-host/src/{main/electron-browser-engine.ts,main/v2-kernel-host.ts,preload/index.ts,renderer/director/bridge.ts,renderer/director/v2/signature-widgets.tsx,renderer/director/App.tsx,renderer/director/views/life-console-view.tsx}`：按角色/账号隔离 partition、`v2:auto-*` 浏览器/租约/P5/交接/清理 IPC、游戏租约与桌面租约双胶囊 HUD、生命总览 P3-03 面板；新增 ADR-004 强制回归测试。
 - **验证**：P3-03 专项单测 22/22、runtime-core 90.16% 分支、`verify:gate` 7/7、`desktop-host build` 与 Electron 45 E2E 3/3 + `ui.e2e` 9/9 全绿；真实 OS 注入与 TCC 打包态授权待 `[REAL-DEVICE]`。
 
+### Fixed（Tidepaper v3.1 验收修正 — `DONE`）
+
+- **夜潮急停对比度** `apps/desktop-host/src/renderer/director/design-tokens.css`：暗色主题的急停横幅与「急停 F8」按钮由 `--rose` + 白字（实测 2.74:1）改为 `--halt-bg`（`color-mix(in srgb, var(--rose) 68%, #000)`），白字提升至 5.43:1；键帽改为黑 18% 底、白字 7.29:1；急停态「恢复自主」改白底深 rose 字 5.43:1。晨雾保持 5.82:1。
+- **急停对比度回归断言** `apps/desktop-host/e2e/ui.e2e.spec.ts`：在既有主题对比度用例内按实际计算色（含半透明叠层合成）校验 `.btn-stop`、`.btn-stop .kbd`、`.wb-halt-copy`、`[data-v2-hud-resume]` ≥4.5:1，晨雾 / 夜潮各一轮。
+- **生命中枢列表截断** `apps/desktop-host/src/renderer/director/views/life-console-view.tsx`：活跃目标与主仆约定条目改为标题单行省略 + 右侧状态 chip，列表禁用横向滚动，长标题不再撑破卡片。
+
 ### Added / Changed（`REQ-UI-01`：Tidepaper v3.1「潮汐纸 · 精修」中控台外壳 — `DONE`）
 
 - **纸面材质与外壳令牌** `apps/desktop-host/src/renderer/director/{design-tokens.css,styles.css}`：`.card` 改为实底 + 细边 + 极轻阴影，玻璃模糊仅保留给 `obsidian-tide` / `tide-deep`；新增静态海图等高线 `--map-contour` 与 feTurbulence 纸纹 `--paper-noise`，移除 ambient 漂移动画；新增 56px 顶栏、统一页头、`.kbd`、`.seg`、急停按钮、焦点环 `--ring` 与纸面滚动条。
