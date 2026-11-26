@@ -16,6 +16,7 @@
  *   node tools/scripts/fetch-engine.mjs --manifest <path> --dest <root>
  */
 import { createHash } from 'node:crypto';
+import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, open, readFile, rename, rm, stat, writeFile, readdir } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
@@ -87,7 +88,10 @@ async function sizeOf(path) {
   }
 }
 
-/** 单文件下载（断点续传：已有部分文件用 Range 续） */
+/** 单文件下载（断点续传：已有部分文件用 Range 续）
+ *  优先用系统 curl：实测 macOS 上 curl 单流 18.7 MB/s，而 Node fetch 流式落到磁盘只有 ~0.2 MB/s。
+ *  curl 不存在时回退到 fetch（慢但可用）。
+ */
 async function downloadFile(url, target, expectedBytes, log) {
   const partial = `${target}.part`;
   const have = await sizeOf(partial);
@@ -95,17 +99,56 @@ async function downloadFile(url, target, expectedBytes, log) {
   const resumeFrom = Math.max(0, await sizeOf(partial));
   if (resumeFrom === expectedBytes) {
     log(`  已有完整分片，跳过下载（${expectedBytes} B）`);
-    return;
+  } else {
+    await mkdir(dirname(target), { recursive: true });
+    if (hasCurl()) {
+      await downloadWithCurl(url, partial);
+    } else {
+      await downloadWithFetch(url, partial, resumeFrom);
+    }
   }
+  const finalSize = await sizeOf(partial);
+  if (finalSize !== expectedBytes) throw new Error(`字节数不符：期望 ${expectedBytes}，实得 ${finalSize}`);
+  // 分片完整后才落到目标路径（校验失败时只删 .part，不会留下半截真文件）
+  await rm(target, { force: true });
+  await rename(partial, target);
+}
+
+let curlChecked = null;
+function hasCurl() {
+  if (curlChecked !== null) return curlChecked;
+  try {
+    curlChecked = spawnSync('curl', ['--version'], { stdio: 'ignore' }).status === 0;
+  } catch {
+    curlChecked = false;
+  }
+  return curlChecked;
+}
+
+function downloadWithCurl(url, partial) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('curl', ['-sSL', '-C', '-', '--retry', '3', '--retry-delay', '2', '-o', partial, url], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`curl 退出码 ${code}${stderr.trim() === '' ? '' : `：${stderr.trim().slice(-200)}`}`));
+    });
+  });
+}
+
+async function downloadWithFetch(url, partial, resumeFrom) {
   const headers = resumeFrom > 0 ? { Range: `bytes=${resumeFrom}-` } : {};
   const response = await fetch(url, { headers, redirect: 'follow' });
   if (!response.ok && response.status !== 206) throw new Error(`HTTP ${response.status} ${response.statusText}`);
   if (!response.body) throw new Error('响应没有 body');
-  await mkdir(dirname(target), { recursive: true });
   const out = createWriteStream(partial, { flags: resumeFrom > 0 ? 'a' : 'w' });
   await pipeline(Readable.fromWeb(response.body), out);
-  const finalSize = await sizeOf(partial);
-  if (finalSize !== expectedBytes) throw new Error(`字节数不符：期望 ${expectedBytes}，实得 ${finalSize}`);
 }
 
 async function install(opts, manifest) {
