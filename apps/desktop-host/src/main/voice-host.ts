@@ -266,13 +266,97 @@ function playVoice(config: VoiceConfig, scene: string, sceneMode: string, text: 
 }
 
 
-export function registerVoiceHostIpc(host: VoiceHost): void {
+/** 音色试听的合成入参：voiceId 是 UI 音色库里的 id，mode 是五档情绪档位 */
+export interface VoiceAuditionInput {
+  voiceId: string;
+  mode: string;
+  text: string;
+}
+
+/** 合成结果：只有真实拿到音频才算 ok；`system-direct` 这类只给口型帧的后端不算 */
+export interface VoiceAuditionOutput {
+  providerKind: string;
+  format: string;
+  audioBase64?: string;
+  degraded?: boolean;
+  degradedFrom?: string;
+}
+
+export type VoiceAuditionSynth = (input: VoiceAuditionInput) => Promise<VoiceAuditionOutput>;
+
+export interface VoiceHostIpcOptions {
+  /**
+   * 试听的真实合成实现（注入 V2 `VoiceProviderRouter`，走用户选中的商业 provider）。
+   * 不注入时退回旧的 mcode→say 链——只在没接 V2 路由的旧装配里出现。
+   */
+  synthesizeAudition?: VoiceAuditionSynth;
+}
+
+/**
+ * 把合成结果落临时文件后用 afplay 播放（试听专用，不改全局配置）。
+ * Windows/Linux 播放链尚未适配，如实报错，不假装放过。
+ */
+async function playBase64Audio(base64: string, format: string): Promise<void> {
+  if (process.platform !== 'darwin') {
+    throw new Error(`试听播放尚未适配 ${process.platform}（当前仅 macOS afplay）`);
+  }
+  const ext = format === 'mp3' ? 'mp3' : format === 'ogg' ? 'ogg' : 'wav';
+  const dir = mkdtempSync(join(tmpdir(), 'whale-audition-'));
+  const file = join(dir, `preview.${ext}`);
+  writeFileSync(file, Buffer.from(base64, 'base64'));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const player = spawn('afplay', [file], { stdio: 'ignore' });
+      player.on('exit', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`afplay 退出码 ${String(code)}`));
+      });
+      player.on('error', (err) => reject(err));
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export function registerVoiceHostIpc(host: VoiceHost, options: VoiceHostIpcOptions = {}): void {
   ipcMain.handle('voice:speak', (_e, voice: VoiceScene) => host.speak(voice));
   // T-M6-33：实际后端探测（界面如实展示 mcode / say / 未适配）
   ipcMain.handle('voice:backend', () => detectVoiceBackend());
-  // 音色试听（音色页）：任意 voiceId × 任意档位直合成，不改全局配置
+  /**
+   * 音色试听（音色页 5×5 矩阵）：
+   * 历史缺陷——这里曾**无条件** `spawn('mcode-tools')`，既不看 prefs 里选中的商业 provider，
+   * 也不探测二进制是否存在，本机没装 mcode-tools 时把 `spawnSync mcode-tools ENOENT` 原样甩给用户。
+   * 现在：有注入路由就走 V2 `VoiceProviderRouter`（选中商业 provider 优先）；
+   * 没有注入才退回旧链，并且先探测 mcode-tools，缺失时给人话错误。
+   */
   ipcMain.handle('voice:audition', async (_e, voiceId: string, mode: string, text?: string) => {
     const probe = text ?? '哼，本鱼才没有偷懒呢！主人快夸夸我嘛～';
+    if (options.synthesizeAudition !== undefined) {
+      try {
+        const out = await options.synthesizeAudition({ voiceId: String(voiceId), mode: String(mode), text: probe });
+        if (out.audioBase64 === undefined || out.audioBase64 === '') {
+          return {
+            ok: false,
+            error: `${out.providerKind} 只返回口型帧、没有可播放音频；试听需要可用的商业 TTS 凭据`,
+          };
+        }
+        await playBase64Audio(out.audioBase64, out.format);
+        return {
+          ok: true,
+          providerKind: out.providerKind,
+          degraded: out.degraded === true,
+          ...(out.degradedFrom === undefined ? {} : { degradedFrom: out.degradedFrom }),
+        };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    if (!defaultHasCommand('mcode-tools')) {
+      return {
+        ok: false,
+        error: '本机没有 mcode-tools，且未接入 V2 语音路由——试听需要先在凭据页配置商业 TTS（MiniMax / OpenAI 兼容 / MiMo）',
+      };
+    }
     try {
       await speakViaMcode(probe, mode, voiceId);
       return { ok: true };

@@ -32,10 +32,11 @@ import {
   CloudOpenAiTtsProvider,
   MiniMaxTtsProvider,
   MimoTtsProvider,
+  OpenRouterTtsProvider,
   type VoiceProvider,
 } from '../../packages/voice-runtime/src/providers';
 
-type ProviderKey = 'mimo-voicedesign' | 'mimo-voiceclone' | 'minimax' | 'openai';
+type ProviderKey = 'mimo-voicedesign' | 'mimo-voiceclone' | 'mimo-tts' | 'minimax' | 'openai' | 'openrouter';
 
 const SENTENCES: Array<{ emotion: string; text: string }> = [
   { emotion: 'sweet_normal', text: '主人，今天也辛苦啦，我给你倒杯热茶好不好呀。' },
@@ -193,6 +194,18 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
       return { provider: mimo('voicedesign'), simulated: fake, name: 'mimo-voicedesign', ...(fakeServer === null ? {} : { close: fakeServer.close }) };
     case 'mimo-voiceclone':
       return { provider: mimo('voiceclone'), simulated: fake, name: 'mimo-voiceclone', ...(fakeServer === null ? {} : { close: fakeServer.close }) };
+    case 'mimo-tts':
+      return { provider: mimo('tts'), simulated: fake, name: 'mimo-tts', ...(fakeServer === null ? {} : { close: fakeServer.close }) };
+    case 'openrouter':
+      return {
+        provider: new OpenRouterTtsProvider({
+          ...(base === undefined ? {} : { baseUrl: base }),
+          resolveApiKey: () => process.env.OPENROUTER_API_KEY?.trim() ?? (fake ? 'fake' : null),
+        }),
+        simulated: fake,
+        name: 'openrouter-gemini',
+        ...(fakeServer === null ? {} : { close: fakeServer.close }),
+      };
     case 'minimax':
       return {
         provider: new MiniMaxTtsProvider({
@@ -227,7 +240,7 @@ async function main(): Promise<void> {
   const outRoot = join(process.cwd(), 'artifacts', 'tts-ab');
 
   const providers: ProviderKey[] = requested === 'all'
-    ? ['minimax', 'openai', 'mimo-voicedesign', 'mimo-voiceclone']
+    ? ['minimax', 'openai', 'openrouter', 'mimo-tts', 'mimo-voicedesign', 'mimo-voiceclone']
     : (requested.split(',') as ProviderKey[]);
 
   for (const key of providers) {

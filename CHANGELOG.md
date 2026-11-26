@@ -5,6 +5,27 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Fixed（director 构建：渲染层不再把 Node-only 模块打进浏览器包）
+
+- **根因**：`director/main.tsx` → `@workbench/voice-runtime` 桶入口 → `providers.ts` → `@workbench/runtime-core` 桶 → `WhaleKernel` → `@workbench/plugin-kit`，把 `node:fs/path/url/worker_threads/crypto` 带进 `platform:'browser'` 的 esbuild 包；`pnpm verify:gate` 只跑 `typecheck` + `dependency-cruiser`，不含打包，所以静默坏了。
+- **修法**：新增子路径入口 `@workbench/runtime-core/errors` 与 `@workbench/voice-runtime/browser`（只导出零 Node 依赖模块），`providers.ts` 与 `voice-center-panel.tsx` 改走子路径；**没有**用 esbuild alias 绕过。`pnpm --filter @workbench/desktop-host build` 恢复通过（main / preload / pet-stage / director）。
+
+### Added（MiMo v2.5 补齐第三模型、OpenRouter 第四家候选、语音中心凭据输入）
+
+- **`mimo-v2.5-tts`**（kind `mimo-tts`）：9 个内置音色（`mimo_default`/冰糖/茉莉/苏打/白桦/Mia/Chloe/Milo/Dean），唱歌用正文前缀 `(唱歌)`/`(sing)`/`(singing)`，由 `styleMode:'singing'` 自动加；`request.voiceRef` 命中内置列表才用，否则回落 `defaultVoice`。
+- **风格控制纠正**：上一版把风格指令写成 voicedesign 专属是错的。现在 user 自然语言指令对**三种模型**都可用（未知情绪不注入），assistant 前缀标签 `(Tag)` 与正文内联音频标签对所有模型同样适用；`probe()` 仍报 `supportsEmotion:false`（官方说有 ≠ 实测过）。
+- **认证头可配置**：`authScheme: 'bearer' | 'api-key'`，默认 Bearer；官方 curl 用 `api-key`，**两种都未实测**，实测后回填证据文档。
+- **`optimize_text_preview`**：仅 voicedesign 生效（省略 assistant），其它模式不伪造字段。
+- **诚实性修正**：`probe().supportsStreaming` 从谎报的 `true` 改为 `false`；流式要的 `pcm16`（24 kHz / 16-bit LE / 单声道）尚未实现。
+- **`OpenRouterTtsProvider`**（kind `openrouter-tts`，`google/gemini-3.8-flash-tts`）：第四家商用候选，`/audio/speech` 原始音频字节，只发 `{model,input,voice,response_format:'wav'}`，不传 `speed`/`instructions`；`supportsEmotion:false` 且 detail 写「情绪控制方式未验证」；不进自动兜底链、默认档不变。
+- **语音中心凭据输入**：四张卡（`minimax` / `openai-tts` / `openrouter` / `mimo-tts`，MiMo 三种模式共用一个 Key）复用既有 `providers:save-key`；明文只上行、UI 只显示 `••••后四位`、不写日志、不进渲染层持久化；保存后立即重探并刷新 available/detail；来源标注「凭据库 / 环境变量 / 未配置」，解析顺序统一为凭据库优先、环境变量兜底。
+- **`docs/v2/VOICE-PERSONA-xiaojing.md`**：小鲸/大肥鱼 VoiceDesign 音色描述模板（中英两版）、五情绪 → 风格指令/前缀标签/音高偏移映射表、内联音频标签用法、以及「社区二创、DeepSeek 官方从未发布拟人形象、不得复用第三方画作/音频/文案」的合规边界。
+
+### Fixed（语音中心「试听」报 `spawnSync mcode-tools ENOENT`）
+
+- **定位**：不是路由分派错，是这条链路**根本没有路由**——`voice:audition`（5×5 试听矩阵）在 handler 里无条件 `spawnSync('mcode-tools')`，既不探测二进制也不看 prefs 里选的商业 provider；本机没装就抛 ENOENT 原文。回落逻辑也不在这条链上（只有 `playVoice` 会回落 say）。
+- **修法**：试听优先走注入的 V2 `VoiceProviderRouter`（用 prefs 选中的商业 provider，`resolveCommercialTtsProvider` 如实标降级），合成后落临时文件 `afplay`；未注入路由的旧装配退回 mcode 前先探测，缺失时给人话错误。
+
 ### Added（小米 MiMo TTS 接入为候选供应商：VoiceClone + VoiceDesign）
 
 - **`MimoTtsProvider`**（`packages/voice-runtime`）：两种模式各注册一个实例，kind 为 `mimo-tts-voiceclone` / `mimo-tts-voicedesign`。请求体按官方结构分别构造——VoiceClone 的 user 为空串、正文放 assistant、参考音频走 `audio.voice` 的 data URL；VoiceDesign 的 user 放自然语言音色描述、正文放 assistant。响应取 `choices[0].message.audio.data` 的 base64 wav，**不能套用现有 `CloudOpenAiTtsProvider`**。

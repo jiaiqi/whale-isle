@@ -11,7 +11,10 @@ import {
   LipSyncTimelinePlayer,
   LocalAudioWorkerProvider,
   MiniMaxTtsProvider,
+  MIMO_TTS_BUILTIN_VOICES,
   MimoTtsProvider,
+  OPENROUTER_GEMINI_TTS_MODEL,
+  OpenRouterTtsProvider,
   resolveCommercialTtsProvider,
   splitSpeechSentences,
   synthesizeTextLipSyncFrames,
@@ -801,7 +804,84 @@ describe('默认档商业供应商选择（显式选择，不靠「有没有 Key
   });
 });
 
-describe('小米 MiMo TTS 候选供应商（VoiceClone / VoiceDesign，候选不设默认）', () => {
+describe('OpenRouter Gemini 3.8 Flash TTS（第四家商用候选）', () => {
+  const wav = makePcm16Wav(Array.from({ length: 400 }, (_, i) => Math.sin(i / 4) * 8000));
+  const request = {
+    requestId: 'or-1',
+    characterId: 'char_xiaojing',
+    voiceRef: 'xiaojing_voice',
+    text: '主人，今天的天气很适合出门走走。',
+    emotion: 'sweet_normal',
+    styleMode: 'normal' as const,
+    speed: 1,
+    pitchShiftSemitones: 0,
+    volume: 1,
+    timeoutMs: 5000,
+  };
+
+  it('打 /audio/speech，请求体只带 OpenAI 形状的四个字段，回包按原始字节解析', async () => {
+    const calls: Array<{ url: string; body: Record<string, unknown>; headers: Record<string, string> }> = [];
+    const provider = new OpenRouterTtsProvider({
+      resolveApiKey: () => 'or-token',
+      fetchImpl: async (url, init) => {
+        calls.push({
+          url,
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+          headers: { ...(init?.headers as Record<string, string>) },
+        });
+        return new Response(wav, { status: 200, headers: { 'content-type': 'audio/wav' } });
+      },
+    });
+    expect(provider.kind).toBe('openrouter-tts');
+    const out = await provider.synthesize(request);
+    expect(out.providerKind).toBe('openrouter-tts');
+    expect(out.format).toBe('wav');
+    expect(out.audioBase64).toBe(Buffer.from(wav).toString('base64'));
+    expect(out.lipFrames.length).toBeGreaterThan(0);
+
+    expect(calls[0]!.url).toBe('https://openrouter.ai/api/v1/audio/speech');
+    expect(calls[0]!.headers['authorization']).toBe('Bearer or-token');
+    expect(calls[0]!.body).toEqual({
+      model: OPENROUTER_GEMINI_TTS_MODEL,
+      input: request.text,
+      voice: 'Zephyr',
+      response_format: 'wav',
+    });
+    // 不传 speed / instructions：该模型 supported_parameters 为空数组，不许自创参数
+    expect(calls[0]!.body['speed']).toBeUndefined();
+    expect(calls[0]!.body['instructions']).toBeUndefined();
+  });
+
+  it('探针不宣称情绪与流式能力，detail 写「情绪控制方式未验证」', () => {
+    const provider = new OpenRouterTtsProvider({ resolveApiKey: () => 'k' });
+    const status = provider.probe();
+    expect(status.available).toBe(true);
+    expect(status.supportsEmotion).toBe(false);
+    expect(status.supportsStreaming).toBe(false);
+    expect(status.detail).toContain('情绪控制方式未验证');
+    expect(status.detail).toContain('未实测');
+  });
+
+  it('缺 Key / 空音频 / HTTP 500 都抛错，不返回假音频', async () => {
+    const noKey = new OpenRouterTtsProvider({ resolveApiKey: () => null });
+    expect(noKey.probe().available).toBe(false);
+    await expect(noKey.synthesize(request)).rejects.toMatchObject({ code: 'SECRET_UNAVAILABLE' });
+
+    const empty = new OpenRouterTtsProvider({
+      resolveApiKey: () => 'k',
+      fetchImpl: async () => new Response(new Uint8Array(), { status: 200 }),
+    });
+    await expect(empty.synthesize(request)).rejects.toThrow('空音频');
+
+    const broken = new OpenRouterTtsProvider({
+      resolveApiKey: () => 'k',
+      fetchImpl: async () => new Response('nope', { status: 500 }),
+    });
+    await expect(broken.synthesize(request)).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+  });
+});
+
+describe('小米 MiMo TTS 候选供应商（tts / VoiceClone / VoiceDesign，候选不设默认）', () => {
   const wav = makePcm16Wav(Array.from({ length: 400 }, (_, i) => Math.sin(i / 4) * 8000));
   const baseRequest = {
     requestId: 'mimo-1',
@@ -818,7 +898,7 @@ describe('小米 MiMo TTS 候选供应商（VoiceClone / VoiceDesign，候选不
 
   it('候选不在自动兜底链里，也不进稳定两家', () => {
     expect(COMMERCIAL_TTS_PROVIDERS).toEqual(['minimax-tts', 'openai-compatible-tts']);
-    expect(CANDIDATE_TTS_PROVIDERS).toEqual(['mimo-tts-voiceclone', 'mimo-tts-voicedesign']);
+    expect(CANDIDATE_TTS_PROVIDERS).toEqual(['openrouter-tts', 'mimo-tts', 'mimo-tts-voiceclone', 'mimo-tts-voicedesign']);
   });
 
   it('显式选了候选但它不可用：回落到稳定两家并标 honored=false，不悄悄留在候选上', () => {
@@ -905,6 +985,163 @@ describe('小米 MiMo TTS 候选供应商（VoiceClone / VoiceDesign，候选不
     });
     expect(noKey.probe().available).toBe(false);
     await expect(noKey.synthesize(baseRequest)).rejects.toMatchObject({ code: 'SECRET_UNAVAILABLE' });
+  });
+
+  it('mimo-v2.5-tts：内置音色走 audio.voice，未知 voiceRef 回落默认音色', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new MimoTtsProvider({
+      mode: 'tts',
+      resolveApiKey: () => 'test-mimo-token',
+      emotionStyleHints: { lazy_yawn: '慵懒困倦，气声偏多，语速偏慢' },
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    expect(provider.kind).toBe('mimo-tts');
+    await provider.synthesize({ ...baseRequest, voiceRef: '茉莉', emotion: 'lazy_yawn' });
+    const first = bodies[0]!;
+    expect(first['model']).toBe('mimo-v2.5-tts');
+    expect(first['audio']).toEqual({ format: 'wav', voice: '茉莉' });
+    const firstMessages = first['messages'] as Array<{ role: string; content: string }>;
+    expect(firstMessages[0]).toEqual({ role: 'user', content: '慵懒困倦，气声偏多，语速偏慢' });
+    expect(firstMessages[1]).toEqual({ role: 'assistant', content: baseRequest.text });
+
+    await provider.synthesize({ ...baseRequest, requestId: 'mimo-tts-2', voiceRef: 'qiaopi_mengmei' });
+    const second = bodies[1]!;
+    expect(second['audio']).toEqual({ format: 'wav', voice: 'mimo_default' });
+    // 未知情绪不注入 user 消息，也不留空 user 占位
+    expect((second['messages'] as unknown[]).length).toBe(1);
+  });
+
+  it('mimo-v2.5-tts 唱歌：styleMode=singing 时才加正文前缀，其它模式不加', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new MimoTtsProvider({
+      mode: 'tts',
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await provider.synthesize({ ...baseRequest, styleMode: 'singing' });
+    const sung = (bodies[0]!['messages'] as Array<{ content: string }>).at(-1)!;
+    expect(sung.content.startsWith('(唱歌)')).toBe(true);
+
+    const voicedesign = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: '年轻女性，普通话',
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await voicedesign.synthesize({ ...baseRequest, requestId: 'mimo-sing-2', styleMode: 'singing' });
+    const notSung = (bodies[1]!['messages'] as Array<{ content: string }>).at(-1)!;
+    expect(notSung.content).toBe(baseRequest.text);
+  });
+
+  it('助手前缀风格标签：半角小括号包住标签，放在正文之前', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new MimoTtsProvider({
+      mode: 'tts',
+      resolveApiKey: () => 'k',
+      emotionStyleTags: { tsundere: 'Tsundere' },
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await provider.synthesize({ ...baseRequest, emotion: 'tsundere' });
+    const assistant = (bodies[0]!['messages'] as Array<{ content: string }>).at(-1)!;
+    expect(assistant.content).toBe(`(Tsundere)${baseRequest.text}`);
+  });
+
+  it('optimize_text_preview 只对 voicedesign 生效：省略 assistant 并显式传字段', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: '年轻女性，普通话，偏甜',
+      optimizeTextPreview: true,
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await provider.synthesize(baseRequest);
+    const body = bodies[0]!;
+    expect(body['optimize_text_preview']).toBe(true);
+    expect((body['messages'] as unknown[]).length).toBe(1);
+    expect((body['messages'] as Array<{ role: string }>)[0]!.role).toBe('user');
+
+    const tts = new MimoTtsProvider({
+      mode: 'tts',
+      optimizeTextPreview: true,
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await tts.synthesize({ ...baseRequest, requestId: 'mimo-preview-2' });
+    expect(bodies[1]!['optimize_text_preview']).toBeUndefined();
+  });
+
+  it('认证头可配置：默认 Bearer，api-key 方案发 api-key 头（两种都未实测）', async () => {
+    const headers: Array<Record<string, string>> = [];
+    const make = (authScheme?: 'bearer' | 'api-key'): MimoTtsProvider =>
+      new MimoTtsProvider({
+        mode: 'tts',
+        ...(authScheme === undefined ? {} : { authScheme }),
+        resolveApiKey: () => 'k',
+        fetchImpl: async (_url, init) => {
+          headers.push({ ...(init?.headers as Record<string, string>) });
+          return new Response(JSON.stringify({
+            choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+          }), { status: 200 });
+        },
+      });
+    await make().synthesize(baseRequest);
+    expect(headers[0]!['authorization']).toBe('Bearer k');
+    expect(headers[0]!['api-key']).toBeUndefined();
+
+    await make('api-key').synthesize({ ...baseRequest, requestId: 'mimo-auth-2' });
+    expect(headers[1]!['api-key']).toBe('k');
+    expect(headers[1]!['authorization']).toBeUndefined();
+  });
+
+  it('适配器是非流式的：probe 不许宣称 supportsStreaming', () => {
+    for (const mode of ['tts', 'voiceclone', 'voicedesign'] as const) {
+      const provider = new MimoTtsProvider({
+        mode,
+        voiceDescription: '年轻女性，普通话',
+        resolveReferenceAudio: () => ({ bytes: wav }),
+        resolveApiKey: () => 'k',
+      });
+      const status = provider.probe();
+      expect(status.supportsStreaming).toBe(false);
+      expect(status.detail).toContain('非流式');
+    }
+  });
+
+  it('内置音色表就是官方 9 个，不多不少', () => {
+    expect([...MIMO_TTS_BUILTIN_VOICES]).toEqual([
+      'mimo_default', '冰糖', '茉莉', '苏打', '白桦', 'Mia', 'Chloe', 'Milo', 'Dean',
+    ]);
   });
 
   it('探针不宣称情绪能力（未实测就不许写 true）', () => {

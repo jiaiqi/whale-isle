@@ -84,8 +84,11 @@ import {
   AudioMixer,
   CloudOpenAiTtsProvider,
   LocalAudioWorkerProvider,
+  MIMO_EMOTION_STYLE_HINTS,
+  MIMO_EMOTION_STYLE_TAGS,
   MiniMaxTtsProvider,
   MimoTtsProvider,
+  OpenRouterTtsProvider,
   PerformanceDirector,
   SingEngine,
   SystemFallbackVoiceProvider,
@@ -350,8 +353,19 @@ export async function createV2KernelHost(options: {
    */
   const resolveMimoKey = (): string | null =>
     kernel.secrets.resolve('mimo-tts') ?? (process.env.WHALE_MIMO_API_KEY?.trim() || null);
+  /**
+   * 商业 TTS 的 Key 优先级统一为：凭据库（safeStorage 加密的 provider-vault.json）优先，环境变量兜底。
+   * 凭据库由「语音中心」的凭据输入框写入（`providers:save-key`，providerId 与这里 resolve 的 id 必须一致）。
+   */
+  const resolveWithEnv = (providerId: string, envName: string): string | null =>
+    kernel.secrets.resolve(providerId) ?? (process.env[envName]?.trim() || null);
+  const resolveMiniMaxKey = (): string | null => resolveWithEnv('minimax', 'WHALE_MINIMAX_API_KEY');
+  const resolveOpenAiTtsKey = (): string | null => resolveWithEnv('openai-tts', 'WHALE_OPENAI_TTS_API_KEY');
+  const resolveOpenRouterKey = (): string | null => resolveWithEnv('openrouter', 'WHALE_OPENROUTER_API_KEY');
   const mimoVoiceDescription = process.env.WHALE_MIMO_VOICE_DESCRIPTION?.trim();
   const mimoVoiceSamplePath = process.env.WHALE_MIMO_VOICE_SAMPLE?.trim();
+  /** 仅 `mimo-v2.5-tts`：内置 9 音色之一，未配时用 mimo_default */
+  const mimoBuiltinVoice = process.env.WHALE_MIMO_VOICE?.trim();
   const resolveMimoReference = (): MimoTtsReferenceAudio | null => {
     if (mimoVoiceSamplePath === undefined || mimoVoiceSamplePath === '') return null;
     try {
@@ -362,21 +376,33 @@ export async function createV2KernelHost(options: {
   };
   const voiceRouter = new VoiceProviderRouter({
     providers: [
-      new MiniMaxTtsProvider({ resolveApiKey: () => kernel.secrets.resolve('minimax') }),
-      new CloudOpenAiTtsProvider({ resolveApiKey: () => kernel.secrets.resolve('openai-tts') }),
+      new MiniMaxTtsProvider({ resolveApiKey: resolveMiniMaxKey }),
+      new CloudOpenAiTtsProvider({ resolveApiKey: resolveOpenAiTtsKey }),
+      // 第四家商用候选：OpenRouter 托管 Gemini 3.8 Flash TTS（显式选择 / 对拍用，不进自动兜底）
+      new OpenRouterTtsProvider({ resolveApiKey: resolveOpenRouterKey }),
+      // 五档情绪的风格指令与标签对三个 MiMo 模型共用；官方口径：user 里的自然语言指令对所有模型有效，
+      // assistant 前缀标签 `(Tag)…` 也通用，两处都配套才好在实测时对比哪种更稳。
+      new MimoTtsProvider({
+        mode: 'tts',
+        ...(mimoBuiltinVoice === undefined ? {} : { defaultVoice: mimoBuiltinVoice }),
+        emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
+        emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
+        resolveApiKey: resolveMimoKey,
+      }),
       new MimoTtsProvider({
         mode: 'voicedesign',
         ...(mimoVoiceDescription === undefined ? {} : { voiceDescription: mimoVoiceDescription }),
-        emotionStyleHints: {
-          sweet_normal: '温柔甜软，带笑意',
-          tsundere_refuse: '傲娇嘴硬，稍微不服气',
-          rage_spray: '生气反驳，音量偏大',
-          lazy_yawn: '慵懒困倦，语速偏慢',
-          happy_rice: '开心雀跃，语气上扬',
-        },
+        emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
+        emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
         resolveApiKey: resolveMimoKey,
       }),
-      new MimoTtsProvider({ mode: 'voiceclone', resolveReferenceAudio: resolveMimoReference, resolveApiKey: resolveMimoKey }),
+      new MimoTtsProvider({
+        mode: 'voiceclone',
+        resolveReferenceAudio: resolveMimoReference,
+        emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
+        emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
+        resolveApiKey: resolveMimoKey,
+      }),
       new LocalAudioWorkerProvider(),
       new SystemFallbackVoiceProvider(process.platform),
     ],

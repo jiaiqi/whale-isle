@@ -9,7 +9,7 @@
  * 离线档的体感代价直接引用 shared-protocol 的 `OFFLINE_TIER_COST_TEXT`，不许在这里另写数字。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AudioLines, Lock, Radio, Sliders, Timer, Volume2 } from 'lucide-react';
+import { AudioLines, KeyRound, Lock, Radio, Sliders, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   MIMO_TTS_CANDIDATE_NOTICE,
@@ -18,10 +18,18 @@ import {
   type VoiceEngineTier,
   type VoiceProviderStatus,
 } from '@workbench/shared-protocol';
-import { CANDIDATE_TTS_PROVIDERS, COMMERCIAL_TTS_PROVIDERS, resolveCommercialTtsProvider } from '@workbench/voice-runtime';
+import { CANDIDATE_TTS_PROVIDERS, COMMERCIAL_TTS_PROVIDERS, resolveCommercialTtsProvider } from '@workbench/voice-runtime/browser';
 import type { CharacterSummary } from './bridge';
 import { VoicePanel } from './voice-panel';
 import { VoiceStudioPanel } from './voice-studio-panel';
+
+/** 语音中心的凭据卡片：providerId 必须与主进程 `kernel.secrets.resolve(...)` 查的 id 完全一致 */
+const VOICE_CREDENTIALS = [
+  { id: 'minimax', label: 'MiniMax T2A', unlocks: '默认档 minimax-tts' },
+  { id: 'openai-tts', label: 'OpenAI 兼容 TTS', unlocks: '默认档 openai-compatible-tts' },
+  { id: 'openrouter', label: 'OpenRouter', unlocks: '候选 openrouter-tts（Gemini 3.8 Flash TTS）' },
+  { id: 'mimo-tts', label: '小米 MiMo', unlocks: '候选 mimo-tts / VoiceClone / VoiceDesign（三种模式共用一个 Key）' },
+] as const;
 
 interface BindingView {
   characterId: string;
@@ -46,12 +54,27 @@ export function VoiceCenterPanel(props: {
   const [providers, setProviders] = useState<VoiceProviderStatus[]>([]);
   const [commercial, setCommercial] = useState<CommercialTtsProvider>('minimax-tts');
   const [previewing, setPreviewing] = useState(false);
+  /** 凭据掩码（只存掩码，明文只在输入框里停留到保存成功为止） */
+  const [credentialMasks, setCredentialMasks] = useState<Record<string, string>>({});
+  const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+  const [keyNotices, setKeyNotices] = useState<Record<string, string>>({});
+  const [keyBusy, setKeyBusy] = useState<string | null>(null);
 
   const reloadBindings = useCallback((): void => {
     void window.directorBridge.voiceCharacterBindings().then(setBindings).catch(() => setBindings([]));
   }, []);
 
   useEffect(() => { reloadBindings(); }, [reloadBindings]);
+
+  const reloadCredentials = useCallback(async (): Promise<void> => {
+    const entries = await Promise.all(VOICE_CREDENTIALS.map(async (credential) => {
+      const res = await window.directorBridge.providerKeyMask(credential.id);
+      return [credential.id, res.ok ? (res.mask ?? '') : ''] as const;
+    }));
+    setCredentialMasks(Object.fromEntries(entries));
+  }, []);
+
+  useEffect(() => { void reloadCredentials(); }, [reloadCredentials]);
 
   useEffect(() => {
     void window.directorBridge.voiceBackend().then(setBackend).catch(() => setBackend(null));
@@ -108,13 +131,63 @@ export function VoiceCenterPanel(props: {
       ? 'MiniMax T2A'
       : kind === 'openai-compatible-tts'
         ? 'OpenAI 兼容 TTS'
-        : kind === 'mimo-tts-voiceclone'
-          ? 'MiMo VoiceClone'
-          : 'MiMo VoiceDesign';
+        : kind === 'openrouter-tts'
+          ? 'OpenRouter Gemini TTS'
+          : kind === 'mimo-tts'
+            ? 'MiMo 内置音色'
+            : kind === 'mimo-tts-voiceclone'
+              ? 'MiMo VoiceClone'
+              : 'MiMo VoiceDesign';
 
   const pickCommercial = (next: CommercialTtsProvider): void => {
     setCommercial(next);
     void window.directorBridge.prefsSet({ voiceCommercialProvider: next });
+  };
+
+  /**
+   * 保存并检测：走已有的 `providers:save-key`（safeStorage 加密的 provider-vault.json），
+   * 明文只上行、不回显、不落渲染层；成功后立刻重探所有 provider，让 available / detail 反映新 Key。
+   */
+  const saveCredential = async (providerId: string): Promise<void> => {
+    const draft = (keyDrafts[providerId] ?? '').trim();
+    if (draft === '') {
+      setKeyNotices((prev) => ({ ...prev, [providerId]: '请先粘贴访问凭据（Key）' }));
+      return;
+    }
+    setKeyBusy(providerId);
+    setKeyNotices((prev) => ({ ...prev, [providerId]: '保存中…' }));
+    try {
+      const saved = await window.directorBridge.saveProviderKey(providerId, draft);
+      if (!saved.ok) {
+        setKeyNotices((prev) => ({ ...prev, [providerId]: `保存失败：${saved.error ?? '未知错误'}` }));
+        return;
+      }
+      setKeyDrafts((prev) => ({ ...prev, [providerId]: '' }));
+      const [statuses] = await Promise.all([window.directorBridge.v2VoiceProviders(), reloadCredentials()]);
+      setProviders(statuses);
+      setKeyNotices((prev) => ({ ...prev, [providerId]: `已保存并重新探测（${saved.mask ?? '掩码不可读'}）` }));
+    } catch (err) {
+      setKeyNotices((prev) => ({ ...prev, [providerId]: `保存失败：${err instanceof Error ? err.message : String(err)}` }));
+    } finally {
+      setKeyBusy(null);
+    }
+  };
+
+  /** Key 来源：凭据库（有掩码）> 环境变量（探针可用但库里没有）> 未配置 */
+  const credentialSource = (providerId: string, available: boolean): '凭据库' | '环境变量' | '未配置' => {
+    if ((credentialMasks[providerId] ?? '') !== '') return '凭据库';
+    return available ? '环境变量' : '未配置';
+  };
+  const credentialAvailable = (providerId: string): boolean => {
+    if (providerId === 'mimo-tts') {
+      return providers.some((p) => p.kind.startsWith('mimo-tts') && p.available);
+    }
+    const kind = providerId === 'minimax'
+      ? 'minimax-tts'
+      : providerId === 'openai-tts'
+        ? 'openai-compatible-tts'
+        : 'openrouter-tts';
+    return providers.some((p) => p.kind === kind && p.available);
   };
 
   const previewVoice = async (): Promise<void> => {
@@ -318,7 +391,78 @@ export function VoiceCenterPanel(props: {
         )}
       </div>
 
-      {tab === 'catalog'
+      <div className="mb-4 rounded-2xl p-3.5" style={{ border: '1px solid var(--stroke)', background: 'var(--surface)' }} data-voice-credentials>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold">
+            <KeyRound size={12} style={{ color: 'var(--blue)' }} />
+            语音供应商访问凭据
+            <span className="pill pill-blue" style={{ fontSize: 10 }}>凭据库优先 · 环境变量兜底</span>
+          </span>
+          <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+            明文只上行、不回显、不写日志；保存后立即重新探测
+          </span>
+        </div>
+        <div className="mt-2 grid gap-2 md:grid-cols-2">
+          {VOICE_CREDENTIALS.map((credential) => {
+            const mask = credentialMasks[credential.id] ?? '';
+            const source = credentialSource(credential.id, credentialAvailable(credential.id));
+            const busy = keyBusy === credential.id;
+            const notice = keyNotices[credential.id];
+            const tone = source === '未配置' ? 'pill-red' : source === '环境变量' ? 'pill-amber' : 'pill-green';
+            return (
+              <div
+                key={credential.id}
+                data-voice-credential={credential.id}
+                data-voice-credential-source={source}
+                className="rounded-xl px-2.5 py-2"
+                style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] font-semibold">
+                  <span>{credential.label}</span>
+                  <span className={`pill ${tone}`} style={{ fontSize: 10 }} data-voice-credential-mask={credential.id}>
+                    {source}{mask === '' ? '' : ` · ${mask}`}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[10px]" style={{ color: 'var(--text-3)' }}>{credential.unlocks}</p>
+                <div className="mt-1.5 flex gap-1.5">
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-voice-credential-input={credential.id}
+                    value={keyDrafts[credential.id] ?? ''}
+                    placeholder={source === '未配置' ? '粘贴访问凭据（Key）…' : '重填可覆盖现有 Key'}
+                    onChange={(event) => setKeyDrafts((prev) => ({ ...prev, [credential.id]: event.target.value }))}
+                    className="min-w-0 flex-1 rounded-lg px-2 py-1 text-[11px] outline-none"
+                    style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    data-voice-credential-save={credential.id}
+                    onClick={() => void saveCredential(credential.id)}
+                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold"
+                    style={{ border: '1px solid var(--blue-line)', background: 'var(--blue-dim)', color: 'var(--blue)' }}
+                  >
+                    {busy ? '检测中…' : '保存并检测'}
+                  </button>
+                </div>
+                {notice !== undefined && (
+                  <p
+                    className="mt-1 text-[10px]"
+                    data-voice-credential-notice={credential.id}
+                    style={{ color: notice.startsWith('保存失败') || notice.startsWith('请先') ? 'var(--red)' : 'var(--green)' }}
+                  >
+                    {notice}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {tab === 'catalog' 
         ? <VoicePanel bare characterName={characterName} boundVoiceId={boundVoiceId} onBind={bind} />
         : <VoiceStudioPanel bare characterId={characterId} characterName={characterName} />}
     </div>

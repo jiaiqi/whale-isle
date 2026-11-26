@@ -14,6 +14,7 @@ import { decidePeakOutfit, isPeakOutfitFamily, resolvePeakPeriod, type PeakOutfi
 import { isMockKeychainLaunch, logVaultStartup, registerProviderVaultIpc, resolveVaultPath } from './provider-vault';
 import { createModsHost } from './mods-host';
 import { bwfMcpEndpoint, resolveBwfEndpoint } from './bwf-settings';
+import { randomUUID } from 'node:crypto';
 import { createPetPrefsStore } from './pet-prefs';
 import { PetWindowManager, type ManagedPetWindow, type PetWindowCreateInput, type WindowBounds } from './pet-window-manager';
 import { createCharacterRegistry } from './character-registry';
@@ -45,7 +46,7 @@ import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
 import { createV2KernelHost, type V2KernelHost } from './v2-kernel-host';
-import { LipSyncTimelinePlayer, synthesizeTextLipSyncFrames } from '@workbench/voice-runtime';
+import { LipSyncTimelinePlayer, resolveCommercialTtsProvider, synthesizeTextLipSyncFrames } from '@workbench/voice-runtime';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import { createFakeStardewLauncher, createStardewLauncher } from './stardew-launcher';
@@ -936,7 +937,41 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     activeLipPlayer?.stop(false);
     activeLipPlayer = null;
   });
-  registerVoiceHostIpc(voice);
+  /**
+   * 试听走 V2 语音路由：用 prefs 里选中的商业 provider，而不是无条件 spawn mcode-tools。
+   * 选中的那家不可用时由 `resolveCommercialTtsProvider` 如实回落并标 `degraded`，
+   * 绝不把「其实换了一家」说成「就是你要的那家」。
+   */
+  registerVoiceHostIpc(voice, {
+    synthesizeAudition: async ({ mode, text }) => {
+      const statuses = await v2KernelHost.voiceRouter.listStatuses();
+      const available = statuses.filter((status) => status.available).map((status) => status.kind);
+      const preference = petPrefsStore?.get().voiceCommercialProvider ?? 'minimax-tts';
+      const choice = resolveCommercialTtsProvider({ preference, available });
+      const identity = v2KernelHost.characterCore.profile.voiceIdentity();
+      const out = await v2KernelHost.voiceRouter.synthesize(
+        {
+          requestId: randomUUID(),
+          characterId: identity.characterId,
+          voiceRef: v2KernelHost.voiceRouter.resolveVoiceRef(identity),
+          text,
+          // 语音中心五档的档位 id 直接当情绪键，MiMo 的风格指令/标签按它取值
+          emotion: mode,
+          styleMode: mode === 'sleepy' ? 'inner' : 'normal',
+        },
+        { preferredProvider: choice.provider },
+      );
+      return {
+        providerKind: out.providerKind,
+        format: out.format,
+        ...(out.audioBase64 === undefined ? {} : { audioBase64: out.audioBase64 }),
+        degraded: out.degraded || !choice.honored,
+        ...(out.degradedFrom === undefined
+          ? (choice.honored ? {} : { degradedFrom: preference })
+          : { degradedFrom: out.degradedFrom }),
+      };
+    },
+  });
   // 记忆图谱（T-M5-04）：回执入图谱 + 聊天检索
   const memory = createMemoryHost(app.getPath('userData'));
   void dayKeyOf;

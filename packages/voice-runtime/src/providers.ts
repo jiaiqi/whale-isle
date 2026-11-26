@@ -17,7 +17,9 @@ import {
   type VoiceSynthesisRequest,
   type VoiceSynthesisRequestInput,
 } from '@workbench/shared-protocol';
-import { WhaleError } from '@workbench/runtime-core';
+// 走子路径而不是 runtime-core 桶：桶会拉进 plugin-kit（node:fs/url/worker_threads），
+// 让渲染进程的 esbuild 直接构建失败。errors 模块零依赖，浏览器安全。
+import { WhaleError } from '@workbench/runtime-core/errors';
 import {
   extractWavLipSyncFrames,
   splitSpeechSentences,
@@ -30,7 +32,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export const COMMERCIAL_TTS_PROVIDERS = ['minimax-tts', 'openai-compatible-tts'] as const;
 
 /** 候选供应商：可被显式选中、可试听对拍，但**不进自动兜底链、不设为默认** */
-export const CANDIDATE_TTS_PROVIDERS = ['mimo-tts-voiceclone', 'mimo-tts-voicedesign'] as const;
+export const CANDIDATE_TTS_PROVIDERS = ['openrouter-tts', 'mimo-tts', 'mimo-tts-voiceclone', 'mimo-tts-voicedesign'] as const;
 
 export interface CommercialTtsChoice {
   /** 本次实际选用的商业供应商 */
@@ -330,13 +332,191 @@ export class MiniMaxTtsProvider implements VoiceProvider {
   }
 }
 
+/** OpenRouter 托管 TTS（第四家商用候选；`/audio/speech` 返回原始音频字节，不是 JSON） */
+export const OPENROUTER_TTS_BASE_URL = 'https://openrouter.ai/api/v1';
+export const OPENROUTER_GEMINI_TTS_MODEL = 'google/gemini-3.8-flash-tts';
+/** Google 预置音色示例；官方称 voice 是 provider-specific，未实测前只当默认值 */
+export const OPENROUTER_TTS_DEFAULT_VOICE = 'Zephyr';
+
+export interface OpenRouterTtsOptions {
+  baseUrl?: string;
+  model?: string;
+  voice?: string;
+  responseFormat?: 'wav' | 'mp3' | 'pcm';
+  resolveApiKey: () => string | null;
+  fetchImpl?: FetchLike;
+}
+
+/**
+ * OpenRouter Gemini 3.8 Flash TTS 候选。
+ *
+ * 与 `CloudOpenAiTtsProvider` 的相同点：同样是 `/audio/speech`、Bearer 认证、二进制音频回包。
+ * 不同点：不传 `speed` / `instructions` 这类非标准字段（该模型的 `supported_parameters` 是空数组，
+ * 风格与情绪怎么控制官方没写），`response_format` 显式传 `wav`（默认是 `pcm`）。
+ *
+ * 能力口径：`supportsEmotion: false`、`supportsStreaming: false`，detail 里写「情绪控制方式未验证」。
+ * 要试情绪只能在 bench 里单开一组实验，不许写进能力声明。
+ */
+export class OpenRouterTtsProvider implements VoiceProvider {
+  readonly kind = 'openrouter-tts' as const;
+  private readonly baseUrl: string;
+  private readonly model: string;
+  private readonly voice: string;
+  private readonly responseFormat: 'wav' | 'mp3' | 'pcm';
+  private readonly fetchImpl: FetchLike;
+
+  constructor(private readonly options: OpenRouterTtsOptions) {
+    this.baseUrl = (options.baseUrl ?? OPENROUTER_TTS_BASE_URL).replace(/\/+$/, '');
+    this.model = options.model ?? OPENROUTER_GEMINI_TTS_MODEL;
+    this.voice = options.voice ?? OPENROUTER_TTS_DEFAULT_VOICE;
+    this.responseFormat = options.responseFormat ?? 'wav';
+    this.fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
+  }
+
+  probe(): VoiceProviderStatus {
+    const hasKey = Boolean(this.options.resolveApiKey()?.trim());
+    return VoiceProviderStatusSchema.parse({
+      kind: this.kind,
+      quality: 'character_tts',
+      available: hasKey,
+      degraded: false,
+      platform: process.platform,
+      detail: hasKey
+        ? `OpenRouter ${this.model} 候选（按 token 计费：$0.50/M 输入 · $9/M 输出）· 情绪控制方式未验证 · 未实测`
+        : `未配置 OpenRouter 凭据（providerId openrouter）· 情绪控制方式未验证`,
+      supportsStreaming: false,
+      supportsEmotion: false,
+    });
+  }
+
+  async synthesize(request: VoiceSynthesisRequest, externalSignal?: AbortSignal): Promise<VoiceSynthesisOutput> {
+    const key = this.options.resolveApiKey()?.trim();
+    if (!key) {
+      throw new WhaleError('SECRET_UNAVAILABLE', 'OpenRouter TTS 缺少 API Key', { recoverable: true });
+    }
+    const started = Date.now();
+    const { signal, cleanup } = withTimeoutSignal(request.timeoutMs, externalSignal);
+    try {
+      const resp = await this.fetchImpl(`${this.baseUrl}/audio/speech`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model: this.model,
+          input: request.text,
+          voice: this.voice,
+          response_format: this.responseFormat,
+        }),
+        signal,
+      });
+      if (!resp.ok) {
+        throw new WhaleError('INTERNAL_ERROR', `OpenRouter TTS HTTP ${resp.status}`, { recoverable: true });
+      }
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      if (bytes.byteLength === 0) {
+        throw new WhaleError('INTERNAL_ERROR', 'OpenRouter TTS 返回空音频', { recoverable: true });
+      }
+      const wavFrames = this.responseFormat === 'wav' ? extractWavLipSyncFrames(bytes) : [];
+      const estimated = estimateSpeechMs(request.text, request.speed);
+      const actualDuration = wavFrames.length > 0
+        ? (wavFrames[wavFrames.length - 1]!.timestampMs + wavFrames[wavFrames.length - 1]!.durationMs)
+        : estimated;
+      return VoiceSynthesisOutputSchema.parse({
+        requestId: request.requestId,
+        providerKind: this.kind,
+        quality: 'character_tts',
+        degraded: false,
+        format: this.responseFormat === 'wav' ? 'wav' : this.responseFormat === 'mp3' ? 'mp3' : 'pcm',
+        sampleRate: 24_000,
+        durationMs: actualDuration,
+        audioBase64: Buffer.from(bytes).toString('base64'),
+        lipFrames: wavFrames.length > 0 ? wavFrames : synthesizeTextLipSyncFrames(request.text, estimated),
+        cached: false,
+        latencyMs: Math.max(0, Date.now() - started),
+      });
+    } finally {
+      cleanup();
+    }
+  }
+}
+
 /** MiMo TTS 官方 base（OpenAI 兼容协议，但请求体不是 /audio/speech） */
 export const MIMO_TTS_BASE_URL = 'https://api.xiaomimimo.com/v1';
 export const MIMO_TTS_MODELS = {
+  /** 内置音色 + 唱歌前缀 + 唯一支持低延迟流式的模型 */
+  tts: 'mimo-v2.5-tts',
   voiceclone: 'mimo-v2.5-tts-voiceclone',
   voicedesign: 'mimo-v2.5-tts-voicedesign',
 } as const;
 export type MimoTtsMode = keyof typeof MIMO_TTS_MODELS;
+
+/** `mimo-v2.5-tts` 内置 9 个音色（官方文档，2026-11-27 版） */
+export const MIMO_TTS_BUILTIN_VOICES = [
+  'mimo_default',
+  '冰糖',
+  '茉莉',
+  '苏打',
+  '白桦',
+  'Mia',
+  'Chloe',
+  'Milo',
+  'Dean',
+] as const;
+export type MimoBuiltinVoice = (typeof MIMO_TTS_BUILTIN_VOICES)[number];
+
+/**
+ * 唱歌不是独立字段，而是正文前缀：`(唱歌)` / `(sing)` / `(singing)` 官方都接受。
+ * 只有 `mimo-v2.5-tts` 支持；voiceclone / voicedesign 不要注入，避免造假能力。
+ */
+export const MIMO_TTS_SINGING_PREFIXES = ['(唱歌)', '(sing)', '(singing)'] as const;
+export const MIMO_TTS_SINGING_PREFIX = MIMO_TTS_SINGING_PREFIXES[0];
+
+/** 抽样率与流式格式：流式只支持 pcm16（24 kHz / 16-bit LE / 单声道），非流式用 wav */
+export const MIMO_TTS_SAMPLE_RATE = 24_000;
+export const MIMO_TTS_STREAMING_FORMAT = 'pcm16';
+
+/**
+ * 认证头：官方 curl 示例用 `--header "api-key: $MIMO_API_KEY"`，
+ * 而 OpenAI 兼容习惯是 `authorization: Bearer`。**两种都未实测**，所以做成可配置，
+ * 实测时两种都试一遍，把通的那种写进证据文档；默认沿用当前实现的 Bearer。
+ */
+export const MIMO_TTS_AUTH_SCHEMES = ['bearer', 'api-key'] as const;
+export type MimoTtsAuthScheme = (typeof MIMO_TTS_AUTH_SCHEMES)[number];
+
+/**
+ * 五档情绪 → 自然语言风格指令（MiMo 的 user 侧风格控制）。
+ * 键同时覆盖两套既有口径：语音中心五档（daily/bright/tsundere/sleepy/surprised）
+ * 与声音工坊五情绪锚点（sweet_normal/tsundere_refuse/rage_spray/lazy_yawn/clumsy_panic）。
+ * 与 `docs/v2/VOICE-PERSONA-xiaojing.md` 的表逐行一致，改一处必须同步另一处。
+ */
+export const MIMO_EMOTION_STYLE_HINTS: Record<string, string> = {
+  daily: '温柔甜软，带笑意，语速适中',
+  bright: '俏皮上扬，语气活泼，句尾轻轻挑起',
+  tsundere: '傲娇嘴硬，稍不服气，音量略大',
+  sleepy: '慵懒困倦，气声偏多，语速偏慢',
+  surprised: '惊喜元气，语气上扬，节奏轻快',
+  sweet_normal: '温柔甜软，带笑意，语速适中',
+  tsundere_refuse: '傲娇嘴硬，稍不服气，音量略大',
+  rage_spray: '生气反驳，音量偏大，语速偏快',
+  lazy_yawn: '慵懒困倦，气声偏多，语速偏慢',
+  clumsy_panic: '心虚慌乱，语速偏快，带一点不确定',
+};
+
+/**
+ * 五档情绪 → 助手前缀风格标签（渲染成 `(Tag)要说的文本`）。
+ * 官方接受半角 `()`、全角 `（）`、`[]` 三种写法；这里统一半角，避免同一句里混排。
+ */
+export const MIMO_EMOTION_STYLE_TAGS: Record<string, string> = {
+  daily: 'Sweet',
+  bright: 'Playful',
+  tsundere: 'Tsundere',
+  sleepy: 'Sleepy',
+  surprised: 'Excited',
+  sweet_normal: 'Sweet',
+  tsundere_refuse: 'Tsundere',
+  rage_spray: 'Angry',
+  lazy_yawn: 'Sleepy',
+  clumsy_panic: 'Nervous',
+};
 
 export interface MimoTtsReferenceAudio {
   /** 参考音频字节（数秒 wav），provider 内部转成 `data:audio/wav;base64,…` */
@@ -350,23 +530,55 @@ export interface MimoTtsOptions {
   /** VoiceClone 必填：参考音频来源；返回 null 视为未配置 */
   resolveReferenceAudio?: () => MimoTtsReferenceAudio | null;
   /**
-   * 可选：把产品情绪映射成自然语言风格提示，追加到 VoiceDesign 的**音色描述**里。
-   * 默认空 = 完全不注入。VoiceClone 不支持（官方请求体要求 user 为空串），不要在这里造假。
+   * 仅 `voicedesign`：`optimize_text_preview=true` 时官网允许省略 assistant 消息，
+   * 只按音色描述做预览。其它模式传 true 会被忽略（不伪造字段）。
+   */
+  optimizeTextPreview?: boolean;
+  /**
+   * 可选：把产品情绪映射成自然语言风格指令，追加到 user 消息。
+   * 官方口径：user 里的自然语言风格指令对**所有模型**都有效、不会被念出来；
+   * 只有 voicedesign 是必填（那里它就是音色描述本身）。未知情绪不注入，绝不编造。
    */
   emotionStyleHints?: Partial<Record<string, string>>;
+  /**
+   * 可选：把产品情绪映射成助手前缀风格标签（如 `Lazy` → `(Lazy)要说的文本`）。
+   * 官方接受半角 `()`、全角 `（）` 与 `[]` 三种写法，这里统一用半角小括号。
+   */
+  emotionStyleTags?: Partial<Record<string, string>>;
+  /** 认证头方案（未实测前可切换；默认 bearer） */
+  authScheme?: MimoTtsAuthScheme;
+  /** 仅 `tts`：内置音色 id；request.voiceRef 命中内置音色时优先用它 */
+  defaultVoice?: MimoBuiltinVoice | string;
   baseUrl?: string;
   model?: string;
   resolveApiKey: () => string | null;
   fetchImpl?: FetchLike;
 }
 
+const MIMO_MODE_LABEL: Record<MimoTtsMode, string> = {
+  tts: '内置音色（mimo-v2.5-tts）',
+  voiceclone: 'VoiceClone',
+  voicedesign: 'VoiceDesign',
+};
+
+const MIMO_KIND_BY_MODE: Record<MimoTtsMode, VoiceProviderKind> = {
+  tts: 'mimo-tts',
+  voiceclone: 'mimo-tts-voiceclone',
+  voicedesign: 'mimo-tts-voicedesign',
+};
+
 /**
- * 小米 MiMo TTS 候选供应商（VoiceClone / VoiceDesign 两种模式各注册一个实例）。
+ * 小米 MiMo TTS 候选供应商（tts / voiceclone / voicedesign 三个模型各注册一个实例）。
  *
  * 与 `CloudOpenAiTtsProvider` 的区别不是配置，而是**请求体结构完全不同**：
- * - VoiceClone：`user` 消息必须为空串，要说的文本放在 `assistant`，参考音频走顶层 `audio.voice` 的 data URL。
+ * - `mimo-v2.5-tts`：内置音色走 `audio.voice` 传音色 id（不是 data URL）；唱歌用正文前缀触发。
+ * - VoiceClone：要说的文本放在 `assistant`，参考音频走顶层 `audio.voice` 的 data URL；
+ *   `user` 按旧文档留空串，新口径允许放风格指令——未实测前有提示才放，否则保持空串。
  * - VoiceDesign：`user` 放音色描述，`assistant` 放要说的文本，不需要参考音频。
- * 两者响应都从 `choices[0].message.audio.data`（base64 wav）取音频，而不是二进制 body。
+ * 三者响应都从 `choices[0].message.audio.data`（base64 wav）取音频，而不是二进制 body。
+ *
+ * 流式：官方要求 `format: "pcm16"`，适配器当前**只做非流式 wav**，所以
+ * `supportsStreaming` 一律 `false`——不许在没写流式代码时宣称支持。
  *
  * 情绪能力**不在 `probe()` 里宣称**：官方说支持自然语言风格指令与内联标签，但我们没有实测证据，
  * 在真跑出稳定性数据之前一律报 `supportsEmotion: false`（item 10 的教训：能力必须实测，不许硬编码 true）。
@@ -380,20 +592,28 @@ export class MimoTtsProvider implements VoiceProvider {
 
   constructor(private readonly options: MimoTtsOptions) {
     this.mode = options.mode;
-    this.kind = options.mode === 'voiceclone' ? 'mimo-tts-voiceclone' : 'mimo-tts-voicedesign';
+    this.kind = MIMO_KIND_BY_MODE[options.mode];
     this.baseUrl = (options.baseUrl ?? MIMO_TTS_BASE_URL).replace(/\/+$/, '');
     this.model = options.model ?? MIMO_TTS_MODELS[options.mode];
     this.fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
+  }
+
+  /** 当前配置的认证头方案（证据文档与排查用；不代表已实测可用） */
+  get authScheme(): MimoTtsAuthScheme {
+    return this.options.authScheme ?? 'bearer';
   }
 
   probe(): VoiceProviderStatus {
     const hasKey = Boolean(this.options.resolveApiKey()?.trim());
     const missing = this.missingConfig();
     const available = hasKey && missing === null;
-    const detailParts = [`MiMo ${this.mode === 'voiceclone' ? 'VoiceClone' : 'VoiceDesign'} 候选（限时免费 / 无商用条款）`];
+    const detailParts = [`MiMo ${MIMO_MODE_LABEL[this.mode]} 候选（限时免费 / 无商用条款）`];
     if (!hasKey) detailParts.push('未配置 MiMo API Key');
     if (missing !== null) detailParts.push(missing);
-    detailParts.push('情绪表达未实测，不宣称支持');
+    detailParts.push(`认证头 ${this.authScheme}（未实测）`);
+    if (this.mode === 'tts') detailParts.push(`内置音色 ${String(MIMO_TTS_BUILTIN_VOICES.length)} 个`);
+    if (this.options.optimizeTextPreview === true && this.mode === 'voicedesign') detailParts.push('optimize_text_preview 已开');
+    detailParts.push('非流式；情绪表达未实测，不宣称支持');
     return VoiceProviderStatusSchema.parse({
       kind: this.kind,
       quality: 'character_tts',
@@ -401,7 +621,7 @@ export class MimoTtsProvider implements VoiceProvider {
       degraded: false,
       platform: process.platform,
       detail: detailParts.join(' · '),
-      supportsStreaming: true,
+      supportsStreaming: false,
       supportsEmotion: false,
     });
   }
@@ -422,10 +642,7 @@ export class MimoTtsProvider implements VoiceProvider {
     try {
       const resp = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${key}`,
-        },
+        headers: this.buildHeaders(key),
         body: JSON.stringify(body),
         signal,
       });
@@ -458,7 +675,7 @@ export class MimoTtsProvider implements VoiceProvider {
         quality: 'character_tts',
         degraded: false,
         format: 'wav',
-        sampleRate: 24_000,
+        sampleRate: MIMO_TTS_SAMPLE_RATE,
         durationMs: actualDuration,
         audioBase64: Buffer.from(bytes).toString('base64'),
         lipFrames: wavFrames.length > 0 ? wavFrames : synthesizeTextLipSyncFrames(request.text, estimated),
@@ -470,6 +687,14 @@ export class MimoTtsProvider implements VoiceProvider {
     }
   }
 
+  /** 认证头：`api-key` 与 `authorization: Bearer` 二选一，未实测前不做假设 */
+  private buildHeaders(key: string): Record<string, string> {
+    if (this.authScheme === 'api-key') {
+      return { 'content-type': 'application/json', 'api-key': key };
+    }
+    return { 'content-type': 'application/json', authorization: `Bearer ${key}` };
+  }
+
   /** 配置缺什么，返回一句人话；齐全时返回 null。probe 与 synthesize 共用同一判据 */
   private missingConfig(): string | null {
     if (this.mode === 'voiceclone') {
@@ -477,17 +702,45 @@ export class MimoTtsProvider implements VoiceProvider {
       if (ref === null || ref.bytes.byteLength === 0) return '未配置参考音频（VoiceClone 必需）';
       return null;
     }
-    if ((this.options.voiceDescription ?? '').trim() === '') return '未配置音色描述（VoiceDesign 必需）';
+    if (this.mode === 'voicedesign' && (this.options.voiceDescription ?? '').trim() === '') {
+      return '未配置音色描述（VoiceDesign 必需）';
+    }
     return null;
   }
 
+  /** 本次请求要用的内置音色：命中内置列表就用它，否则用配置的默认音色 */
+  private resolveBuiltinVoice(voiceRef: string): string {
+    const known = (MIMO_TTS_BUILTIN_VOICES as readonly string[]).includes(voiceRef);
+    if (known) return voiceRef;
+    const fallback = this.options.defaultVoice?.trim();
+    return fallback === undefined || fallback === '' ? 'mimo_default' : fallback;
+  }
+
+  /** 自然语言风格指令（所有模式都可用；为空时不注入，也不占位空 user 消息） */
+  private styleInstruction(request: VoiceSynthesisRequest): string {
+    return this.options.emotionStyleHints?.[request.emotion]?.trim() ?? '';
+  }
+
+  /** 助手侧文本：风格标签前缀（半角小括号）+ 唱歌前缀（仅 tts 模式）+ 原文 */
+  private styledText(request: VoiceSynthesisRequest): string {
+    const tag = this.options.emotionStyleTags?.[request.emotion]?.trim() ?? '';
+    const singing = request.styleMode === 'singing' && this.mode === 'tts';
+    const prefix = [
+      tag === '' ? '' : `(${tag})`,
+      singing ? MIMO_TTS_SINGING_PREFIX : '',
+    ].join('');
+    return `${prefix}${request.text}`;
+  }
+
   /**
-   * 两种模式的请求体：
-   * - voiceclone：`messages:[{user:''},{assistant:text}]` + `audio.voice=data:audio/wav;base64,…`
-   * - voicedesign：`messages:[{user:描述},{assistant:text}]` + `audio:{format:'wav'}`
-   * 情绪提示只可能进 VoiceDesign 的描述里；未知情绪不注入，绝不编造。
+   * 三种模式的请求体：
+   * - tts：`messages:[{user:风格指令?},{assistant:文本}]` + `audio:{format:'wav', voice:内置音色 id}`
+   * - voiceclone：`messages:[{user:风格指令 或 空串},{assistant:文本}]` + `audio.voice=data:audio/wav;base64,…`
+   * - voicedesign：`messages:[{user:音色描述},{assistant:文本}]`（开了 optimize_text_preview 时省略 assistant）
+   * 非流式一律 `format:'wav'`；流式需要的 `pcm16` 还没实现，不许在这里偷偷宣称。
    */
   private buildRequestBody(request: VoiceSynthesisRequest): Record<string, unknown> {
+    const assistant = this.styledText(request);
     if (this.mode === 'voiceclone') {
       const ref = this.options.resolveReferenceAudio?.() ?? null;
       const dataUrl = `data:audio/wav;base64,${Buffer.from(ref?.bytes ?? new Uint8Array()).toString('base64')}`;
@@ -495,28 +748,41 @@ export class MimoTtsProvider implements VoiceProvider {
         model: this.model,
         stream: false,
         messages: [
-          { role: 'user', content: '' },
-          { role: 'assistant', content: request.text },
+          { role: 'user', content: this.styleInstruction(request) },
+          { role: 'assistant', content: assistant },
         ],
         audio: { format: 'wav', voice: dataUrl },
       };
     }
-    const hint = this.options.emotionStyleHints?.[request.emotion]?.trim() ?? '';
-    const description = [(this.options.voiceDescription ?? '').trim(), hint === '' ? '' : `风格：${hint}`]
-      .filter((part) => part !== '')
-      .join('；');
+    if (this.mode === 'voicedesign') {
+      // voicedesign 的 user 消息本身就是音色描述，风格指令只能拼在后面，不能顶掉描述
+      const hint = this.styleInstruction(request);
+      const description = [(this.options.voiceDescription ?? '').trim(), hint === '' ? '' : `风格：${hint}`]
+        .filter((part) => part !== '')
+        .join('；');
+      const messages: Array<{ role: string; content: string }> = [{ role: 'user', content: description }];
+      const previewOnly = this.options.optimizeTextPreview === true;
+      if (!previewOnly) messages.push({ role: 'assistant', content: assistant });
+      return {
+        model: this.model,
+        stream: false,
+        messages,
+        ...(previewOnly ? { optimize_text_preview: true } : {}),
+        audio: { format: 'wav' },
+      };
+    }
+    const style = this.styleInstruction(request);
     return {
       model: this.model,
       stream: false,
       messages: [
-        { role: 'user', content: description },
-        { role: 'assistant', content: request.text },
+        ...(style === '' ? [] : [{ role: 'user', content: style }]),
+        { role: 'assistant', content: assistant },
       ],
-      audio: { format: 'wav' },
+      audio: { format: 'wav', voice: this.resolveBuiltinVoice(request.voiceRef) },
     };
   }
 }
-
 export interface LocalAudioWorkerOptions {
   baseUrl?: string;
   fetchImpl?: FetchLike;

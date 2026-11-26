@@ -8,6 +8,8 @@ import { z } from 'zod';
 export const VoiceProviderKindSchema = z.enum([
   'openai-compatible-tts',
   'minimax-tts',
+  'openrouter-tts',
+  'mimo-tts',
   'mimo-tts-voiceclone',
   'mimo-tts-voicedesign',
   'local-audio-worker',
@@ -57,12 +59,16 @@ export const OFFLINE_TIER_COST_TEXT = '一句话等 16–43 秒 / 首包 10–35
  * 默认档（商业 API）用哪一家：**用户显式选择**，不许靠「有没有配置 Key」隐式决定。
  * 选中的那家不可用时要如实报告「没兑现」，而不是静悄悄换成另一家。
  *
- * 前两家是长期可依赖的稳定档；`mimo-*` 两个是**候选**（见 `MIMO_TTS_CANDIDATE_NOTICE`），
+ * 前两家是长期可依赖的稳定档；`openrouter-tts` 与 `mimo-*` 三个是**候选**（见 `MIMO_TTS_CANDIDATE_NOTICE`），
  * 选得中、听得着，但绝不进自动兜底链，也绝不设为默认。
+ * `mimo-tts` 对应 `mimo-v2.5-tts`（内置 9 个音色、支持唱歌前缀、唯一支持流式的那个），
+ * `mimo-tts-voiceclone` / `mimo-tts-voicedesign` 分别对应同名模型。
  */
 export const CommercialTtsProviderSchema = z.enum([
   'minimax-tts',
   'openai-compatible-tts',
+  'openrouter-tts',
+  'mimo-tts',
   'mimo-tts-voiceclone',
   'mimo-tts-voicedesign',
 ]);
