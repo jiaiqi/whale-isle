@@ -5,6 +5,23 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P3-01` 真机补验：歌声引擎真实后端探测 — 状态维持 `IMPLEMENTED_UNVERIFIED`）
+
+- **新增 `services/sing-worker/`**（FastAPI，端口 18880）：歌声后端适配层。只转发到显式配置的 `WHALE_SING_SVS_ENDPOINT` / `WHALE_SING_SVC_ENDPOINT`；普通 TTS 单列 `ttsClone` 能力位如实上报，`detail` 强制带「普通 TTS 不得当作 SVS/SVC 使用」告警；后端缺失返回 501 + 具体原因且**不含** `audioBase64`，`neuralVerified` 仅在真实后端真返回音频时置 `true`。
+- **修复探测造假**：`v2-kernel-host.ts` 中 `new SingEngine()` **从未传 `workerEndpoint`**，导致 `probeBackends` 必然返回 svs/svc 双 unavailable、探测形同虚设；现由 `WHALE_SING_WORKER` 显式注入。
+- **探测明细回传**：`packages/voice-runtime/src/performance.ts` 的 `probeBackends` 回传后端 `detail`（「Worker 在线但 SVS 能力未就绪：未配置 svs 后端…」），`realNeuralInferenceVerified` 严格取 Worker 回执，缺失或 `false` 一律不置真。
+- **新增 `tools/scripts/measure-lyrics-clock-drift.mts`**：真实墙钟 `process.hrtime.bigint` 以 25ms 采样驱动 `LyricsClockSync`，输出每行高亮时刻与声明 `startMs` 的偏差 JSON。
+- **真机证据**（`[REAL-DEVICE]`）：三层探测 `Electron → sing-worker(18880) → GPT-SoVITS(9880)` 真实跑通；歌词时钟 max 偏差 25ms / P95 25ms（容差 60ms，4/4 命中）；跨 `live2d/vrm-3d/obs-stage/desktop-2d` 状态 `retained=true`；pet-stage 实为 WebM 双 `<video>` 渲染（0 canvas、60.4 FPS、0 丢帧），无 `.moc3`/`.vrm` 资产故 Live2D/VRM 画布目视无从谈起；GPT-SoVITS 真实推理 HTTP 200 / 1.01s / 32000Hz / 2580ms（**属 TTS 音色克隆，非歌声合成**，故不置 `realNeuralInferenceVerified`）。
+- **门禁与测试**：`pnpm verify:gate` 7/7 PASS；`performance.spec.ts` 5/5 PASS（新增明细回传与 `neuralVerified` 门禁两例）；`services/sing-worker/test_sing_worker.py` 4/4 PASS。
+- **仍缺前置（已报 owner）**：合法 Cubism `.moc3` + `.vrm` 资产、歌声合成（SVS）与音色转换（SVC）后端权重及索引、4 组缺失情绪参考音频、点歌台管线（Demucs 分离 + 切片 + 预缓冲）。
+
+### Added / Changed（`V2-P3-06` 真机补验：中控台「启动」按钮真实点击 — 转 `DONE`）
+
+- 冷启动路径实测：游戏未运行 → 申请 `ComputerUseLease` → CGEvent 真实点击顶栏「启动」→ 2 秒内 `autodriveStatus().running === true`，按钮标签翻转为「停止星露谷物语自动驾驶」。
+- 帧证据归档：`artifacts/acceptance/P3-06-before-click.png` 与 `P3-06-after-click-driving.png`（`screencapture -x -l <windowId>`；`-R` 区域截取会带到合成画面失真）。
+- 抓到两个真实缺陷待修：BWF 就绪竞态（启动瞬间 `autodriveStart` 报「MCP 不可达」，需重试）；CGEvent 点击依赖窗口真正处于系统前台（建议改 AXPress）。
+- 方法论结论：macOS `screencapture -V -l` 取到的是**陈旧缓冲**（连续 10 帧内容完全一致），改用 0.25s 间隔 `-l` 连拍 60 帧才拿到真实帧差。
+
 ### Added（V2-P3-04A：Digital Life L1 契约先行）
 
 - **`shared-protocol/src/social.ts`**：社区数字生活 L1 契约——`BrowseSession`（`interactionMode` 以 `z.literal('readonly')` 契约层钉死 L1 只读边界，目标/条目与时长预算/停止条件必填）、`SocialPlatformCapabilityEntry` 能力矩阵（渠道/授权/风险级别/`lastVerifiedAt=0` 表未实测）、`ContentUnderstanding`（诚实记录执行理解的 modelId）、`InterestSignal`（单次幅度封顶 ±0.5 防剧烈改写偏好）。

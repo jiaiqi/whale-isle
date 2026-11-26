@@ -5,26 +5,29 @@
 ## 1. 当前进度锚点
 
 - **当前分支**：`feat/whale-isle-v2`（已发布并推送至 `origin/feat/whale-isle-v2`；已完成 P0 & P1、P2 全部 8 单、`V2-P3-01`、`ADR-003` Tidepaper 主视觉升级、`V2-P3-02`、**`V2-P3-03`**，并已合入 `feat/stardew-launcher`（`V2-P3-06` 一键启动器）与 `feat/tidepaper-v3.1`（Tidepaper v3.1 外壳 + 空状态插画））
-- **上一已完成/交接工单**：`V2-P3-03` — **受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**（状态：`IMPLEMENTED_UNVERIFIED`）
-- **当前唯一激活工单**：无（`V2-P3-04` Digital Life L1 已以 `IMPLEMENTED_UNVERIFIED` 封口，A–F 六子单全绿，证据 [P3-04-social-life-verification.md](./evidence/P3-04-social-life-verification.md)；2026-11-26 真机验收：`V2-P2-06` 与 `V2-P3-03`（3c 真实 CGEvent 注入接线）已转 `DONE`；下一候选 `V2-P3-05` 多被动桌宠同屏，或继续清真机验收积压）
+- **上一已完成/交接工单**：`V2-P3-01` **真机补验**（统一表演系统；状态维持 `IMPLEMENTED_UNVERIFIED`——缺合法 `.moc3`/`.vrm` 与歌声后端权重，已列清单待 owner 提供）
+- **当前唯一激活工单**：无（`V2-P3-04` Digital Life L1 已以 `IMPLEMENTED_UNVERIFIED` 封口，A–F 六子单全绿，证据 [P3-04-social-life-verification.md](./evidence/P3-04-social-life-verification.md)；2026-11-26 真机验收：`V2-P2-06`、`V2-P3-03`（3c 真实 CGEvent 注入接线）、`V2-P3-06`（中控台「启动」按钮真实点击）已转 `DONE`，`V2-P3-01` 完成真机补验但仍为 `IMPLEMENTED_UNVERIFIED`；下一候选 `V2-P3-05` 多被动桌宠同屏，或继续清真机验收积压 `V2-P2-08` / `V2-P3-02`）
 - **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01`/`V2-P3-02`/`V2-P3-03` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
 - **输入抢占口径（`ADR-004`）**：`ComputerUseLease` 只管 OS 合成输入/前台桌面控制；用户物理输入撤销它。`GameCharacterControlLease` 不受普通键鼠影响，只认 F7/UI 开关/P0 急停（T-M6-73）。P0 急停同时撤销两者。
 - **本地客户端常驻约定**：用户要求每次完成任务后保持本地桌面端运行（`pnpm --filter @workbench/desktop-host start`）以便随时测试；推进新工单重新构建后务必保持客户端处于运行状态。
 
-## 2. 本次 `V2-P3-03` 实际交付与验证证据
+## 2. 本次 `V2-P3-01` 真机补验实际交付与验证证据
 
-- **契约先行** [packages/shared-protocol/src/browser-computer.ts](../../packages/shared-protocol/src/browser-computer.ts) & [index.ts](../../packages/shared-protocol/src/index.ts)：新增账号/Profile、`ComputerUseLease`、浏览器任务/runner report/人机交接、P5 一次性 token、OS 输入执行器与用户输入监控状态、`BrowserComputerSnapshot` 契约（Zod 4 默认值使用 `.prefault({})`）。
-- **核心安全与运行时** [automation-security.ts](../../packages/runtime-core/src/automation-security.ts)、[browser-runner.ts](../../packages/runtime-core/src/browser-runner.ts)、[human-input-monitor.ts](../../packages/runtime-core/src/human-input-monitor.ts)、[input-executor.ts](../../packages/runtime-core/src/input-executor.ts)：`AccountVault` 掩码/轮换/级联删除与元数据落盘、Per-Character Browser Profile 路径越界拒绝、`ComputerUseLeaseManager` 设备级单主控 + TTL/心跳 + 人工抢占自动恢复 + 急停、`DeterministicBrowserRunner` 确定性动作与逐步 guard、CAPTCHA `awaiting_human`、页面注入只记录不提权、`powerMonitor` idle 轮询与合成事件排除、feature flag 默认关闭的 OS 输入执行器骨架（真实注入 `PENDING`）。
-- **宿主与 UI 接线**：[v2-kernel-host.ts](../../apps/desktop-host/src/main/v2-kernel-host.ts)、[electron-browser-engine.ts](../../apps/desktop-host/src/main/electron-browser-engine.ts)、[preload/index.ts](../../apps/desktop-host/src/preload/index.ts)、[bridge.ts](../../apps/desktop-host/src/renderer/director/bridge.ts)、[signature-widgets.tsx](../../apps/desktop-host/src/renderer/director/v2/signature-widgets.tsx)、[App.tsx](../../apps/desktop-host/src/renderer/director/App.tsx) 与 [life-console-view.tsx](../../apps/desktop-host/src/renderer/director/views/life-console-view.tsx)：注册 `v2:auto-*` IPC、Electron 隐藏窗口确定性引擎、HUD 游戏/桌面双租约胶囊、生命总览 P3-03 操作面板。
-- **强制回归**：[input-preemption-scope.spec.ts](../../apps/desktop-host/src/main/input-preemption-scope.spec.ts)：星露谷 AI 自主模式下注入用户输入，游戏租约保持 `owner='ai'`，`ComputerUseLease` 被撤销；合成事件不误伤；P0 急停双撤销。
-- **真实验证**：P3-03 专项单测 **22/22 PASS**、runtime-core 包级 **90.16% 分支**（Statements 97.37% / Functions 100% / Lines 99.02%）、`desktop-host build` exit 0、`pnpm verify:gate` **7/7 PASS**、Electron 45 E2E Part 1 **3/3 PASS** + Part 2 `ui.e2e` **9/9 PASS**，详见证据 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)。
-- **为什么不是 `DONE`**：真实 CGEvent/SendInput 注入未接线（3c feature flag 默认关闭，仅 dry-run）、macOS TCC 打包态授权与真实社交站点风控/验证码样式待 `[REAL-DEVICE]`。
+- **新增 `services/sing-worker/`**（FastAPI，端口 18880）：只转发到显式配置的 `WHALE_SING_SVS_ENDPOINT` / `WHALE_SING_SVC_ENDPOINT`；普通 TTS 单列 `ttsClone` 能力位并强制带「普通 TTS 不得当作 SVS/SVC 使用」告警；后端缺失 → 501 + 具体原因，**不返回任何伪造音频**；`neuralVerified` 仅在真实后端真返回音频时才置 `true`。
+- **修复探测造假** [v2-kernel-host.ts](../../apps/desktop-host/src/main/v2-kernel-host.ts)：`new SingEngine()` **从未传 `workerEndpoint`**（原实现 `probeBackends` 必然返回 svs/svc 双 unavailable，探测形同虚设），现由 `WHALE_SING_WORKER` 显式注入。
+- **探测明细回传** [performance.ts](../../packages/voice-runtime/src/performance.ts)：`probeBackends` 回传后端 `detail`（「Worker 在线但 SVS 能力未就绪：未配置 svs 后端…」），`realNeuralInferenceVerified` 严格取 Worker 回执，缺失即不置真。
+- **度量工具** [measure-lyrics-clock-drift.mts](../../tools/scripts/measure-lyrics-clock-drift.mts)：真实墙钟 `process.hrtime.bigint` 25ms 采样驱动 `LyricsClockSync`，输出每行高亮偏差 JSON。
+- **真机证据**（`[REAL-DEVICE]`，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md) 第 3 节）：三层探测 `Electron → sing-worker(18880) → GPT-SoVITS(9880)` 真实跑通；歌词时钟 max 偏差 **25ms** / P95 25ms（容差 60ms，4/4 命中）；跨 `live2d/vrm-3d/obs-stage/desktop-2d` 状态 `retained=true`（歌词行/口型/表情/舞蹈动作全保）；pet-stage 实为 WebM 双 `<video>` 渲染（0 canvas、60.4 FPS、P95 18.3ms、0 丢帧）；GPT-SoVITS 真实推理 HTTP 200 / 1.01s / 32000Hz / 2580ms（**属 TTS 非唱歌**，故不置真）。
+- **门禁与单测**：`pnpm verify:gate` **7/7 PASS**；`performance.spec.ts` **5/5 PASS**（新增明细回传与 `neuralVerified` 门禁两例）；`services/sing-worker/test_sing_worker.py` **4/4 PASS**（无后端时 501 且不含 `audioBase64`）。
+- **为什么不是 `DONE`**：本机**无合法 `.moc3` / `.vrm` 资产**（Live2D/VRM 画布目视无从谈起）、**无歌声合成（SVS）与音色转换（SVC）后端**（GPT-SoVITS 是 TTS 音色克隆，不能冒充唱歌）、情绪参考音频只有 1/5 组、点歌台管线未落地。清单已报 owner，状态维持 `IMPLEMENTED_UNVERIFIED`。
+- **历史交接**（`V2-P3-03`，已转 `DONE`）：受控 Browser Use 与 Computer Use，真实 CGEvent 注入经 3c 自研 Swift helper 接线并真机验证（指针精确落位、合成事件不误伤租约），证据 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)。
 
 ## 3. 下一步行动（Next Agent 从这里接手）
 
-1. **真机验收积压清理中**：`V2-P2-06` 已于 2026-11-26 完成 `[REAL-DEVICE]` 真机目视核验并转 `DONE`（证据 [P2-pixel-stardew-avatar-verification.md](./evidence/P2-pixel-stardew-avatar-verification.md) 第三节）；`V2-P1-06` / `V2-P2-01` 仍只需要星露谷 + SMAPI（本机已具备），按 [REAL-DEVICE-CHECKLIST.md](./evidence/REAL-DEVICE-CHECKLIST.md) 执行；`V2-P3-06` 启动器录屏验收需游戏退出后走冷启动路径，等 owner 决策是否退出当前在档游戏（在档第1年夏17日，退出有丢当天进度风险）。
-2. 认领 **`V2-P3-04`（Digital Life L1：自主浏览、多模态内容理解、兴趣形成与日常调度）**：查阅 `docs/v2/blueprint/08-Digital-Life社交浏览与记忆.md`、[REQUIREMENTS.md](./REQUIREMENTS.md)（`REQ-SOC-01`）、[ADR-004](./adr/ADR-004-input-preemption-scope.md)，复用本工单的 `BrowserRuntime` / `AccountVault` / `BrowserProfileMgr` / 确定性 runner 与 `awaiting_human` 交接，禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
-3. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
+1. **真机验收积压清理中**：`V2-P2-06`、`V2-P3-03`（3c 真实注入接线）、`V2-P3-06`（中控台「启动」真实点击）已于 2026-11-26 转 `DONE`；`V2-P3-01` 真机补验已完成能自动的部分并维持 `IMPLEMENTED_UNVERIFIED`（缺合法 `.moc3`/`.vrm`、SVS/SVC 后端权重与索引、4 组情绪参考音频，已列清单报 owner）；`V2-P1-06` / `V2-P2-01` 仍只需要星露谷 + SMAPI（本机已具备），按 [REAL-DEVICE-CHECKLIST.md](./evidence/REAL-DEVICE-CHECKLIST.md) 执行；剩余 `V2-P2-08`（双端联机）、`V2-P3-02`（真实开播）待排。
+2. **P3-06 遗留两个真实缺陷待派单**：① 启动后 BWF 就绪竞态（启动瞬间 `autodriveStart` 报「MCP 不可达」，需重试轮询）；② CGEvent 点击依赖窗口真正处于系统前台（建议改用 AXPress 走辅助功能 API，不依赖焦点）。
+3. 认领 **`V2-P3-05`（多被动桌宠同屏）** 或下一个候选工单：查阅 `docs/v2/blueprint/` 对应蓝图、[REQUIREMENTS.md](./REQUIREMENTS.md)、[ADR-004](./adr/ADR-004-input-preemption-scope.md)；禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
+4. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
 
 ## 4. 2026-11-26 合流记录（两条支线已回流主线）
 
