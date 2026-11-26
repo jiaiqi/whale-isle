@@ -2,10 +2,10 @@
  * V2-P3-03b Electron 确定性浏览器引擎（REQ-AUTO-01 / REQ-SEC-02）：
  * - 用隐藏 BrowserWindow + 每角色/账号独立 partition 执行确定性 DOM 动作，不连接用户日常 Chrome Profile。
  * - 只允许 http/https；页面正文仅作为数据返回，绝不执行页面给出的指令。
- * - Cookie 从隔离 Profile 的 cookies.json 单向导入 Chromium partition（不进 Git、不进导出）。
+ * - Cookie 双向同步：启动时从隔离 Profile 的 cookies.json 导入 Chromium partition，dispose 时把 partition 现状回写 cookies.json（人工交接登录的登录态因此跨任务存活）。不进 Git、不进导出。
  * - Playwright 引擎可在同一 BrowserEnginePort 下替换，本文件是当前无额外依赖的默认可执行引擎。
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BrowserWindow, session, type Session } from 'electron';
 import type { BrowserEnginePort, BrowserPageSnapshot } from '@workbench/runtime-core';
@@ -101,6 +101,8 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
   }
 
   async dispose(): Promise<void> {
+    // 回写 Cookie 再关窗：人工交接登录后的新登录态必须落盘，否则下轮任务无登录态（单向导入缺陷修复）
+    await this.persistCookies();
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
   }
@@ -177,6 +179,30 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
           .set({ url: url.toString(), name, value, sameSite: 'lax' })
           .catch(() => undefined);
       }
+    }
+  }
+
+  /**
+   * 把 partition 当前 Cookie 全量回写隔离 Profile 的 cookies.json（与 applyStoredCookies 互逆）。
+   * 原子写（tmp + rename）防半截文件；回写失败只告警不炸 dispose（清理路径不因此改变任务结论）。
+   * 隐私边界不变：cookies.json 只在隔离 Profile 目录（userData 下），不进 Git、不进导出。
+   */
+  private async persistCookies(): Promise<void> {
+    try {
+      const all = await this.partition.cookies.get({});
+      const store: CookieStore = {};
+      for (const cookie of all) {
+        const host = (cookie.domain ?? '').replace(/^\./, '');
+        if (host === '') continue;
+        const origin = `${cookie.secure === true ? 'https' : 'http'}://${host}`;
+        (store[origin] ??= {})[cookie.name] = cookie.value;
+      }
+      const file = join(this.profile.profileDir, 'cookies.json');
+      const tmpFile = `${file}.tmp`;
+      writeFileSync(tmpFile, `${JSON.stringify(store, null, 1)}\n`, 'utf8');
+      renameSync(tmpFile, file);
+    } catch (error) {
+      console.warn('[browser-engine] Cookie 回写失败：', error instanceof Error ? error.message : error);
     }
   }
 }
