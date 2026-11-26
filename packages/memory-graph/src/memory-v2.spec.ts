@@ -169,11 +169,20 @@ describe('V2-P1-04 human-like 5-category memory, fuzzy impressions & cascade har
     const diary = store.writeDiary('第1年春3日');
     expect(diary?.derivedFromIds).toContain(ev.id);
 
+    // 二级衍生（摘要的摘要）：从日记再派生的周记，级联删除必须一并带走
+    const weekly = store.addNode({
+      nodeType: 'summary',
+      text: '本周摘要（派生自日记）',
+      derivedFromIds: [diary!.id],
+    });
+
     // 级联真删除 ev 与 rel：验证衍生日记、图谱节点、磁盘 JSONL 原文、SQLite 回调及无明文审计
     const ledgerCallback = vi.fn((key: string) => key === 'viewer:u-99');
     const delEv = store.hardDelete(ev.id, { reason: '用户删除事件', onDeleteLedgerRef: ledgerCallback });
     expect(delEv.deleted).toBe(true);
     expect(delEv.audit?.deletedDerivedIds).toContain(diary!.id);
+    // 二级衍生（摘要的摘要）必须级联，否则成为指向已删节点的孤儿
+    expect(delEv.audit?.deletedDerivedIds).toContain(weekly.id);
 
     const delRel = store.hardDelete(rel.id, { reason: '用户删除常客记录', onDeleteLedgerRef: ledgerCallback });
     expect(delRel.deleted).toBe(true);

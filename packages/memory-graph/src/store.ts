@@ -403,18 +403,30 @@ export class MemoryStore {
       return { deleted: false, blockedReason: 'PROTECTED_SELF_MEMORY' };
     }
 
+    // 级联衍生集：BFS 展开到不动点——二级衍生（摘要的摘要）也必须级联，
+    // 此前只展开一层会让二级衍生成为指向已删节点的孤儿
     const derivedIds = new Set<string>();
-    for (const candidate of this.nodes.values()) {
-      if (candidate.id === nodeId) continue;
-      if (candidate.derivedFromIds?.includes(nodeId)) {
-        derivedIds.add(candidate.id);
+    let frontier: readonly string[] = [nodeId];
+    while (frontier.length > 0) {
+      const wave = new Set<string>(frontier);
+      const next: string[] = [];
+      for (const candidate of this.nodes.values()) {
+        if (candidate.id === nodeId || derivedIds.has(candidate.id)) continue;
+        if (candidate.derivedFromIds?.some((id) => wave.has(id))) {
+          derivedIds.add(candidate.id);
+          next.push(candidate.id);
+        }
       }
-    }
-    for (const edge of this.edges) {
-      if (edge.kind === 'instance' && edge.to === nodeId) {
-        const src = this.nodes.get(edge.from);
-        if (src && src.nodeType === 'summary') derivedIds.add(src.id);
+      for (const edge of this.edges) {
+        if (edge.kind === 'instance' && wave.has(edge.to)) {
+          const src = this.nodes.get(edge.from);
+          if (src && src.nodeType === 'summary' && !derivedIds.has(src.id)) {
+            derivedIds.add(src.id);
+            next.push(src.id);
+          }
+        }
       }
+      frontier = next;
     }
 
     const allRemoved = new Set<string>([nodeId, ...derivedIds]);
