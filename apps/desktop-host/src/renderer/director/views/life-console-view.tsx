@@ -600,7 +600,7 @@ export function LifeConsoleView({
 
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Goals */}
-            <div className="inset space-y-2 p-3">
+            <div className="inset min-w-0 space-y-2 p-3">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span>活跃目标栈（Goals）</span>
                 <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
@@ -628,11 +628,11 @@ export function LifeConsoleView({
                   <Plus size={11} />添加
                 </button>
               </div>
-              <div className="max-h-36 space-y-1 overflow-y-auto">
+              <div className="max-h-36 min-w-0 space-y-1 overflow-y-auto overflow-x-hidden">
                 {(snapshot?.goals ?? []).slice(-6).reverse().map((g) => (
-                  <div key={g.goalId} data-v2-goal-item className="rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
-                    <span className="font-medium">{g.title}</span>
-                    <span className="mono ml-1.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>[{g.status}]</span>
+                  <div key={g.goalId} data-v2-goal-item className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
+                    <span className="min-w-0 flex-1 truncate font-medium" title={g.title}>{g.title}</span>
+                    <span className="mono shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px]" style={{ color: 'var(--text-3)', background: 'var(--inset)', whiteSpace: 'nowrap' }}>{g.status}</span>
                   </div>
                 ))}
                 {(snapshot?.goals.length ?? 0) === 0 && (
@@ -642,7 +642,7 @@ export function LifeConsoleView({
             </div>
 
             {/* Commitments */}
-            <div className="inset space-y-2 p-3">
+            <div className="inset min-w-0 space-y-2 p-3">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span>主仆约定账本（Commitments）</span>
                 <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
@@ -670,11 +670,11 @@ export function LifeConsoleView({
                   <Plus size={11} />记下
                 </button>
               </div>
-              <div className="max-h-36 space-y-1 overflow-y-auto">
+              <div className="max-h-36 min-w-0 space-y-1 overflow-y-auto overflow-x-hidden">
                 {(snapshot?.commitments ?? []).slice(-6).reverse().map((c) => (
-                  <div key={c.commitmentId} data-v2-commitment-item className="rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
-                    <span className="font-medium">{c.title}</span>
-                    <span className="mono ml-1.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>{c.status}</span>
+                  <div key={c.commitmentId} data-v2-commitment-item className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke)' }}>
+                    <span className="min-w-0 flex-1 truncate font-medium" title={c.title}>{c.title}</span>
+                    <span className="mono shrink-0 rounded-full px-1.5 py-0.5 text-[9.5px]" style={{ color: 'var(--text-3)', background: 'var(--inset)', whiteSpace: 'nowrap' }}>{c.status}</span>
                   </div>
                 ))}
                 {(snapshot?.commitments.length ?? 0) === 0 && (
