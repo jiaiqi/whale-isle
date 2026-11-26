@@ -1,16 +1,15 @@
 /**
- * Whale Isle V2 — Obsidian Tide 四大签名组件与真实阶段标注（V2-P1-05）
+ * Whale Isle V2 — 四大签名组件与真实阶段标注（V2-P1-05 / Tidepaper v3.1 精修）
  * 1. SonarRing：投射 CharacterCore 9 态即时生命/呼吸/专注/思考/演奏状态
  * 2. ReceiptChip：严格四态（PENDING | COMPLETED | FAILED | UNCERTAIN）
  * 3. LicenseBadge：许可边界徽章（DEV_ONLY_NON_COMMERCIAL / COMMERCIAL_READY / MIT / Apache-2.0 等）
- * 4. ControlOwnershipHud：置顶常驻控制权 HUD（急停 F8 / 接管 F9 / 静默睡眠 F10）
+ * 4. ControlOwnershipHud：三层权属（活动 / 游戏角色租约 / 桌面键鼠租约）+ 急停 F8 / 接管 F9 / 睡眠 F10
  */
 import {
   AlertTriangle,
   Brain,
   CheckCircle2,
   Clock,
-  Cpu,
   Gamepad2,
   Hand,
   HelpCircle,
@@ -221,7 +220,7 @@ export function StageBadge({
   );
 }
 
-// ── 4. ControlOwnershipHud（置顶常驻控制权 HUD） ────────────────────────────
+// ── 4. ControlOwnershipHud（三层权属 + 急停） ───────────────────────────────
 
 const ACTIVITY_LABEL: Record<LifeActivityKind | string, string> = {
   companion: '桌面陪伴',
@@ -243,6 +242,23 @@ const CONTROL_META: Record<
   manual_takeover: { label: '人类接管中', toneClass: 'pill-amber' },
 };
 
+/** 设备级 ComputerUseLease 视图（ADR-004）；未接线时由 HUD 如实显示「未接入 · P3」 */
+export type ComputerLeaseState = 'held' | 'free' | 'preempted' | 'halted' | 'permission_denied' | 'unsupported';
+
+export interface ComputerLeaseView {
+  state: ComputerLeaseState;
+  label: string;
+  detail?: string;
+  holderId?: string | null;
+  purpose?: string;
+  humanOverride?: boolean;
+  /** `inputExecutor.mode`：disabled / dry_run（界面显示「预演」）/ live */
+  inputMode?: 'disabled' | 'dry_run' | 'live';
+  /** `pendingHandoffs` 中 status='awaiting_human' 的数量 */
+  pendingHandoffs?: number;
+  halted?: boolean;
+}
+
 export interface ControlOwnershipHudProps {
   displayName: string;
   characterId: string;
@@ -255,14 +271,8 @@ export interface ControlOwnershipHudProps {
   brainMode: string;
   asleep: boolean;
   busy: boolean;
-  /** ADR-004：桌面级 ComputerUseLease 与游戏级 GameCharacterControlLease 分开显示 */
-  computerLease?: {
-    active: boolean;
-    holderId: string | null;
-    humanOverride: boolean;
-    pendingHandoffs: number;
-    runnerReady: boolean;
-  } | null;
+  /** ADR-004：V2-P3-03 真实设备级租约；不传则诚实显示未接入 */
+  computerLease?: ComputerLeaseView | null;
   onEmergencyHalt: () => void;
   onToggleTakeover: () => void;
   onResumeAutonomous: () => void;
@@ -292,147 +302,204 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
   } = props;
 
   const isTakeover = !halted && (humanControl || controlMode === 'manual_takeover');
-  const ctrl = halted
-    ? { label: 'P0 急停锁定', toneClass: 'pill-red' }
-    : isTakeover
-      ? CONTROL_META.manual_takeover!
-      : (CONTROL_META[controlMode] ?? CONTROL_META.autonomous!);
+  const ctrl = isTakeover ? CONTROL_META.manual_takeover! : (CONTROL_META[controlMode] ?? CONTROL_META.autonomous!);
   const actLabel = ACTIVITY_LABEL[activityMode] ?? activityMode;
   const exprMeta = EXPRESSION_META[(halted ? 'halted' : expression) as CharacterExpression | 'halted'] ?? EXPRESSION_META.idle;
+  const computerLeaseView = computerLease ?? null;
+  const hasComputerLease = computerLeaseView !== null;
+  const leaseValue = computerLeaseView !== null ? computerLeaseView.label : '未接入 · P3';
+  const computerLeaseAttr = computerLeaseView === null
+    ? 'idle'
+    : computerLeaseView.humanOverride === true
+      ? 'human'
+      : computerLeaseView.state === 'held'
+        ? 'ai'
+        : 'idle';
+  const gameLeaseAttr = humanControl ? 'human' : brainMode === 'paused' ? 'paused' : running ? 'ai' : 'idle';
+  const inputMode = computerLeaseView?.inputMode ?? null;
+  const pendingHandoffs = computerLeaseView?.pendingHandoffs ?? 0;
+  const leaseDetail = computerLeaseView === null ? '' : (computerLeaseView.detail ?? computerLeaseView.purpose ?? '');
+  const leaseTitle = computerLeaseView !== null
+    ? (leaseDetail !== '' ? `ComputerUseLease：${leaseValue} · ${leaseDetail}` : `ComputerUseLease：${leaseValue}`)
+    : 'ComputerUseLease 由 V2-P3-03 接入；当前如实标注未接入，绝不伪造设备级控制状态';
+
+  if (halted) {
+    return (
+      <div
+        className="wb-hud is-halted"
+        data-v2-control-hud
+        data-halted="true"
+        data-control-mode={controlMode}
+        data-activity-mode={activityMode}
+        {...(running ? { 'data-testid': 'human-control-bar' } : {})}
+      >
+        <button
+          type="button"
+          onClick={onOpenLifeConsole}
+          className="wb-hud-person"
+          title="点击打开生命中枢（12 域快照 / 统一表演舞台 / 额度矩阵 / 记忆控制）"
+        >
+          <SonarRing expression="halted" halted size={24} label={`${displayName} · 急停锁定`} />
+          <span className="wb-hud-name">{displayName}</span>
+          <span className="wb-hud-id">{characterId}</span>
+        </button>
+        <span className="wb-halt-copy">
+          <OctagonAlert size={14} />
+          <span>紧急停止已生效：AI 不再发送新的游戏控制、键鼠或对外发布动作。</span>
+        </span>
+        <div className="wb-hud-actions">
+          <button
+            type="button"
+            data-v2-hud-resume
+            disabled={busy}
+            onClick={onResumeAutonomous}
+            className="wb-ctrl"
+            style={{ padding: '5px 12px', fontSize: 11, fontWeight: 650 }}
+            title="解除锁定并恢复 AI 自主托管模式"
+          >
+            <Play size={12} />
+            <span>恢复自主</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      className="wb-hud flex flex-wrap items-center gap-2 border-b px-4 py-1.5 text-[11px]"
+      className={`wb-hud${isTakeover ? ' is-takeover' : ''}`}
       data-v2-control-hud
-      data-halted={halted ? 'true' : 'false'}
+      data-halted="false"
       data-control-mode={controlMode}
       data-activity-mode={activityMode}
       {...(running ? { 'data-testid': 'human-control-bar' } : {})}
-      style={{
-        borderColor: 'var(--stroke)',
-        background: halted
-          ? 'color-mix(in srgb, var(--red) 10%, var(--bg))'
-          : isTakeover
-            ? 'color-mix(in srgb, var(--amber) 10%, var(--bg))'
-            : 'color-mix(in srgb, var(--surface) 74%, var(--bg))',
-        backdropFilter: 'blur(16px)',
-      }}
     >
       <button
         type="button"
         onClick={onOpenLifeConsole}
-        className="flex items-center gap-2 rounded-full px-1.5 py-0.5 transition hover:bg-[var(--surface-2)]"
-        title="点击打开 V2 生命中枢（12 域快照 / 统一表演舞台 / 额度矩阵 / 记忆控制）"
+        className="wb-hud-person"
+        title="点击打开生命中枢（12 域快照 / 统一表演舞台 / 额度矩阵 / 记忆控制）"
       >
-        <SonarRing expression={expression} halted={halted} size={22} label={`${displayName} · ${exprMeta.label}`} />
-        <span className="wb-display text-[13px] font-semibold" style={{ color: 'var(--text-1)' }}>{displayName}</span>
-        <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>{characterId}</span>
+        <SonarRing expression={expression} halted={false} size={24} label={`${displayName} · ${exprMeta.label}`} />
+        <span className="wb-hud-name">{displayName}</span>
+        <span className="wb-hud-id">{characterId}</span>
       </button>
 
-      <span className={`pill ${ctrl.toneClass}`} style={{ fontSize: 10 }}>
-        {isTakeover ? <Hand size={10} /> : <Cpu size={10} />}
-        <span>控制权：{ctrl.label}</span>
-      </span>
+      <div className="wb-lease" role="group" aria-label="三层控制权归属">
+        <div className="wb-lease-item" title={`LifeActivityAuthority：当前活动与表达态 ${actLabel} / ${exprMeta.label}`}>
+          <span className="lb">活动 · LifeActivity</span>
+          <span className="vl"><Sparkles size={9} style={{ display: 'inline', verticalAlign: -1, marginRight: 4 }} />{actLabel} · {exprMeta.label}</span>
+        </div>
+        <div
+          className={`wb-lease-item${isTakeover ? ' on' : ''}`}
+          data-v2-game-lease={gameLeaseAttr}
+          title={`GameCharacterControlLease：${ctrl.label}（只认 F7 / F9 / F8，游戏内普通键鼠不打断 AI）`}
+        >
+          <span className="lb">游戏角色 · GameCharacter</span>
+          <span className="vl"><Gamepad2 size={9} style={{ display: 'inline', verticalAlign: -1, marginRight: 4 }} />{ctrl.label}</span>
+        </div>
+        <div
+          className={`wb-lease-item${computerLeaseView !== null ? ' on' : ' pending'}`}
+          data-v2-computer-lease={computerLeaseAttr}
+          title={leaseTitle}
+        >
+          <span className="lb">桌面键鼠 · ComputerUse</span>
+          <span className="vl">
+            <Monitor size={9} style={{ display: 'inline', verticalAlign: -1, marginRight: 4 }} />
+            <span className="vl-text">{leaseValue}</span>
+            {inputMode !== null && (
+              <span className="wb-input-chip" data-v2-input-mode={inputMode} title={`OS 输入执行器：${inputMode}`}>
+                {inputMode === 'dry_run' ? '预演' : inputMode}
+              </span>
+            )}
+          </span>
+          {leaseDetail !== '' && <span className="vl-sub" title={leaseDetail}>{leaseDetail}</span>}
+        </div>
+      </div>
 
-      {/* ADR-004：游戏角色租约与桌面租约分开表达，绝不合并成一个「控制权」标签 */}
-      <span
-        className="pill pill-blue"
-        data-v2-game-lease={humanControl ? 'human' : brainMode === 'paused' ? 'paused' : running ? 'ai' : 'idle'}
-        style={{ fontSize: 10 }}
-        title="GameCharacterControlLease：只认 F7、界面开关与 P0 急停；普通键鼠输入不影响它（T-M6-73）"
-      >
-        <Gamepad2 size={10} />
-        <span>游戏角色：{humanControl ? '人类接管' : brainMode === 'paused' ? 'AI 安全暂停' : running ? 'AI 自主' : '未运行'}</span>
-      </span>
-
-      <span
-        className="pill"
-        data-v2-computer-lease={computerLease?.humanOverride ? 'human' : computerLease?.active ? 'ai' : 'idle'}
-        style={{ fontSize: 10 }}
-        title="ComputerUseLease：设备级桌面键鼠/前台窗口租约；用户物理输入 ≤1s 抢占。外部 Harness 不受其约束"
-      >
-        <Monitor size={10} />
-        <span>
-          桌面租约：{computerLease?.humanOverride ? '人类优先' : computerLease?.active ? `AI 独占${computerLease.holderId ? ` · ${computerLease.holderId}` : ''}` : '空闲'}
-          {computerLease && computerLease.pendingHandoffs > 0 ? ` · 待人工 ${computerLease.pendingHandoffs}` : ''}
-          {computerLease?.runnerReady === false ? ' · 引擎未接线' : ''}
-        </span>
-      </span>
-
-      <span className="pill" style={{ fontSize: 10 }} title={`当前 LifeRuntime 活动与表达态：${actLabel} / ${exprMeta.label}`}>
-        {activityMode === 'gaming' ? <Gamepad2 size={10} /> : <Sparkles size={10} />}
-        <span>{actLabel} · {exprMeta.label}</span>
-      </span>
+      {pendingHandoffs > 0 && (
+        <button
+          type="button"
+          className="wb-handoff-alert"
+          data-v2-computer-handoff={pendingHandoffs}
+          onClick={onOpenLifeConsole}
+          title="浏览器任务停在验证码 / 登录 / 风控页，需要人类亲自处理；鲸屿不会自动绕过"
+        >
+          <ShieldAlert size={11} />
+          <span>等待你处理验证码 / 登录</span>
+          <b>{pendingHandoffs}</b>
+        </button>
+      )}
 
       {running && (
-        <span className="pill pill-blue" style={{ fontSize: 10 }}>
-          <Brain size={10} />
+        <span className="pill pill-blue" style={{ fontSize: 9.5 }}>
+          <Brain size={9} />
           <span>{brainMode === 'paused' ? 'AI 安全暂停' : brainMode === 'rule-standin' ? '规则代驾中' : brainMode === 'rule' ? '手动规则模式' : '游戏接管中'}</span>
         </span>
       )}
 
       {asleep && (
-        <span className="pill pill-amber" style={{ fontSize: 10 }}>
-          <Moon size={10} />
+        <span className="pill pill-amber" style={{ fontSize: 9.5 }}>
+          <Moon size={9} />
           <span>安静睡眠</span>
         </span>
       )}
 
-      <div className="flex-1" />
-
-      <button
-        type="button"
-        data-v2-hud-sleep
-        disabled={busy}
-        onClick={onToggleSleep}
-        className={`wb-ctrl${asleep ? ' on-blue' : ''}`}
-        style={{ padding: '3px 10px', fontSize: 10.5 }}
-        title="F10：切换睡眠安静模式（暂停主动发声）"
-      >
-        {asleep ? <Sun size={11} /> : <Moon size={11} />}
-        <span>{asleep ? '唤醒 F10' : '睡眠 F10'}</span>
-      </button>
-
-      <button
-        type="button"
-        data-v2-hud-takeover
-        disabled={busy}
-        onClick={onToggleTakeover}
-        className={`wb-ctrl${isTakeover ? ' on-green' : ''}`}
-        style={{ padding: '3px 10px', fontSize: 10.5 }}
-        title="F9：一键接管或交还给 AI 托管"
-      >
-        <Hand size={11} />
-        <span>{isTakeover ? '交还给 AI F9' : '我来操作 F9'}</span>
-      </button>
-
-      {(halted || controlMode === 'manual_takeover') && (
+      <div className="wb-hud-actions">
         <button
           type="button"
-          data-v2-hud-resume
+          data-v2-hud-sleep
           disabled={busy}
-          onClick={onResumeAutonomous}
-          className="wb-ctrl on-green"
-          style={{ padding: '3px 10px', fontSize: 10.5 }}
-          title="解除锁定并恢复 AI 自主托管模式"
+          onClick={onToggleSleep}
+          className={`wb-ctrl${asleep ? ' on-blue' : ''}`}
+          style={{ padding: '5px 10px', fontSize: 10.5 }}
+          title="F10：切换睡眠安静模式（暂停主动发声）"
         >
-          <Play size={11} />
-          <span>恢复自主</span>
+          {asleep ? <Sun size={11} /> : <Moon size={11} />}
+          <span>{asleep ? '唤醒' : '睡眠'} <span className="kbd" style={{ height: 15, minWidth: 15 }}>F10</span></span>
         </button>
-      )}
 
-      <button
-        type="button"
-        data-v2-hud-halt
-        disabled={busy}
-        onClick={onEmergencyHalt}
-        className="wb-ctrl on-red"
-        style={{ padding: '3px 10px', fontSize: 10.5, fontWeight: 650 }}
-        title="F8：P0 紧急停手（停游戏动作 + 清混音器 + 锁定活动写入）"
-      >
-        <OctagonAlert size={11} />
-        <span>急停 F8</span>
-      </button>
+        <button
+          type="button"
+          data-v2-hud-takeover
+          disabled={busy}
+          onClick={onToggleTakeover}
+          className={`wb-ctrl${isTakeover ? ' on-green' : ''}`}
+          style={{ padding: '5px 10px', fontSize: 10.5 }}
+          title="F9：一键接管或交还给 AI 托管"
+        >
+          <Hand size={11} />
+          <span>{isTakeover ? '交还给 AI' : '我来操作'} <span className="kbd" style={{ height: 15, minWidth: 15 }}>F9</span></span>
+        </button>
+
+        {isTakeover && (
+          <button
+            type="button"
+            data-v2-hud-resume
+            disabled={busy}
+            onClick={onResumeAutonomous}
+            className="wb-ctrl on-green"
+            style={{ padding: '5px 10px', fontSize: 10.5 }}
+            title="恢复 AI 自主托管模式"
+          >
+            <Play size={11} />
+            <span>恢复自主</span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          data-v2-hud-halt
+          disabled={busy}
+          onClick={onEmergencyHalt}
+          className="btn-stop"
+          title="F8：P0 紧急停手（停游戏动作 + 清混音器 + 锁定活动写入）"
+        >
+          <OctagonAlert size={12} />
+          <span>急停</span>
+          <span className="kbd">F8</span>
+        </button>
+      </div>
     </div>
   );
 }
