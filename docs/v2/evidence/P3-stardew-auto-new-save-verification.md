@@ -2,7 +2,7 @@
 
 > 工单范围：`V2-P3-07`（拆分为 `V2-P3-07A` → `(07B ∥ 07C)` → `07D` → `07E` 及 `fix(mods)` 1.6 小屋槽位修补）  
 > 分支：`stardew-auto-new-save`（基于 `feat/whale-isle-v2`）  
-> 结论：**契约、BWF C# 1.6 公开 API 建档/房主补丁、就绪判定硬化、默认隔离+中文双保险、 UI 状态机（10/10）以及  真机冷启动 R1–R4 与真实 Electron 中控台点击拉起 R5 全部实测通过； 全系列（–）全部达成 ，owner 常规存档  与  全程零写入、零改写。**
+> 结论：**契约、BWF C# 1.6 公开 API 建档/房主补丁、就绪判定硬化、默认隔离+中文双保险、`[E2E-HOST]` UI 状态机（10/10）以及 `[REAL-DEVICE]` 真机冷启动 R1–R4 与真实 Electron 中控台点击拉起 R5 全部实测通过；`V2-P3-07` 全系列（`07A`–`07E`）全部达成 `DONE`，owner 常规存档 `~/.config/StardewValley/Saves/` 与 `startup_preferences` 全程零写入、零改写。**
 
 ---
 
