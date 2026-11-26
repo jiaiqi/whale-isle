@@ -975,6 +975,14 @@ export type RiceBowlStatus = z.infer<typeof RiceBowlStatusSchema>;
  * 落 userData/pet-desktop-prefs.json（主进程文件 KV，坏文件回落默认值）；渲染层经 preload 读写，
  * 后续缩放 UI、角色切换、多 MCP 端点都复用这一份契约（跨语言生成 TS/JSON Schema/Pydantic）。
  */
+export const PetBubbleFontIdSchema = z.enum([
+  'shangshou-gummy',
+  'handwriting',
+  'rounded',
+  'formal',
+]);
+export type PetBubbleFontId = z.infer<typeof PetBubbleFontIdSchema>;
+
 export const PetDesktopPrefsSchema = z.object({
   /** 窗口左上角 DIP 坐标；displayId 为空表示主屏/未知 */
   position: z.object({
@@ -1005,6 +1013,8 @@ export const PetDesktopPrefsSchema = z.object({
   windowLayer: z.enum(['always', 'follow-ai', 'normal']).default('always'),
   /** 气泡字号独立缩放（T-M6-63）：null=跟随人物 scale，非 null 时单独生效 */
   bubbleFontScale: z.number().min(0.7).max(1.6).nullable().default(null),
+  /** 气泡可选字体：保留上首软糖体，可选手写/圆体/正式体 SIL OFL 1.1 随包字体 */
+  bubbleFontId: PetBubbleFontIdSchema.default('shangshou-gummy'),
   /** 允许桌宠空闲自主巡逻（T-M6-64：25–45s 低概率短距离散步） */
   patrolEnabled: z.boolean().default(true),
   /** 小本子手写体（T-M6-65）：auto=按角色自动匹配，其余为具体字体 id */
@@ -1578,13 +1588,26 @@ export const PetBubbleKindSchema = z.enum([
   'notice',
   'reaction',
   'hint',
+  'legacy',
 ]);
 export type PetBubbleKind = z.infer<typeof PetBubbleKindSchema>;
+
+export const PetBubbleMoodSchema = z.enum([
+  'happy',
+  'angry',
+  'sleepy',
+  'surprised',
+  'thinking',
+  'coquettish',
+  'shy',
+]);
+export type PetBubbleMood = z.infer<typeof PetBubbleMoodSchema>;
 
 export const PetBubbleEventSchema = z.object({
   agentId: z.string().min(1).default('default'),
   text: z.string(),
   kind: PetBubbleKindSchema.default('dialog'),
+  mood: PetBubbleMoodSchema.optional(),
   ttlMs: z.number().int().positive().max(60_000).optional(),
 });
 export type PetBubbleEvent = z.infer<typeof PetBubbleEventSchema>;

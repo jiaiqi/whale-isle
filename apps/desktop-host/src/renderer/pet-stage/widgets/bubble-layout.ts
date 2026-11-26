@@ -1,14 +1,16 @@
 /**
- * 智能多类型气泡布局纯函数：
- *   - 感知角色位置、朝向、窗口贴边与舞台障碍物（workCards / riceBowl）；
- *   - 根据同屏数量动态放大气泡尺寸，突破旧版 220px 狭窄上限；
- *   - 三阶段防重叠求解 + 极矮/窄舞台水平分栏兜底，保证几何 100% 不重叠且不越界；
+ * 智能多类型气泡布局、8 向连续融合 SVG 尾巴与 3 粒飘点纯函数（零 DOM）。
+ *   - 感知角色位置、朝向、窗口贴边、障碍物（workCards / riceBowl）与脸身保护区；
+ *   - 保留第 7 类 legacy（经典半透蓝玻泡）在角色右下角的原位风格与避障逻辑；
+ *   - 单路径 SVG 闭合轮廓保证气泡与尾巴无缝衔接，上/下/左/右全方向自然生长；
  *   - 保留 computeBubbleLayout / rectsOverlap 向后兼容出口。
  */
 import {
-  bubbleTheme,
   estimateBubbleSize,
+  resolveBubbleStyle,
   type BubbleKind,
+  type BubbleMood,
+  type BubbleTailKind,
 } from './bubble-types';
 
 export interface StageBox {
@@ -30,7 +32,16 @@ export interface BubbleLayout {
 
 export type CharacterFacing = 'left' | 'right' | 'center';
 export type ScreenEdgeHint = 'left' | 'right' | null;
-export type BubbleTailDirection = 'bottom-left' | 'bottom-right' | 'bottom-center' | 'left' | 'right' | 'none';
+export type BubbleTailDirection =
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'left'
+  | 'right'
+  | 'none';
 
 export interface CharacterAnchor {
   xRatio: number;
@@ -48,10 +59,12 @@ export interface BubbleStageContext {
 export interface ActiveBubbleItem {
   kind: BubbleKind;
   text: string;
+  mood?: BubbleMood | null;
 }
 
 export interface PlacedBubble {
   kind: BubbleKind;
+  mood?: BubbleMood | null;
   rect: BubbleRect;
   tail: BubbleTailDirection;
   side: 'left' | 'right' | 'center';
@@ -62,6 +75,19 @@ export interface SmartBubbleLayout {
   items: Partial<Record<BubbleKind, PlacedBubble>>;
   ordered: PlacedBubble[];
   preferredSide: 'left' | 'right';
+}
+
+export interface BubbleShellGeometry {
+  path: string;
+  svgWidth: number;
+  svgHeight: number;
+  pad: number;
+}
+
+export interface CloudDot {
+  cx: number;
+  cy: number;
+  r: number;
 }
 
 export const MAX_VISIBLE_BUBBLES = 3;
@@ -113,13 +139,15 @@ export function resolvePreferredSide(context: BubbleStageContext = {}): 'left' |
   return 'right';
 }
 
-/** 计算尾巴朝向：根据气泡相对角色头部的几何方位精确指向角色。 */
+/** 计算尾巴朝向：覆盖上/下/左/右 8 向，按气泡与角色头部的相对几何方位精确指向角色。 */
 export function resolveTailDirection(
   kind: BubbleKind,
   rect: BubbleRect,
   anchorPx: { x: number; y: number },
+  tailKindOverride?: BubbleTailKind,
 ): BubbleTailDirection {
-  if (bubbleTheme(kind).tailKind === 'none') return 'none';
+  const tailKind = tailKindOverride ?? resolveBubbleStyle(kind).tailKind;
+  if (tailKind === 'none') return 'none';
   const cx = rect.x + rect.width / 2;
   const bottom = rect.y + rect.height;
   if (bottom <= anchorPx.y + 18) {
@@ -127,7 +155,207 @@ export function resolveTailDirection(
     if (cx > anchorPx.x + 24) return 'bottom-left';
     return 'bottom-center';
   }
+  if (rect.y >= anchorPx.y + 38) {
+    if (cx < anchorPx.x - 24) return 'top-right';
+    if (cx > anchorPx.x + 24) return 'top-left';
+    return 'top-center';
+  }
   return cx >= anchorPx.x ? 'left' : 'right';
+}
+
+/**
+ * 生成气泡 + 尾巴的单条闭合 SVG 外壳路径（无任何接缝与断开）。
+ * 主体严格占用坐标 [pad .. pad + width] × [pad .. pad + height]，尾巴向外延伸至多 11px。
+ */
+export function buildBubbleShellPath(input: {
+  width: number;
+  height: number;
+  radius: number;
+  tail: BubbleTailDirection;
+  tailKind: BubbleTailKind;
+  pad?: number;
+}): BubbleShellGeometry {
+  const pad = input.pad ?? 14;
+  const w = Math.max(28, Math.round(input.width));
+  const h = Math.max(20, Math.round(input.height));
+  const x0 = pad;
+  const y0 = pad;
+  const x1 = pad + w;
+  const y1 = pad + h;
+  const r = Math.max(4, Math.min(Math.round(input.radius), Math.floor(Math.min(w, h) / 2) - 1));
+  const tail = input.tailKind === 'cloud' || input.tailKind === 'none' ? 'none' : input.tail;
+  const isSharp = input.tailKind === 'sharp';
+  const tailLen = isSharp ? 12 : 10;
+  const bw = Math.min(9, Math.max(5, Math.floor((Math.min(w, h) - r * 2) * 0.25)));
+
+  const seg: string[] = [`M ${x0 + r} ${y0}`];
+
+  // 顶边（左 → 右）
+  if (tail === 'top-left' || tail === 'top-center' || tail === 'top-right') {
+    const safeMinX = x0 + r + bw + 3;
+    const safeMaxX = x1 - r - bw - 3;
+    const rawTx = tail === 'top-left'
+      ? x0 + r + Math.min(24, Math.round(w * 0.22))
+      : tail === 'top-right'
+        ? x1 - r - Math.min(24, Math.round(w * 0.22))
+        : Math.round((x0 + x1) / 2);
+    const tx = Math.min(safeMaxX, Math.max(safeMinX, rawTx));
+    const tilt = tail === 'top-left' ? -5 : tail === 'top-right' ? 5 : 0;
+    const tipX = tx + tilt;
+    const tipY = y0 - tailLen;
+    if (tx - bw > x0 + r) seg.push(`L ${tx - bw} ${y0}`);
+    if (isSharp) {
+      seg.push(`Q ${tx - 3} ${y0}, ${tipX} ${tipY}`);
+      seg.push(`Q ${tx + 3} ${y0}, ${tx + bw} ${y0}`);
+    } else {
+      seg.push(`Q ${tx - 3} ${y0}, ${tipX - 1.5} ${tipY + 1.5}`);
+      seg.push(`Q ${tipX} ${tipY - 1}, ${tipX + 1.5} ${tipY + 1.5}`);
+      seg.push(`Q ${tx + 3} ${y0}, ${tx + bw} ${y0}`);
+    }
+  }
+  seg.push(`L ${x1 - r} ${y0}`);
+  seg.push(`Q ${x1} ${y0}, ${x1} ${y0 + r}`);
+
+  // 右边（上 → 下）
+  if (tail === 'right') {
+    const safeMinY = y0 + r + bw + 2;
+    const safeMaxY = y1 - r - bw - 2;
+    const ty = Math.min(safeMaxY, Math.max(safeMinY, Math.round((y0 + y1) / 2)));
+    const tipX = x1 + tailLen;
+    const tipY = ty + 3;
+    if (ty - bw > y0 + r) seg.push(`L ${x1} ${ty - bw}`);
+    if (isSharp) {
+      seg.push(`Q ${x1} ${ty - 2}, ${tipX} ${tipY}`);
+      seg.push(`Q ${x1} ${ty + 3}, ${x1} ${ty + bw}`);
+    } else {
+      seg.push(`Q ${x1} ${ty - 2}, ${tipX - 1.5} ${tipY - 1.5}`);
+      seg.push(`Q ${tipX + 1} ${tipY}, ${tipX - 1.5} ${tipY + 1.5}`);
+      seg.push(`Q ${x1} ${ty + 3}, ${x1} ${ty + bw}`);
+    }
+  }
+  seg.push(`L ${x1} ${y1 - r}`);
+  seg.push(`Q ${x1} ${y1}, ${x1 - r} ${y1}`);
+
+  // 底边（右 → 左）
+  if (tail === 'bottom-right' || tail === 'bottom-center' || tail === 'bottom-left') {
+    const safeMinX = x0 + r + bw + 3;
+    const safeMaxX = x1 - r - bw - 3;
+    const rawTx = tail === 'bottom-left'
+      ? x0 + r + Math.min(24, Math.round(w * 0.22))
+      : tail === 'bottom-right'
+        ? x1 - r - Math.min(24, Math.round(w * 0.22))
+        : Math.round((x0 + x1) / 2);
+    const tx = Math.min(safeMaxX, Math.max(safeMinX, rawTx));
+    const tilt = tail === 'bottom-left' ? -5 : tail === 'bottom-right' ? 5 : 0;
+    const tipX = tx + tilt;
+    const tipY = y1 + tailLen;
+    if (tx + bw < x1 - r) seg.push(`L ${tx + bw} ${y1}`);
+    if (isSharp) {
+      seg.push(`Q ${tx + 3} ${y1}, ${tipX} ${tipY}`);
+      seg.push(`Q ${tx - 3} ${y1}, ${tx - bw} ${y1}`);
+    } else {
+      seg.push(`Q ${tx + 3} ${y1}, ${tipX + 1.5} ${tipY - 1.5}`);
+      seg.push(`Q ${tipX} ${tipY + 1}, ${tipX - 1.5} ${tipY - 1.5}`);
+      seg.push(`Q ${tx - 3} ${y1}, ${tx - bw} ${y1}`);
+    }
+  }
+  seg.push(`L ${x0 + r} ${y1}`);
+  seg.push(`Q ${x0} ${y1}, ${x0} ${y1 - r}`);
+
+  // 左边（下 → 上）
+  if (tail === 'left') {
+    const safeMinY = y0 + r + bw + 2;
+    const safeMaxY = y1 - r - bw - 2;
+    const ty = Math.min(safeMaxY, Math.max(safeMinY, Math.round((y0 + y1) / 2)));
+    const tipX = x0 - tailLen;
+    const tipY = ty + 3;
+    if (ty + bw < y1 - r) seg.push(`L ${x0} ${ty + bw}`);
+    if (isSharp) {
+      seg.push(`Q ${x0} ${ty + 3}, ${tipX} ${tipY}`);
+      seg.push(`Q ${x0} ${ty - 2}, ${x0} ${ty - bw}`);
+    } else {
+      seg.push(`Q ${x0} ${ty + 3}, ${tipX + 1.5} ${tipY + 1.5}`);
+      seg.push(`Q ${tipX - 1} ${tipY}, ${tipX + 1.5} ${tipY - 1.5}`);
+      seg.push(`Q ${x0} ${ty - 2}, ${x0} ${ty - bw}`);
+    }
+  }
+  seg.push(`L ${x0} ${y0 + r}`);
+  seg.push(`Q ${x0} ${y0}, ${x0 + r} ${y0} Z`);
+
+  return {
+    path: seg.join(' '),
+    svgWidth: w + pad * 2,
+    svgHeight: h + pad * 2,
+    pad,
+  };
+}
+
+/** 生成精致的 3 颗递减思绪云粒（覆盖上/下/左/右全方向）。 */
+export function buildThoughtCloudDots(input: {
+  width: number;
+  height: number;
+  tail: BubbleTailDirection;
+  pad?: number;
+}): CloudDot[] {
+  if (input.tail === 'none') return [];
+  const pad = input.pad ?? 14;
+  const w = Math.max(28, Math.round(input.width));
+  const h = Math.max(20, Math.round(input.height));
+  const x0 = pad;
+  const y0 = pad;
+  const x1 = pad + w;
+  const y1 = pad + h;
+
+  switch (input.tail) {
+    case 'left':
+      return [
+        { cx: x0 - 4, cy: Math.round(y0 + h * 0.48), r: 4.1 },
+        { cx: x0 - 9, cy: Math.round(y0 + h * 0.56), r: 2.8 },
+        { cx: x0 - 12.5, cy: Math.round(y0 + h * 0.63), r: 1.7 },
+      ];
+    case 'right':
+      return [
+        { cx: x1 + 4, cy: Math.round(y0 + h * 0.48), r: 4.1 },
+        { cx: x1 + 9, cy: Math.round(y0 + h * 0.56), r: 2.8 },
+        { cx: x1 + 12.5, cy: Math.round(y0 + h * 0.63), r: 1.7 },
+      ];
+    case 'top-left':
+      return [
+        { cx: x0 + Math.min(26, Math.round(w * 0.25)), cy: y0 - 4, r: 4.1 },
+        { cx: x0 + Math.min(20, Math.round(w * 0.19)), cy: y0 - 9, r: 2.8 },
+        { cx: x0 + Math.min(15, Math.round(w * 0.14)), cy: y0 - 12.5, r: 1.7 },
+      ];
+    case 'top-right':
+      return [
+        { cx: x1 - Math.min(26, Math.round(w * 0.25)), cy: y0 - 4, r: 4.1 },
+        { cx: x1 - Math.min(20, Math.round(w * 0.19)), cy: y0 - 9, r: 2.8 },
+        { cx: x1 - Math.min(15, Math.round(w * 0.14)), cy: y0 - 12.5, r: 1.7 },
+      ];
+    case 'top-center':
+      return [
+        { cx: Math.round(x0 + w / 2), cy: y0 - 4, r: 4.1 },
+        { cx: Math.round(x0 + w / 2), cy: y0 - 9, r: 2.8 },
+        { cx: Math.round(x0 + w / 2), cy: y0 - 12.5, r: 1.7 },
+      ];
+    case 'bottom-left':
+      return [
+        { cx: x0 + Math.min(26, Math.round(w * 0.25)), cy: y1 + 4, r: 4.1 },
+        { cx: x0 + Math.min(20, Math.round(w * 0.19)), cy: y1 + 9, r: 2.8 },
+        { cx: x0 + Math.min(15, Math.round(w * 0.14)), cy: y1 + 12.5, r: 1.7 },
+      ];
+    case 'bottom-right':
+      return [
+        { cx: x1 - Math.min(26, Math.round(w * 0.25)), cy: y1 + 4, r: 4.1 },
+        { cx: x1 - Math.min(20, Math.round(w * 0.19)), cy: y1 + 9, r: 2.8 },
+        { cx: x1 - Math.min(15, Math.round(w * 0.14)), cy: y1 + 12.5, r: 1.7 },
+      ];
+    case 'bottom-center':
+      return [
+        { cx: Math.round(x0 + w / 2), cy: y1 + 4, r: 4.1 },
+        { cx: Math.round(x0 + w / 2), cy: y1 + 9, r: 2.8 },
+        { cx: Math.round(x0 + w / 2), cy: y1 + 12.5, r: 1.7 },
+      ];
+  }
 }
 
 function clampRect(
@@ -174,6 +402,8 @@ function buildCandidates(
   const sideUpperY = Math.max(margin, Math.round(anchorPx.y - h * 0.65));
   const nearHeadY = Math.max(margin, Math.round(anchorPx.y - h * 0.45));
   const lowerSideY = Math.max(margin, bottomLimit - h);
+  const legacyBottom = stage.height > 150 ? Math.min(bottomLimit, stage.height - 35) : bottomLimit;
+  const legacyLowerY = Math.max(margin, legacyBottom - h);
 
   let rawList: BubbleRect[];
   switch (kind) {
@@ -201,6 +431,14 @@ function buildCandidates(
             { x: oppX, y: topY, width: w, height: h },
             { x: oppX, y: sideUpperY, width: w, height: h },
           ];
+      break;
+    case 'legacy':
+      rawList = [
+        { x: rightX, y: legacyLowerY, width: w, height: h },
+        { x: leftX, y: legacyLowerY, width: w, height: h },
+        { x: rightX, y: sideUpperY, width: w, height: h },
+        { x: leftX, y: sideUpperY, width: w, height: h },
+      ];
       break;
     case 'thought':
       rawList = [
@@ -242,11 +480,26 @@ function buildCandidates(
     const cOppX = preferred === 'right' ? leftX : stage.width - margin - cw;
     const cMainX = preferred === 'right' ? stage.width - margin - cw : leftX;
     const cMidY = Math.max(margin, Math.round(anchorPx.y - 12));
-    rawList.push(
-      { x: cOppX, y: topY, width: cw, height: ch },
-      { x: cOppX, y: cMidY, width: cw, height: ch },
-      { x: cMainX, y: cMidY, width: cw, height: ch },
-    );
+    const cLowerY = Math.max(margin, bottomLimit - ch);
+    if (kind === 'legacy') {
+      const cRightX = stage.width - margin - cw;
+      const cLegacyLowerY = Math.max(margin, legacyBottom - ch);
+      rawList.unshift({ x: cRightX, y: cLegacyLowerY, width: cw, height: ch });
+      rawList.push(
+        { x: cRightX, y: cMidY, width: cw, height: ch },
+        { x: cOppX, y: cLegacyLowerY, width: cw, height: ch },
+        { x: cOppX, y: topY, width: cw, height: ch },
+      );
+    } else {
+      const isPrimary = kind === 'dialog' || kind === 'reaction' || kind === 'hint';
+      const [firstX, secondX] = isPrimary ? [cMainX, cOppX] : [cOppX, cMainX];
+      rawList.push(
+        { x: firstX, y: topY, width: cw, height: ch },
+        { x: firstX, y: cMidY, width: cw, height: ch },
+        { x: secondX, y: topY, width: cw, height: ch },
+        { x: secondX, y: cMidY, width: cw, height: ch },
+      );
+    }
   }
 
   return rawList.map((r) => clampRect(r, stage, margin, bottomLimit));
@@ -293,7 +546,7 @@ function sideOfRect(rect: BubbleRect, stageWidth: number): 'left' | 'right' | 'c
 /**
  * 智能多类型气泡求解器：
  *   1. 去重并按语义优先级截取前 MAX_VISIBLE_BUBBLES（3 个）；
- *   2. 依序尝试「避开已有气泡+障碍物」→「仅避开已有气泡」→「垂直扫描/裁剪」；
+ *   2. 依序尝试「避开已有气泡+障碍物+脸身保护区」→「避开已有气泡+障碍物」→「垂直扫描/裁剪」；
  *   3. 极端矮/窄舞台降级为水平等宽分栏，数学保证 100% 在舞台内且两两不重叠。
  */
 export function computeSmartBubbleLayout(
@@ -312,13 +565,12 @@ export function computeSmartBubbleLayout(
     y: safeStage.height * anchor.headYRatio,
   };
 
-  // 去重保留最新同类型气泡，过滤空串
   const dedup = new Map<BubbleKind, ActiveBubbleItem>();
   for (const item of active) {
     if (item.text.trim() !== '') dedup.set(item.kind, item);
   }
   const selected = [...dedup.values()]
-    .sort((a, b) => bubbleTheme(b.kind).priority - bubbleTheme(a.kind).priority)
+    .sort((a, b) => resolveBubbleStyle(b.kind, b.mood).priority - resolveBubbleStyle(a.kind, a.mood).priority)
     .slice(0, MAX_VISIBLE_BUBBLES);
 
   if (selected.length === 0) {
@@ -340,21 +592,22 @@ export function computeSmartBubbleLayout(
         height: Math.max(36, bottomLimit - guardTop),
       }
     : null;
-  const sideAvailW = avatarGuard === null
+  const leftWingAvailW = avatarGuard === null ? 0 : avatarGuard.x - margin - 4;
+  const rightWingAvailW = avatarGuard === null
     ? 0
-    : preferredSide === 'right'
-      ? avatarGuard.x - margin - 4
-      : safeStage.width - margin - (avatarGuard.x + avatarGuard.width + 4);
+    : safeStage.width - margin - (avatarGuard.x + avatarGuard.width + 4);
   const obstaclesWithAvatar = avatarGuard !== null ? [...occupied, avatarGuard] : occupied;
 
   const sized = selected.map((item) => ({
     item,
+    style: resolveBubbleStyle(item.kind, item.mood),
     size: estimateBubbleSize({
       kind: item.kind,
       text: item.text,
       stage: safeStage,
       activeCount: selected.length,
       fontScale: context.fontScale,
+      mood: item.mood,
     }),
   }));
 
@@ -362,18 +615,26 @@ export function computeSmartBubbleLayout(
   let needHorizontalFallback = false;
 
   for (const entry of sized) {
+    const isPrimary = entry.item.kind === 'dialog' || entry.item.kind === 'reaction' || entry.item.kind === 'hint';
+    const targetSideW = entry.item.kind === 'legacy'
+      ? rightWingAvailW
+      : isPrimary
+        ? (preferredSide === 'right' ? rightWingAvailW : leftWingAvailW)
+        : (preferredSide === 'right' ? leftWingAvailW : rightWingAvailW);
     let sideCompact: { width: number; height: number } | null = null;
-    if (avatarGuard !== null && sideAvailW >= 104 && entry.size.width > sideAvailW) {
+    if (avatarGuard !== null && targetSideW >= 104 && entry.size.width > targetSideW) {
       const est = estimateBubbleSize({
         kind: entry.item.kind,
         text: entry.item.text,
-        stage: { width: Math.ceil(sideAvailW / 0.65), height: safeStage.height },
+        stage: safeStage,
         activeCount: 1,
         fontScale: context.fontScale,
+        mood: entry.item.mood,
+        overrideWidth: targetSideW,
       });
       sideCompact = {
-        width: Math.min(sideAvailW, est.width),
-        height: Math.max(24, Math.min(Math.floor(safeStage.height * 0.38), est.height)),
+        width: est.width,
+        height: Math.max(24, Math.min(Math.floor(safeStage.height * 0.44), est.height)),
       };
     }
 
@@ -429,14 +690,16 @@ export function computeSmartBubbleLayout(
   const items: Partial<Record<BubbleKind, PlacedBubble>> = {};
   const ordered: PlacedBubble[] = [];
   for (let i = 0; i < sized.length; i += 1) {
-    const kind = sized[i]!.item.kind;
+    const entry = sized[i]!;
+    const kind = entry.item.kind;
     const rect = placedRects[i]!;
     const placed: PlacedBubble = {
       kind,
+      ...(entry.item.mood !== undefined && entry.item.mood !== null ? { mood: entry.item.mood } : {}),
       rect,
-      tail: resolveTailDirection(kind, rect, anchorPx),
+      tail: resolveTailDirection(kind, rect, anchorPx, entry.style.tailKind),
       side: sideOfRect(rect, safeStage.width),
-      maxLines: bubbleTheme(kind).maxLines,
+      maxLines: entry.style.maxLines,
     };
     items[kind] = placed;
     ordered.push(placed);

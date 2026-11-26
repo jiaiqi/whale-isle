@@ -35,6 +35,7 @@ export const BUBBLE_KIND_TTL_MS: Record<BubbleKind, number> = {
   notice: 8_000,
   reaction: 6_000,
   hint: 9_000,
+  legacy: 10_000,
 };
 
 export interface BubbleSlotEntry {

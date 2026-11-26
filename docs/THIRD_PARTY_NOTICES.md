@@ -69,6 +69,9 @@
 | **crosspet 角色/皮肤/彩蛋 + 手写字体**（2026-11-24 随包直入，~87MB：946 文件） | `assets/pet-packs/crosspet/`（`lokicorvus/crosspet` @ main） | CC BY-NC-SA 4.0（`characters/LICENSE.md`） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ **禁止商用**；保留 `characters/LICENSE.md` 并署名 CrossPet / ZipZipPipe / 上善无形等原作者 |
 | **Tidepaper 小鲸中控台空状态插画**（2026-11-26：6 组 light/dark WebP + 定妆样张） | `apps/desktop-host/assets/illustrations/`；角色身份参考本仓 `packages/pet-renderer/assets/blue-whale-maid/` WebM；OpenAI image_gen（内置工具，模型 ID 未向调用方提供） | 小鲸角色衍生图按 CC BY-NC-SA 4.0；图像服务输出权利遵循 [OpenAI Terms of Use](https://openai.com/policies/terms-of-use/) | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 署名 PC2005-cloud/dsh-pet、ZipZipPipe；仅本地开发与评审，禁止商业用途及公开直播；不使用 CrossPet 图像素材 |
 | **上首软糖体.ttf**（气泡字体，3.9MB） | `assets/pet-packs/fonts/上首软糖体.ttf`（`PC2005-cloud/dsh-pet` 仓库内） | ⚠️ 字体本体许可证未在仓库单独声明（随 MIT 代码仓库分发） | `DEV_ONLY_NON_COMMERCIAL` | ⚠️ 仅本地自用；商用前必须替换为自制/明确授权字体 |
+| **Long Cang（龙藏体，手写感）** | `apps/desktop-host/assets/fonts/long-cang.woff2`（源自 `google/fonts/ofl/longcang`） | ✅ **SIL Open Font License 1.1**（可商用、可随包分发；全文归档 `docs/licenses/long-cang-ofl-1.1.txt`） | `COMMERCIAL_ALLOWED` | ✅ 随包打包进 `dist/renderer/pet-stage/fonts/` |
+| **ZCOOL KuaiLe（站酷快乐体，圆体）** | `apps/desktop-host/assets/fonts/zcool-kuaile.woff2`（源自 `google/fonts/ofl/zcoolkuaile`） | ✅ **SIL Open Font License 1.1**（可商用、可随包分发；全文归档 `docs/licenses/zcool-kuaile-ofl-1.1.txt`） | `COMMERCIAL_ALLOWED` | ✅ 随包打包进 `dist/renderer/pet-stage/fonts/` |
+| **ZCOOL XiaoWei（站酷小薇体，正式体）** | `apps/desktop-host/assets/fonts/zcool-xiaowei.woff2`（源自 `google/fonts/ofl/zcoolxiaowei`） | ✅ **SIL Open Font License 1.1**（可商用、可随包分发；全文归档 `docs/licenses/zcool-xiaowei-ofl-1.1.txt`） | `COMMERCIAL_ALLOWED` | ✅ 随包打包进 `dist/renderer/pet-stage/fonts/` |
 
 ## 4. 许可证文本归档
 

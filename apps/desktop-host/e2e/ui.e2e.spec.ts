@@ -27,12 +27,25 @@ interface PetStageWindow {
   __petStageTest?: {
     showBubbles(input: { thought: string; dialog: string }): void;
     hideBubbles(): void;
-    showBubble(kind: 'thought' | 'dialog' | 'status' | 'notice' | 'reaction' | 'hint', text: string): boolean;
-    hideBubble(kind: 'thought' | 'dialog' | 'status' | 'notice' | 'reaction' | 'hint'): void;
+    showBubble(
+      kind: 'thought' | 'dialog' | 'status' | 'notice' | 'reaction' | 'hint' | 'legacy',
+      text: string,
+      opts?: { ttlMs?: number; voiceManaged?: boolean; mood?: string },
+    ): boolean;
+    hideBubble(kind: 'thought' | 'dialog' | 'status' | 'notice' | 'reaction' | 'hint' | 'legacy'): void;
     setBubbleContext(ctx: { anchor?: { xRatio?: number; headYRatio?: number; facing?: 'left' | 'right' | 'center' }; edgeHint?: 'left' | 'right' | null }): void;
     setBubbleStageBox(box: { width: number; height: number }): void;
+    setBubbleFont?(fontId: 'shangshou-gummy' | 'handwriting' | 'rounded' | 'formal'): void;
     bubbleElements(): { thought: DOMRectJSON | null; dialog: DOMRectJSON | null };
-    allBubbleElements(): Record<string, { rect: DOMRectJSON; tail: string; pointerEvents: string; zIndex: string } | null>;
+    allBubbleElements(): Record<string, {
+      rect: DOMRectJSON;
+      tail: string;
+      mood: string;
+      fontFamily: string;
+      hasShellSvg: boolean;
+      pointerEvents: string;
+      zIndex: string;
+    } | null>;
     setRiceRatio(ratio: number): void;
     riceRatio(): number;
   };
@@ -112,21 +125,95 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
 
       // 截图留证（artifacts/ 本地不入库）
       mkdirSync(artifactsDir, { recursive: true });
+      await stageWin.waitForTimeout(260);
       const shotPath = join(artifactsDir, 'pet-stage-bubbles.png');
       await stageWin.screenshot({ path: shotPath });
 
-      // 语义气泡智能定位、更大宽度、朝向镜像、多轨不重叠与样式约束校验
+      // 语义气泡智能定位、更大宽度、连续尾巴、朝向镜像、多轨不重叠与样式约束校验
       await stageWin.evaluate(() => {
         const t = (window as unknown as PetStageWindow).__petStageTest!;
         t.hideBubbles();
         t.setBubbleContext({ anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'right' }, edgeHint: null });
         t.showBubble('dialog', '今天星露谷春天收获了满满一筐防风草和草莓，鱼片晚上要不要一起吃海鲜炖菜呀！');
       });
+      await stageWin.waitForTimeout(260);
       const singleDialog = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest?.allBubbleElements().dialog ?? null);
       expect(singleDialog).not.toBeNull();
       expect(singleDialog!.rect.width).toBeGreaterThan(220);
+      expect(singleDialog!.hasShellSvg).toBe(true);
+      expect(singleDialog!.tail).not.toBe('none');
       expect(singleDialog!.pointerEvents).toBe('none');
       expect(singleDialog!.zIndex).toBe('7');
+      await stageWin.screenshot({ path: join(artifactsDir, 'pet-stage-bubble-dialog.png') });
+
+      // 情绪气泡变体 + 随包字体加载切换留证（happy + angry + coquettish × rounded/handwriting/formal）
+      await stageWin.evaluate(async () => {
+        const t = (window as unknown as PetStageWindow).__petStageTest!;
+        t.hideBubbles();
+        t.setBubbleFont?.('rounded');
+        t.showBubble('reaction', '哼，再乱晃本鱼就要红温喷水啦！', { mood: 'angry' });
+        t.showBubble('dialog', '太好啦，今天心情像海盐气泡水一样甜！', { mood: 'happy' });
+        t.showBubble('hint', '唔……其实鱼片夸夸本鱼也是可以的嘛～', { mood: 'coquettish' });
+        await document.fonts.ready;
+      });
+      const moodSnapshot = await stageWin.evaluate(() => ({
+        els: (window as unknown as PetStageWindow).__petStageTest!.allBubbleElements(),
+        fontsLoaded: Array.from(document.fonts)
+          .filter((f) => f.family.includes('WhaleBubble'))
+          .map((f) => ({ family: f.family, status: f.status })),
+      }));
+      expect(moodSnapshot.els.reaction?.mood).toBe('angry');
+      expect(moodSnapshot.els.dialog?.mood).toBe('happy');
+      expect(moodSnapshot.els.hint?.mood).toBe('coquettish');
+      expect(moodSnapshot.els.reaction?.hasShellSvg).toBe(true);
+      expect(moodSnapshot.els.dialog?.hasShellSvg).toBe(true);
+      expect(moodSnapshot.els.hint?.hasShellSvg).toBe(true);
+      expect(moodSnapshot.els.dialog?.fontFamily).toContain('WhaleBubbleRounded');
+      expect(moodSnapshot.fontsLoaded.some((f) => f.family.includes('WhaleBubbleRounded') && f.status === 'loaded')).toBe(true);
+      const moodRects = ['reaction', 'dialog', 'hint'].map((k) => moodSnapshot.els[k]!.rect);
+      for (let i = 0; i < moodRects.length; i += 1) {
+        for (let j = i + 1; j < moodRects.length; j += 1) {
+          expect(overlap(moodRects[i]!, moodRects[j]!)).toBe(false);
+        }
+      }
+      await stageWin.waitForTimeout(260);
+      await stageWin.screenshot({ path: join(artifactsDir, 'pet-stage-bubble-moods.png') });
+
+      // 切换手写感 & 正式体并确认 fontFamily 与真实字体文件加载，再还原默认字体
+      for (const [fontId, family] of [
+        ['handwriting', 'WhaleBubbleHandwriting'],
+        ['formal', 'WhaleBubbleFormal'],
+      ] as const) {
+        await stageWin.evaluate(async (id) => {
+          const t = (window as unknown as PetStageWindow).__petStageTest!;
+          t.setBubbleFont?.(id);
+          await document.fonts.ready;
+        }, fontId);
+        const fontCheck = await stageWin.evaluate((expectedFamily) => ({
+          fontFamily: (window as unknown as PetStageWindow).__petStageTest!.allBubbleElements().dialog?.fontFamily ?? '',
+          loaded: Array.from(document.fonts).some((f) => f.family.includes(expectedFamily) && f.status === 'loaded'),
+        }), family);
+        expect(fontCheck.fontFamily).toContain(family);
+        expect(fontCheck.loaded).toBe(true);
+      }
+
+      // 恢复默认字体并验证第 7 种类型：右下角经典半透蓝泡（legacy）+ 避让底部饭碗
+      await stageWin.evaluate(() => {
+        const t = (window as unknown as PetStageWindow).__petStageTest!;
+        t.setBubbleFont?.('shangshou-gummy');
+        t.hideBubbles();
+        t.setBubbleContext({ anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'center' }, edgeHint: null });
+        t.setRiceRatio(0.06);
+        t.showBubble('legacy', '收到指令，这就过去帮忙照看星露谷农田和矿洞状态！');
+      });
+      await stageWin.waitForTimeout(260);
+      const legacyEl = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest!.allBubbleElements().legacy);
+      expect(legacyEl).not.toBeNull();
+      expect(legacyEl!.hasShellSvg).toBe(true);
+      expect(legacyEl!.rect.x).toBeGreaterThan(160);
+      expect(legacyEl!.rect.y).toBeGreaterThan(100);
+      expect(['top-left', 'left']).toContain(legacyEl!.tail);
+      await stageWin.screenshot({ path: join(artifactsDir, 'pet-stage-bubble-legacy.png') });
 
       // 三气泡并发分组 A（status + thought + dialog）零重叠 & 朝向镜像
       await stageWin.evaluate(() => {

@@ -62,6 +62,7 @@ describe('bubble lifecycle（语音租约驱动）', () => {
 describe('multi-bubble schedule（按语义类型差异化 TTL）', () => {
   it('各类型默认 TTL 与覆盖值安全夹紧', () => {
     expect(BUBBLE_KIND_TTL_MS.reaction).toBeLessThan(BUBBLE_KIND_TTL_MS.dialog);
+    expect(BUBBLE_KIND_TTL_MS.legacy).toBe(10_000);
     expect(BUBBLE_KIND_TTL_MS.dialog).toBeLessThan(BUBBLE_KIND_TTL_MS.thought);
     expect(BUBBLE_KIND_TTL_MS.thought).toBeLessThan(BUBBLE_KIND_TTL_MS.status);
 

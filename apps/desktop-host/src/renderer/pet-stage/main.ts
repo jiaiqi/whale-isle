@@ -4,7 +4,7 @@
  */
 import { mergePoseEffects, normalizePoseEffect, PoseSkinRenderer, SpritesheetRenderer, WebmVideoRenderer, pickAmbient, poseEffectOffsets, poseEffectSvg, spriteFrameIndex, spriteFrameRect, type RendererHost, type SpriteAudioController, type VideoFactory, type VideoHandle } from '@workbench/pet-renderer';
 import { classifyAutodriveReceipt, GAME_EVENT_ACTION_MAP, RICE_LEVEL_ACTION_MAP } from '@workbench/pet-renderer/emotion-map';
-import type { PetActionState, PetAvatarClip, PetBubbleKind } from '@workbench/shared-protocol';
+import type { PetActionState, PetAvatarClip, PetBubbleKind, PetBubbleMood } from '@workbench/shared-protocol';
 import { ALPHA_THRESHOLD, createAlphaProbe } from './alpha-probe';
 import { bubbleTick, createBubbleLifecycle, showBubble, speakerIdle, speechResult, speechStarted, type BubbleLifecycleState } from './bubble-lifecycle';
 import { createInteractionState, DIZZY_ACTIONS, dockEdgeFor, headPat, recordShake, setAsleep, settleWorkGrudge, shouldBlockWhileAsleep, shouldEnterPowerSaver, type ShakeContext } from './interaction';
@@ -16,7 +16,9 @@ import type { PetDesktopPrefs } from '@workbench/shared-protocol';
 import { AudioLeaseManager } from './audio-lease';
 import {
   ALL_BUBBLE_KINDS,
+  moodForTrigger,
   mountBubbleWidgets,
+  type BubbleFontId,
   type BubbleKind,
   type BubbleRect,
   type BubbleStageContext,
@@ -55,7 +57,7 @@ interface PetStageBridge {
   onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }) => void): () => void;
   onLipSync?(handler: (event: { agentId: string; frame: { viseme: string; amplitude: number } }) => void): () => void;
   onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
-  onPetBubble?(handler: (event: { agentId: string; text: string; kind?: PetBubbleKind; ttlMs?: number }) => void): void;
+  onPetBubble?(handler: (event: { agentId: string; text: string; kind?: PetBubbleKind; mood?: PetBubbleMood; ttlMs?: number }) => void): void;
   onPetState?(handler: (event: { agentId: string; state?: unknown }) => void): void;
   onScaleChanged?(handler: (scale: number) => void): void;
   characterManifest(id: string): Promise<{ ok: boolean; manifest?: unknown; error?: string }>;
@@ -140,8 +142,9 @@ let lastActivityAt = Date.now();
 let powerSaver = false;
 let bubbleState: BubbleLifecycleState = createBubbleLifecycle();
 let bubbleVoiceEnabled = true;
-/** T-M6-63：气泡字号独立缩放（null=跟随人物 scale）与窗口显示层级 */
+/** T-M6-63：气泡字号独立缩放（null=跟随人物 scale）、随包气泡字体与窗口显示层级 */
 let bubbleFontScalePref: number | null = null;
+let bubbleFontIdPref: BubbleFontId = 'shangshou-gummy';
 let currentWindowLayer: 'always' | 'follow-ai' | 'normal' = 'always';
 /** T-M6-64：自主巡逻 / 工作忙碌 / 任务卡 */
 let patrolEnabled = true;
@@ -539,14 +542,14 @@ function playGreeting(characterId: string): void {
         }
       }
       if (greeting.line !== '') {
-        widgets?.show('hint', greeting.line, { ttlMs: 9_000 });
+        widgets?.show('hint', greeting.line, { ttlMs: 9_000, mood: moodForTrigger('greeting') });
       }
       lastEventAt = Date.now();
       return;
     }
     const line = await bridge.friendMeet?.(characterId).catch(() => '') ?? '';
     if (line === '') return;
-    widgets?.show('hint', line, { ttlMs: 9_000 });
+    widgets?.show('hint', line, { ttlMs: 9_000, mood: moodForTrigger('greeting') });
   })();
 }
 
@@ -762,13 +765,16 @@ bridge.onPetBump?.((payload) => {
     [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }],
     { duration: 260, iterations: 2 },
   );
-  widgets?.show('reaction', `哎呀，撞到${payload.partnerName}了，你走路不看路呀！`, { ttlMs: 6_000 });
+  widgets?.show('reaction', `哎呀，撞到${payload.partnerName}了，你走路不看路呀！`, {
+    ttlMs: 6_000,
+    mood: moodForTrigger('bump'),
+  });
   lastEventAt = Date.now();
 });
-// T-M6-49：本机驱动口 say / wake / 工作跟随戴皇冠
+// T-M6-49：本机驱动口 say（保留原右下角经典半透蓝泡） / wake / 工作跟随戴皇冠
 bridge.onPetSay?.((payload) => {
   wakeUp();
-  widgets?.show('dialog', payload.text, { ttlMs: 8_000 });
+  widgets?.show('legacy', payload.text, { ttlMs: 8_000 });
   void renderer.play('happy_maid').catch(() => undefined);
   lastEventAt = Date.now();
 });
@@ -836,7 +842,7 @@ function settleAfterWork(): void {
   }
   const line = poseConfig?.lines?.[grudge]?.[0];
   if (line !== undefined) {
-    widgets?.show('reaction', line, { ttlMs: 8_000 });
+    widgets?.show('reaction', line, { ttlMs: 8_000, mood: moodForTrigger('grudge') });
   }
   lastEventAt = Date.now();
 }
@@ -907,19 +913,20 @@ if (window.directorBridge?.onAutodriveEvent) {
       latestGeneration = event.generation;
     }
     lastEventAt = Date.now();
-    // 多语义气泡：decision 意图 → thought；对话回执 → dialog（语音租约托管）；反射吐槽 → reaction；游戏时钟 → status
+    // 多语义气泡：decision 意图 → thought；chat_reply → dialog；chat_order → legacy；反射吐槽 → reaction；游戏时钟 → status
     if (event.type === 'decision' && typeof event.intent === 'string' && event.intent.length > 0) {
-      widgets?.show('thought', event.intent);
+      widgets?.show('thought', event.intent, { mood: moodForTrigger('decision') });
     }
     if (event.type === 'receipt' && (event.tool === 'chat_reply' || event.tool === 'chat_order') && event.summary) {
       const voiceBridge = (window as unknown as { directorBridge?: { voiceConfigGet?: () => Promise<{ enabled: boolean }> } }).directorBridge;
       void voiceBridge?.voiceConfigGet?.().then((config) => { bubbleVoiceEnabled = config.enabled; }).catch(() => undefined);
       const effect = showBubble(bubbleState, event.summary, Date.now(), bubbleVoiceEnabled);
       bubbleState = effect.state;
-      widgets?.show('dialog', event.summary, { voiceManaged: true });
+      const bubbleKind: BubbleKind = event.tool === 'chat_order' ? 'legacy' : 'dialog';
+      widgets?.show(bubbleKind, event.summary, { voiceManaged: true });
       widgets?.setDialogMuted(effect.muted);
     } else if (event.type === 'receipt' && typeof event.tool === 'string' && event.tool.startsWith('reflex_') && event.summary) {
-      widgets?.show('reaction', event.summary, { ttlMs: 7_000 });
+      widgets?.show('reaction', event.summary, { ttlMs: 7_000, mood: moodForTrigger('reflex') });
     }
     if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
       const kind = classifyAutodriveReceipt(event.status, event.tool ?? '', event.summary ?? '');
@@ -985,7 +992,10 @@ bridge.onPetBubble?.((event) => {
   widgets?.show(
     event.kind ?? 'dialog',
     event.text,
-    event.ttlMs === undefined ? undefined : { ttlMs: event.ttlMs },
+    {
+      ...(event.ttlMs !== undefined ? { ttlMs: event.ttlMs } : {}),
+      ...(event.mood !== undefined ? { mood: event.mood } : {}),
+    },
   );
 });
 bridge.onPetState?.((event) => {
@@ -1191,7 +1201,7 @@ const playPokePose = (): void => {
 const showPokeLine = (): void => {
   void bridge.pokeLine?.(dockedAgentId).then((result) => {
     if (result.ok && result.line !== undefined) {
-      widgets?.show('reaction', result.line, { ttlMs: 10_000 });
+      widgets?.show('reaction', result.line, { ttlMs: 10_000, mood: moodForTrigger('poke') });
     }
   }).catch(() => undefined);
 };
@@ -1203,7 +1213,10 @@ const patHeadOnce = (): void => {
   void bridge.friendRecord?.(currentCharacterId, 'pat').catch(() => undefined);
   // 串门彩蛋：CrossPet egg-* 与 userData 里 egg:true 的自定义角色被点中都逃跑（关窗）
   if (poseConfig?.egg === true || currentCharacterId.startsWith('crosspet-egg-')) {
-    widgets?.show('reaction', '被抓住了！下次再来串门～', { ttlMs: 4_000 });
+    widgets?.show('reaction', '被抓住了！下次再来串门～', {
+      ttlMs: 4_000,
+      mood: moodForTrigger('egg'),
+    });
     setTimeout(() => { void bridge.petFlee?.(dockedAgentId).catch(() => undefined); }, 900);
     return;
   }
@@ -1214,7 +1227,7 @@ const patHeadOnce = (): void => {
     }
     const line = poseConfig?.lines?.[pat.stage]?.[0];
     if (line !== undefined) {
-      widgets?.show('hint', line, { ttlMs: 8_000 });
+      widgets?.show('hint', line, { ttlMs: 8_000, mood: moodForTrigger('coax') });
     }
     return;
   }
@@ -1335,16 +1348,21 @@ setInterval(() => {
     if (next && glyphActive) clearGlyphs();
   }
   if (interaction.asleep && idle > 90_000 && Math.random() < 0.05) {
-    widgets?.show('thought', '唔……梦里也有好多米饭……', { ttlMs: 6_000 });
+    widgets?.show('thought', '唔……梦里也有好多米饭……', {
+      ttlMs: 6_000,
+      mood: moodForTrigger('sleep'),
+    });
   }
 }, 5_000);
 const applyGlobalPrefs = (p: PetDesktopPrefs): void => {
   powerSaverEnabled = p.powerSaverEnabled;
   sfxVolume = p.sfxVolume;
   bubbleFontScalePref = p.bubbleFontScale ?? null;
+  bubbleFontIdPref = p.bubbleFontId ?? 'shangshou-gummy';
   currentWindowLayer = p.windowLayer;
   patrolEnabled = p.patrolEnabled;
   applyBubbleFontScale();
+  widgets?.setFont(bubbleFontIdPref);
   if (renderer instanceof SpritesheetRenderer) {
     renderer.setSfxEnabled(p.sfxEnabled);
     renderer.setSfxVolume(p.sfxVolume);
@@ -1427,7 +1445,7 @@ window.addEventListener('mousemove', (event) => {
       lastWorkShakeLineAt = nowMs;
       const line = poseConfig?.lines?.[shakeResult]?.[0];
       if (line !== undefined) {
-        widgets?.show('reaction', line, { ttlMs: 5_000 });
+        widgets?.show('reaction', line, { ttlMs: 5_000, mood: moodForTrigger('shake') });
       }
     }
   } else if (shakeResult !== lastDizzyVisual) {
@@ -1662,6 +1680,7 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
 // ---- UI 挂件（T-M1-05）：多语义智能气泡 + 赛博饭碗 ----
 // 舞台 CSS 实际 400×260（窗口 400×284 留脚线 21px 余量）；旧代码按 440×300 算气泡会贴出窗右缘
 widgets = mountBubbleWidgets(stage, { width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
+widgets.setFont(bubbleFontIdPref);
 syncBubbleContext();
 void Promise.all([bridge.winPosition(), bridge.screenBounds()]).then(([pos, bounds]) => {
   if (pos !== null) {
@@ -1730,6 +1749,10 @@ void bridge.appMeta().then((meta) => {
       setBubbleStageBox(next: StageBox) {
         widgets?.setStageBox(next);
       },
+      setBubbleFont(fontId: BubbleFontId) {
+        bubbleFontIdPref = fontId;
+        widgets?.setFont(fontId);
+      },
       bubbleRects: () => widgets?.rects(),
       setRiceRatio: (ratio: number) => refreshRiceWidget(ratio), // 饿态（<15%）测试自动亮灯，与线上行为一致
       riceRatio: () => riceBowlWidget.ratio(),
@@ -1739,7 +1762,15 @@ void bridge.appMeta().then((meta) => {
         dialog: document.querySelector('.pet-bubble--dialog')?.getBoundingClientRect().toJSON() ?? null,
       }),
       allBubbleElements: () => {
-        const out: Record<string, { rect: unknown; tail: string; pointerEvents: string; zIndex: string } | null> = {};
+        const out: Record<string, {
+          rect: unknown;
+          tail: string;
+          mood: string;
+          fontFamily: string;
+          hasShellSvg: boolean;
+          pointerEvents: string;
+          zIndex: string;
+        } | null> = {};
         for (const kind of ALL_BUBBLE_KINDS) {
           const el = document.querySelector(`.pet-bubble--${kind}`) as HTMLElement | null;
           if (el === null || el.style.display === 'none') {
@@ -1749,6 +1780,9 @@ void bridge.appMeta().then((meta) => {
             out[kind] = {
               rect: el.getBoundingClientRect().toJSON(),
               tail: el.dataset.tail ?? 'none',
+              mood: el.dataset.bubbleMood ?? '',
+              fontFamily: cs.fontFamily,
+              hasShellSvg: el.querySelector('.pet-bubble__shell path') !== null,
               pointerEvents: cs.pointerEvents,
               zIndex: cs.zIndex,
             };
