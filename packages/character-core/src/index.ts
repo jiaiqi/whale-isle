@@ -4,4 +4,5 @@
 export * from './profile-stores';
 export * from './goals-commitments';
 export * from './life-runtime';
+export * from './social-runtime';
 export * from './character-core';

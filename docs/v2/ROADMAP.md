@@ -141,8 +141,8 @@
 - **`V2-P3-04`（`DOING`）：Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**（owner 2026-11-26 批准拆分为 A–F 六个原子工单，依赖 A →（B ∥ C）→ D → E → F）
   - `P3-04A`（`DONE`）：契约先行——`social.ts` L1 只读浏览会话/平台能力矩阵/内容理解/兴趣信号 + `model.ts` 多模态消息 parts（9 例契约单测，纯本地可验）
   - `P3-04B`（`DONE`）：model-gateway 多模态映射与脱敏（OpenAI image_url / Anthropic image block 双协议映射、文本与图片 URL 脱敏、supportsVision=false 预检跳过、入站契约校验；6 例新单测，包分支覆盖 94.27%；真实供应商多模态调用联调随 P3-04 整链验收）
-  - `P3-04C`（`DOING`）：SocialRuntime L1 只读浏览内核
-  - `P3-04D`（`PENDING`）：内容理解管线与兴趣沉淀
+  - `P3-04C`（`DONE`）：SocialRuntime L1 只读浏览内核（会话状态机 planned→active⇄paused/awaiting_human→completed/aborted、能力矩阵门禁「授权+已实测」双条件、L1 互动能力契约外再拦、maxItems/maxDurationMs 预算自动收官、事实事件广播；5 例单测，social-runtime.ts 分支覆盖 93.33%；runner 抓取接线归入 P3-04D 管线）
+  - `P3-04D`（`DOING`）：内容理解管线与兴趣沉淀
   - `P3-04E`（`PENDING`）：日程调度接线与状态可见
   - `P3-04F`（`PENDING`）：mock-harness 站点仿真与 E2E 验收
 - **`V2-P3-05`：多被动桌宠同屏展示（独立形象/动作/基础音色，主从隔离）**
