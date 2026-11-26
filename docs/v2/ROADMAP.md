@@ -156,6 +156,31 @@
 - **`V2-P3-05`：多被动桌宠同屏展示（独立形象/动作/基础音色，主从隔离）**
 - **`V2-P3-06`（`DONE`）：星露谷一键启动器与真实就绪探活**（`stardew-launcher.ts` 实现「安装探测 → 直接 spawn SMAPI → 等 BWF `get_state` 真实应答才置 `ready`」，已在运行去重、子进程 detached 不随宿主退出；回退 `open steam://rungameid/413150`；标题画面自动 `load_save({})`；顺带修复 `game-health.ts` 把「标题画面返回 200 + isError:false」误判为 `online` 的编造就绪缺陷。真机两种启动方式均实测进档，见 [P3-stardew-launcher-verification.md](./evidence/P3-stardew-launcher-verification.md)；2026-11-26 `[REAL-DEVICE]` 补验完成：中控台顶栏「启动」按钮**真实 CGEvent 点击**端到端验证（不调 IPC）——点按钮 → 启动弹窗 → 确认 → 游戏拉起并自动读档（`saveLoadRequested/autoLoadSave`）→ BWF 真实应答 → 自动驾驶接管（帧连拍证据 `P3-06-before-click.png` / `P3-06-after-click-driving.png`），详见 [P3-stardew-launcher-verification.md](./evidence/P3-stardew-launcher-verification.md) 第 6 节；本次抓到两个真实缺陷：①启动后 BWF 就绪竞态需重试（2026-11-26 已修：`AutodriveRunner.start()` 支持 `readyTimeoutMs`/`readyPollMs` 就绪重探，宿主注入 90s 窗口 + 2s 间隔，等待期间 `stop()` 安静取消、不误报不可达；单测 4 例，`[SIMULATION]` 级，真机冷启动等待表现待复验）；②CGEvent 点击需窗口前台（未修，属单桌宠链路待办）；Windows/Linux 仍仅纯函数单测、Steam 回退会打开 Terminal）
 
+- **`V2-P3-07`（`PENDING`，owner 2026-11-27 拍板后新增）：歌声系统与舞台形象技术路线（ADR-005）**
+
+  > 路线决策见 [ADR-005](./adr/ADR-005-singing-and-stage-technology-route.md)（owner 原文逐字收录）；素材与选型明细见 [P3-01-MATERIALS-NEEDED.md](./P3-01-MATERIALS-NEEDED.md)。
+  > **验收铁律（owner 原文）**：核心评价标准是「角色声音自然、生动、有自己的风格，形象与动作灵活，整套系统能够自动化运行并持续扩展，而不是单纯完成技术接口接入」。**PoC 通过 ≠ 需求达成**；本单系歌声/形象类，最高只能标 `IMPLEMENTED_UNVERIFIED`，直到有真实素材 + 真实听感/真机画面证据。
+
+  **阶段划分（三阶段，顺序不可颠倒）**：
+
+  - **阶段一（`V2-P3-07A`~`V2-P3-07D`，`PENDING`）：SVC 翻唱 + VRM 1.0 一个完整角色跑通**
+    - `V2-P3-07A`（`PENDING`）**契约先行**：`SingingProfile` / `SingingMode`（`svc | svs | svs_svc`）/ `VoiceIdentity` 的 Zod 契约（`packages/shared-protocol`），以及 `Embodiment` 域「多形态并存」数据模型；契约层从第一天就按三种实现设计，不做只支持 SVC 的窄契约。
+    - `V2-P3-07B`（`PENDING`）**SVC 落地**：干声分离 → 目标音色转换 → 伴奏混音的端到端链路接上现有点歌台；歌声模型走**独立 Worker + 按需下载**（`fetch-engine.mjs` 模式），主安装包不含权重；GPL/AGPL 项目禁入；普通 TTS / GPT-SoVITS 一律不得当 SVC。
+    - `V2-P3-07C`（`PENDING`）**VRM 1.0 真实渲染**：Electron 舞台窗口内的 WebGL VRM 运行时，覆盖加载/骨骼/待机呼吸/视线表情/音频驱动口型/歌舞/节拍同步/摄像机灯光场景；桌面与 OBS 双输出一致；与现有 `WebmVideoRenderer`（双 `<video>`，不占 WebGL）资源隔离。
+    - `V2-P3-07D`（`PENDING`）**一个完整角色端到端**：同一角色走完「点歌 → 演唱 → 伴奏混音 → 歌词 → 口型 → 舞蹈 → 桌面 + OBS 输出」，并以真实素材（owner 提供的授权声源与 `.vrm` 资产）完成真机听感与画面验收。
+    - **阶段一的前置阻塞（必须如实记为 `BLOCKED`，不得绕过）**：① 训练/转换用**授权声源**由 owner 提供；② `.vrm` 资产由 owner 提供或经 `V2-P2-04` 流水线产出；③ 歌声模型权重的许可须先逐文件核实（见 `O5-svs-svc-weight-license-per-file.md`）。
+  - **阶段二（`V2-P3-08`，`PENDING`）：SVS 与 SVS+SVC + 角色自己的演唱风格**
+    - `V2-P3-08A`（`PENDING`）SVS 实现（乐谱 + 歌词 + 音素 → 歌声）：DiffSinger / OpenUtau 路线的可部署性与**无人值守自动化**能力须先 PoC 验证；官方检查点与声库许可须闭合，否则自训。
+    - `V2-P3-08B`（`PENDING`）SVS+SVC 串联（先生成演唱 → 再统一音色），把角色的音域/演唱风格真正落到 `SingingProfile` 上——这是「SVC 交付音色、SVS 交付演唱风格」差异的收口。
+    - `V2-P3-08C`（`PENDING`）**Live2D 精细化 2D 形象**：作为后续 2D 方案落地，**不取消该产品需求**；排在 VRM 之后，不阻塞阶段一。
+    - `V2-P3-08D`（`PENDING`）多形象并存 UI 与资产治理：同一角色多形态并存的可视化切换与 `AssetRegistry` 许可门禁联动。
+  - **阶段三（`V2-P3-09`，`PENDING`）：自动化与持续扩展**
+    - `V2-P3-09A`（`PENDING`）歌声/形象链路的**无人值守自动化**：点歌 → 自动演唱 → 自动混音 → 自动口型与舞蹈的端到端自动运行，失败时诚实降级并给出人话原因。
+    - `V2-P3-09B`（`PENDING`）**持续扩展机制**：新歌声引擎/新渲染器的接入成本收敛到「实现接口 + 声明能力」，且不影响既有形态。
+
+  **本单明确不做的事**：不同时强制集成所有歌声模型；不把重型模型捆绑进主安装包；不在阶段一之前就宣称角色演唱风格已实现。
+
+
 ---
 
 ## P4：单角色全功能闭环、自主社区交互与 Evolution Engine Full

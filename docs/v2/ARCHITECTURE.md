@@ -196,6 +196,77 @@ flowchart LR
 - **TTS / SVS / SVC 严禁混为一谈**：普通 TTS 只负责自然对话；唱歌由 `SingingRuntime` 明确区分歌声合成（SVS：歌词+旋律）与歌声转换（SVC：授权音色转换），且均须经过歌曲、伴奏与歌词授权门禁。
 - **自然感与沉默权**：角色有权在陪伴或专注时保持沉默；桌宠气泡展示可读意图与简短行动理由，不依赖隐藏思维链。
 
+### 5.1 `Voice Identity` / `Singing Profile` 与歌声实现分层（ADR-005）
+
+> 路线决策见 [ADR-005](./adr/ADR-005-singing-and-stage-technology-route.md)（owner 原文逐字收录）。
+
+**统一声音身份契约**（角色核心侧，唯一真源）：
+
+| 契约 | 归属域 | 内容 |
+| --- | --- | --- |
+| `VoiceIdentity` | `CharacterCore` 12 域之「Voice Identity」 | 音色标识、说话习惯、情绪表达、参考音频/声库引用 |
+| `SingingProfile` | 同上（与 Voice Identity 同域，一角色一份） | **音域、演唱风格、音乐偏好**、发声方法偏好 |
+
+**歌声实现分层**（可切换的三个实现，共用同一 `SingingProfile` 契约）：
+
+```mermaid
+flowchart LR
+  Profile["SingingProfile / VoiceIdentity<br/>(角色核心 · 唯一真源)"] --> Runtime["SingingRuntime (统一契约)"]
+  Runtime --> SVC["SVC 实现<br/>源演唱干声 → 目标音色"]
+  Runtime --> SVS["SVS 实现<br/>乐谱+歌词 → 歌声"]
+  Runtime --> Both["SVS+SVC 实现<br/>先生成演唱 → 再统一音色"]
+  SVC --> Mixer["AudioMixer"]
+  SVS --> Mixer
+  Both --> Mixer
+```
+
+- **SVC 优先**：`SingingRuntime` 的默认实现是 SVC（用角色自己的原创音色翻唱），因为它能最快跑通「点歌 → 演唱 → 伴奏混音 → 歌词 → 口型 → 舞蹈」这条端到端链路。
+- **契约先行，形态后补**：即便阶段一只实现 SVC，`SingingRuntime` 的**契约层从第一天就按 SVC / SVS / SVS+SVC 三种实现设计**，避免阶段二推倒重来。
+- **「换音色 ≠ 演唱风格」**（owner 原文口径）：SVC 交付的是角色的**音色**，不是角色的**演唱风格**；后者要靠 SVS 或 SVS+SVC 路径落地。任何把「给别人的演唱换一个音色」当作角色演唱风格已实现的做法都是错的。
+- **重型模型不进主安装包**：歌声模型与权重走**独立 Worker 进程 + 按需下载**（复用 `tools/scripts/fetch-engine.mjs` 的 `installed.json` 标记 / 字节校验 / 诚实降级模式），主安装包只含运行时与契约。
+- **许可红线**：GPL/AGPL 项目及其分支禁入主线；普通 TTS 与 GPT-SoVITS 一律不得当作 SVS/SVC 使用（现有 `SingEngine` 已有 `ttsClone` 单列 + 强制告警的口径，沿用）。
+- **声源授权**：模型许可 ≠ 声音人格权；商用直播 / 衍生模型 / 再分发三项授权分别留档，训练素材与声源由 owner 提供且我们有权使用。
+
+### 5.2 表现层：可插拔渲染器与统一表现接口（ADR-005 §3）
+
+**角色核心状态与渲染器严格解耦**：
+
+```mermaid
+flowchart TB
+  subgraph Core["角色核心状态（唯一真源 · 只读）"]
+    Id["Identity"]
+    Per["Personality"]
+    Mem["Memory"]
+    Emo["Emotion"]
+    Voi["Voice Identity / Singing Profile"]
+    Emb["Embodiment 域<br/>(仅存资产指针与形态清单)"]
+  end
+  subgraph Perf["表演编排层"]
+    PD["PerformanceDirector"]
+    PI["统一表现接口<br/>(表情/口型/骨骼/视线/歌词/节拍)"]
+    SR["StageRuntime (形态注册与切换)"]
+  end
+  subgraph Renderers["可插拔渲染器（实现同一表现接口）"]
+    R1["WebM / Sprite 桌面 2D"]
+    R2["Live2D 2D（后续阶段）"]
+    R3["VRM 1.0 3D"]
+    R4["OBS 舞台（一路输出，非独立状态）"]
+  end
+  Core --> PD --> PI --> SR
+  SR --> R1
+  SR --> R2
+  SR --> R3
+  SR --> R4
+```
+
+- **身份唯一、表现可插拔**：身份 / 人格 / 记忆 / 情绪 / 声音由 `CharacterCore` 唯一持有，所有渲染器**只读**；`Embodiment` 域只记录「该角色有哪些形象形态、各自指向哪份资产」，**不承载渲染细节**。
+- **多形象共存**：同一角色可同时拥有桌面 2D、Live2D、VRM 3D、游戏内风格化角色与虚拟舞台/直播形象，**全部共享同一身份、人格、记忆、情绪与声音**。
+- **OBS 是一路输出，不是另一套状态**：桌面窗口与 OBS 窗口共享同一份表演时间轴与同一份角色核心状态。
+- **解耦的可检验标准**：**新增一种形象形态，不应改动 `CharacterCore` 的任何一行**。做不到即视为耦合未解开。
+- **VRM 1.0 优先**：3D 舞台以 VRM 1.0 为优先格式，要求**真实渲染**（WebGL）而非仅 BlendShape 数据结构；覆盖角色加载、全身骨骼动画、待机与呼吸、视线与表情、音频驱动口型、唱歌与舞蹈、节拍同步、摄像机/灯光/舞台场景，以及桌面与 OBS 双输出。
+- **Live2D 定位**：作为后续精细化 2D 方案，**不取消该产品需求，也不阻塞第一个完整角色的开发**；其验收口径与 VRM 独立，不得合并计入。
+
+
 ---
 
 ## 六、完整 `Creative Studio` 与资产管线

@@ -95,7 +95,25 @@
 - **`V2-P2-07`（十态 `AssetRegistry`、舞台/声音工坊、商用清源与一键回滚）**：纯本地资产治理与创作闭环，`asset-registry-v2.spec.ts`（3/3 PASS）、`verify:gate` 7/7 与 Electron 45 E2E（v1→v2→回滚→SHA-256→商业清源阻断）全绿，状态记为 `DONE`。
 - **`V2-P2-08`（`CoopRuntime` v1 星露谷人机联机协作）**：`coop-runtime.spec.ts`（5/5 PASS，90% 分支覆盖）、本机真实 `Mods/` 兼容扫描（`v2CoopModCompat`）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；双端真实游戏客户端开房协同实玩待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。
 
-## 七、P3 阶段近期实测状态快照
+## 七、歌声与舞台形象路线的验收口径（ADR-005 · 2026-11-27）
+
+> owner 原话：「核心评价标准是角色声音自然、生动、有自己的风格，形象与动作灵活，整套系统能够自动化运行并持续扩展，**而不是单纯完成技术接口接入**」。
+
+| 判据 | 什么算达成 | 什么**不算**达成 |
+| --- | --- | --- |
+| 声音自然生动 | `[REAL-DEVICE]` 真人试听能听出「是她唱的」，音域/换气/咬字/颤音符合 `SingingProfile` | 探针返回 `available`、接口返回 200、时长对齐 |
+| 形象动作灵活 | `[REAL-DEVICE]` 真实 `.vrm` 在舞台窗口出画面，1080p60 帧率达标，全身骨骼 + 表情 + 口型 + 节拍同步可见 | `inspectState()` 返回一份 BlendShape 快照 |
+| 系统自动化运行 | 点歌 → 自动演唱 → 自动混音 → 自动口型与舞蹈 **无人值守**跑完，失败时诚实降级并给出人话原因 | 手工点一次按钮跑通 |
+| 持续扩展 | 新歌声引擎/新渲染器只实现接口 + 声明能力，不改动既有形态与角色核心状态 | 改一堆既有代码让它跑起来 |
+
+**封口规则（不因 §2 的通用规则而放松）**：
+
+- `V2-P3-07`~`V2-P3-09` 系歌声/形象类工单，**最高只能标 `IMPLEMENTED_UNVERIFIED`**，直到有**真实素材**（owner 提供的授权声源与合规 `.vrm`）与**真实听感/真机画面**证据。
+- **PoC 通过 ≠ 需求达成**：单测、回放、沙盒、仿真渲染图**都不能**用来证明「声音自然生动」或「形象动作灵活」——这两条只有真人试听与真机画面能证。
+- 「用别人的演唱换一个音色」**不构成**「已实现角色演唱风格」；SVC 只交付音色，SVS / SVS+SVC 才交付演唱风格。评审时须核对交付的是哪一半。
+- 普通 TTS / GPT-SoVITS 的输出**不得**作为 SVS/SVC 验收样本（沿用 `SingEngine` 现有 `ttsClone` 单列 + 强制告警口径）。
+
+## 八、P3 阶段近期实测状态快照
 
 - **`V2-P3-01`（统一表演系统：`SingEngine` SVS/SVC + 歌词时钟 + 舞蹈 + 2D/3D `StageRuntime`）**：`performance.spec.ts` + `stage-runtime.spec.ts`（6/6 PASS，合并 90.88% 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md)；2026-11-26 真机补验已完成能自动的部分：新增 `services/sing-worker` 并把 `SingEngine.workerEndpoint` 真正接上（**此前从未注入，`probeBackends` 必然双 unavailable、探测是假的**），真机三层探测 `Electron → sing-worker(18880) → GPT-SoVITS(9880)` 跑通，SVS/SVC 如实 `unavailable`、普通 TTS 单列 `ttsClone` 并强制带「普通 TTS 不得当作 SVS/SVC 使用」告警；歌词时钟真实墙钟度量 max 偏差 25ms / P95 25ms；跨 4 后端状态 `retained=true`；GPT-SoVITS 真实推理实测 HTTP 200 / 1.01s / 32000Hz / 2580ms（属 TTS 非唱歌，不置 `realNeuralInferenceVerified`）；pet-stage 实为 WebM 视频渲染（0 canvas、60.4 FPS、0 丢帧），无 `.moc3`/`.vrm` 资产故画布观感无从谈起。2026-11-26 点歌台宿主接线（[P3-song-console-host-verification.md](./evidence/P3-song-console-host-verification.md)）：`v2:song-*` 五路 IPC + `SongConsole` + audio-ai-worker `/api/song/*` + SQLite `song_cache_index` + 首切片播放回执打通，缓存键覆盖源文件指纹与声线/调参，宿主单测 15/15、内核 26/26、Python 61/61、真实 Electron IPC E2E 通过（无后端场景逐项 unavailable，`lastPlayback` 如实为 null）；仍缺：合法 Cubism `.moc3` / `.vrm`、歌声合成（SVS）与音色转换（SVC）后端权重及索引、真实五组情绪参考音频、Demucs/RVC/曲库实机验证；状态维持 `IMPLEMENTED_UNVERIFIED`。
 - **`ADR-003` UI/UX Tidepaper 主基线升级（`REQ-UI-01`）**：工作台已切换为潮汐纸 Tidepaper（晨雾 Mist 默认 + 夜潮 Night Tide + 5 强调色）并保留 Obsidian Tide / Tide Deep 可选切换，接入 V2-P2 与 V2-P3-01 实盘操作面板；`verify:gate` 7/7 与 Electron 45 E2E 4 套件（含 WCAG AA 4.5:1 对比度校验）全绿，详见 [P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)。

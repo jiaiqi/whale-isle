@@ -56,7 +56,7 @@
 - item 5 歌声：音色来源与权重授权未给书面许可前，不下载/不集成任何歌声权重，不生成可分发合成样本；「中文产品音色无符合项」结论不变。
 - item 4 `V2-P3-02` 真实开播：等 owner 完成 obs-websocket 密码 / 屏幕录制授权 / D 路径首次弹窗三步；obs-websocket 密码是 owner 凭据，不代开、不代改。
 - `V2-P3-01` 视觉：缺合法 `.moc3`/`.vrm` 与情绪参考音频。
-- 表现力语音（item 10）：方案已出、**未实现、未下载任何权重**，见 [docs/design/expressive-voice-plan.md](../design/expressive-voice-plan.md)；等 owner 拍三件事（CosyVoice2 最小集 ≈4.07 GB 下载批准 / 首装 ≈6 GB 体积口径 / 原创音色走「本地随机嵌入」还是「一次性云端 voice design」）。
+- 表现力语音（item 10）：**2026-11-27 已完成本机实测并出结论**——见 [TTS-local-engine-benchmark-verification.md](./evidence/TTS-local-engine-benchmark-verification.md)。结论：**本机自托管不可用**（CosyVoice2-0.5B RTF 中位数 2.42 / P95 4.23，一句话约 7 秒音频要等 17–43 秒；CPU fp32 / MPS fp32 / MPS fp16 三档全数不合格，fp16 autocast 反而更慢且更耗内存）。按方案 §5.5 **默认档切商业 API**，本地引擎**保留为可选离线档**（4 GB 权重不删），UI 必须标注体感代价（一句话等 16–43 秒、首包 10–35 秒、冷启动首句 30 秒）。原待 owner 拍板事项：默认档切换需在后续工单落地（`planVoiceFallback()` 当前仍以「装没装」决定优先级，缺「本地仅作可选离线档」的显式开关）；另 `services/audio-ai-worker/tts_engine/emotion_router.py` 的 `StubLocalBackend` 自称 `"local-gpt-sovits"` 却渲染正弦波，属**冒名**，须改为如实标记并让 `supportsEmotion` 走探针实测。
 
 ## 6. 2026-11-26 owner 直接反馈：中控台顶栏自绘（PR #2 / 分支 `feat-console-titlebar-self`）
 
@@ -64,3 +64,11 @@
 - **做法**：仅 `createDirectorWindow` 在 darwin 使用 `titleBarStyle: 'hiddenInset'` + `trafficLightPosition {x:18,y:14}`；渲染层新增 40px `.wb-titlebar`（80px 红绿灯安全区 + 品牌 + 窗口级标签），背景走 Tidepaper token；品牌从侧栏移入顶栏避免重复。Windows/Linux 保留原生边框且不渲染该顶栏。
 - **验证**：拖动、双击 zoom/unzoom、全屏均用真实 CGEvent 在 macOS 真机复核；`pnpm verify:gate` 7/7、`ui.e2e` + `v2-obsidian-ui.e2e` 10 用例 PASS。证据 [P3-director-titlebar-verification.md](./evidence/P3-director-titlebar-verification.md)。
 - **合并状态**：该分支已 rebase 到最新 `origin/feat/whale-isle-v2`（PR #2），不自动合入主线；Windows/Linux 真机未执行，`V2-P3-05` 等主线工单状态不受影响。
+
+## 7. 2026-11-27：歌声系统与舞台形象路线拍板（ADR-005）
+
+- **owner 拍板**（原文逐字收录于 [ADR-005](./adr/ADR-005-singing-and-stage-technology-route.md) §1）：**SVC 优先、长期兼容 SVS**；**VRM 1.0 优先**，Live2D「不取消但不阻塞第一个完整角色」；**多形象共存**，所有形态共享同一身份/人格/记忆/情绪/声音；「不能简单地将其他歌手的演唱换一个音色就认为已经实现了完整的角色演唱风格」；「不要同时强制集成所有模型，不要将重型模型强制捆绑进主安装包」。
+- **落点**：新增 `V2-P3-07`（三阶段：阶段一 = SVC 翻唱 + VRM 1.0 一个完整角色跑通 → 阶段二 = SVS / SVS+SVC + Live2D → 阶段三 = 自动化与持续扩展），新增需求 `REQ-VOX-03` / `REQ-VOX-04` / `REQ-PERF-02` / `REQ-EMB-03` / `REQ-EMB-04`，架构新增 §5.1（`SingingProfile` 与三种歌声实现分层）与 §5.2（可插拔渲染器与统一表现接口）。
+- **诚实的现状**：现有 `Vrm3dStageAdapter` / `Live2dStageAdapter` **只有 BlendShape 数据结构、没有任何真实渲染**；`Embodiment` 域当前仅支持单形态指针，「多形象并存」的数据模型未定义。阶段一要补的是**真实 WebGL VRM 运行时**，不是把现有 stub 接得更漂亮。
+- **阶段一的硬前置（缺任一项即 `BLOCKED`，不得绕过）**：① owner 提供的**授权声源**（商用直播 / 衍生模型 / 再分发三项授权分别留档）；② 合规 `.vrm` 资产（owner 提供或经 `V2-P2-04` 流水线产出）；③ 歌声模型权重的**逐文件许可**核实结论。
+- **验收铁律**：owner 明确「PoC 通过 ≠ 需求达成」——歌声/形象类工单最高只能标 `IMPLEMENTED_UNVERIFIED`，直到有真实素材 + 真实听感/真机画面证据。
