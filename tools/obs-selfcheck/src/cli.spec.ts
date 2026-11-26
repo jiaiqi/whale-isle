@@ -66,10 +66,14 @@ class FakeClient {
   readonly requests: Array<{ requestType: string; requestData?: Record<string, unknown> }> = [];
   receivedPassword: string | undefined;
   closed = false;
+  private shotIndex = 0;
   constructor(
     private readonly behavior: {
       connectError?: Error;
       screenshot?: string;
+      /** 依次返回的截图序列（轮询用）；用尽后重复最后一帧 */
+      screenshots?: string[];
+      currentProgramScene?: string;
       requestError?: { requestType: string; error: Error };
     } = {},
   ) {}
@@ -87,7 +91,16 @@ class FakeClient {
     if (options.requestType === 'GetVersion') {
       return { obsVersion: '33.0.3', obsWebSocketVersion: '5.7.6' };
     }
+    if (options.requestType === 'GetSceneList') {
+      return { currentProgramSceneName: this.behavior.currentProgramScene ?? '场景', scenes: [] };
+    }
     if (options.requestType === 'GetSourceScreenshot') {
+      const seq = this.behavior.screenshots;
+      if (seq !== undefined && seq.length > 0) {
+        const frame = seq[Math.min(this.shotIndex, seq.length - 1)] ?? seq[0] ?? '';
+        this.shotIndex += 1;
+        return { imageData: frame };
+      }
       return { imageData: this.behavior.screenshot ?? colorPngDataUri([204, 0, 0]) };
     }
     return {};
@@ -288,6 +301,109 @@ describe('runProbe', () => {
     expect(shot?.requestData).not.toHaveProperty('imgFormat');
     expect(shot?.requestData).not.toHaveProperty('width');
     expect(shot?.requestData).not.toHaveProperty('height');
+  });
+
+  it('进临时场景再截图：SetCurrentProgramScene 必须排在 GetSourceScreenshot 之前', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
+    const client = new FakeClient({ screenshot: colorPngDataUri([204, 0, 0]) });
+    const code = await runProbe({
+      configPaths: paths,
+      log: () => undefined,
+      settleMs: 0,
+      startRedPage: async () => fakeRedPage,
+      createClient: () => client.asClient(),
+    });
+    expect(code).toBe(PROBE_EXIT.OK);
+    const types = client.types();
+    const setIdx = types.indexOf('SetCurrentProgramScene');
+    const shotIdx = types.indexOf('GetSourceScreenshot');
+    expect(setIdx).toBeGreaterThan(-1);
+    expect(shotIdx).toBeGreaterThan(setIdx);
+    // 先记原节目场景，再切走
+    expect(types.indexOf('GetSceneList')).toBeLessThan(setIdx);
+    expect(client.requests.find((r) => r.requestType === 'SetCurrentProgramScene')?.requestData)
+      .toEqual({ sceneName: expect.stringContaining('WhaleIsle-SelfCheck-') });
+  });
+
+  it('成功路径：探针结束把节目场景切回原场景', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
+    const client = new FakeClient({ screenshot: colorPngDataUri([204, 0, 0]), currentProgramScene: '场景' });
+    await runProbe({
+      configPaths: paths,
+      log: () => undefined,
+      settleMs: 0,
+      startRedPage: async () => fakeRedPage,
+      createClient: () => client.asClient(),
+    });
+    const restores = client.requests.filter(
+      (r) => r.requestType === 'SetCurrentProgramScene' && r.requestData?.sceneName === '场景',
+    );
+    expect(restores).toHaveLength(1);
+    // 恢复必须在删除临时场景之前
+    const restoreIdx = client.requests.findIndex(
+      (r) => r.requestType === 'SetCurrentProgramScene' && r.requestData?.sceneName === '场景',
+    );
+    expect(client.types().indexOf('RemoveScene')).toBeGreaterThan(restoreIdx);
+  });
+
+  it('失败路径：截图抛错也要把节目场景切回原场景', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
+    const client = new FakeClient({
+      currentProgramScene: '场景',
+      requestError: { requestType: 'GetSourceScreenshot', error: new Error('截图失败') },
+    });
+    const code = await runProbe({
+      configPaths: paths,
+      log: () => undefined,
+      settleMs: 0,
+      startRedPage: async () => fakeRedPage,
+      createClient: () => client.asClient(),
+    });
+    expect(code).toBe(PROBE_EXIT.ERROR);
+    expect(client.requests.some(
+      (r) => r.requestType === 'SetCurrentProgramScene' && r.requestData?.sceneName === '场景',
+    )).toBe(true);
+  });
+
+  it('轮询：前两帧全黑、第三帧红页 → 退出码 0，且截了三次', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
+    const client = new FakeClient({
+      screenshots: [colorPngDataUri([0, 0, 0]), colorPngDataUri([0, 0, 0]), colorPngDataUri([204, 0, 0])],
+    });
+    const lines: string[] = [];
+    const code = await runProbe({
+      configPaths: paths,
+      log: (l) => lines.push(l),
+      settleMs: 5_000,
+      pollIntervalMs: 0,
+      startRedPage: async () => fakeRedPage,
+      createClient: () => client.asClient(),
+    });
+    expect(code).toBe(PROBE_EXIT.OK);
+    expect(client.types().filter((t) => t === 'GetSourceScreenshot')).toHaveLength(3);
+    expect(lines.join('\n')).toContain('第 3 次截图');
+  });
+
+  it('全黑结论不再甩锅硬件加速：按「场景 → CEF profile → 硬件加速」顺序给处置', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=true\n', { server_enabled: true, server_port: 4455 });
+    const client = new FakeClient({ screenshot: colorPngDataUri([0, 0, 0]) });
+    const lines: string[] = [];
+    const code = await runProbe({
+      configPaths: paths,
+      log: (l) => lines.push(l),
+      settleMs: 0,
+      startRedPage: async () => fakeRedPage,
+      createClient: () => client.asClient(),
+    });
+    expect(code).toBe(PROBE_EXIT.BLACK);
+    const text = lines.join('\n');
+    expect(text).toContain('全黑不等于硬件加速');
+    expect(text).toContain('浏览器源不在节目场景里');
+    expect(text).toContain('obs-browser');
+    expect(text).toContain('关闭「启用浏览器源硬件加速」');
+    // 顺序：场景 → CEF → 硬件加速
+    expect(text.indexOf('浏览器源不在节目场景里')).toBeLessThan(text.indexOf('obs-browser'));
+    expect(text.indexOf('obs-browser')).toBeLessThan(text.indexOf('启用浏览器源硬件加速'));
   });
 
   it('渲染全黑 → 退出码 1，且临时场景与临时输入都被删除', async () => {

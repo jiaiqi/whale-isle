@@ -2,10 +2,10 @@
 /**
  * OBS 浏览器源「静态红页自检」CLI（item 4 / `V2-P3-02` OBS 本地闭环配套）。
  *
- * 背景：本机 OBS 33.0.3 + CEF 150 在 Darwin 27.2 上开启「浏览器源硬件加速」
- * （`global.ini` 的 `BrowserHWAccel=true`）时，`browser_source` **渲染全黑**——
- * 连纯色静态红页也是黑屏。这极易被误判成「我们 overlay 页面坏了」。
- * 本工具把「是否处于该缺陷状态」变成一条可复跑的判据。
+ * 背景（2026-11-26 更正）：本机 `browser_source` 曾经全黑，最初归因为「浏览器源硬件加速」，
+ * **该归因是错的**。owner 实测定位到真因是 **CEF profile 损坏**（`plugin_config/obs-browser` 挪走后重启即恢复），
+ * 另有一个探针自身缺陷：临时源所在场景不是节目场景时根本不会被渲染，截图必然全黑。
+ * 因此本工具现在的判据是「页面能否被真实渲染成红」，全黑时按「场景 → CEF profile → 硬件加速」顺序给处置。
  *
  * 用法：
  *   pnpm obs:selfcheck              # ① 只读前置自检（不改任何 OBS 配置）
@@ -86,11 +86,16 @@ export interface ProbeOptions {
   /** 测试替身：返回一个已连接（或抛错）的客户端 */
   createClient?: (url: string) => ObsWebsocketClient;
   startRedPage?: () => Promise<RedPageServer>;
-  /** 等待 CEF 加载本地页面的延时（测试里置 0） */
+  /** **最多**等多久拿到非全黑帧（毫秒，默认 8000）；0 = 只截一帧不重试 */
   settleMs?: number;
+  /** 轮询间隔（毫秒，默认 500） */
+  pollIntervalMs?: number;
   password?: string;
   log?: (line: string) => void;
 }
+
+const DEFAULT_SETTLE_LIMIT_MS = 8_000;
+const DEFAULT_POLL_INTERVAL_MS = 500;
 
 export const PROBE_EXIT = {
   OK: 0,
@@ -129,10 +134,19 @@ export async function runProbe(options: ProbeOptions = {}): Promise<number> {
 
   const sceneName = `WhaleIsle-SelfCheck-${Date.now()}`;
   const inputName = `${sceneName}-red`;
+  const maxWaitMs = options.settleMs ?? DEFAULT_SETTLE_LIMIT_MS;
+  const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  /** 探针进入前的节目场景：finally 里必须切回去，否则 owner 的直播画面会被晾在临时场景上 */
+  let originalProgramScene: string | null = null;
   try {
     const version = await client.request({ requestType: 'GetVersion' });
     log(`已连接 OBS ${String(version.obsVersion ?? '?')}`
       + `（obs-websocket ${String(version.obsWebSocketVersion ?? '?')}）`);
+    const sceneList = await client.request({ requestType: 'GetSceneList' });
+    const current = sceneList.currentProgramSceneName;
+    originalProgramScene = typeof current === 'string' && current !== '' ? current : null;
+    if (originalProgramScene !== null) log(`当前节目场景：${originalProgramScene}（探针结束后会切回）`);
+
     await client.request({ requestType: 'CreateScene', requestData: { sceneName } });
     await client.request({
       requestType: 'CreateInput',
@@ -143,27 +157,34 @@ export async function runProbe(options: ProbeOptions = {}): Promise<number> {
         inputSettings: { url: redPage.url, width: 64, height: 64, shutdown_source_when_inactive: false },
       },
     });
-    const settleMs = options.settleMs ?? 1500;
-    if (settleMs > 0) await new Promise((resolve) => setTimeout(resolve, settleMs));
-    const shot = await client.request({
-      requestType: 'GetSourceScreenshot',
-      // 字段名按 obs-websocket 5.x 协议：imageFormat / imageWidth / imageHeight。
-      // 历史坑：这里曾写成 imgFormat / width / height，OBS 回 "Your request is missing the `imageFormat` field."
-      requestData: { sourceName: inputName, imageFormat: 'png', imageWidth: 64, imageHeight: 64 },
-    });
-    const dataUri = String(shot.imageData ?? '');
-    const base64 = dataUri.includes(',') ? dataUri.slice(dataUri.indexOf(',') + 1) : dataUri;
-    const image = decodePng(Buffer.from(base64, 'base64'));
-    const center = pixelAt(image, Math.floor(image.width / 2), Math.floor(image.height / 2));
+    // 关键一步：浏览器源只有在**节目场景**里才会被渲染。不切场景时截图必然全黑——
+    // 早期探针漏了这一步，把「没渲染」误报成「硬件加速缺陷」。
+    await client.request({ requestType: 'SetCurrentProgramScene', requestData: { sceneName } });
+
+    // 轮询而不是固定睡 1.5s：CEF 冷启动时 1.5s 不够会假阴性
+    const deadline = Date.now() + Math.max(0, maxWaitMs);
+    let image = null;
+    let shotCount = 0;
+    for (;;) {
+      shotCount += 1;
+      image = await captureCenterPixel(client, inputName);
+      if (!isAllBlack(image.image)) break;
+      if (Date.now() >= deadline) break;
+      if (pollIntervalMs > 0) await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+    const center = image.center;
     log(`红页 URL：${redPage.url}`);
-    log(`截图尺寸 ${image.width}x${image.height}，中心像素 rgb(${center.join(',')})`);
-    if (isAllBlack(image)) {
-      log('结论：browser_source 渲染全黑——命中本机已知缺陷（浏览器源硬件加速）。');
-      log('处置：关闭 OBS 浏览器源硬件加速后重跑本探针。');
+    log(`截图尺寸 ${image.image.width}x${image.image.height}，中心像素 rgb(${center.join(',')})（第 ${shotCount} 次截图）`);
+    if (isAllBlack(image.image)) {
+      log(`结论：browser_source 在 ${Math.round(maxWaitMs / 100) / 10}s 内始终渲染全黑。`);
+      log('全黑不等于硬件加速，按下面顺序排查：');
+      log('  ① 浏览器源不在节目场景里——探针已自动切到临时场景，若仍全黑可先排除此项；');
+      log('  ② CEF profile 损坏——处置：完全退出 OBS，把 ~/Library/Application Support/obs-studio/plugin_config/obs-browser 整个挪走，再重启 OBS；');
+      log('  ③ 浏览器源硬件加速——处置：OBS 设置 → 高级 → 关闭「启用浏览器源硬件加速」，然后完全退出并重开 OBS。');
       return PROBE_EXIT.BLACK;
     }
-    if (isRedPage(image)) {
-      log('结论：browser_source 正常渲染静态红页，未命中全黑缺陷。');
+    if (isRedPage(image.image)) {
+      log('结论：browser_source 正常渲染静态红页，画面侧链路可用。');
       return PROBE_EXIT.OK;
     }
     log('结论：browser_source 有内容但不是红页，可能加载未完成或源地址被改写；请人工目视核对。');
@@ -174,11 +195,34 @@ export async function runProbe(options: ProbeOptions = {}): Promise<number> {
   } finally {
     // 只删自己建的临时输入与临时场景；失败也不影响 owner 已有场景
     await client.request({ requestType: 'RemoveInput', requestData: { inputName } }).catch(() => undefined);
+    // 先切回原节目场景，再删临时场景——顺序反了会让 OBS 在删除当前节目场景时不知所措
+    if (originalProgramScene !== null) {
+      await client.request({ requestType: 'SetCurrentProgramScene', requestData: { sceneName: originalProgramScene } })
+        .then(() => log(`已切回原节目场景：${originalProgramScene}`))
+        .catch(() => log(`[!] 切回原节目场景失败：${originalProgramScene}，请在 OBS 里手动切回`));
+    }
     await client.request({ requestType: 'RemoveScene', requestData: { sceneName } }).catch(() => undefined);
     log(`已清理临时输入与临时场景（${sceneName}）。`);
     client.close();
     await redPage.close();
   }
+}
+
+/** 截一帧并取中心像素（失败即抛错，由调用方决定怎么记） */
+async function captureCenterPixel(
+  client: ObsWebsocketClient,
+  inputName: string,
+): Promise<{ image: ReturnType<typeof decodePng>; center: number[] }> {
+  const shot = await client.request({
+    requestType: 'GetSourceScreenshot',
+    // 字段名按 obs-websocket 5.x 协议：imageFormat / imageWidth / imageHeight。
+    // 历史坑：这里曾写成 imgFormat / width / height，OBS 回 "Your request is missing the `imageFormat` field."
+    requestData: { sourceName: inputName, imageFormat: 'png', imageWidth: 64, imageHeight: 64 },
+  });
+  const dataUri = String(shot.imageData ?? '');
+  const base64 = dataUri.includes(',') ? dataUri.slice(dataUri.indexOf(',') + 1) : dataUri;
+  const image = decodePng(Buffer.from(base64, 'base64'));
+  return { image, center: pixelAt(image, Math.floor(image.width / 2), Math.floor(image.height / 2)) };
 }
 
 /** ② 人机目视模式：打印红页地址并常驻，直到 Ctrl+C */
