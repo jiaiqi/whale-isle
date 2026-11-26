@@ -30,7 +30,7 @@
 ## 三、2026-11-26 真机补验（宿主 IPC 层 `[REAL-DEVICE]`）
 
 > **范围声明（诚实口径）**：本节是在**真实运行的 Electron 宿主**里驱动 `CoopRuntimeV1` 的 8 路 V2 IPC，验证宿主接线与运行时行为**真实可用**；
-> 它**不等于**「双端真实《星露谷》客户端联机开房协同实玩」——后者需要第二台机器或第二个 Steam 账号（见第 4 节），本机不具备。
+> 它**不等于**「双端真实《星露谷》客户端联机开房协同实玩」——原判断「需要第二台机器或第二个 Steam 账号」已于 2026-11-26 复核修正：官方支持**本地分屏合作**（同机同账号、无需第二设备），真实缺口是 AI 端 farmhand 控制语义，详见 [P2-08-coop-acceptance-path-analysis.md](./P2-08-coop-acceptance-path-analysis.md)。
 
 ### 3.1 本机前置盘点
 
@@ -64,8 +64,8 @@
 
 ## 四、真机双端联机仍缺的前置（需 owner 提供）
 
-1. **第二台机器或第二个 Steam 账号**：本机 `userdata` 只有 1 个账号，无法在同一台机器上以两个客户端进同一联机农场（Steam 默认禁止同游戏多实例）。
-2. **联机农场内的 farmhand 槽位**：需要房主端在游戏内「添加/管理农场工」并让 AI 端以 farmhand 身份加入，才能验证 `WhaleIsle.AvatarSync`「仅替换本端玩家」在双端下的外观差异（`evaluateCoopModsCompatibility` 已具备该差异告警能力，但**尚无真实差异样本**）。
+1. **（2026-11-26 修正）同机分屏即可，不必先要第二账号/设备**：官方 Wiki 明确 `Start Local Co-op` 本地分屏免费、同账号可用（需为额外玩家接手柄并先在单机模式建 cabin）；「第二台机器/第二账号」只在需要两个独立客户端验证网络同步时才需要。核实依据见 [P2-08-coop-acceptance-path-analysis.md](./P2-08-coop-acceptance-path-analysis.md)。
+2. **联机农场内的 farmhand 槽位与 AI 控制**：需要房主端在游戏内建 cabin 并让 AI 端以 farmhand 身份加入；当前 BWF/SMAPI 仅覆盖房主输入，farmhand 身份的动作回执与输入路由属实现缺口，才能验证 `WhaleIsle.AvatarSync`「仅替换本端玩家」在双端下的外观差异（`evaluateCoopModsCompatibility` 已具备该差异告警能力，但**尚无真实差异样本**）。
 3. **BWF 在 farmhand 身份下的行为**：需实测 AI 作为非房主玩家时 BWF MCP 的动作回执（寻路/用工具是否仍以真实回执返回），当前所有 BWF 实测均为**单客户端房主**场景。
 
 > 上述均为外部账号/设备前置，Agent 无法自行获取；已按调度要求单列清单报 owner，不阻塞其余工单推进。
