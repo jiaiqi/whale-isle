@@ -275,6 +275,55 @@ export const SocialAutostartDecisionSchema = z.object({
 });
 export type SocialAutostartDecision = z.output<typeof SocialAutostartDecisionSchema>;
 
+// ---------------------------------------------------------------------------
+// L1 浏览执行器（V2-P3-04G 续：执行器骨架 + 候选来源抽象 + 逐条读取 + 理解配额）
+// 真实平台浏览在 owner 逐项声明能力矩阵并实测前一律不接；本地夹具源只用于开发/测试，
+// 且必须显式放行才可运行——任何文档或 UI 都不得把「能浏览网页」写成已具备的能力。
+// ---------------------------------------------------------------------------
+
+export const SocialBrowseSourceKindSchema = z.enum(['local_fixture', 'platform']);
+export type SocialBrowseSourceKind = z.infer<typeof SocialBrowseSourceKindSchema>;
+
+/** 候选来源自报家门：来源种类、平台、是否逐项实测过（verdict 由运行时再校一遍） */
+export const SocialBrowseSourceDescriptorSchema = z.object({
+  sourceId: z.string().min(1).max(100),
+  platform: SocialPlatformIdSchema,
+  kind: SocialBrowseSourceKindSchema,
+  /** 真实平台源必须 allowed=true 且 lastVerifiedAt>0 才允许置真；local_fixture 恒 false */
+  verified: z.boolean().default(false),
+  note: z.string().max(200).default(''),
+});
+export type SocialBrowseSourceDescriptor = z.output<typeof SocialBrowseSourceDescriptorSchema>;
+
+/** 执行器对外自述（生活页直接展示，防止把夹具链路说成「已能浏览」） */
+export const SocialBrowseExecutorStatusSchema = z.object({
+  wired: z.boolean().default(false),
+  sources: z.array(SocialBrowseSourceDescriptorSchema).default([]),
+  /** 是否存在「已实测的真实平台候选源」；false 表示绝不会真发起 */
+  runnable: z.boolean().default(false),
+});
+export type SocialBrowseExecutorStatus = z.output<typeof SocialBrowseExecutorStatusSchema>;
+
+/** 单次执行的诚实回执：看了几条、理解用了几次配额、为什么停 */
+export const SocialBrowseRunSummarySchema = z.object({
+  sessionId: z.string().min(1),
+  platform: SocialPlatformIdSchema,
+  sourceId: z.string().min(1).max(100),
+  sourceKind: SocialBrowseSourceKindSchema,
+  candidatesConsidered: z.number().int().nonnegative().default(0),
+  itemsViewed: z.number().int().nonnegative().default(0),
+  /** 逐条读取失败次数（失败不计入已浏览条目） */
+  readFailures: z.number().int().nonnegative().default(0),
+  understandingCalls: z.number().int().nonnegative().default(0),
+  /** 因理解配额耗尽而只记浏览事实、未理解条数 */
+  understandingSkipped: z.number().int().nonnegative().default(0),
+  understandingFailures: z.number().int().nonnegative().default(0),
+  stopReason: BrowseSessionStopReasonSchema,
+  status: BrowseSessionStatusSchema,
+  detail: z.string().max(300).default(''),
+});
+export type SocialBrowseRunSummary = z.output<typeof SocialBrowseRunSummarySchema>;
+
 /** 生活页四块的数据源：下次可发起/当前会话/今日用量/最近 5 次 */
 export const SocialAutostartSnapshotSchema = z.object({
   settings: SocialAutostartSettingsSchema,
@@ -290,5 +339,7 @@ export const SocialAutostartSnapshotSchema = z.object({
   recent: z.array(SocialAutostartRecordSchema).max(5).default([]),
   consecutiveFailures: z.number().int().nonnegative().default(0),
   executorReady: z.boolean().default(false),
+  /** L1 浏览执行器状态：必须如实显示「有没有接真实平台」，没接就不许写「能浏览」 */
+  executor: SocialBrowseExecutorStatusSchema.default({ wired: false, sources: [], runnable: false }),
 });
 export type SocialAutostartSnapshot = z.output<typeof SocialAutostartSnapshotSchema>;

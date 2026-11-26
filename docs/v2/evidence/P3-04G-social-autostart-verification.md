@@ -68,9 +68,60 @@
 
 ## 5. 仍然缺的（不得记为已验收）
 
-1. **执行器未接入** → 自动发起永不发生（`executor_not_ready` 恒定）。
+1. **执行器已接线但无候选来源** → 自动发起仍然永不发生（`platform_unverified` 先拦、`executor_not_ready` 兜底）。见第 6 节。
 2. **无 `[E2E-HOST]`/`[REAL-DEVICE]` 验证**：生活页四块只在类型与构建层面通过，没有跑一次真实 Electron 截图断言。
 3. **tick 的 60 秒节拍**没有在长时运行中浸泡过（急停、跨夜、休眠唤醒后的行为未实测）。
 4. 桌宠气泡改动会使 `social-life.e2e.spec.ts` 里「在读：」这条断言只剩「收官」分支可命中——需要在该 e2e 里补一条"不再逐条刷屏"的负向断言（本次未改该文件，避免与 item 7 的气泡文件并发冲突）。
 
-下一步（另立工单）：L1 浏览执行器（候选来源 + 逐条读取 + 理解配额）→ 打开 `executorReady` → 补 E2E。
+下一步：真实平台候选源（须 owner 逐项声明能力矩阵并实测）→ 接第一个真实平台 → 补 `[E2E-HOST]` 截图断言。
+
+---
+
+## 6. 续：L1 浏览执行器骨架（同日，owner 2026-11-26 批示后并入本单）
+
+### 6.1 交付了什么
+
+| 能力 | 落点 | 说明 |
+| --- | --- | --- |
+| 候选来源抽象 | `social-executor.ts` `SocialBrowseCandidateSource` | 只供给候选，不含任何互动写操作；自述 `sourceId / platform / kind / verified` |
+| 逐条读取 | `SocialBrowseItemReader` | 只读公开正文；抛错 = 该条读取失败，**不计入已浏览条目**，继续下一条 |
+| 内容理解 | `SocialBrowseUnderstander` | 宿主接到既有 `ContentUnderstandingPipeline`；失败不静默降级，如实记 `understandingFailures` |
+| 理解配额 | `maxUnderstandingCalls`（默认 8，可由调度决策下发） | 配额用尽后**一次模型调用都不再发**，只记浏览事实并累计 `understandingSkipped` |
+| 中途打断 | `isInterrupted()` 每条前检查 | 触发即 `abort(user_stopped)`，回执与事件如实 |
+| 双门禁 | `assertSourceUsable()` | ① `local_fixture` 必须显式 `allowLocalFixture`（产品恒 false）② `platform` 源 `verified=false` 一律 `PERMISSION_DENIED` |
+| 自述口径 | `status()` + `SocialBrowseExecutorStatus` | 只有「真实平台 + 已实测」才 `runnable=true`；夹具源永远不置真 |
+
+契约新增（`packages/shared-protocol/src/social.ts`）：`SocialBrowseSourceKindSchema`、`SocialBrowseSourceDescriptorSchema`、`SocialBrowseExecutorStatusSchema`、`SocialBrowseRunSummarySchema`；`SocialAutostartSnapshot` 增 `executor` 字段。
+
+### 6.2 范围红线执行情况（owner 批示）
+
+- **真实平台浏览一律不接**：宿主 `v2-kernel-host.ts` 构造执行器时 `allowLocalFixture: false` 且**不注册任何来源** → `status()` 恒为 `{ wired: true, sources: [], runnable: false }`。能力矩阵为空时调度层早已以 `platform_unverified` 拦截，执行器 `executorReady` 仍是 false，两道门互为兜底。
+- **没有把「能浏览网页」写进文档或 UI**：生活页文案明确写「当前没有任何候选来源：真实平台在逐项声明并实测能力之前一律不接」；`describeSourceKind()` 统一把夹具源表述为「本地夹具（未接真实平台）」。
+- **夹具源只用于链路验证**：`LocalFixtureCandidateSource` 确定性、零网络，只在单测里显式打开 `allowLocalFixture`。
+
+### 6.3 单测（`social-executor.spec.ts`，12 例全过）
+
+owner 点名要求的四类全覆盖，另加六例：
+
+- **配额耗尽**：`maxItems=2` / 5 条候选 → 只读 2 条，按 `budget_exhausted` 收官
+- **理解调用超限**：`maxUnderstandingCalls=2` / 5 条 → 模型只调 2 次，`skipped=3`
+- **平台未授权**：`kind='platform'` 且 `verified=false` → 动手前 `PERMISSION_DENIED`，`itemsViewed` 保持 0
+- **用户中途打断**：第一条后 `isInterrupted()` 为真 → 只读 1 条即 `aborted/user_stopped`，事件 `social.session.aborted` 落地
+- 夹具源默认被拒（不放行则拒绝运行）
+- 没有候选来源时拒绝发起，不伪造来源
+- 正常链路 3 条 → 读 3 / 理解 3 / `objective_met`
+- 理解失败也计入配额（防「失败不计数」把配额刷爆），不中止会话
+- 逐条读取失败不计入已浏览条目
+- 时长预算到点收官；`status()` 与 `describeSourceKind()` 口径
+
+> 夹具环境的 `generic_web + read_public` 能力条目是**测试合成**，不构成对任何真实平台的授权声明。
+
+### 6.4 门禁
+
+`pnpm verify:gate` → **7 过 / 0 跳过 / 0 待接线**；`pnpm typecheck` 零错误。
+
+### 6.5 仍然缺的
+
+1. **没有任何真实平台候选源**：执行器不会真跑；首个真实平台须等 owner 逐项授权并实测。
+2. **`[E2E-HOST]` 未做**：生活页执行器文案只有类型与构建层面证据，无 Electron 截图断言。
+3. **理解端到端未接**：`SocialBrowseUnderstander` 由宿主注入，目前尚无调用方把 `ContentUnderstandingPipeline` + `InterestSink` 串起来（等真实来源落地时同批接）。

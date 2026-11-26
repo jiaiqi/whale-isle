@@ -28,6 +28,7 @@ import {
   type SocialAutostartRecord,
   type SocialAutostartSettings,
   type SocialAutostartSnapshot,
+  type SocialBrowseExecutorStatus,
 } from '@workbench/shared-protocol';
 import { WhaleError, type RuntimeEventBus } from '@workbench/runtime-core';
 
@@ -252,6 +253,8 @@ export interface SocialAutostartFacts {
   modelReady: boolean;
   /** 当前是否有会话在跑 */
   activeSessionId?: string | null;
+  /** L1 执行器自述（有没有接真实平台），缺省按未接线展示 */
+  executor?: SocialBrowseExecutorStatus;
 }
 
 export interface SocialAutostartSessionEnd {
@@ -434,6 +437,7 @@ export class SocialAutostartScheduler {
       recent: this.records,
       consecutiveFailures: this.consecutiveFailures,
       executorReady: facts.executorReady,
+      executor: facts.executor ?? { wired: false, sources: [], runnable: false },
     });
   }
 

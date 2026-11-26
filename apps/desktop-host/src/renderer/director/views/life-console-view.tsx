@@ -1260,7 +1260,13 @@ export function LifeConsoleView({
           )}
           {socialSnap !== null && !socialSnap.autostart.executorReady ? (
             <div className="text-[10.5px]" data-v2-social-autostart-executor style={{ color: 'var(--amber, #b45309)' }}>
-              L1 浏览执行器尚未接入（候选来源 + 逐条读取 + 内容理解）：即使开关打开也不会发起，避免空会话白吃当日预算。
+              执行器骨架已接线（候选来源 → 逐条读取 → 内容理解，含理解配额），但
+              {socialSnap.autostart.executor.sources.length === 0
+                ? '当前没有任何候选来源：真实平台在逐项声明并实测能力之前一律不接。'
+                : `当前来源：${socialSnap.autostart.executor.sources
+                    .map((source) => `${source.sourceId}（${source.kind === 'local_fixture' ? '本地夹具，未接真实平台' : source.verified ? '真实平台·已实测' : '真实平台·未实测'}）`)
+                    .join('、')}。`}
+              因此即使开关打开也不会发起，避免空会话白吃当日预算。
             </div>
           ) : null}
         </div>

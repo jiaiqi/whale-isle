@@ -17,8 +17,9 @@
 - **拦截原因逐项可读**：暂停/急停、已有会话、夜间、连续失败、次数用尽、时长用尽、冷却、间隔未到、平台未实测、执行器未接入、模型不可用、用户玩游戏/直播/用电脑——生活页直接显示「被谁拦住」。
 - **P0 急停立即 abort 在跑会话**（记 `user_stopped`）；会话跨 00:00 按 `quiet_hours` 收官。
 - **桌宠气泡改为只报开始/收官**，移除逐条浏览投影（owner 口径：不逐条刷屏）。
-- **23 例确定性单测**（可注入时钟与随机序列，不 sleep），`verify:gate` 7/7。证据 [P3-04G-social-autostart-verification.md](./docs/v2/evidence/P3-04G-social-autostart-verification.md)。
-- **如实记录未接项**：L1 浏览执行器未接入，`executorReady` 恒 `false`，开关打开也不会发起——避免空会话白吃当日额度。
+- **L1 浏览执行器骨架并入本单**：候选来源抽象（`SocialBrowseCandidateSource`）、逐条读取（`SocialBrowseItemReader`）、内容理解配额（超限后不再发模型调用）、用户中途打断（`aborted/user_stopped`）四段端口齐全；双门禁——夹具源必须显式放行且产品恒 `allowLocalFixture=false`，真实平台源未实测一律 `PERMISSION_DENIED`。
+- **23 + 12 例确定性单测**（可注入时钟与随机序列，不 sleep），`verify:gate` 7/7。证据 [P3-04G-social-autostart-verification.md](./docs/v2/evidence/P3-04G-social-autostart-verification.md)。
+- **如实记录未接项**：宿主不注册任何候选来源，执行器 `runnable=false`、`executorReady` 仍为 `false`，开关打开也不会发起——真实平台浏览在 owner 逐项声明并实测能力矩阵之前一律不接。
 
 ### Added（单桌宠全链路 E2E：宿主仿真 BWF 端点 + 启动到记忆一条剧本）
 

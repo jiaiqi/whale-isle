@@ -27,7 +27,7 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
-import { CharacterCore, ContentUnderstandingPipeline, InterestSink, SocialAutostartScheduler, SocialRuntime, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts } from '@workbench/character-core';
+import { CharacterCore, ContentUnderstandingPipeline, InterestSink, SocialAutostartScheduler, SocialBrowseExecutor, SocialRuntime, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts } from '@workbench/character-core';
 import {
   AudioTrackKindSchema,
   BrowseCandidateSchema,
@@ -653,6 +653,18 @@ export async function createV2KernelHost(options: {
     },
   });
 
+  // ---- V2-P3-04G 续：L1 浏览执行器（骨架已接线，候选来源为空）----
+  // 三段端口（候选来源 / 逐条读取 / 内容理解）已实现并有单测覆盖，但**不接任何真实平台**：
+  // owner 逐项声明并实测能力矩阵之前，来源表恒为空 → 执行器 runnable=false → 调度层以
+  // platform_unverified / executor_not_ready 如实拦截，一次也不会真发起。
+  // allowLocalFixture 固定 false：产品运行期永不跑本地夹具源（夹具只在单测里用）。
+  const socialExecutor = new SocialBrowseExecutor({
+    runtime: socialRuntime,
+    allowLocalFixture: false,
+    isInterrupted: () =>
+      characterCore.life.activityState().halted || Boolean(autodriveRef?.runner.isRunning()),
+  });
+
   // ---- V2-P3-04E 补：自主发起社交会话（owner 口径 2026-11-26，默认关闭）----
   // 策略层只决定「何时可以开始」；看什么、怎么互动仍归模型（ADR-002）。
   const socialAutostartStore = new JsonFileConfigStore(
@@ -675,10 +687,12 @@ export async function createV2KernelHost(options: {
       platformReady: socialCapabilitiesStore
         .get()
         .entries.some((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public'),
-      // L1 浏览执行器（候选来源 + 逐条读取 + 内容理解）尚未接入：不发起，避免空会话白吃预算
+      // L1 浏览执行器已接线，但还没有「已实测的真实平台候选源」：不发起，避免空会话白吃预算。
+      // 真实平台浏览一律等 owner 逐项声明能力矩阵并实测后再接（来源表为空 = runnable false）。
       executorReady: false,
       modelReady: autodriveRef?.getBrainMode().llmReady ?? false,
       activeSessionId: active?.sessionId ?? null,
+      executor: socialExecutor.status(),
     };
   };
   const socialAutostartSnapshot = () => {
