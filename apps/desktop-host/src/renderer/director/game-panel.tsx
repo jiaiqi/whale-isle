@@ -8,10 +8,10 @@
  * 原则：区块只渲染真实数据——回执来自游戏侧真实回执，连接状态来自主进程只读探活，
  * 任何未连接/未就绪都如实展示引导，不显示虚假的「已连接」。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, PlugZap, RefreshCw, Square } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, PlugZap, RefreshCw, Rocket, Square } from 'lucide-react';
 import { summarizeAutodriveQuality, formatRate } from '@workbench/game-bridge-mcp/metrics';
-import type { AutodriveEventView, GameHealthView, GameId } from './bridge';
+import type { AutodriveEventView, GameHealthView, GameId, StardewLaunchStateView, StardewLaunchStatusView } from './bridge';
 
 /** 回执状态色（语义色 token，深浅主题通用） */
 export const GAME_STATUS_COLOR: Record<string, { bg: string; line: string; text: string }> = {
@@ -120,6 +120,81 @@ export function useGameHealth(
   return { report, probing, reprobe: () => { void probe(); } };
 }
 
+const STARDEW_LAUNCH_TERMINAL: readonly StardewLaunchStateView[] = ['ready', 'timeout', 'failed', 'not_installed'];
+
+/** 状态中文名（未知状态原样显示，不臆造） */
+export const STARDEW_LAUNCH_LABEL: Record<StardewLaunchStateView, string> = {
+  not_installed: '未检测到游戏',
+  launching: '正在启动',
+  waiting_mcp: '等待游戏就绪',
+  ready: '已就绪',
+  timeout: '等待超时',
+  failed: '启动失败',
+};
+
+/**
+ * V2-P3-05：星露谷一键启动的渲染层状态轮询。
+ * 主进程启动后立即返回，这里按 800ms 拉取真实状态；只有主进程确认 MCP get_state 应答才显示「已就绪」。
+ */
+export function useStardewLaunch(onReady?: () => void): {
+  status: StardewLaunchStatusView | null;
+  busy: boolean;
+  launch: () => Promise<void>;
+  cancel: () => Promise<void>;
+} {
+  const [status, setStatus] = useState<StardewLaunchStatusView | null>(null);
+  const [busy, setBusy] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+
+  const clearTimer = useCallback((): void => {
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearTimer, [clearTimer]);
+
+  const settle = useCallback((next: StardewLaunchStatusView): void => {
+    setStatus(next);
+    if (STARDEW_LAUNCH_TERMINAL.includes(next.state)) {
+      clearTimer();
+      setBusy(false);
+      if (next.state === 'ready') onReadyRef.current?.();
+    }
+  }, [clearTimer]);
+
+  const launch = useCallback(async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const first = await window.directorBridge.stardewLaunch();
+      settle(first);
+      if (STARDEW_LAUNCH_TERMINAL.includes(first.state)) return;
+      clearTimer();
+      timerRef.current = window.setInterval(() => {
+        void window.directorBridge.stardewLaunchStatus()
+          .then(settle)
+          .catch(() => { clearTimer(); setBusy(false); });
+      }, 800);
+    } catch {
+      setBusy(false);
+    }
+  }, [clearTimer, settle]);
+
+  const cancel = useCallback(async (): Promise<void> => {
+    clearTimer();
+    try {
+      settle(await window.directorBridge.stardewLaunchCancel());
+    } catch {
+      setBusy(false);
+    }
+  }, [clearTimer, settle]);
+
+  return { status, busy, launch, cancel };
+}
+
 /**
  * 连接状态与开箱引导条（设计稿 conn-banner）：
  *   online    —— 绿色：桥接在线且游戏侧就绪
@@ -140,6 +215,14 @@ export function GameConnectionBanner({
   const name = GAME_FULL_NAME[gameId];
   const status = report?.status ?? 'unknown';
   const connected = status === 'online';
+  const launchState = useStardewLaunch(onReprobe);
+  const launchStatus = launchState.status;
+  const launchTone = launchStatus?.state === 'ready'
+    ? 'var(--green)'
+    : launchStatus?.state === 'failed' || launchStatus?.state === 'timeout' || launchStatus?.state === 'not_installed'
+      ? 'var(--red)'
+      : 'var(--amber)';
+  const showLaunchProgress = gameId === 'stardew' && !connected && launchStatus !== null && launchStatus.state !== 'not_installed';
 
   return (
     <div
@@ -174,15 +257,59 @@ export function GameConnectionBanner({
             </ol>
           </>
         )}
+        {showLaunchProgress && launchStatus !== null && (
+          <div
+            data-stardew-launch-progress
+            className="mt-2 rounded-lg px-2.5 py-2 text-[11px]"
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}
+          >
+            <div className="flex items-center gap-1.5 font-semibold" style={{ color: launchTone }}>
+              <Rocket size={11} />
+              {STARDEW_LAUNCH_LABEL[launchStatus.state]}
+              {launchStatus.elapsedMs > 0 && (
+                <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+                  已等待 {Math.round(launchStatus.elapsedMs / 1000)}s
+                </span>
+              )}
+            </div>
+            <div className="mt-0.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>{launchStatus.message}</div>
+            {launchStatus.hint !== '' && (
+              <div className="mt-0.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>{launchStatus.hint}</div>
+            )}
+          </div>
+        )}
       </div>
-      <button
-        data-game-reprobe
-        className={`btn-pill ${connected ? 'ghost' : 'primary'} shrink-0`}
-        onClick={onReprobe}
-        disabled={probing}
-      >
-        <RefreshCw size={11} />{connected ? '刷新状态' : '重新探测连接'}
-      </button>
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        {gameId === 'stardew' && !connected && (
+          <div
+            data-stardew-launch-panel
+            data-stardew-launch-state={launchStatus?.state ?? 'idle'}
+            className="flex items-center gap-1.5"
+          >
+            <button
+              data-stardew-launch
+              className="btn-pill primary"
+              onClick={() => void launchState.launch()}
+              disabled={launchState.busy}
+            >
+              <Rocket size={11} />{launchState.busy ? '启动中…' : '启动星露谷'}
+            </button>
+            {launchState.busy && (
+              <button data-stardew-launch-cancel className="btn-pill ghost" onClick={() => void launchState.cancel()}>
+                取消
+              </button>
+            )}
+          </div>
+        )}
+        <button
+          data-game-reprobe
+          className={`btn-pill ${connected ? 'ghost' : 'primary'} shrink-0`}
+          onClick={onReprobe}
+          disabled={probing}
+        >
+          <RefreshCw size={11} />{connected ? '刷新状态' : '重新探测连接'}
+        </button>
+      </div>
     </div>
   );
 }
