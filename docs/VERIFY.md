@@ -233,6 +233,8 @@
 | `V2-P3-06` 缺陷① BWF 就绪竞态 | `[SIMULATION]` 单测 + 全仓门禁 | `autodrive.spec.ts` **77/77**：重探后成功（ping 序列 false/false/true → 3 次 ping、2 条「启动竞态」watchdog 事件、假时钟 4s）、6s 窗口耗尽仍抛 `unreachableMessage` 且 `isRunning=false`、等待中 `stop()` 安静取消；原有单 ping 失败即抛错用例在默认 `readyTimeoutMs=0` 下继续通过；`pnpm verify:gate` **7 过 / 0 跳过 / 0 待接线** | 2026-11-26 |
 | planner 语义留痕 | `[SIMULATION]` 单测 | `planner-utils.spec.ts` 13 例锁定两处现状（`NON_SELLABLE` 不含「木箱」、`pickTrashableFallback` 后命中覆盖前命中），实现未改，结论见 [P3-planner-semantics-findings.md](./v2/evidence/P3-planner-semantics-findings.md) | 2026-11-26 |
 
+| 单桌宠全链路 E2E | `[E2E-HOST]` + `[SIMULATION]` | `single-pet-chain.e2e.spec.ts` 1/1（6.22s）：宿主在 `PET_STAGE_E2E` 下经 `WHALE_E2E_BWF_ENDPOINT` 指向活农场仿真；点顶栏「启动」→ 勾选自动启动 → 确认 → `running=true` → 仿真收到 `get_state` 与真实动作 → 三态回执 → `v2MemoryQuery` 命中该回执；已加入 macOS CI。证据 [P3-single-pet-chain-verification.md](./v2/evidence/P3-single-pet-chain-verification.md) | 2026-11-26 |
+
 ### 待人类宿主真机验收项
 
 | 项目 | 验收内容 | 状态 |

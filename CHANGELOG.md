@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added（单桌宠全链路 E2E：宿主仿真 BWF 端点 + 启动到记忆一条剧本）
+
+- **宿主可在测试态指向仿真 BWF**：`bwf-settings.ts` 新增 `resolveBwfEndpoint()`（注入端点优先、空串回落真实端口）；`index.ts` 仅在 `PET_STAGE_E2E=1` 时读取 `WHALE_E2E_BWF_ENDPOINT`，并在注入时忽略真实端口联动，生产恒为 `undefined`。
+- **`single-pet-chain.e2e.spec.ts`**（`[E2E-HOST]`+`[SIMULATION]`）：测试进程起活农场仿真（12 株成熟草莓 + 12 格已开垦）→ 点顶栏「启动」并勾选自动启动 → `running=true` → 仿真收到 `get_state` 与真实动作 → 三态回执 → `v2MemoryQuery` 检索命中该回执 → 停止。本机 1/1、6.22s；已加入 `.github/workflows/ci.yml` 的 macOS E2E 列表。证据 [P3-single-pet-chain-verification.md](./docs/v2/evidence/P3-single-pet-chain-verification.md)。
+- **`V2-P4-01` 转 `NEXT`**：owner「先把一个桌宠走通」后成为唯一激活主线；本单为其实现侧首件。
+- **调度方案文档**（仅方案，未实现）：`P3-04E-scheduler-autostart-proposal.md` 给出自动发起社交会话的节律、单次预算、急停位置与 owner 可见信息，等 owner 拍四个点。
+
 ### Fixed / Changed（单桌宠链路优先：P3-06 缺陷①就绪竞态修复；`V2-P2-09` 按 owner 决策暂缓）
 
 - **P3-06 缺陷①（BWF 就绪竞态）已修**：`AutodriveRunner.start()` 原实现只做一次 `adapter.ping()`，冷启动后立刻点「启动」会误报「BWF MCP 不可达」。现新增 `readyTimeoutMs`（默认 `0` = 保持旧行为）与 `readyPollMs`，窗口内按间隔重探并逐次发 `watchdog/heartbeat` 事件说明「第 N 次重探」；窗口耗尽仍抛 `unreachableMessage` 不装成功；等待期间 `stop()` 安静取消而不误报故障。宿主 `autodrive-host.ts` 注入 90s 窗口 + 2s 间隔。新增单测 3 例（`[SIMULATION]`），真机冷启动等待表现待复验。

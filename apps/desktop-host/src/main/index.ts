@@ -13,7 +13,7 @@ import { createEggTheater } from './egg-theater';
 import { decidePeakOutfit, isPeakOutfitFamily, resolvePeakPeriod, type PeakOutfitState } from './peak-schedule';
 import { isMockKeychainLaunch, logVaultStartup, registerProviderVaultIpc, resolveVaultPath } from './provider-vault';
 import { createModsHost } from './mods-host';
-import { bwfMcpEndpoint } from './bwf-settings';
+import { bwfMcpEndpoint, resolveBwfEndpoint } from './bwf-settings';
 import { createPetPrefsStore } from './pet-prefs';
 import { PetWindowManager, type ManagedPetWindow, type PetWindowCreateInput, type WindowBounds } from './pet-window-manager';
 import { createCharacterRegistry } from './character-registry';
@@ -68,6 +68,11 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
+/**
+ * [SIMULATION] 单桌宠链路 E2E：宿主指向测试进程里起的仿真 BWF（mock-harness 农场仿真），
+ * 只在 `PET_STAGE_E2E=1` 时生效；不读也不写真实 Mods 配置，生产环境永远为 undefined。
+ */
+const TEST_BWF_ENDPOINT = TEST_MODE ? process.env.WHALE_E2E_BWF_ENDPOINT : undefined;
 
 // whale-pet:// 必须在 app ready 之前登记特权（standard/secure/supportFetchAPI），
 // 否则 <img>/<audio>/fetch 会被当成非标准协议拦截。见 T-M6-45。
@@ -980,7 +985,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     },
   });
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发；端口随 modsHost 可配置项联动
-  const mainGameEndpoint = (): string => bwfMcpEndpoint(modsHost.bwfMcpPort);
+  // E2E 指向仿真 BWF 时固定用注入端点，无视真实 Mods 端口变化（[SIMULATION]，仅测试态）。
+  const mainGameEndpoint = (): string => resolveBwfEndpoint({ testEndpoint: TEST_BWF_ENDPOINT, port: modsHost.bwfMcpPort });
   const autodrive = createAutodriveHost(
     mainGameEndpoint(),
     vaultPath,
@@ -1008,6 +1014,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     petBubbleToDefault(`本次浏览收官，看了 ${payload.session?.itemsViewed ?? 0} 条（${payload.session?.stopReason ?? '完成'}）`);
   });
   modsHost.onBwfPortChange((port) => {
+    if (TEST_BWF_ENDPOINT !== undefined) return; // E2E 固定仿真端点，不被真实端口联动覆盖
     void autodrive.setEndpoint(bwfMcpEndpoint(port));
   });
   // 多桌宠联机协作（T-M6-39）：复用 autodrive 的 Gateway/饭碗，但每 Agent 独立 planner/persona/voice。

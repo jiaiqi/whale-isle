@@ -23,6 +23,16 @@ export function bwfMcpEndpoint(port: number = BWF_DEFAULT_PORT): string {
   return `http://127.0.0.1:${port}/mcp`;
 }
 
+/**
+ * 解析宿主应连的 BWF 端点。
+ * `testEndpoint` 只由 `PET_STAGE_E2E` 注入（单桌宠链路 E2E 指向仿真 BWF），
+ * 生产环境恒为 `undefined`，因此永远回落到真实端口；空串按未注入处理。
+ */
+export function resolveBwfEndpoint(options: { testEndpoint?: string | undefined; port?: number }): string {
+  const injected = options.testEndpoint?.trim() ?? '';
+  return injected === '' ? bwfMcpEndpoint(options.port) : injected;
+}
+
 export const BWF_BASE_URL = bwfBaseUrl(BWF_DEFAULT_PORT);
 
 export interface BwfSettingsPush {

@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BWF_DEFAULT_PORT, pushBwfPlayerInControl, pushBwfShowHud, syncBwfConfigPort } from './bwf-settings';
+import { BWF_DEFAULT_PORT, pushBwfPlayerInControl, pushBwfShowHud, resolveBwfEndpoint, syncBwfConfigPort } from './bwf-settings';
 
 const jsonResponse = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 });
 
@@ -123,5 +123,19 @@ describe('pushBwfPlayerInControl', () => {
     const bad = (async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
     expect(await pushBwfPlayerInControl(false, 'http://localhost:18088', bad))
       .toEqual({ applied: false, reachable: true, supported: false, playerInControl: false });
+  });
+});
+
+describe('resolveBwfEndpoint（E2E 仿真端点注入）', () => {
+  it('未注入 / 空串 → 回落真实端口端点', () => {
+    expect(resolveBwfEndpoint({ port: 18088 })).toBe('http://127.0.0.1:18088/mcp');
+    expect(resolveBwfEndpoint({ testEndpoint: undefined, port: 18088 })).toBe('http://127.0.0.1:18088/mcp');
+    expect(resolveBwfEndpoint({ testEndpoint: '   ', port: 18088 })).toBe('http://127.0.0.1:18088/mcp');
+    expect(resolveBwfEndpoint({})).toBe(`http://127.0.0.1:${BWF_DEFAULT_PORT}/mcp`);
+  });
+
+  it('注入测试端点 → 原样使用（不改协议、不加路径、不看端口）', () => {
+    expect(resolveBwfEndpoint({ testEndpoint: 'http://127.0.0.1:51234/mcp', port: 18088 })).toBe('http://127.0.0.1:51234/mcp');
+    expect(resolveBwfEndpoint({ testEndpoint: ' http://127.0.0.1:1/custom ', port: 18088 })).toBe('http://127.0.0.1:1/custom');
   });
 });
