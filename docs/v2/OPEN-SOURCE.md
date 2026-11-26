@@ -53,3 +53,4 @@
 3. **非商用测试素材（CC BY-NC-SA 4.0 / 未明示版权）**：仅限本地开发测试（`licenseScope: "DEV_ONLY_NON_COMMERCIAL"`），`AssetRegistry` 与打包脚本阻断其进入公开直播与商业发行包。
 4. **绝对禁抄红线（UNLICENSED）**：`newbeejmc/Dsh_douyin`、`fore-vip/dsh-live`、`Journey-Together` 等未授权仓库严禁复制任何源码或测试夹具，由 [verify-gate.mjs](file:///Users/jiaqi/Documents/vibe/ai-vtuber-workbench/tools/scripts/verify-gate.mjs) 自动阻断。
 5. **传染性红线（GPL-3.0 / AGPL）**：`cortico-world-douyin-live`、`TShock`、`HEROsMod`、`dst-admin-go` 等 GPL-3.0 项目严禁 vendor 引入主仓，防止整仓协议传染。
+6. **生成式素材与角色衍生图**：服务条款决定图像输出的权利范围，不能扩大输入角色素材的许可。基于 `blue-whale-maid` 现有角色形象生成的插画继续标记 `DEV_ONLY_NON_COMMERCIAL`，按 CC BY-NC-SA 4.0 署名和相同方式共享，不进入商业发行或公开直播；逐项来源、提示词、工具及服务条款登记在 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) 与素材目录 README。

@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 1,
+  "registryNote": "AssetRegistryV2 当前没有 ui_illustration 类别；此文件按 AssetProvenanceSchema 记录来源、授权与 SHA-256，未伪造 AssetRegistryCategory。",
+  "entries": [
+    {
+      "assetId": "empty-chat-dark",
+      "filePath": "apps/desktop-host/assets/illustrations/empty-chat-dark.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 120650,
+      "sha256": "2a3224245add839d95067284d68db9890725e82f39550afb4dd8f896f084b0cc",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/待机呼吸休闲.webm",
+          "apps/desktop-host/assets/illustrations/empty-chat-light.webp"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "2a3224245add839d95067284d68db9890725e82f39550afb4dd8f896f084b0cc",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。",
+          "2026-11-26 deterministic post-processing: alpha silhouette dilation, #EEE9DF outer rim at 55% opacity, 1 px feather; hero rim scaled to 4 px, other scenes to 3 px."
+        ]
+      }
+    },
+    {
+      "assetId": "empty-chat-light",
+      "filePath": "apps/desktop-host/assets/illustrations/empty-chat-light.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 128344,
+      "sha256": "7b790c2bc07edfc6da28cb7b63800a0ad5c39e53cfeab68945addbf8576565b6",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/待机呼吸休闲.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "7b790c2bc07edfc6da28cb7b63800a0ad5c39e53cfeab68945addbf8576565b6",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    },
+    {
+      "assetId": "empty-memory-dark",
+      "filePath": "apps/desktop-host/assets/illustrations/empty-memory-dark.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 129054,
+      "sha256": "8176f3a8bba98a4be1e412733f4c367189071d74e72ddbb822e89d455160cb70",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm",
+          "apps/desktop-host/assets/illustrations/empty-memory-light.webp"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "8176f3a8bba98a4be1e412733f4c367189071d74e72ddbb822e89d455160cb70",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。",
+          "2026-11-26 deterministic post-processing: alpha silhouette dilation, #EEE9DF outer rim at 55% opacity, 1 px feather; hero rim scaled to 4 px, other scenes to 3 px."
+        ]
+      }
+    },
+    {
+      "assetId": "empty-memory-light",
+      "filePath": "apps/desktop-host/assets/illustrations/empty-memory-light.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 134530,
+      "sha256": "047b56163d347afb09d32a7a33823be4aad853eefd754251b168ceccc888f12f",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "047b56163d347afb09d32a7a33823be4aad853eefd754251b168ceccc888f12f",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    },
+    {
+      "assetId": "game-offline-dark",
+      "filePath": "apps/desktop-host/assets/illustrations/game-offline-dark.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 122236,
+      "sha256": "df9486f0190c5b2835105486f6fdafa0b949b2bffa5ad32d1ba6d3e54fac2b63",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/点击回应-傲娇生气.webm",
+          "apps/desktop-host/assets/illustrations/game-offline-light.webp"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "df9486f0190c5b2835105486f6fdafa0b949b2bffa5ad32d1ba6d3e54fac2b63",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。",
+          "2026-11-26 deterministic post-processing: alpha silhouette dilation, #EEE9DF outer rim at 55% opacity, 1 px feather; hero rim scaled to 4 px, other scenes to 3 px."
+        ]
+      }
+    },
+    {
+      "assetId": "game-offline-light",
+      "filePath": "apps/desktop-host/assets/illustrations/game-offline-light.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 139652,
+      "sha256": "44d8e62e97265847e22492dd32aec9a6985dfdbb8fbde6e4c5ee0326fca802eb",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/点击回应-傲娇生气.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "44d8e62e97265847e22492dd32aec9a6985dfdbb8fbde6e4c5ee0326fca802eb",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    },
+    {
+      "assetId": "halted-dark",
+      "filePath": "apps/desktop-host/assets/illustrations/halted-dark.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 101358,
+      "sha256": "0a53a51563f224c8063e0e06739de4cd189b5a1519d7a42290d8697ac6ab520a",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm",
+          "apps/desktop-host/assets/illustrations/halted-light.webp"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "0a53a51563f224c8063e0e06739de4cd189b5a1519d7a42290d8697ac6ab520a",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。",
+          "2026-11-26 deterministic post-processing: alpha silhouette dilation, #EEE9DF outer rim at 55% opacity, 1 px feather; hero rim scaled to 4 px, other scenes to 3 px."
+        ]
+      }
+    },
+    {
+      "assetId": "halted-light",
+      "filePath": "apps/desktop-host/assets/illustrations/halted-light.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 127538,
+      "sha256": "61534a72a5d394e53be306c4d6a4c4a95589724a738f9f49c53a5d2c9439646b",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "61534a72a5d394e53be306c4d6a4c4a95589724a738f9f49c53a5d2c9439646b",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    },
+    {
+      "assetId": "live-offline-dark",
+      "filePath": "apps/desktop-host/assets/illustrations/live-offline-dark.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 146348,
+      "sha256": "3d4f74dbe36eb26664600cfaecd0fc246c5614171f280a669d1fdb783479281c",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/待机呼吸休闲.webm",
+          "apps/desktop-host/assets/illustrations/live-offline-light.webp"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "3d4f74dbe36eb26664600cfaecd0fc246c5614171f280a669d1fdb783479281c",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。",
+          "2026-11-26 deterministic post-processing: alpha silhouette dilation, #EEE9DF outer rim at 55% opacity, 1 px feather; hero rim scaled to 4 px, other scenes to 3 px."
+        ]
+      }
+    },
+    {
+      "assetId": "live-offline-light",
+      "filePath": "apps/desktop-host/assets/illustrations/live-offline-light.webp",
+      "width": 960,
+      "height": 720,
+      "sizeBytes": 154872,
+      "sha256": "3e6ca0c75e00d89397a01f6dc6a99bec1fc472c71979ed205d2b8ee875dd5faf",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/待机呼吸休闲.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "3e6ca0c75e00d89397a01f6dc6a99bec1fc472c71979ed205d2b8ee875dd5faf",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    },
+    {
+      "assetId": "onboarding-hero-dark",
+      "filePath": "apps/desktop-host/assets/illustrations/onboarding-hero-dark.webp",
+      "width": 1600,
+      "height": 800,
+      "sizeBytes": 215446,
+      "sha256": "8cc8b6787a63c211b59bc051c4bd869802a87e4f71fb4403711d2188ed958f5c",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm",
+          "apps/desktop-host/assets/illustrations/onboarding-hero-light.webp"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "8cc8b6787a63c211b59bc051c4bd869802a87e4f71fb4403711d2188ed958f5c",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。",
+          "2026-11-26 deterministic post-processing: alpha silhouette dilation, #EEE9DF outer rim at 55% opacity, 1 px feather; hero rim scaled to 4 px, other scenes to 3 px."
+        ]
+      }
+    },
+    {
+      "assetId": "onboarding-hero-light",
+      "filePath": "apps/desktop-host/assets/illustrations/onboarding-hero-light.webp",
+      "width": 1600,
+      "height": 800,
+      "sizeBytes": 204548,
+      "sha256": "f325ef3ba51eb9eeb65320cf150cd394731d78c692dbe5e9d49239e9e83b9894",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "f325ef3ba51eb9eeb65320cf150cd394731d78c692dbe5e9d49239e9e83b9894",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    },
+    {
+      "assetId": "xiaojing-character-sheet-sample",
+      "filePath": "apps/desktop-host/assets/illustrations/xiaojing-character-sheet-sample.webp",
+      "width": 1024,
+      "height": 1024,
+      "sizeBytes": 149580,
+      "sha256": "7b1a8f9910ebd1d09f72c6da6a0371a5c0404e0d2c667cee139992b2ed55a573",
+      "provenance": {
+        "sourceType": "ai-generated",
+        "author": "Whale Isle project, generated with OpenAI image_gen",
+        "repoOrUrl": "packages/pet-renderer/assets/blue-whale-maid",
+        "license": "CC BY-NC-SA 4.0 (character derivative); OpenAI Terms of Use for generated output",
+        "allowCommercial": false,
+        "allowLivestream": false,
+        "allowRedistribution": true,
+        "modelProvider": "OpenAI image_gen (built-in tool)",
+        "inputRefPaths": [
+          "packages/pet-renderer/assets/blue-whale-maid/manifest.json",
+          "packages/pet-renderer/assets/blue-whale-maid/女仆屈膝礼仪.webm",
+          "packages/pet-renderer/assets/blue-whale-maid/待机呼吸休闲.webm",
+          "packages/pet-renderer/assets/blue-whale-maid/吃饭·碗饭.webm",
+          "packages/pet-renderer/assets/blue-whale-maid/点击回应-傲娇生气.webm"
+        ],
+        "generatedAt": "2026-11-26",
+        "sha256": "7b1a8f9910ebd1d09f72c6da6a0371a5c0404e0d2c667cee139992b2ed55a573",
+        "reviewNotes": [
+          "小鲸身份参考来自项目 blue-whale-maid WebM；仅本地开发与评审。",
+          "禁止商业使用及公开直播；允许的再分发须署名并遵循 CC BY-NC-SA 4.0 相同方式共享。",
+          "image_gen 工具未向调用方公开具体模型 ID。"
+        ]
+      }
+    }
+  ]
+}
