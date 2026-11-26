@@ -38,6 +38,7 @@ import { CoopPanel } from './coop-panel';
 import { toolLabel, useGameHealth, type ReceiptFilter } from './game-panel';
 import { NAV_GROUPS, Sidebar, type Tab } from './shell/sidebar';
 import { Topbar, type ThemeMode, type ThemeSkin, type TideAccent } from './shell/topbar';
+import { TitleBar, usesCustomTitleBar } from './shell/titlebar';
 import { CommandPalette, type CommandAction } from './shell/command-palette';
 import { ControlOwnershipHud, type ComputerLeaseView } from './v2/signature-widgets';
 import { ChatAside, ChatView, parseDirective } from './views/chat-view';
@@ -45,6 +46,8 @@ import { GameWorkspaceView, type AvatarSyncViewState } from './views/stardew-vie
 import { LifeConsoleView } from './views/life-console-view';
 
 const NAV_FLAT = NAV_GROUPS.flatMap((g) => g.items);
+/** macOS 自绘窗口顶栏（hiddenInset）；Windows/Linux 保留原生边框，不渲染这条 40px 顶栏 */
+const CUSTOM_TITLE_BAR = usesCustomTitleBar();
 
 interface AppProps {
   profiles: DiningProfilePreset[];
@@ -859,14 +862,16 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   return (
     <div
-      className={`wb-shell${tab === 'chat' ? ' has-aside' : ''} h-screen w-screen`}
+      className={`wb-shell${tab === 'chat' ? ' has-aside' : ''}${CUSTOM_TITLE_BAR ? ' has-titlebar' : ''} h-screen w-screen`}
       data-theme={resolvedTheme}
       data-theme-mode={themeMode}
       data-skin={skin}
       data-accent={accent}
     >
       <div className="ambient" />
+      {CUSTOM_TITLE_BAR && <TitleBar />}
       <Sidebar
+        showBrand={!CUSTOM_TITLE_BAR}
         tab={tab}
         onSelect={setTab}
         running={running}
