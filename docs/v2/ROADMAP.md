@@ -134,9 +134,9 @@
   - `V2-P2-09A`（`IMPLEMENTED_UNVERIFIED`）契约：`StardewLaunchOptionsSchema` 增 `isolateDataDir`（绝对路径强校验），新增 `StardewScreenBindingSchema`；
   - `V2-P2-09B`（`IMPLEMENTED_UNVERIFIED`）隔离启动：启动器与联机队友实例注入 `XDG_CONFIG_HOME`/`XDG_DATA_HOME`（不动 `HOME`），Steam 策略与相对路径显式拒绝；单测 74 例全绿，真机「owner 存档零写入」待验；
   - `V2-P2-09C`（`IMPLEMENTED_UNVERIFIED`）宿主联机身份绑定：`CoopParticipant.bodyBinding` + `CoopBodyLeaseViewSchema` 契约先行，`CoopRuntimeV1` 新增按身体的绑定/改绑、`participantOfBody` 解析、按身体的「玩家一动即接管」判定与跨身体动作路由拦截，宿主 4 路 IPC（`v2:coop-body-bind`/`-body-leases`/`-human-takeover`/`-action-route`）；单测 15/15 + Electron 45 E2E 1/1 全绿；**真机 bodyBinding 值来源（BWF 按 `Context.ScreenId` 上报）属 `V2-P2-09D`，尚未开工**；
-  - `V2-P2-09D`（`NEXT`）BWF 分屏感知补丁：按 `Context.ScreenId` 路由动作（前置：owner 完成「单机建 cabin + 接手柄 + Start Local Co-op」，否则 `BLOCKED`）；
-  - `V2-P2-09E`（`PENDING`）按屏「玩家一动即接管」与 `ABORTED_BY_HUMAN_TAKEOVER` 回执；
-  - `V2-P2-09F`（`PENDING`）分屏 farmhand 沙盒剧本与回归。
+  - `V2-P2-09D`（`BLOCKED`）BWF 分屏感知补丁：按 `Context.ScreenId` 路由动作（前置：owner 完成「单机建 cabin + 接手柄 + Start Local Co-op」，决策已交 owner、等待回复，owner 放行后回到 `NEXT`）；
+  - `V2-P2-09E`（`IMPLEMENTED_UNVERIFIED`）按屏「玩家一动即接管」与 `ABORTED_BY_HUMAN_TAKEOVER` 回执：`CoopInFlightActionSchema`/`CoopTakeoverAbortReceiptSchema` 契约先行，`beginBodyAction`（同身体动作互斥锁）/`finishBodyAction`（只接受真实三态回执）/接管时按身体中止并产出回执，宿主 2 路新 IPC；单测 9/9 + E2E 2/2 全绿；**真机接管事件来源属 D（`BLOCKED`），D 放行前本单不得 `DONE`**；
+  - `V2-P2-09F`（`IMPLEMENTED_UNVERIFIED`）分屏 farmhand 沙盒剧本骨架：3 个确定性剧本（host 屏输入不抢租约 / farmhand 屏一动接管并中止 / 缺身体标识不判定）+ 重放一致性回归，4/4 全绿；**剧本输入为手工编排数据，`[SIMULATION]`，真机屏幕标识来源属 D（`BLOCKED`），不得记为 `[REAL-DEVICE]`**。
 
 ---
 

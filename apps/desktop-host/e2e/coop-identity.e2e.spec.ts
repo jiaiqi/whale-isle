@@ -30,8 +30,30 @@ interface DirectorCoopBridgeWindow {
       bodyBinding?: { screenId: number; uniqueMultiplayerID: string; role: 'host' | 'farmhand' };
     }): Promise<{ ok: boolean; error?: string }>;
     v2CoopBodyLeases(): Promise<{ bodyLeases: Array<{ uniqueMultiplayerID: string; screenId: number; role: string; participantId: string; controlOwner: string }> }>;
-    v2CoopHumanTakeover(input: { uniqueMultiplayerID?: string }): Promise<{ takenOver: boolean; participantId?: string; reason: string }>;
+    v2CoopHumanTakeover(input: { uniqueMultiplayerID?: string }): Promise<{
+      takenOver: boolean;
+      participantId?: string;
+      reason: string;
+      abortedReceipts: Array<{
+        actionId: string;
+        participantId: string;
+        uniqueMultiplayerID: string;
+        screenId: number;
+        tool: string;
+        status: string;
+      }>;
+    }>;
     v2CoopActionRoute(input: { participantId: string; targetUniqueMultiplayerID: string }): Promise<{ allowed: boolean; reason: string }>;
+    v2CoopBodyActionBegin(input: {
+      participantId: string;
+      uniqueMultiplayerID: string;
+      tool: string;
+      actionId?: string;
+    }): Promise<{ ok: boolean; error?: string; action?: { actionId: string; screenId: number } }>;
+    v2CoopBodyActionFinish(input: {
+      actionId: string;
+      status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN';
+    }): Promise<{ ok: boolean; error?: string; status?: string }>;
   };
 }
 
@@ -124,6 +146,85 @@ describe('[E2E-HOST] V2-P2-09C 宿主联机身份绑定（host/farmhand 双租�
           .v2CoopActionRoute({ participantId: 'ai-xiaojing', targetUniqueMultiplayerID: '2002' }));
       expect(own.allowed).toBe(false);
       expect(own.reason).toContain('控制租约未就绪');
+
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('V2-P2-09E：在飞动作登记 + 动作互斥锁 + 接管产出 ABORTED_BY_HUMAN_TAKEOVER 回执', { timeout: 120_000 }, async () => {
+    const app = await electron.launch({
+      args: ['--use-mock-keychain', mainEntry],
+      executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    const pageErrors: string[] = [];
+    try {
+      const director = await waitForDirector(app);
+      director.on('pageerror', (err) => pageErrors.push(err.message));
+      await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge
+          .v2CoopRoomCreate({ roomId: 'e2e-p209e', sharedGoal: 'E2E 接管中止自检' }));
+      await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge.v2CoopParticipantJoin({
+          participantId: 'human-host',
+          kind: 'human',
+          characterId: 'farmer-host',
+          displayName: '人类房主',
+          bodyBinding: { screenId: 0, uniqueMultiplayerID: '1001', role: 'host' },
+        }));
+      await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge.v2CoopParticipantJoin({
+          participantId: 'ai-xiaojing',
+          kind: 'ai',
+          characterId: 'char_xiaojing',
+          displayName: '小鲸',
+          bodyBinding: { screenId: 1, uniqueMultiplayerID: '2002', role: 'farmhand' },
+        }));
+
+      // ① 在飞动作登记成功，落在 farmhand 身体的 screen 1
+      const begun = await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge.v2CoopBodyActionBegin({
+          participantId: 'ai-xiaojing',
+          uniqueMultiplayerID: '2002',
+          tool: 'water_crops_batch',
+          actionId: 'act-water-e2e',
+        }));
+      expect(begun.ok).toBe(true);
+      expect(begun.action?.screenId).toBe(1);
+
+      // ② 动作互斥锁：同一身体并发下发被拒
+      const second = await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge.v2CoopBodyActionBegin({
+          participantId: 'ai-xiaojing',
+          uniqueMultiplayerID: '2002',
+          tool: 'move_to_tile',
+        }));
+      expect(second.ok).toBe(false);
+      expect(second.error).toContain('动作互斥锁');
+
+      // ③ 人类在 farmhand 身体一动 → 在飞动作中止，回执按身体记录
+      const takeover = await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge
+          .v2CoopHumanTakeover({ uniqueMultiplayerID: '2002' }));
+      expect(takeover.takenOver).toBe(true);
+      expect(takeover.abortedReceipts).toHaveLength(1);
+      expect(takeover.abortedReceipts[0]).toMatchObject({
+        actionId: 'act-water-e2e',
+        participantId: 'ai-xiaojing',
+        uniqueMultiplayerID: '2002',
+        screenId: 1,
+        tool: 'water_crops_batch',
+        status: 'ABORTED_BY_HUMAN_TAKEOVER',
+      });
+
+      // ④ 被中止的动作不能再补 finish（诚实报错，不伪造成功）
+      const lateFinish = await director.evaluate(() =>
+        (window as unknown as DirectorCoopBridgeWindow).directorBridge
+          .v2CoopBodyActionFinish({ actionId: 'act-water-e2e', status: 'COMPLETED' }));
+      expect(lateFinish.ok).toBe(false);
+      expect(lateFinish.error).toContain('在飞动作不存在');
 
       expect(pageErrors).toEqual([]);
     } finally {

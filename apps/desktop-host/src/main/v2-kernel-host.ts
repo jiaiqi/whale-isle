@@ -1248,6 +1248,24 @@ export async function createV2KernelHost(options: {
       participantId: rawInput.participantId,
       targetUniqueMultiplayerID: rawInput.targetUniqueMultiplayerID,
     }));
+  // V2-P2-09E：按身体的在飞动作登记与接管中止回执——「玩家一动即接管」要精确中止
+  // 正在执行的动作，必须先登记「哪个身体上在跑哪个动作」，并加同一身体的动作互斥锁。
+  ipcMain.handle('v2:coop-body-action-begin', (_e, rawInput: {
+    participantId: string;
+    uniqueMultiplayerID: string;
+    tool: string;
+    actionId?: string;
+  }) => {
+    const result = coopRuntime.beginBodyAction(rawInput);
+    return { ...result, snapshot: coopRuntime.snapshot() };
+  });
+  ipcMain.handle('v2:coop-body-action-finish', (_e, rawInput: {
+    actionId: string;
+    status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN';
+  }) => {
+    const result = coopRuntime.finishBodyAction(rawInput.actionId, rawInput.status);
+    return { ...result, snapshot: coopRuntime.snapshot() };
+  });
   // V2-P3-01：统一表演系统（SingEngine SVS/SVC + 歌词时钟 + 舞蹈 + StageRuntime）
   ipcMain.handle('v2:perf-snapshot', async () => ({
     performance: performanceDirector.snapshot(),

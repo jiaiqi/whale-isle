@@ -19,6 +19,8 @@ import {
   CoopRuntimeSnapshotSchema,
   CoopTaskItemSchema,
   StardewScreenBindingSchema,
+  CoopInFlightActionSchema,
+  CoopTakeoverAbortReceiptSchema,
   type CoopModCompatibilityReport,
   type CoopModMismatch,
   type CoopModSummary,
@@ -29,6 +31,8 @@ import {
   type CoopRuntimeSnapshot,
   type CoopTaskItem,
   type CoopBodyLeaseView,
+  type CoopInFlightAction,
+  type CoopTakeoverAbortReceipt,
   type StardewScreenBinding,
 } from '@workbench/shared-protocol';
 import { GameCharacterControlLease } from './control-lease';
@@ -167,6 +171,8 @@ export class CoopRuntimeV1 {
   private readonly leases = new Map<string, GameCharacterControlLease>();
   private readonly tasks = new Map<string, CoopTaskItem>();
   private readonly reservations = new Map<string, CoopResourceReservation>();
+  /** 各身体上正在执行的动作（`V2-P2-09E`），按 actionId 索引 */
+  private readonly inFlightActions = new Map<string, CoopInFlightAction>();
 
   constructor(options: CoopRuntimeV1Options = {}) {
     this.now = options.now ?? Date.now;
@@ -209,6 +215,7 @@ export class CoopRuntimeV1 {
     this.leases.clear();
     this.tasks.clear();
     this.reservations.clear();
+    this.inFlightActions.clear();
     this.updatedAt = this.now();    this.blackboard.setGoal({
       id: this.roomId,
       title: this.sharedGoal,
@@ -367,11 +374,13 @@ export class CoopRuntimeV1 {
   }
 
   /**
-   * 「玩家一动即接管」判定（`V2-P2-09C`）。
+   * 「玩家一动即接管」判定（`V2-P2-09C` 契约面 + `V2-P2-09E` 在飞动作中止）。
    *
    * 输入是**观测到真人输入的那个身体**（不是笼统的「有人动了」）。
    * 只有当该身体属于某个 AI 参与者时，才把该 AI 的租约交给人类；
    * 人类自己的身体不产生接管事件，也不影响其他 AI 成员。
+   * 判定为接管时，同步中止**该身体上**的全部在飞动作并返回
+   * `ABORTED_BY_HUMAN_TAKEOVER` 回执（`V2-P2-09E`），其他身体上的动作不受影响。
    *
    * 铁律：拿不到身体标识时**不判定接管**——宁可漏接管也不误抢 AI 的控制权。
    */
@@ -379,30 +388,64 @@ export class CoopRuntimeV1 {
     /** 观测到真人输入的身体 ID；缺失则不判定 */
     uniqueMultiplayerID?: string;
     reason?: string;
-  }): { takenOver: boolean; participantId?: string; reason: string } {
+  }): {
+    takenOver: boolean;
+    participantId?: string;
+    reason: string;
+    /** `V2-P2-09E`：本次接管中止的在飞动作回执（未接管或该身体无在飞动作时为空） */
+    abortedReceipts: CoopTakeoverAbortReceipt[];
+  } {
     const bodyId = input.uniqueMultiplayerID;
     if (bodyId === undefined || bodyId === '') {
-      return { takenOver: false, reason: '未提供身体标识，无法判定接管（不误抢 AI 控制权）' };
+      return {
+        takenOver: false,
+        reason: '未提供身体标识，无法判定接管（不误抢 AI 控制权）',
+        abortedReceipts: [],
+      };
     }
     const participant = this.participantOfBody(bodyId);
     if (participant === null) {
-      return { takenOver: false, reason: `未找到身体 ${bodyId} 的绑定成员，不判定接管` };
+      return { takenOver: false, reason: `未找到身体 ${bodyId} 的绑定成员，不判定接管`, abortedReceipts: [] };
     }
     if (participant.kind !== 'ai') {
-      return { takenOver: false, reason: `身体 ${bodyId} 属于人类成员 ${participant.participantId}，无需接管` };
+      return {
+        takenOver: false,
+        reason: `身体 ${bodyId} 属于人类成员 ${participant.participantId}，无需接管`,
+        abortedReceipts: [],
+      };
     }
     const lease = this.leases.get(participant.participantId);
     /* v8 ignore next 3 -- 防御层：成员在册 ⇒ 租约在册（joinParticipant 同时建档、仅 createRoom 一起清空），此分支构造不出 */
     if (lease === undefined) {
-      return { takenOver: false, reason: `成员 ${participant.participantId} 无控制租约，无法接管` };
+      return {
+        takenOver: false,
+        reason: `成员 ${participant.participantId} 无控制租约，无法接管`,
+        abortedReceipts: [],
+      };
     }
     lease.takeOverByHuman(input.reason ?? `人类在身体 ${bodyId} 上操作，已接管该 AI 角色`);
     participant.controlOwner = lease.owner;
+    // V2-P2-09E：接管立即中止该身体上的全部在飞动作，并产出按身体的
+    // ABORTED_BY_HUMAN_TAKEOVER 回执（与 BWF 侧同名同义，这里按身体记录证据面）。
+    // 铁律不变：以真实接管事件为准，绝不把「同屏不打架」当成接管判定。
+    const abortReason = input.reason ?? `人类在身体 ${bodyId} 上操作，已接管该 AI 角色`;
+    const abortedReceipts: CoopTakeoverAbortReceipt[] = [];
+    for (const [actionId, action] of this.inFlightActions) {
+      if (action.uniqueMultiplayerID !== bodyId) continue;
+      abortedReceipts.push(CoopTakeoverAbortReceiptSchema.parse({
+        ...action,
+        status: 'ABORTED_BY_HUMAN_TAKEOVER',
+        reason: abortReason,
+        abortedAt: this.now(),
+      }));
+      this.inFlightActions.delete(actionId);
+    }
     this.updatedAt = this.now();
     return {
       takenOver: true,
       participantId: participant.participantId,
       reason: lease.snapshot().reason,
+      abortedReceipts,
     };
   }
 
@@ -446,6 +489,80 @@ export class CoopRuntimeV1 {
       }
     }
     return { allowed: true, reason: '动作已路由到该成员绑定的游戏内身体' };
+  }
+
+  /**
+   * 登记一个即将在指定身体上执行的动作（`V2-P2-09E`）。
+   *
+   * 先过 `routeActionToBody` 的全部拦截（未绑定/跨身体/租约失效一律拒绝），
+   * 然后按身体加**动作互斥锁**：同一身体同时只允许一个动作在飞
+   * （与 BWF 的 `ACTION_IN_FLIGHT` 拒绝语义一致），杜绝同一身体并发下发。
+   */
+  beginBodyAction(input: {
+    participantId: string;
+    uniqueMultiplayerID: string;
+    tool: string;
+    actionId?: string;
+  }): { ok: boolean; error?: string; action?: CoopInFlightAction } {
+    const routed = this.routeActionToBody({
+      participantId: input.participantId,
+      targetUniqueMultiplayerID: input.uniqueMultiplayerID,
+    });
+    if (!routed.allowed) return { ok: false, error: routed.reason };
+    const participant = this.participants.get(input.participantId);
+    const binding = participant?.bodyBinding ?? null;
+    /* v8 ignore next 3 -- 防御层：routeActionToBody 通过即存在绑定，此分支构造不出 */
+    if (participant === null || participant === undefined || binding === null) {
+      return { ok: false, error: `成员 ${input.participantId} 未绑定游戏内身体` };
+    }
+    const busy = [...this.inFlightActions.values()].some(
+      (action) => action.uniqueMultiplayerID === binding.uniqueMultiplayerID,
+    );
+    if (busy) {
+      return {
+        ok: false,
+        error: `身体 ${binding.uniqueMultiplayerID} 已有在飞动作，拒绝并发下发（动作互斥锁）`,
+      };
+    }
+    const action = CoopInFlightActionSchema.parse({
+      actionId: input.actionId ?? `act-${randomUUID().slice(0, 8)}`,
+      participantId: input.participantId,
+      uniqueMultiplayerID: binding.uniqueMultiplayerID,
+      screenId: binding.screenId,
+      tool: input.tool,
+      startedAt: this.now(),
+    });
+    this.inFlightActions.set(action.actionId, action);
+    this.updatedAt = this.now();
+    return { ok: true, action };
+  }
+
+  /**
+   * 以 BWF 的真实回执结束一个在飞动作（`V2-P2-09E`）。
+   *
+   * `status` 只接受 `COMPLETED | FAILED | UNCERTAIN`——被接管中止的动作
+   * 不经过这里，它在 `detectHumanTakeover` 里直接产出 `ABORTED_BY_HUMAN_TAKEOVER`
+   * 回执并从登记表移除；因此动作被中止后再来 finish 会得到「在飞动作不存在」的诚实报错。
+   */
+  finishBodyAction(
+    actionId: string,
+    status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN',
+  ): { ok: boolean; error?: string; action?: CoopInFlightAction; status?: 'COMPLETED' | 'FAILED' | 'UNCERTAIN' } {
+    const action = this.inFlightActions.get(actionId);
+    if (action === undefined) {
+      return {
+        ok: false,
+        error: `在飞动作不存在：${actionId}（可能已被接管中止，或从未登记）`,
+      };
+    }
+    this.inFlightActions.delete(actionId);
+    this.updatedAt = this.now();
+    return { ok: true, action, status };
+  }
+
+  /** 当前全部在飞动作（证据面与沙盒剧本断言用） */
+  inFlightActionViews(): CoopInFlightAction[] {
+    return [...this.inFlightActions.values()];
   }
 
   controlLeaseOf(participantId: string): GameCharacterControlLease | null {
@@ -774,6 +891,7 @@ export class CoopRuntimeV1 {
       reservations: [...this.reservations.values()],
       lastCompatReport: this.lastCompatReport,
       bodyLeases: this.bodyLeaseViews(),
+      inFlightActions: this.inFlightActionViews(),
       updatedAt: this.updatedAt,
     });
   }

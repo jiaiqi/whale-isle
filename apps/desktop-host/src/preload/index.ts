@@ -406,6 +406,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2CoopBodyLeases: (): Promise<unknown> => ipcRenderer.invoke('v2:coop-body-leases'),
   v2CoopHumanTakeover: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-human-takeover', input),
   v2CoopActionRoute: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-action-route', input),
+  v2CoopBodyActionBegin: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-body-action-begin', input),
+  v2CoopBodyActionFinish: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-body-action-finish', input),
   v2PerfSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:perf-snapshot'),
   v2PerfSilenceCheck: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:perf-silence-check', input),
   v2PerfSpeechPlan: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:perf-speech-plan', input),

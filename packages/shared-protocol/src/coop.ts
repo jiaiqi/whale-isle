@@ -74,6 +74,43 @@ export const CoopBodyLeaseViewSchema = z.object({
 });
 export type CoopBodyLeaseView = z.infer<typeof CoopBodyLeaseViewSchema>;
 
+/**
+ * 在某游戏内身体上**正在执行**的动作（`V2-P2-09E`）。
+ *
+ * 「玩家一动即接管」要能精确中止在飞动作，就必须先知道「哪个身体上正在跑哪个动作」。
+ * 同屏多个 `Game1` 实例时按 `uniqueMultiplayerID` 索引，绝不按笼统的「房间」索引。
+ */
+export const CoopInFlightActionSchema = z.object({
+  actionId: z.string().min(1),
+  participantId: z.string().min(1),
+  /** 动作落在哪个身体上（Farmer.UniqueMultiplayerID，十进制字符串） */
+  uniqueMultiplayerID: z.string().regex(/^[0-9]+$/u),
+  screenId: z.number().int().nonnegative(),
+  tool: z.string().min(1),
+  startedAt: z.number().int().nonnegative(),
+});
+export type CoopInFlightAction = z.infer<typeof CoopInFlightActionSchema>;
+
+/**
+ * 接管中止在飞动作的回执（`V2-P2-09E`）。
+ *
+ * 与 BWF 侧 `StardewMcpActionReceipt.status = 'ABORTED_BY_HUMAN_TAKEOVER'` 同名同义，
+ * 但这里按**身体**记录证据面：是哪个身体、哪块屏、哪个成员的动作被谁中止。
+ * 铁律同回执铁律：以真实接管事件为准，严禁用 LLM 台词或「同屏不打架」冒充。
+ */
+export const CoopTakeoverAbortReceiptSchema = z.object({
+  actionId: z.string().min(1),
+  participantId: z.string().min(1),
+  uniqueMultiplayerID: z.string().regex(/^[0-9]+$/u),
+  screenId: z.number().int().nonnegative(),
+  tool: z.string().min(1),
+  status: z.literal('ABORTED_BY_HUMAN_TAKEOVER'),
+  reason: z.string().min(1),
+  startedAt: z.number().int().nonnegative(),
+  abortedAt: z.number().int().nonnegative(),
+});
+export type CoopTakeoverAbortReceipt = z.infer<typeof CoopTakeoverAbortReceiptSchema>;
+
 export const CoopTaskStatusSchema = z.enum([
   'proposed',
   'accepted',
@@ -163,6 +200,8 @@ export const CoopRuntimeSnapshotSchema = z.object({
   lastCompatReport: CoopModCompatibilityReportSchema.nullable().default(null),
   /** 按身体索引的租约视图（`V2-P2-09C`）：host/farmhand 各持一份，互不抢占 */
   bodyLeases: z.array(CoopBodyLeaseViewSchema).default([]),
+  /** 正在各身体上执行的动作（`V2-P2-09E`）：接管中止判定与证据面 */
+  inFlightActions: z.array(CoopInFlightActionSchema).default([]),
   updatedAt: z.number().int().nonnegative(),
 });
 export type CoopRuntimeSnapshot = z.infer<typeof CoopRuntimeSnapshotSchema>;

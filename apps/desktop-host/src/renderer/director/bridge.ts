@@ -32,11 +32,13 @@ import type {
   CommercialCleanExportResult,
   CoopModCompatibilityReport,
   CoopBodyLeaseView,
+  CoopInFlightAction,
   CoopParticipant,
   CoopResourceIntent,
   CoopResourceReservation,
   CoopRuntimeSnapshot,
   CoopSpeakerEvent,
+  CoopTakeoverAbortReceipt,
   CoopTaskItem,
   ComputerUseLease,
   ComputerInputExecutorStatus,
@@ -905,11 +907,29 @@ export interface DirectorBridge {
     takenOver: boolean;
     participantId?: string;
     reason: string;
+    abortedReceipts: CoopTakeoverAbortReceipt[];
     snapshot?: CoopRuntimeSnapshot;
   }>;
   v2CoopActionRoute(input: { participantId: string; targetUniqueMultiplayerID: string }): Promise<{
     allowed: boolean;
     reason: string;
+  }>;
+  // V2-P2-09E：按身体的在飞动作登记与接管中止回执
+  v2CoopBodyActionBegin(input: {
+    participantId: string;
+    uniqueMultiplayerID: string;
+    tool: string;
+    actionId?: string;
+  }): Promise<{ ok: boolean; error?: string; action?: CoopInFlightAction; snapshot?: CoopRuntimeSnapshot }>;
+  v2CoopBodyActionFinish(input: {
+    actionId: string;
+    status: 'COMPLETED' | 'FAILED' | 'UNCERTAIN';
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    action?: CoopInFlightAction;
+    status?: 'COMPLETED' | 'FAILED' | 'UNCERTAIN';
+    snapshot?: CoopRuntimeSnapshot;
   }>;
   v2SongCapabilities(): Promise<{
     ok: boolean;

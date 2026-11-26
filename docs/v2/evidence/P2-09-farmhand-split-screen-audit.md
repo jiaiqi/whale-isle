@@ -229,3 +229,41 @@
 3. **`ABORTED_BY_HUMAN_TAKEOVER` 回执**：契约枚举早已存在（`GameBridgeReceiptStatusSchema`），
    但「接管 → 取消在飞动作 → 回写该状态」链路属于 `V2-P2-09E`，本单只做到「租约归属判定」。
 4. **D/E/F 未开工**：farmhand 仍不能由 AI 安全控制。
+
+---
+
+## 8. 已实现部分：`V2-P2-09E`（接管判定分支 + `ABORTED_BY_HUMAN_TAKEOVER` 回执）与 `V2-P2-09F`（分屏沙盒剧本骨架）（2026-11-26）
+
+### 8.1 改动
+
+| 文件 | 改动 |
+| --- | --- |
+| `packages/shared-protocol/src/coop.ts` | 新增 `CoopInFlightActionSchema`（在某身体上执行中的动作，按 `uniqueMultiplayerID` 索引）与 `CoopTakeoverAbortReceiptSchema`（`status: z.literal('ABORTED_BY_HUMAN_TAKEOVER')`，按身体记录证据面）；`CoopRuntimeSnapshotSchema` 增 `inFlightActions` |
+| `packages/game-bridge-mcp/src/coop-runtime.ts` | 新增 `beginBodyAction`（先过 `routeActionToBody` 门禁，再加同一身体的**动作互斥锁**，与 BWF 的 `ACTION_IN_FLIGHT` 拒绝语义一致）、`finishBodyAction`（只接受 `COMPLETED\|FAILED\|UNCERTAIN` 真实回执；被中止的动作补 finish 得到诚实报错）、`inFlightActionViews`；`detectHumanTakeover` 判定接管时中止**该身体上**全部在飞动作并返回 `abortedReceipts`；`createRoom` 清空在飞登记 |
+| `apps/desktop-host/src/main/v2-kernel-host.ts` | 新增 2 路 IPC：`v2:coop-body-action-begin` / `v2:coop-body-action-finish`（`v2:coop-human-takeover` 的返回自动携带 `abortedReceipts`） |
+| `apps/desktop-host/src/preload/index.ts`、`apps/desktop-host/src/renderer/director/bridge.ts` | 暴露与类型声明 |
+| `tools/mock-harness/src/coop-split-screen.ts` | **[SIMULATION]** 分屏沙盒剧本骨架：确定性事件流（`body_snapshot` / `human_input` / `ai_action_begin` / `ai_action_end`）驱动宿主判定；3 个骨架剧本（host 屏输入不抢租约 / farmhand 屏一动接管并中止 / 缺身体标识不判定） |
+| 测试 | `coop-takeover.spec.ts`（9 例）、`coop-split-screen.spec.ts`（4 例）、E2E `coop-identity.e2e.spec.ts` 增第 2 例 |
+
+### 8.2 设计要点
+
+- **中止发生在接管判定的同一调用里**：人类在 farmhand 屏一动 → 租约交给人类 + 该屏在飞动作全部以 `ABORTED_BY_HUMAN_TAKEOVER` 回执出账 + 动作从登记表移除。此后 BWF 对该 actionId 的迟到回执补不进登记表（`finishBodyAction` 诚实报错），杜绝「中止后又显示 COMPLETED」的假状态。
+- **回执按身体记录证据面**：`actionId / participantId / uniqueMultiplayerID / screenId / tool / startedAt / abortedAt`，与 BWF 侧同名状态同义，但能说清是哪个屏哪个身体。
+- **互斥锁按身体不按房间**：同一身体同时只允许一个在飞动作；其他身体（含 host）不受影响。
+
+### 8.3 验证（`[SIMULATION]`/单测 + `[E2E-HOST]`，不是真机分屏）
+
+| 项 | 结果 |
+| --- | --- |
+| 单测 `coop-takeover.spec.ts` | 9/9 通过（登记/互斥锁/三态 finish/按身体中止/跨身体不受影响/空数组语义/接管后禁止登记/重置清空） |
+| 沙盒回归 `coop-split-screen.spec.ts` | 4/4 通过（3 剧本 + 确定性重放一致） |
+| E2E（Electron 宿主真实 IPC） | 2/2 通过：第 2 例走 `v2:coop-body-action-begin` → 互斥锁拒绝 → `v2:coop-human-takeover` 返回 1 条按身体的 `ABORTED_BY_HUMAN_TAKEOVER` 回执 → 迟到 finish 诚实报错 |
+| `pnpm verify:gate` | 全绿（见提交说明） |
+
+### 8.4 BLOCKED（依赖真实屏幕标识，不得当成已完成）
+
+| 缺口 | 依赖 | 说明 |
+| --- | --- | --- |
+| 真实 `human_input` 事件的来源（`Context.ScreenId` → 身体） | `V2-P2-09D`（BWF 分屏感知补丁）+ owner 分屏前置 | 当前 `detectHumanTakeover` 的输入由宿主/沙盒喂入；真机上必须由打过补丁的 BWF 按屏上报，D 未放行前本单最高 `IMPLEMENTED_UNVERIFIED` |
+| 真机 `ABORTED_BY_HUMAN_TAKEOVER` 时延 | 同上 | BWF 对「同进程另一 `Game1` 实例的动作」的取消时延未测；F 骨架只验证宿主判定与回执证据面 |
+| 断线/离线在飞动作的归宿 | 后续工单 | 成员掉线宽限期内在飞动作保留（BWF 继续执行），超时离线后的归属策略未定义，不在本单范围 |
