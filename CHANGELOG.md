@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added（V2-P3-04A：Digital Life L1 契约先行）
+
+- **`shared-protocol/src/social.ts`**：社区数字生活 L1 契约——`BrowseSession`（`interactionMode` 以 `z.literal('readonly')` 契约层钉死 L1 只读边界，目标/条目与时长预算/停止条件必填）、`SocialPlatformCapabilityEntry` 能力矩阵（渠道/授权/风险级别/`lastVerifiedAt=0` 表未实测）、`ContentUnderstanding`（诚实记录执行理解的 modelId）、`InterestSignal`（单次幅度封顶 ±0.5 防剧烈改写偏好）。
+- **`shared-protocol/src/model.ts`**：多模态消息契约——`ChatContentPart`（text/image，base64 与 url 双源）、单图 base64 ≤6M 字符、单消息 ≤8 parts，供 P3-04B 网关映射与内容理解管线消费。
+- 两域不进 `CONTRACT_SCHEMAS` 跨语言注册（C#/Python 无消费方，沿用 P3-03 browser-computer 先例），`gen:contracts` 零漂移；新增 9 例契约单测。
+
 ### Fixed（批次 C：UI 诚实性）
 
 - **OBS 页演示数据可见标记** `obs-panel.tsx`：弹幕议会投票卡、RVC 歌词卡、弹幕交互条三处演示数据新增可见「预演」徽章（此前只在代码注释标注，UI 上无法与真实数据区分）；饭碗与双轨气泡用真实数据不标；`ui.e2e` 新增徽章 ≥3 可见的防回归断言。
