@@ -457,3 +457,112 @@ export const StardewAvatarExportVerificationSchema = z.object({
   warnings: z.array(z.string()),
 });
 export type StardewAvatarExportVerification = z.infer<typeof StardewAvatarExportVerificationSchema>;
+
+/** V2-P2-07：统一十态 AssetRegistry、舞台/场景与声音资产创作及版本回滚契约 */
+export const AssetRegistryCategorySchema = z.enum([
+  'avatar_2d',
+  'live2d',
+  'vrm_3d',
+  'pixel_sprite',
+  'stage_background',
+  'desktop_wallpaper',
+  'sound_sfx',
+  'voice_bgm',
+  'character_bible',
+]);
+export type AssetRegistryCategory = z.infer<typeof AssetRegistryCategorySchema>;
+
+export const StageSceneInspectionSchema = z.object({
+  valid: z.boolean(),
+  mimeType: z.string().min(1),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  aspectRatio: z.string().optional(),
+  isHdOrAbove: z.boolean(),
+  sha256: z.string().min(1),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+});
+export type StageSceneInspection = z.infer<typeof StageSceneInspectionSchema>;
+
+export const SoundAssetInspectionSchema = z.object({
+  valid: z.boolean(),
+  format: z.enum(['wav', 'mp3', 'ogg', 'm4a', 'unknown']),
+  sizeBytes: z.number().int().nonnegative(),
+  sampleRate: z.number().int().positive().optional(),
+  channels: z.number().int().positive().optional(),
+  bitsPerSample: z.number().int().positive().optional(),
+  durationMs: z.number().int().nonnegative().optional(),
+  peakAmplitude: z.number().min(0).max(1).optional(),
+  clippingDetected: z.boolean(),
+  sha256: z.string().min(1),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+});
+export type SoundAssetInspection = z.infer<typeof SoundAssetInspectionSchema>;
+
+export const AssetVersionRecordSchema = z.object({
+  versionId: z.string().min(1),
+  versionNumber: z.number().int().positive(),
+  status: AssetPipelineStatusSchema,
+  snapshotPath: z.string().min(1),
+  fileName: z.string().min(1),
+  sizeBytes: z.number().int().nonnegative(),
+  sha256: z.string().min(1),
+  provenance: AssetProvenanceSchema,
+  note: z.string().optional(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+export type AssetVersionRecord = z.infer<typeof AssetVersionRecordSchema>;
+
+export const AssetRegistryEntrySchema = z.object({
+  assetId: z.string().min(1),
+  characterId: z.string().min(1),
+  displayName: z.string().min(1),
+  category: AssetRegistryCategorySchema,
+  activeVersionId: z.string().nullable(),
+  previousActiveVersionId: z.string().nullable(),
+  versions: z.array(AssetVersionRecordSchema),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+export type AssetRegistryEntry = z.infer<typeof AssetRegistryEntrySchema>;
+
+export const AssetIntegrityCheckSchema = z.object({
+  ok: z.boolean(),
+  assetId: z.string().min(1),
+  versionId: z.string().min(1),
+  expectedSha256: z.string().min(1),
+  actualSha256: z.string().optional(),
+  reason: z.string().min(1),
+});
+export type AssetIntegrityCheck = z.infer<typeof AssetIntegrityCheckSchema>;
+
+export const CommercialCleanExportResultSchema = z.object({
+  ok: z.boolean(),
+  channel: AssetDistributionChannelSchema,
+  outputDir: z.string().min(1),
+  manifestPath: z.string().min(1),
+  exportedAssets: z.array(
+    z.object({
+      assetId: z.string().min(1),
+      versionId: z.string().min(1),
+      category: AssetRegistryCategorySchema,
+      fileName: z.string().min(1),
+      sha256: z.string().min(1),
+      license: z.string().min(1),
+    }),
+  ),
+  blockedAssets: z.array(
+    z.object({
+      assetId: z.string().min(1),
+      versionId: z.string().nullable(),
+      license: z.string().min(1),
+      reason: z.string().min(1),
+    }),
+  ),
+  exportedCount: z.number().int().nonnegative(),
+  blockedCount: z.number().int().nonnegative(),
+});
+export type CommercialCleanExportResult = z.infer<typeof CommercialCleanExportResultSchema>;

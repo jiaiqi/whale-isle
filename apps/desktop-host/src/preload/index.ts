@@ -380,6 +380,15 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2PixelReview: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:pixel-review', input),
   v2PixelExportStardew: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:pixel-export-stardew', input),
   v2PixelVerifyStardew: (modsDir?: string): Promise<unknown> => ipcRenderer.invoke('v2:pixel-verify-stardew', modsDir),
+  v2AssetList: (filter?: unknown): Promise<unknown[]> => ipcRenderer.invoke('v2:asset-list', filter),
+  v2AssetGet: (assetId: string): Promise<unknown> => ipcRenderer.invoke('v2:asset-get', assetId),
+  v2AssetRegister: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:asset-register', input),
+  v2AssetTransition: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:asset-transition', input),
+  v2AssetVerify: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:asset-verify', input),
+  v2AssetRollback: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:asset-rollback', input),
+  v2AssetExportClean: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:asset-export-clean', input),
+  v2StageSceneCreate: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:stage-scene-create', input),
+  v2SoundSfxCreate: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:sound-sfx-create', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

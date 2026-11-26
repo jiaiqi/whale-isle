@@ -34,6 +34,13 @@ import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
 import { PixelAvatarPipelineV2 } from './pixel-avatar-v2';
+import {
+  AssetRegistryV2,
+  createProceduralStageScenePng,
+  synthesizeSfxWav,
+  type SfxPreset,
+  type StageSceneTheme,
+} from './asset-registry-v2';
 import { resolvePetPacksDir } from './pet-packs';
 import {
   formatMemoryContext,
@@ -675,6 +682,90 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:pixel-verify-stardew', (_e, modsDir?: string) =>
     pixelPipeline.verifyExport(typeof modsDir === 'string' && modsDir !== '' ? modsDir : undefined),
   );
+  // V2-P2-07：十态 AssetRegistry、舞台/场景/声音资产创作、商业清源与版本回滚 IPC
+  const assetRegistry = new AssetRegistryV2({ userDataDir: options.userDataDir });
+  ipcMain.handle('v2:asset-list', (_e, filter?: { characterId?: string; category?: Parameters<AssetRegistryV2['listAssets']>[0] extends infer T ? T extends { category?: infer C } ? C : never : never }) =>
+    assetRegistry.listAssets(filter),
+  );
+  ipcMain.handle('v2:asset-get', (_e, assetId: string) =>
+    assetRegistry.getAsset(String(assetId ?? '')),
+  );
+  ipcMain.handle('v2:asset-register', (_e, rawInput: Parameters<AssetRegistryV2['registerVersion']>[0]) => {
+    try {
+      return { ok: true, ...assetRegistry.registerVersion(rawInput) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:asset-transition', (_e, rawInput: Parameters<AssetRegistryV2['transitionStatus']>[0]) =>
+    assetRegistry.transitionStatus(rawInput),
+  );
+  ipcMain.handle('v2:asset-verify', (_e, rawInput: { assetId: string; versionId?: string }) => {
+    try {
+      return { ok: true, check: assetRegistry.verifyIntegrity(String(rawInput.assetId ?? ''), rawInput.versionId) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:asset-rollback', (_e, rawInput: Parameters<AssetRegistryV2['rollbackAsset']>[0]) =>
+    assetRegistry.rollbackAsset(rawInput),
+  );
+  ipcMain.handle('v2:asset-export-clean', (_e, rawInput: { outputDir?: string; channel?: Parameters<AssetRegistryV2['exportCleanBundle']>[0]['channel']; assetIds?: string[] }) => {
+    try {
+      const outputDir =
+        rawInput?.outputDir && rawInput.outputDir.trim() !== ''
+          ? rawInput.outputDir
+          : join(options.userDataDir, 'clean-exports', `bundle-${Date.now().toString(36)}`);
+      return {
+        ok: true,
+        result: assetRegistry.exportCleanBundle({
+          outputDir,
+          ...(rawInput?.channel ? { channel: rawInput.channel } : {}),
+          ...(rawInput?.assetIds ? { assetIds: rawInput.assetIds } : {}),
+        }),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:stage-scene-create', (_e, rawInput: { outputPath?: string; theme?: StageSceneTheme; width?: number; height?: number }) => {
+    try {
+      const outputPath =
+        rawInput?.outputPath && rawInput.outputPath.trim() !== ''
+          ? rawInput.outputPath
+          : join(options.userDataDir, 'studio-generated', `stage-${Date.now().toString(36)}.png`);
+      return {
+        ok: true,
+        ...createProceduralStageScenePng({
+          outputPath,
+          ...(rawInput?.theme ? { theme: rawInput.theme } : {}),
+          ...(rawInput?.width ? { width: rawInput.width } : {}),
+          ...(rawInput?.height ? { height: rawInput.height } : {}),
+        }),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:sound-sfx-create', (_e, rawInput: { outputPath?: string; preset?: SfxPreset; durationMs?: number; sampleRate?: number }) => {
+    try {
+      const outputPath =
+        rawInput?.outputPath && rawInput.outputPath.trim() !== ''
+          ? rawInput.outputPath
+          : join(options.userDataDir, 'studio-generated', `sfx-${Date.now().toString(36)}.wav`);
+      return {
+        ok: true,
+        ...synthesizeSfxWav({
+          outputPath,
+          ...(rawInput?.preset ? { preset: rawInput.preset } : {}),
+          ...(rawInput?.durationMs ? { durationMs: rawInput.durationMs } : {}),
+          ...(rawInput?.sampleRate ? { sampleRate: rawInput.sampleRate } : {}),
+        }),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');

@@ -5,7 +5,12 @@
 import type {
   Asset2dStudioPackage,
   AssetDistributionChannel,
+  AssetIntegrityCheck,
+  AssetPipelineStatus,
   AssetProvenance,
+  AssetRegistryCategory,
+  AssetRegistryEntry,
+  AssetVersionRecord,
   AudioMixerSnapshot,
   AudioTrackKind,
   AudioTrackState,
@@ -18,6 +23,7 @@ import type {
   CharacterCoreSnapshot,
   CharacterExpression,
   CharacterGoal,
+  CommercialCleanExportResult,
   CoopSpeakerEvent,
   CrossPetImportRequest,
   CrossPetImportResult,
@@ -44,6 +50,8 @@ import type {
   PreferenceCategory,
   ProviderQuotaMatrix,
   ProviderQuotaReport,
+  SoundAssetInspection,
+  StageSceneInspection,
   StardewAvatarExportVerification,
   TeamBlackboardSnapshot,
   TeamCommsMessage,
@@ -712,6 +720,43 @@ export interface DirectorBridge {
     installModIfMissing?: boolean;
   }): Promise<{ ok: boolean; error?: string; job?: PixelAvatarJobSnapshot; verification?: StardewAvatarExportVerification }>;
   v2PixelVerifyStardew(modsDir?: string): Promise<StardewAvatarExportVerification>;
+  v2AssetList(filter?: { characterId?: string; category?: AssetRegistryCategory }): Promise<AssetRegistryEntry[]>;
+  v2AssetGet(assetId: string): Promise<AssetRegistryEntry | null>;
+  v2AssetRegister(input: {
+    assetId: string;
+    characterId: string;
+    displayName: string;
+    category: AssetRegistryCategory;
+    sourceFilePath: string;
+    initialStatus?: 'draft' | 'candidate' | 'review_required';
+    provenance: Omit<AssetProvenance, 'sha256' | 'generatedAt'> & { generatedAt?: string };
+    note?: string;
+  }): Promise<{ ok: boolean; error?: string; entry?: AssetRegistryEntry; version?: AssetVersionRecord; qaErrors?: string[] }>;
+  v2AssetTransition(input: {
+    assetId: string;
+    versionId: string;
+    nextStatus: AssetPipelineStatus;
+    note?: string;
+  }): Promise<{ ok: boolean; error?: string; entry?: AssetRegistryEntry }>;
+  v2AssetVerify(input: { assetId: string; versionId?: string }): Promise<{ ok: boolean; error?: string; check?: AssetIntegrityCheck }>;
+  v2AssetRollback(input: { assetId: string; targetVersionId?: string; note?: string }): Promise<{ ok: boolean; error?: string; entry?: AssetRegistryEntry }>;
+  v2AssetExportClean(input?: {
+    outputDir?: string;
+    channel?: AssetDistributionChannel;
+    assetIds?: string[];
+  }): Promise<{ ok: boolean; error?: string; result?: CommercialCleanExportResult }>;
+  v2StageSceneCreate(input?: {
+    outputPath?: string;
+    theme?: 'tidepaper_mist' | 'night_tide' | 'obsidian_stage';
+    width?: number;
+    height?: number;
+  }): Promise<{ ok: boolean; error?: string; outputPath?: string; inspection?: StageSceneInspection }>;
+  v2SoundSfxCreate(input?: {
+    outputPath?: string;
+    preset?: 'chime' | 'pop' | 'alert' | 'sparkle' | 'splash';
+    durationMs?: number;
+    sampleRate?: number;
+  }): Promise<{ ok: boolean; error?: string; outputPath?: string; inspection?: SoundAssetInspection }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

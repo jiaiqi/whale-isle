@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-07`：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚 — `DONE`）
+
+- **统一十态 AssetRegistry 与音画质检契约** `packages/shared-protocol/src/media.ts`：新增 `AssetRegistryCategory`、`StageSceneInspection`、`SoundAssetInspection`、`AssetVersionRecord`、`AssetRegistryEntry`、`AssetIntegrityCheck` 与 `CommercialCleanExportResult`。
+- **舞台背景/音效工坊、十态版本回滚与商用清源门禁** `apps/desktop-host/src/main/{asset-registry-v2.ts,asset-registry-v2.spec.ts,v2-kernel-host.ts}` & `apps/desktop-host/src/{preload/index.ts,renderer/director/bridge.ts}`：实现 `createProceduralStageScenePng` / `inspectStageSceneAsset`、`synthesizeSfxWav` / `inspectAudioAsset`（RIFF WAV `fmt`/`data` 解析与削波检测 + OGG/MP3/M4A 嗅探）、`AssetRegistryV2`（不可变快照、`validation_failed`/未审批发布阻断、SHA-256 防篡改、一键回滚与 `exportCleanBundle` 拦截 `CC BY-NC-SA 4.0`），挂载 9 路 `v2:asset-*` / `v2:stage-scene-create` / `v2:sound-sfx-create` IPC 并通过 `verify:gate` 7/7 与 Electron 45 E2E 全套。
+
 ### Added / Changed（`V2-P2-06`：游戏像素人物流水线与 Stardew Avatar Mod 导出核验 — `IMPLEMENTED_UNVERIFIED`）
 
 - **11 步像素流水线与 Stardew 导出核验契约** `packages/shared-protocol/src/media.ts`：新增 `PixelPipelineStep`、`PixelSpriteQaReport`、`PixelAvatarJobRequest`、`PixelAvatarJobSnapshot` 与 `StardewAvatarExportVerification` Zod 契约。

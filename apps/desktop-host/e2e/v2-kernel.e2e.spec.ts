@@ -80,6 +80,48 @@ interface DirectorV2Window {
       realDeviceInGameVisualVerified: boolean;
       issues: string[];
     }>;
+    v2StageSceneCreate(input?: { theme?: string; width?: number; height?: number }): Promise<{
+      ok: boolean;
+      outputPath?: string;
+      inspection?: { valid: boolean; width?: number; height?: number; aspectRatio?: string };
+    }>;
+    v2SoundSfxCreate(input?: { preset?: string; durationMs?: number }): Promise<{
+      ok: boolean;
+      outputPath?: string;
+      inspection?: { valid: boolean; format: string; durationMs?: number; clippingDetected: boolean };
+    }>;
+    v2AssetRegister(input: {
+      assetId: string;
+      characterId: string;
+      displayName: string;
+      category: string;
+      sourceFilePath: string;
+      provenance: {
+        sourceType: string;
+        license: string;
+        allowCommercial: boolean;
+        allowLivestream: boolean;
+        allowRedistribution: boolean;
+        inputRefPaths: string[];
+        reviewNotes: string[];
+      };
+    }): Promise<{ ok: boolean; version?: { versionId: string; status: string } }>;
+    v2AssetTransition(input: { assetId: string; versionId: string; nextStatus: string; note?: string }): Promise<{
+      ok: boolean;
+      entry?: { activeVersionId: string | null };
+    }>;
+    v2AssetVerify(input: { assetId: string; versionId?: string }): Promise<{
+      ok: boolean;
+      check?: { ok: boolean };
+    }>;
+    v2AssetRollback(input: { assetId: string; targetVersionId?: string }): Promise<{
+      ok: boolean;
+      entry?: { activeVersionId: string | null; versions: Array<{ versionId: string; status: string }> };
+    }>;
+    v2AssetExportClean(input?: { channel?: string; assetIds?: string[] }): Promise<{
+      ok: boolean;
+      result?: { exportedCount: number; blockedCount: number; exportedAssets: Array<{ assetId: string }>; blockedAssets: Array<{ assetId: string }> };
+    }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -372,6 +414,93 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(Array.isArray(p206.jobs)).toBe(true);
       expect(typeof p206.verify.modDir).toBe('string');
       expect(p206.verify.realDeviceInGameVisualVerified).toBe(false);
+
+      // V2-P2-07：验证原创舞台图/SFX 合成、十态 AssetRegistry 发布、一键回滚、SHA-256 核验与商业清源过滤
+      const p207 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const tag = Date.now().toString(36);
+        const stageId = `e2e-stage-${tag}`;
+        const ncId = `e2e-nc-${tag}`;
+        const stage1 = await bridge.v2StageSceneCreate({ theme: 'tidepaper_mist', width: 320, height: 180 });
+        const stage2 = await bridge.v2StageSceneCreate({ theme: 'night_tide', width: 320, height: 180 });
+        const sfx = await bridge.v2SoundSfxCreate({ preset: 'chime', durationMs: 180 });
+
+        const reg1 = await bridge.v2AssetRegister({
+          assetId: stageId,
+          characterId: 'char_xiaojing',
+          displayName: 'E2E舞台v1',
+          category: 'stage_background',
+          sourceFilePath: stage1.outputPath!,
+          provenance: {
+            sourceType: 'user-upload',
+            license: 'SELF_OWNED_COMMERCIAL',
+            allowCommercial: true,
+            allowLivestream: true,
+            allowRedistribution: true,
+            inputRefPaths: [],
+            reviewNotes: [],
+          },
+        });
+        await bridge.v2AssetTransition({ assetId: stageId, versionId: reg1.version!.versionId, nextStatus: 'approved' });
+        await bridge.v2AssetTransition({ assetId: stageId, versionId: reg1.version!.versionId, nextStatus: 'published' });
+
+        const reg2 = await bridge.v2AssetRegister({
+          assetId: stageId,
+          characterId: 'char_xiaojing',
+          displayName: 'E2E舞台v2',
+          category: 'stage_background',
+          sourceFilePath: stage2.outputPath!,
+          provenance: {
+            sourceType: 'user-upload',
+            license: 'SELF_OWNED_COMMERCIAL',
+            allowCommercial: true,
+            allowLivestream: true,
+            allowRedistribution: true,
+            inputRefPaths: [],
+            reviewNotes: [],
+          },
+        });
+        await bridge.v2AssetTransition({ assetId: stageId, versionId: reg2.version!.versionId, nextStatus: 'approved' });
+        await bridge.v2AssetTransition({ assetId: stageId, versionId: reg2.version!.versionId, nextStatus: 'published' });
+
+        const rollbackRes = await bridge.v2AssetRollback({ assetId: stageId });
+        const verifyRes = await bridge.v2AssetVerify({ assetId: stageId });
+
+        const ncReg = await bridge.v2AssetRegister({
+          assetId: ncId,
+          characterId: 'custom-cp-deepseek',
+          displayName: 'E2E非商用测试',
+          category: 'stage_background',
+          sourceFilePath: stage1.outputPath!,
+          provenance: {
+            sourceType: 'third-party-import',
+            license: 'CC BY-NC-SA 4.0',
+            allowCommercial: false,
+            allowLivestream: false,
+            allowRedistribution: false,
+            inputRefPaths: [],
+            reviewNotes: [],
+          },
+        });
+        await bridge.v2AssetTransition({ assetId: ncId, versionId: ncReg.version!.versionId, nextStatus: 'approved' });
+        await bridge.v2AssetTransition({ assetId: ncId, versionId: ncReg.version!.versionId, nextStatus: 'published' });
+
+        const cleanExport = await bridge.v2AssetExportClean({
+          channel: 'commercial_distribution',
+          assetIds: [stageId, ncId],
+        });
+        return { stage1, sfx, rollbackRes, verifyRes, cleanExport, stageId, ncId };
+      });
+      expect(p207.stage1.inspection?.valid).toBe(true);
+      expect(p207.sfx.inspection?.valid).toBe(true);
+      expect(p207.sfx.inspection?.format).toBe('wav');
+      expect(p207.rollbackRes.ok).toBe(true);
+      expect(p207.rollbackRes.entry?.activeVersionId).toBe('v1');
+      expect(p207.verifyRes.check?.ok).toBe(true);
+      expect(p207.cleanExport.result?.exportedCount).toBe(1);
+      expect(p207.cleanExport.result?.blockedCount).toBe(1);
+      expect(p207.cleanExport.result?.exportedAssets[0]?.assetId).toBe(p207.stageId);
+      expect(p207.cleanExport.result?.blockedAssets[0]?.assetId).toBe(p207.ncId);
     } finally {
       await app.close();
     }
