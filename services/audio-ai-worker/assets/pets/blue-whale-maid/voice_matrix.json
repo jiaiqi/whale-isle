@@ -9,8 +9,9 @@
     "profiles": [
       {
         "emotionTag": "sweet_normal",
-        "refAudioPath": "ref/sweet_normal.wav",
-        "refText": "sweet_normal 的参考台词",
+        "refAudioPath": "voices/design_sweet_normal.wav",
+        "refText": "哼，本鱼才没有偷懒呢！主人快夸夸我嘛～",
+        "refAssetKind": "stub_sine",
         "speed": 1.0,
         "temperature": 0.8,
         "topP": 1.0,
@@ -25,8 +26,9 @@
       },
       {
         "emotionTag": "tsundere_refuse",
-        "refAudioPath": "ref/tsundere_refuse.wav",
-        "refText": "tsundere_refuse 的参考台词",
+        "refAudioPath": "voices/tsundere_refuse.wav",
+        "refText": "哼、哼！才不是因为担心主人呢！笨蛋！",
+        "refAssetKind": "missing",
         "speed": 1.05,
         "temperature": 0.8,
         "topP": 1.0,
@@ -41,8 +43,9 @@
       },
       {
         "emotionTag": "rage_spray",
-        "refAudioPath": "ref/rage_spray.wav",
-        "refText": "rage_spray 的参考台词",
+        "refAudioPath": "voices/rage_spray.wav",
+        "refText": "谁、谁是鱼啊！本鱼是鲸！喷水抗议！",
+        "refAssetKind": "missing",
         "speed": 1.1,
         "temperature": 0.8,
         "topP": 1.0,
@@ -57,8 +60,9 @@
       },
       {
         "emotionTag": "lazy_yawn",
-        "refAudioPath": "ref/lazy_yawn.wav",
-        "refText": "lazy_yawn 的参考台词",
+        "refAudioPath": "voices/lazy_yawn.wav",
+        "refText": "唔……好困……让本鱼再睡五分钟嘛……",
+        "refAssetKind": "missing",
         "speed": 1.15,
         "temperature": 0.8,
         "topP": 1.0,
@@ -72,9 +76,10 @@
         "sfxVolume": 0.0
       },
       {
-        "emotionTag": "clumsy_panic",
-        "refAudioPath": "ref/clumsy_panic.wav",
-        "refText": "clumsy_panic 的参考台词",
+        "emotionTag": "happy_rice",
+        "refAudioPath": "voices/happy_rice.wav",
+        "refText": "米饭！热腾腾的白米饭！本鱼最喜欢干饭啦！",
+        "refAssetKind": "missing",
         "speed": 1.2,
         "temperature": 0.8,
         "topP": 1.0,
@@ -90,9 +95,9 @@
     ]
   },
   "svc": {
-    "rvcModelPath": "rvc/xiaojing.pth",
-    "indexPath": "rvc/xiaojing.index",
-    "pitchShiftSemitones": 2,
+    "rvcModelPath": "",
+    "indexPath": "",
+    "pitchShiftSemitones": 0,
     "indexRate": 0.75,
     "protectVoiceless": 0.33,
     "vocalGainDb": 0.0,

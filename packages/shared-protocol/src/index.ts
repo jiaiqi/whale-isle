@@ -578,12 +578,25 @@ export const PauseConfigSchema = z.object({
 });
 export type PauseConfig = z.infer<typeof PauseConfigSchema>;
 
+/**
+ * TTS 参考音频素材性质（诚实口径）。
+ * - `real_voice`：真人/真实录音干声，可用于真实音色克隆；
+ * - `stub_sine`：占位正弦波（工程生成的确定性 stub），**不是人声**，只能用于占位试听；
+ * - `missing`：磁盘上不存在该素材。
+ */
+export const TtsRefAssetKindSchema = z.enum(['real_voice', 'stub_sine', 'missing']);
+export type TtsRefAssetKind = z.infer<typeof TtsRefAssetKindSchema>;
+
 /** TTS 情感锚点独立可调参数（每个锚点一条；refText 必填防内部 ASR 卡顿） */
 export const TtsEmotionTuningParamsSchema = z.object({
-  emotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'clumsy_panic']),
+  // 与 TtsVoicePackSchema / AudioPlaybackLeaseSchema 的情绪枚举保持同一集合（happy_rice = 干饭兴奋）。
+  // 注：`clumsy_panic` 是**桌宠动作状态**（PetActionState），不是 TTS 情绪锚点，两者不可混用。
+  emotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'happy_rice']),
   refAudioPath: z.string().default(''),
   /** 参考干声对应文本——必填（空值会触发内部 ASR 导致约 40s 卡顿） */
   refText: z.string().min(1),
+  /** 参考素材性质；缺省视为 `real_voice`（老包兼容），但真实路由应显式标注 */
+  refAssetKind: TtsRefAssetKindSchema.default('real_voice'),
   speed: z.number().min(0.7).max(1.4).default(1.0),
   temperature: z.number().min(0.1).max(1.0).default(1.0),
   topP: z.number().min(0.1).max(1.0).default(1.0),
@@ -610,6 +623,27 @@ export const SvcSingingTuningParamsSchema = z.object({
   accompanimentGainDb: z.number().min(-24).max(6).default(-3),
 });
 export type SvcSingingTuningParams = z.infer<typeof SvcSingingTuningParamsSchema>;
+
+/**
+ * 音色包落盘结构（`voice_matrix.json`）契约。
+ * 之前该文件是「谁写谁负责」的手工 JSON，save-pack 落盘与 shared-protocol 枚举会各写各的
+ * （实测踩坑：voice_matrix 第 5 组写 `clumsy_panic`，而契约枚举是 `happy_rice`，校验必然挂）。
+ * 现在落盘产物本身也有 schema，save-pack 写出前先过本契约，漂移在写入那一刻就被拦下。
+ */
+export const TtsVoicePackMatrixSchema = z.object({
+  schemaVersion: z.string().min(1),
+  petId: z.string().min(1),
+  voicePackId: z.string().min(1),
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']),
+  tts: z.object({
+    voicePackId: z.string().min(1),
+    defaultEmotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'happy_rice']),
+    profiles: z.array(TtsEmotionTuningParamsSchema),
+  }),
+  svc: SvcSingingTuningParamsSchema.optional(),
+});
+export type TtsVoicePackMatrix = z.infer<typeof TtsVoicePackMatrixSchema>;
+export type TtsVoicePackMatrixInput = z.input<typeof TtsVoicePackMatrixSchema>;
 
 /** 声音工坊音色创建请求（三种路径） */
 export const VoiceDesignRequestSchema = z.object({

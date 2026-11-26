@@ -96,12 +96,29 @@ class PauseConfig(BaseModel):
     ellipsisMs: int = Field(default=460, ge=50, le=3000)
 
 
+# TTS 情绪锚点全集（与 shared-protocol 的 TtsEmotionTuningParamsSchema 严格同集合）。
+# 注：`clumsy_panic` 是**桌宠动作状态**（PetActionState：心虚冒汗），不是 TTS 情绪锚点，
+# 历史上这里写成 clumsy_panic 而契约写 happy_rice，导致 save-pack 落盘必然校验失败。
+EMOTION_TAGS: tuple[str, ...] = (
+    "sweet_normal",
+    "tsundere_refuse",
+    "rage_spray",
+    "lazy_yawn",
+    "happy_rice",
+)
+
+# 参考音频素材性质（诚实口径）：real_voice=真实人声干声；stub_sine=工程生成的占位正弦波；
+# missing=磁盘上不存在。stub_sine / missing 都不得用于真实音色克隆。
+RefAssetKind = Literal["real_voice", "stub_sine", "missing"]
+
+
 class EmotionTuningParams(BaseModel):
     emotionTag: Literal[
-        "sweet_normal", "tsundere_refuse", "rage_spray", "lazy_yawn", "clumsy_panic"
+        "sweet_normal", "tsundere_refuse", "rage_spray", "lazy_yawn", "happy_rice"
     ]
     refAudioPath: str = ""
     refText: str  # 必填：防内部 ASR 40s 卡顿
+    refAssetKind: RefAssetKind = "real_voice"
     speed: float = Field(default=1.0, ge=0.7, le=1.4)
     temperature: float = Field(default=1.0, ge=0.1, le=1.0)
     topP: float = Field(default=1.0, ge=0.1, le=1.0)
@@ -173,13 +190,61 @@ def _synth_stub_wav(duration_ms: int, sample_rate: int = 24000) -> bytes:
     return buf.getvalue()  # type: ignore[no-any-return]
 
 
+def _resolve_ref_asset(pet_id: str, ref_path: str) -> Path:
+    """把音色包里的相对参考音频路径解析为磁盘绝对路径（相对角色资产目录）。"""
+    p = Path(ref_path)
+    if p.is_absolute():
+        return p
+    return _pet_voices_dir(pet_id).parent / ref_path
+
+
+def _probe_ref_asset(path: str | Path) -> tuple[RefAssetKind, str]:
+    """探测参考音频素材的真实性质（诚实口径）。
+
+    返回 ``(kind, detail)``：
+      - ``missing``：磁盘上不存在该文件；
+      - ``stub_sine``：工程生成的占位正弦波（**不是人声**，不得用于真实音色克隆）；
+      - ``real_voice``：真实录音干声。
+
+    判定顺序：sidecar 标记（design 落盘时写）→ 零交叉率主频启发式（兜底）→ 默认 real_voice。
+    """
+    p = Path(path)
+    if not str(path).strip() or not p.exists() or not p.is_file():
+        return "missing", f"参考音频不存在：{path or '(空)'}"
+    sidecar = p.with_suffix(p.suffix + ".stub.json")
+    if sidecar.exists():
+        try:
+            meta = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+        if meta.get("stub") is True:
+            return "stub_sine", str(meta.get("detail") or "占位正弦波（工程生成，非人声）")
+    try:
+        with wave.open(str(p), "rb") as w:
+            frames = w.getnframes()
+            rate = w.getframerate()
+            width = w.getsampwidth()
+            channels = w.getnchannels()
+            raw = w.readframes(frames)
+    except (OSError, wave.Error):
+        return "real_voice", "无法解析 WAV（按真实素材处理，推理失败时由调用方如实降级）"
+    if width != 2 or channels != 1 or rate <= 0 or frames < rate // 2:
+        return "real_voice", "非 16bit 单声道长样本（按真实素材处理）"
+    samples = struct.unpack(f"<{frames}h", raw)
+    crossings = sum(1 for i in range(1, frames) if (samples[i - 1] < 0) != (samples[i] < 0))
+    freq = crossings / 2.0 / (frames / rate)
+    if abs(freq - 440.0) < 20.0:
+        return "stub_sine", f"疑似占位正弦波（主频约 {freq:.0f}Hz，接近工程 stub 的 440Hz）"
+    return "real_voice", f"真实干声（主频约 {freq:.0f}Hz）"
+
+
 def _emotion_preset_text(tag: str) -> str:
     return {
         "sweet_normal": "主人好～今天的米饭已经备好了哦！",
         "tsundere_refuse": "哼、哼！才不是因为担心主人呢！笨蛋！",
         "rage_spray": "谁、谁是鱼啊！本鱼是鲸！喷水抗议！",
         "lazy_yawn": "唔……好困……让本鱼再睡五分钟嘛……",
-        "clumsy_panic": "都、都怪这块石头突然长出来的！真的！",
+        "happy_rice": "米饭！热腾腾的白米饭！本鱼最喜欢干饭啦！",
     }.get(tag, "哼，本鱼才没有偷懒呢！")
 
 
@@ -219,11 +284,25 @@ def design(req: VoiceDesignRequest) -> Any:
         preset = DESIGN_PRESETS.get(req.prompt, req.prompt)
         out = pet_voices / f"design_{req.emotionTag}.wav"
         out.write_bytes(_synth_stub_wav(4000))
+        # sidecar 标记：如实声明这是占位正弦波，不是人声（运行时据此拒绝真实音色克隆）
+        out.with_suffix(out.suffix + ".stub.json").write_text(
+            json.dumps(
+                {
+                    "stub": True,
+                    "detail": "占位正弦波（工程生成，非人声）；不可用于真实音色克隆",
+                    "emotionTag": req.emotionTag,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         return {
             "ok": True,
             "mode": "cloud_voice_design",
             "refAudioPath": str(out),
             "refText": req.previewText,
+            "refAssetKind": "stub_sine",
             "promptArchived": preset[:120],
             "previewAudioB64": _b64_wav(4000),
             "licenseScope": "DEV_ONLY_NON_COMMERCIAL",
@@ -395,6 +474,36 @@ def _pet_voices_dir(pet_id: str) -> Path:
     return d
 
 
+def _validate_voice_pack_matrix(matrix: dict[str, Any]) -> str | None:
+    """校验 voice_matrix.json 结构（与 shared-protocol TtsVoicePackMatrixSchema 对齐）。
+
+    返回 ``None`` 表示通过；否则返回错误描述。
+    """
+    for key in ("schemaVersion", "petId", "voicePackId", "licenseScope", "tts"):
+        if key not in matrix:
+            return f"音色包缺少必填字段：{key}"
+    if matrix["licenseScope"] not in ("DEV_ONLY_NON_COMMERCIAL", "COMMERCIAL_READY"):
+        return f"licenseScope 越界：{matrix['licenseScope']}"
+    tts = matrix["tts"]
+    if not isinstance(tts, dict) or "profiles" not in tts:
+        return "tts 段缺少 profiles"
+    default_tag = tts.get("defaultEmotionTag")
+    if default_tag not in EMOTION_TAGS:
+        return f"defaultEmotionTag 不在契约枚举内：{default_tag}"
+    profiles = tts["profiles"]
+    if not isinstance(profiles, list) or not profiles:
+        return "tts.profiles 不能为空"
+    for prof in profiles:
+        if not isinstance(prof, dict):
+            return "tts.profiles 元素必须是对象"
+        tag = prof.get("emotionTag")
+        if tag not in EMOTION_TAGS:
+            return f"tts.profiles 情绪锚点不在契约枚举内：{tag}"
+        if not str(prof.get("refText") or "").strip():
+            return f"情绪锚点 {tag} 的 refText 为空"
+    return None
+
+
 @router.post("/save-pack")
 def save_pack(req: SavePackRequest) -> Any:
     if not req.emotionParams:
@@ -412,6 +521,30 @@ def save_pack(req: SavePackRequest) -> Any:
         return JSONResponse(
             status_code=400, content={"error": "情绪锚点重复（每个锚点仅一条配置）"}
         )
+    unknown_tags = sorted({p.emotionTag for p in req.emotionParams} - set(EMOTION_TAGS))
+    if unknown_tags:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": f"情绪锚点不在契约枚举内：{unknown_tags}（合法集合 {list(EMOTION_TAGS)}）"
+            },
+        )
+    # 素材诚实校验：调用方声称 real_voice，但磁盘上其实没有 / 是占位波 → 拒绝落盘，
+    # 杜绝「包里写着有真人声，实际是 stub」这种漂移。
+    for p in req.emotionParams:
+        actual_kind, detail = _probe_ref_asset(_resolve_ref_asset(req.petId, p.refAudioPath))
+        if actual_kind != p.refAssetKind:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": (
+                        f"情绪锚点 {p.emotionTag} 的 refAssetKind 与磁盘实际不符："
+                        f"声明 {p.refAssetKind}，实际 {actual_kind}（{detail}）"
+                    ),
+                    "actualRefAssetKind": actual_kind,
+                    "detail": detail,
+                },
+            )
     matrix = {
         "schemaVersion": "1.0",
         "petId": req.petId,
@@ -424,6 +557,10 @@ def save_pack(req: SavePackRequest) -> Any:
         },
         "svc": req.svcParams.model_dump(),
     }
+    # 落盘前用矩阵等价契约校验（与 shared-protocol 的 TtsVoicePackMatrixSchema 同结构）
+    matrix_check = _validate_voice_pack_matrix(matrix)
+    if matrix_check is not None:
+        return JSONResponse(status_code=400, content={"error": matrix_check})
     out = _pet_voices_dir(req.petId).parent / "voice_matrix.json"
     tmp = out.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(matrix, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -443,9 +580,16 @@ def load_pack(petId: str = "blue-whale-maid") -> Any:
     if not out.exists():
         return JSONResponse(status_code=404, content={"error": "该角色尚未保存音色包"})
     try:
-        return {"ok": True, "matrix": json.loads(out.read_text(encoding="utf-8"))}
+        matrix = json.loads(out.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return JSONResponse(status_code=500, content={"error": "音色包损坏"})
+    drift = _validate_voice_pack_matrix(matrix)
+    if drift is not None:
+        return JSONResponse(
+            status_code=409,
+            content={"error": f"音色包与契约漂移：{drift}", "drift": drift},
+        )
+    return {"ok": True, "matrix": matrix}
 
 
 # ---------------------------------------------------------------------------

@@ -113,6 +113,7 @@ def test_audition_tts_params_passthrough_exact() -> None:
         "emotionTag": "tsundere_refuse",
         "refAudioPath": "ref/tsundere.wav",
         "refText": "哼、哼！才不是因为担心主人呢！",
+        "refAssetKind": "missing",
         "speed": 1.25,
         "temperature": 0.55,
         "topP": 0.9,
@@ -186,6 +187,7 @@ def test_save_pack_persists_and_hot_reloads() -> None:
             "emotionTag": tag,
             "refAudioPath": f"ref/{tag}.wav",
             "refText": f"{tag} 的参考台词",
+            "refAssetKind": "missing",
             "speed": 1.0 + i * 0.05,
             "temperature": 0.8,
             "topP": 1.0,
@@ -195,7 +197,7 @@ def test_save_pack_persists_and_hot_reloads() -> None:
             "sfxVolume": 0.0,
         }
         for i, tag in enumerate(
-            ["sweet_normal", "tsundere_refuse", "rage_spray", "lazy_yawn", "clumsy_panic"]
+            ["sweet_normal", "tsundere_refuse", "rage_spray", "lazy_yawn", "happy_rice"]
         )
     ]
     svc_params = {
@@ -274,3 +276,134 @@ def test_mutex_concurrent_heavy_task_rejected() -> None:
 def test_design_presets_include_user_prompt() -> None:
     assert "12到14岁" in DESIGN_PRESETS["dfeiyu_tsundere_whale"]
     assert "6到8岁" in DESIGN_PRESETS["loli_sweet"]
+
+
+# ---------------------------------------------------------------------------
+# 契约漂移回归门禁（2026-11-26 实测修复：voice_matrix 第 5 组 clumsy_panic vs 契约 happy_rice）
+# ---------------------------------------------------------------------------
+
+
+def _svc_params() -> dict[str, Any]:
+    return {
+        "rvcModelPath": "",
+        "indexPath": "",
+        "pitchShiftSemitones": 0,
+        "indexRate": 0.75,
+        "protectVoiceless": 0.33,
+        "vocalGainDb": 0.0,
+        "accompanimentGainDb": -3.0,
+    }
+
+
+def test_emotion_tags_match_contract_set() -> None:
+    """Python 侧情绪锚点集合必须与 shared-protocol 严格一致（clumsy_panic 是动作状态，不是 TTS 锚点）。"""
+    from voice_studio import EMOTION_TAGS
+
+    assert EMOTION_TAGS == (
+        "sweet_normal",
+        "tsundere_refuse",
+        "rage_spray",
+        "lazy_yawn",
+        "happy_rice",
+    )
+    assert "clumsy_panic" not in EMOTION_TAGS
+
+
+def test_save_pack_rejects_clumsy_panic_emotion_tag() -> None:
+    """回归：落盘过 clumsy_panic 的包与契约漂移，save-pack 必须在写入前拦下。"""
+    r = client.post(
+        "/api/voice-studio/save-pack",
+        json={
+            "petId": "blue-whale-maid",
+            "voicePackId": "blue-whale-maid-v2",
+            "emotionParams": [
+                {
+                    "emotionTag": "clumsy_panic",
+                    "refAudioPath": "ref/clumsy_panic.wav",
+                    "refText": "都、都怪这块石头突然长出来的！真的！",
+                    "refAssetKind": "missing",
+                }
+            ],
+            "svcParams": _svc_params(),
+        },
+    )
+    assert r.status_code == 422  # Pydantic Literal 直接拒绝
+    assert "clumsy_panic" in r.text
+
+
+def test_save_pack_rejects_ref_asset_kind_mismatch() -> None:
+    """回归：声称 real_voice 但磁盘上根本没有该素材 → 拒绝落盘（杜绝包里写有真人声实际没有）。"""
+    r = client.post(
+        "/api/voice-studio/save-pack",
+        json={
+            "petId": "blue-whale-maid",
+            "voicePackId": "blue-whale-maid-v2",
+            "emotionParams": [
+                {
+                    "emotionTag": "sweet_normal",
+                    "refAudioPath": "voices/never_exists.wav",
+                    "refText": "参考台词",
+                    "refAssetKind": "real_voice",
+                }
+            ],
+            "svcParams": _svc_params(),
+        },
+    )
+    assert r.status_code == 400
+    body = r.json()
+    assert body["actualRefAssetKind"] == "missing"
+    assert "refAssetKind" in body["error"]
+
+
+def test_design_output_is_honestly_marked_stub() -> None:
+    """回归：cloud design 产出的占位正弦波必须标 stub_sine，不得冒充真人声。"""
+    r = client.post(
+        "/api/voice-studio/design",
+        json={
+            "mode": "cloud_voice_design",
+            "prompt": "dfeiyu_tsundere_whale",
+            "previewText": "哼，本鱼才没有偷懒呢！",
+            "emotionTag": "sweet_normal",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["refAssetKind"] == "stub_sine"
+    from voice_studio import _probe_ref_asset
+
+    kind, _detail = _probe_ref_asset(body["refAudioPath"])
+    assert kind == "stub_sine"
+
+
+def test_load_pack_reports_contract_drift() -> None:
+    """回归：磁盘上的音色包与契约漂移时，load-pack 明确报 409 而不是照单全收。"""
+    matrix_path = Path(
+        client.get("/api/voice-studio/status").json()["voiceMatrixDir"]
+    ) / "voice_matrix.json"
+    matrix_path.parent.mkdir(parents=True, exist_ok=True)
+    matrix_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "1.0",
+                "petId": "blue-whale-maid",
+                "voicePackId": "blue-whale-maid-v2",
+                "licenseScope": "DEV_ONLY_NON_COMMERCIAL",
+                "tts": {
+                    "voicePackId": "blue-whale-maid-v2",
+                    "defaultEmotionTag": "sweet_normal",
+                    "profiles": [
+                        {
+                            "emotionTag": "clumsy_panic",
+                            "refAudioPath": "ref/clumsy_panic.wav",
+                            "refText": "占位",
+                        }
+                    ],
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    r = client.get("/api/voice-studio/load-pack", params={"petId": "blue-whale-maid"})
+    assert r.status_code == 409
+    assert "漂移" in r.json()["error"]
