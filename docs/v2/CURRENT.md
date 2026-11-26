@@ -56,3 +56,4 @@
 - item 5 歌声：音色来源与权重授权未给书面许可前，不下载/不集成任何歌声权重，不生成可分发合成样本；「中文产品音色无符合项」结论不变。
 - item 4 `V2-P3-02` 真实开播：等 owner 完成 obs-websocket 密码 / 屏幕录制授权 / D 路径首次弹窗三步；obs-websocket 密码是 owner 凭据，不代开、不代改。
 - `V2-P3-01` 视觉：缺合法 `.moc3`/`.vrm` 与情绪参考音频。
+- 表现力语音（item 10）：方案已出、**未实现、未下载任何权重**，见 [docs/design/expressive-voice-plan.md](../design/expressive-voice-plan.md)；等 owner 拍三件事（CosyVoice2 最小集 ≈4.07 GB 下载批准 / 首装 ≈6 GB 体积口径 / 原创音色走「本地随机嵌入」还是「一次性云端 voice design」）。
