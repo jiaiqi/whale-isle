@@ -40,7 +40,7 @@ import { createCliLogWatcher } from './cli-log-watcher';
 import { createWorkFollowInstaller } from './work-follow-installer';
 import { createStardewAvatarHost, isSafeCharacterId } from './stardew-avatar-host';
 import { createFrontAppWatcher } from './front-app-watcher';
-import { PetApiStateSchema, StardewLaunchOptionsSchema } from '@workbench/shared-protocol';
+import { mapLocaleToStardewLanguage, PetApiStateSchema } from '@workbench/shared-protocol';
 import { importAboutmePets, readPackCatalog } from '@workbench/pet-renderer/aboutme-pets';
 import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
@@ -50,6 +50,7 @@ import { LipSyncTimelinePlayer, resolveCommercialTtsProvider, synthesizeTextLipS
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
 import { createFakeStardewLauncher, createStardewLauncher } from './stardew-launcher';
+import { createStardewLaunchPrefs, defaultIsolatedDataDir } from './stardew-launch-prefs';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
 import { createTrayHost, shouldHideDirectorOnClose, shouldQuitOnAllWindowsClosed, type TrayHost } from './tray-host';
@@ -1243,15 +1244,80 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     }
   });
   ipcMain.handle('game:dst-state', async () => fetchDstSnapshot());
-  // V2-P3-05 星露谷一键启动：探测安装 → SMAPI 启动（回退 Steam）→ 轮询 BWF MCP → 真实 ready。
-  // E2E 装配假启动器，绝不真的打开游戏。
-  const stardewLauncher = TEST_MODE ? createFakeStardewLauncher() : createStardewLauncher();
-  ipcMain.handle('stardew:launch', async (_event, options?: unknown) => {
-    const parsed = StardewLaunchOptionsSchema.safeParse(options ?? {});
-    return stardewLauncher.launch(parsed.success ? parsed.data : {});
+  // V2-P3-05 / V2-P3-07 星露谷启动与从 0 建档（默认隔离目录 + 中文 + 像素形象同步不改名；E2E 装配假启动器）
+  const stardewLaunchPrefs = createStardewLaunchPrefs(app.getPath('userData'));
+  const stardewIsolatedDir = defaultIsolatedDataDir(app.getPath('userData'));
+  const stardewLauncher = TEST_MODE
+    ? createFakeStardewLauncher({ defaultIsolateDataDir: stardewIsolatedDir })
+    : createStardewLauncher({
+      defaultIsolateDataDir: stardewIsolatedDir,
+      syncAvatar: ({ characterId, farmerName, modsPath }) => {
+        const id = characterId ?? characters.selected().id;
+        if (modsPath) {
+          return stardewAvatar.writeForProfile({
+            profileModsDir: modsPath,
+            characterId: id,
+            displayName: farmerName,
+            syncDisplayName: false,
+          });
+        }
+        return stardewAvatar.syncCharacter({
+          characterId: id,
+          displayName: farmerName,
+          syncDisplayName: false,
+          force: true,
+        });
+      },
+    });
+  ipcMain.handle('stardew:launch', async (_event, rawOptions?: unknown) => {
+    if (rawOptions !== undefined && rawOptions !== null && (typeof rawOptions !== 'object' || Array.isArray(rawOptions))) {
+      return stardewLauncher.launch(rawOptions as never);
+    }
+    const prefsNow = stardewLaunchPrefs.get();
+    const input = (rawOptions ?? {}) as Record<string, unknown>;
+    const merged: Record<string, unknown> = {
+      ...input,
+      ...(input.storageMode === undefined && input.isolateDataDir === undefined ? { storageMode: prefsNow.storageMode } : {}),
+      ...(input.language === undefined ? { language: prefsNow.language } : {}),
+    };
+    if ((merged.savePolicy === 'always_new' || merged.savePolicy === 'continue_or_create') && merged.newSave === undefined) {
+      const selected = characters.selected();
+      const mode = merged.gameMode === 'coop_host' ? 'coop_host' : 'singleplayer';
+      merged.newSave = {
+        farmerName: selected.displayName.slice(0, 24) || '小鲸',
+        farmName: prefsNow.farmName,
+        favoriteThing: prefsNow.favoriteThing,
+        farmType: prefsNow.farmType,
+        mode,
+        startingCabins: mode === 'coop_host' ? prefsNow.startingCabins : 0,
+        cabinLayout: prefsNow.cabinLayout,
+        skipIntro: prefsNow.skipIntro,
+        appearance: {
+          characterId: selected.id,
+          syncPixelAvatar: prefsNow.syncPixelAvatar,
+        },
+      };
+    }
+    if (typeof merged.port === 'number' && Number.isInteger(merged.port)) {
+      void autodrive.setEndpoint(bwfMcpEndpoint(merged.port));
+    }
+    return stardewLauncher.launch(merged as never);
   });
   ipcMain.handle('stardew:launch-status', () => stardewLauncher.status());
   ipcMain.handle('stardew:launch-cancel', () => stardewLauncher.cancel());
+  ipcMain.handle('stardew:launch-prefs-get', () => stardewLaunchPrefs.get());
+  ipcMain.handle('stardew:launch-prefs-set', (_event, update?: unknown) => stardewLaunchPrefs.patch(update));
+  ipcMain.handle('stardew:launch-defaults', () => {
+    const current = characters.selected();
+    return {
+      characterId: current.id,
+      farmerName: current.displayName.slice(0, 24) || '小鲸',
+      spriteReady: stardewAvatar.spriteReady(current.id),
+      isolatedDataDir: stardewIsolatedDir,
+      prefs: stardewLaunchPrefs.get(),
+      recommendedLanguage: mapLocaleToStardewLanguage('zh-CN'),
+    };
+  });
   app.on('will-quit', () => stardewLauncher.dispose());
   // WebUI 形态（T-M6-04）：本机浏览器复核口（HTTP/WS + 远程审批）。
   // 包裹 try/catch：WebUI 起不来只告警，绝不拖垮 Electron 主进程。

@@ -85,10 +85,10 @@ export interface StardewAvatarHost {
   setLiveliness(next: boolean): StardewAvatarState;
   installMod(): { ok: boolean; error?: string; compiled?: boolean };
   uninstallMod(): { ok: boolean; error?: string };
-  /** 开关开启时把某角色写入主 Mods 目录（切桌宠/换肤自动调用） */
-  syncCharacter(input: { characterId: string; displayName: string }): { ok: boolean; error?: string; sprite?: boolean; tier?: StardewSpriteTier };
+  /** 开关开启时把某角色写入主 Mods 目录（切桌宠/换肤自动调用；force=true 时允许建档前显式同步） */
+  syncCharacter(input: { characterId: string; displayName: string; syncDisplayName?: boolean; force?: boolean }): { ok: boolean; error?: string; sprite?: boolean; tier?: StardewSpriteTier };
   /** 联机：为某个隔离 profile 的 Mods 目录写专属 active-avatar.json（不受全局开关限制） */
-  writeForProfile(input: { profileModsDir: string; characterId: string; displayName: string }): { ok: boolean; error?: string };
+  writeForProfile(input: { profileModsDir: string; characterId: string; displayName: string; syncDisplayName?: boolean }): { ok: boolean; error?: string; sprite?: boolean; tier?: StardewSpriteTier };
   /** 该角色是否已有生成好的精灵表（自定义角色目录或 stardew-avatars 目录） */
   spriteReady(characterId: string): boolean;
   spritePathFor(characterId: string): string | null;
@@ -224,7 +224,7 @@ export function createStardewAvatarHost(options: {
   /** 组装 + Zod 校验 + 原子写入 active-avatar.json（含精灵表复制与清晰度/灵动开关）。 */
   const writeActiveAvatar = (
     modDir: string,
-    input: { characterId: string; displayName: string },
+    input: { characterId: string; displayName: string; syncDisplayName?: boolean },
   ): { ok: boolean; error?: string; sprite?: boolean; tier?: StardewSpriteTier } => {
     if (!isSafeCharacterId(input.characterId)) return { ok: false, error: `角色 id 非法：${input.characterId.slice(0, 64)}` };
     try {
@@ -256,6 +256,7 @@ export function createStardewAvatarHost(options: {
         displayName: input.displayName.trim() === '' ? input.characterId : input.displayName.trim().slice(0, 40),
         preset: presetForCharacter(input.characterId),
         liveliness,
+        syncDisplayName: input.syncDisplayName ?? true,
         ...(spriteSheetPath === undefined ? {} : { spriteSheetPath }),
         ...(spriteTier === undefined ? {} : { spriteTier }),
       });
@@ -344,7 +345,7 @@ export function createStardewAvatarHost(options: {
       }
     },
     syncCharacter(input) {
-      if (!enabled) return { ok: false, error: '「同步桌宠形象进游戏」开关未开启' };
+      if (!enabled && input.force !== true) return { ok: false, error: '「同步桌宠形象进游戏」开关未开启' };
       const dir = modsDir();
       if (dir === null) return { ok: false, error: '未找到星露谷 Mods 目录' };
       const modDir = join(dir, MOD_FOLDER);
