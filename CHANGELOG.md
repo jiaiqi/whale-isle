@@ -5,6 +5,19 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed（桌宠双轨气泡可读性与遮挡）
+
+- **内心戏云朵泡对比度**：`bubbles.ts` 底色从 `rgba(191,90,242,0.30)` 浅紫加深为 `rgba(96,44,150,0.68)` 深紫渐变、文字提亮为 `#f8f1ff`——浅紫底 + 浅字在浅色桌面上几乎不可读（真机截图确认）。
+- **对话泡被角色遮挡**：两个气泡补 `z-index:7`——角色 WebM 双 `<video>` 交叉淡入每次换片重挂载 DOM，无 z-index 的气泡会被新视频压盖住；7 高于角色视频、低于 workCards(z8)/guide(z9)。
+- **对话泡位置整体重排**：`bubble-layout.ts` 从「贴右下（bottom:12，与角色身体重叠区）」改为「右上头部侧面固定位 + 朝左尾巴指向角色」，底部居中区域让给饭碗挂件；垂直隔离带从 8px 加宽到 20px，覆盖云朵泡 DOM max-height 的 +16 余量，长文本极端情况下双轨也不重叠。
+- **验证**：`bubbles.spec.ts` 4/4、`ui.e2e` 双轨气泡几何断言通过；[E2E-HOST] 截图 `artifacts/pet-stage-bubbles.png` 与真机窗口 CDP 截图双重留证。
+
+### Fixed（中控台弹层层叠：小窗口下被 HUD 盖住点不到）
+
+- **根因**：`.wb-main` 的 `position:relative + z-index:1` 形成层叠上下文，弹层 `z-[150]` 只在其内部生效，对外仍低于 `.wb-hud(z5)`；窗口较矮时 HUD 换行增高盖住弹窗顶部按钮（CI macOS 上 Playwright 报 `wb-hud intercepts pointer events`）。
+- **修复**：`coop-panel.tsx`「添加 AI 队友」与 `character-pack-store.tsx`「角色包商店」两个弹层改为 `createPortal` 到 `document.body`；其余同构弹层（providers/dialogs ×2、pet-studio ×2、App.tsx 启动弹窗）列入后续统一处理。
+- **测试隔离**：`ui.e2e.spec.ts` 9 处启动统一加 `WHALE_DISABLE_INPUT_MONITOR=1`——真实物理输入检测器会把开发者本机键鼠活动误判为人类接管撤销桌面租约，导致租约断言在本机必现失败（CI 无头环境无此变量）。
+
 ### Fixed（安全：供应商凭据通道命名空间击穿 + 账号级联删除空操作）
 
 - **`provider-vault.ts`**：`providers:save-key` / `key-mask` / `discover-models` / `copy-key` / `check-balance` / `test-chat` 全部拒绝 `account:` 前缀（账号保险箱条目），`vault-status` 过滤该前缀不暴露存在性；修复渲染进程可借通用供应商 IPC 把社交凭据写入剪贴板或发往任意 baseUrl 的边界击穿。
