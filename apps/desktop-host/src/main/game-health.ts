@@ -13,11 +13,30 @@
  *
  * 探测结果只用于界面提示与排查指引；动作是否成功一律以游戏侧真实回执为准（AGENTS.md 真实执行回执铁律）。
  */
-import { DstStateSnapshotSchema, GameBridgeHealthSchema, type DstStateSnapshot } from '@workbench/shared-protocol';
-import { gameAdapters, type GameId } from '@workbench/game-bridge-mcp';
+import {
+  DstStateSnapshotSchema,
+  GameBridgeHealthSchema,
+  StardewLanHostStatusSchema,
+  type DstStateSnapshot,
+  type StardewLanHostStatus,
+} from '@workbench/shared-protocol';
+import { gameAdapters, isStardewWorldReadyText, type GameId } from '@workbench/game-bridge-mcp';
 import { bwfMcpEndpoint } from './bwf-settings';
 
 export type GameHealthStatus = 'online' | 'reachable' | 'offline';
+
+/** BWF /settings 上报的运行态与联机房主快照（V2-P3-07B/C） */
+export interface BwfRuntimeProbe {
+  reachable: boolean;
+  revision?: string;
+  worldReady?: boolean;
+  inTitleMenu?: boolean;
+  ticksUntilLanguageLoad?: number;
+  languageCode?: string;
+  saveFolderName?: string | null;
+  capabilities: string[];
+  lan: StardewLanHostStatus | null;
+}
 
 export interface GameHealthReport {
   gameId: GameId;
@@ -29,6 +48,8 @@ export interface GameHealthReport {
   /** 一行人类可读摘要（连接后显示版本与控制权等真实信息） */
   detail: string;
   error?: string;
+  /** 可选 BWF 运行态与联机房主快照 */
+  runtime?: BwfRuntimeProbe;
   /** 未连通时给人类的启动指引（每步可独立执行；不提供任何绕过路径） */
   guidance: string[];
   checkedAt: number;
@@ -127,13 +148,48 @@ export interface ProbeOptions {
   endpoint?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** true 时（coop_host）要求 BWF /settings 的 lan.isHost && serverRunning && lanListening 才判定 online */
+  requireLanHost?: boolean;
 }
 
-/**
- * BWF 在标题画面/读档过程中也会回 HTTP 200 且 `isError:false`，正文却是「游戏还没有进入存档」。
- * 这不是就绪——启动器若把它当 online 就会编造 ready（2026-11-26 真机踩到）。
- */
-const NOT_IN_SAVE_TEXT_RE = /还没有进入存档|请玩家先读取存档|正在加载存档|标题画面/;
+/** 查询 BWF GET /settings 采集运行态与联机 LAN 服务器快照（兼容无 runtime 字段的旧版 DLL） */
+export async function probeBwfRuntime(
+  baseUrl: string,
+  timeoutMs: number = 4_000,
+  fetchImpl: typeof fetch = fetch,
+): Promise<BwfRuntimeProbe | null> {
+  try {
+    const cleanBase = baseUrl.replace(/\/mcp\/?$/, '').replace(/\/$/, '');
+    const res = await fetchImpl(`${cleanBase}/settings`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) return null;
+    const raw = await res.text();
+    const body = JSON.parse(raw) as {
+      revision?: unknown;
+      runtime?: Record<string, unknown>;
+      lan?: unknown;
+    };
+    const rt = body.runtime && typeof body.runtime === 'object' ? body.runtime : undefined;
+    const lanParsed = body.lan !== undefined ? StardewLanHostStatusSchema.safeParse(body.lan) : null;
+    const caps = Array.isArray(rt?.capabilities)
+      ? rt.capabilities.filter((item): item is string => typeof item === 'string')
+      : [];
+    return {
+      reachable: true,
+      ...(typeof body.revision === 'string' ? { revision: body.revision } : {}),
+      ...(typeof rt?.worldReady === 'boolean' ? { worldReady: rt.worldReady } : {}),
+      ...(typeof rt?.inTitleMenu === 'boolean' ? { inTitleMenu: rt.inTitleMenu } : {}),
+      ...(typeof rt?.ticksUntilLanguageLoad === 'number' ? { ticksUntilLanguageLoad: rt.ticksUntilLanguageLoad } : {}),
+      ...(typeof rt?.languageCode === 'string' ? { languageCode: rt.languageCode } : {}),
+      ...(rt?.saveFolderName === null || typeof rt?.saveFolderName === 'string'
+        ? { saveFolderName: rt.saveFolderName }
+        : {}),
+      capabilities: caps,
+      lan: lanParsed?.success ? lanParsed.data : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /** 从 MCP tools/call 的 result 里取文本（兼容 content[] 与直接字符串）。 */
 function mcpResultText(result: unknown): string {
@@ -148,8 +204,13 @@ function mcpResultText(result: unknown): string {
     .join('\n');
 }
 
-/** 星露谷：BWF MCP（18080/mcp）——get_state 能应答即视为就绪 */
-async function probeStardew(endpoint: string, timeoutMs: number, fetchImpl: typeof fetch): Promise<Omit<GameHealthReport, 'gameId' | 'endpoint' | 'guidance' | 'checkedAt'>> {
+/** 星露谷：BWF MCP（18080/mcp）——get_state 正常进入存档且无 isError 才视为 online；requireLanHost 时再核验 LAN 监听 */
+async function probeStardew(
+  endpoint: string,
+  timeoutMs: number,
+  fetchImpl: typeof fetch,
+  options: { requireLanHost?: boolean } = {},
+): Promise<Omit<GameHealthReport, 'gameId' | 'endpoint' | 'guidance' | 'checkedAt'>> {
   const startedAt = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -171,14 +232,44 @@ async function probeStardew(endpoint: string, timeoutMs: number, fetchImpl: type
       return { status: 'reachable', ok: false, latencyMs, detail: 'Mod 在运行但未就绪', error: rpcErrorText(rpc.error) };
     }
     if (rpc.result == null) return { status: 'reachable', ok: false, latencyMs, detail: 'MCP 返回空结果' };
+    const resultObj = typeof rpc.result === 'object' && rpc.result !== null ? (rpc.result as { isError?: unknown }) : null;
     const resultText = mcpResultText(rpc.result);
-    if (NOT_IN_SAVE_TEXT_RE.test(resultText)) {
+    if (resultObj?.isError === true) {
+      return {
+        status: 'reachable',
+        ok: false,
+        latencyMs,
+        detail: 'MCP 已应答但游戏侧返回错误（尚未就绪）',
+        error: resultText.slice(0, 200) || 'isError=true',
+      };
+    }
+    if (!isStardewWorldReadyText(resultText)) {
       return {
         status: 'reachable',
         ok: false,
         latencyMs,
         detail: 'MCP 已应答，但游戏还在标题画面/正在读档（尚未进入存档）',
         error: resultText.slice(0, 200),
+      };
+    }
+    if (options.requireLanHost === true) {
+      const runtime = await probeBwfRuntime(endpoint, timeoutMs, fetchImpl);
+      const lan = runtime?.lan ?? null;
+      if (!lan?.isHost || !lan.serverRunning || !lan.lanListening) {
+        return {
+          status: 'reachable',
+          ok: false,
+          latencyMs,
+          detail: '已进入存档，但联机房主 LAN 服务器尚未监听',
+          ...(runtime === null ? {} : { runtime }),
+        };
+      }
+      return {
+        status: 'online',
+        ok: true,
+        latencyMs,
+        detail: `BWF MCP 与房主 LAN 已就绪（端口 ${lan.lanPort}）`,
+        ...(runtime === null ? {} : { runtime }),
       };
     }
     return { status: 'online', ok: true, latencyMs, detail: 'BWF MCP 在线 · get_state 正常应答' };
@@ -256,7 +347,9 @@ export async function probeGameHealth(
   const timeoutMs = options.timeoutMs ?? 5_000;
   const fetchImpl = options.fetchImpl ?? fetch;
   const base = gameId === 'stardew'
-    ? await probeStardew(endpoint, timeoutMs, fetchImpl)
+    ? await probeStardew(endpoint, timeoutMs, fetchImpl, {
+      ...(options.requireLanHost === undefined ? {} : { requireLanHost: options.requireLanHost }),
+    })
     : await probeHttpHealth(gameId, endpoint, timeoutMs, fetchImpl);
   return {
     gameId,

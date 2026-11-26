@@ -5,7 +5,9 @@
  */
 import { RulePlanner, type GameStateSnapshot, type Planner } from './planner';
 import type { McpCallOptions, McpCallResult } from './mcp-client';
-import { actionTimeoutMs, BwfMcpClient } from './mcp-client';
+import { actionTimeoutMs, BwfMcpClient, isStardewWorldReadyText, STARDEW_NOT_IN_SAVE_RE } from './mcp-client';
+
+export { isStardewWorldReadyText, STARDEW_NOT_IN_SAVE_RE };
 
 export type GameId = 'stardew' | 'terraria' | 'dst';
 
@@ -141,8 +143,8 @@ export class StardewAdapter implements GameAdapter {
     const normalized = normalizeBwfEndpoint(endpoint);
     this.transport = new BwfMcpClient(normalized, fetchImpl);
     this.unreachableMessage = normalized === DEFAULT_STARDEW_ENDPOINT
-      ? 'BWF MCP 不可达（18080）——确认游戏已启动且 Mod MCP 服务器就绪'
-      : `BWF MCP 不可达（${normalized}）——确认游戏已启动且 Mod MCP 服务器就绪`;
+      ? 'BWF MCP 不可达（18080）或尚未进入存档——确认游戏已启动、进入存档且 Mod MCP 服务器就绪'
+      : `BWF MCP 不可达（${normalized}）或尚未进入存档——确认游戏已启动、进入存档且 Mod MCP 服务器就绪`;
   }
 
   ping(): Promise<boolean> {
