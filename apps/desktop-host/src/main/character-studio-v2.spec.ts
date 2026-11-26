@@ -17,6 +17,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../../..');
 const bundledCrossPetChars = join(repoRoot, 'assets', 'pet-packs', 'crosspet', 'characters');
 
+// 随包 CrossPet 素材（约 2GB 二进制）按仓库约定不入库，由 `pnpm sync:pet-packs` 幂等拉取；
+// CI 不拉取，因此依赖真实随包目录的用例在无素材环境如实跳过，不伪造通过。
+const crossPetBundlePresent = existsSync(bundledCrossPetChars);
+
 function makeMinimalPng(width = 64, height = 64): Buffer {
   const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const ihdrLen = Buffer.alloc(4);
@@ -317,7 +321,7 @@ describe('CharacterStudioV2（V2-P2-05：Character Bible / Live2D QA / 授权门
     expect(inspectLive2dOrLayered2d(emptyDir).valid).toBe(false);
   });
 
-  it('importCrossPetPack：真实随包 30 角色全量合法导入、Character Bible 自动建档与商业/直播硬拦截', () => {
+  it.skipIf(!crossPetBundlePresent)('importCrossPetPack：真实随包 30 角色全量合法导入、Character Bible 自动建档与商业/直播硬拦截', () => {
     const userData = makeTempDir('crosspet-real-');
     cleanupDirs.push(userData);
     const studio = new CharacterStudioV2({
@@ -367,8 +371,8 @@ describe('CharacterStudioV2（V2-P2-05：Character Bible / Live2D QA / 授权门
     expect(existsSync(join(userData, 'pet-characters', 'cp-deepseek', '.provenance.json'))).toBe(true);
   });
 
-  it('importCrossPetPack & register2dPackage：单角色目录、过滤器与坏包/缺源容错校验', () => {
-    const userData = makeTempDir('crosspet-edge-');
+  it.skipIf(!crossPetBundlePresent)('importCrossPetPack：过滤器与单角色目录形式导入（依赖真实随包素材）', () => {
+    const userData = makeTempDir('crosspet-filter-');
     cleanupDirs.push(userData);
     const studio = new CharacterStudioV2({
       userDataDir: userData,
@@ -386,8 +390,16 @@ describe('CharacterStudioV2（V2-P2-05：Character Bible / Live2D QA / 授权门
     });
     expect(singleChar.importedCount).toBe(1);
     expect(singleChar.entries[0]?.category).toBe('skin');
+  });
 
-    // 坏角色包与不存在目录处理
+  it('importCrossPetPack & register2dPackage：坏包/缺源容错校验', () => {
+    const userData = makeTempDir('crosspet-edge-');
+    cleanupDirs.push(userData);
+    const studio = new CharacterStudioV2({
+      userDataDir: userData,
+      packsRoot: join(repoRoot, 'assets', 'pet-packs'),
+    });
+
     const syntheticRoot = makeTempDir('crosspet-broken-');
     cleanupDirs.push(syntheticRoot);
     mkdirSync(join(syntheticRoot, 'no-json'), { recursive: true });

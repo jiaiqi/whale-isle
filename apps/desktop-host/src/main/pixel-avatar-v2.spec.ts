@@ -19,6 +19,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../../../..');
 const publishDir = join(repoRoot, 'mods', 'stardew-avatar-sync', 'publish');
 
+// publish/WhaleIsleAvatar.dll 是编译产物且不入库；CI 在单测前执行 `node tools/scripts/build-avatar-mod.mjs` 构建。
+// 无 dotnet 的开发机上相关用例如实跳过（或按「未比对」断言 undefined），不伪造通过。
+const publishDllPresent = existsSync(join(publishDir, 'WhaleIsleAvatar.dll'));
+
 function makeTempDir(prefix = 'pixel-avatar-v2-'): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -170,7 +174,8 @@ describe('PixelAvatarPipelineV2（V2-P2-06：11 步像素流水线与 Stardew Av
     );
     const badExport = verifyStardewAvatarExport(modDir, publishDir);
     expect(badExport.ok).toBe(false);
-    expect(badExport.dllMatchesPublish).toBe(false);
+    // publish/ 无 DLL 时实现如实返回 undefined（未比对），有 DLL 时必然与 FAKE_DLL 不匹配
+    expect(badExport.dllMatchesPublish).toBe(publishDllPresent ? false : undefined);
     expect(badExport.issues.some((i) => i.includes('穿越'))).toBe(true);
 
     // 非法精灵图尺寸 + tier 不一致
@@ -190,7 +195,7 @@ describe('PixelAvatarPipelineV2（V2-P2-06：11 步像素流水线与 Stardew Av
     expect(verifyStardewAvatarExport(modDir).issues.some((i) => i.includes('网格规范'))).toBe(true);
   });
 
-  it('PixelAvatarPipelineV2：完整 11 步流水线（1x/2x/4x）、审查门禁与 Stardew Avatar Mod 原子导出核验', () => {
+  it.skipIf(!publishDllPresent)('PixelAvatarPipelineV2：完整 11 步流水线（1x/2x/4x）、审查门禁与 Stardew Avatar Mod 原子导出核验', () => {
     const userData = makeTempDir('pixel-v2-user-');
     const modsRoot = makeTempDir('pixel-v2-mods-');
     const coopModsRoot = makeTempDir('pixel-v2-coop-');

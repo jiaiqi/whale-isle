@@ -55,6 +55,11 @@ jobs:
       - name: Gate 1b · dependency-cruiser 架构边界
         run: pnpm lint:deps
 
+      - name: 构建 WhaleIsleAvatar Mod（像素流水线测试的 DLL 前置）
+        # publish/WhaleIsleAvatar.dll 不入库；dotnet 缺失时脚本如实告警退出 0，
+        # 相关测试按 skipIf 如实跳过而非假绿（GitHub runner 自带 .NET SDK，正常会产出 DLL）。
+        run: node tools/scripts/build-avatar-mod.mjs
+
       - name: Gate 3 · 单元/契约测试
         # vitest.config.mts 只包含 packages/apps/services 的 src/**/*.spec.ts；
         # Electron E2E 不在此步（macOS job 单独跑），ubuntu 无需 Electron。
@@ -111,6 +116,10 @@ jobs:
 
       - name: Build desktop-host（Electron E2E 前置）
         run: pnpm --filter @workbench/desktop-host build
+
+      - name: 构建 WhaleIsleAvatar Mod（像素流水线测试的 DLL 前置）
+        # 同 ubuntu job：dotnet 缺失时如实告警退出 0，相关测试 skipIf 跳过
+        run: node tools/scripts/build-avatar-mod.mjs
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
