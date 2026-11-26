@@ -1,5 +1,7 @@
 # Whale Isle V2 需求追踪矩阵（Requirements Traceability Matrix）
 
+> 矩阵沿用工程化编号（`REQ-CORE`…），与原文同名编号不同义，引用时以本文档映射为准。
+
 > **上游依据**：[blueprint/](./blueprint/README.md)（`MASTER` + `01`–`17`）、[REQUIREMENTS.md](./REQUIREMENTS.md) 及用户第一轮架构审查反馈（2026-11-25）。  
 > **原则**：完整覆盖 V2 全量产品需求，**不允许因未实现或实现困难而删减需求**；状态诚实区分 `DONE`（代码+门禁+对应验证全部完成）、`IMPLEMENTED_UNVERIFIED`（代码/单测完成但缺真机/真实平台验证）、`PARTIAL`（部分实现或骨架）、`STUB`（仅有桩实现）、`PENDING`（未开始）。
 

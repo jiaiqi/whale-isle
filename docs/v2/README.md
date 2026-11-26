@@ -9,6 +9,7 @@
 | 文档 | 说明 |
 | --- | --- |
 | [PRODUCT.md](./PRODUCT.md) | 产品总定义、五大定位、核心原则、六大世界与「单主角色先行」边界 |
+| [PRODUCT-REQUIREMENTS.md](./PRODUCT-REQUIREMENTS.md) | owner 原始需求原文（逐字搬运、只增不改：22 节 / 98 个 `REQ-*` / 12 条需求执行原则） |
 | [REQUIREMENTS.md](./REQUIREMENTS.md) | 不可遗漏的 V2/V2.1 全量原始需求清单（`REQ-CORE` ~ `REQ-MULTI`） |
 | [TRACEABILITY.md](./TRACEABILITY.md) | 需求 → 模块 → 工单 → 验证证据的全链路追踪矩阵 |
 

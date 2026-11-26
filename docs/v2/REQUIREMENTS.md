@@ -1,5 +1,7 @@
 # Whale Isle V2 — 不可遗漏的原始需求清单（Requirements Baseline）
 
+> 本文为工程化归纳版，原始原文（owner 原文，逐字）见 [PRODUCT-REQUIREMENTS.md](./PRODUCT-REQUIREMENTS.md)。
+
 > **原则**：本清单汇集 [blueprint/](./blueprint/README.md)（`MASTER` + `01`–`17`）与第一轮架构审查的全部原始产品需求。**禁止因当前未实现或技术复杂度高而擅自删减需求。**  
 > **追踪映射**：每一项需求的实现模块、对应工单、依赖与真实验证口径均严格映射到 [TRACEABILITY.md](./TRACEABILITY.md)。
 
