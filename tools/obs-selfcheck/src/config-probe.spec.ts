@@ -104,7 +104,7 @@ describe('readWebsocketState', () => {
 });
 
 describe('evaluatePreconditions', () => {
-  it('硬件加速开启 → 前置不满足并给出处置建议', () => {
+  it('硬件加速开启 → 如实报告，并给出「场景 → CEF profile → 硬件加速」的排查顺序', () => {
     const base = makeObsDir('[General]\nBrowserHWAccel=true\n', { server_enabled: false });
     const report = evaluatePreconditions({
       globalIni: join(base, 'global.ini'),
@@ -112,11 +112,14 @@ describe('evaluatePreconditions', () => {
     });
     expect(report.satisfied).toBe(false);
     expect(report.hwAccelEnabled).toBe(true);
-    expect(report.summary).toContain('前置不满足');
-    expect(report.remedy).toContain('浏览器源硬件加速');
+    expect(report.summary).toContain('硬件加速开启');
+    expect(report.summary).toContain('场景 → CEF profile → 硬件加速');
+    // 不得再断言「开启硬件加速 = 必然全黑」
+    expect(report.summary).not.toContain('已知会渲染全黑');
+    expect(report.remedy).toContain('obs-browser');
   });
 
-  it('硬件加速关闭 → 前置满足', () => {
+  it('硬件加速关闭 → 如实报告为已关闭', () => {
     const base = makeObsDir('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
     const report = evaluatePreconditions({
       globalIni: join(base, 'global.ini'),

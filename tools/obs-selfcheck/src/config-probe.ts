@@ -1,8 +1,12 @@
 /**
  * OBS 配置只读探测（item 4 / `V2-P3-02`）。
  *
- * 唯一职责：把「本机 OBS 是否处于浏览器源硬件加速导致渲染全黑的已知缺陷状态」
- * 变成一条**只读**、可复跑的判据，避免以后把 OBS 侧渲染缺陷误判成我们 overlay 页面的问题。
+ * 唯一职责：把「本机 OBS 的浏览器源渲染前置状态」变成一条**只读**、可复跑的判据，
+ * 避免以后把 OBS 侧渲染问题误判成我们 overlay 页面的问题。
+ *
+ * 2026-11-26 更正：本文件原先断言「硬件加速开启 → browser_source 必然全黑」，**该因果关系是错的**。
+ * 真因是 CEF profile 损坏 + 探针未把临时源切进节目场景（见 P3-02 证据文档 §7.7）。
+ * 硬件加速只是三条候选原因之一，不再作为「前置不满足」的判据。
  *
  * 硬边界：本模块**只读** OBS 配置文件，绝不写入、绝不修改 owner 的全局设置。
  */
@@ -106,10 +110,10 @@ export function evaluatePreconditions(paths: ObsConfigPaths = defaultObsConfigPa
     websocket,
     satisfied: !enabled,
     summary: enabled
-      ? '前置不满足：本机处于「浏览器源硬件加速开启」状态，browser_source 已知会渲染全黑'
-      : '前置满足：浏览器源硬件加速已关闭，browser_source 应可正常渲染',
+      ? '硬件加速开启（OBS 默认即开启）；若见全黑按「场景 → CEF profile → 硬件加速」顺序排查，不要直接归因硬件加速'
+      : '硬件加速已关闭；若仍见全黑按「场景 → CEF profile」顺序排查',
     remedy: enabled
-      ? 'OBS → 设置 → 高级 → 源 → 关闭「浏览器源硬件加速」；随后用 `pnpm obs:selfcheck --probe` 复核。'
+      ? '先用 `pnpm obs:selfcheck --probe` 取像素证据；真见全黑再依次排查：① 临时源是否在节目场景 ② CEF profile 是否损坏（退出 OBS 后挪走 plugin_config/obs-browser 再重启）③ 最后才考虑关闭「浏览器源硬件加速」。'
       : '无需处置；若仍见全黑请用 `pnpm obs:selfcheck --probe` 取像素证据后再判断。',
   };
 }

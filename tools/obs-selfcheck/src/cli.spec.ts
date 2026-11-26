@@ -164,11 +164,11 @@ describe('parseMode', () => {  it('识别 probe / serve / 默认只读报告', (
 });
 
 describe('formatPreconditionReport', () => {
-  it('硬件加速开启 + ws 未开 → 报前置不满足并提示 probe 不可用', () => {
+  it('硬件加速开启 + ws 未开 → 如实报告并提示 probe 不可用', () => {
     const paths = writeConfigs('[General]\nBrowserHWAccel=true\n', { server_enabled: false, server_port: 4455 });
     const text = formatPreconditionReport(paths);
     expect(text).toContain('BrowserHWAccel = true');
-    expect(text).toContain('前置不满足');
+    expect(text).toContain('场景 → CEF profile → 硬件加速');
     expect(text).toContain('--probe` 自动探针将无法运行');
   });
 
@@ -185,7 +185,7 @@ describe('formatPreconditionReport', () => {
     expect(text).toContain('未找到 obs-websocket 配置');
   });
 
-  it('硬件加速已关闭 → 报「已关闭硬件加速」而不是缺陷状态', () => {
+  it('硬件加速已关闭 → 报「已关闭硬件加速」，不再出现缺陷状态断言', () => {
     const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: false });
     const text = formatPreconditionReport(paths);
     expect(text).toContain('已关闭硬件加速');

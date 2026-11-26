@@ -1,16 +1,20 @@
 # OWNER 操作清单（item 4 / `V2-P3-02`）：OBS 浏览器源前置 + 音频进 OBS
 
 > 一页纸。三步都做完，鲸屿的 overlay 画面与声音就能进 OBS；每步都有**验证方式**和**还原方式**。
+> **2026-11-26 更正**：第 1 步原写「必须关闭浏览器源硬件加速」是误归因，已按真因改写。
 > 背景与证据见 [RUNBOOK-OBS-OVERLAY.md](./RUNBOOK-OBS-OVERLAY.md) 与 [P3-02 证据](./evidence/P3-02-obs-local-closure-verification.md)。
 
 ---
 
-## 第 1 步：关闭 OBS「浏览器源硬件加速」（画面前置，必做）
+## 第 1 步：浏览器源画面排查（2026-11-26 更正：不必先关硬件加速）
 
-- **操作**：OBS → 设置 → 高级 → 源 → 关闭「浏览器源硬件加速」（英文界面：Hardware acceleration）。
-- **为什么**：本机实测开启时 `browser_source` 渲染全黑（连纯红静态页都黑），关闭后正常。不关它，OBS 里看不到任何 overlay 画面，而且无法判断是谁的问题。
-- **验证**：终端跑 `pnpm obs:selfcheck`——输出 `BrowserHWAccel = false` 且结论为「前置满足」即通过。
-- **还原**：想改回原设置，先确认红页自检为红色再改回 `true`，并记下「改动 → 验证 → 还原」三步。
+- **更正**：原先说「必须关闭浏览器源硬件加速，否则必然全黑」是**错的**。真因是 CEF profile 损坏 + 临时源不在节目场景，硬件加速只是第三条候选原因。完整证据见 [P3-02 §7.7](./evidence/P3-02-obs-local-closure-verification.md)。
+- **怎么查**：终端跑 `pnpm obs:selfcheck --probe`（需先做第 2 步）。全黑时按顺序排查：
+  1. 源是否在当前**节目场景**里（不在节目场景的源不会被渲染；`--probe` 已自动切场景）；
+  2. **CEF profile 是否损坏**——处置：完全退出 OBS → 把 `~/Library/Application Support/obs-studio/plugin_config/obs-browser` 整个挪走（先备份）→ 重启 OBS；
+  3. 最后才考虑关闭「浏览器源硬件加速」（OBS → 设置 → 高级 → 源），改完要**完全退出并重开** OBS。
+- **验证**：`pnpm obs:selfcheck --probe` 退出码 `0`，输出中心像素 `rgb(204,0,0)`。
+- **还原**：若第 3 步改过设置，确认不再全黑后可改回原值，并记下「改动 → 验证 → 还原」三步。
 
 ## 第 2 步：开启 obs-websocket 并告诉鲸屿密码（自动验证与音频推流前置，必做）
 
@@ -43,6 +47,6 @@
 
 | 项 | 完成 | 验证结果 |
 | --- | --- | --- |
-| 1. 浏览器源硬件加速已关闭 | ☐ | `pnpm obs:selfcheck` 显示前置满足 |
+| 1. 浏览器源能出画面 | ☐ | `pnpm obs:selfcheck --probe` 退出码 0、中心像素 `rgb(204,0,0)` |
 | 2. obs-websocket 已开启（4455），密码已提供 | ☐ | `pnpm obs:selfcheck --probe` 退出码 0 |
 | 3A / 3D 二选一 | ☐ | OBS 混音器出现鲸屿音源电平（非零） |

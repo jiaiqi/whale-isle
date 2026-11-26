@@ -63,7 +63,7 @@ export function formatPreconditionReport(paths: ObsConfigPaths = defaultObsConfi
     lines.push('  [?] 未显式配置 BrowserHWAccel，按 OBS 默认值（true）处理');
   } else {
     lines.push(`  BrowserHWAccel = ${report.hwAccel.value}`
-      + (report.hwAccelEnabled ? '  ← 处于本机已知「浏览器源全黑」缺陷状态' : '  ← 已关闭硬件加速'));
+      + (report.hwAccelEnabled ? '  ← 开启（OBS 默认）；全黑时它只是第三条候选原因' : '  ← 已关闭硬件加速'));
   }
   const ws = report.websocket;
   lines.push('obs-websocket:');

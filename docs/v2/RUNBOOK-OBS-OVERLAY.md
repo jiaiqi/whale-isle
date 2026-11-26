@@ -5,24 +5,29 @@
 
 ---
 
-## 0. 硬前置：关闭「浏览器源硬件加速」
+## 0. 前置：浏览器源为什么可能全黑，以及正确的排查顺序
 
-### 0.1 为什么这是前置而不是建议
+> **2026-11-26 更正**：本节原写「必须关闭浏览器源硬件加速，否则必然全黑」，**该因果结论是错的**。
+> owner 真机定位到两个真因：**CEF profile 损坏**（退出 OBS 后把 `plugin_config/obs-browser` 挪走再重启即恢复）
+> 与**探针自身缺陷**（临时源不在节目场景里就不会被渲染，截图必然全黑）。
+> 硬件加速只是第三条候选原因。完整证据链见 [P3-02 证据文档 §7.7](./evidence/P3-02-obs-local-closure-verification.md)。
 
-本机（macOS Darwin 27.2 / OBS Studio 33.0.3 / CEF 150）实测发现：
+### 0.1 现象与三种可能原因（按排查顺序）
 
-| `global.ini` 的 `BrowserHWAccel` | `browser_source` 渲染结果 |
-| --- | --- |
-| `true`（OBS 默认，也是本机原设置） | **全黑**。连本地静态红页（`background:#c00`）截图也是 `(0,0,0)` |
-| `false` | 正常。静态红页取到 `(204,0,0)`，我们的 `/obs` overlay 卡片可见且随事件变化 |
+`browser_source` 渲染全黑时，按这个顺序查，**不要一上来就归因硬件加速**：
 
-因此：**在关闭该选项之前，任何「OBS 里看不到我们的 overlay」的现象都不能归因到我们的页面**。这不是我们的 bug，是 OBS/CEF 在该平台上的渲染缺陷。
+| 顺序 | 可能原因 | 处置 |
+| --- | --- | --- |
+| ① | 源不在**节目场景**里（不在节目场景的源不会被渲染） | 把该源加进当前节目场景，或直接用 `--probe`（它已自动切场景） |
+| ② | **CEF profile 损坏**（表现为本地 HTTP 服务端收不到任何请求） | 完全退出 OBS → 把 `~/Library/Application Support/obs-studio/plugin_config/obs-browser` 整个挪走（先备份）→ 重启 OBS |
+| ③ | 浏览器源**硬件加速** | OBS → 设置 → 高级 → 源 → 关闭「浏览器源硬件加速」，然后**完全退出并重开** OBS |
 
-### 0.2 处置方式（owner 手动执行，脚本不代改）
+> 历史教训：当初「关掉硬件加速就好了」其实是同一次操作里连 CEF profile 一起被重置，好转不是那个开关的功劳。
 
-1. OBS → 设置 → 高级 → 源 → 关闭「浏览器源硬件加速」（英文界面为 *Hardware acceleration*）。
-2. 用 §1 的静态红页自检确认浏览器源能出画面。
-3. 若要还原为原设置，**先确认红页在关闭状态下可见**，再改回 `BrowserHWAccel=true`，并把「改动 → 验证 → 还原」三步都记进证据文档。
+### 0.2 处置边界
+
+1. 前两步（场景、CEF profile）属 owner 本机操作，脚本只**检测**不代做。
+2. 第③步改的是 OBS 全局设置，**必须 owner 自己改**；改完若不再复现，可考虑改回原值并记录「改动 → 验证 → 还原」三步。
 
 > **红线**：本仓的工具**只读** OBS 配置文件，**不会**替 owner 改任何 OBS 全局设置。`tools/obs-selfcheck` 的 `config-probe.ts` 只做 `existsSync` + `readFileSync`。
 
@@ -34,15 +39,15 @@ pnpm obs:selfcheck --serve  # ② 起本地静态红页，人工粘贴进 OBS �
 pnpm obs:selfcheck --probe  # ③ 自动探针：连 obs-websocket 建临时 browser_source 并取中心像素
 ```
 
-- ① 的输出直接给出 `BrowserHWAccel` 当前值与「前置满足 / 不满足」判定，退出码 `0`。
+- ① 的输出直接给出 `BrowserHWAccel` 当前值，并按「场景 → CEF profile → 硬件加速」给出排查顺序；退出码 `0`。
 - ② 会打印形如 `http://127.0.0.1:<port>/red` 的地址；在 OBS 里加一个「浏览器」源粘贴该 URL：
   - 画面为**红色** → 浏览器源渲染正常；
-  - 画面**全黑** → 命中本机已知缺陷（且脚本会提示当前正处于该状态）。
+  - 画面**全黑** → 按 §0.1 的三条顺序排查（脚本会一并打印这三条处置）。
 - ③ 需要 OBS 正在运行且 **WebSocket 服务器已开启**（属 owner 开关，脚本只提示位置、不代改）：
   - 密码通过 `--password <值>` 或环境变量 `OBS_WEBSOCKET_PASSWORD` 提供；
   - 脚本会创建**临时**场景 `WhaleIsle-SelfCheck-<时间戳>` 与临时 `browser_source`，
     截图取中心像素后**立即删除**该输入与该场景，不触碰 owner 已有场景；
-  - 退出码：`0` 正常渲染红页 / `1` 命中全黑缺陷 / `2` obs-websocket 未开启或连不上 /
+  - 退出码：`0` 正常渲染红页 / `1` 全黑（按 §0.1 三条顺序排查） / `2` obs-websocket 未开启或连不上 /
     `3` 有内容但不是红页（需人工目视核对）/ `4` 探针执行异常。
 
 > 探针**不推送、不录制**，全程不接触推流密钥。
@@ -148,6 +153,6 @@ pnpm obs:selfcheck --probe  # ③ 自动探针：连 obs-websocket 建临时 bro
 
 ## 4. 证据文档
 
-- [P3-02-obs-local-closure-verification.md](./evidence/P3-02-obs-local-closure-verification.md) —— OBS 本地闭环实测证据、硬件加速缺陷对照表、音频链路与未验证项。
-- [OWNER-CHECKLIST-OBS-AUDIO.md](./OWNER-CHECKLIST-OBS-AUDIO.md) —— 转交 owner 的一页最小操作清单（硬件加速 / obs-websocket 密码 / 音频二选一 + 还原方式）。
+- [P3-02-obs-local-closure-verification.md](./evidence/P3-02-obs-local-closure-verification.md) —— OBS 本地闭环实测证据、全黑真因（CEF profile + 探针缺陷）与音频链路、未验证项。
+- [OWNER-CHECKLIST-OBS-AUDIO.md](./OWNER-CHECKLIST-OBS-AUDIO.md) —— 转交 owner 的一页最小操作清单（浏览器源排查顺序 / obs-websocket 密码 / 音频二选一 + 还原方式）。
 - 工具源码与单测：[tools/obs-selfcheck/](../tools/obs-selfcheck/)。
