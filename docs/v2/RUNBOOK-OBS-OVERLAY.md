@@ -149,4 +149,5 @@ pnpm obs:selfcheck --probe  # ③ 自动探针：连 obs-websocket 建临时 bro
 ## 4. 证据文档
 
 - [P3-02-obs-local-closure-verification.md](./evidence/P3-02-obs-local-closure-verification.md) —— OBS 本地闭环实测证据、硬件加速缺陷对照表、音频链路与未验证项。
+- [OWNER-CHECKLIST-OBS-AUDIO.md](./OWNER-CHECKLIST-OBS-AUDIO.md) —— 转交 owner 的一页最小操作清单（硬件加速 / obs-websocket 密码 / 音频二选一 + 还原方式）。
 - 工具源码与单测：[tools/obs-selfcheck/](../tools/obs-selfcheck/)。

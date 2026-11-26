@@ -287,3 +287,66 @@ rm -rf "<userDataDir>/singing-stack"
 3. `fairseq`（RVC 部分加载链依赖）在 macOS arm64 的安装可行性——未核实；若失败，改用 Applio 推理侧或不依赖 fairseq 的加载路径。
 4. demucs 模型（`htdemucs`/`htdemucs_ft`）的精确下载体积与权重许可逐文件文本——未核实（README 统一 MIT 声明，证据强度中）。
 5. RMVPE 仓库许可的本次复验因 GitHub API rate limit 未完成——沿用既有证据文档结论（无 LICENSE），不影响「不可用」判定。
+
+---
+
+## 8. Dry-run 自检（2026-11-26 追加，`[REAL-DEVICE]` 仅限探测/解析，未安装任何包）
+
+按 owner 指令「不执行安装，只做 dry-run 级别的检查」，对本方案的命令与回滚方法做了可复跑自检。全程在 `/tmp` 临时目录进行，结束后已删除并复核全局缓存基线。
+
+### 8.1 前置探测复核（与 §1 一致，增量用新实测值）
+
+| 项 | 实测 | 判定 |
+| --- | --- | --- |
+| uv | 0.11.17（aarch64） | 可用 |
+| uv 托管解释器 | `cpython-3.11.15-macos-aarch64-none` 存在；`cpython-3.10.20` 存在 | `uv venv --python 3.11` 直接链接、不下载解释器 ✅（本次实测链接成功） |
+| `~/.cache/huggingface` 基线 | **11 G** | 回滚复核锚点 |
+| `~/.cache/uv` 基线 | **6.0 G**（§1 记的 5.9 GB 已漂移，以本次为准） | 回滚复核锚点 |
+| `~/.cache/torch` | 不存在 | 与方案一致 |
+| `<userDataDir>/singing-stack` | 不存在 | 干净起点，回滚=删一个目录成立 |
+| 磁盘 | 1.4 TiB 可用 | 空间不是约束 |
+
+### 8.2 venv 创建链路实测（隔离 env 注入下）
+
+在注入 `UV_CACHE_DIR`/`HF_HOME`/`TORCH_HOME`/`XDG_CACHE_HOME` 全部指向临时目录后执行 `uv venv --python 3.11`：成功链接 uv 托管的 CPython 3.11.15，**未下载解释器**，临时 venv 已删除。证明 §2.2 的创建命令可复跑，且隔离注入生效（全局缓存基线零变化，见 8.4）。
+
+### 8.3 依赖 dry-run 解析（`uv pip install --dry-run`，只解析元数据、未安装）
+
+| 检查 | 结果 | 对方案的修正 |
+| --- | --- | --- |
+| 必需集 `torch==2.7.0 torchaudio numpy scipy soundfile librosa faiss-cpu demucs` @ py3.11 | **53 个包全部可解析**，含 `faiss-cpu==1.16.0`、`demucs==4.1.0`、`numba==0.68.1`、`llvmlite==0.50.0` | §7 第 1 项「faiss-cpu / librosa 链 wheel 可得性未核实」→ **已核实可解析** |
+| torchaudio 不钉版本时 | 解析为 `torchaudio==2.11.0`（与 torch 2.7.0 **不同代**） | **方案修正：锁定文件必须显式钉 `torchaudio==2.7.0`**（同代钉法已验证可解析），否则静默装上不匹配的组合 |
+| `faiss-cpu` @ py3.13 | 也可解析（`faiss-cpu==1.16.0` + `numpy==2.5.5`） | §2.2 把 3.13 标为「未核实风险」→ **已核实可解析**；但方案仍保持选 3.11（与 RVC 链成熟度对齐，且便于与 GPT-SoVITS 的 3.10 区分），3.13 只作为降级备选记录 |
+
+### 8.4 回滚方法的 dry-run 演练（在临时目录层面）
+
+1. dry-run 全程的所有缓存都落在临时目录（隔离 env 注入生效的实测证据）。
+2. 删除临时目录后复核：`~/.cache/huggingface` 仍 11 G、`~/.cache/uv` 仍 6.0 G、`~/.cache/torch` 仍不存在。
+3. 证明 §3.2 的「`du -sh` 基线比对」回滚验收方法**可复跑且成立**；正式安装后照此方法复核即可。
+
+### 8.5 owner 决策清单（需要下载体积 / 版本，等 owner 决定何时装）
+
+**代码与依赖（PyPI，装到隔离 venv）**：
+
+| 项 | 版本（dry-run 解析结果） | 下载体积量级 | 依据 |
+| --- | --- | --- | --- |
+| venv 骨架 | CPython 3.11.15（本机已托管，**零下载**） | 20–50 MB 磁盘 | §8.2 实测 |
+| torch | 2.7.0（钉） | wheel 69 MB 下载 / 335 MB 安装 | §3.1 实测锚点 |
+| torchaudio | **2.7.0（钉，必须与 torch 同代）** | 约 1–6 MB | §8.3 修正 |
+| numpy / scipy / soundfile | 解析值 2.4.6 / 1.17.1 / 0.14.0 | 合计约 135 MB 安装 | §3.1 锚点 + dry-run |
+| librosa + numba/llvmlite | librosa 最新 + numba 0.68.1 | 约 50–120 MB 安装 | dry-run 已可解析 |
+| faiss-cpu | 1.16.0 | 20–50 MB 安装 | dry-run 已可解析 |
+| demucs（可选） | 4.1.0 | wheel <1 MB | §3.1 实测 |
+
+**权重（下载到隔离 models/，许可状态见 §4，缺授权的一律不装）**：
+
+| 项 | 体积 | 许可 | 状态 |
+| --- | --- | --- | --- |
+| HuBERT `hubert_base.pt` | 189 MB | MIT（已核实，含权重） | 可装 |
+| FCPE `fcpe_c_v001.pt` | 数 MB–20 MB | MIT（已核实） | 可装 |
+| CREPE `full.pth`（可选） | ~85 MB | MIT（已核实） | 可装 |
+| RVC v2 底模 `f0G40k.pth`+`f0D40k.pth` | 合计约 150–250 MB | 研究用途标注 | 仅限研究用途，**不得商用分发** |
+| demucs 模型（可选，`htdemucs`） | 约 80 MB | MIT | 可装 |
+| 中文产品音色 `.pth` | — | **暂无符合项** | **不装**，等 owner 书面授权（§5.1 三用途缺一不可） |
+
+**合计**：必需最小集约 **0.9–1.2 GB**；含可选集约 **1.2–2.0 GB**；磁盘 1.4 TiB 可用。约束是许可不是字节。
