@@ -115,27 +115,54 @@ describe('本地引擎安装状态判定（item 10：--remove 之后产品必须
   });
 });
 
-describe('降级链（方案 §5.5：本地 → 商业 → 系统，每跳标 degraded）', () => {
+describe('档位化降级链（item 10：显式离线档开关，禁止按「装没装」决定优先级）', () => {
   const missing = resolveLocalEngine({ enginesRoot: root, engineId: 'cosyvoice2', fs: fakeFs({}) });
-
-  it('本地已装：首选本地且不标降级，商业与系统作为兜底', () => {
-    const fs = fakeFs({
+  const installed = resolveLocalEngine({
+    enginesRoot: root,
+    engineId: 'cosyvoice2',
+    version: '0.5b-test',
+    fs: fakeFs({
       [`${root}/cosyvoice2/0.5b-test/installed.json`]: JSON.stringify(marker('cosyvoice2', [{ path: 'llm.pt', bytes: 1 }])),
       [`${root}/cosyvoice2/0.5b-test/llm.pt`]: 1,
-    });
-    const local = resolveLocalEngine({ enginesRoot: root, engineId: 'cosyvoice2', version: '0.5b-test', fs });
-    const plan = planVoiceFallback({ local, commercialAvailable: true });
+    }),
+  });
+  if (!installed.installed) throw new Error('fixture 应为已安装');
+
+  it('默认档（不传 tier）= 商业 API 优先；装了本地引擎也不改变主选', () => {
+    const plan = planVoiceFallback({ local: installed, commercialAvailable: true });
+    expect(plan.tier).toBe('commercial_default');
+    expect(plan.tierHonored).toBe(true);
+    expect(plan.primary).toBe('commercial_api');
+    expect(plan.plan.map((step) => step.step)).toEqual(['commercial_api', 'local_engine', 'system_tts']);
+    // 离线档列在可选位，且降级标记仍是「本地引擎本身不降级」
+    expect(plan.plan[1]).toMatchObject({ role: 'optional', degraded: false });
+    expect(plan.plan[1]?.reason).toContain('16–43 秒');
+    expect(plan.plan[0]?.degraded).toBe(true);
+  });
+
+  it('显式离线档：本地引擎排第一且不标降级，商业与系统作为兜底', () => {
+    const plan = planVoiceFallback({ local: installed, commercialAvailable: true, tier: 'offline_preferred' });
+    expect(plan.tier).toBe('offline_preferred');
+    expect(plan.tierHonored).toBe(true);
     expect(plan.primary).toBe('local_engine');
     expect(plan.plan.map((step) => step.step)).toEqual(['local_engine', 'commercial_api', 'system_tts']);
-    expect(plan.plan[0]?.degraded).toBe(false);
+    expect(plan.plan[0]).toMatchObject({ role: 'primary', degraded: false });
     expect(plan.plan.slice(1).every((step) => step.degraded)).toBe(true);
   });
 
-  it('本地未安装：首选商业 API 并标 degraded，原因写明未安装', () => {
-    const plan = planVoiceFallback({ local: missing, commercialAvailable: true });
+  it('选了离线档但本地未安装：回落商业 API，tierHonored=false 且原因写明未安装', () => {
+    const plan = planVoiceFallback({ local: missing, commercialAvailable: true, tier: 'offline_preferred' });
     expect(plan.primary).toBe('commercial_api');
+    expect(plan.tierHonored).toBe(false);
     expect(plan.plan[0]?.degraded).toBe(true);
     expect(plan.plan[0]?.reason).toContain('未安装');
+  });
+
+  it('默认档下商业 API 不可用但本地已装：本地顶上来做兜底，tierHonored=false', () => {
+    const plan = planVoiceFallback({ local: installed, commercialAvailable: false });
+    expect(plan.primary).toBe('local_engine');
+    expect(plan.tierHonored).toBe(false);
+    expect(plan.plan[0]?.role).toBe('primary');
   });
 
   it('本地与商业都不可用：只剩系统 TTS，仍然如实标注', () => {
@@ -149,6 +176,7 @@ describe('降级链（方案 §5.5：本地 → 商业 → 系统，每跳标 de
     const plan = planVoiceFallback({ local: missing, commercialAvailable: false, systemTtsAvailable: false });
     expect(plan.plan).toHaveLength(0);
     expect(plan.primary).toBe('system_tts');
+    expect(plan.tierHonored).toBe(false);
   });
 });
 

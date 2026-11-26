@@ -49,7 +49,7 @@ def test_gate_tsundere_refuse_matches_correct_reference_audio() -> None:
     result = router.synthesize("[傲娇反驳] 哼，本鱼才没有偷懒！")
     assert result.emotion_tag == "tsundere_refuse"
     assert result.ref_audio_path == "ref/tsundere_refuse.wav"
-    assert result.backend == "local-gpt-sovits"
+    assert result.backend == "stub-sine-placeholder"
     assert result.degraded is False
 
 
@@ -101,7 +101,7 @@ def test_local_failure_degrades_to_cloud() -> None:
     )
     result = router.synthesize("[破防喷水] 噗——")
     assert result.degraded is True
-    assert result.backend == "cloud-siliconflow"
+    assert result.backend == "stub-sine-placeholder-cloud"
     assert result.ref_audio_path == "ref/rage_spray.wav"
     assert len(result.audio) > 0
 
@@ -151,3 +151,79 @@ def test_stub_backends_are_deterministic() -> None:
     profile = PACK.profiles[0]
     backend = StubLocalBackend()
     assert backend.synthesize("测试", profile, 24_000) == backend.synthesize("测试", profile, 24_000)
+
+
+def test_stub_backends_do_not_impersonate_real_models() -> None:
+    """冒名回归：占位后端不许自称任何真实模型（曾自称 local-gpt-sovits / cloud-siliconflow）。"""
+    real_model_names = {"local-gpt-sovits", "cloud-siliconflow", "cosyvoice", "cosyvoice2", "gpt-sovits"}
+    for backend in (StubLocalBackend(), StubCloudBackend(), FailingBackend()):
+        assert backend.name.startswith("stub-"), backend.name
+        assert backend.name not in real_model_names
+        assert backend.placeholder is True
+
+
+def test_result_to_dict_flags_placeholder_audio() -> None:
+    """回执必须自带占位标记：调用方据此分辨「正弦波」与「真实 TTS 人声」。"""
+    router = EmotionTtsRouter(voice_pack=PACK)
+    payload = router.result_to_dict(router.synthesize("[嘴甜常态] 主人好~"))
+    assert payload["placeholder"] is True
+    assert payload["backend"] == "stub-sine-placeholder"
+    assert "不是任何 TTS 模型产出的人声" in payload["placeholderReason"]
+
+
+def test_probe_reports_placeholder_backend_as_no_emotion_support() -> None:
+    """探针实测：占位后端即使改基频也不算情绪 TTS。"""
+    capability = EmotionTtsRouter(voice_pack=PACK).probe_emotion_capability()
+    assert capability["mode"] == "placeholder"
+    assert capability["engine"] == "stub-sine-placeholder"
+    assert capability["supportsEmotion"] is False
+    assert "占位" in capability["detail"]
+
+
+class _EmotionAgnosticBackend:
+    """假「真实」后端：不占位，但完全无视情绪（两次合成字节一致）。"""
+
+    name = "fake-real-agnostic"
+    placeholder = False
+
+    def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes:
+        return b"same-bytes"
+
+
+class _EmotionAwareBackend:
+    """假「真实」后端：按情绪产出不同字节。"""
+
+    name = "fake-real-aware"
+    placeholder = False
+
+    def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes:
+        return f"voice-{profile.emotion_tag}".encode()
+
+
+class _ExplodingBackend:
+    """假「真实」后端：探针调用即抛错。"""
+
+    name = "fake-real-broken"
+    placeholder = False
+
+    def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes:
+        raise RuntimeError("MODEL_LOAD_FAILED")
+
+
+def test_probe_measures_emotion_response_instead_of_trusting_declaration() -> None:
+    agnostic = EmotionTtsRouter(voice_pack=PACK, local_backend=_EmotionAgnosticBackend()).probe_emotion_capability()
+    assert agnostic["mode"] == "real"
+    assert agnostic["supportsEmotion"] is False
+    assert "无响应" in agnostic["detail"]
+
+    aware = EmotionTtsRouter(voice_pack=PACK, local_backend=_EmotionAwareBackend()).probe_emotion_capability()
+    assert aware["mode"] == "real"
+    assert aware["supportsEmotion"] is True
+    assert "探针通过" in aware["detail"]
+
+
+def test_probe_reports_failure_instead_of_claiming_support() -> None:
+    broken = EmotionTtsRouter(voice_pack=PACK, local_backend=_ExplodingBackend()).probe_emotion_capability()
+    assert broken["supportsEmotion"] is False
+    assert "探针失败" in broken["detail"]
+    assert "MODEL_LOAD_FAILED" in broken["detail"]

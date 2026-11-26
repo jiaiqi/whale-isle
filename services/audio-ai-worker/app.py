@@ -26,6 +26,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from tts_engine.emotion_router import (
+    PLACEHOLDER_REASON,
     EmotionTtsRouter,
     EmotionVoiceProfile,
     TtsVoicePack,
@@ -96,18 +97,27 @@ def estimate_duration_ms(text: str, ms_per_char: int = 220) -> int:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    """服务健康 + TTS 能力实测自报。
+
+    `tts` 段是宿主探针的唯一数据来源：`mode=placeholder` 表示当前后端只产出正弦占位波形，
+    宿主必须按「不是真实 TTS / 不支持情绪」展示，不许猜成可用。
+    """
     return {
         "status": "ok",
         "service": "audio-ai-worker",
         "version": APP_VERSION,
         "backend": detect_backend(),
         "platform": platform.platform(),
+        "tts": TTS_ROUTER.probe_emotion_capability(),
     }
 
 
 @app.post("/tts/synthesize")
 def synthesize(payload: dict[str, Any]) -> JSONResponse:
-    """合成骨架：{text, emotionTag?, voicePackId?, durationMs?} → {audioBase64, durationMs, synthId}。"""
+    """合成骨架：{text, emotionTag?, voicePackId?, durationMs?} → {audioBase64, durationMs, synthId}。
+
+    回执显式带 `placeholder=true`：这条链路产出的是正弦占位波形，不是人声。
+    """
     text = str(payload.get("text", "")).strip()
     if not text:
         return JSONResponse(status_code=400, content={"error": {"code": "EMPTY_TEXT", "message": "text 不能为空"}})
@@ -119,7 +129,9 @@ def synthesize(payload: dict[str, Any]) -> JSONResponse:
             "format": "wav",
             "durationMs": duration_ms,
             "audioBase64": base64.b64encode(audio).decode("ascii"),
-            "backend": detect_backend(),
+            "backend": "stub-sine-placeholder",
+            "placeholder": True,
+            "placeholderReason": PLACEHOLDER_REASON,
         }
     )
 
@@ -189,6 +201,9 @@ async def ws_audio(websocket: WebSocket) -> None:
                                 "format": "wav",
                                 "durationMs": duration_ms,
                                 "audioBase64": base64.b64encode(audio).decode("ascii"),
+                                "backend": "stub-sine-placeholder",
+                                "placeholder": True,
+                                "placeholderReason": PLACEHOLDER_REASON,
                             },
                         }
                     )

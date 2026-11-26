@@ -2,11 +2,17 @@
 
 职责：
   - 情绪标签 → 匹配大肥鱼参考音频（voice pack，5 组 5 秒情绪参考音频）；
-  - 本地 GPT-SoVITS 优先推理，失败自动降级到云端后端（degraded=True 如实上报）；
+  - 本地真实推理后端优先，失败自动降级到云端后端（degraded=True 如实上报）；
   - 产出音频流 + 口型包络（viseme 序列），供桌宠同步嘴型。
 
-接口先行：真实 torch 推理（2GB+ 模型）按 TTSBackend 可插拔，本模块提供确定性 stub 实现，
+接口先行：真实 torch 推理（2GB+ 模型）按 TtsBackend 可插拔，本模块提供确定性 stub 实现，
 接口与真实实现完全一致（真实推理接入时替换 backend 工厂即可）。
+
+诚实标记铁律（item 10 修正）：
+  stub 后端产出的是**正弦波占位音频**，不是任何人声。它必须自报 `placeholder=True`
+  与 `stub-*` 名字，并在合成回执里带 `placeholder/placeholderReason`。
+  历史坑：`StubLocalBackend` 曾自称 `"local-gpt-sovits"`——那是一个真实存在的本地 TTS
+  服务（见 `packages/model-gateway/src/presets.ts`），调用方无从分辨，等于让占位冒名真实模型。
 """
 
 from __future__ import annotations
@@ -81,20 +87,32 @@ class SynthesisResult:
     duration_ms: int
     audio: bytes
     lip_envelope: LipEnvelope
+    # 该音频是否为占位波形而非真实 TTS 人声
+    placeholder: bool = True
+    placeholder_reason: str = ""
 
 
 class TtsBackend(Protocol):
-    """推理后端接口（真实 GPT-SoVITS / 云端 TTS 均实现此协议）。"""
+    """推理后端接口（真实 CosyVoice / GPT-SoVITS / 云端 TTS 均实现此协议）。"""
 
     name: str
+    # True = 只产出占位波形（正弦），不是人声；真实后端必须显式声明 False
+    placeholder: bool
 
     def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes: ...
 
 
-class StubLocalBackend:
-    """本地后端 stub：确定性波形（无 torch 依赖），同参同输出。"""
+PLACEHOLDER_REASON = "确定性正弦占位波形：用于打通链路与口型同步，不是任何 TTS 模型产出的人声"
 
-    name = "local-gpt-sovits"
+
+class StubLocalBackend:
+    """占位本地后端：确定性正弦波（无 torch 依赖），同参同输出。
+
+    它**不是** GPT-SoVITS，也**不是** CosyVoice——`name` 与 `placeholder` 必须如实反映这一点。
+    """
+
+    name = "stub-sine-placeholder"
+    placeholder = True
 
     def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes:
         # 情绪影响基频与谐波结构：傲娇（高、紧）vs 困倦（低、缓）
@@ -109,9 +127,10 @@ class StubLocalBackend:
 
 
 class StubCloudBackend:
-    """云端后端 stub：模拟网络后端（音色略高，模拟云端模型差异）。"""
+    """占位云端后端：同样是正弦波（音色略高），**不**代表任何真实云端 TTS 服务。"""
 
-    name = "cloud-siliconflow"
+    name = "stub-sine-placeholder-cloud"
+    placeholder = True
 
     def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes:
         return _render_wave(text, sample_rate, 360.0)
@@ -120,7 +139,8 @@ class StubCloudBackend:
 class FailingBackend:
     """故障注入后端：始终失败（用于验证降级链路）。"""
 
-    name = "local-gpt-sovits"
+    name = "stub-failing"
+    placeholder = True
 
     def synthesize(self, text: str, profile: EmotionVoiceProfile, sample_rate: int) -> bytes:
         raise RuntimeError("LOCAL_BACKEND_UNAVAILABLE")
@@ -134,6 +154,47 @@ class EmotionTtsRouter:
     local_backend: TtsBackend = field(default_factory=StubLocalBackend)
     cloud_backend: TtsBackend = field(default_factory=StubCloudBackend)
     sample_rate: int = 24_000
+    # 能力探针结果缓存（探针会真的合成两小段音频；真实模型下不该每次 /health 都跑一遍）
+    _capability_cache: dict[str, Any] | None = field(default=None, init=False, repr=False)
+
+    def probe_emotion_capability(self) -> dict[str, Any]:
+        """实测探针：同一文本用两种情绪各合成一小段，比较音频字节。
+
+        - 占位后端一律 `supportsEmotion=False`：正弦改基频不叫情绪 TTS；
+        - 真实后端只有在音频字节确实随情绪变化时才 True——后端自己声明不作数；
+        - 探针异常同样报 False 并把异常写进 detail，绝不猜成可用。
+        """
+        if self._capability_cache is not None:
+            return self._capability_cache
+        backend = self.local_backend
+        placeholder = bool(getattr(backend, "placeholder", True))
+        responsive = False
+        error_text = ""
+        try:
+            text = "能力探针"
+            sweet = backend.synthesize(text, self.voice_pack.profile_for("sweet_normal"), self.sample_rate)
+            rage = backend.synthesize(text, self.voice_pack.profile_for("rage_spray"), self.sample_rate)
+            responsive = sweet != rage
+        except Exception as error:  # noqa: BLE001 —— 探针失败必须如实上报，不许吞
+            error_text = f"{type(error).__name__}: {error}"
+
+        if placeholder:
+            detail = f"占位后端 {backend.name}：{PLACEHOLDER_REASON}；不支持情绪 TTS"
+        elif error_text:
+            detail = f"后端 {backend.name} 探针失败：{error_text}"
+        elif not responsive:
+            detail = f"后端 {backend.name} 对情绪无响应（两种情绪产出相同音频）"
+        else:
+            detail = f"后端 {backend.name} 情绪探针通过"
+
+        capability = {
+            "mode": "placeholder" if placeholder else "real",
+            "engine": backend.name,
+            "supportsEmotion": (not placeholder) and responsive,
+            "detail": detail,
+        }
+        self._capability_cache = capability
+        return capability
 
     def parse_emotion(self, text: str) -> tuple[EmotionTag, str]:
         """解析情绪前缀 → (emotionTag, 正文)；无前缀用默认情绪。"""
@@ -161,6 +222,7 @@ class EmotionTtsRouter:
 
         duration_ms = _duration_ms(body)
         envelope = build_lip_envelope(body, duration_ms)
+        placeholder = bool(getattr(backend, "placeholder", True))
         return SynthesisResult(
             synth_id=str(uuid.uuid4()),
             emotion_tag=emotion,
@@ -171,16 +233,19 @@ class EmotionTtsRouter:
             duration_ms=duration_ms,
             audio=audio,
             lip_envelope=envelope,
+            placeholder=placeholder,
+            placeholder_reason=PLACEHOLDER_REASON if placeholder else "",
         )
 
     def result_to_dict(self, result: SynthesisResult) -> dict[str, Any]:
         """转成与 shared-protocol TtsSynthesisResultSchema 对齐的字典（跨语言契约）。"""
-        return {
+        payload: dict[str, Any] = {
             "synthId": result.synth_id,
             "emotionTag": result.emotion_tag,
             "refAudioPath": result.ref_audio_path,
             "backend": result.backend,
             "degraded": result.degraded,
+            "placeholder": result.placeholder,
             "format": result.format,
             "durationMs": result.duration_ms,
             "audioBase64": base64.b64encode(result.audio).decode("ascii"),
@@ -189,6 +254,9 @@ class EmotionTtsRouter:
                 "totalDurationMs": result.lip_envelope.total_duration_ms,
             },
         }
+        if result.placeholder_reason:
+            payload["placeholderReason"] = result.placeholder_reason
+        return payload
 
 
 def build_lip_envelope(text: str, duration_ms: int) -> LipEnvelope:

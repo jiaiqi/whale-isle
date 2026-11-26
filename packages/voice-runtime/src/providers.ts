@@ -5,6 +5,7 @@
  * - 支持分句预取（bounded prefetch）、LRU 合成缓存、AbortSignal 取消与诚实降级追踪
  */
 import {
+  LocalAudioWorkerHealthSchema,
   VoiceProviderStatusSchema,
   VoiceSynthesisOutputSchema,
   VoiceSynthesisRequestSchema,
@@ -295,19 +296,61 @@ export class LocalAudioWorkerProvider implements VoiceProvider {
     this.fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
   }
 
+  /**
+   * 探针实测：能力一律来自 Worker 的 `/health` 自报，**不许硬编码**。
+   *
+   * 历史坑：这里曾对成功与失败两个分支都写死 `supportsEmotion: true`，
+   * 于是连「正弦波占位后端」也被宿主当成情绪 TTS 展示。
+   */
   async probe(): Promise<VoiceProviderStatus> {
     const { signal, cleanup } = withTimeoutSignal(1200);
     try {
       const resp = await this.fetchImpl(`${this.baseUrl}/health`, { method: 'GET', signal });
+      if (!resp.ok) {
+        return VoiceProviderStatusSchema.parse({
+          kind: this.kind,
+          quality: 'local_worker',
+          available: false,
+          degraded: false,
+          platform: process.platform,
+          detail: `Audio Worker 返回 ${resp.status}`,
+          supportsStreaming: false,
+          supportsEmotion: false,
+        });
+      }
+      let body: unknown = null;
+      try {
+        body = await resp.json();
+      } catch {
+        body = null;
+      }
+      const health = LocalAudioWorkerHealthSchema.safeParse(body);
+      const tts = health.success ? health.data.tts : undefined;
+      if (tts === undefined) {
+        // 旧版 Worker 只回 {status:'ok'}：没上报就不许猜，按「不支持情绪」处理
+        return VoiceProviderStatusSchema.parse({
+          kind: this.kind,
+          quality: 'local_worker',
+          available: true,
+          degraded: true,
+          platform: process.platform,
+          detail: `本地 Audio Worker 在线 (${this.baseUrl})，但未上报 TTS 能力（旧版 Worker），按「不支持情绪」处理`,
+          supportsStreaming: false,
+          supportsEmotion: false,
+        });
+      }
+      const placeholder = tts.mode !== 'real';
       return VoiceProviderStatusSchema.parse({
         kind: this.kind,
         quality: 'local_worker',
-        available: resp.ok,
-        degraded: false,
+        available: true,
+        // 占位波形不是角色音色，必须按降级展示
+        degraded: placeholder,
         platform: process.platform,
-        detail: resp.ok ? `本地 Audio Worker 在线 (${this.baseUrl})` : `Audio Worker 返回 ${resp.status}`,
+        detail: `本地 Audio Worker 在线 (${this.baseUrl}) · ${tts.engine} · ${tts.detail}`,
         supportsStreaming: false,
-        supportsEmotion: true,
+        // 占位后端无论自报什么都按不支持情绪：正弦变基频不叫人声表情
+        supportsEmotion: tts.mode === 'real' && tts.supportsEmotion,
       });
     } catch {
       return VoiceProviderStatusSchema.parse({
@@ -318,7 +361,7 @@ export class LocalAudioWorkerProvider implements VoiceProvider {
         platform: process.platform,
         detail: `本地 Audio Worker 未启动 (${this.baseUrl})`,
         supportsStreaming: false,
-        supportsEmotion: true,
+        supportsEmotion: false,
       });
     } finally {
       cleanup();
@@ -347,6 +390,9 @@ export class LocalAudioWorkerProvider implements VoiceProvider {
         durationMs?: number;
         audioBase64?: string;
         degraded?: boolean;
+        /** Worker 自报：这段音频是占位波形而非真实 TTS 人声 */
+        placeholder?: boolean;
+        placeholderReason?: string;
         lipEnvelope?: {
           visemes?: Array<{ viseme: 'closed' | 'wide' | 'round' | 'open' | 'teeth'; startMs: number; durationMs: number; amplitude?: number }>;
         };
@@ -359,11 +405,13 @@ export class LocalAudioWorkerProvider implements VoiceProvider {
         amplitude: v.amplitude ?? 0.6,
         rmsDb: -12,
       }));
+      const placeholder = data.placeholder === true;
       return VoiceSynthesisOutputSchema.parse({
         requestId: request.requestId,
         providerKind: this.kind,
         quality: 'local_worker',
-        degraded: Boolean(data.degraded),
+        // 占位波形同样属于降级：不能让调用方以为这是角色真实音色
+        degraded: Boolean(data.degraded) || placeholder,
         format: data.format ?? 'wav',
         sampleRate: 24_000,
         durationMs,
@@ -371,6 +419,8 @@ export class LocalAudioWorkerProvider implements VoiceProvider {
         lipFrames: lipFrames.length > 0 ? lipFrames : synthesizeTextLipSyncFrames(request.text, durationMs),
         cached: false,
         latencyMs: Math.max(0, Date.now() - started),
+        placeholder,
+        ...(data.placeholderReason === undefined ? {} : { placeholderReason: data.placeholderReason }),
       });
     } finally {
       cleanup();

@@ -79,7 +79,7 @@ describe('情绪感知 TTS 路由（宿主侧）', () => {
       durationMs: 2000,
       lipEnvelope: ENVELOPE,
       refAudioPath: 'ref/tsundere_refuse.wav',
-      backend: 'local-gpt-sovits',
+      backend: 'stub-sine-placeholder',
       degraded: false,
     };
     const { lease, visemeTimeline } = buildPlaybackLease({
@@ -134,8 +134,9 @@ describe('情绪感知 TTS 路由（宿主侧）', () => {
       synthId: '22222222-2222-4222-8222-222222222222',
       emotionTag: 'tsundere_refuse',
       refAudioPath: 'ref/tsundere_refuse.wav',
-      backend: 'local-gpt-sovits',
+      backend: 'stub-sine-placeholder',
       degraded: false,
+      placeholder: false,
       format: 'wav',
       durationMs: 2000,
       audioBase64: 'UklGRg==',

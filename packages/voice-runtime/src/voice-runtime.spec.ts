@@ -684,3 +684,83 @@ describe('SpeechFloorArbiter & multi-track AudioMixer (V2-P1-02)', () => {
     }, { signal: ac2.signal })).rejects.toThrow(WhaleError);
   });
 });
+
+describe('本地 Audio Worker 探针实测（item 10：能力不许硬编码）', () => {
+  const workerWithHealth = (health: unknown): LocalAudioWorkerProvider =>
+    new LocalAudioWorkerProvider({ fetchImpl: async () => new Response(JSON.stringify(health), { status: 200 }) });
+
+  it('Worker 自报 placeholder 时：supportsEmotion=false、degraded=true，detail 带上引擎名', async () => {
+    const status = await workerWithHealth({
+      status: 'ok',
+      tts: {
+        mode: 'placeholder',
+        engine: 'stub-sine-placeholder',
+        supportsEmotion: false,
+        detail: '占位后端 stub-sine-placeholder：不是人声；不支持情绪 TTS',
+      },
+    }).probe();
+    expect(status.available).toBe(true);
+    expect(status.supportsEmotion).toBe(false);
+    expect(status.degraded).toBe(true);
+    expect(status.detail).toContain('stub-sine-placeholder');
+  });
+
+  it('占位后端即使自报 supportsEmotion=true 也不采信（正弦变基频不叫人声表情）', async () => {
+    const status = await workerWithHealth({
+      status: 'ok',
+      tts: { mode: 'placeholder', engine: 'stub-sine-placeholder', supportsEmotion: true, detail: '自称支持' },
+    }).probe();
+    expect(status.supportsEmotion).toBe(false);
+  });
+
+  it('真实后端自报支持情绪时才置 true', async () => {
+    const status = await workerWithHealth({
+      status: 'ok',
+      tts: { mode: 'real', engine: 'cosyvoice2', supportsEmotion: true, detail: '情绪探针通过' },
+    }).probe();
+    expect(status.supportsEmotion).toBe(true);
+    expect(status.degraded).toBe(false);
+  });
+
+  it('旧版 Worker 只回 {status:ok}：没上报就按不支持情绪处理，不许猜 true', async () => {
+    const status = await workerWithHealth({ status: 'ok' }).probe();
+    expect(status.available).toBe(true);
+    expect(status.supportsEmotion).toBe(false);
+    expect(status.degraded).toBe(true);
+    expect(status.detail).toContain('未上报');
+  });
+
+  it('HTTP 非 2xx / 连不上：available=false 且 supportsEmotion=false', async () => {
+    const bad = new LocalAudioWorkerProvider({ fetchImpl: async () => new Response('nope', { status: 503 }) });
+    expect(await bad.probe()).toMatchObject({ available: false, supportsEmotion: false });
+    const dead = new LocalAudioWorkerProvider({ fetchImpl: async () => { throw new Error('ECONNREFUSED'); } });
+    expect(await dead.probe()).toMatchObject({ available: false, supportsEmotion: false });
+  });
+
+  it('合成回执带 placeholder=true 时：输出标占位并把 degraded 置真，不再冒充角色音色', async () => {
+    const worker = new LocalAudioWorkerProvider({
+      fetchImpl: async () => new Response(JSON.stringify({
+        format: 'wav',
+        durationMs: 700,
+        audioBase64: 'UklGRg==',
+        placeholder: true,
+        placeholderReason: '确定性正弦占位波形',
+      }), { status: 200 }),
+    });
+    const out = await worker.synthesize({
+      requestId: 'ph-1',
+      characterId: 'char_xiaojing',
+      voiceRef: 'qiaopi_mengmei',
+      text: '占位',
+      emotion: 'neutral',
+      styleMode: 'normal',
+      speed: 1,
+      pitchShiftSemitones: 0,
+      volume: 1,
+      timeoutMs: 5000,
+    });
+    expect(out.placeholder).toBe(true);
+    expect(out.degraded).toBe(true);
+    expect(out.placeholderReason).toContain('正弦');
+  });
+});

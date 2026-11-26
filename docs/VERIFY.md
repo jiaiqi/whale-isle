@@ -238,6 +238,8 @@
 | 本地语音引擎安装判定 | `[SIMULATION]` 单测（真实临时目录 + 内存 fs 替身） | `local-engine.spec.ts` **13 例**：缺 `installed.json`（= `--remove` 之后）→ `no_marker` 未安装；损坏清单 / 引擎不符 / 权重缺失 / 字节数不符逐项判未安装；完整安装 → installed；降级链本地→商业→系统逐跳标 degraded，系统 TTS 也关时返回空计划。**尚未在真实 4 GB 权重上跑过 `--check`**（下载中） | 2026-11-26 |
 | 中控台 macOS 自绘窗口顶栏（owner 反馈） | `[E2E-HOST]` + `[REAL-DEVICE]` | 40px `.wb-titlebar` 取代系统标题栏：浅/深主题背景与 `.wb-top` 计算色完全一致（`color(srgb 0.9561 0.9412 0.9110)` / `color(srgb 0.0541 0.0745 0.1310)`），侧栏品牌移入顶栏后不再重复；原生红绿灯保留，圆心 y=20 与顶栏中线对齐、右缘 74px < 80px 安全区。真机 CGEvent：拖动顶栏窗口 `(280,46)→(340,125)`；双击 `isMaximized false→true`（bounds 1920×956，系统 zoom，不是全屏）并可逆；全屏 1920×1080 时红绿灯隐藏、顶栏无遮挡。`pnpm verify:gate` 7/7；`ui.e2e` + `v2-obsidian-ui.e2e` 2 文件 10 用例 PASS。证据 [P3-director-titlebar-verification.md](./v2/evidence/P3-director-titlebar-verification.md) | 2026-11-26 |
 
+| 表现力语音收尾三件（item 10：离线档开关 / UI 代价 / 冒名修正） | `[REAL-DEVICE]`（本机真实进程 + 真实 HTTP）+ 单测 | `planVoiceFallback()` 显式档位：默认档首跳 `commercial_api`、本地引擎降级为 `role:'optional'` 并写明「一句话等 16–43 秒」；`offline_preferred` 首跳本地；选离线档但未安装时 `tierHonored=false` 且原因写明未安装。语音中心面板渲染同一份 `OFFLINE_TIER_COST_TEXT` 并显示 worker 探针档位。真机：本机启动真实 `uvicorn app:app`（127.0.0.1:18770）→ `GET /health` 返回 `tts.mode=placeholder / engine=stub-sine-placeholder / supportsEmotion=false`；`POST /tts/emotion` 返回 `placeholder:true / backend=stub-sine-placeholder`；宿主侧真实 HTTP 探针 `probe()` → `supportsEmotion:false, degraded:true`，`synthesize()` → `placeholder:true`。`pnpm verify:gate` 7/7；TS 新增 11 例、Python 新增 6 例。证据 [TTS-local-engine-benchmark-verification.md](./v2/evidence/TTS-local-engine-benchmark-verification.md) §9 | 2026-11-27 |
+
 ### 待人类宿主真机验收项
 
 | 项目 | 验收内容 | 状态 |

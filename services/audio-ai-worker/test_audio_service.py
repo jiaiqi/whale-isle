@@ -21,6 +21,26 @@ def test_health_reports_backend_and_version() -> None:
     assert body["backend"] in {"mps", "cuda", "cpu"}
 
 
+def test_health_reports_tts_capability_honestly() -> None:
+    """探针实测来源：`/health.tts` 必须如实说「这是占位后端、不支持情绪 TTS」。"""
+    body = client.get("/health").json()
+    tts = body["tts"]
+    assert tts["mode"] == "placeholder"
+    assert tts["engine"] == "stub-sine-placeholder"
+    assert tts["supportsEmotion"] is False
+    assert "占位" in tts["detail"]
+
+
+def test_synthesize_endpoint_marks_placeholder_audio() -> None:
+    """骨架合成接口不许把正弦波当成真实 TTS 回执。"""
+    response = client.post("/tts/synthesize", json={"text": "测试", "durationMs": 200})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["placeholder"] is True
+    assert body["backend"] == "stub-sine-placeholder"
+    assert body["placeholderReason"]
+
+
 def test_detect_backend_matches_platform_heuristics() -> None:
     backend = detect_backend()
     if backend == "mps":

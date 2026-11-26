@@ -2,6 +2,7 @@
 
 from .emotion_router import (
     EMOTION_PREFIXES,
+    PLACEHOLDER_REASON,
     EmotionTtsRouter,
     EmotionVoiceProfile,
     LipEnvelope,
@@ -15,6 +16,7 @@ from .emotion_router import (
 
 __all__ = [
     "EMOTION_PREFIXES",
+    "PLACEHOLDER_REASON",
     "EmotionTtsRouter",
     "EmotionVoiceProfile",
     "LipEnvelope",

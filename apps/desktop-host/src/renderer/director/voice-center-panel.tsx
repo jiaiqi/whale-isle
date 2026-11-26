@@ -4,10 +4,18 @@
  * 顶部 9 角色声线绑定条（每角色独立覆盖 → userData/voice-bindings.json），
  * 下方 5×5 试听与高阶情感/RVC 精调全部随所选 characterId 动态切换；
  * 右侧三张状态卡如实展示：真实语音后端（mcode/say/未适配）、动作原声 ducking、全局抢麦锁 live 状态。
+ *
+ * item 10 增补：语音引擎档位（默认商业 API / 可选离线档）与本地 Audio Worker 的实测探针。
+ * 离线档的体感代价直接引用 shared-protocol 的 `OFFLINE_TIER_COST_TEXT`，不许在这里另写数字。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AudioLines, Lock, Radio, Sliders, Volume2 } from 'lucide-react';
+import { AudioLines, Lock, Radio, Sliders, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  OFFLINE_TIER_COST_TEXT,
+  type VoiceEngineTier,
+  type VoiceProviderStatus,
+} from '@workbench/shared-protocol';
 import type { CharacterSummary } from './bridge';
 import { VoicePanel } from './voice-panel';
 import { VoiceStudioPanel } from './voice-studio-panel';
@@ -31,6 +39,8 @@ export function VoiceCenterPanel(props: {
   const [backend, setBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
   const [sfx, setSfx] = useState({ enabled: true, volume: 0.7 });
   const [speaker, setSpeaker] = useState<{ name: string | null; state: 'speaking' | 'idle' }>({ name: null, state: 'idle' });
+  const [tier, setTier] = useState<VoiceEngineTier>('commercial_default');
+  const [localWorker, setLocalWorker] = useState<VoiceProviderStatus | null>(null);
 
   const reloadBindings = useCallback((): void => {
     void window.directorBridge.voiceCharacterBindings().then(setBindings).catch(() => setBindings([]));
@@ -42,7 +52,11 @@ export function VoiceCenterPanel(props: {
     void window.directorBridge.voiceBackend().then(setBackend).catch(() => setBackend(null));
     void window.directorBridge.prefsGet().then((prefs) => {
       setSfx({ enabled: prefs.sfxEnabled ?? true, volume: prefs.sfxVolume ?? 0.7 });
+      setTier(prefs.voiceEngineTier ?? 'commercial_default');
     }).catch(() => undefined);
+    void window.directorBridge.v2VoiceProviders()
+      .then((providers) => setLocalWorker(providers.find((p) => p.kind === 'local-audio-worker') ?? null))
+      .catch(() => setLocalWorker(null));
   }, []);
 
   useEffect(() => {
@@ -64,6 +78,22 @@ export function VoiceCenterPanel(props: {
 
   const backendLabel = backend === null ? '探测中…' : backend.backend === 'mcode' ? 'mcode 角色链' : backend.backend === 'say' ? 'macOS say 兜底' : '未适配';
   const backendTone = backend?.backend === 'mcode' ? 'pill-green' : backend?.backend === 'say' ? 'pill-amber' : 'pill-red';
+
+  const offline = tier === 'offline_preferred';
+  const toggleTier = (): void => {
+    const next: VoiceEngineTier = offline ? 'commercial_default' : 'offline_preferred';
+    setTier(next);
+    void window.directorBridge.prefsSet({ voiceEngineTier: next });
+    toast(next === 'offline_preferred' ? `已切到离线档：${OFFLINE_TIER_COST_TEXT}` : '已切回默认档：商业 API 优先，本地引擎保留为可选离线档');
+  };
+  const workerTone = localWorker === null || !localWorker.available ? 'pill-red' : localWorker.degraded ? 'pill-amber' : 'pill-green';
+  const workerLabel = localWorker === null ? '未探测' : !localWorker.available ? '未启动' : localWorker.degraded ? '占位/降级' : '真实后端';
+  const workerDetail = localWorker === null
+    ? '未探测到本地 Audio Worker（未启动，或不在本机）'
+    : localWorker.detail;
+  const emotionLabel = localWorker === null || !localWorker.available
+    ? '未知'
+    : localWorker.supportsEmotion ? '支持（探针实测）' : '不支持（探针实测）';
 
   return (
     <div data-voice-center data-voice-tab={tab}>
@@ -150,6 +180,39 @@ export function VoiceCenterPanel(props: {
           <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-2)' }} data-voice-speaker>
             {speaker.state === 'speaking' && speaker.name !== null ? `正在发言：${speaker.name}` : '空闲：没有桌宠持有语音租约'}
           </p>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl p-3.5" style={{ border: '1px solid var(--stroke)', background: 'var(--surface)' }} data-voice-engine-tier={tier}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold">
+            <Timer size={12} style={{ color: 'var(--amber)' }} />
+            语音引擎档位（item 10 本机实测）
+            <span className={`pill ${offline ? 'pill-amber' : 'pill-blue'}`} style={{ fontSize: 10 }} data-voice-engine-tier-label>
+              {offline ? '离线档（本地引擎）' : '默认档（商业 API）'}
+            </span>
+          </span>
+          <button
+            type="button"
+            className={`sw${offline ? ' on' : ''}`}
+            aria-pressed={offline}
+            data-voice-offline-toggle
+            aria-label="切换到离线档（本地引擎）"
+            onClick={toggleTier}
+          />
+        </div>
+        <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-2)' }} data-voice-engine-tier-hint>
+          {offline
+            ? `离线档由你主动选择：不联网、不走商业 API。代价是本机实测 ${OFFLINE_TIER_COST_TEXT}；随时可以关掉切回默认档。`
+            : `默认档走商业 API。本地引擎即使装好也不会自动优先——本机实测它 ${OFFLINE_TIER_COST_TEXT}，只能在需要离线时用上面的开关主动切过去。`}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--text-2)' }} data-voice-local-worker={localWorker === null ? 'unknown' : localWorker.available ? (localWorker.degraded ? 'degraded' : 'real') : 'offline'}>
+          <span className="flex items-center gap-1.5">
+            <span className={`pill ${workerTone}`} style={{ fontSize: 10 }}>{workerLabel}</span>
+            本地 Audio Worker
+          </span>
+          <span>情绪 TTS：{emotionLabel}</span>
+          <span className="truncate" title={workerDetail} style={{ color: 'var(--text-3)' }}>{workerDetail}</span>
         </div>
       </div>
 

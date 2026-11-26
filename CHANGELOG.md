@@ -3,7 +3,17 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] — 2026-11-26
+## [Unreleased] — 2026-11-27
+
+### Changed（表现力语音收尾三件：显式离线档开关 / UI 体感代价 / 修 StubLocalBackend 冒名）
+
+- **显式「本地引擎 = 可选离线档」开关**：`planVoiceFallback()` 不再用「本地引擎装没装」隐式决定优先级，改为接收显式 `tier`——`commercial_default`（默认，商业 API 首跳、本地引擎降为 `role:'optional'`）与 `offline_preferred`（本地引擎首跳，随时可切回）。新增 `tierHonored`：所选档位没兑现（例如选了离线档但本地未安装）时置 `false`，UI 必须说出来。档位持久化在 `PetDesktopPrefsSchema.voiceEngineTier`。
+- **UI 直接写体感代价**：`OFFLINE_TIER_COST` / `OFFLINE_TIER_COST_TEXT` 提到 `packages/shared-protocol/src/voice.ts`，语音中心面板渲染「一句话等 16–43 秒 / 首包 10–35 秒 / 冷启动首句 30 秒」，并展示本地 Audio Worker 的探针实测档位（占位/降级、真实后端、未启动）与「情绪 TTS：支持/不支持（探针实测）」。文档与界面共用同一份常量。
+- **修 `StubLocalBackend` 冒名**：`"local-gpt-sovits"`（一个真实存在的本地 TTS 服务 preset）→ `"stub-sine-placeholder"`；`StubCloudBackend` 的 `"cloud-siliconflow"` 同样冒名真实云端服务 → `"stub-sine-placeholder-cloud"`；`FailingBackend` → `"stub-failing"`。
+- **占位标记贯通契约**：`TtsSynthesisResultSchema` 新增 `placeholder` / `placeholderReason`；`VoiceSynthesisOutputSchema` 同步；`/tts/synthesize`、`/tts/emotion`、`/ws/audio` 回执都带标记，调用方再也不会把「正弦波」当成「真实 TTS 人声」。
+- **`supportsEmotion` 改探针实测**：`/health` 新增 `tts` 段（`mode`/`engine`/`supportsEmotion`/`detail`），由 `EmotionTtsRouter.probe_emotion_capability()` 真跑——同文本两种情绪各合成一小段再比字节，字节相同即判定后端不区分情绪；占位后端一律 `false`。宿主 `LocalAudioWorkerProvider.probe()` 删掉两处硬编码的 `supportsEmotion: true`，改读 worker 自报，旧版 Worker 未上报时按 `false` 处理。
+- **验证**：`pnpm verify:gate` 7/7；新增 11 例 TS 单测（档位分支 / 探针解析 / 占位回执）+ 6 例 Python 单测（冒名回归 / 占位标记 / 探针三种后端）。真机证据（本机真实 uvicorn + 真实 HTTP）：`/health` → `mode=placeholder, supportsEmotion=false`，`/tts/emotion` → `placeholder:true`，宿主探针 → `supportsEmotion:false, degraded:true`。证据 [TTS-local-engine-benchmark-verification.md](./docs/v2/evidence/TTS-local-engine-benchmark-verification.md) §9。
+
 
 ### Added（表现力语音：引擎下载器 + 本地引擎安装状态判定）
 

@@ -195,10 +195,10 @@ $ node tools/scripts/fetch-engine.mjs --remove --dest /tmp/cvbench/remove-sandbo
 
 | # | 事项 | 说明 |
 | --- | --- | --- |
-| 1 | **默认档切商业 API** | 按方案 §5.5，本机结论要求默认走商业 API。`planVoiceFallback()` 当前仍是「本地引擎已装就排第一」——需要引入「本地引擎仅作可选离线档」的显式开关，而不是靠"装没装"来决定优先级 |
-| 2 | **UI 标注体感代价** | 本地档必须明示：一句话等 16–43 秒、首包 10–35 秒、冷启动首句 30 秒 |
-| 3 | **真实推理标记诚实化** | `services/audio-ai-worker/tts_engine/emotion_router.py` 里的 `StubLocalBackend` 目前把自己标成 `"local-gpt-sovits"` 却渲染正弦波——这是**冒名**，必须改成如实标记（如 `stub-sine`）并让 `supportsEmotion` 走探针实测而非硬编码 |
-| 4 | **ZipVoice 试跑** | §4 里唯一值得先试的候选；需先解决权重 CC-BY-NC 的非商用限制 |
+| 1 | ✅ **默认档切商业 API** | 2026-11-27 已落地，见 §9.1 |
+| 2 | ✅ **UI 标注体感代价** | 2026-11-27 已落地，见 §9.2 |
+| 3 | ✅ **真实推理标记诚实化** | 2026-11-27 已落地，见 §9.3 |
+| 4 | **ZipVoice 试跑** | owner 2026-11-27 批准「非商用权重可用于内部验证，不商用」；待做，产物须标 `[INTERNAL-VALIDATION-NONCOMMERCIAL]` |
 | 5 | **听感验收** | 数值稳定性只覆盖「没崩没爆」，表现力与自然度必须由人类真机试听判定 |
 
 ---
@@ -216,3 +216,76 @@ node tools/scripts/fetch-engine.mjs --remove   # 按 installed.json 精确删除
 .venv/bin/python bench.py --mode cold --out cold.json      # 冷启动
 .venv/bin/python bench_backend.py --device mps --autocast fp16 --out mps-fp16.jsonl   # C 组
 ```
+
+---
+
+## 9. 收尾三件（2026-11-27 落地）
+
+### 9.1 显式「本地引擎 = 可选离线档」开关
+
+`planVoiceFallback()` 不再用「装没装」隐式决定优先级，改为接收显式档位 `tier`：
+
+| 档位 | 首跳 | 其余 |
+| --- | --- | --- |
+| `commercial_default`（默认） | `commercial_api` | 本地引擎降为 `role: 'optional'`，再往后是系统 TTS |
+| `offline_preferred` | `local_engine` | `commercial_api` → `system_tts` |
+
+- 档位持久化在 `PetDesktopPrefsSchema.voiceEngineTier`（契约层），UI 开关写它、读它，随时可切回。
+- 计划新增 `tierHonored`：所选档位的首选后端**没有**排在第一时置 `false`（例如选了离线档但本地引擎未安装），必须让 UI 把这句说出来，不许假装档位生效。
+- `degraded` 语义保持不变（只有本地引擎本身为 `false`），避免把「商业档是默认」和「质量降级」两件事搅在一起。
+
+### 9.2 UI 直接写体感代价
+
+三个数字不再只活在证据文档里：`packages/shared-protocol/src/voice.ts` 导出
+`OFFLINE_TIER_COST` 与 `OFFLINE_TIER_COST_TEXT =「一句话等 16–43 秒 / 首包 10–35 秒 / 冷启动首句 30 秒」`，
+语音中心面板（`apps/desktop-host/src/renderer/director/voice-center-panel.tsx`）直接渲染这段原文，
+UI 与本文档共用同一份常量，杜绝「文档写一套、界面写另一套」。
+
+面板同时显示本地 Audio Worker 的**探针实测**结果（`v2VoiceProviders()`）：
+`占位/降级` / `真实后端` / `未启动`，以及「情绪 TTS：支持 / 不支持（探针实测）」。
+
+### 9.3 冒名修正与探针实测
+
+| 位置 | 修前 | 修后 |
+| --- | --- | --- |
+| `emotion_router.py` `StubLocalBackend.name` | `"local-gpt-sovits"`（一个真实存在的本地 TTS 服务） | `"stub-sine-placeholder"` |
+| `StubCloudBackend.name` | `"cloud-siliconflow"`（冒名真实云端服务） | `"stub-sine-placeholder-cloud"` |
+| `FailingBackend.name` | `"local-gpt-sovits"` | `"stub-failing"` |
+| 合成回执 | 无占位标记，调用方无从分辨 | 新增 `placeholder` / `placeholderReason`（写入 `TtsSynthesisResultSchema` 契约） |
+| `/health` | 只有硬件后端，没有 TTS 能力 | 新增 `tts` 段：`mode` / `engine` / `supportsEmotion` / `detail` |
+| `LocalAudioWorkerProvider.probe()` | 成功与失败两个分支都硬编码 `supportsEmotion: true` | 读 `/health.tts` 实测；旧版 Worker 未上报时按 `false` 处理；占位后端一律 `false` |
+
+`supportsEmotion` 的探针是真跑出来的：`EmotionTtsRouter.probe_emotion_capability()` 用同一句文本、
+两种情绪各合成一小段再比较字节——字节一样就说明后端根本不区分情绪。占位后端即使字节不同也报 `false`，
+因为「正弦改基频」不叫情绪 TTS。
+
+### 9.4 真机证据（本机真实进程 + 真实 HTTP）
+
+启动真实 `uvicorn app:app`（127.0.0.1:18770，本机 macOS-27.2.1-arm64），不重启桌面端：
+
+```json
+// GET /health
+{ "status": "ok", "backend": "mps",
+  "tts": { "mode": "placeholder", "engine": "stub-sine-placeholder",
+           "supportsEmotion": false,
+           "detail": "占位后端 stub-sine-placeholder：确定性正弦占位波形…不是任何 TTS 模型产出的人声；不支持情绪 TTS" } }
+
+// POST /tts/emotion {"text":"[傲娇反驳] 哼，本鱼才没有偷懒！"}
+{ "backend": "stub-sine-placeholder", "degraded": false, "placeholder": true,
+  "placeholderReason": "确定性正弦占位波形：用于打通链路与口型同步，不是任何 TTS 模型产出的人声",
+  "durationMs": 2200, "format": "wav" }
+```
+
+宿主侧用**真实 HTTP**（非 mock fetch）打同一个进程：
+
+```
+probe(): { kind: 'local-audio-worker', available: true, degraded: true,
+           supportsEmotion: false,
+           detail: '… · stub-sine-placeholder · 占位后端…不支持情绪 TTS' }
+synthesize(): { degraded: true, placeholder: true, durationMs: 2200, audioBytes: 105644 }
+```
+
+结论：调用本地后端拿到的是**明确标注为占位的波形**，而不是伪装成真实 TTS 的人声回执。
+
+**证据等级**：`[REAL-DEVICE]` 仅限「本机真实 FastAPI 进程 + 真实 HTTP 往返」；
+不包含 Electron 宿主内播放、不包含人耳听感判定，那两项仍未验收。

@@ -1,15 +1,21 @@
 /**
- * 本地语音引擎的安装状态判定与降级链（item 10 阶段 1/2）。
+ * 本地语音引擎的安装状态判定与档位化降级链（item 10）。
  *
  * 唯一判据：`<enginesRoot>/<engineId>/<version>/installed.json` **存在且能过校验**。
  * - 没有这个文件（例如刚跑过 `fetch-engine.mjs --remove`）= 未安装；
  * - 清单里登记的文件缺失或字节数不符 = 不完整，同样按未安装处理；
  * - 任何"看起来像装了"的猜测都不允许——宁可报未安装走降级，也不许把半包当可用引擎。
  *
- * 降级链按方案 §5.5：本地表现力引擎 → 商业 API → 系统 TTS，每一跳都标 degraded，不静默。
+ * 档位（`VoiceEngineTier`）：
+ * - `commercial_default`（默认）：商业 API 优先；本地引擎即使装了也只作为**可选离线档**列在后面；
+ * - `offline_preferred`：用户主动选离线档，本地引擎排第一。
+ *
+ * 严禁再用「本地装没装」隐式决定优先级：本机实测本地引擎一句话要等 17–43 秒，
+ * 装了不等于该默认走它。档位由用户显式选择（设置里的 `voiceEngineTier`），且随时可切回。
  */
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { OFFLINE_TIER_COST_TEXT, type VoiceEngineTier } from '@workbench/shared-protocol';
 
 export interface EngineInstalledFile {
   path: string;
@@ -117,10 +123,14 @@ function pickLatestVersion(fs: EngineFsPort, engineRoot: string): string | null 
 
 export type VoiceBackendStep = 'local_engine' | 'commercial_api' | 'system_tts';
 
+/** 该档在本次计划中的角色：主选 / 兜底 / 可选（用户没选、但装着且能切过去） */
+export type VoiceFallbackRole = 'primary' | 'fallback' | 'optional';
+
 export interface VoiceFallbackStep {
   step: VoiceBackendStep;
-  /** 相对"本地表现力引擎"的降级程度：本地原样=false，其余=true */
+  /** 相对"本地表现力引擎"的质量降级：本地引擎本身=false，其余=true（语义未变） */
   degraded: boolean;
+  role: VoiceFallbackRole;
   reason: string;
 }
 
@@ -128,30 +138,80 @@ export interface VoiceFallbackPlan {
   /** 首选后端（= plan[0]，便于宿主直接取） */
   primary: VoiceBackendStep;
   plan: VoiceFallbackStep[];
+  /** 本次采用的档位（调用方没传时就是默认档） */
+  tier: VoiceEngineTier;
+  /** 所选档位的首选后端是否真的排在第一；false = 档位没兑现，必须如实告诉用户 */
+  tierHonored: boolean;
 }
 
 /**
- * 生成降级链：顺序固定（本地 → 商业 → 系统），但只保留"当前真的可用"的档位；
- * 本地未安装时第一档就标 degraded 并给出具体原因，便于 UI 如实显示而不是装作本地在工作。
+ * 生成档位化降级链：
+ * - `commercial_default`：商业 API → （装了的话）离线档 → 系统 TTS；
+ * - `offline_preferred`：本地引擎 → 商业 API → 系统 TTS；
+ * - 只保留"当前真的可用"的档位，缺哪档都写清具体原因，便于 UI 如实显示而不是装作本地在工作。
  */
 export function planVoiceFallback(input: {
   local: LocalEngineState;
   commercialAvailable: boolean;
   systemTtsAvailable?: boolean;
+  /** 用户显式选择的档位；缺省 = 默认档（商业 API 优先） */
+  tier?: VoiceEngineTier;
 }): VoiceFallbackPlan {
+  const tier = input.tier ?? 'commercial_default';
+  // 提前取出两个分支各自的稳定字段：闭包里 TS 无法对 `input.local` 做窄化
+  const localInstalled = input.local.installed;
+  const localReason = input.local.installed ? '' : input.local.reason;
+  const localLabel = input.local.installed ? `${input.local.marker.engineId}@${input.local.marker.version}` : '';
+
+  const localStep = (role: VoiceFallbackRole): VoiceFallbackStep => {
+    if (!localInstalled) {
+      return { step: 'local_engine', degraded: false, role, reason: `本地引擎未安装（${localReason}）` };
+    }
+    return {
+      step: 'local_engine',
+      degraded: false,
+      role,
+      reason: `本地引擎 ${localLabel}（离线档，代价：${OFFLINE_TIER_COST_TEXT}）`,
+    };
+  };
+
+  const commercialStep = (role: VoiceFallbackRole): VoiceFallbackStep => {
+    let reason: string;
+    if (role !== 'primary') {
+      reason = localInstalled
+        ? '商业 API 兜底（离线档不可用时才走）'
+        : `本地引擎未安装（${localReason}），走商业 API`;
+    } else if (tier === 'offline_preferred') {
+      reason = `你选择了离线档，但本地引擎未安装（${localReason}），已回落到商业 API`;
+    } else {
+      reason = '商业 API 默认档（item 10 结论：本机自托管不可用，默认走商业 API）';
+    }
+    return { step: 'commercial_api', degraded: true, role, reason };
+  };
+
+  const systemStep = (role: VoiceFallbackRole): VoiceFallbackStep => ({
+    step: 'system_tts',
+    degraded: true,
+    role,
+    reason: '商业 API 也不可用时的系统音色兜底（quality=system_fallback）',
+  });
+
   const plan: VoiceFallbackStep[] = [];
-  if (input.local.installed) {
-    plan.push({ step: 'local_engine', degraded: false, reason: `本地引擎 ${input.local.marker.engineId}@${input.local.marker.version}` });
+  /** 第一跳永远是主选；其后的档位按调用方给的语义（兜底 / 可选）标注 */
+  const roleFor = (roleAfterFirst: VoiceFallbackRole): VoiceFallbackRole =>
+    plan.length === 0 ? 'primary' : roleAfterFirst;
+
+  if (tier === 'offline_preferred') {
+    if (localInstalled) plan.push(localStep('primary'));
+    if (input.commercialAvailable) plan.push(commercialStep(roleFor('fallback')));
+    if (input.systemTtsAvailable ?? true) plan.push(systemStep(roleFor('fallback')));
+  } else {
+    if (input.commercialAvailable) plan.push(commercialStep('primary'));
+    if (localInstalled) plan.push(localStep(roleFor('optional')));
+    if (input.systemTtsAvailable ?? true) plan.push(systemStep(roleFor('fallback')));
   }
-  if (input.commercialAvailable) {
-    plan.push({
-      step: 'commercial_api',
-      degraded: true,
-      reason: input.local.installed ? '本地引擎不可用时的兜底' : `本地引擎未安装（${input.local.reason}），走商业 API`,
-    });
-  }
-  if (input.systemTtsAvailable ?? true) {
-    plan.push({ step: 'system_tts', degraded: true, reason: '商业 API 也不可用时的系统音色兜底（quality=system_fallback）' });
-  }
-  return { primary: plan[0]?.step ?? 'system_tts', plan };
+
+  const primary = plan[0]?.step ?? 'system_tts';
+  const tierPreferred: VoiceBackendStep = tier === 'offline_preferred' ? 'local_engine' : 'commercial_api';
+  return { primary, plan, tier, tierHonored: primary === tierPreferred };
 }

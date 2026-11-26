@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VoiceEngineTierSchema } from './voice';
 
 // ============================================================================
 // 1. 桌宠渲染与音频锁契约 (源自 dsh-pet 复评结论，预留 Live2D 扩展)
@@ -100,10 +101,17 @@ export const TtsSynthesisResultSchema = z.object({
   emotionTag: z.enum(['sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'happy_rice']),
   /** 命中的参考音频路径（门禁断言：情绪 → 正确参考音频） */
   refAudioPath: z.string().min(1),
-  /** 实际使用的推理后端：local-gpt-sovits / cloud-* */
+  /** 实际使用的推理后端：真实模型名（如 cosyvoice2）或占位标识（stub-*） */
   backend: z.string().min(1),
   /** 是否发生了降级（本地失败 → 云端） */
   degraded: z.boolean().default(false),
+  /**
+   * 该音频是否为占位波形（stub）而非真实 TTS 人声。
+   * 历史坑：stub 后端曾自称 `local-gpt-sovits`，调用方无从分辨，等于把正弦波当真 TTS 播放展示。
+   */
+  placeholder: z.boolean().default(false),
+  /** 占位原因（给 UI 与日志用；placeholder=false 时省略） */
+  placeholderReason: z.string().optional(),
   format: z.enum(['wav', 'mp3', 'ogg']),
   durationMs: z.number().min(0),
   audioBase64: z.string().min(1),
@@ -1017,6 +1025,11 @@ export const PetDesktopPrefsSchema = z.object({
   peakOutfitDay: z.string().default('crosspet-deepseek'),
   /** 优惠空闲时段皮肤（默认 DeepSeek 睡衣） */
   peakOutfitOffPeak: z.string().default('crosspet-deepseek-pajamas'),
+  /**
+   * 语音引擎档位（item 10）：默认商业 API；`offline_preferred` = 用户主动选择的离线档。
+   * 语义是「用户选择」，不是「本地引擎装没装」——装了也不自动优先。
+   */
+  voiceEngineTier: VoiceEngineTierSchema.default('commercial_default'),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 

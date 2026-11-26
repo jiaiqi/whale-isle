@@ -24,6 +24,58 @@ export const VoiceBackendQualitySchema = z.enum([
 ]);
 export type VoiceBackendQuality = z.infer<typeof VoiceBackendQualitySchema>;
 
+/**
+ * 语音引擎档位（item 10 实测结论的落地形态）。
+ *
+ * 默认 `commercial_default`：商业 API 优先，本地引擎只作为**用户主动选择**的离线档。
+ * 严禁用「本地引擎装没装」隐式决定优先级——装了就自动优先本地，会让用户莫名等 17–43 秒。
+ */
+export const VoiceEngineTierSchema = z.enum(['commercial_default', 'offline_preferred']);
+export type VoiceEngineTier = z.infer<typeof VoiceEngineTierSchema>;
+
+/**
+ * 离线档的体感代价（item 10 本机实测，Apple Silicon / CosyVoice2-0.5B，n=150）。
+ * 证据：`docs/v2/evidence/TTS-local-engine-benchmark-verification.md`。
+ *
+ * UI 必须直接引用 `OFFLINE_TIER_COST_TEXT`，不许各处自己另写一套数字。
+ */
+export const OFFLINE_TIER_COST = {
+  /** 一句话（约 7 秒音频）从提交到整句出声 */
+  perSentenceMs: { min: 16_000, max: 43_000 },
+  /** 首包（第一段音频到手；对话级交互看这个数） */
+  firstPacketMs: { min: 10_000, max: 35_000 },
+  /** 冷启动首句：进程启动 + 权重加载 + 首个 chunk */
+  coldStartFirstSentenceMs: 30_000,
+} as const;
+
+/** UI 与文档共用的离线档代价文案（原文固定，禁止改写数字） */
+export const OFFLINE_TIER_COST_TEXT = '一句话等 16–43 秒 / 首包 10–35 秒 / 冷启动首句 30 秒';
+
+/**
+ * 本地 Audio Worker 的 `/health` 自报（宿主探针的唯一数据来源）。
+ *
+ * `tts` 缺省 = 旧版 Worker 没上报能力，宿主必须按「不支持情绪」处理，不许猜成 true。
+ */
+export const LocalAudioWorkerHealthSchema = z.object({
+  status: z.string().min(1),
+  service: z.string().optional(),
+  version: z.string().optional(),
+  backend: z.string().optional(),
+  platform: z.string().optional(),
+  tts: z
+    .object({
+      /** real=真实人声推理；placeholder=确定性占位波形，不是 TTS */
+      mode: z.enum(['real', 'placeholder']),
+      /** 实际在跑的引擎标识（占位后端必须自报 stub-*，不许冒名任何真实模型） */
+      engine: z.string().min(1),
+      /** 后端实测：同一文本换情绪是否真的产生不同音频 */
+      supportsEmotion: z.boolean(),
+      detail: z.string().min(1),
+    })
+    .optional(),
+});
+export type LocalAudioWorkerHealth = z.output<typeof LocalAudioWorkerHealthSchema>;
+
 export const VoiceProviderStatusSchema = z.object({
   kind: VoiceProviderKindSchema,
   quality: VoiceBackendQualitySchema,
@@ -80,6 +132,9 @@ export const VoiceSynthesisOutputSchema = z.object({
   lipFrames: z.array(LipSyncFrameSchema).default([]),
   cached: z.boolean().default(false),
   latencyMs: z.number().nonnegative().default(0),
+  /** 该音频是否为占位波形（stub）而非真实 TTS 人声；true 时 UI 必须如实标注，不许当角色音色播放展示 */
+  placeholder: z.boolean().default(false),
+  placeholderReason: z.string().optional(),
 });
 export type VoiceSynthesisOutput = z.output<typeof VoiceSynthesisOutputSchema>;
 
