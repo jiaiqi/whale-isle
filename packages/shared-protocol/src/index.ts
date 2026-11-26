@@ -1043,10 +1043,11 @@ export const PetDesktopPrefsSchema = z.object({
   /**
    * 默认档用哪一家商业 TTS：用户显式选择（item 10 后续）。
    * 选中的那家不可用时由 `resolveCommercialTtsProvider()` 如实报 `honored:false`，不隐式顶替。
-   * 2026-11-27 owner 决定「就用小米 MiMo」：默认改为 `mimo-tts`（内置音色，固定声线零漂移）。
-   * 限免风险仍挂 UI，MiniMax/OpenAI/OpenRouter 降级为备用（不进自动兜底链的硬约束不变）。
+   * 2026-11-27 owner 定稿：声线库默认声线是 07 黏糊·调皮，用它生成的参考音频走 VoiceClone 锁声线，
+   * 所以默认档是 `mimo-tts-voiceclone`（内置音色 `mimo-tts` 降为「换个声线随时切」的备选）。
+   * 限免与无商用条款的风险仍挂在 UI 与证据文档里，见 `docs/v2/VOICE-PERSONA-xiaojing.md`。
    */
-  voiceCommercialProvider: CommercialTtsProviderSchema.default('mimo-tts'),
+  voiceCommercialProvider: CommercialTtsProviderSchema.default('mimo-tts-voiceclone'),
   /**
    * OpenRouter 上用的 TTS 模型 id（可改：OpenRouter 的 TTS 模型很多）。
    * 默认值是本仓库实测过的那个；用户可换成 OpenRouter 上的其它 TTS 模型 id，改错由请求失败如实暴露。

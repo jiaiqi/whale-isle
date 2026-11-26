@@ -10,30 +10,17 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Download, Loader2, Mic2, Pause, Play, Sparkles, Wand2 } from 'lucide-react';
+import { MIMO_DEFAULT_TIMBRE_ID, MIMO_TIMBRE_PRESETS } from '@workbench/shared-protocol';
 
-/** 原创示例描述（不复制任何第三方文案）；第一个就是小鲸的定稿人设 */
-const DESCRIPTION_PRESETS: Array<{ id: string; label: string; text: string }> = [
-  {
-    id: 'xiaojing',
-    label: '小鲸·软萌女仆',
-    text: '一位十六七岁的少女声线，中文普通话，带一点点南方口音的软糯尾音；音色清亮偏甜，中高频有细微气声，不用播音腔；语速中等偏慢，句尾习惯轻轻上扬；性格是黏人又爱逞强的女仆，对主人说话时温柔讨好，被调侃时会立刻拔高音量反驳，但撑不过两秒就泄气。',
-  },
-  {
-    id: 'genki',
-    label: '元气少女',
-    text: '十八岁左右的少女声线，普通话标准，音色明亮结实，中气足；语速偏快，句尾干脆利落，笑起来有明显的上扬；性格开朗外向，像刚运动完还在兴奋地说话。',
-  },
-  {
-    id: 'ojousama',
-    label: '傲娇大小姐',
-    text: '十七八岁的少女声线，普通话略带一点矜持的咬字，音色偏冷偏亮；语速中等，重音落在句首，尾音收得干净；性格高傲挑剔，说话时习惯性带着一点不耐烦，但不会真的凶。',
-  },
-  {
-    id: 'nightradio',
-    label: '深夜电台',
-    text: '二十出头的女性声线，普通话标准，音色偏低偏暖，气声明显；语速慢，停顿多，句尾往下收；性格温和克制，像深夜电台里不想吵醒任何人的主持人。',
-  },
-];
+/**
+ * 音色描述预设 = 契约层的声线库（`MIMO_TIMBRE_PRESETS`）。
+ * owner 2026-11-27 决赛圈勾选的四条（两轮一致），默认是 07 黏糊·调皮；
+ * 这些是 MiMo VoiceDesign 的自然语言音色描述（不是关键词列表），描述原文见契约层与
+ * `docs/v2/VOICE-PERSONA-xiaojing.md`。
+ */
+const DESCRIPTION_PRESETS: Array<{ id: string; label: string; text: string }> =
+  MIMO_TIMBRE_PRESETS.map((preset) => ({ id: preset.id, label: preset.label, text: preset.description }));
+const DEFAULT_TIMBRE = MIMO_TIMBRE_PRESETS.find((preset) => preset.id === MIMO_DEFAULT_TIMBRE_ID) ?? MIMO_TIMBRE_PRESETS[0]!;
 
 const EMOTION_OPTIONS: Array<{ id: string; label: string }> = [
   { id: '', label: '不控制' },
@@ -60,7 +47,7 @@ function formatSeconds(ms: number): string {
 }
 
 export function VoiceDesignLab(): React.JSX.Element {
-  const [description, setDescription] = useState(DESCRIPTION_PRESETS[0]!.text);
+  const [description, setDescription] = useState<string>(DEFAULT_TIMBRE.description);
   const [text, setText] = useState(DEFAULT_TEXT);
   const [emotion, setEmotion] = useState('');
   const [optimizePreview, setOptimizePreview] = useState(false);

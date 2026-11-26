@@ -358,6 +358,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2VoiceCloneSampleInfo: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-clone-sample-info'),
   v2VoiceCloneSampleSave: (filePath: string): Promise<unknown> => ipcRenderer.invoke('v2:voice-clone-sample-save', { filePath }),
   v2VoiceCloneSampleClear: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-clone-sample-clear'),
+  v2VoiceReferenceInfo: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-reference-info'),
+  v2VoiceReferenceGenerate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-reference-generate', input),
   v2ProviderQuota: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota', input),
   v2ProviderQuotaMatrix: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota-matrix', input),
   v2MemoryAdd: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-add', input),

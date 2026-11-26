@@ -294,7 +294,8 @@ async function main(): Promise<void> {
   const limitRaw = arg('limit');
   const limit = limitRaw === undefined ? SENTENCES.length : Math.max(1, Number.parseInt(limitRaw, 10));
   const consistency = Number.parseInt(arg('consistency', '0')!, 10);
-  const outRoot = join(process.cwd(), 'artifacts', 'tts-ab');
+  /** `--out <目录>`：换产物根目录（默认 artifacts/tts-ab）；真实跑的实验组与假服务端产物分开放 */
+  const outRoot = arg('out', join(process.cwd(), 'artifacts', 'tts-ab'))!;
 
   const providers: ProviderKey[] = requested === 'all'
     ? ['minimax', 'openai', 'openrouter', 'mimo-tts', 'mimo-voicedesign', 'mimo-voiceclone']

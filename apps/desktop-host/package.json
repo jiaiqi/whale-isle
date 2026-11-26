@@ -36,6 +36,10 @@
         "to": "pet-packs"
       },
       {
+        "from": "../../assets/voice",
+        "to": "voice"
+      },
+      {
         "from": "../../tools/hooks",
         "to": "hooks"
       },

@@ -8,7 +8,9 @@
 
 ## 0. 结论
 
-- **owner 决定（2026-11-27）：语音主线定为小米 MiMo。** 默认档切到 `mimo-tts`（内置音色，固定声线零漂移）；MiniMax 因账号额度耗尽停用（provider 类与 BYOK 卡保留，可自行填凭据恢复）。`CANDIDATE_TTS_PROVIDERS` 本来就不含 `minimax-tts`（候选只有 openrouter-tts + MiMo 三态），无需改动。
+- **owner 决定（2026-11-27）：语音主线定为小米 MiMo。** 默认档先切到 `mimo-tts`（内置音色），声线定稿后改到
+  **`mimo-tts-voiceclone`**（默认声线 07 的参考音频锁声线）；MiniMax 因账号额度耗尽停用（provider 类与 BYOK 卡保留，可自行填凭据恢复）。`CANDIDATE_TTS_PROVIDERS` 本来就不含 `minimax-tts`（候选只有 openrouter-tts + MiMo 三态），无需改动。
+- **声线定稿（2026-11-27）**：四条声线进声线库、07 为默认；参考音频随包分发（`assets/voice/`），主进程默认用它做 clone 源；回归见 §2.14。
 - **适配器与路由已落地**：`MimoTtsProvider` 三个模型各注册一个实例——`mimo-v2.5-tts`（kind `mimo-tts`，内置 9 音色 + 唱歌前缀）、`mimo-v2.5-tts-voiceclone`、`mimo-v2.5-tts-voicedesign`；另有 `OpenRouterTtsProvider`（kind `openrouter-tts`，`google/gemini-3.8-flash-tts`）作为第四家候选。
 - **候选身份是硬约束**：四家候选都**不进自动兜底链**（`COMMERCIAL_TTS_PROVIDERS` 仍只有 MiniMax / OpenAI）；只有用户显式选中才会走。2026-11-27 owner 决定把**默认档显式设为 `mimo-tts`**（内置音色固定声线），这不是自动兜底，MiniMax / OpenAI 仍留作备用档。
 - **真实 API 已实连**（2026-11-27 01:29–01:47）：`mimo-v2.5-tts`、`mimo-v2.5-tts-voicedesign`、`openrouter-tts` 全部成功合成；`api-key` 与 `Bearer` 两种认证头**都已实测通**（见 §2.4–§2.6）。Key 从 Electron 加密凭据库进程内取得，不落盘、不进日志。
@@ -260,6 +262,44 @@ VoiceClone 的锁定稳定性见 §2.9（已实测）。
 这是「同一档情绪十次像不像同一次」的**客观读数**：像，但不是复制粘贴——情绪标签没有把声学参数钉死。
 听感结论仍留给 owner；本次只测一档（daily）一句话，其它四档与长句未测。
 
+### 2.14 声线定稿与锁定回归（2026-11-27，已实测）
+
+**定稿**：owner 决赛圈两轮一致勾选四条（02 御姐冷·年轻 / **07 黏糊·调皮（默认）** / 08 黏糊·半睡 / 12 憨憨·偏低发呆），
+描述原文见契约层 `MIMO_TIMBRE_PRESETS`，人设文档见 [VOICE-PERSONA-xiaojing.md](../VOICE-PERSONA-xiaojing.md)。
+
+**参考音频**：用 07 的描述现场合成一条干净台词「主人，今天也辛苦啦，我给你倒杯热茶好不好呀。」
+（`mimo-v2.5-tts-voicedesign`，风格提示只加「自然地说，不要播音腔」，不带情绪档）
+→ `assets/voice/xiaojing-07-nianhu-piqi.wav`（24 kHz / 16-bit / 单声道 / 5.6s / 263 KB，自产文本 + MiMo 生成）。
+
+**回归一：clone 锁定**（同一句 ×10，参考音频 = 上面那条随包基准，`--provider mimo-voiceclone --consistency 10`）：
+
+| | 均值 | 最小 | 最大 | 标准差 |
+| --- | --- | --- | --- | --- |
+| **随包基准 07（本次）** | **0.8373** | **0.7723** | 0.8881 | **0.0245** |
+| 对照：自产 `consistency-1.wav` 参考（§2.9） | 0.8342 | 0.7500 | 0.8990 | 0.0430 |
+| 对照：VoiceDesign 同描述 ×10（§2.8） | 0.7124 | 0.4145 | 0.8407 | 0.0862 |
+
+10/10 成功，wall 1442–3592ms。最小 0.7723 高于同音色基线（0.7545）量级，σ 0.0245 也更紧 → **锁定成立**。
+产物 `artifacts/tts-ab/mimo-voiceclone-bundled/mimo-voiceclone/`（余弦用 `tools/scripts/speaker-cosine.py`）。
+**边界照旧**：只证明「对这条参考音频的一致性」；参考音频只有一条、10 次生成、样本小；只听余弦，未做听感盲测；
+MiMo 限免无商用条款。
+
+**回归二：五档情绪 × 同一句 ×3（clone 声线）**：
+
+| 档位 | 时长 s | RMS dBFS | F0 中位 Hz |
+| --- | --- | --- | --- |
+| daily 软萌小仆 | 5.49（σ 0.40） | −19.43（σ 0.23） | 292.4（σ 15.9） |
+| bright 俏皮上扬 | 5.28（σ 0.26） | −18.71（σ 0.30） | 286.2（σ 12.5） |
+| tsundere 傲娇炸毛 | 5.23（σ 0.27） | −18.35（σ 0.43） | 297.1（σ 16.2） |
+| sleepy 慵懒气声 | 5.12（σ 0.45） | −20.03（σ 1.00） | 284.3（σ 8.9） |
+| surprised 惊喜元气 | 5.39（σ 0.72） | −19.98（σ 0.32） | 291.9（σ 11.2） |
+
+**结论（必须照抄这个口径）**：档间跨度（时长 0.37s、RMS 1.68dB、F0 12.8Hz）与每档自身波动
+（时长 σ 0.26–0.72s、RMS σ 0.23–1.00dB、F0 σ 8.9–16.2Hz）**同量级甚至更小**，
+即**客观量上五档情绪在 clone 声线上没拉开**；是否成立只能靠听感判断（留给 owner）。
+这与 §2.5 内置音色上的单次迹象（时长 +41%、F0 216–255Hz）不矛盾：那是不同句子、不同声线的单次对比，不可直接横比。
+产物 `artifacts/tts-ab/mimo-voiceclone-bundled/`（`stability-all.json` 含每条读数）。
+
 ### 2.13 OpenRouter 音色备选池（Gemini 3.8 Flash TTS）
 
 - 官方文档列 **30 个预置音色**：Zephyr、Puck、Charon、Kore、Fenrir、Leda、Orus、Aoede、Callirrhoe、Autonoe、Enceladus、Iapetus、Umbriel、Algieba、Despina、Erinome、Algenib、Rasalgethi、Laomedeia、Achernar、Alnilam、Schedar、Gacrux、Pulcherrima、Achird、Zubenelgenubi、Vindemiatrix、Sadachbia、Sadaltager、Sulafat（另有扩展音色库，需 `client.voices.list()`）。
@@ -275,7 +315,7 @@ VoiceClone 的锁定稳定性见 §2.9（已实测）。
 | --- | --- | --- |
 | VoiceDesign 音色漂移 | ✅ **已实测**（§2.8）：最小 0.4145，不能当固定声线 | 漂移路径已写死为「候选→人工挑→VoiceClone 锁死」 |
 | VoiceClone 克隆一致性 | ✅ **已实测**（§2.9）：均值 0.8342 / 最小 0.7500，能锁住；但对自产参考、样本小、未听感盲测 | 与目标音色的相似度需合法参考音频另测 |
-| 五情绪指令 / 前缀标签 / 内联标签的**稳定性** | ✅ **daily 档已实测**（§2.12，×10）；bright / tsundere / sleepy / surprised 与长句**未实测** | 其余四档同法各跑 ≥10 次 |
+| 五情绪指令 / 前缀标签 / 内联标签的**稳定性** | ✅ **daily 档（内置音色）已实测**（§2.12，×10）；✅ **五档 ×3（clone 声线）已实测**（§2.14，档间客观量没拉开）；内置音色上的其余四档与长句**未实测** | 其余四档同法各跑 ≥10 次 |
 | 唱歌前缀听感 | **未实测** | 跑 `--from-vault --provider mimo-tts`，styleMode=singing 单独实验 |
 | OpenRouter 情绪控制方式 | **未实测（官方无说法）** | 只能单开实验组，不进能力声明 |
 | OpenRouter 一句实际花费 | **未实测**（口径已核对，§2.11） | 按 token 计费，必须拿真实账单实扣 |

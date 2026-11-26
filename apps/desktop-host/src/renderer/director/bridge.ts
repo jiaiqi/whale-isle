@@ -754,6 +754,23 @@ export interface DirectorBridge {
   v2VoiceCloneSampleInfo(): Promise<{ exists: boolean; bytes: number; durationMs: number | null }>;
   v2VoiceCloneSampleSave(filePath: string): Promise<{ exists: boolean; bytes: number; durationMs: number | null }>;
   v2VoiceCloneSampleClear(): Promise<{ exists: boolean; bytes: number; durationMs: number | null }>;
+  /** 用声线库里的音色描述现场生成一条参考音频并落成克隆参考（锁定声线） */
+  v2VoiceReferenceGenerate(input: { description: string; text?: string }): Promise<{
+    exists: boolean;
+    bytes: number;
+    durationMs: number | null;
+    providerKind: string;
+  }>;
+  /** 随包基准参考音频（声线库默认声线 07 黏糊·调皮）：可试听、可设为声线 */
+  v2VoiceReferenceInfo(): Promise<{
+    exists: boolean;
+    bytes: number;
+    durationMs: number | null;
+    timbreId: string;
+    label: string;
+    description: string;
+    source: string;
+  }>;
   v2ProviderQuota(input: {
     providerId: string;
     planType?: 'PAY_AS_YOU_GO' | 'CODING_PLAN' | 'LOCAL_GPU';

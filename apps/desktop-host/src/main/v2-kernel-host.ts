@@ -47,6 +47,9 @@ import {
   StageSceneSpecSchema,
   VoiceProviderKindSchema,
   VoiceSynthesisRequestSchema,
+  MIMO_BUNDLED_REFERENCE_ASSET,
+  MIMO_DEFAULT_TIMBRE_ID,
+  MIMO_TIMBRE_PRESETS,
   PetDesktopPrefsSchema,
   type CharacterCoreSnapshot,
   type DanceRoutineInput,
@@ -239,6 +242,12 @@ const VoiceDesignPreviewSchema = z.object({
   optimizeTextPreview: z.boolean().optional(),
 });
 
+const VoiceReferenceGenerateSchema = z.object({
+  /** 声线库里的音色描述（自然语言段落） */
+  description: z.string().min(1).max(1024),
+  /** 合成参考音频用的台词；默认用角色语气的一句中性台词 */
+  text: z.string().min(1).max(1024).default('主人，今天也辛苦啦，我给你倒杯热茶好不好呀。'),
+});
 const VoiceIdentityPatchSchema = z.object({
   voiceProfileId: z.string().min(1).optional(),
   voiceDescription: z.string().min(1).optional(),
@@ -356,6 +365,24 @@ export async function createV2KernelHost(options: {
     filePath: join(options.userDataDir, 'v2-character-core.json'),
   });
 
+  /**
+   * 声线定稿迁移（owner 2026-11-27）：默认人设描述还是老的「俏皮元气略带傲娇尾音」，
+   * 现在定稿是声线库里的 07 黏糊·调皮。只有「从没被改过」的档案才迁移，
+   * 用户自己在音色设计台改过的描述一律保留（不覆盖用户选择）。
+   */
+  try {
+    const identity = characterCore.profile.voiceIdentity();
+    const timbre = MIMO_TIMBRE_PRESETS.find((item) => item.id === MIMO_DEFAULT_TIMBRE_ID);
+    if (timbre !== undefined && identity.voiceDescription === '俏皮元气略带傲娇尾音的少女蓝鲸声线') {
+      characterCore.profile.updateVoiceIdentity({
+        voiceDescription: timbre.description,
+        preferredProviderId: 'mimo-tts-voiceclone',
+      });
+    }
+  } catch {
+    /* 档案读不出来就保持原样，不阻塞启动 */
+  }
+
   const audioMixer = new AudioMixer({ events: kernel.events });
   /**
    * MiMo TTS 候选接入（2026-11-27，owner 批准作为候选而非默认）：
@@ -398,13 +425,32 @@ export async function createV2KernelHost(options: {
    * 参考音频必须是自产或已获授权的录音；UI 上传只做本地拷贝，不接触任何网络。
    */
   const cloneSamplePath = join(options.userDataDir, 'voice-clone-sample.wav');
+  /**
+   * 随包基准参考音频（owner 2026-11-27 定稿的 07 黏糊·调皮）。
+   * 打包态在 `resources/voice/`，开发态在仓库 `assets/voice/`（与 guide-forager 同款解析方式）。
+   * 这条音频是「自产文本 + MiMo VoiceDesign 生成」：MiMo 限时免费且页面无商用条款 → 仅开发/内部用。
+   */
+  const bundledVoiceDir = (): string =>
+    app.isPackaged
+      ? join(process.resourcesPath, 'voice')
+      : join(dirname(fileURLToPath(import.meta.url)), '../../../../assets/voice');
+  const bundledReferencePath = (): string => join(bundledVoiceDir(), MIMO_BUNDLED_REFERENCE_ASSET);
   const resolveMimoReference = (): MimoTtsReferenceAudio | null => {
     try {
       if (existsSync(cloneSamplePath)) {
         return { bytes: new Uint8Array(readFileSync(cloneSamplePath)) };
       }
     } catch {
-      /* 读不到就继续看环境变量 */
+      /* 读不到就继续往下找 */
+    }
+    // 随包基准（默认声线 07）；用户没上传自己的参考音频时就用这条
+    try {
+      const bundled = bundledReferencePath();
+      if (existsSync(bundled)) {
+        return { bytes: new Uint8Array(readFileSync(bundled)) };
+      }
+    } catch {
+      /* 继续看环境变量 */
     }
     if (mimoVoiceSamplePath === undefined || mimoVoiceSamplePath === '') return null;
     try {
@@ -913,6 +959,76 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:voice-clone-sample-clear', () => {
     if (existsSync(cloneSamplePath)) rmSync(cloneSamplePath);
     return cloneSampleInfo();
+  });
+  /**
+   * 随包基准参考音频的信息（声线库默认声线 07）。UI 用它渲染「小鲸声线」预设：
+   * 可试听（走 clone 档合成）、可设为声线（切默认档 + 写角色 VoiceIdentity）。
+   */
+  ipcMain.handle('v2:voice-reference-info', () => {
+    const path = bundledReferencePath();
+    const preset = MIMO_TIMBRE_PRESETS.find((item) => item.id === MIMO_DEFAULT_TIMBRE_ID);
+    if (!existsSync(path)) {
+      return {
+        exists: false, bytes: 0, durationMs: null,
+        timbreId: MIMO_DEFAULT_TIMBRE_ID,
+        label: preset?.label ?? MIMO_DEFAULT_TIMBRE_ID,
+        description: preset?.description ?? '',
+        source: '随包基准参考音频缺失（开发态 assets/voice/ 与打包态 resources/voice/ 都没找到）',
+      };
+    }
+    try {
+      const bytes = readFileSync(path);
+      const frames = extractWavLipSyncFrames(new Uint8Array(bytes));
+      const last = frames.at(-1);
+      return {
+        exists: true, bytes: bytes.byteLength,
+        durationMs: last === undefined ? null : last.timestampMs + last.durationMs,
+        timbreId: MIMO_DEFAULT_TIMBRE_ID,
+        label: preset?.label ?? MIMO_DEFAULT_TIMBRE_ID,
+        description: preset?.description ?? '',
+        source: '随包基准参考音频（自产文本 + MiMo VoiceDesign 生成；MiMo 限时免费、无商用条款，仅开发/内部用）',
+      };
+    } catch (error) {
+      return {
+        exists: false, bytes: 0, durationMs: null,
+        timbreId: MIMO_DEFAULT_TIMBRE_ID,
+        label: preset?.label ?? MIMO_DEFAULT_TIMBRE_ID,
+        description: preset?.description ?? '',
+        source: `随包基准参考音频读取失败：${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  });
+
+  /**
+   * 声线库「锁定」：用某条音色描述现场合成一条干净的参考音频，落成 userData 里的克隆参考，
+   * 之后默认档切到 clone 档就用这条参考锁声线（VoiceDesign 自身漂移大，不能直接当角色声线）。
+   * 合成失败或没配凭据时如实报错，不返回假音频。
+   */
+  ipcMain.handle('v2:voice-reference-generate', async (_e, rawInput: unknown) => {
+    const parsed = VoiceReferenceGenerateSchema.parse(rawInput);
+    const provider = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: parsed.description,
+      emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
+      emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
+      resolveApiKey: resolveMimoKey,
+    });
+    const identity = characterCore.profile.voiceIdentity();
+    const result = await provider.synthesize(VoiceSynthesisRequestSchema.parse({
+      requestId: randomUUID(),
+      characterId: identity.characterId,
+      voiceRef: voiceRouter.resolveVoiceRef(identity),
+      text: parsed.text,
+    }));
+    if (result.audioBase64 === undefined) {
+      throw new Error('参考音频合成失败：后端没有返回音频');
+    }
+    const bytes = Buffer.from(result.audioBase64, 'base64');
+    if (bytes.byteLength > 20 * 1024 * 1024) {
+      throw new Error('参考音频超过 20MB 上限');
+    }
+    writeFileSync(cloneSamplePath, bytes);
+    return { ...cloneSampleInfo(), providerKind: result.providerKind, durationMs: result.durationMs };
   });
 
   /**

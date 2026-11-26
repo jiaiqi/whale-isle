@@ -26,6 +26,19 @@
 
 - Gemini 3.8 Flash TTS 官方文档列 30 个预置音色（Zephyr…Sulafat）；本仓库实调过 Zephyr（历史 3/3）与 Kore（1 次 200/3625ms/80204B），其余 28 个未逐个验证，当备选池用时先单条试调。端点元数据 `supports_voice_cloning:false`、`supported_parameters:[]`。
 
+### Added（声线定稿：声线库四条 + 07 默认 + 随包参考音频 + VoiceClone 锁声线）
+
+- **声线库**：owner 决赛圈两轮一致勾选四条（02 御姐冷·年轻 / **07 黏糊·调皮（默认）** / 08 黏糊·半睡 / 12 憨憨·偏低发呆），描述权威副本进契约层 `MIMO_TIMBRE_PRESETS`（`packages/shared-protocol/src/voice.ts`），人设文档 `VOICE-PERSONA-xiaojing.md` 同步。
+- **随包参考音频**：`assets/voice/xiaojing-07-nianhu-piqi.wav`（24 kHz/16-bit/单声道/5.6s，自产文本 + MiMo VoiceDesign 生成），台账标 `DEV_ONLY_NON_COMMERCIAL`，打包后落 `resources/voice/`；README 记录来源、许可与复现命令。
+- **默认档改 VoiceClone**：`voiceCommercialProvider` 默认 `mimo-tts-voiceclone`；主进程 clone 源优先级「用户上传 → 随包基准 → 环境变量」；启动时把「从没被改过」的默认人设描述迁移到 07（用户自己改过的一律保留）。
+- **语音中心「声线库」**：每条可「试听」（VoiceDesign 预览）与「锁定为声线」（现场生成参考音频 → 落成克隆参考 → 写角色 VoiceIdentity → 默认档切 clone 档）；新 IPC `v2:voice-reference-info` / `v2:voice-reference-generate`。
+
+### Validated（声线定稿回归 `[REAL-DEVICE]`）
+
+- **clone 锁定**：随包 07 基准参考 ×10，10/10 成功，说话人余弦均值 **0.8373** / 最小 **0.7723** / σ 0.0245（此前自产参考组为 0.8342 / 0.7500 / 0.0430，VoiceDesign 同描述组为 0.7124 / 0.4145 / 0.0862）。只证明「对这条参考音频的一致性」：样本 10 条、只听余弦、未做听感盲测、MiMo 限免无商用条款。
+- **五档情绪 × 同一句 ×3（clone 声线）**：时长 5.12–5.49s、RMS −20.03…−18.35dB、F0 中位 284.3–297.1Hz；档间跨度与每档自身波动同量级 → **客观量上五档没拉开**，听感留给 owner。
+- **边界写死**：MiMo 限时免费、页面无商用条款 → 「MiMo 主线」不等于可以长期当商用默认依赖，商用前须换授权 TTS 并重做参考音频（台账与资产 README 均已标注）。
+
 ### Validated（VoiceClone 锁定一致性 `[REAL-DEVICE]`：管线成立）
 
 - **`--provider mimo-voiceclone --consistency 10 --from-vault`**（参考音频 = VoiceDesign 漂移组人工挑出的自产 `consistency-1.wav`）：10/10 成功，说话人余弦均值 **0.8342** / 最小 **0.7500** / 最大 0.8990 / 标准差 0.0430；对照 VoiceDesign 同描述 ×10（均值 0.7124 / 最小 0.4145 / 标准差 0.0862）与 ZipVoice 同音色基线（均值 0.8563 / 最小 0.7545）。

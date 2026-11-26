@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioLines, KeyRound, Lock, Radio, Sliders, Sparkles, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  MIMO_TIMBRE_PRESETS,
   MIMO_TTS_CANDIDATE_NOTICE,
   OFFLINE_TIER_COST_TEXT,
   type CommercialTtsProvider,
@@ -60,6 +61,10 @@ export function VoiceCenterPanel(props: {
   const [mimoBuiltinVoice, setMimoBuiltinVoice] = useState<string>('mimo_default');
   const [previewingKey, setPreviewingKey] = useState<string | null>(null);
   const [cloneInfo, setCloneInfo] = useState<CloneSampleInfo | null>(null);
+  const [reference, setReference] = useState<{
+    exists: boolean; bytes: number; durationMs: number | null;
+    timbreId: string; label: string; description: string; source: string;
+  } | null>(null);
   const [cloneBusy, setCloneBusy] = useState(false);
   const cloneInputRef = useRef<HTMLInputElement | null>(null);
   /** 凭据掩码（只存掩码，明文只在输入框里停留到保存成功为止） */
@@ -86,6 +91,7 @@ export function VoiceCenterPanel(props: {
 
   useEffect(() => {
     void window.directorBridge.v2VoiceCloneSampleInfo().then(setCloneInfo).catch(() => setCloneInfo(null));
+    void window.directorBridge.v2VoiceReferenceInfo().then(setReference).catch(() => setReference(null));
   }, []);
 
   useEffect(() => {
@@ -247,6 +253,63 @@ export function VoiceCenterPanel(props: {
       toast.error(`保存参考音频失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setCloneBusy(false);
+    }
+  };
+
+  /** 声线库试听：走 VoiceDesign 预览（描述现场合成），听到的是「这条描述长什么样」 */
+  const playTimbrePreview = async (timbre: { id: string; label: string; description: string }): Promise<void> => {
+    setPreviewingKey(`timbre-${timbre.id}`);
+    try {
+      const res = await window.directorBridge.v2VoiceDesignPreview({
+        text: '主人，今天也辛苦啦，我给你倒杯热茶好不好呀。',
+        voiceDescription: timbre.description,
+      });
+      if (res.audioBase64 !== undefined) {
+        const mime = res.format === 'mp3' ? 'audio/mpeg' : res.format === 'ogg' ? 'audio/ogg' : 'audio/wav';
+        void new Audio(`data:${mime};base64,${res.audioBase64}`).play().catch(() => undefined);
+      }
+      toast.success(`${timbre.label} 试听已生成 · ${res.providerKind}`);
+    } catch (err) {
+      toast.error(`${timbre.label} 试听失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPreviewingKey(null);
+    }
+  };
+
+  /**
+   * 声线库「锁定」：用该描述现场合成一条参考音频（VoiceDesign），落成克隆参考，再把默认档切到 clone 档。
+   * 合成失败如实报错，不写半成品参考。
+   */
+  const lockTimbre = async (timbre: { id: string; label: string; description: string }): Promise<void> => {
+    setPreviewingKey(`lock-${timbre.id}`);
+    try {
+      const info = await window.directorBridge.v2VoiceReferenceGenerate({ description: timbre.description });
+      setCloneInfo({ exists: info.exists, bytes: info.bytes, durationMs: info.durationMs });
+      await window.directorBridge.v2VoiceIdentityUpdate({
+        voiceDescription: timbre.description,
+        preferredProviderId: 'mimo-tts-voiceclone',
+      });
+      await window.directorBridge.prefsSet({ voiceCommercialProvider: 'mimo-tts-voiceclone' });
+      toast.success(`已锁定 ${timbre.label}：生成参考音频 ${(info.bytes / 1024).toFixed(0)} KB，默认档切到 VoiceClone`);
+    } catch (err) {
+      toast.error(`锁定 ${timbre.label} 失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPreviewingKey(null);
+    }
+  };
+
+  /** 把声线库预设设为桌宠声线：写角色 VoiceIdentity（描述 + clone 档）+ 切默认档，主进程每次合成重读 */
+  const bindReferenceVoice = async (): Promise<void> => {
+    if (reference === null) return;
+    try {
+      await window.directorBridge.v2VoiceIdentityUpdate({
+        voiceDescription: reference.description,
+        preferredProviderId: 'mimo-tts-voiceclone',
+      });
+      await window.directorBridge.prefsSet({ voiceCommercialProvider: 'mimo-tts-voiceclone' });
+      toast.success(`已设为桌宠声线：${reference.label}（走 VoiceClone，参考音频 ${cloneInfo?.exists === true ? '是你上传的那条' : '是随包基准'}）`);
+    } catch (err) {
+      toast.error(`设为声线失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -432,6 +495,43 @@ export function VoiceCenterPanel(props: {
               {commercialChoice.honored ? '' : `（${commercialChoice.reason}）`}
             </span>
           </div>
+          <section className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-timbre-library>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold">
+              <span>声线库<span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · owner 定稿四条 · 默认 07 黏糊·调皮</span></span>
+              <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                「锁定」会用这条描述现场生成一条参考音频，再走 VoiceClone 锁声线（每次一次 API 调用）
+              </span>
+            </div>
+            <div className="mt-1.5 grid gap-1">
+              {MIMO_TIMBRE_PRESETS.map((timbre) => (
+                <div key={timbre.id} className="flex flex-wrap items-center gap-1.5" data-voice-timbre={timbre.id}>
+                  <span className="text-[10.5px] font-semibold" style={{ color: 'var(--text-2)' }}>{timbre.label}</span>
+                  {timbre.isDefault && <span className="pill pill-blue" style={{ fontSize: 10 }}>默认</span>}
+                  <span className="truncate text-[10px]" style={{ color: 'var(--text-3)' }} title={timbre.description}>{timbre.description}</span>
+                  <button
+                    type="button"
+                    data-voice-timbre-preview={timbre.id}
+                    disabled={previewingKey !== null}
+                    onClick={() => void playTimbrePreview(timbre)}
+                    className="rounded-full px-2 py-0.5 text-[10.5px]"
+                    style={{ color: 'var(--text-3)' }}
+                  >
+                    {previewingKey === `timbre-${timbre.id}` ? '合成中…' : '试听'}
+                  </button>
+                  <button
+                    type="button"
+                    data-voice-timbre-lock={timbre.id}
+                    disabled={previewingKey !== null}
+                    onClick={() => void lockTimbre(timbre)}
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                    style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+                  >
+                    {previewingKey === `lock-${timbre.id}` ? '生成中…' : '锁定为声线'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
           <div className="grid gap-2 md:grid-cols-3">
             <section className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-voice-source="builtin">
               <div className="flex items-center justify-between text-[11px] font-semibold">
@@ -482,9 +582,41 @@ export function VoiceCenterPanel(props: {
                 {cloneInfo === null
                   ? '读取参考音频状态…'
                   : cloneInfo.exists
-                    ? `已保存 ${(cloneInfo.bytes / 1024).toFixed(0)} KB${cloneInfo.durationMs !== null ? ` · ${(cloneInfo.durationMs / 1000).toFixed(1)}s` : ''}`
-                    : '未上传参考音频（只收本地 .wav，RIFF 校验 + 20MB 上限）'}
+                    ? `当前用你上传的参考音频：${(cloneInfo.bytes / 1024).toFixed(0)} KB${cloneInfo.durationMs !== null ? ` · ${(cloneInfo.durationMs / 1000).toFixed(1)}s` : ''}`
+                    : reference?.exists === true
+                      ? `当前用随包基准（小鲸声线）：${(reference.bytes / 1024).toFixed(0)} KB${reference.durationMs !== null ? ` · ${(reference.durationMs / 1000).toFixed(1)}s` : ''}`
+                      : '未上传参考音频（只收本地 .wav，RIFF 校验 + 20MB 上限）'}
               </p>
+              {reference !== null && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1" data-voice-reference-preset>
+                  <span className="text-[10px] font-semibold" style={{ color: 'var(--text-3)' }}>声线库预设</span>
+                  <button
+                    type="button"
+                    data-voice-reference-bind={reference.timbreId}
+                    disabled={reference.exists !== true}
+                    onClick={() => void bindReferenceVoice()}
+                    className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                    style={{
+                      border: `1px solid ${commercial === 'mimo-tts-voiceclone' ? 'var(--blue-line)' : 'var(--stroke)'}`,
+                      background: commercial === 'mimo-tts-voiceclone' ? 'var(--blue-dim)' : 'var(--surface)',
+                      color: commercial === 'mimo-tts-voiceclone' ? 'var(--blue)' : 'var(--text-2)',
+                    }}
+                    title={reference.source}
+                  >
+                    {reference.label}
+                  </button>
+                  <button
+                    type="button"
+                    data-voice-reference-preview
+                    disabled={previewingKey !== null || reference.exists !== true}
+                    onClick={() => void playPreview('reference', '主人，这条就是小鲸以后的声线了，你听习惯了吗？', 'mimo-tts-voiceclone')}
+                    className="rounded-full px-2 py-0.5 text-[10.5px]"
+                    style={{ color: 'var(--text-3)' }}
+                  >
+                    {previewingKey === 'reference' ? '合成中…' : '试听'}
+                  </button>
+                </div>
+              )}
               <div className="mt-1.5 flex flex-wrap gap-1">
                 <input
                   ref={cloneInputRef}
@@ -545,6 +677,8 @@ export function VoiceCenterPanel(props: {
               </div>
               <p className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
                 实测（自产参考音频 ×10）：余弦均值 0.8342、最低 0.7500。样本小、只听余弦、未做听感盲测；限免服务无商用条款。
+                <br />
+                随包基准 = 声线库默认声线 07 黏糊·调皮（自产文本 + MiMo 生成，仅开发/内部用）。
               </p>
             </section>
 

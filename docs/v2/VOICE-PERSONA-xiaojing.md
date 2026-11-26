@@ -4,8 +4,9 @@
 > 没有标注的一律按**未实测**处理，禁止在代码或 UI 里写成能力声明。
 > 关联：`docs/v2/evidence/mimo-tts-candidate-integration.md`、`docs/v2/evidence/tts-provider-ab-test.md`（对拍协议）。
 
-**owner 决定（2026-11-27）：语音主线定为小米 MiMo（默认档 `mimo-tts`）；MiniMax 额度耗尽已停用（provider 与 BYOK 卡保留，可自行填凭据恢复）。**
-音色描述与情绪映射的正文在下一次 owner 选定音色方向前保持不动。
+**owner 决定（2026-11-27）：语音主线定为小米 MiMo（默认档）；MiniMax 额度耗尽已停用（provider 与 BYOK 卡保留，可自行填凭据恢复）。**
+**声线定稿（2026-11-27，决赛圈两轮一致勾选四条）**：默认声线 = **07 黏糊·调皮**，四条全部收进声线库可切换；
+产品路径写死为「VoiceDesign 出参考音频 → VoiceClone 锁声线」，因为 VoiceDesign 自身漂移太大不能直接当声线。
 
 ---
 
@@ -21,33 +22,27 @@
 
 ---
 
-## 2. VoiceDesign 音色描述模板（一段自然语言，直接填进 `WHALE_MIMO_VOICE_DESCRIPTION`）
+## 2. 声线库（owner 2026-11-27 决赛圈定稿，四条两轮一致）
 
-> 用法：整段作为 MiMo VoiceDesign 的 `user` 消息。年龄、性别、口音、音色、语速、性格六要素缺一不可，
-> 顺序无所谓，但**不要写成关键词列表**——官方口径是自然语言描述。
+> 这四条描述的**权威副本在契约层** `packages/shared-protocol/src/voice.ts` 的 `MIMO_TIMBRE_PRESETS`
+> （UI、音色设计台、主进程迁移都读它），本文只做解释与合规说明。改描述要改契约层。
 
-```text
-一位十六七岁的少女声线，中文普通话，带一点点南方口音的软糯尾音；音色清亮偏甜，
-中高频有细微气声，不用播音腔；语速中等偏慢，句尾习惯轻轻上扬；性格是黏人又爱逞强的女仆，
-对主人说话时温柔讨好，被调侃时会立刻拔高音量反驳，但撑不过两秒就泄气。
-```
+| id | 名称 | 描述（直接作为 VoiceDesign 的 `user` 消息） | 定位 |
+| --- | --- | --- | --- |
+| `07-nianhu-piqi` | **07 黏糊·调皮**（默认） | 软糯黏糊但带笑意的女声，撒娇里藏着坏主意，尾音轻轻上翘 | 鲸鱼娘「贱兮兮可爱 + 傲娇嘴硬 + 外冷内软 + 黏人」 |
+| `02-yujie-leng` | 02 御姐冷·年轻 | 二十岁左右的年轻女声，音调中低，语气平静克制，尾音干脆，像不太爱解释的人 | 外冷内软的反差面 |
+| `08-nianhu-banshui` | 08 黏糊·半睡 | 黏糊的迷糊女声，气声多，像半睡半醒时撒娇，字尾含混 | 慵懒/犯困面 |
+| `12-hanhan-difa` | 12 憨憨·偏低发呆 | 偏低的中性软声，呆呆的，语气没什么起伏，像在发呆 | 憨憨面 |
 
-English fallback（同样的六要素，给只吃英文描述的实测对比用；未实测，勿当默认）：
+用法与规则：
 
-```text
-A teenage girl's voice, Mandarin Chinese with a faint southern accent and soft sentence endings;
-bright, sweet timbre with a touch of breathiness, never news-anchor polished; medium-slow pace,
-slight upward lilt at phrase ends; clingy but proud maid — sweet to her master, quick to raise her
-voice when teased, then deflates within two seconds.
-```
-
-填写时注意：
-
-- 描述里**不要**写"大肥鱼"三个字。雷区词只属于对话内容，不属于音色。
-- 描述是长期资产，改它等于换声线；改完必须重跑 `tools/scripts/bench-tts-ab.mts` 的听感对拍并更新证据文档。
-- VoiceClone 模式不需要这段描述，它要的是参考音频（`WHALE_MIMO_VOICE_SAMPLE`）；参考音频同样必须是**自制或已获授权**的录音。
-
----
+- 整段作为 MiMo VoiceDesign 的 `user` 消息；官方口径是**自然语言描述**，不要写成关键词列表。
+- 描述里**不要**写「大肥鱼」三个字。雷区词只属于对话内容，不属于音色。
+- 描述是「配方」不是「声线」：同一段描述连跑 10 次，说话人余弦最小 0.4145（漂移是实的），
+  所以产品路径必须是「描述 → 生成一条参考音频 → VoiceClone 锁死」。
+- 随包参考音频：`assets/voice/xiaojing-07-nianhu-piqi.wav`（自产文本 + MiMo 生成，见 `assets/voice/README.md`）。
+- 换声线的操作路径：语音中心「声线来源 → 声线库」→ 试听（VoiceDesign 预览）→ 锁定为声线
+  （现场生成参考音频并切到 `mimo-tts-voiceclone`）。参考音频必须是**自制或已获授权**的录音。
 
 ## 3. 五情绪映射（与语音中心五档一一对应）
 
@@ -102,9 +97,20 @@ voice when teased, then deflates within two seconds.
 - 推荐路径：**VoiceDesign 出候选 → 人工挑一条 → 用自产音频走 VoiceClone 锁死**；
   参考音频必须是自产或已获授权的录音，不碰他人声音。
 
+声线定稿后的实测（2026-11-27，证据见 [mimo-tts-candidate-integration.md](./evidence/mimo-tts-candidate-integration.md) §2.14）：
+
+- **clone 锁定**：用随包参考音频（07）跑同一句 ×10，10/10 成功；说话人余弦均值 **0.8373** / 最小 **0.7723** / σ 0.0245，
+  比此前自产参考那组（均值 0.8342 / 最小 0.7500 / σ 0.0430）更稳。**同样只证明「对这条参考音频的一致性」**，
+  样本 10 条、只听余弦、未做听感盲测；MiMo 限免无商用条款。
+- **五档情绪 × 同一句 ×3（clone 声线）**：时长 5.12–5.49s、RMS −20.03…−18.35dB、F0 中位 284.3–297.1Hz；
+  档间差距与每档自身波动（时长 σ 0.26–0.72s、RMS σ 0.23–1.00dB、F0 σ 8.9–16.2Hz）**同量级甚至更小**——
+  客观量上五档情绪**没有明显拉开**，是否成立只能靠听感判断。这一条与此前内置音色上的单次迹象
+  （时长 +41%、F0 216–255Hz）不矛盾：那两次是不同句子、不同声线，不能直接比。
+
 仍未实测（不许写成已支持）：
 
-- 情绪稳定性（同指令连跑 ≥10 次的分布）、唱歌听感、VoiceClone 克隆一致性（在跑，用自产 `consistency-1.wav` 当参考音频）。
+- 唱歌听感；内置音色（`mimo-tts`）上的五档情绪分布；clone 声线上五档情绪的主观听感判定；
+  VoiceClone 与「某个真人/目标音色」的相似度（需合法目标参考音频）。
 - MiMo 流式（`pcm16`）**未实现**，`supportsStreaming` 固定 `false`。
 - OpenRouter Gemini 3.8 Flash TTS 的情绪控制方式官方没有说法，一律按"未验证"处理；要试就在 bench 单开实验组。
 - 音高偏移是 mcode 链路的参数，**不能**直接套到 MiMo / OpenRouter 上：它们的 API 没有 pitch 字段。
@@ -114,6 +120,8 @@ voice when teased, then deflates within two seconds.
 
 ## 5. 维护约定
 
-- 改音色描述、改风格指令、改标签：三处同步——本文、`packages/voice-runtime/src/providers.ts` 的两个常量、
-  `docs/v2/evidence/mimo-tts-candidate-integration.md` 的实测记录（如果有新实测）。
+- 改音色描述（声线库条目）：权威副本在契约层 `MIMO_TIMBRE_PRESETS`，本文与证据文档同步；
+  改完要重跑参考音频生成 + clone 锁定 ×10，把新的余弦写回证据文档。
+- 改风格指令、改标签：两处同步——本文 §3 的表、`packages/voice-runtime/src/providers.ts` 的两个常量
+  （`MIMO_EMOTION_STYLE_HINTS` / `MIMO_EMOTION_STYLE_TAGS`），并更新 `docs/v2/evidence/mimo-tts-candidate-integration.md` 的实测记录（如果有新实测）。
 - 任何"听起来更好"的结论都必须附 bench 产物路径与日期；没有产物的听感结论不进文档。
