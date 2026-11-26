@@ -16,7 +16,7 @@
  *   回退 steam —— `open steam://rungameid/413150`，依赖 Steam 的 StardewValley 启动脚本指向 SMAPI。
  */
 import { execFile as nodeExecFile, spawn as nodeSpawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir as osHomedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -28,7 +28,9 @@ import {
   type StardewLaunchStatus,
   type StardewLaunchStrategy,
 } from '@workbench/shared-protocol';
-import { gameExecutableDir, guessGameRootDirs, guessModsDirs, guessSmapiBinaries } from '@workbench/stardew-mods';
+import {
+  gameExecutableDir, guessGameRootDirs, guessModsDirs, guessSmapiBinaries, isolateDataEnv,
+} from '@workbench/stardew-mods';
 import { probeGameHealth } from './game-health';
 
 export const STARDEW_STEAM_APP_ID = '413150';
@@ -57,6 +59,8 @@ export interface StardewLauncherDeps {
   processRunning?: () => Promise<boolean>;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** 创建隔离数据目录（默认递归 mkdir）；单测注入计数替身 */
+  ensureDir?: (path: string) => void;
 }
 
 function defaultProbe(endpoint: string, timeoutMs: number): Promise<LaunchProbeResult> {
@@ -223,7 +227,7 @@ export interface StardewLauncher {
 }
 
 class DefaultStardewLauncher implements StardewLauncher {
-  private readonly deps: Required<Pick<StardewLauncherDeps, 'platform' | 'homedir' | 'exists' | 'readFile' | 'spawnImpl' | 'execFileImpl' | 'fetchImpl' | 'probe' | 'sleep' | 'now'>> & {
+  private readonly deps: Required<Pick<StardewLauncherDeps, 'platform' | 'homedir' | 'exists' | 'readFile' | 'spawnImpl' | 'execFileImpl' | 'fetchImpl' | 'probe' | 'sleep' | 'now' | 'ensureDir'>> & {
     processRunning: () => Promise<boolean>;
   };
   private statusValue: StardewLaunchStatus = baseStatus();
@@ -243,6 +247,7 @@ class DefaultStardewLauncher implements StardewLauncher {
       probe: deps.probe ?? defaultProbe,
       sleep: deps.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms))),
       now: deps.now ?? Date.now,
+      ensureDir: deps.ensureDir ?? ((path: string) => { mkdirSync(path, { recursive: true }); }),
       processRunning: deps.processRunning ?? (() => this.defaultProcessRunning()),
     };
   }
@@ -271,7 +276,19 @@ class DefaultStardewLauncher implements StardewLauncher {
     }
 
     const parsed = StardewLaunchOptionsSchema.safeParse(options);
-    const opts = parsed.success ? parsed.data : {};
+    if (!parsed.success) {
+      // 参数不合法必须如实报错：曾出现「isolateDataDir 写成相对路径」被静默丢弃、
+      // 结果用 owner 存档正常启动的情况——那等于隔离悄悄失效。
+      const first = parsed.error.issues[0];
+      const where = first?.path.join('.') ?? 'options';
+      this.patch({
+        state: 'failed',
+        message: `启动参数不合法（${where}）：${first?.message ?? '未知错误'}`,
+        hint: '隔离实例请传绝对路径的 isolateDataDir，并确认 strategy 不是 steam。',
+      });
+      return this.status();
+    }
+    const opts = parsed.data;
     const install = detectStardewInstall(this.deps);
     const mcpPort = opts.port ?? resolveBwfPort(install.modsDir, this.deps);
     const timeoutMs = opts.timeoutMs ?? DEFAULT_LAUNCH_TIMEOUT_MS;
@@ -290,6 +307,26 @@ class DefaultStardewLauncher implements StardewLauncher {
       autoLoadSave,
       message: '正在探测安装…',
     };
+
+    // V2-P2-09B：联机隔离实例——只注入 XDG_CONFIG_HOME/XDG_DATA_HOME，绝不动 HOME（否则影响 Steam 与许可）。
+    const isolateDataDir = opts.isolateDataDir ?? null;
+    const isolateEnv = isolateDataDir === null ? null : isolateDataEnv(isolateDataDir);
+    if (isolateDataDir !== null && isolateEnv === null) {
+      this.patch({
+        state: 'failed',
+        message: `隔离数据目录必须是绝对路径：${isolateDataDir}`,
+        hint: '相对路径会被 .NET 静默忽略并回退到 owner 存档目录，宿主不会在这种情况下启动游戏。',
+      });
+      return this.status();
+    }
+    if (isolateDataDir !== null && strategy === 'steam') {
+      this.patch({
+        state: 'failed',
+        message: 'Steam 启动策略无法携带隔离环境变量，已拒绝启动以免共用 owner 存档',
+        hint: "请把 strategy 改为 'smapi'（或 'auto'），或在关闭隔离后再用 Steam 启动。",
+      });
+      return this.status();
+    }
 
     if (!install.gameInstalled) {
       this.patch({
@@ -328,12 +365,15 @@ class DefaultStardewLauncher implements StardewLauncher {
     }
 
     // ② 启动：auto = 先 SMAPI，失败回退 Steam。
-    const attempts: StardewLaunchStrategy[] = strategy === 'auto'
-      ? ['smapi', 'steam']
-      : [strategy];
+    // 隔离实例只允许 smapi：Steam 回退不携带 env，会静默共用 owner 存档。
+    const attempts: StardewLaunchStrategy[] = isolateDataDir !== null
+      ? ['smapi']
+      : strategy === 'auto'
+        ? ['smapi', 'steam']
+        : [strategy];
     let lastError = '';
     for (const attempt of attempts) {
-      const spawned = await this.spawnStrategy(attempt, install);
+      const spawned = await this.spawnStrategy(attempt, install, isolateEnv);
       if (spawned.ok) {
         this.patch({
           state: 'launching',
@@ -380,12 +420,27 @@ class DefaultStardewLauncher implements StardewLauncher {
   private async spawnStrategy(
     strategy: StardewLaunchStrategy,
     install: StardewInstallInfo,
+    isolateEnv: { XDG_CONFIG_HOME: string; XDG_DATA_HOME: string } | null = null,
   ): Promise<{ ok: boolean; pid?: number; error?: string }> {
     if (strategy === 'smapi') {
       if (!install.smapiInstalled) return { ok: false, error: 'SMAPI 可执行文件不存在' };
+      if (isolateEnv !== null) {
+        // 先把隔离目录建出来：.NET 不会替我们创建 XDG_CONFIG_HOME
+        try {
+          this.deps.ensureDir(isolateEnv.XDG_CONFIG_HOME);
+          this.deps.ensureDir(isolateEnv.XDG_DATA_HOME);
+        } catch (err) {
+          return { ok: false, error: `无法创建隔离数据目录：${err instanceof Error ? err.message : String(err)}` };
+        }
+      }
       return this.spawnDetached(install.smapiBinary, [], {
         cwd: install.executableDir,
-        env: { ...process.env, SMAPI_NO_TERMINAL: 'true', SMAPI_USE_CURRENT_SHELL: 'true' },
+        env: {
+          ...process.env,
+          SMAPI_NO_TERMINAL: 'true',
+          SMAPI_USE_CURRENT_SHELL: 'true',
+          ...(isolateEnv ?? {}),
+        },
       });
     }
     if (this.deps.platform === 'darwin') {

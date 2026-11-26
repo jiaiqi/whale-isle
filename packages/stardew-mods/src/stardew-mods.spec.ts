@@ -9,6 +9,8 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   errorMessage,
+  isAbsoluteDataDir,
+  isolateDataEnv,
   guessModsDirs,
   installModFromDirectory,
   isSafeModFolderName,
@@ -517,5 +519,24 @@ describe('guessModsDirs / 目录名工具', () => {
   it('errorMessage 把非 Error 值转成字符串', () => {
     expect(errorMessage('boom')).toBe('boom');
     expect(errorMessage(new Error('bad'))).toBe('bad');
+  });
+});
+
+describe('V2-P2-09B 联机隔离实例的 XDG 环境（纯函数）', () => {
+  it('绝对路径生成 xdg-config/xdg-data，且不碰 HOME', () => {
+    const env = isolateDataEnv('/Users/tester/whale/coop/agent-1/stardew-data');
+    expect(env).toEqual({
+      XDG_CONFIG_HOME: join('/Users/tester/whale/coop/agent-1/stardew-data', 'xdg-config'),
+      XDG_DATA_HOME: join('/Users/tester/whale/coop/agent-1/stardew-data', 'xdg-data'),
+    });
+    expect(Object.keys(env ?? {})).not.toContain('HOME');
+  });
+
+  it('尾部斜杠被裁掉；Windows 盘符绝对路径也算绝对', () => {
+    expect(isAbsoluteDataDir('/tmp/iso/')).toBe(true);
+    expect(isAbsoluteDataDir('C:\\iso')).toBe(true);
+    expect(isAbsoluteDataDir('relative/dir')).toBe(false);
+    expect(isolateDataEnv('relative/dir')).toBeNull();
+    expect(isolateDataEnv('/')).toBeNull();
   });
 });

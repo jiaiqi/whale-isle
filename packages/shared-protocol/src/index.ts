@@ -890,8 +890,33 @@ export const StardewLaunchOptionsSchema = z.object({
   autoLoadSave: z.boolean().optional(),
   /** auto=smapi 失败后回退 steam；smapi=只直接 spawn；steam=只走 Steam */
   strategy: z.enum(['auto', 'smapi', 'steam']).optional(),
+  /**
+   * 联机隔离实例的数据目录（**必须是绝对路径**）。
+   *
+   * 给出时宿主给游戏子进程注入 `XDG_CONFIG_HOME=<dir>/xdg-config` 与
+   * `XDG_DATA_HOME=<dir>/xdg-data`：游戏的 `Saves`、`startup_preferences`、`default_options`
+   * 与 SMAPI 的 `mod-data` 全部落在隔离目录，**不触碰 owner 的 `~/.config/StardewValley`**。
+   *
+   * 为什么是绝对路径：macOS 的 .NET 运行时只在 `XDG_CONFIG_HOME` 以 `/` 开头时采纳，
+   * 否则静默回退 `$HOME/.config`（隔离会失效却不报错）。
+   *
+   * 为什么不能配 `strategy='steam'`：`open steam://…` 无法携带环境变量，
+   * 用 Steam 启动等于共用 owner 存档，宿主必须如实拒绝而不是静默放行。
+   */
+  isolateDataDir: z.string().min(1).regex(/^(\/|[A-Za-z]:[\\/])/u, 'isolateDataDir 必须是绝对路径').optional(),
 });
 export type StardewLaunchOptions = z.infer<typeof StardewLaunchOptionsSchema>;
+
+/** 分屏/联机实例与游戏内身体的绑定（`V2-P2-09A`；`screenId` 对应 SMAPI `Context.ScreenId`） */
+export const StardewScreenBindingSchema = z.object({
+  /** 分屏屏号：0 为主屏；单客户端联机时恒为 0 */
+  screenId: z.number().int().nonnegative(),
+  /** 游戏内唯一多人 ID（Farmer.UniqueMultiplayerID，十进制字符串，避免 JS number 精度丢失） */
+  uniqueMultiplayerID: z.string().regex(/^[0-9]+$/u),
+  /** 该屏身份：房主或农场工人 */
+  role: z.enum(['host', 'farmhand']),
+});
+export type StardewScreenBinding = z.infer<typeof StardewScreenBindingSchema>;
 
 // ───────────────────────── 记忆图谱视图（T-M6-07 UI v4 记忆页） ─────────────────────────
 /** 记忆节点视图（渲染层/Dexie 只读镜像；正文已消毒） */

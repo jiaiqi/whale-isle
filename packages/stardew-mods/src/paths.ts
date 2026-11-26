@@ -84,3 +84,26 @@ export function sanitizeModFolderName(raw: string): string {
   const cleaned = raw.replace(ILLEGAL_FOLDER_CHARS, '_').replace(/^[. ]+|[. ]+$/g, '');
   return cleaned === '' ? 'mod' : cleaned;
 }
+
+/**
+ * 联机隔离实例的 XDG 环境变量（`V2-P2-09B`）。
+ *
+ * 依据（本机 `System.Private.CoreLib.dll` 反编译）：macOS/Linux 上 .NET 的
+ * `SpecialFolder.ApplicationData` 等于 `XDG_CONFIG_HOME`（**必须是绝对路径**），
+ * 否则回退 `$HOME/.config`；`LocalApplicationData` 同理走 `XDG_DATA_HOME`。
+ * 因此只改这两个变量就能把存档/设置/SMAPI mod-data 搬进隔离目录，而**不动 `HOME`**——
+ * 不动 HOME 才不会影响 Steam 客户端与游戏许可校验。
+ *
+ * 非绝对路径返回 null：调用方必须如实拒绝（否则 .NET 会静默回退到 owner 的存档目录）。
+ */
+export function isolateDataEnv(isolateDataDir: string): { XDG_CONFIG_HOME: string; XDG_DATA_HOME: string } | null {
+  if (!isAbsoluteDataDir(isolateDataDir)) return null;
+  const root = isolateDataDir.replace(/[\\/]+$/u, '');
+  if (root === '') return null;
+  return { XDG_CONFIG_HOME: join(root, 'xdg-config'), XDG_DATA_HOME: join(root, 'xdg-data') };
+}
+
+/** 绝对路径判定（POSIX `/…` 或 Windows `C:\…` / `C:/…`） */
+export function isAbsoluteDataDir(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(path);
+}

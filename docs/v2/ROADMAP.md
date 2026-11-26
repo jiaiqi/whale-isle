@@ -131,9 +131,9 @@
 - **`V2-P2-07`（`DONE`）：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚**（`packages/shared-protocol/src/media` 十态仓库/音画质检/清源契约、`AssetRegistryV2` 不可变快照 + SHA-256 防篡改 + 一键回滚 + `CC BY-NC-SA 4.0` 商用/直播强拦截、原创三主题舞台背景与 5 档无削波 WAV 音效合成及 9 路 V2 IPC 完成，`verify:gate` 7/7 + 3 专项单测 + Electron 45 E2E 全绿，详见 [P2-asset-registry-stage-sound-verification.md](./evidence/P2-asset-registry-stage-sound-verification.md)）
 - **`V2-P2-08`（`IMPLEMENTED_UNVERIFIED`）：真实星露谷人机联机协作（`CoopRuntime` v1）**（`packages/shared-protocol/src/coop` 契约、`CoopRuntimeV1` 任务板/防误卖资源预留/成员独立 `GameCharacterControlLease`/断线宽限与超时释放锁防死锁、`evaluateCoopModsCompatibility` + `@workbench/stardew-mods` 本机实盘兼容预检及 8 路 V2 IPC 完成，`verify:gate` 7/7 + Electron 45 E2E 全绿，详见 [P2-coop-runtime-v1-verification.md](./evidence/P2-coop-runtime-v1-verification.md)；双端星露谷客户端真机联机实玩待 `[REAL-DEVICE]`）
 - **`V2-P2-09`（`NEXT`）：星露谷 farmhand 联机 AI 控制与实例隔离**（勘察与方案见 [P2-09-farmhand-split-screen-audit.md](./evidence/P2-09-farmhand-split-screen-audit.md)：farmhand 在同机分屏下**有条件可行**——游戏侧支持多 `Game1` 实例与 `Context.ScreenId`，但现版 BWF 是进程级单例、零分屏感知，直接跑会控制错人；隔离推荐 spawn 注入绝对路径 `XDG_CONFIG_HOME`，不动 `HOME`）。拆为 A–F 六子单：
-  - `V2-P2-09A`（`NEXT`）契约：`StardewLaunchOptionsSchema` 增 `profileDir`/`xdgConfigHome`，新增 `StardewScreenBindingSchema`；
-  - `V2-P2-09B`（`PENDING`）隔离启动：三个启动器注入 `XDG_CONFIG_HOME`，Steam 回退显式报「不支持隔离」；
-  - `V2-P2-09C`（`PENDING`）宿主联机身份绑定：host/farmhand 双租约互不抢占；
+  - `V2-P2-09A`（`IMPLEMENTED_UNVERIFIED`）契约：`StardewLaunchOptionsSchema` 增 `isolateDataDir`（绝对路径强校验），新增 `StardewScreenBindingSchema`；
+  - `V2-P2-09B`（`IMPLEMENTED_UNVERIFIED`）隔离启动：启动器与联机队友实例注入 `XDG_CONFIG_HOME`/`XDG_DATA_HOME`（不动 `HOME`），Steam 策略与相对路径显式拒绝；单测 74 例全绿，真机「owner 存档零写入」待验；
+  - `V2-P2-09C`（`NEXT`）宿主联机身份绑定：host/farmhand 双租约互不抢占；
   - `V2-P2-09D`（`PENDING`）BWF 分屏感知补丁：按 `Context.ScreenId` 路由动作；
   - `V2-P2-09E`（`PENDING`）按屏「玩家一动即接管」与 `ABORTED_BY_HUMAN_TAKEOVER` 回执；
   - `V2-P2-09F`（`PENDING`）分屏 farmhand 沙盒剧本与回归。

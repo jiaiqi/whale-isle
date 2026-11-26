@@ -4,10 +4,10 @@
  * 只做「探测 → 隔离目录 → 参数数组 spawn → 如实回报」，不拼 shell 字符串；
  * 端点数据由 index 注入（CoopHost 是唯一事实源），本模块不持有游戏状态。
  */
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ipcMain } from 'electron';
-import { guessModsDirs } from '@workbench/stardew-mods';
+import { guessModsDirs, isolateDataEnv } from '@workbench/stardew-mods';
 import {
   detectLaunchStatus,
   launchDstCluster,
@@ -157,9 +157,34 @@ export function createCoopLaunchHost(options: {
         }
         const status = (await detect()).find((item) => item.gameId === 'stardew');
         if (status?.executable == null) return { ok: false, error: '未找到 StardewModdingAPI' };
-        const child = spawnGameProcess(status.executable, ['--mods-path', prepared.profileModsDir]);
+        // V2-P2-09B：联机实例必须隔离存档与设置，否则第二个实例会与 owner 共用
+        // `~/.config/StardewValley`（含 owner 的两个存档）。只注入 XDG_*，不动 HOME。
+        const isolateDataDir = join(profilesRoot, agentId, 'stardew-data');
+        const isolateEnv = isolateDataEnv(isolateDataDir);
+        if (isolateEnv === null) {
+          return { ok: false, error: `隔离数据目录不是绝对路径：${isolateDataDir}` };
+        }
+        try {
+          mkdirSync(isolateEnv.XDG_CONFIG_HOME, { recursive: true });
+          mkdirSync(isolateEnv.XDG_DATA_HOME, { recursive: true });
+        } catch (error) {
+          return { ok: false, error: `无法创建隔离数据目录：${error instanceof Error ? error.message : String(error)}` };
+        }
+        const child = spawnGameProcess(
+          status.executable,
+          ['--mods-path', prepared.profileModsDir],
+          undefined,
+          undefined,
+          { ...process.env, ...isolateEnv },
+        );
         child.unref();
-        return { ok: true, pid: child.pid, profileModsDir: prepared.profileModsDir, port };
+        return {
+          ok: true,
+          pid: child.pid,
+          profileModsDir: prepared.profileModsDir,
+          isolateDataDir,
+          port,
+        };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }

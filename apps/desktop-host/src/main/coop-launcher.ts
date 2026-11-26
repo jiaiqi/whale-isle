@@ -121,8 +121,20 @@ export async function detectLaunchStatus(platform: NodeJS.Platform, homedir: str
   ];
 }
 
-export function spawnGameProcess(executable: string, args: string[], cwd?: string, spawnImpl: typeof spawn = spawn): ChildProcess {
-  return spawnImpl(executable, args, { cwd, stdio: 'ignore', detached: true });
+export function spawnGameProcess(
+  executable: string,
+  args: string[],
+  cwd?: string,
+  spawnImpl: typeof spawn = spawn,
+  env?: NodeJS.ProcessEnv,
+): ChildProcess {
+  return spawnImpl(executable, args, {
+    cwd,
+    stdio: 'ignore',
+    detached: true,
+    // V2-P2-09B：联机隔离实例经 env 注入 XDG_CONFIG_HOME/XDG_DATA_HOME；不给就沿用父进程环境
+    ...(env === undefined ? {} : { env }),
+  });
 }
 
 // ───────────────────────── 泰拉瑞亚（T-M6-47） ─────────────────────────

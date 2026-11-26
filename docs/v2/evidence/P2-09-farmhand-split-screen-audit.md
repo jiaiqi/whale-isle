@@ -120,8 +120,62 @@
 4. `Farmer.controller` 在分屏农场工人身上的确切赋值时机。
 5. `mock-harness` 现有 `stardew-simulator` 是否足以表达「双屏」语义（需在 F 里评估）。
 
+## 3.5 二次核实补充（官方 Wiki + 反编译交叉验证）
+
+| 事项 | 结论 | 依据 |
+| --- | --- | --- |
+| 分屏第二玩家能否用键盘 | **不能**。加入分屏只检测手柄 Start 键（`GamePad.GetState(playerIndex).IsButtonDown(Buttons.Start)`，遍历 `PlayerIndex.One..Four`），非第一实例还会强制 `gamepadMode = ForceOn` | 官方 Wiki「Connect a controller … the keyboard on PC is always reserved for the first player」+ `GameRunner.cs` 反编译 |
+| 分屏对 Mod 的语义 | 每个 Mod 跑在每一屏上；4 个本地玩家时 `UpdateTicked` 每 tick 触发 4 次，官方建议用 `PerScreen<T>` / `ScreenId` 区分 | 官方 Wiki「Modding:Modder Guide/APIs/Multiplayer」 |
+| `Farmer.controller` 是什么 | **`PathFindController`（寻路/AI 移动控制器）**，不是手柄控制器；输入由 `Game1.instancePlayerOneIndex` 与每实例的 `Game1.input`/`Game1.options` 决定 | `Character.cs` / `Game1.cs` 反编译 |
+| `Game1.player` setter | 1.6.9 起为 `internal`，官方不建议替换玩家对象；BWF 改的是 `Player.Position`/`faceDirection`/`CanMove` 等字段**不是**替换对象，因此不受影响 | 官方 Wiki「Migrate to Stardew Valley 1.6.9」 |
+| 存档路径常量 | `Program.GetAppDataFolder()`（`SpecialFolder.ApplicationData` + `StardewValley`）、`GetSavesFolder()`、`StartupPreferences`、`DefaultOptions`；`Game1.savePathOverride` 只是「按完整路径读档」的内部字段，**不是用户设置** | 反编译 1.6.3 / 1.6.15 |
+| 跨进程控制另一个玩家 | **没有受支持的路径**：每个客户端只处理自己 `IsLocalPlayer` 的输入；要让房主侧 AI 稳定驱动客机角色，必须在客机进程也装 Mod + `Helper.Multiplayer.SendMessage` 消息协议。**不要设计「房主越权操控客机 farmer」** | 官方 Wiki「Game Fundamentals / Multiplayer API」 |
+| Steam Cloud | 同步的是 `Saves` 目录（本机 `~/.config/StardewValley/Saves/steam_autocloud.vdf` + `remotecache.vdf` 键 `StardewValley/Saves/...`）；XDG 隔离后云同步路径与实际写入路径不一致，预期不影响隔离实例（未实测） | Steamworks Auto-Cloud 文档 + 本机实测 |
+
+结论不变：**同机分屏由「同一个模组按屏分派」驱动；独立客机进程由「客机进程内的模组 + 双端消息协议」驱动。**
+
 ## 5. 本单不改的东西
 
 - 不改 owner 的 `~/.config/StardewValley`（含两个存档）、不改 Steam 配置、不改 OBS 配置。
 - 不启动游戏、不改 BWF 上游克隆（补丁只以 patch 文件形式进本仓）。
 - 不在本单宣称「farmhand 已可由 AI 控制」——现版本会控制错人。
+
+---
+
+## 6. 已实现部分：`V2-P2-09A` 契约 + `V2-P2-09B` 隔离启动（2026-11-26）
+
+### 6.1 改动（5 个业务源码文件 + 3 个测试）
+
+| 文件 | 改动 |
+| --- | --- |
+| `packages/shared-protocol/src/index.ts` | `StardewLaunchOptionsSchema` 增 `isolateDataDir`（**必须绝对路径**，正则同时接受 POSIX 与盘符形式）；新增 `StardewScreenBindingSchema { screenId, uniqueMultiplayerID, role }` |
+| `packages/stardew-mods/src/paths.ts` | 新增纯函数 `isolateDataEnv(dir)`（返回 `XDG_CONFIG_HOME`/`XDG_DATA_HOME`，非绝对路径返回 `null`）与 `isAbsoluteDataDir()` |
+| `apps/desktop-host/src/main/stardew-launcher.ts` | 参数不合法不再静默丢弃而是 `failed` 如实报错；`isolateDataDir` 相对路径 → 拒绝启动；`strategy='steam'` + 隔离 → 拒绝（Steam 无法携带 env）；隔离下 `auto` 只尝试 `smapi`；spawn 前 `mkdir` 隔离目录并注入两个 XDG 变量（**不动 `HOME`**） |
+| `apps/desktop-host/src/main/coop-launcher.ts` | `spawnGameProcess` 增可选 `env` 形参（保持既有 4 参调用不变） |
+| `apps/desktop-host/src/main/coop-launch-host.ts` | 星露谷队友实例默认隔离：`<profilesRoot>/<agentId>/stardew-data`，创建目录并注入 XDG，返回值带 `isolateDataDir` |
+
+### 6.2 为什么这样改（取舍）
+
+- **只注入 `XDG_*`、不动 `HOME`**：.NET 的 `ApplicationData` 在 Unix 上就是 `$XDG_CONFIG_HOME`（须绝对路径）否则 `$HOME/.config`；动 `HOME` 会让 Steam/Steamworks 找不到 `~/Library/Application Support/Steam`，风险远大于收益。
+- **参数不合法要显式失败**：单测里真的复现了「相对路径被 Zod 拒 → 整个 options 被当成 `{}` → 用 owner 存档正常启动」的静默失效，所以把 `safeParse` 失败改成 `failed` 并报出字段名。
+- **隔离下禁止 Steam 回退**：`open steam://…` 无法携带 env，回退等于共用 owner 存档。
+
+### 6.3 验证（`[SIMULATION]`/单测，不是真机）
+
+| 用例 | 结果 |
+| --- | --- |
+| 相对路径 `isolateDataDir` → `failed` 且不 spawn（消息含 `isolateDataDir`） | PASS |
+| 隔离 + `strategy:'steam'` → `failed` 且不 spawn | PASS |
+| `smapi` 启动注入 `XDG_CONFIG_HOME=<dir>/xdg-config`、`XDG_DATA_HOME=<dir>/xdg-data`，`HOME` 保持父进程值，目录被创建 | PASS |
+| 隔离 + `auto` 且 SMAPI 失败 → 只尝试过 SMAPI，不回退 Steam | PASS |
+| `spawnGameProcess` 传 env 原样交给子进程；不传时 `env` 为 `undefined` | PASS |
+| `isolateDataEnv` 尾部斜杠裁剪、Windows 盘符、相对路径/`/` 返回 `null` | PASS |
+| `stardew-launcher.spec.ts` 全量 | **16/16 PASS** |
+| `coop-launcher.spec.ts` + `stardew-mods.spec.ts` | **58/58 PASS** |
+| `pnpm typecheck` / `pnpm lint:deps` | 零错误 / 零违规 |
+
+### 6.4 尚未验证（不得当成已完成）
+
+1. **真机隔离生效**：未启动游戏；「隔离目录真的接住了 `Saves`/`startup_preferences`」需要跑一次并核对 owner `~/.config/StardewValley` 的 mtime 不变（`[REAL-DEVICE]`）。
+2. **Steam Cloud 在隔离实例下的行为**：未实测。
+3. **C/D/E/F 未开工**：宿主身份绑定、BWF 分屏路由补丁、按屏接管、沙盒剧本都还没做，farmhand 仍不能由 AI 安全控制。

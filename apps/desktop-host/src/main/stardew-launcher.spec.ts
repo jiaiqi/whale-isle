@@ -51,6 +51,30 @@ function fakeSpawn(behaviour: (command: string) => 'ok' | 'error') {
   return { impl: impl as NonNullable<StardewLauncherDeps['spawnImpl']>, calls };
 }
 
+
+/** 捕获 spawn options.env 的替身（隔离环境断言用） */
+function envCapturingSpawn(behaviour: (command: string) => 'ok' | 'error' = () => 'ok') {
+  const calls: Array<{ command: string; args: string[]; env?: NodeJS.ProcessEnv }> = [];
+  const impl = ((command: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
+    calls.push({ command, args, ...(options?.env === undefined ? {} : { env: options.env }) });
+    const listeners = new Map<string, (value?: unknown) => void>();
+    const child = {
+      pid: 4242,
+      once(event: string, handler: (value?: unknown) => void) {
+        listeners.set(event, handler);
+        return child;
+      },
+      unref: () => undefined,
+    };
+    queueMicrotask(() => {
+      if (behaviour(command) === 'error') listeners.get('error')?.(new Error('spawn ENOENT'));
+      else listeners.get('spawn')?.();
+    });
+    return child;
+  }) as unknown as NonNullable<StardewLauncherDeps['spawnImpl']>;
+  return { impl, calls };
+}
+
 function sequenceProbe(sequence: LaunchProbeResult[]) {
   let index = 0;
   return vi.fn(async () => {
@@ -233,5 +257,60 @@ describe('StardewLauncher 状态机', () => {
     expect(done.state).toBe('timeout');
     expect(done.saveLoadRequested).toBe(true);
     expect(done.hint).toContain('标题画面');
+  });
+});
+
+describe('V2-P2-09B 联机隔离实例（XDG 注入）', () => {
+  const ISO = '/Users/tester/Library/Application Support/whale-isle/coop/xdg';
+
+  it('相对路径 → 直接 failed，不 spawn（.NET 会静默回退 owner 存档）', async () => {
+    const spawn = envCapturingSpawn();
+    const launcher = createStardewLauncher(baseDeps({ spawnImpl: spawn.impl }));
+    const status = await launcher.launch({ isolateDataDir: 'relative/dir', strategy: 'smapi' });
+    expect(status.state).toBe('failed');
+    expect(status.message).toContain('isolateDataDir');
+    expect(spawn.calls).toHaveLength(0);
+  });
+
+  it('隔离实例 + steam 策略 → 拒绝启动，不 spawn（Steam 无法携带 env）', async () => {
+    const spawn = envCapturingSpawn();
+    const launcher = createStardewLauncher(baseDeps({ spawnImpl: spawn.impl }));
+    const status = await launcher.launch({ isolateDataDir: ISO, strategy: 'steam' });
+    expect(status.state).toBe('failed');
+    expect(status.message).toContain('Steam');
+    expect(spawn.calls).toHaveLength(0);
+  });
+
+  it('smapi 启动会注入 XDG_CONFIG_HOME/XDG_DATA_HOME 并建目录，HOME 保持不变', async () => {
+    const spawn = envCapturingSpawn();
+    const dirs: string[] = [];
+    const launcher = createStardewLauncher(baseDeps({
+      spawnImpl: spawn.impl,
+      ensureDir: (path) => { dirs.push(path); },
+      probe: sequenceProbe([
+        { status: 'offline', detail: '未监听' },
+        { status: 'online', detail: 'BWF MCP 在线' },
+      ]),
+    }));
+    const status = await launcher.launch({ isolateDataDir: ISO, strategy: 'smapi' });
+    expect(status.state).toBe('launching');
+    expect(spawn.calls[0]?.command).toBe(SMAPI);
+    const env = spawn.calls[0]?.env ?? {};
+    expect(env.XDG_CONFIG_HOME).toBe(`${ISO}/xdg-config`);
+    expect(env.XDG_DATA_HOME).toBe(`${ISO}/xdg-data`);
+    // 只注入 XDG，绝不动 HOME（动 HOME 会影响 Steam 与许可校验）
+    expect(env.HOME).toBe(process.env.HOME);
+    expect(dirs).toEqual([`${ISO}/xdg-config`, `${ISO}/xdg-data`]);
+  });
+
+  it('隔离实例在 auto 策略下不回退 Steam（避免静默共用 owner 存档）', async () => {
+    const spawn = envCapturingSpawn((command) => (command === SMAPI ? 'error' : 'ok'));
+    const launcher = createStardewLauncher(baseDeps({
+      spawnImpl: spawn.impl,
+      ensureDir: () => undefined,
+    }));
+    const status = await launcher.launch({ isolateDataDir: ISO, strategy: 'auto' });
+    expect(status.state).toBe('failed');
+    expect(spawn.calls.map((call) => call.command)).toEqual([SMAPI]);
   });
 });

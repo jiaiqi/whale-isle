@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareStardewProfile, safeAgentId, safePort } from './coop-launcher';
+import { prepareStardewProfile, safeAgentId, safePort, spawnGameProcess } from './coop-launcher';
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -120,5 +120,23 @@ describe('coop-launcher DST 集群', () => {
     expect(sidecar?.env?.ELECTRON_RUN_AS_NODE).toBe('1');
     expect(sidecar?.env?.DST_PAIR_TOKEN).toBe(server?.env?.DST_PAIR_TOKEN);
     expect(sidecar?.env?.DST_PORT).toBe('18100');
+  });
+});
+
+describe('V2-P2-09B spawnGameProcess 隔离环境', () => {
+  it('传入 env 时原样交给子进程（XDG 隔离），不传时沿用父进程环境', () => {
+    const record: Array<{ cmd: string; args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const impl = ((cmd: string, args?: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => {
+      record.push({ cmd, args: [...(args ?? [])], ...(options?.env === undefined ? {} : { env: options.env }) });
+      return { pid: 4001, unref: () => undefined } as unknown as ChildProcess;
+    }) as unknown as typeof spawn;
+    const env = { ...process.env, XDG_CONFIG_HOME: '/tmp/iso/xdg-config', XDG_DATA_HOME: '/tmp/iso/xdg-data' };
+
+    spawnGameProcess('/game/StardewModdingAPI', ['--mods-path', '/tmp/profile/Mods'], '/game', impl, env);
+    expect(record[0]?.env?.XDG_CONFIG_HOME).toBe('/tmp/iso/xdg-config');
+    expect(record[0]?.env?.XDG_DATA_HOME).toBe('/tmp/iso/xdg-data');
+
+    spawnGameProcess('/game/StardewModdingAPI', [], '/game', impl);
+    expect(record[1]?.env).toBeUndefined();
   });
 });
