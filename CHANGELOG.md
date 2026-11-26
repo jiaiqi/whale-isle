@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed（弹层 portal 统一收尾 + E2E 环境确定性）
+
+- **剩余 4 处弹层 portal 化**：`providers/dialogs.tsx`（导入外部配置、添加自定义服务商）与 `pet-studio/`（验收台、创作中心）统一 `createPortal` 到 body，摆脱 `.wb-main` 层叠上下文困局；App.tsx 启动弹窗经核实挂载在 `.wb-main` 之外、层叠正常，未动。
+- **studio.e2e 断言同步 Tidepaper v3.1 侧栏文案**：「语音中心 → 声音与表演」「OBS 挂件 → 直播与 OBS」；v3.1 合流时漏同步，因该套件不在 CI 运行清单而迟至今日暴露——CI 只跑 9 个 e2e 套件中的 4 个，覆盖盲区已记录待办。
+- **stardew-launcher.e2e 环境干扰修复**：新增 `WHALE_E2E_GAME_OFFLINE=1` 开关（仅 TEST_MODE 生效），`game:health` 在该开关下如实返回 offline 不真探测——本机真机星露谷在线时真实探活会让「离线横幅/先启动游戏提示」路径测不到。
+
 ### Fixed（气泡 `<think>` 标签清洗双保险 + 联机链路真实漏洞）
 
 - **渲染层防御清洗** `pet-stage/widgets/bubble-text.ts`（新增纯函数）+ `bubbles.ts` 入口接入：thought 轨有 think 块时取标签内内容、dialog 轨剥掉 think 块只留可见文本，未闭合的流式半截块也吃掉，清洗后为空不弹气泡；覆盖 pet:say 直达、问候/彩蛋、E2E 注入等所有绕过主进程清洗的路径。

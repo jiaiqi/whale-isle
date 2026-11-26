@@ -43,11 +43,11 @@ describe('[E2E-HOST] 桌宠工坊与语音中心', () => {
       page = await waitForWindow(app, 'director');
       await page.waitForFunction(() => Boolean((window as unknown as { directorBridge?: { petStudioCatalog?: unknown } }).directorBridge?.petStudioCatalog), { timeout: 30_000 });
 
-      // 侧栏：精简后的 4 组 10 项（无旧「声音工坊与音色库」）
+      // 侧栏：Tidepaper v3.1 后的分组导航（无旧「声音工坊与音色库」）
       const navText = await page.locator('aside').first().innerText();
       expect(navText).toContain('桌宠工坊');
-      expect(navText).toContain('语音中心');
-      expect(navText).toContain('OBS 挂件');
+      expect(navText).toContain('声音与表演');
+      expect(navText).toContain('直播与 OBS');
       expect(navText).toContain('Harness');
       expect(navText).not.toContain('声音工坊与音色库');
 

@@ -41,7 +41,7 @@ describe('[E2E-HOST] V2-P3-05 星露谷一键启动', () => {
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_E2E_GAME_OFFLINE: '1' },
     });
     try {
       const director = await waitForWindow(app, 'director');

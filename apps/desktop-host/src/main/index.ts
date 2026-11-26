@@ -1131,6 +1131,19 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   // 三游戏桥接探活（T-M6-25）：只读探测当前配置端口（星露谷默认 18088 / 泰拉瑞亚 18090 / 饥荒 18100），结果如实回报
   ipcMain.handle('game:health', async (_event, gameId: GameId, endpoint?: string) => {
     const resolvedEndpoint = endpoint ?? (gameId === 'stardew' ? mainGameEndpoint() : undefined);
+    // E2E 确定性：stardew-launcher.e2e 全用例假设游戏离线，本机真机游戏在线时真实探测会让横幅/提示路径测不到
+    if (TEST_MODE && process.env.WHALE_E2E_GAME_OFFLINE === '1') {
+      return {
+        gameId,
+        endpoint: resolvedEndpoint ?? '',
+        status: 'offline' as const,
+        ok: false,
+        latencyMs: 0,
+        detail: 'E2E 强制离线（WHALE_E2E_GAME_OFFLINE=1），未真实探测',
+        guidance: GAME_CONNECT_GUIDANCE[gameId],
+        checkedAt: Date.now(),
+      };
+    }
     try {
       return await probeGameHealth(gameId, { ...(resolvedEndpoint === undefined ? {} : { endpoint: resolvedEndpoint }) });
     } catch (error) {
