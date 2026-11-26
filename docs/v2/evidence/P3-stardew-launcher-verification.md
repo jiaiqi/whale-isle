@@ -183,3 +183,13 @@ BWF `load_save` 回执（`artifacts/p3-stardew-launcher/bwf-load-save-smapi.log`
    建议：注入前由宿主确保目标窗口前台（或改用 AXPress 元素级动作而非坐标点击）。
 3. **macOS 录屏取帧不稳**：`screencapture -V -l <窗口ID>` 会对遮挡窗口取到**陈旧缓冲**（连续 10 帧内容完全不变），
    本次改用 0.25s 间隔的 `screencapture -l` 连拍才拿到真实状态跃迁。
+
+## 7. 缺陷①（就绪竞态）修复：`start()` 就绪重探（2026-11-26，`[SIMULATION]`）
+
+- **根因**：`AutodriveRunner.start()` 只做一次 `adapter.ping()`，而 `gameHealth` 判 offline 与 BWF 端口真正可应答之间存在窗口期，冷启动后立刻点「启动」就命中「BWF MCP 不可达」。
+- **改法**：`AutodriveOptions` 新增 `readyTimeoutMs`（默认 `0` = 保持旧行为）与 `readyPollMs`（默认 2s）。`readyTimeoutMs > 0` 时首探失败按间隔重探，每次等待发 `watchdog/heartbeat` 事件说明「游戏/Mod 尚未就绪（启动竞态）：第 N 次重探，Xs 后再试，最长等 Ys」；窗口耗尽仍抛 `adapter.unreachableMessage`，**不装成功**。
+- **取消语义**：等待期间 `stop()` 置 `startAborted`，`start()` 安静返回而非误报「不可达」（否则用户点停止会看到一条假故障）。
+- **宿主接线**：`apps/desktop-host/src/main/autodrive-host.ts` 的 `createRunner()` 注入 `readyTimeoutMs: 90_000, readyPollMs: 2_000`（实测就绪耗时 14s，90s 留足冷启动余量）。
+- **测试**：`autodrive.spec.ts` 新增 3 例——重探后成功（`ping` 序列 false/false/true，断言 3 次 ping、2 条竞态事件、假时钟 4s）、窗口耗尽仍抛错（假时钟 6s 且 `isRunning=false`）、等待中 `stop()` 安静取消；原有「ping 失败 start 抛错」用例在默认 `readyTimeoutMs=0` 下继续通过（77/77）。
+- **证据等级**：`[SIMULATION]`（假适配器 + 假时钟），**真机冷启动等待表现待复验**：游戏退出后立刻点「启动」，应能看到竞态事件且不再失败。
+- **缺陷②（CGEvent 点击依赖前台）未修**，转入单桌宠链路待办，方向改为 AXPress 元素级动作。

@@ -25,9 +25,9 @@
 ## 3. 下一步行动（Next Agent 从这里接手）
 
 1. **真机验收积压清理中**：`V2-P2-06`、`V2-P3-03`（3c 真实注入接线）、`V2-P3-06`（中控台「启动」真实点击）已于 2026-11-26 转 `DONE`；`V2-P3-01` 真机补验已完成能自动的部分并维持 `IMPLEMENTED_UNVERIFIED`（缺合法 `.moc3`/`.vrm`、SVS/SVC 后端权重与索引、4 组情绪参考音频，已列清单报 owner）；`V2-P1-06` / `V2-P2-01` 仍只需要星露谷 + SMAPI（本机已具备），按 [REAL-DEVICE-CHECKLIST.md](./evidence/REAL-DEVICE-CHECKLIST.md) 执行；剩余 `V2-P2-08`（双端联机）与 `V2-P3-02`（真实开播）待排；`V2-P3-02` 的 **OBS 本地闭环已实测**（obs-websocket 5.7.6 真实握手 + 测试场景 + overlay 画面变化 + 音频电平，见 [P3-02-obs-local-closure-verification.md](./evidence/P3-02-obs-local-closure-verification.md)），发现本机 OBS 浏览器源硬件加速开启时全黑、关闭正常（已还原设置），真实开播仍待平台账号与授权。
-2. **P3-06 遗留两个真实缺陷待派单**：① 启动后 BWF 就绪竞态（启动瞬间 `autodriveStart` 报「MCP 不可达」，需重试轮询）；② CGEvent 点击依赖窗口真正处于系统前台（建议改用 AXPress 走辅助功能 API，不依赖焦点）。
+2. **P3-06 遗留两个真实缺陷**：① 启动后 BWF 就绪竞态——**已修**（2026-11-26）：`AutodriveRunner.start()` 新增 `readyTimeoutMs`/`readyPollMs` 可注入就绪重探，等待期发 `watchdog/heartbeat` 事件说明「第 N 次重探」，宿主 `autodrive-host.ts` 注入 90s 窗口 + 2s 间隔；等待中 `stop()` 安静取消而不误报「MCP 不可达」；默认 `readyTimeoutMs=0` 保持旧行为，原有单 ping 失败即抛错的老用例继续通过；新增单测 3 例（重探后成功 / 窗口耗尽仍抛错 / 等待中取消），`[SIMULATION]` 级，**真机冷启动等待表现待复验**；② CGEvent 点击依赖窗口真正处于系统前台（建议改用 AXPress 走辅助功能 API，不依赖焦点）——**未修**，属单桌宠链路待办。
 3. **点歌台中控台面板已接入**（2026-11-26，`[E2E-HOST]`）：`点歌台` 页签展示四个原子能力真实状态、提交/取消点歌与真实播放回执，缺后端时如实 `unavailable`/`rejected`；证据见 [P3-song-console-host-verification.md](./evidence/P3-song-console-host-verification.md) 第 6 节。`positionMs` ↔ 真实播放头已闭合：`tools/native/macos-audio-helper.swift`（AVAudioPlayer）每 100ms 回报 `currentTime` 驱动 `tickClock`，不可用时回退 `afplay` 并如实标 `realPlayhead=false`（见同文档第 7 节）。
-4. **`V2-P2-09`（farmhand 联机 AI 控制与实例隔离，`NEXT`）**：勘察已完成（[P2-09-farmhand-split-screen-audit.md](./evidence/P2-09-farmhand-split-screen-audit.md)）——farmhand 在同机分屏下**有条件可行**，但现版 BWF 是进程级单例、零分屏感知（直接跑会控制错人），必须先打「按 `Context.ScreenId` 路由」补丁；隔离推荐 spawn 注入**绝对路径** `XDG_CONFIG_HOME`（不动 `HOME`、不动 owner 存档，回滚=删 env）。按 A→B→C→D→E→F 推进：**A（契约）、B（XDG 隔离启动）、C（宿主联机身份绑定）、E（按屏接管 + 在飞动作中止回执）、F（分屏沙盒剧本骨架）已实现**（均 `IMPLEMENTED_UNVERIFIED`；E 单测 9/9 + E2E 2/2，F 沙盒回归 4/4 全绿）；**D（BWF 分屏感知补丁）现 `BLOCKED`**——owner 已收到「单机建 cabin + 接手柄 + Start Local Co-op」决策并等待回复，放行前 E/F 的真机项一律 `BLOCKED`，不得用沙盒通过冒充真机。
+4. **`V2-P2-09`（farmhand 联机与分屏，owner 暂缓）**：**owner 决策（2026-11-26）：「先不做分屏功能，先把一个桌宠的功能走通」**——`V2-P2-09` 整体与 `V2-P2-09D` 一起按下（D 记 `PENDING` + 「owner 暂缓，等单桌宠走通后再启动」，不再挂「等 cabin + 手柄前置」理由）；已交付的 A（契约）、B（XDG 隔离启动）、C（宿主联机身份绑定）、E（按屏接管 + 在飞动作中止回执）、F（分屏沙盒剧本骨架）保留在 `feat/whale-isle-v2` 不回滚，均 `IMPLEMENTED_UNVERIFIED`，其中 E/F 的真机项仍 `BLOCKED`，不得用沙盒通过冒充真机。勘察见 [P2-09-farmhand-split-screen-audit.md](./evidence/P2-09-farmhand-split-screen-audit.md)。
 5. 认领 **`V2-P3-05`（多被动桌宠同屏）** 或下一个候选工单：查阅 `docs/v2/blueprint/` 对应蓝图、[REQUIREMENTS.md](./REQUIREMENTS.md)、[ADR-004](./adr/ADR-004-input-preemption-scope.md)；禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
 6. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
 
@@ -37,3 +37,22 @@
 - **`feat/tidepaper-v3.1` → V2**（合并提交 `0878d91`）：Tidepaper v3.1 外壳、三层租约 HUD 与急停横幅、中控台 IA 重组；补完空状态插画接入（对话 / 游戏回执 / 未开播 / 记忆无命中 / 急停）与 `buildComputerLeaseView()` 五态映射。
 - 合并后 `pnpm verify:gate` **7/7 PASS**，`ui.e2e` **9/9**、`v2-obsidian-ui.e2e` **1/1** PASS。
 - 合并期间发现的环境坑：`-launch` worktree 残留的 Electron 占着 `e2e-profile` 的 LevelDB 锁，会让 `ui.e2e` 的服务商页用例超时假失败；跑 E2E 前先 `pgrep -f e2e-profile` 清理。
+
+## 5. 单桌宠链路优先（owner 决策 2026-11-26）
+
+> owner 原话：「先不做分屏功能，先把一个桌宠的功能走通」。分屏线（`V2-P2-09` A–F）整体按下、成果不回滚；`V2-P3-05` 多被动桌宠同屏也随之排到单桌宠走通之后。
+
+**实现侧可不等 owner 推进的缺口（按优先级）**：
+
+| # | 缺口 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| 1 | P3-06 缺陷① BWF 就绪竞态 | ✅ 已修（本日） | `readyTimeoutMs`/`readyPollMs` 就绪重探 + `stop()` 安静取消；单测 3 例 `[SIMULATION]`，真机冷启动待复验 |
+| 2 | P3-06 缺陷② CGEvent 点击依赖前台窗口 | 待做 | 方向：`whale-input-helper.swift` 增 `axpress`（`AXUIElementCopyElementAtPosition` 命中 + `kAXPressAction`），坐标不变但不再要求前台；AX 不可用时回退现有坐标点击并如实标注；改完需真机复验 |
+| 3 | P3-04E 遗留：scheduler tick 自动发起社交会话的循环 | 待做 | 当前只有手动/事件驱动；可先接确定性 tick 循环 + 预算/急停守卫 + 单测，真实平台交互仍 `BLOCKED` |
+| 4 | 单桌宠全链路单一剧本 E2E | 待做 | 现有 E2E 分散在 ui / v2-kernel / social-life 各子系统；缺一条「启动 → 就绪 → 自动驾驶 → 台词 → 语音锁释放 → 记忆落盘」的端到端剧本，用 `[SIMULATION]` 沙盒，断言只走 IPC/状态层（不碰 bubble 内部实现，避免与 item 7 的 `threadfin` worktree 冲突） |
+
+**必须等 owner 的（不自行推进）**：
+
+- item 5 歌声：音色来源与权重授权未给书面许可前，不下载/不集成任何歌声权重，不生成可分发合成样本；「中文产品音色无符合项」结论不变。
+- item 4 `V2-P3-02` 真实开播：等 owner 完成 obs-websocket 密码 / 屏幕录制授权 / D 路径首次弹窗三步；obs-websocket 密码是 owner 凭据，不代开、不代改。
+- `V2-P3-01` 视觉：缺合法 `.moc3`/`.vrm` 与情绪参考音频。

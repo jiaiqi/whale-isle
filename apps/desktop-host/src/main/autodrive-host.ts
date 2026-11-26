@@ -805,6 +805,10 @@ export function createAutodriveHost(
         ...(endpoint === undefined ? {} : { endpoint }),
         generation: runnerGeneration,
         gameId: runnerGameId,
+        // P3-06 遗留缺陷①：游戏启动+读档+Mod 起 MCP 要几十秒——给启动一次竞态等待窗口，
+        // 期间 watchdog 事件如实回报「等待游戏就绪」，而不是单次 ping 就报「MCP 不可达」。
+        readyTimeoutMs: 90_000,
+        readyPollMs: 2_000,
       },
       adapter,
     );

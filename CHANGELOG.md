@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed / Changed（单桌宠链路优先：P3-06 缺陷①就绪竞态修复；`V2-P2-09` 按 owner 决策暂缓）
+
+- **P3-06 缺陷①（BWF 就绪竞态）已修**：`AutodriveRunner.start()` 原实现只做一次 `adapter.ping()`，冷启动后立刻点「启动」会误报「BWF MCP 不可达」。现新增 `readyTimeoutMs`（默认 `0` = 保持旧行为）与 `readyPollMs`，窗口内按间隔重探并逐次发 `watchdog/heartbeat` 事件说明「第 N 次重探」；窗口耗尽仍抛 `unreachableMessage` 不装成功；等待期间 `stop()` 安静取消而不误报故障。宿主 `autodrive-host.ts` 注入 90s 窗口 + 2s 间隔。新增单测 3 例（`[SIMULATION]`），真机冷启动等待表现待复验。
+- **owner 决策：先不做分屏，先把一个桌宠走通**。`V2-P2-09` 整体与 `V2-P2-09D` 记为 `PENDING` +「owner 暂缓，等单桌宠走通后再启动」，不再挂「等 cabin + 手柄前置」阻塞理由；已交付的 A/B/C/E/F 保留在 `feat/whale-isle-v2` 不回滚，真机项仍 `BLOCKED`。
+- **planner 两处实现语义入库留痕**（不改实现，待 owner 定）：`NON_SELLABLE` 排除「箱子」但不排除「木箱」，与 `hasChestItem` 的宝箱识别不对称；`pickTrashableFallback` 是后命中覆盖前命中而非先命中先生效。详见 [P3-planner-semantics-findings.md](./docs/v2/evidence/P3-planner-semantics-findings.md)，现状已由 `planner-utils.spec.ts` 断言锁定。
+
 ### Added / Changed（`V2-P3-01` 点歌台：宿主 IPC 接线与真实调用路径 — 状态维持 `IMPLEMENTED_UNVERIFIED`）
 
 - **接通生产调用路径**：`v2-kernel-host.ts` 新增 `v2:song-capabilities|request|snapshot|cancel|shutdown` 五路 IPC，装配 `createSongConsoleHost()`（`SongConsole` 编排内核 + audio-ai-worker `/api/song/*` 真实 HTTP 客户端 + SQLite `song_cache_index` + 首切片播放挂载），preload 与 `DirectorBridge` 同步暴露类型。

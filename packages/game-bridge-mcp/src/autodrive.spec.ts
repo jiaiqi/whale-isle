@@ -858,6 +858,97 @@ describe('终极分支收口', () => {
     expect(runner.isRunning()).toBe(false);
   });
 
+  it('AutodriveRunner：readyTimeoutMs>0 时按间隔重探，就绪后正常起跑（启动竞态）', async () => {
+    let calls = 0;
+    const pings = [false, false, true];
+    const adapter = {
+      gameId: 'stardew' as const,
+      displayName: '星露谷物语',
+      unreachableMessage: 'BWF MCP 不可达（测试）',
+      transport: {
+        async callTool() { return { kind: 'ok' as const, text: STATE_OK, isError: false }; },
+      },
+      ping: async () => { const value = pings[Math.min(calls, pings.length - 1)] ?? false; calls += 1; return value; },
+      isLongAction: () => false,
+      extractClock: () => '第1年春16日 07:30',
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: '完成' }),
+    };
+    const events: AutodriveEvent[] = [];
+    let fakeTime = 0;
+    const runner = new AutodriveRunner(
+      (e) => events.push(e),
+      {
+        maxCycles: 1,
+        stepDelayMs: 0,
+        pollDelayMs: 0,
+        errorDelayMs: 0,
+        readyTimeoutMs: 30_000,
+        readyPollMs: 2_000,
+        now: () => fakeTime,
+        sleep: async (ms) => { fakeTime += ms; },
+      },
+      adapter,
+    );
+    await runner.start();
+    expect(runner.isRunning()).toBe(true);
+    await runner.stopAndWait();
+    expect(calls).toBe(3);
+    const waitings = events.filter((e) => e.type === 'watchdog' && String(e.detail).includes('启动竞态'));
+    expect(waitings).toHaveLength(2);
+    expect(fakeTime).toBe(4_000);
+  });
+
+  it('AutodriveRunner：等待窗口耗尽仍不可达 → 抛 unreachableMessage，不装成功', async () => {
+    const adapter = {
+      gameId: 'stardew' as const,
+      displayName: '星露谷物语',
+      unreachableMessage: 'BWF MCP 不可达（超时测试）',
+      transport: { async callTool() { return { kind: 'ok' as const, text: STATE_OK, isError: false }; } },
+      ping: async () => false,
+      isLongAction: () => false,
+      extractClock: () => '第1年春16日 07:30',
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: '完成' }),
+    };
+    let fakeTime = 0;
+    const runner = new AutodriveRunner(
+      () => undefined,
+      { readyTimeoutMs: 6_000, readyPollMs: 2_000, now: () => fakeTime, sleep: async (ms) => { fakeTime += ms; } },
+      adapter,
+    );
+    await expect(runner.start()).rejects.toThrow('BWF MCP 不可达（超时测试）');
+    expect(runner.isRunning()).toBe(false);
+    // 6s 窗口 / 2s 间隔 → 3 轮等待后放弃
+    expect(fakeTime).toBe(6_000);
+  });
+
+  it('AutodriveRunner：就绪等待期间 stop() 安静取消，不误报「不可达」', async () => {
+    const adapter = {
+      gameId: 'stardew' as const,
+      displayName: '星露谷物语',
+      unreachableMessage: 'BWF MCP 不可达（不该出现）',
+      transport: { async callTool() { return { kind: 'ok' as const, text: STATE_OK, isError: false }; } },
+      ping: async () => false,
+      isLongAction: () => false,
+      extractClock: () => '第1年春16日 07:30',
+      classifyReceipt: () => ({ status: 'COMPLETED' as const, summary: '完成' }),
+    };
+    let runnerRef: AutodriveRunner | null = null;
+    let fakeTime = 0;
+    const runner = new AutodriveRunner(
+      () => undefined,
+      {
+        readyTimeoutMs: 60_000,
+        readyPollMs: 2_000,
+        now: () => fakeTime,
+        sleep: async (ms) => { fakeTime += ms; runnerRef?.stop(); },
+      },
+      adapter,
+    );
+    runnerRef = runner;
+    await expect(runner.start()).resolves.toBeUndefined();
+    expect(runner.isRunning()).toBe(false);
+  });
+
   it('22:00 收工后 → 回家/睡觉；defaultAction 缺失回落 actions[0]', async () => {
     const p = new RulePlanner();
     // 收工时间到（22:10）→ 在 Town 就回家，在农舍就睡

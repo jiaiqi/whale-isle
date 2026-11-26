@@ -92,6 +92,14 @@ export interface AutodriveOptions {
   errorDelayMs?: number;
   /** 状态轮询间隔（get_state 保守 8s） */
   pollDelayMs?: number;
+  /**
+   * 启动就绪等待上限（P3-06 遗留缺陷①：启动竞态）。
+   * 默认 0 = 保持旧行为（单次 ping 失败即抛错）；生产宿主应传正值——
+   * 游戏启动 + 读档 + Mod MCP 起服务要几十秒，单次 ping 必在竞态窗口内失败。
+   */
+  readyTimeoutMs?: number;
+  /** 就绪重探间隔（默认 2s） */
+  readyPollMs?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -111,6 +119,8 @@ export class AutodriveRunner {
   private running = false;
   /** start() 重入锁：并发的两次 start（双击/外部+UI）只能启动一个循环 */
   private starting = false;
+  /** 就绪等待期间收到 stop()：安静退出，不把用户取消伪装成「游戏不可达」 */
+  private startAborted = false;
   private cycle = 0;
   private loopTask: Promise<void> | null = null;
   readonly client: GameBridgeTransport;
@@ -348,9 +358,33 @@ export class AutodriveRunner {
   async start(): Promise<void> {
     if (this.running || this.starting) return;
     this.starting = true;
+    this.startAborted = false;
     try {
-      const alive = await this.adapter.ping();
-      if (!alive) throw new Error(this.adapter.unreachableMessage);
+      // P3-06 遗留缺陷①：游戏刚启动时 BWF MCP 要几十秒才就绪，单次 ping 必在竞态窗口内
+      // 报「MCP 不可达」。`readyTimeoutMs > 0` 时按 `readyPollMs` 重探直到就绪或超时，
+      // 期间每轮发 watchdog 事件让 UI 如实显示「等待游戏就绪」，而不是装死或装成功。
+      const clock = this.options.now ?? Date.now;
+      const sleep = this.options.sleep ?? defaultSleep;
+      const timeoutMs = this.options.readyTimeoutMs ?? 0;
+      const pollMs = this.options.readyPollMs ?? 2_000;
+      const deadline = clock() + timeoutMs;
+      let alive = await this.adapter.ping();
+      let attempt = 0;
+      while (!alive && !this.startAborted && clock() < deadline) {
+        attempt += 1;
+        this.onEvent({
+          type: 'watchdog',
+          kind: 'heartbeat',
+          detail: `游戏/Mod 尚未就绪（启动竞态）：第 ${attempt} 次重探，${Math.round(pollMs / 1000)}s 后再试，最长等 ${Math.round(timeoutMs / 1000)}s`,
+        });
+        await sleep(pollMs);
+        if (this.startAborted) break;
+        alive = await this.adapter.ping();
+      }
+      if (!alive) {
+        if (this.startAborted) return;
+        throw new Error(this.adapter.unreachableMessage);
+      }
       if (this.running) return; // ping 期间可能被另一路 start 抢先
       if (this.controlLease.owner === 'halted' || this.controlLease.owner === 'paused') {
         this.controlLease.resumeAi('重新启动自动驾驶');
@@ -369,6 +403,8 @@ export class AutodriveRunner {
 
   stop(): void {
     this.running = false;
+    // 就绪等待中的 start() 也要能被取消（见 startAborted 字段注释）
+    this.startAborted = true;
   }
 
   /** 平滑停机：让当前动作回执闭合后退出循环，供游戏热切换串行化 */
