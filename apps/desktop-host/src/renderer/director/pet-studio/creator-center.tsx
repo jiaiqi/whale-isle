@@ -4,6 +4,7 @@
  * 零 emoji；所有数据经真实 IPC，不伪造「已出图/已保存」。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCheck, Copy, FolderOpen, ImagePlus, Layers, Link2, RefreshCw, Sparkles, UploadCloud, Wand2, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ModelProviderConfig, StardewSpriteTier } from '@workbench/shared-protocol';
@@ -567,7 +568,8 @@ export function CreatorCenter(props: {
 
   if (!open) return null;
 
-  return (
+  // portal 到 body：.wb-main 的 position+z-index 会形成层叠上下文，z-50 不 portal 会被 .wb-hud(z5) 盖住
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center px-4" style={{ background: 'rgba(2,6,16,.72)', backdropFilter: 'blur(6px)' }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} data-creator-center>
       <div className="card w-full max-w-[900px]" style={{ maxHeight: '88vh', overflow: 'auto', padding: 18 }}>
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -1105,7 +1107,8 @@ export function CreatorCenter(props: {
           </section>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

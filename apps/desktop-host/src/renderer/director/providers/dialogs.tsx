@@ -1,7 +1,10 @@
 /**
  * 服务商页两个弹窗（T-M6-26 合并：自定义服务商 + 导入）。
  * 全部状态与提交动作由容器通过 props 传入。
+ * 弹层统一 createPortal 到 document.body：.wb-main 的 position+z-index 会形成层叠上下文，
+ * 不 portal 时 z-[150] 只在其内部生效，小窗口下会被 .wb-hud(z5) 盖住导致按钮点不到。
  */
+import { createPortal } from 'react-dom';
 import { Database, Download, FileJson, Info, RefreshCw, X } from 'lucide-react';
 import type { ImportScanView } from '../bridge';
 import { EmptyState } from './ui';
@@ -30,7 +33,7 @@ interface ImportDialogProps {
 export function ImportDialog({
   source, scan, selected, policy, busy, onClose, onSelectSource, onPickFile, onToggle, onPolicy, onApply,
 }: ImportDialogProps): React.JSX.Element {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.52)', backdropFilter: 'blur(6px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-[560px] max-w-[92vw] rounded-2xl p-5" style={{ background: 'var(--bg-elev)', border: '1px solid var(--stroke-2)', boxShadow: 'var(--shadow-2)' }}>
         <div className="mb-4 flex items-center justify-between">
@@ -106,7 +109,8 @@ export function ImportDialog({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -135,7 +139,7 @@ interface CustomProviderDialogProps {
 export function CustomProviderDialog({
   name, protocol, url, fullUrl, models, onName, onProtocol, onUrl, onPaste, onFullUrl, onModels, onClose, onCreate,
 }: CustomProviderDialogProps): React.JSX.Element {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.52)', backdropFilter: 'blur(6px)' }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-[460px] max-w-[92vw] rounded-2xl p-5" style={{ background: 'var(--bg-elev)', border: '1px solid var(--stroke-2)', boxShadow: 'var(--shadow-2)' }}>
         <div className="mb-4 flex items-center justify-between">
@@ -181,6 +185,7 @@ export function CustomProviderDialog({
           <button className="btn-pill primary" onClick={onCreate} data-create-provider>创建并配置</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

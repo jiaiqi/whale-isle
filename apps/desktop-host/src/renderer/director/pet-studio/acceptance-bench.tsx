@@ -3,6 +3,7 @@
  * 暂停真实事件 → 12 场景直接驱动真实桌宠窗口 → 回退检查 → 90% 参考线轮播 → 脱敏报告。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ClipboardCheck, Play, Stethoscope, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -123,7 +124,8 @@ export function AcceptanceBench({ open, onClose }: { open: boolean; onClose: () 
 
   if (!open) return null;
 
-  return (
+  // portal 到 body：.wb-main 的 position+z-index 会形成层叠上下文，z-50 不 portal 会被 .wb-hud(z5) 盖住
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center px-4" style={{ background: 'rgba(2,6,16,.72)', backdropFilter: 'blur(6px)' }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }} data-acceptance-bench>
       <div className="card w-full max-w-[980px]" style={{ maxHeight: '90vh', overflow: 'auto', padding: 18 }}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -215,6 +217,7 @@ export function AcceptanceBench({ open, onClose }: { open: boolean; onClose: () 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
