@@ -6,6 +6,7 @@
  * 未连接、未接管、无目标一律如实显示，不用原型示例数据冒充运行状态。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import {
   CheckCircle2, ChevronDown, ChevronUp, Flag, LifeBuoy, LockKeyhole, MessageSquare, Monitor, Pencil, Play, Plus, Radio, RefreshCw, Rocket,
@@ -918,7 +919,9 @@ export function CoopPanel(): React.JSX.Element {
         </aside>
       </div>
 
-      {addOpen && (
+      {/* portal 到 body：.wb-main 有 position+z-index 会形成层叠上下文，
+          不 portal 时 z-[150] 只在 .wb-main 内部生效，会被 .wb-hud(z5) 盖住导致小窗口下按钮点不到 */}
+      {addOpen && createPortal(
         <div
           className="fixed inset-0 z-[150] flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,.52)', backdropFilter: 'blur(6px)' }}
@@ -978,7 +981,8 @@ export function CoopPanel(): React.JSX.Element {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

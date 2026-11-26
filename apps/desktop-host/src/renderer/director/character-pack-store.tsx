@@ -1,5 +1,6 @@
 /** aboutme-pets 角色包商店（T-M6-41）：9 包状态、单包/全量导入、进度；素材仅落 userData。 */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Download, Loader2, PackageOpen, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PetPackCatalogItem, PetPackImportProgress } from './bridge';
@@ -42,7 +43,9 @@ export function CharacterPackStore({ onImported }: { onImported?: () => void }):
       <button type="button" className="btn-pill ghost" onClick={() => setOpen(true)} data-pet-pack-store>
         <PackageOpen size={11} />角色包商店
       </button>
-      {open && (
+      {/* portal 到 body：.wb-main 有 position+z-index 会形成层叠上下文，
+          不 portal 时 z-[150] 只在 .wb-main 内部生效，会被 .wb-hud(z5) 盖住导致小窗口下按钮点不到 */}
+      {open && createPortal(
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,.52)', backdropFilter: 'blur(6px)' }} onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="pack-store-title" className="card w-full max-w-[720px] p-5" style={{ boxShadow: 'var(--shadow-2)' }}>
             <div className="mb-3 flex items-center justify-between">
@@ -87,7 +90,8 @@ export function CharacterPackStore({ onImported }: { onImported?: () => void }):
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
