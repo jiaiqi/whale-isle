@@ -32,14 +32,38 @@
 - `artifacts/acceptance/P3-02-obs-overlay-frame-before.png` / `-after.png`（`GetSourceScreenshot` 两帧）
 - `artifacts/acceptance/P3-02-obs-browser-black-hwaccel-on.png`（同一场景、同一 URL，硬件加速开启时的全黑画布）
 
-## 4. 抓到的真实缺陷：浏览器源硬件加速导致全黑
+## 4. 抓到的真实缺陷：浏览器源硬件加速导致全黑（**明确前置条件**）
 
 | 条件 | `browser_source` 渲染结果 |
 | --- | --- |
 | `BrowserHWAccel=true`（本机原设置） | 全黑。连**本地静态红页**（`file:///tmp/…/simple.html`，背景 `#c00`）截图也是 `(0,0,0)`，排除是我们 overlay 的问题 |
 | `BrowserHWAccel=false` | 正常渲染：静态红页取到 `(204,0,0)`，我们的 `/obs` 卡片可见且随事件变化 |
 
-判定：这是**本机 OBS 33.0.3 + CEF 150 在 Darwin 27.2 上的渲染缺陷**，不是 `webui-server` 的 `/obs` 页面缺陷（同一页面在 Chromium 里正常）。处置建议：在 OBS「设置 → 高级 → 源」里关闭浏览器源硬件加速，或等 OBS/CEF 修复。**本次测试后已还原为原设置，未擅自长期改动用户配置。**
+判定：这是**本机 OBS 33.0.3 + CEF 150 在 Darwin 27.2 上的渲染缺陷**，不是 `webui-server` 的 `/obs` 页面缺陷（同一页面在 Chromium 里正常）。
+
+### 4.1 由此确立的**硬前置**
+
+> **在关闭「浏览器源硬件加速」之前，任何「OBS 里看不到我们的 overlay」的现象都不得归因到我们的页面。**
+
+该前置已写进运行手册 [RUNBOOK-OBS-OVERLAY.md](../RUNBOOK-OBS-OVERLAY.md) §0，并配套一条可复跑的检测方式（静态红页自检）。
+
+**处置属于 owner 决策**：OBS → 设置 → 高级 → 源 → 关闭「浏览器源硬件加速」；改完用红页自检复核，确认可见后再决定是否改回原值，并记录「改动 → 验证 → 还原」三步。**本仓的工具只读 OBS 配置，不会代改 owner 的全局设置**（`tools/obs-selfcheck/src/config-probe.ts` 只做 `existsSync` + `readFileSync`）。
+
+### 4.2 检测方式：静态红页自检（`pnpm obs:selfcheck`）
+
+自检用的红页是一个**与我们的 overlay 完全无关**的独立静态 HTML（纯 `#c00` 背景），
+因此「红页黑 ⇒ 责任在 OBS 侧；红页红而 `/obs` 黑 ⇒ 才是我们页面的问题」——两类故障可立即分流。
+
+| 模式 | 行为 | 本机实测结果（2026-11-26） |
+| --- | --- | --- |
+| `pnpm obs:selfcheck` | 只读 `global.ini` 与 obs-websocket 配置，判定前置是否满足 | 读出 `BrowserHWAccel = true` → **前置不满足**；`server_enabled=false` → `--probe` 不可用 |
+| `pnpm obs:selfcheck --serve` | 本机回环起静态红页（打印 `http://127.0.0.1:<port>/red`），人工粘贴进 OBS 目视 | 服务正常起；脚本同时提示「当前正处于已知会全黑的状态，红色结果需先关闭硬件加速才是有效对照」 |
+| `pnpm obs:selfcheck --probe` | 连 obs-websocket 建**临时**场景与临时 `browser_source`，取中心像素后立即删除 | **未执行**：需 owner 先开启 obs-websocket（属 owner 开关，脚本只提示位置不代改）。退出码语义：`0` 红页正常 / `1` 命中全黑 / `2` ws 未开启或连不上 / `3` 有内容非红页 / `4` 探针异常 |
+
+工具实现：`tools/obs-selfcheck/`（PNG 解码 `png-decode.ts` + 只读配置探测 `config-probe.ts` + obs-websocket v5 最小客户端 `obs-websocket-client.ts` + CLI `cli.ts`），单测 **46 例全绿**（`pnpm exec vitest run tools/obs-selfcheck`）。
+
+其中 `obs-websocket-client.spec.ts` 用真实 WebSocket 服务端把 v5 的 op 0/1/2/6/9 全走一遍：无认证握手、salt+challenge 认证哈希校验、`result=false` 回执、请求超时、非 JSON 与未知 requestId 忽略、端口无人监听。对端是本地假服务端，仍属 `[SIMULATION]`，不等同于真实 OBS。
+
 
 ## 5. 音频链路
 
@@ -51,9 +75,54 @@
 
 结论：OBS 的音频通道本身可用（有真实电平证据），但「鲸屿的声音进 OBS」这一条属 owner 前置（TCC 授权 + 是否安装虚拟声卡），本次不做也不宣称。
 
+### 5.1 「必须装虚拟声卡」是过时认知——现成可用路径已核实（2026-11-26 追加）
+
+后续专项核实（只读 + 本机临时对象探测，**未安装任何驱动、未改任何系统设置**）得出：
+
+| 路径 | 需装驱动 | 需 TCC 授权 | 能否只抓本 App | macOS 要求 |
+| --- | --- | --- | --- | --- |
+| **A. 应用直接把音频推给 OBS**（`CreateInput` 建 Media Source 指到音频文件 + `TriggerMediaInputAction` 播放） | ❌ | ❌ | ✅ 完全精确 | 无要求 |
+| B. OBS `macOS Audio Capture` → Desktop Audio Capture | ❌ | ✅ Screen Recording | ❌ 混入整机所有声音 | macOS 13+（OBS 28+/30+） |
+| C. OBS `macOS Audio Capture` → Application Audio Capture | ❌ | ✅ Screen Recording | ⚠️ **抓不到 `afplay`** | macOS 13+（OBS 30+） |
+| D. 应用侧 Core Audio process tap → 编码推流 → OBS Media Source | ❌ | ✅ 首次录制弹一次授权 | ✅ 按 PID 精确（含 `afplay`） | macOS 14.2+ |
+| E. AudioDriverKit 自建虚拟声卡 | ✅ | ❌（需向 Apple 申请 entitlement） | — | — |
+| F. BlackHole/Loopback 等第三方虚拟声卡 | ✅ | ❌ | ❌ 设备级混音 | — |
+
+**推荐 A**：本项目的 TTS/点歌**本来就先把音频落到临时文件再 `afplay` 播放**，
+所以「应用 → OBS Media Source」这条路径**零驱动、零 TCC、零系统设置改动**，
+且本机 obs-websocket 已具备（4455 端口，握手已实测通过）。
+
+**C 在本机不可行的原因（实测）**：`afplay` 是**独立于 Electron 主进程的进程**，且 **bundleID 为空**
+（CoreAudio 进程列表实测确认），不在 `SCShareableContent.applications` 里，
+因此按 bundleIdentifier 枚举的 Application Audio Capture **选不到它**。
+只有 Electron 渲染进程自身的 `HTMLAudioElement`（桌宠 SFX）能被 C 覆盖。
+
+**D 的可行性（本机实测）**：用未签名的 CLI Swift 程序对正在播放的 `afplay` 创建 Core Audio process tap
+成功（`TAP_CREATED` → `TAP_DESTROYED`），**全程无弹窗、无授权、无驱动**，
+系统 tap 列表复核为 0（无残留）。授权只在「从 aggregate device 开始录制」时触发一次。
+注意 `afplay` 每次是**临时 PID**，需动态重绑。
+
+**明确的无符合项声明**：不存在「既精确只抓本 App（含其 `afplay` 子进程）、又不装驱动、又不需任何 TCC、又不改应用代码」的路径。
+要精确按进程抓 `afplay`，必须用 D（需首次录制授权）**或**走 A（零授权，推荐）。
+
+**需要 owner 提供的授权/决策**：
+
+| 项 | owner 需要做什么 |
+| --- | --- |
+| 路径 A | 提供 obs-websocket 密码（本机 `auth_required=true`） |
+| 路径 B/C | 在「系统设置 → 隐私与安全性 → 屏幕与系统音频录制」确认 OBS（本机已勾选，撤销后需重勾） |
+| 路径 D | 首次录制时在弹出的 "Allow 鲸屿 to record system audio" 上点一次允许 |
+| 路径 F | **本次明确排除**（装系统级驱动须 owner 明确同意） |
+
+### 5.2 对旧表述的纠正
+
+- 「通常要虚拟声卡做路由」→ **可选但非必需**（OBS 30+ 与 macOS 14.2+ 的 process tap 都不需要第三方驱动）。
+- `SCStreamConfiguration.audioCapture` / `sampleRatesChannels` 在公开 SDK 中**不存在**（本机 macOS 27.2 SDK 全文检索无匹配），这两个名称无法核实，**不应在代码或文档中引用**。
+- 「Audio Input entitlement」≠ process tap 所需权限：后者门槛是 `NSAudioCaptureUsageDescription` + 系统音频录制 TCC 提示，**不是** `com.apple.security.device.audio-input`（本机实测未签名 CLI 也能建 tap）。
+
 ## 6. 未验证 / 不得当成已通过
 
 1. **真实开播**：按指令全程未开播、未录制、未接触推流密钥。
-2. **OBS 硬件加速开启下的 Browser Source 观感**：本机已知全黑，未解决（需 OBS/CEF 侧修复或长期关闭该选项）。
-3. **本 app 音频进 OBS 的实际听感与延迟**：受 TCC 与虚拟声卡阻塞。
+2. **OBS 硬件加速开启下的 Browser Source 观感**：本机已知全黑，未解决（需 OBS/CEF 侧修复或由 owner 关闭该选项——见 §4.1 与运行手册）。
+3. **本 app 音频进 OBS 的实际听感与延迟**：未验证；§5.1 的路径 A/B/C/D 均**未在本机跑通端到端**（D 只验证了「能创建 tap 并销毁」，未验证把 PCM 送进 OBS）。
 4. **推流画面观感/码率**：未开播，无可验证对象。

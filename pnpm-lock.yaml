@@ -295,6 +295,18 @@ importers:
         specifier: workspace:*
         version: link:../soak-real
 
+  tools/obs-selfcheck:
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      ws:
+        specifier: ^8.18.0
+        version: 8.23.0
+
   tools/soak-real:
     dependencies:
       '@workbench/game-bridge-mcp':

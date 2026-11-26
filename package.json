@@ -17,6 +17,7 @@
     "py:test": "uv run --quiet --with pytest --with pydantic --with fastapi --with httpx --with websockets pytest services/audio-ai-worker services/sing-worker -q",
     "py:check": "pnpm py:type && pnpm py:test",
     "verify:gate": "node tools/scripts/verify-gate.mjs",
+    "obs:selfcheck": "tsx tools/obs-selfcheck/src/cli.ts",
     "audit:high": "pnpm audit --audit-level high",
     "soak:autodrive": "node tools/scripts/soak-autodrive.mjs",
     "soak:real": "tsc -b tools/soak-real && tsx tools/soak-real/src/cli.ts",

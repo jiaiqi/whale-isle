@@ -1,0 +1,15 @@
+{
+  "name": "@workbench/obs-selfcheck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "[item4 / V2-P3-02] OBS 浏览器源静态红页自检：判定本机「浏览器源硬件加速导致渲染全黑」缺陷",
+  "type": "module",
+  "scripts": {
+    "selfcheck": "tsx src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "ws": "^8.18.0"
+  }
+}
