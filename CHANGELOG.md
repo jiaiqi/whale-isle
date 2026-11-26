@@ -723,3 +723,9 @@
 ### Security
 
 - Gate 2 内置扫描：硬编码密钥特征（`sk-` / `ghp_` / `AKIA` / 明文 apiKey 赋值）与 UNLICENSED 项目源码痕迹（`fore-vip/dsh-live`、`newbeejmc/Dsh_douyin`）。
+
+### Added（V2-P3-03c 真实 OS 输入注入接线，2026-11-26）
+
+- **macOS CGEvent 真实注入**：自研 `tools/native/macos-input-helper.swift`（CoreGraphics 官方 API：permission/move/click/type/key/scroll 六类白名单动作，未授权 exit 3），宿主 `native-input-helper.ts` 按源码 SHA-256 版本化编译缓存（仅 `WHALE_ENABLE_OS_INPUT=1` 时编译，不拖慢默认启动），作为 `nativeInjector` 接入 `ComputerInputExecutor`；spawnSync 参数数组调用不走 shell，杜绝命令注入。
+- **`[E2E-HOST]` 真实注入回归** `input-injection.e2e.spec.ts`：装配 → 租约 → 真实移动鼠标 → 指针读回精确落位 → 合成事件不误伤租约；无辅助功能权限环境自动断言 `permission_denied` fail-closed 路径。
+- **真机验证结论**：Electron 开发进程 TCC 已授权（granted），live 模式注入通过；`V2-P2-06` 同日完成 `[REAL-DEVICE]` 游戏内像素形象目视核验；`V2-P3-03` 转 `DONE`（macOS 打包态 TCC 与 Windows SendInput 为后续发布工程项）。

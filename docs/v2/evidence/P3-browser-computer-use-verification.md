@@ -101,12 +101,37 @@
 
 ---
 
-## 4. 未完成缺口（不能标 `DONE` 的原因）
+## 4. 未完成缺口（复核于 2026-11-26，缺口 1 已关闭）
 
-1. **真实 CGEvent/SendInput 注入 `[REAL-DEVICE]`**：`nativeInjector` 未接线，3c 仅提供 dry-run 骨架；开启 `WHALE_ENABLE_OS_INPUT=1` 且无注入器时如实返回 `not_implemented`。
-2. **macOS TCC 双身份验证 `[REAL-DEVICE]`**：开发态与打包 `.app` 的辅助功能/屏幕录制授权需分别验证，见真机清单。
-3. **真实社交站点 `[REAL-DEVICE]`**：真实登录、Cookie 过期、平台风控页与验证码样式需逐站点复核；不得使用任何打码服务。
+1. ~~真实 CGEvent/SendInput 注入 `[REAL-DEVICE]`~~ **已关闭（2026-11-26，见「5. 3c 真实注入接线与真机补验」）**。
+2. **macOS TCC 双身份验证 `[REAL-DEVICE]`**：开发态已验证（Electron 开发二进制辅助功能权限 granted，真实注入通过）；打包 `.app` 签名后的授权流程属发布工程，待发布工单验证。
+3. **真实社交站点 `[REAL-DEVICE]`**：真实登录、Cookie 过期、平台风控页与验证码样式需逐站点复核（属 V2-P3-04 真机验收范畴）；不得使用任何打码服务。
 4. **Playwright 适配器**：当前 `BrowserEnginePort` 已有 `playwright` 类型位，但未引入依赖、未接线；Electron 隐藏窗口为默认可执行引擎。
+5. **Windows SendInput**：`whale-input-helper` 仅 macOS（CoreGraphics）；Windows 注入器待后续立项（`ensureNativeInputHelper` 非 darwin 如实返回 `unsupported_platform`）。
+
+## 5. 3c 真实注入接线与真机补验（2026-11-26，`[REAL-DEVICE]` 等价）
+
+**决策**：采用自研 Swift helper（CoreGraphics CGEvent 官方 API）编译为单一二进制，主进程 spawnSync 参数数组调用；不采用 node-gyp 原生模块（构建链重 / Electron ABI 对齐坑）、不采用 cliclick/osascript（外部依赖或能力不全）、不采用 pyobjc（本机未装）。
+
+**交付**（6 个业务文件，≤8 红线内）：
+
+| 文件 | 内容 |
+| --- | --- |
+| `tools/native/macos-input-helper.swift` | CGEvent 注入助手：permission / move / click / type（Unicode）/ key（白名单键码表）/ scroll；未授权时 exit 3；参数全部白名单校验 |
+| `apps/desktop-host/src/main/native-input-helper.ts` | 源码向上定位、SHA-256 版本化缓存编译（仅 `WHALE_ENABLE_OS_INPUT=1` 时编译，不拖慢默认启动）、`stepToHelperArgs` 白名单映射、`createNativeInjector` |
+| `apps/desktop-host/src/main/native-input-helper.spec.ts` | 4 例：路径定位、编译缓存复用、编译失败如实 `compile_failed`、参数白名单与注入串拒绝 |
+| `apps/desktop-host/src/main/v2-kernel-host.ts` | 装配接线 + `v2:auto-input-status` 如实上报 helper 状态 |
+| `apps/desktop-host/e2e/input-injection.e2e.spec.ts` | `[E2E-HOST]` 全链路：装配 → 租约 → 真实移动鼠标 → 指针读回 → 合成事件不误伤租约 |
+| `packages/runtime-core/src/input-executor.ts` | 头注释更新（注入已接线） |
+
+**真机证据**（2026-11-26 本机，macOS Darwin 27.2.0）：
+
+- `swiftc -O` 编译 4.2s 通过；`whale-input-helper permission` 探测 `granted`；手动 `move 600 400` 成功。
+- e2e 探针：`executor.mode = live`、`permission = granted`、`nativeHelper.ok = true`（Electron 开发进程 TCC 已授权）。
+- e2e 真实注入日志：`moved: {ok:true, executed:true, mode:"live", code:"executed"}`；指针读回 `before (640,420) → target (677,449) → after (677,449)` **精确落位**；第二次注入仍 executed（合成事件被 `human-input-monitor` 正确排除，租约未误撤销）。
+- 回归：`v2-kernel.e2e` 1/1、`ui.e2e` 9/9、`verify:gate` 7/7 全绿。
+
+**诚实口径**：CGEvent 通道真实打通（非 dry-run 伪造）；`click`/`type`/`key`/`scroll` 动作经参数映射单测与 helper 白名单覆盖，真机抽样验证了 `move`（最安全动作）；CI 等无 TCC 权限环境自动走 `permission_denied` fail-closed 路径（e2e 内建分支断言）。
 
 ## 安全复核补记（2026-11-26，`fix(security)` 提交 `27127d5`）
 

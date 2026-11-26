@@ -57,6 +57,7 @@ import {
 } from '@workbench/shared-protocol';
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { ElectronBrowserEngine } from './electron-browser-engine';
+import { createNativeInjector, ensureNativeInputHelper } from './native-input-helper';
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
@@ -495,10 +496,23 @@ export async function createV2KernelHost(options: {
       return 'unknown';
     }
   };
+  // V2-P3-03c：真实 CGEvent 注入器——仅当 WHALE_ENABLE_OS_INPUT=1 时才用系统 swiftc 编译
+  // tools/native/macos-input-helper.swift 到 userData 缓存（按源码 SHA-256 版本化，避免拖慢默认启动）；
+  // 编译不可用则保持 not_implemented 诚实回报，绝不伪造成功。
+  const osInputEnabled = process.env.WHALE_ENABLE_OS_INPUT === '1';
+  const nativeHelper = osInputEnabled
+    ? ensureNativeInputHelper({
+        appPath: app.getAppPath(),
+        cacheDir: join(options.userDataDir, 'native'),
+      })
+    : ({ ok: false, reason: 'feature_disabled' } as const);
   const inputExecutor = new ComputerInputExecutor({
     leases: computerLeaseMgr,
-    enabled: process.env.WHALE_ENABLE_OS_INPUT === '1',
+    enabled: osInputEnabled,
     permissionProbe: inputPermissionProbe,
+    ...(nativeHelper.ok && nativeHelper.helperPath
+      ? { nativeInjector: createNativeInjector(nativeHelper.helperPath) }
+      : {}),
     onSyntheticInput: (at) => inputMonitor.noteSyntheticInput(at),
   });
   const browserRunner = new DeterministicBrowserRunner({
@@ -1487,7 +1501,10 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:auto-input-status', () => ({
     monitor: inputMonitor.status(),
     executor: inputExecutor.status(),
-    realOsInputEnabled: process.env.WHALE_ENABLE_OS_INPUT === '1',
+    realOsInputEnabled: osInputEnabled,
+    nativeHelper: nativeHelper.ok
+      ? { ok: true, ...(nativeHelper.compileMs !== undefined ? { compileMs: nativeHelper.compileMs } : {}) }
+      : { ok: false, reason: nativeHelper.reason ?? 'unknown' },
   }));
   ipcMain.handle('v2:auto-input-simulate', (_e, deviceId?: string) => ({
     ok: true,

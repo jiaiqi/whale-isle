@@ -1,9 +1,10 @@
 /**
- * V2-P3-03c 真实 OS 输入执行器骨架（feature flag 默认关闭，先做 dry-run）：
+ * V2-P3-03c 真实 OS 输入执行器（feature flag 默认关闭，未开启时只 dry-run）：
  * - `WHALE_ENABLE_OS_INPUT` 未开启时只记录意图，绝不注入任何键鼠事件。
  * - 即使开启：缺少原生注入器时如实返回 `not_implemented`；缺少辅助功能权限时返回 `permission_denied`。
  * - 每个原子动作执行前重新校验 ComputerUseLease；急停或人类抢占后立即拒绝。
- * - 真正的 CGEvent / SendInput 注入在本轮标记 PENDING，最高只到 IMPLEMENTED_UNVERIFIED。
+ * - macOS 真实 CGEvent 注入由 desktop-host `native-input-helper.ts` 编译 tools/native/macos-input-helper.swift
+ *   接入（[REAL-DEVICE] 已验证指针精确落位与合成事件排除）；Windows SendInput 仍 PENDING。
  */
 import type { ComputerInputExecutorStatus, ComputerUseLease } from '@workbench/shared-protocol';
 
