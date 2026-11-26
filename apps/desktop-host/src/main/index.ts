@@ -617,6 +617,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const frontAppWatcher = createFrontAppWatcher({
     enabled: () => prefs.get().followFrontApp || presencePolicyOf() === 'always-with-app',
     onBundle: (bundleId) => {
+      if (isQuitting) return;
       const match = matchCharacterForApp({
         userDataDir: app.getPath('userData'),
         bundleId,
@@ -633,6 +634,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     },
   });
   frontAppWatcher.start();
+  app.on('before-quit', () => frontAppWatcher.stop());
   app.on('will-quit', () => frontAppWatcher.stop());
 
   /** 自定义角色热重载：清缓存 → 广播角色列表 → 每个桌宠窗重载自身 manifest（零重启）。 */
@@ -707,12 +709,14 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const workFollow = createWorkFollowHost({
     userDataDir: app.getPath('userData'),
     summon: (characterId) => {
+      if (isQuitting) return;
       // 多 AI 同屏最多 4 只跨 AI 桌宠，避免会话多开时窗口爆量
       const crossPets = petWindowManager?.list().filter((view) => view.characterId.startsWith('crosspet-')) ?? [];
       if (crossPets.length >= 4) return;
       void summonPet(characterId);
     },
     switchCharacter: (characterId) => {
+      if (isQuitting) return;
       // 单宠换装：只关掉其他跨 AI 窗口，default 主窗保留并原地换角色（含夜间睡衣）
       petWindowManager?.dismissAll('default');
       switchDefaultCharacter(petControl.nightOutfit(characterId));
@@ -790,9 +794,13 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const cliLogWatcher = createCliLogWatcher({
     homeDir: homedir(),
     enabled: () => workFollow.logWatchEnabled(),
-    onEvent: (event) => { workFollow.ingest(event); },
+    onEvent: (event) => {
+      if (isQuitting) return;
+      workFollow.ingest(event);
+    },
   });
   cliLogWatcher.start();
+  app.on('before-quit', () => { cliLogWatcher.stop(); workFollow.dispose(); });
   app.on('will-quit', () => cliLogWatcher.stop());
   // T-M6-58：8 家 CLI 钩子一键安装（只动已知标准 JSON 文件；手动模式只给可复制片段）
   const hookSourceCandidates = app.isPackaged
