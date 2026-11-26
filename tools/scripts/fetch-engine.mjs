@@ -18,7 +18,7 @@
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, open, readFile, rename, rm, stat, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm, rmdir, stat, writeFile, readdir } from 'node:fs/promises';
 import { homedir, platform } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -86,6 +86,24 @@ async function sizeOf(path) {
   } catch {
     return -1;
   }
+}
+
+/** 列出目录里还剩什么（相对路径）；目录本身不存在时返回空数组 */
+async function listLeftovers(dir) {
+  const out = [];
+  const walk = async (current, prefix) => {
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) {
+        await walk(join(current, entry.name), rel);
+      } else {
+        out.push(rel);
+      }
+    }
+  };
+  await walk(dir, '');
+  return out;
 }
 
 /** 单文件下载（断点续传：已有部分文件用 Range 续）
@@ -267,14 +285,23 @@ async function remove(opts, manifest) {
     }
   }
   await rm(markerPath, { force: true });
-  // 清空目录（自底向上，只删空目录，避免误删别的版本）
+  // 清空目录（自底向上，只删**空**目录，避免误删别的版本或清单外的文件）。
+  // 历史坑：这里曾用 `rm(dir, { recursive: false })`，对目录会抛 ERR_FS_EISDIR，
+  // 又被 `.catch(() => undefined)` 吞掉——结果是文件删光了、目录壳留着，
+  // 「删干净」是假的。正确做法是 `rmdir`：只删空目录，非空则报 ENOTEMPTY。
   const walk = async (dir) => {
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) if (entry.isDirectory()) await walk(join(dir, entry.name));
-    await rm(dir, { recursive: false, force: true }).catch(() => undefined);
+    await rmdir(dir).catch(() => undefined);
   };
   await walk(versionDir);
-  await rm(join(opts.dest, manifest.engineId), { recursive: false, force: true }).catch(() => undefined);
+  await rmdir(join(opts.dest, manifest.engineId)).catch(() => undefined);
+  // 清单之外的文件不在删除范围内（不能凭 guess 删用户数据），但必须如实报出来，
+  // 不能让「删干净」的结论掩盖残留。
+  const leftovers = await listLeftovers(versionDir);
+  if (leftovers.length > 0) {
+    console.log(`! 未删除（不在清单内，需人工确认）：${leftovers.join('、')}`);
+  }
   console.log(`✓ 已删除 ${removed} 个文件与 installed.json（${versionDir}）`);
   return 0;
 }
@@ -298,4 +325,4 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   );
 }
 
-export { loadManifest, defaultEnginesRoot, parseArgs };
+export { loadManifest, defaultEnginesRoot, parseArgs, remove, check };

@@ -6,7 +6,13 @@ export default defineConfig({
     // Gate 3 只跑确定性单元/契约测试。Electron 宿主 E2E（apps/*/e2e/**）依赖先构建 dist，
     // 由 CI 的 macOS job 与 `pnpm exec vitest run apps/desktop-host/e2e` 单独执行；
     // Gate 4 的 gate4-loopback 由 verify-gate.mjs 显式点名运行，不受此 include 影响。
-    include: ['packages/*/src/**/*.spec.ts', 'tools/*/src/**/*.spec.ts', 'apps/*/src/**/*.spec.ts', 'services/*/src/**/*.spec.ts'],
+    include: [
+      'packages/*/src/**/*.spec.ts',
+      'tools/*/src/**/*.spec.ts',
+      'tools/scripts/**/*.spec.ts',
+      'apps/*/src/**/*.spec.ts',
+      'services/*/src/**/*.spec.ts',
+    ],
     coverage: {
       enabled: true,
       provider: 'v8',
