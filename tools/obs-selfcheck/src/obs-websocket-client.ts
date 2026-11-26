@@ -41,14 +41,28 @@ interface PendingRequest {
 
 type SocketFactory = (url: string) => WebSocket;
 
-/** 关闭码 → 能直接给 owner 看的文案（含处置建议，500 字符以内的行动指引比错误码有用） */
-export function describeClose(code: number, reason?: string): string {
+/** 关闭码 → 能直接给 owner 看的文案（含处置建议，500 字符以内的行动指引比错误码有用） */export function describeClose(code: number, reason?: string): string {
   const suffix = reason !== undefined && reason !== '' ? `，${reason}` : '';
   if (code === AUTH_FAILED_CLOSE_CODE || /auth/i.test(reason ?? '')) {
     return `OBS WebSocket 认证失败：密码不正确（服务端关闭码 ${code}${suffix}）。`
       + '请在 OBS → 设置 → WebSocket 服务器设置里重设服务器密码，注意复制时别丢首字符。';
   }
   return `obs-websocket 连接已断开（关闭码 ${code}${suffix}）`;
+}
+
+/**
+ * obs-websocket 5.x 认证串（协议 `Authentication` 节，两步）：
+ *
+ *   secret         = base64( sha256( password + salt ) )
+ *   authentication = base64( sha256( secret + challenge ) )
+ *
+ * 历史坑：这里曾经写成三步（先把 password 单独哈希，再把 salt、challenge 的拼接顺序反过来），
+ * 而假服务端照抄了同一套公式，于是实现错、测试也错、两边自洽，真机却永远回 4009。
+ * 所以：**假服务端必须按协议公式独立实现，不能复用本函数**；向量断言里的常量也不能从实现里取。
+ */
+export function computeAuthentication(password: string, salt: string, challenge: string): string {
+  const secret = createHash('sha256').update(`${password}${salt}`).digest('base64');
+  return createHash('sha256').update(`${secret}${challenge}`).digest('base64');
 }
 
 export class ObsWebsocketClient {
@@ -79,11 +93,7 @@ export class ObsWebsocketClient {
       if (password === undefined || password === '') {
         throw new Error('OBS WebSocket 开启了认证：需要通过 --password 或环境变量 OBS_WEBSOCKET_PASSWORD 提供密码');
       }
-      const secretHash = createHash('sha256').update(password).digest('base64');
-      const saltHash = createHash('sha256').update(`${authentication.salt ?? ''}${secretHash}`).digest('base64');
-      auth.authentication = createHash('sha256')
-        .update(`${authentication.challenge ?? ''}${saltHash}`)
-        .digest('base64');
+      auth.authentication = computeAuthentication(password, authentication.salt ?? '', authentication.challenge ?? '');
     }
     this.socket.send(JSON.stringify({ op: 1, d: auth }));
     await this.waitIdentified(options.identifiedTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);

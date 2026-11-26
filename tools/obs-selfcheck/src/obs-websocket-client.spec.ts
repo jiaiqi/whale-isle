@@ -40,15 +40,18 @@ async function startFakeObs(options: FakeObsOptions = {}): Promise<FakeObsServer
       const message = JSON.parse(String(raw)) as { op: number; d: Record<string, unknown> };
       received.push(message);
       if (message.op === 1) {
+        // 假服务端按 obs-websocket 5.x 协议公式**独立实现**（不引用客户端的 computeAuthentication）：
+        //   secret = b64(sha256(password + salt))；authentication = b64(sha256(secret + challenge))
+        // 照抄被测实现的公式只会验证「自洽」——上一版就是这么把错的算法一路放过真机验收的。
         const expected = options.auth === undefined
           ? undefined
           : createHash('sha256')
-            .update(`${options.auth.challenge}${createHash('sha256')
-              .update(`${options.auth.salt}${createHash('sha256').update(options.auth.password).digest('base64')}`)
-              .digest('base64')}`)
+            .update(
+              `${createHash('sha256').update(`${options.auth.password}${options.auth.salt}`).digest('base64')}${options.auth.challenge}`,
+            )
             .digest('base64');
         if (expected !== undefined && message.d.authentication !== expected) {
-          socket.close();
+          socket.close(4009, 'Authentication failed.');
           return;
         }
         socket.send(JSON.stringify({ op: 2, d: { negotiatedRpcVersion: 1 } }));
@@ -318,5 +321,40 @@ describe('ObsWebsocketClient · 连接阶段失败必须立刻抛错（禁止无
     expect(describeClose(4009, 'Authentication failed.')).toContain('密码不正确');
     expect(describeClose(4009, 'Authentication failed.')).toContain('别丢首字符');
     expect(describeClose(1006, '')).toContain('连接已断开');
+  });
+});
+
+/**
+ * 认证算法回归（owner 2026-11-26 定点修复）。
+ *
+ * 之前实现是三步且拼接顺序反了，假服务端又照抄了同一套公式，于是「实现错 + 测试错 + 两边自洽」，
+ * 单测全绿、真机永远 4009。这两条测试专门防退化。
+ */
+describe('obs-websocket 认证算法（协议两步）', () => {
+  it('固定向量：password/salt/challenge 三个字面量 → 精确等于手算常量', async () => {
+    const { computeAuthentication } = await import('./obs-websocket-client.js');
+    // 常量由 obs-websocket 5.x 协议公式独立算出（node -e 与 python 双向交叉核对），不从被测实现里取
+    const expected = 'XZoiWAVck3AYkCEZPmxkUuT7YWggKQwaNrmOAkjCqdw=';
+    expect(computeAuthentication('pw-123', 'salt-abc', 'chal-xyz')).toBe(expected);
+    // 反例：旧的三步错误写法算出来是另一个值，永远不该再出现
+    const { createHash } = await import('node:crypto');
+    const legacy = createHash('sha256')
+      .update(`chal-xyz${createHash('sha256')
+        .update(`salt-abc${createHash('sha256').update('pw-123').digest('base64')}`)
+        .digest('base64')}`)
+      .digest('base64');
+    expect(legacy).not.toBe(expected);
+  });
+
+  it('假服务端按协议独立校验：密码错就回 4009，对才回 Identified', async () => {
+    const server = await startFakeObs({ auth: { salt: 'salt-abc', challenge: 'chal-xyz', password: 'pw-123' } });
+
+    const wrong = new ObsWebsocketClient(server.url);
+    await expect(wrong.connect('pw-124')).rejects.toThrow(/认证失败：密码不正确/);
+    wrong.close();
+
+    const right = new ObsWebsocketClient(server.url);
+    await expect(right.connect('pw-123')).resolves.toBeUndefined();
+    right.close();
   });
 });

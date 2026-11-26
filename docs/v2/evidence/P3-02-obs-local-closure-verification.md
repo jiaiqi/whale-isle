@@ -158,3 +158,25 @@
 ### 7.2 2026-11-26 22:38 复跑记录（只读）
 
 `pnpm obs:selfcheck` 仍输出 `BrowserHWAccel = true`。证据链：`global.ini` 第 6 行原文为 `true`；该文件 mtime 20:16 且当时 22:38 未再被写过；OBS 进程自 20:16 前启动后未重启。该开关由 OBS 启动时读取、退出/应用时写回，故「界面取消勾选但未应用/未重启」时磁盘仍是旧值。**必须完全退出 OBS 再重开，`pnpm obs:selfcheck` 显示 `BrowserHWAccel = false` 才算真关。**
+
+### 7.3 认证算法缺陷与修复（2026-11-26，owner 真机定位）
+
+**症状**：真机用正确密码连接，OBS 5.7.6 一律回 `CLOSE 4009 Authentication failed.`，之前所有「密码不对」的结论都是误判。
+
+**根因**：`obs-websocket-client.ts` 的认证串算错，写成三步且拼接顺序反了：
+
+| 口径 | 公式 |
+| --- | --- |
+| 协议（obs-websocket 5.x `Authentication` 节） | `secret = b64(sha256(password + salt))`；`authentication = b64(sha256(secret + challenge))` |
+| 修复前实现（错） | `b64(sha256(challenge + b64(sha256(salt + b64(sha256(password))))))` |
+
+**为什么单测没拦住**：`obs-websocket-client.spec.ts` 里的假服务端照抄了被测实现的同一套公式，实现错、测试也错、两边自洽，于是永远是绿的。这类「自洽的错」是比缺测试更危险的一类缺陷。
+
+**修复与防退化**：
+
+- `computeAuthentication(password, salt, challenge)` 按协议两步重写，注释写明出处与「假服务端不能照抄实现公式」的教训。
+- 假服务端改为按协议公式**独立实现**；认证不通过时回 `4009 Authentication failed.`（之前只 `close()`，关闭码不明确）。
+- 新增固定向量断言：`password='pw-123' / salt='salt-abc' / challenge='chal-xyz'` → `XZoiWAVck3AYkCEZPmxkUuT7YWggKQwaNrmOAkjCqdw=`，常量由 `node -e` 与 Python 双向交叉核对后写成字面量，不从被测实现取值；同时断言旧的三步写法算出的值不等于该常量。
+- 新增「假服务端按协议独立校验」用例：密码错回 4009、密码对才 `Identified`。
+
+**边界**：真实密码全程未写入任何文件、注释、测试或提交信息；真机探针由 owner 亲自执行。`obs-selfcheck` 全量 **56 例通过**，`pnpm verify:gate` 7/7。
