@@ -5,6 +5,15 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added / Fixed（`V2-P3-07A`–`07E`：星露谷从 0 自动建档、联机房主、默认存储隔离与中文双保险）
+
+- **契约先行（`V2-P3-07A`，`358f5a8`）**：新增 `packages/shared-protocol/src/stardew-launch.ts`（`StardewLaunchOptions`/`LaunchStatus`/`LanHostStatus`/`LaunchPrefs`/`NewSaveConfig`、locale → 星露谷语言码映射与跨语言 schema 同步）及 `StardewAvatarSyncSchema.syncDisplayName`。
+- **BWF 1.6 公开 API 补丁与外观护航（`V2-P3-07B`，`2f9d7e8` + `f8d7d2a`）**：仓外 MIT BWF 新增第 3 份补丁（`WHALE_BWF_MCP_PORT`/`WHALE_STARDEW_LANG`、`EnsureLanguage()`、程序化 `create_new_save`、扩展 `load_save`、`GET /settings` 带 `runtime`/`lan` 与 1.6 `isUnclaimedFarmhand` 未认领小屋槽位判定），并扩展 `WhaleIsleAvatar` `SyncDisplayName` 防覆写自定义农夫名。
+- **就绪探测硬化（`V2-P3-07C`，`6a746bc`）**：`BwfMcpClient.ping()`（`mcp-client.ts` 分支覆盖 `92.59%`）拒绝标题画面文本与 `isError=true`，消除 `AutodriveRunner` 启动竞态误判；`game-health.ts` 新增 `probeBwfRuntime()` 与 `requireLanHost` 门禁。
+- **启动器编排与默认隔离+中文双保险（`V2-P3-07D`，`3ff7e8b`）**：新增 `stardew-launch-prefs.ts` 默认使用鲸屿专属 `XDG` 隔离目录与中文（`zh`）并初始化隔离 `startup_preferences`，`stardew-launcher.ts` 支持 `always_new`/`continue_or_create`/`load_only`/`manual`、瞬态错误重试、`BWF_PATCH_MISSING` 快败与 `coop_host` LAN 监听等待，升级宿主 IPC（不再吞 `safeParse` 错误）/preload/bridge。
+- **中控台一键 UI 与 E2E（`V2-P3-07E`，`cceccd6`）**：共玩页横幅、启动弹窗与 `⌘K` 补齐「从 0 单机开玩」「从 0 联机房主开玩」、存储模式切换与可折叠建档配置表单；Electron E2E `stardew-launcher.e2e` + `ui.e2e` 10/10 全绿；`pnpm verify:gate` 7/7 通过。
+- **真机 R1–R4 全套验收通过**（[P3-stardew-auto-new-save-verification.md](./docs/v2/evidence/P3-stardew-auto-new-save-verification.md)）：R1 常规只读续玩 `泡泡湾_454908853`（15.28s，`Saves/` 全目录与 mtime 零变动）、R2 后台隔离中文单机从 0 建档+P2-06 2× 形象（27.13s，农夫名未被覆写）、R3 后台隔离中文联机房主+UDP 24642+2/2 小屋（28.96s）、R4 旧版 BWF 1.81s 快败 `BWF_PATCH_MISSING` 并验证补丁恢复。
+
 ### Added（02 / 08 / 12 候选参考资产，默认档未动）
 
 - 三条候选参考音频随包留存：`assets/voice/xiaojing-02-yujie-leng.wav`、`-08-nianhu-banshui.wav`、`-12-hanhan-difa.wav`（与 07 同句、同生成方式；默认档仍只引用 07 那条，等 owner 听选后再一次性切换）。

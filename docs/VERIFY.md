@@ -252,7 +252,7 @@
 
 | 项目 | 验收内容 | 状态 |
 | --- | --- | --- |
-| P3-06 缺陷① 真机冷启动 | 退出游戏后立刻点中控台顶栏「启动」：应看到「游戏/Mod 尚未就绪（启动竞态）：第 N 次重探…」事件而不是「BWF MCP 不可达」失败；游戏就绪后自动驾驶自动接管 | ⏳ |
+| P3-06 缺陷① 真机冷启动 | 退出游戏后立刻点中控台顶栏「启动」：应看到「游戏/Mod 尚未就绪（启动竞态）：第 N 次重探…」事件而不是「BWF MCP 不可达」失败；游戏就绪后自动驾驶自动接管 | ✅ 2026-11-27 经 R1/R2 真机冷启动+`AutodriveRunner` 验证通过 |
 | P3-06 缺陷② 窗口前台 | 该缺陷只影响自动验收脚本坐标点击（产品内按钮由人点）；如需自动化点击自家按钮，先 `bringToFront`，或另立「按 AX 元素点击」工单 | ⏳ 待 owner 决定是否立项 |
 | `P3-04G` 生活页四块 | 打开中控台「生活」页：应看到「自主发起（默认关闭）」开关、下次可发起时间与拦截原因、当前会话、今日用量、最近 5 次；点开关应持续化并在重启后保持 | ⏳ |
 | `P3-04G` L1 执行器骨架 | `[SIMULATION]` 确定性单测 | `social-executor.spec.ts` **12 例**：条目配额耗尽收官、理解配额超限后不再发模型调用、平台源未实测动手前拒绝、用户中途打断按 `user_stopped` 中止、夹具源默认被拒、读取失败不计入已浏览、理解失败也计入配额、执行器自述 `runnable` 口径 | 2026-11-26 |
@@ -267,3 +267,17 @@
 | 音色方向选型 | owner 听过 07 的**锁定版**后判定「音色不对味」；实测证明 clone 未改音色（设计版 vs 克隆版余弦 0.84，与内部一致性同量级），所以是**在 02 / 08 / 12 里挑一条**。三条候选的参考资产与全套回归已就绪（02 / 08 / 12，默认档暂不动）；owner 听定后再做那一次性的默认值与参考资产切换 | ⏳ 等 owner 听选 |
 | MiMo TTS 真实对拍 | 放 `mimo-tts` 凭据（凭据设置页）或 `WHALE_MIMO_API_KEY`，并提供 `WHALE_MIMO_VOICE_DESCRIPTION`；VoiceClone 另需 `WHALE_MIMO_VOICE_SAMPLE` 指向**合法可用**的真人参考音频（现有 `design_sweet_normal.wav` 是合成 stub，不能用）。然后跑 `npx tsx tools/scripts/bench-tts-ab.mts --provider mimo-voicedesign`，再做 `--consistency 10` + `speaker-cosine.py` 测音色漂移 | ⏳ 待 owner 提供 Key |
 | ZipVoice 产物人耳听感 | 听 `artifacts/tts-ab/zipvoice-internal-noncommercial/out-*.wav` 15 条：确认「像人」、无电流感/机械感/吞字；本报告只给了 RTF 与 ASR 回环，**听感结论未下**。另需 owner 拍板：CC-BY-NC 权重是否就此止步于内部验证 | ⏳ 待 owner |
+
+## 2026-11-27 批次（V2-P3-07A–E 星露谷从 0 建档/联机房主/隔离存储与中文双保险）
+
+### Mock / 沙盒 / 宿主 E2E / 真机 R1–R4 已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `V2-P3-07A`–`07D`（`DONE`） / `07E`（`IMPLEMENTED_UNVERIFIED`） | `[SIMULATION]` + `[E2E-HOST]` + `[REAL-DEVICE]` | **单测与门禁**：`stardew-launch.spec.ts`、`stardew-launch-prefs.spec.ts`(4/4)、`stardew-launcher.spec.ts`(22/22)、`mcp-client.ts` 分支 **92.59%**、`pnpm verify:gate` **7/7 PASS**；**Electron E2E**：`stardew-launcher.e2e.spec.ts` + `ui.e2e.spec.ts` **10/10**（含一键单机/联机房主/存储模式切换持久化 reload/⌘K，截图 `artifacts/stardew-launcher-e2e.png`）；**真机 R1–R4**（[P3-stardew-auto-new-save-verification.md](./v2/evidence/P3-stardew-auto-new-save-verification.md)）：① R1 常规只读续玩 `泡泡湾_454908853`（15.28s ready，6 次 `watchdog` 重探零误报，`wait` 回执 COMPLETED，`Saves/` 全项 mtime 零改动，截图 `P3-07-r1-standard-continue.png`）；② R2 后台零 CGEvent 隔离中文单机从 0 建档 `鲸屿单机_455382664`（27.13s，`<languageCode>zh</languageCode>` + P2-06 2× 精灵表 + `SaveGameInfo` 保留 `小鲸零号`，截图 `P3-07-r2-singleplayer-new-save.png`）；③ R3 后台隔离中文联机房主 `联机星露_455382728`（28.96s，`lsof` 实证 UDP `24642`、`2/2` 未认领小屋槽位，截图 `P3-07-r3-coop-host-new-save.png`）；④ R4 切换旧版 `BlindWhaleFarmer.dll.bak-1.1.27-stock` 实证 `/settings` 可达后 **1.81s**（< 5s）快败 `BWF_PATCH_MISSING`，恢复补丁版后 `/settings` 全 5 项 `capabilities` 恢复 | 2026-11-27 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| `V2-P3-07E` 中控台真机点击 | 在真实运行的中控台页面（非 E2E 假启动器）人工点按「从 0 单机开玩」「从 0 联机房主开玩」与存储开关一次确认完整界面联动 | ⏳ 待人工顺手抽检 |
