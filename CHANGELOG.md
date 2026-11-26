@@ -33,6 +33,13 @@
 - **顺手修复**：tray-popover e2e 启动竞态（独立 commit `3583472`）。
 - **暂缓项（如实记录）**：scheduler tick 自动发起浏览会话的循环未接（当前手动/事件驱动）；pet-stage 浏览状态投影归 P3-04F。
 
+### Added（V2-P3-04F：站点仿真与全链路 E2E）
+
+- **`tools/mock-harness/social-site-sim.ts`** `[SIMULATION]`：社区站点确定性仿真器（本地 node:http，4 篇夹具含 prompt 注入页，全部带 `data-simulation` 标识；候选经契约校验），3 例单测。
+- **`social-life.e2e.spec.ts`** `[E2E-HOST]`：L1 全链路——能力未授权/未实测双双拒绝 → 声明已实测 → 规划 → 启动 → 真实 runner 读仿真站（不访问公网）→ 达预算自动收官 → 无 Key 理解诚实报错 → pet-stage 思考泡投影（复用 pet:bubble 通道，不新增协议）。
+- **pet-stage 投影**：主进程订阅 `social.session.viewed/completed` 内核事件转思考泡（「在读：…」「收官…」）。
+- 整单 `V2-P3-04` 以 `IMPLEMENTED_UNVERIFIED` 封口，证据归档 `docs/v2/evidence/P3-04-social-life-verification.md`。
+
 ### Fixed（批次 C：UI 诚实性）
 
 - **OBS 页演示数据可见标记** `obs-panel.tsx`：弹幕议会投票卡、RVC 歌词卡、弹幕交互条三处演示数据新增可见「预演」徽章（此前只在代码注释标注，UI 上无法与真实数据区分）；饭碗与双轨气泡用真实数据不标；`ui.e2e` 新增徽章 ≥3 可见的防回归断言。

@@ -95,6 +95,8 @@ import type {
   VoiceProviderKind,
   VoiceProviderStatus,
   BrowseSession,
+  ContentUnderstanding,
+  InterestSignal,
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
 } from '@workbench/shared-protocol';
@@ -1003,6 +1005,14 @@ export interface DirectorBridge {
   v2SocialPause(sessionId: string): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
   v2SocialComplete(sessionId: string): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
   v2SocialAbort(input: { sessionId: string; reason?: string }): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
+  v2SocialRecordViewed(input: { sessionId: string; candidate: unknown }): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
+  v2SocialUnderstand(input: {
+    sessionId: string;
+    item: unknown;
+    textContent: string;
+    screenshot?: { mime: string; dataBase64: string };
+    currentInterests?: string[];
+  }): Promise<{ ok: boolean; understanding?: ContentUnderstanding; signals?: InterestSignal[]; error?: string }>;
   v2AutoInputStatus(): Promise<{
     monitor: HumanInputMonitorStatus;
     executor: ComputerInputExecutorStatus;

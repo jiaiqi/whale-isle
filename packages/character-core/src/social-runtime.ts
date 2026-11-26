@@ -139,6 +139,7 @@ export class SocialRuntime {
     this.options.events.publish('social.session.viewed', {
       sessionId,
       candidateId: parsed.candidateId,
+      title: parsed.title,
       url: parsed.url,
       itemsViewed,
     });

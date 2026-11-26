@@ -431,6 +431,8 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2SocialPause: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('v2:social-pause', sessionId),
   v2SocialComplete: (sessionId: string): Promise<unknown> => ipcRenderer.invoke('v2:social-complete', sessionId),
   v2SocialAbort: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-abort', input),
+  v2SocialRecordViewed: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-record-viewed', input),
+  v2SocialUnderstand: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-understand', input),
   v2AutoAccountExport: (): Promise<unknown> => ipcRenderer.invoke('v2:auto-account-export'),
   v2AutoP5Confirm: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-p5-confirm', input),
   v2AutoHandoffs: (): Promise<unknown[]> => ipcRenderer.invoke('v2:auto-handoffs'),

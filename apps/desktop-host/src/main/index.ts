@@ -994,6 +994,19 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     characters,
   );
   v2KernelHost.attachV1Bridges({ autodrive, voice, memory });
+  // V2-P3-04F：Digital Life L1 浏览状态投影到桌宠气泡（复用既有 pet:bubble 通道，不新增协议）
+  const petBubbleToDefault = (text: string): void => {
+    const win = petBrowserWindows.get('default');
+    if (win && !win.isDestroyed()) win.webContents.send('pet:bubble', { agentId: 'default', text, kind: 'thought' });
+  };
+  v2KernelHost.kernel.events.subscribe('social.session.viewed', (event) => {
+    const payload = event.payload as { title?: string; url?: string; itemsViewed?: number };
+    petBubbleToDefault(`在读：${payload.title || payload.url || '新内容'}（第 ${payload.itemsViewed ?? '?'} 条）`);
+  });
+  v2KernelHost.kernel.events.subscribe('social.session.completed', (event) => {
+    const payload = event.payload as { session?: { itemsViewed?: number; stopReason?: string } };
+    petBubbleToDefault(`本次浏览收官，看了 ${payload.session?.itemsViewed ?? 0} 条（${payload.session?.stopReason ?? '完成'}）`);
+  });
   modsHost.onBwfPortChange((port) => {
     void autodrive.setEndpoint(bwfMcpEndpoint(port));
   });
