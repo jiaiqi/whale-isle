@@ -82,6 +82,8 @@ Playwright over CDP 连接真实 Electron（`127.0.0.1:9333`），枚举 `pet-st
 | 帧间隔 | median 16.7ms / P95 18.3ms / max 18.6ms |
 | 掉帧（>50ms） | **0** |
 
+**口径校正（2026-11-26）**：表中 `60.4 FPS` 是 `requestAnimationFrame` 回调频率，**不是视频实际解码帧率**，也不代表观感流畅度；本项只证明渲染循环在跑、无长任务卡顿（掉帧 0），视频真实帧率未测。
+
 **结论**：桌宠窗当前是 **VP9-Alpha `.webm` 双 `<video>` 渲染**（与宪章 §1.1 一致），**不是** canvas / WebGL 画布，因此「Live2D / VRM 画布帧率与目视观感」这一项在当前资产状态下**无法在真机上成立**——不是没测，是被测对象不存在。StageRuntime 的 `desktop-2d / live2d / vrm-3d / obs-stage` 四个后端**切换 API 全部 `ok=true`**、`realDeviceRenderVerified` 恒为 `false`（如实标记，不冒充已目视验收）。
 
 ### 3.3 跨后端状态保留 `[REAL-DEVICE]`
@@ -95,6 +97,8 @@ Playwright over CDP 连接真实 Electron（`127.0.0.1:9333`），枚举 `pet-st
 | `vrm-3d` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
 | `obs-stage` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
 | `desktop-2d` | true | char_xiaojing | index 1（不变） | `round` / 0.3233 | `singing` | `dance_spin` |
+
+**口径校正（2026-11-26）**：`retained = true` 只证明 **`StageRuntime` 的状态机与绑定数据**在四后端之间切换不丢（角色/歌词/口型/表情/舞蹈 cue 均在），**不证明** Live2D / VRM 真的把画面渲染出来了——本机无 `.moc3` / `.vrm` 资产，四后端的渲染结果均为 `realDeviceRenderVerified = false`。这条是「状态保留已验、实际渲染未验」。
 
 `retained = true`。`PerformanceDirector` 快照同步显示 `mode = singing_and_dancing`、`positionMs = 2500`、`activeDanceCue = c2`、活跃图层含 `vocal_lipsync: sing:*` 与 `performance_choreo: dance:*`。
 

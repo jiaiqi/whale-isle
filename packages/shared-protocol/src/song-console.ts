@@ -31,6 +31,7 @@ export const SongConsoleStageSchema = z.enum([
   'completed', // 全部完成
   'rejected', // 被门禁/黑名单拒绝（含明确原因）
   'unavailable', // 素材/能力缺失（含明确缺口）
+  'cancelled', // 用户取消 / 退出清理（后台补齐立即停止且不落缓存）
 ]);
 export type SongConsoleStage = z.infer<typeof SongConsoleStageSchema>;
 
@@ -43,6 +44,7 @@ export const SongConsoleStateSchema = z.enum([
   'completed',
   'rejected',
   'unavailable',
+  'cancelled',
 ]);
 export type SongConsoleState = z.infer<typeof SongConsoleStateSchema>;
 
@@ -59,7 +61,7 @@ export type SongConsoleCapability = z.output<typeof SongConsoleCapabilitySchema>
 /** 点歌请求 */
 export const SongConsoleRequestSchema = z.object({
   requestId: z.string().min(1),
-  characterId: z.string().min(1),
+  characterId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
   voiceProfileId: z.string().min(1),
   channel: PerformanceChannelSchema.default('private_desktop'),
   song: SongCatalogItemSchema,
@@ -69,21 +71,61 @@ export const SongConsoleRequestSchema = z.object({
   firstSliceMs: z.number().int().min(5_000).max(120_000).default(25_000),
   /** 单切片时长（后续后台切片） */
   sliceMs: z.number().int().min(5_000).max(120_000).default(25_000),
+  // ---- 声线与调参：全部进入缓存键，换声线/换调参必须失效旧缓存 ----
+  /** RVC 声线模型权重路径 */
+  rvcModelPath: z.string().default(''),
+  /** RVC 检索索引路径 */
+  rvcIndexPath: z.string().default(''),
+  pitchShiftSemitones: z.number().int().min(-12).max(12).default(0),
+  indexRate: z.number().min(0).max(1).default(0.75),
+  protectVoiceless: z.number().min(0).max(0.5).default(0.33),
+  vocalGain: z.number().min(0).max(2).default(1),
+  accompanimentGain: z.number().min(0).max(2).default(0.75),
 });
 export type SongConsoleRequest = z.output<typeof SongConsoleRequestSchema>;
 export type SongConsoleRequestInput = z.input<typeof SongConsoleRequestSchema>;
 
+/** Python 原子能力的跨语言请求与回执；由 registry 生成 Pydantic。 */
+export const SongSeparateRequestSchema = z.object({
+  sourceAudioPath: z.string().min(1),
+  outputDir: z.string().min(1),
+});
+export const SongSeparateResultSchema = z.object({
+  vocalPath: z.string().min(1),
+  accompanimentPath: z.string().min(1),
+});
+export const SongRenderSliceRequestSchema = SongConsoleRequestSchema.pick({
+  rvcModelPath: true, rvcIndexPath: true, pitchShiftSemitones: true,
+  indexRate: true, protectVoiceless: true, vocalGain: true, accompanimentGain: true,
+}).extend({
+  vocalPath: z.string().min(1), accompanimentPath: z.string().min(1),
+  startMs: z.number().int().nonnegative(), durationMs: z.number().int().positive(),
+  outputPath: z.string().min(1),
+});
+export const SongAudioResultSchema = z.object({
+  audioPath: z.string().min(1), durationMs: z.number().int().nonnegative(),
+});
+export const SongConcatRequestSchema = z.object({
+  slicePaths: z.array(z.string().min(1)).min(1), outputPath: z.string().min(1),
+});
+export const SongCapabilitiesResultSchema = z.object({
+  capabilities: z.array(SongConsoleCapabilitySchema), ready: z.boolean(), missing: z.array(z.string()),
+});
+
 /** 点歌状态快照（宿主 → UI / 节目状态机） */
 export const SongConsoleStatusSchema = z.object({
   requestId: z.string().min(1),
-  characterId: z.string().min(1),
+  characterId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
   state: SongConsoleStateSchema,
   stage: SongConsoleStageSchema,
   songId: z.string().min(1),
   songTitle: z.string().min(1),
   channel: PerformanceChannelSchema,
   rightsCheck: SongRightsCheckSchema,
-  /** 缓存键：`<characterId>_<sha256(sourceAudioPath + 声线参数)[:16]>` */
+  /**
+   * 缓存键：`<characterId>_<sha256(源文件指纹 + 声线模型 + 全部调参)[:16]>`。
+   * 源文件用 size+mtime 指纹而非仅路径——同名文件换了内容不会误命中旧缓存。
+   */
   cacheKey: z.string().min(1),
   cacheHit: z.boolean().default(false),
   cacheLookupMs: z.number().nonnegative().optional(),

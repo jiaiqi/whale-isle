@@ -1,0 +1,238 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SongConsoleRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SongConsoleRequest",
+  "$defs": {
+    "SongConsoleRequest": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "voiceProfileId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "channel": {
+          "default": "private_desktop",
+          "type": "string",
+          "enum": [
+            "private_desktop",
+            "livestream_public",
+            "commercial_distribution"
+          ]
+        },
+        "song": {
+          "type": "object",
+          "properties": {
+            "songId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artist": {
+              "default": "Original",
+              "type": "string"
+            },
+            "bpm": {
+              "default": 120,
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 300
+            },
+            "durationMs": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "keySignature": {
+              "default": "C major",
+              "type": "string"
+            },
+            "preferredRange": {
+              "default": "C4-F5",
+              "type": "string"
+            },
+            "accompanimentTrackPath": {
+              "type": "string"
+            },
+            "melodyMidiPath": {
+              "type": "string"
+            },
+            "referenceVocalPath": {
+              "type": "string"
+            },
+            "lyrics": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "startMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "endMs": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "primaryText": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "secondaryText": {
+                    "type": "string"
+                  },
+                  "romaji": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "index",
+                  "startMs",
+                  "endMs",
+                  "primaryText"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "rights": {
+              "type": "object",
+              "properties": {
+                "songLicense": {
+                  "type": "string",
+                  "enum": [
+                    "original_owned",
+                    "licensed_commercial",
+                    "licensed_livestream",
+                    "dev_only_non_commercial",
+                    "unlicensed"
+                  ]
+                },
+                "accompanimentLicense": {
+                  "type": "string",
+                  "enum": [
+                    "original_owned",
+                    "licensed_commercial",
+                    "licensed_livestream",
+                    "dev_only_non_commercial",
+                    "unlicensed"
+                  ]
+                },
+                "lyricsLicense": {
+                  "type": "string",
+                  "enum": [
+                    "original_owned",
+                    "licensed_commercial",
+                    "licensed_livestream",
+                    "dev_only_non_commercial",
+                    "unlicensed"
+                  ]
+                },
+                "voiceModelAuthorized": {
+                  "type": "boolean"
+                },
+                "voiceConsentSource": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "attribution": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "songLicense",
+                "accompanimentLicense",
+                "lyricsLicense",
+                "voiceModelAuthorized",
+                "voiceConsentSource"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "songId",
+            "title",
+            "durationMs",
+            "rights"
+          ],
+          "additionalProperties": false
+        },
+        "sourceAudioPath": {
+          "default": "",
+          "type": "string"
+        },
+        "firstSliceMs": {
+          "default": 25000,
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 120000
+        },
+        "sliceMs": {
+          "default": 25000,
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 120000
+        },
+        "rvcModelPath": {
+          "default": "",
+          "type": "string"
+        },
+        "rvcIndexPath": {
+          "default": "",
+          "type": "string"
+        },
+        "pitchShiftSemitones": {
+          "default": 0,
+          "type": "integer",
+          "minimum": -12,
+          "maximum": 12
+        },
+        "indexRate": {
+          "default": 0.75,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "protectVoiceless": {
+          "default": 0.33,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "vocalGain": {
+          "default": 1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "accompanimentGain": {
+          "default": 0.75,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        }
+      },
+      "required": [
+        "requestId",
+        "characterId",
+        "voiceProfileId",
+        "song"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

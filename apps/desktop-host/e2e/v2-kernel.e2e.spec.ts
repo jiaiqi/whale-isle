@@ -142,6 +142,11 @@ interface DirectorV2Window {
       snapshot?: { status: string; participants: Array<{ participantId: string; connectionState: string; reconnectAttempts: number }> };
     }>;
     v2CoopModCompat(): Promise<{ ok: boolean; report?: { compatible: boolean; canStartCoop: boolean; bwfReady: boolean; hostModCount: number } }>;
+    v2SongCapabilities(): Promise<{ ok: boolean; capabilities: Array<{ name: string; ready: boolean; detail: string; hint?: string }>; error?: string }>;
+    v2SongRequest(input: Record<string, unknown>): Promise<{ ok: boolean; status?: { state: string; stage: string; rejectionReason?: string; unavailableReason?: string; missingCapabilities: string[]; prebufferPath?: string }; hasBackgroundJob?: boolean; error?: string }>;
+    v2SongSnapshot(): Promise<{ status: { state: string } | null; lastPlayback: unknown; playbackReceipts: unknown[] }>;
+    v2SongCancel(requestId: string): Promise<{ ok: boolean; cancelled: boolean; reason?: string }>;
+    v2SongShutdown(reason?: string): Promise<{ cancelledRequestId: string | null }>;
     v2PerfSnapshot(): Promise<{
       performance: { characterId: string; mode: string; halted: boolean };
       stage: { characterId: string; activeBackend: string; registeredBackends: string[]; devWatermarkActive: boolean };
@@ -262,7 +267,7 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_AUDIO_WORKER: 'http://127.0.0.1:9' },
     });
     try {
       const director = await waitForDirector(app);
@@ -922,6 +927,86 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(p303b.p5Blocked.pauseReason).toBe('p5_explicit_confirm');
       expect(p303b.p5Ok?.ok).toBe(true);
       expect(p303b.p5Replay?.pauseReason).toBe('p5_explicit_confirm');
+
+      // ---- V2-P3-01 点歌台：真实 IPC 全链路（worker 故意指向关闭端口，验证「缺后端如实报缺」） ----
+      const song = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const base = {
+          characterId: 'blue-whale-maid',
+          voiceProfileId: 'voice-xiaojing',
+          sourceAudioPath: '',
+        };
+        const rights = {
+          songLicense: 'original_owned',
+          accompanimentLicense: 'original_owned',
+          lyricsLicense: 'original_owned',
+          voiceModelAuthorized: true,
+          voiceConsentSource: 'owner_self_recorded',
+        };
+        const caps = await bridge.v2SongCapabilities();
+        const noRights = await bridge.v2SongRequest({
+          ...base,
+          requestId: 'e2e-song-rights',
+          song: {
+            songId: 'e2e-1',
+            title: '晴天',
+            artist: '周杰伦',
+            durationMs: 30_000,
+            rights: { ...rights, voiceModelAuthorized: false },
+          },
+        });
+        const blacklisted = await bridge.v2SongRequest({
+          ...base,
+          requestId: 'e2e-song-blacklist',
+          song: { songId: 'e2e-2', title: '国歌', artist: '群星', durationMs: 30_000, rights },
+        });
+        const missingBackend = await bridge.v2SongRequest({
+          ...base,
+          requestId: 'e2e-song-unavailable',
+          song: { songId: 'e2e-3', title: '晴天', artist: '周杰伦', durationMs: 30_000, rights },
+        });
+        const cancelUnknown = await bridge.v2SongCancel('e2e-no-such-request');
+        const shutdown = await bridge.v2SongShutdown('e2e');
+        const snapshot = await bridge.v2SongSnapshot();
+        return { caps, noRights, blacklisted, missingBackend, cancelUnknown, shutdown, snapshot };
+      });
+
+      // 能力探测：后端不可达 → 逐项不 ready 且说明真实原因，绝不假装可用
+      expect(song.caps.ok).toBe(false);
+      expect(song.caps.capabilities.length).toBeGreaterThan(0);
+      expect(song.caps.capabilities.every((c) => c.ready === false)).toBe(true);
+      expect(song.caps.capabilities.find((c) => c.name === 'demucs')?.detail).toContain('不可达');
+
+      // 门禁拒绝：授权不足 → rejected，且不进入任何音频处理
+      expect(song.noRights.ok).toBe(false);
+      expect(song.noRights.status?.state).toBe('rejected');
+      expect(song.noRights.status?.rejectionReason).toContain('授权门禁');
+      expect(song.noRights.status?.prebufferPath).toBeUndefined();
+
+      // 违禁曲目黑名单：走仓库 assets/song-blacklist.json（开发态路径解析真实生效）
+      expect(song.blacklisted.status?.state).toBe('rejected');
+      expect(song.blacklisted.status?.rejectionReason).toContain('违禁曲目黑名单');
+
+      // 后端缺失：逐项列缺口、明确 unavailable、无任何"已开唱"产物
+      expect(song.missingBackend.ok).toBe(false);
+      expect(song.missingBackend.status?.state).toBe('unavailable');
+      expect(song.missingBackend.status?.missingCapabilities.join('；')).toContain('demucs');
+      expect(song.missingBackend.status?.prebufferPath).toBeUndefined();
+      expect(song.missingBackend.status?.unavailableReason).toContain('拒绝以占位音频冒充真唱');
+
+      // 取消 / 退出清理：没有进行中的请求时不误伤
+      expect(song.cancelUnknown).toEqual({
+        ok: false,
+        cancelled: false,
+        reason: expect.stringContaining('没有正在进行的点歌请求'),
+      });
+      expect(song.shutdown).toEqual({ cancelledRequestId: null });
+
+      // 快照如实：状态是最后一次真实结果，从未播放过就没有播放回执
+      expect(song.snapshot.status?.state).toBe('unavailable');
+      expect(song.snapshot.lastPlayback).toBeNull();
+      expect(Array.isArray(song.snapshot.playbackReceipts)).toBe(true);
+      expect(song.snapshot.playbackReceipts).toHaveLength(0);
     } finally {
       await app.close();
       await new Promise<void>((resolve) => pageServer.close(() => resolve()));

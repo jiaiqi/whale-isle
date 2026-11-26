@@ -4,7 +4,7 @@
  * - 复用 provider-vault.ts 的 safeStorage 凭据库作为 SecretVaultPort，绝不重复造钥匙串逻辑
  * - 注册内置诊断插件 core-diagnostics，并将 V1 autodrive/voice 关键状态事件同步到 CharacterCore & LifeRuntime
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -54,6 +54,7 @@ import {
   type SingRequestInput,
   type SpeechPerformancePlanInput,
   type StageBackendKind,
+  type SongBlacklistEntry,
 } from '@workbench/shared-protocol';
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { ElectronBrowserEngine } from './electron-browser-engine';
@@ -96,6 +97,7 @@ import {
 } from '@workbench/model-gateway';
 import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
+import { createSongConsoleHost, loadSongBlacklist, resolveSongBlacklistPath, type SongPlaybackPort } from './song-console-host';
 import type { MemoryHost } from './memory-host';
 import type { VoiceHost } from './voice-host';
 import {
@@ -403,6 +405,61 @@ export async function createV2KernelHost(options: {
   // 未配置时 SingEngine 如实回报 svs/svc unavailable，绝不假装有真实歌声后端。
   const singEngine = new SingEngine({
     ...(process.env.WHALE_SING_WORKER ? { workerEndpoint: process.env.WHALE_SING_WORKER } : {}),
+  });
+  // V2-P3-01 点歌台：编排内核 + audio-ai-worker 真实 HTTP 客户端 + SQLite song_cache_index。
+  // 首切片就绪后用 macOS afplay 挂真实播放（无后端时永远走不到这里，也不假装播过）。
+  // 单端互斥：开唱前先停 TTS（复用 V1 VoiceHost 的 stopAll），避免两路声音叠在一起。
+  let playingSong: ReturnType<typeof spawn> | null = null;
+  let voiceStopAll: (() => void) | null = null;
+  const songPlayback: SongPlaybackPort = {
+    playFile: ({ filePath }) => {
+      voiceStopAll?.();
+      return new Promise((resolve) => {
+        const startedAt = Date.now();
+        const settle = (ok: boolean, reason?: string): void => {
+          playingSong = null;
+          resolve({ ok, playedMs: Date.now() - startedAt, ...(reason === undefined ? {} : { reason }) });
+        };
+        try {
+          const player = spawn('afplay', [filePath], { stdio: 'ignore' });
+          playingSong = player;
+          player.on('error', (err) => settle(false, `afplay 启动失败：${err.message}`));
+          player.on('exit', (code, signal) =>
+            code === 0
+              ? settle(true)
+              : settle(false, signal === 'SIGTERM' ? '播放被停止' : `afplay 退出码 ${code}`),
+          );
+        } catch (err) {
+          settle(false, err instanceof Error ? err.message : String(err));
+        }
+      });
+    },
+    stop: () => {
+      const player = playingSong;
+      playingSong = null;
+      if (player !== null && player.exitCode === null) {
+        try {
+          player.kill('SIGTERM');
+        } catch {
+          /* 已退出 */
+        }
+      }
+    },
+  };
+  const loadSongBlacklistPath = (): SongBlacklistEntry[] => {
+    const path = resolveSongBlacklistPath({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath ?? '',
+      repoRoot: resolve(dirname(fileURLToPath(import.meta.url)), '../../../..'),
+    });
+    return path === null ? [] : loadSongBlacklist(path);
+  };
+  const songConsoleHost = createSongConsoleHost({
+    userDataDir: options.userDataDir,
+    workerEndpoint: process.env.WHALE_AUDIO_WORKER ?? 'http://127.0.0.1:18770',
+    // 开发态仓库根 assets/，打包态 resources/assets（与 pet-packs 同一套路径约定）
+    blacklist: loadSongBlacklistPath(),
+    playback: songPlayback,
   });
   const performanceDirector = new PerformanceDirector({
     characterId: 'char_xiaojing',
@@ -1195,6 +1252,35 @@ export async function createV2KernelHost(options: {
     const stage = stageRuntime.stopPerformance(why);
     return { ok: true, performance: perf, stage };
   });
+  // ---- V2-P3-01 点歌台 IPC（真实调用路径：门禁 → 黑名单 → 缓存 → 分离/切片/转换 → 预缓冲 → 后台补齐） ----
+  ipcMain.handle('v2:song-capabilities', () => songConsoleHost.capabilities());
+  ipcMain.handle('v2:song-request', async (_e, rawInput: unknown) => {
+    try {
+      const session = await songConsoleHost.request(rawInput as Parameters<typeof songConsoleHost.request>[0]);
+      // 后台补齐不阻塞 IPC 返回；失败只记录，不静默吞掉
+      session.completion?.catch((err: unknown) => {
+        console.warn('[v2:song-request] 后台补齐失败：', err instanceof Error ? err.message : String(err));
+      });
+      return {
+        ok: session.status.state !== 'rejected' && session.status.state !== 'unavailable',
+        status: session.status,
+        hasBackgroundJob: session.completion !== null,
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:song-snapshot', () => ({
+    status: songConsoleHost.snapshot(),
+    lastPlayback: songConsoleHost.lastPlayback(),
+    playbackReceipts: songConsoleHost.playbackReceipts(),
+  }));
+  ipcMain.handle('v2:song-shutdown', (_e, reason?: string) =>
+    songConsoleHost.shutdown(typeof reason === 'string' && reason.trim() !== '' ? reason : 'user_quit'),
+  );
+  ipcMain.handle('v2:song-cancel', (_e, requestId: unknown) =>
+    songConsoleHost.cancel(typeof requestId === 'string' ? requestId : ''),
+  );
   ipcMain.handle('v2:stage-switch-backend', (_e, rawInput: { backend: StageBackendKind; binding?: unknown }) => {
     try {
       const backend = StageBackendKindSchema.parse(rawInput.backend);
@@ -1560,6 +1646,7 @@ export async function createV2KernelHost(options: {
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
       autodriveRef = autodrive;
+      voiceStopAll = () => voice.stopAll();
       stopFn = () => {
         inputMonitor.stop();
         void autodrive.runner.emergencyStop('V2 紧急停止');
@@ -1599,6 +1686,7 @@ export async function createV2KernelHost(options: {
       }
       performanceDirector.stopPerformance('kernel_stop');
       stageRuntime.stopPerformance('kernel_stop');
+      songConsoleHost.shutdown('kernel_stop');
       audioMixer.stopAll();
       characterCore.save();
       await kernel.stop();

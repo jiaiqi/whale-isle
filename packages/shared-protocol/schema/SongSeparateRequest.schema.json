@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SongSeparateRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SongSeparateRequest",
+  "$defs": {
+    "SongSeparateRequest": {
+      "type": "object",
+      "properties": {
+        "sourceAudioPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputDir": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "sourceAudioPath",
+        "outputDir"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

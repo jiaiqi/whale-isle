@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SongConcatRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SongConcatRequest",
+  "$defs": {
+    "SongConcatRequest": {
+      "type": "object",
+      "properties": {
+        "slicePaths": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "slicePaths",
+        "outputPath"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

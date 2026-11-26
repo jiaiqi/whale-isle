@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SongRenderSliceRequest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SongRenderSliceRequest",
+  "$defs": {
+    "SongRenderSliceRequest": {
+      "type": "object",
+      "properties": {
+        "rvcModelPath": {
+          "default": "",
+          "type": "string"
+        },
+        "rvcIndexPath": {
+          "default": "",
+          "type": "string"
+        },
+        "pitchShiftSemitones": {
+          "default": 0,
+          "type": "integer",
+          "minimum": -12,
+          "maximum": 12
+        },
+        "indexRate": {
+          "default": 0.75,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "protectVoiceless": {
+          "default": 0.33,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        },
+        "vocalGain": {
+          "default": 1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "accompanimentGain": {
+          "default": 0.75,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "vocalPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accompanimentPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "durationMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "outputPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "vocalPath",
+        "accompanimentPath",
+        "startMs",
+        "durationMs",
+        "outputPath"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

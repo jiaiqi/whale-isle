@@ -438,3 +438,168 @@ describe('SongConsole 完整管线', () => {
     expect(cache.stored).toHaveLength(0);
   });
 });
+
+describe('SongConsole 缓存键覆盖影响输出的全部输入', () => {
+  async function keyFor(overrides: Record<string, unknown> = {}, sourcePath?: string): Promise<string> {
+    const console_ = new SongConsole({ pipeline: fakePipeline(), cache: memoryCache(), cacheDir: workDir });
+    const result = await console_.request({
+      requestId: `req-key-${Math.random().toString(36).slice(2, 8)}`,
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      song: song(),
+      sourceAudioPath: sourcePath ?? writeAudio(join(workDir, 'src.wav')),
+      ...overrides,
+    } as never);
+    await result.completion;
+    return result.status.cacheKey;
+  }
+
+  it('换声线模型 → 键不同（避免换声线误复用旧缓存）', async () => {
+    const a = await keyFor({ rvcModelPath: '' });
+    const b = await keyFor({ rvcModelPath: 'rvc/xiaojing.pth' });
+    expect(a).not.toBe(b);
+  });
+
+  it('换索引 / 换升降调 / 换 indexRate / 换保护强度 → 键均不同', async () => {
+    const base = await keyFor({});
+    expect(await keyFor({ rvcIndexPath: 'rvc/xiaojing.index' })).not.toBe(base);
+    expect(await keyFor({ pitchShiftSemitones: 2 })).not.toBe(base);
+    expect(await keyFor({ indexRate: 0.5 })).not.toBe(base);
+    expect(await keyFor({ protectVoiceless: 0.1 })).not.toBe(base);
+    expect(await keyFor({ vocalGain: 1.2 })).not.toBe(base);
+    expect(await keyFor({ accompanimentGain: 0.5 })).not.toBe(base);
+  });
+
+  it('换 voiceProfileId / 换切片参数 → 键不同', async () => {
+    const base = await keyFor({});
+    expect(await keyFor({ voiceProfileId: 'other_profile' })).not.toBe(base);
+    expect(await keyFor({ firstSliceMs: 30_000 })).not.toBe(base);
+    expect(await keyFor({ sliceMs: 20_000 })).not.toBe(base);
+  });
+
+  it('同路径但源文件内容被替换（size/mtime 变化）→ 键不同', async () => {
+    const path = join(workDir, 'same-name.wav');
+    writeAudio(path, 64);
+    const first = await keyFor({}, path);
+    // 覆盖同名文件（内容长度不同 → size 变）
+    writeAudio(path, 128);
+    const second = await keyFor({}, path);
+    expect(first).not.toBe(second);
+  });
+
+  it('完全相同的输入 → 键稳定（可复用）', async () => {
+    const path = writeAudio(join(workDir, 'stable.wav'));
+    const a = await keyFor({}, path);
+    const b = await keyFor({}, path);
+    expect(a).toBe(b);
+  });
+});
+
+describe('SongConsole 取消与退出清理', () => {
+  it('后台补齐中途取消 → cancelled 且不落缓存', async () => {
+    const cache = memoryCache();
+    const gateRef: { release: () => void } = { release: () => undefined };
+    let sliceCalls = 0;
+    const gate = new Promise<void>((resolve) => {
+      gateRef.release = resolve;
+    });
+    const slowPipeline: SongConsolePipelinePort = {
+      probeCapabilities: async () => readyCaps(),
+      separate: async ({ outputDir }) => ({
+        vocalPath: writeAudio(join(outputDir, 'vocal.wav')),
+        accompanimentPath: writeAudio(join(outputDir, 'accomp.wav')),
+      }),
+      renderSlice: async ({ outputPath }) => {
+        sliceCalls += 1;
+        // 只卡住「后台补齐」的切片（首切片必须放行，否则 request() 不返回）
+        if (sliceCalls > 1) await gate;
+        return { audioPath: writeAudio(outputPath), durationMs: 25_000 };
+      },
+      concat: async ({ outputPath }) => ({ audioPath: writeAudio(outputPath), durationMs: 60_000 }),
+    };
+    const console_ = new SongConsole({ pipeline: slowPipeline, cache, cacheDir: workDir });
+    const result = await console_.request({
+      requestId: 'req-cancel-1',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      song: song({ durationMs: 60_000 }),
+      sourceAudioPath: writeAudio(join(workDir, 'src.wav')),
+    });
+    // 首切片就绪后（预缓冲）取消
+    expect(result.status.stage).toBe('prebuffer_ready');
+    const cancelResult = console_.cancel('req-cancel-1');
+    expect(cancelResult.ok).toBe(true);
+    expect(cancelResult.cancelled).toBe(true);
+    gateRef.release();
+    const final = await result.completion!;
+    expect(final.state).toBe('cancelled');
+    expect(cache.stored).toHaveLength(0);
+  });
+
+  it('取消不存在的请求 / 已终态请求 → ok=false 且给出原因', async () => {
+    const console_ = new SongConsole({ pipeline: fakePipeline(), cache: memoryCache(), cacheDir: workDir });
+    expect(console_.cancel('nope').ok).toBe(false);
+    expect(console_.cancel('').ok).toBe(false);
+    const done = await console_.request({
+      requestId: 'req-cancel-2',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      song: song(),
+      sourceAudioPath: join(workDir, 'missing.wav'),
+    });
+    expect(done.status.state).toBe('unavailable');
+    const again = console_.cancel('req-cancel-2');
+    expect(again.ok).toBe(false);
+    expect(again.reason).toContain('终态');
+  });
+});
+
+describe('SongConsole 后端异常兜底', () => {
+  it('separate 抛错（如后端 501）→ unavailable 且带真实错误原因', async () => {
+    const throwingPipeline: SongConsolePipelinePort = {
+      probeCapabilities: async () => readyCaps(),
+      separate: async () => {
+        throw new Error('HTTP 501：未找到 demucs 可执行（demucs）');
+      },
+      renderSlice: async ({ outputPath }) => ({ audioPath: writeAudio(outputPath), durationMs: 1 }),
+      concat: async ({ outputPath }) => ({ audioPath: writeAudio(outputPath), durationMs: 1 }),
+    };
+    const console_ = new SongConsole({ pipeline: throwingPipeline, cache: memoryCache(), cacheDir: workDir });
+    const result = await console_.request({
+      requestId: 'req-throw-1',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      song: song(),
+      sourceAudioPath: writeAudio(join(workDir, 'src.wav')),
+    });
+    expect(result.status.state).toBe('unavailable');
+    expect(result.status.unavailableReason).toContain('HTTP 501');
+    expect(result.status.missingCapabilities.join(' ')).toContain('demucs');
+  });
+
+  it('renderSlice 抛错 → unavailable 且不落缓存', async () => {
+    const cache = memoryCache();
+    const throwingPipeline: SongConsolePipelinePort = {
+      probeCapabilities: async () => readyCaps(),
+      separate: async ({ outputDir }) => ({
+        vocalPath: writeAudio(join(outputDir, 'v.wav')),
+        accompanimentPath: writeAudio(join(outputDir, 'a.wav')),
+      }),
+      renderSlice: async () => {
+        throw new Error('RVC 权重指纹不匹配');
+      },
+      concat: async ({ outputPath }) => ({ audioPath: writeAudio(outputPath), durationMs: 1 }),
+    };
+    const console_ = new SongConsole({ pipeline: throwingPipeline, cache, cacheDir: workDir });
+    const result = await console_.request({
+      requestId: 'req-throw-2',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      song: song(),
+      sourceAudioPath: writeAudio(join(workDir, 'src.wav')),
+    });
+    expect(result.status.state).toBe('unavailable');
+    expect(result.status.missingCapabilities.join(' ')).toContain('RVC 权重指纹不匹配');
+    expect(cache.stored).toHaveLength(0);
+  });
+});

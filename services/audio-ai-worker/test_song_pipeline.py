@@ -134,8 +134,9 @@ def test_concat_400_on_empty_and_missing_slices(tmp_path: Path, monkeypatch: pyt
     import song_pipeline
 
     monkeypatch.setattr(song_pipeline, "_which", lambda b: f"/fake/{b}")
+    # 跨语言契约已禁止空切片列表 → 由请求校验拦截（422），不再靠处理函数兜底
     empty = client.post("/api/song/concat", json={"slicePaths": [], "outputPath": str(tmp_path / "o.ogg")})
-    assert empty.status_code == 400
+    assert empty.status_code == 422
     missing = client.post(
         "/api/song/concat",
         json={"slicePaths": [str(tmp_path / "nope.ogg")], "outputPath": str(tmp_path / "o.ogg")},

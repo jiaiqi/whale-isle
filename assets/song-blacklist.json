@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-11-26",
+  "entries": [
+    {
+      "keyword": "国歌",
+      "reason": "法定庄重场合专用曲目，直播娱乐场景不得演唱或改编",
+      "scope": "all_channels"
+    },
+    {
+      "keyword": "国际歌",
+      "reason": "政治属性曲目，避免直播场景误用",
+      "scope": "all_channels"
+    },
+    {
+      "keyword": "没有共产党就没有新中国",
+      "reason": "政治属性曲目，避免直播场景误用",
+      "scope": "all_channels"
+    }
+  ]
+}

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -27,6 +28,8 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from protocol_models import SongConcatRequest, SongRenderSliceRequest, SongSeparateRequest
+
 router = APIRouter(prefix="/api/song")
 
 DEMUCS_BIN = os.environ.get("WHALE_SONG_DEMUCS_BIN", "demucs").strip() or "demucs"
@@ -34,6 +37,7 @@ RVC_BIN = os.environ.get("WHALE_SONG_RVC_BIN", "rvc").strip() or "rvc"
 FFMPEG_BIN = os.environ.get("WHALE_SONG_FFMPEG_BIN", "ffmpeg").strip() or "ffmpeg"
 RVC_MODEL_PATH = os.environ.get("WHALE_SONG_RVC_MODEL", "").strip()
 RVC_INDEX_PATH = os.environ.get("WHALE_SONG_RVC_INDEX", "").strip()
+DEMUCS_MODEL = os.environ.get("WHALE_SONG_DEMUCS_MODEL", "htdemucs").strip() or "htdemucs"
 
 CapabilityName = Literal["demucs", "rvc", "ffmpeg", "rmvpe"]
 
@@ -51,30 +55,6 @@ class CapabilitiesResponse(BaseModel):
     capabilities: list[SongCapability]
     ready: bool
     missing: list[str] = Field(default_factory=list)
-
-
-class SeparateRequest(BaseModel):
-    sourceAudioPath: str
-    outputDir: str
-    model: str = "htdemucs"
-
-
-class RenderSliceRequest(BaseModel):
-    vocalPath: str
-    accompanimentPath: str
-    startMs: int = Field(ge=0)
-    durationMs: int = Field(gt=0)
-    outputPath: str
-    pitchShiftSemitones: int = Field(default=0, ge=-12, le=12)
-    indexRate: float = Field(default=0.75, ge=0.0, le=1.0)
-    protectVoiceless: float = Field(default=0.33, ge=0.0, le=0.5)
-    vocalGainDb: float = Field(default=0.0, ge=-12.0, le=12.0)
-    accompanimentGainDb: float = Field(default=-3.0, ge=-24.0, le=6.0)
-
-
-class ConcatRequest(BaseModel):
-    slicePaths: list[str]
-    outputPath: str
 
 
 def _which(binary: str) -> str | None:
@@ -162,7 +142,7 @@ def _run(cmd: list[str]) -> tuple[bool, str]:
 
 
 @router.post("/separate")
-def separate(req: SeparateRequest) -> Any:
+def separate(req: SongSeparateRequest) -> Any:
     """Demucs v4：分离人声与伴奏。不产出占位音频。"""
     caps = probe_capabilities()
     demucs_cap = next(c for c in caps.capabilities if c.name == "demucs")
@@ -181,7 +161,7 @@ def separate(req: SeparateRequest) -> Any:
             DEMUCS_BIN,
             "--two-stems=vocals",
             "-n",
-            req.model,
+            DEMUCS_MODEL,
             "-o",
             str(demucs_out),
             req.sourceAudioPath,
@@ -189,7 +169,7 @@ def separate(req: SeparateRequest) -> Any:
     )
     if not ok:
         return JSONResponse(status_code=502, content={"error": f"Demucs 分离失败：{detail}", "capability": "demucs"})
-    stem_dir = demucs_out / req.model / Path(req.sourceAudioPath).stem
+    stem_dir = demucs_out / DEMUCS_MODEL / Path(req.sourceAudioPath).stem
     vocal = stem_dir / "vocals.wav"
     accompaniment = stem_dir / "no_vocals.wav"
     if not _file_ready(str(vocal)) or not _file_ready(str(accompaniment)):
@@ -201,7 +181,7 @@ def separate(req: SeparateRequest) -> Any:
 
 
 @router.post("/render-slice")
-def render_slice(req: RenderSliceRequest) -> Any:
+def render_slice(req: SongRenderSliceRequest) -> Any:
     """RVC v2 (RMVPE)：人声切片声线转换 + 与伴奏混音。不产出占位音频。"""
     caps = probe_capabilities()
     rvc_cap = next(c for c in caps.capabilities if c.name == "rvc")
@@ -216,6 +196,15 @@ def render_slice(req: RenderSliceRequest) -> Any:
         if not _file_ready(path):
             return JSONResponse(status_code=400, content={"error": f"{label}不存在或为空：{path}"})
 
+    # 请求内声线模型优先（同机可换声线），缺文件即如实拒绝，不退回别的模型冒充
+    model_path = (req.rvcModelPath or "").strip() or RVC_MODEL_PATH
+    index_path = (req.rvcIndexPath or "").strip() or RVC_INDEX_PATH
+    if not _file_ready(model_path):
+        return JSONResponse(
+            status_code=501,
+            content={"error": f"RVC 声线模型不存在：{model_path or '（未配置）'}", "capability": "rvc"},
+        )
+
     out_path = Path(req.outputPath)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     converted = out_path.with_suffix(".rvc.wav")
@@ -228,8 +217,8 @@ def render_slice(req: RenderSliceRequest) -> Any:
             "--output",
             str(converted),
             "--model",
-            RVC_MODEL_PATH,
-            *(["--index", RVC_INDEX_PATH] if RVC_INDEX_PATH else []),
+            model_path,
+            *(["--index", index_path] if _file_ready(index_path) else []),
             "--pitch",
             str(req.pitchShiftSemitones),
             "--index-rate",
@@ -258,7 +247,11 @@ def render_slice(req: RenderSliceRequest) -> Any:
             "-i",
             str(converted),
             "-filter_complex",
-            f"[0:a]volume={req.accompanimentGainDb}dB[a0];[1:a]volume={req.vocalGainDb}dB[a1];[a0][a1]amix=inputs=2:duration=longest",
+            (
+                f"[0:a]volume={_linear_to_db(req.accompanimentGain or 0):.2f}dB[a0];"
+                f"[1:a]volume={_linear_to_db(req.vocalGain or 0):.2f}dB[a1];"
+                "[a0][a1]amix=inputs=2:duration=longest"
+            ),
             "-c:a",
             "libvorbis",
             "-q:a",
@@ -274,7 +267,7 @@ def render_slice(req: RenderSliceRequest) -> Any:
 
 
 @router.post("/concat")
-def concat(req: ConcatRequest) -> Any:
+def concat(req: SongConcatRequest) -> Any:
     """把多个切片无缝拼接为最终产物（ffmpeg concat demuxer）。"""
     caps = probe_capabilities()
     ffmpeg_cap = next(c for c in caps.capabilities if c.name == "ffmpeg")
@@ -282,9 +275,10 @@ def concat(req: ConcatRequest) -> Any:
         return JSONResponse(
             status_code=501, content={"error": ffmpeg_cap.detail, "hint": ffmpeg_cap.hint, "capability": "ffmpeg"}
         )
-    if not req.slicePaths:
+    slice_paths = [item.root for item in req.slicePaths]
+    if not slice_paths:
         return JSONResponse(status_code=400, content={"error": "slicePaths 不能为空"})
-    missing = [p for p in req.slicePaths if not _file_ready(p)]
+    missing = [p for p in slice_paths if not _file_ready(p)]
     if missing:
         return JSONResponse(status_code=400, content={"error": f"切片文件缺失：{missing}"})
 
@@ -292,7 +286,7 @@ def concat(req: ConcatRequest) -> Any:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     list_file = out_path.with_suffix(".concat.txt")
     list_file.write_text(
-        "\n".join(f"file '{Path(p).resolve()}'" for p in req.slicePaths) + "\n", encoding="utf-8"
+        "\n".join(f"file '{Path(p).resolve()}'" for p in slice_paths) + "\n", encoding="utf-8"
     )
     ok, detail = _run(
         [FFMPEG_BIN, "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c:a", "libvorbis", "-q:a", "5", str(out_path)]
@@ -303,6 +297,13 @@ def concat(req: ConcatRequest) -> Any:
         return JSONResponse(status_code=502, content={"error": "拼接未产出音频", "capability": "ffmpeg"})
     duration_ms = _probe_duration_ms(out_path)
     return {"audioPath": str(out_path), "durationMs": duration_ms}
+
+
+def _linear_to_db(gain: float) -> float:
+    """契约里的增益是线性倍数（0=静音），ffmpeg 的 volume 滤镜吃 dB；0 按下限 -60dB 处理。"""
+    if gain <= 0.0:
+        return -60.0
+    return 20.0 * math.log10(gain)
 
 
 def _probe_duration_ms(path: Path) -> int:

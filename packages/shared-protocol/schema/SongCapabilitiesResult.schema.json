@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SongCapabilitiesResult",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SongCapabilitiesResult",
+  "$defs": {
+    "SongCapabilitiesResult": {
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "demucs",
+                  "rvc",
+                  "ffmpeg",
+                  "rmvpe"
+                ]
+              },
+              "ready": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1
+              },
+              "hint": {
+                "default": "",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "ready",
+              "detail"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "capabilities",
+        "ready",
+        "missing"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -14,7 +14,7 @@
             "tsundere_refuse",
             "rage_spray",
             "lazy_yawn",
-            "clumsy_panic"
+            "happy_rice"
           ]
         },
         "refAudioPath": {
@@ -24,6 +24,15 @@
         "refText": {
           "type": "string",
           "minLength": 1
+        },
+        "refAssetKind": {
+          "default": "real_voice",
+          "type": "string",
+          "enum": [
+            "real_voice",
+            "stub_sine",
+            "missing"
+          ]
         },
         "speed": {
           "default": 1,

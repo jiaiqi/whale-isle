@@ -5,6 +5,17 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P3-01` 点歌台：宿主 IPC 接线与真实调用路径 — 状态维持 `IMPLEMENTED_UNVERIFIED`）
+
+- **接通生产调用路径**：`v2-kernel-host.ts` 新增 `v2:song-capabilities|request|snapshot|cancel|shutdown` 五路 IPC，装配 `createSongConsoleHost()`（`SongConsole` 编排内核 + audio-ai-worker `/api/song/*` 真实 HTTP 客户端 + SQLite `song_cache_index` + 首切片播放挂载），preload 与 `DirectorBridge` 同步暴露类型。
+- **首切片真的接播放**：`prebuffer_ready` 与 `cache_hit` 才触发 `afplay`，且**在进程 exit 后才 resolve**，写入 `PLAYING → COMPLETED/FAILED/CANCELLED` 回执流水；`rejected/unavailable/cancelled` 会停播并标记 `CANCELLED`。开唱前先 `voice.stopAll()`，避免 TTS 与歌声两端同时出声。
+- **停止方式修正**：不再 `pkill -f afplay`（会误杀其它音频应用），改为持有子进程句柄按 `SIGTERM` 定向停止；`kernel.stop()` 调 `songConsoleHost.shutdown('kernel_stop')`。
+- **契约先行**：点歌请求/状态/能力与 Python 原子能力请求回执（`SongSeparateRequest/Result`、`SongRenderSliceRequest`、`SongAudioResult`、`SongConcatRequest`、`SongCapabilitiesResult`）登记进 `CONTRACT_SCHEMAS` 并生成 JSON Schema + Pydantic；`characterId` 收敛为 `^[a-zA-Z0-9_-]+$`（当文件名用，防路径穿越）。
+- **修掉「换声线只换缓存键」**：`renderSlice` 端口扩展为携带 `rvcModelPath/rvcIndexPath/pitchShiftSemitones/indexRate/protectVoiceless/vocalGain/accompanimentGain`，与缓存键同一组输入，真正送到推理端；Python 侧请求内模型优先且缺文件即 501，线性增益改为 `20*log10` 转 dB。
+- **缓存键加固**：源文件 `size@mtimeMs` 指纹参与哈希，同名换内容不误命中。
+- **验证**：`song-console-host.spec.ts` 15/15、内核 `song-console.spec.ts` 26/26、Python 61/61、真实 Electron IPC E2E 通过（worker 指向关闭端口，确定性验证门禁拒绝/违禁黑名单/逐项 unavailable/取消/退出清理/失败不落缓存，`lastPlayback` 如实为 `null`）、`pnpm verify:gate` 7/7。
+- **仍未实测**：本机无 Demucs / RVC / 声线权重 / 授权曲库，**分离、转换与首片真实播放均未跑过**；中控台点歌 UI 面板待后续工单。
+
 ### Added / Changed（`V2-P3-01` 真机补验：歌声引擎真实后端探测 — 状态维持 `IMPLEMENTED_UNVERIFIED`）
 
 - **新增 `services/sing-worker/`**（FastAPI，端口 18880）：歌声后端适配层。只转发到显式配置的 `WHALE_SING_SVS_ENDPOINT` / `WHALE_SING_SVC_ENDPOINT`；普通 TTS 单列 `ttsClone` 能力位如实上报，`detail` 强制带「普通 TTS 不得当作 SVS/SVC 使用」告警；后端缺失返回 501 + 具体原因且**不含** `audioBase64`，`neuralVerified` 仅在真实后端真返回音频时置 `true`。

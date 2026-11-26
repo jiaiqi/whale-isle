@@ -1,5 +1,10 @@
 import type { ZodType } from 'zod';
 import {
+  SongConsoleRequestSchema, SongConsoleStatusSchema, SongConsoleCapabilitySchema,
+  SongSeparateRequestSchema, SongSeparateResultSchema, SongRenderSliceRequestSchema,
+  SongAudioResultSchema, SongConcatRequestSchema, SongCapabilitiesResultSchema,
+} from './song-console';
+import {
   PauseConfigSchema,
   TtsEmotionTuningParamsSchema,
   SvcSingingTuningParamsSchema,
@@ -81,6 +86,15 @@ import {
 export const CONTRACT_VERSION = '1.0.0';
 
 export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
+  SongConsoleRequest: SongConsoleRequestSchema,
+  SongConsoleStatus: SongConsoleStatusSchema,
+  SongConsoleCapability: SongConsoleCapabilitySchema,
+  SongSeparateRequest: SongSeparateRequestSchema,
+  SongSeparateResult: SongSeparateResultSchema,
+  SongRenderSliceRequest: SongRenderSliceRequestSchema,
+  SongAudioResult: SongAudioResultSchema,
+  SongConcatRequest: SongConcatRequestSchema,
+  SongCapabilitiesResult: SongCapabilitiesResultSchema,
   PetRendererType: PetRendererTypeSchema,
   PetActionState: PetActionStateSchema,
   PetAvatarClip: PetAvatarClipSchema,

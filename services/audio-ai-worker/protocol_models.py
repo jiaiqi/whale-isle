@@ -13,6 +13,256 @@ from uuid import UUID
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 
 
+class Channel(StrEnum):
+    private_desktop = 'private_desktop'
+    livestream_public = 'livestream_public'
+    commercial_distribution = 'commercial_distribution'
+
+
+class Lyric(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    index: Annotated[int, Field(ge=0)]
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+    primaryText: Annotated[str, Field(min_length=1)]
+    secondaryText: str | None = None
+    romaji: str | None = None
+
+
+class SongLicense(StrEnum):
+    original_owned = 'original_owned'
+    licensed_commercial = 'licensed_commercial'
+    licensed_livestream = 'licensed_livestream'
+    dev_only_non_commercial = 'dev_only_non_commercial'
+    unlicensed = 'unlicensed'
+
+
+class AccompanimentLicense(StrEnum):
+    original_owned = 'original_owned'
+    licensed_commercial = 'licensed_commercial'
+    licensed_livestream = 'licensed_livestream'
+    dev_only_non_commercial = 'dev_only_non_commercial'
+    unlicensed = 'unlicensed'
+
+
+class LyricsLicense(StrEnum):
+    original_owned = 'original_owned'
+    licensed_commercial = 'licensed_commercial'
+    licensed_livestream = 'licensed_livestream'
+    dev_only_non_commercial = 'dev_only_non_commercial'
+    unlicensed = 'unlicensed'
+
+
+class Rights(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    songLicense: SongLicense
+    accompanimentLicense: AccompanimentLicense
+    lyricsLicense: LyricsLicense
+    voiceModelAuthorized: bool
+    voiceConsentSource: Annotated[str, Field(min_length=1)]
+    attribution: str | None = ''
+
+
+class Song(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    songId: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(min_length=1)]
+    artist: str | None = 'Original'
+    bpm: Annotated[float | None, Field(gt=0.0, le=300.0)] = 120
+    durationMs: Annotated[int, Field(gt=0)]
+    keySignature: str | None = 'C major'
+    preferredRange: str | None = 'C4-F5'
+    accompanimentTrackPath: str | None = None
+    melodyMidiPath: str | None = None
+    referenceVocalPath: str | None = None
+    lyrics: Annotated[list[Lyric] | None, Field(validate_default=True)] = []
+    rights: Rights
+
+
+class SongConsoleRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    requestId: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    voiceProfileId: Annotated[str, Field(min_length=1)]
+    channel: Channel | None = 'private_desktop'
+    song: Song
+    sourceAudioPath: str | None = ''
+    firstSliceMs: Annotated[int | None, Field(ge=5000, le=120000)] = 25000
+    sliceMs: Annotated[int | None, Field(ge=5000, le=120000)] = 25000
+    rvcModelPath: str | None = ''
+    rvcIndexPath: str | None = ''
+    pitchShiftSemitones: Annotated[int | None, Field(ge=-12, le=12)] = 0
+    indexRate: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.75
+    protectVoiceless: Annotated[float | None, Field(ge=0.0, le=0.5)] = 0.33
+    vocalGain: Annotated[float | None, Field(ge=0.0, le=2.0)] = 1
+    accompanimentGain: Annotated[float | None, Field(ge=0.0, le=2.0)] = 0.75
+
+
+class State(StrEnum):
+    idle = 'idle'
+    preparing = 'preparing'
+    streaming = 'streaming'
+    completing = 'completing'
+    completed = 'completed'
+    rejected = 'rejected'
+    unavailable = 'unavailable'
+    cancelled = 'cancelled'
+
+
+class Stage(StrEnum):
+    rights_check = 'rights_check'
+    blacklist_check = 'blacklist_check'
+    cache_lookup = 'cache_lookup'
+    cache_hit = 'cache_hit'
+    separating = 'separating'
+    slicing = 'slicing'
+    converting = 'converting'
+    mixing = 'mixing'
+    prebuffer_ready = 'prebuffer_ready'
+    streaming = 'streaming'
+    completing = 'completing'
+    completed = 'completed'
+    rejected = 'rejected'
+    unavailable = 'unavailable'
+    cancelled = 'cancelled'
+
+
+class RightsCheck(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    allowed: bool
+    channel: Channel
+    reasons: list[str]
+    requiresAttribution: bool
+
+
+class SongConsoleStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    requestId: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    state: State
+    stage: Stage
+    songId: Annotated[str, Field(min_length=1)]
+    songTitle: Annotated[str, Field(min_length=1)]
+    channel: Channel
+    rightsCheck: RightsCheck
+    cacheKey: Annotated[str, Field(min_length=1)]
+    cacheHit: bool | None = False
+    cacheLookupMs: Annotated[float | None, Field(ge=0.0)] = None
+    rejectionReason: str | None = None
+    unavailableReason: str | None = None
+    missingCapabilities: list[str] | None = []
+    prebufferPath: str | None = None
+    prebufferDurationMs: Annotated[int | None, Field(ge=0)] = None
+    finalPath: str | None = None
+    totalDurationMs: Annotated[int | None, Field(ge=0)] = None
+    completedSlices: Annotated[int | None, Field(ge=0)] = 0
+    totalSlices: Annotated[int | None, Field(ge=0)] = 0
+    backgroundJobId: str | None = None
+    updatedAt: Annotated[int, Field(ge=0)]
+
+
+class Name(StrEnum):
+    demucs = 'demucs'
+    rvc = 'rvc'
+    ffmpeg = 'ffmpeg'
+    rmvpe = 'rmvpe'
+
+
+class SongConsoleCapability(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: Name
+    ready: bool
+    detail: Annotated[str, Field(min_length=1)]
+    hint: str | None = ''
+
+
+class SongSeparateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    sourceAudioPath: Annotated[str, Field(min_length=1)]
+    outputDir: Annotated[str, Field(min_length=1)]
+
+
+class SongSeparateResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    vocalPath: Annotated[str, Field(min_length=1)]
+    accompanimentPath: Annotated[str, Field(min_length=1)]
+
+
+class SongRenderSliceRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    rvcModelPath: str | None = ''
+    rvcIndexPath: str | None = ''
+    pitchShiftSemitones: Annotated[int | None, Field(ge=-12, le=12)] = 0
+    indexRate: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.75
+    protectVoiceless: Annotated[float | None, Field(ge=0.0, le=0.5)] = 0.33
+    vocalGain: Annotated[float | None, Field(ge=0.0, le=2.0)] = 1
+    accompanimentGain: Annotated[float | None, Field(ge=0.0, le=2.0)] = 0.75
+    vocalPath: Annotated[str, Field(min_length=1)]
+    accompanimentPath: Annotated[str, Field(min_length=1)]
+    startMs: Annotated[int, Field(ge=0)]
+    durationMs: Annotated[int, Field(gt=0)]
+    outputPath: Annotated[str, Field(min_length=1)]
+
+
+class SongAudioResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    audioPath: Annotated[str, Field(min_length=1)]
+    durationMs: Annotated[int, Field(ge=0)]
+
+
+class SlicePath(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class SongConcatRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    slicePaths: Annotated[list[SlicePath], Field(min_length=1)]
+    outputPath: Annotated[str, Field(min_length=1)]
+
+
+class Capability(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: Name
+    ready: bool
+    detail: Annotated[str, Field(min_length=1)]
+    hint: str | None = ''
+
+
+class SongCapabilitiesResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    capabilities: list[Capability]
+    ready: bool
+    missing: list[str]
+
+
 class PetRendererType(StrEnum):
     webm_alpha = 'webm-alpha'
     live2d = 'live2d'
@@ -1383,7 +1633,13 @@ class EmotionTag6(StrEnum):
     tsundere_refuse = 'tsundere_refuse'
     rage_spray = 'rage_spray'
     lazy_yawn = 'lazy_yawn'
-    clumsy_panic = 'clumsy_panic'
+    happy_rice = 'happy_rice'
+
+
+class RefAssetKind(StrEnum):
+    real_voice = 'real_voice'
+    stub_sine = 'stub_sine'
+    missing = 'missing'
 
 
 class TtsEmotionTuningParams(BaseModel):
@@ -1393,6 +1649,7 @@ class TtsEmotionTuningParams(BaseModel):
     emotionTag: EmotionTag6
     refAudioPath: str | None = ''
     refText: Annotated[str, Field(min_length=1)]
+    refAssetKind: RefAssetKind | None = 'real_voice'
     speed: Annotated[float | None, Field(ge=0.7, le=1.4)] = 1
     temperature: Annotated[float | None, Field(ge=0.1, le=1.0)] = 1
     topP: Annotated[float | None, Field(ge=0.1, le=1.0)] = 1
@@ -1679,7 +1936,7 @@ class PetWindowView(BaseModel):
     bounds: Bounds
 
 
-class State(StrEnum):
+class State1(StrEnum):
     speaking = 'speaking'
     idle = 'idle'
 
@@ -1690,7 +1947,7 @@ class CoopSpeakerEvent(BaseModel):
     )
     activeAgentId: str | None
     speakerName: str
-    state: State
+    state: State1
     voiceId: str | None = None
 
 
@@ -2387,6 +2644,27 @@ class AIWorkbenchContracts(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    SongConsoleRequest_1: Annotated[
+        SongConsoleRequest, Field(alias='SongConsoleRequest')
+    ]
+    SongConsoleStatus_1: Annotated[SongConsoleStatus, Field(alias='SongConsoleStatus')]
+    SongConsoleCapability_1: Annotated[
+        SongConsoleCapability, Field(alias='SongConsoleCapability')
+    ]
+    SongSeparateRequest_1: Annotated[
+        SongSeparateRequest, Field(alias='SongSeparateRequest')
+    ]
+    SongSeparateResult_1: Annotated[
+        SongSeparateResult, Field(alias='SongSeparateResult')
+    ]
+    SongRenderSliceRequest_1: Annotated[
+        SongRenderSliceRequest, Field(alias='SongRenderSliceRequest')
+    ]
+    SongAudioResult_1: Annotated[SongAudioResult, Field(alias='SongAudioResult')]
+    SongConcatRequest_1: Annotated[SongConcatRequest, Field(alias='SongConcatRequest')]
+    SongCapabilitiesResult_1: Annotated[
+        SongCapabilitiesResult, Field(alias='SongCapabilitiesResult')
+    ]
     PetRendererType_1: Annotated[PetRendererType, Field(alias='PetRendererType')]
     PetActionState_1: Annotated[PetActionState, Field(alias='PetActionState')]
     PetAvatarClip_1: Annotated[PetAvatarClip, Field(alias='PetAvatarClip')]

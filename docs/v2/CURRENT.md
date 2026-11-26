@@ -19,7 +19,7 @@
 - **度量工具** [measure-lyrics-clock-drift.mts](../../tools/scripts/measure-lyrics-clock-drift.mts)：真实墙钟 `process.hrtime.bigint` 25ms 采样驱动 `LyricsClockSync`，输出每行高亮偏差 JSON。
 - **真机证据**（`[REAL-DEVICE]`，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md) 第 3 节）：三层探测 `Electron → sing-worker(18880) → GPT-SoVITS(9880)` 真实跑通；歌词时钟 max 偏差 **25ms** / P95 25ms（容差 60ms，4/4 命中）；跨 `live2d/vrm-3d/obs-stage/desktop-2d` 状态 `retained=true`（歌词行/口型/表情/舞蹈动作全保）；pet-stage 实为 WebM 双 `<video>` 渲染（0 canvas、60.4 FPS、P95 18.3ms、0 丢帧）；GPT-SoVITS 真实推理 HTTP 200 / 1.01s / 32000Hz / 2580ms（**属 TTS 非唱歌**，故不置真）。
 - **门禁与单测**：`pnpm verify:gate` **7/7 PASS**；`performance.spec.ts` **5/5 PASS**（新增明细回传与 `neuralVerified` 门禁两例）；`services/sing-worker/test_sing_worker.py` **4/4 PASS**（无后端时 501 且不含 `audioBase64`）。
-- **为什么不是 `DONE`**：本机**无合法 `.moc3` / `.vrm` 资产**（Live2D/VRM 画布目视无从谈起）、**无歌声合成（SVS）与音色转换（SVC）后端**（GPT-SoVITS 是 TTS 音色克隆，不能冒充唱歌）、情绪参考音频只有 1/5 组、点歌台管线未落地。清单已报 owner，状态维持 `IMPLEMENTED_UNVERIFIED`。
+- **为什么不是 `DONE`**：本机**无合法 `.moc3` / `.vrm` 资产**（Live2D/VRM 画布目视无从谈起）、**无歌声合成（SVS）与音色转换（SVC）后端**（GPT-SoVITS 是 TTS 音色克隆，不能冒充唱歌）、情绪参考音频**真实五组全缺**（现有 `design_sweet_normal.wav` 已证实是合成 stub，不是真人声）、点歌台管线**已落地并接通宿主 IPC**（`v2:song-*` 五路，见 [P3-song-console-host-verification.md](./evidence/P3-song-console-host-verification.md)，但无 Demucs/RVC/曲库，分离·转换·首片播放未实测）。清单已报 owner，状态维持 `IMPLEMENTED_UNVERIFIED`。
 - **历史交接**（`V2-P3-03`，已转 `DONE`）：受控 Browser Use 与 Computer Use，真实 CGEvent 注入经 3c 自研 Swift helper 接线并真机验证（指针精确落位、合成事件不误伤租约），证据 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)。
 
 ## 3. 下一步行动（Next Agent 从这里接手）

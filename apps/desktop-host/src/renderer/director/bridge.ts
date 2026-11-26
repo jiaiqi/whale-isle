@@ -81,6 +81,9 @@ import type {
   SoundAssetInspection,
   SpeechPerformancePlan,
   SpeechPerformancePlanInput,
+  SongConsoleCapability,
+  SongConsoleRequestInput,
+  SongConsoleStatus,
   StageBackendKind,
   StageCharacterBindingInput,
   StageRuntimeSnapshot,
@@ -372,6 +375,18 @@ export interface AutodriveEventView {
   gameId?: GameId;
   generation?: number;
   agentId?: string;
+}
+
+/** 点歌首切片播放回执（真实播放结束/失败/取消后由宿主写入） */
+export interface SongPlaybackReceiptView {
+  requestId: string;
+  cacheKey: string;
+  filePath: string;
+  status: 'PLAYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  startedAt: number;
+  endedAt?: number;
+  playedMs?: number;
+  reason?: string;
 }
 
 export interface DirectorBridge {
@@ -877,6 +892,24 @@ export interface DirectorBridge {
     participantId?: string;
     reason?: string;
   }): Promise<{ ok: boolean; error?: string; snapshot?: CoopRuntimeSnapshot; detail?: unknown }>;
+  v2SongCapabilities(): Promise<{
+    ok: boolean;
+    capabilities: SongConsoleCapability[];
+    error?: string;
+  }>;
+  v2SongRequest(input: SongConsoleRequestInput): Promise<{
+    ok: boolean;
+    status?: SongConsoleStatus;
+    hasBackgroundJob?: boolean;
+    error?: string;
+  }>;
+  v2SongSnapshot(): Promise<{
+    status: SongConsoleStatus | null;
+    lastPlayback: SongPlaybackReceiptView | null;
+    playbackReceipts: SongPlaybackReceiptView[];
+  }>;
+  v2SongCancel(requestId: string): Promise<{ ok: boolean; cancelled: boolean; reason?: string }>;
+  v2SongShutdown(reason?: string): Promise<{ cancelledRequestId: string | null }>;
   v2PerfSnapshot(): Promise<{
     performance: PerformanceSnapshot;
     stage: StageRuntimeSnapshot;
