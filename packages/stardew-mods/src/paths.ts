@@ -11,34 +11,57 @@
  */
 import { join } from 'node:path';
 
-/** 星露谷 Mods 目录候选（按优先级排序；调用方负责探测哪一个存在） */
-export function guessModsDirs(platform: NodeJS.Platform, homedir: string): string[] {
+/** 星露谷游戏根目录候选（按优先级排序；调用方负责探测哪一个存在） */
+export function guessGameRootDirs(platform: NodeJS.Platform, homedir: string): string[] {
   if (platform === 'darwin') {
-    const gameRoot = join(
-      homedir,
-      'Library',
-      'Application Support',
-      'Steam',
-      'steamapps',
-      'common',
-      'Stardew Valley',
-    );
-    // SMAPI on macOS 把 Mods 放进 app bundle 的 Contents/MacOS 下，其次才是游戏根目录
-    return [join(gameRoot, 'Contents', 'MacOS', 'Mods'), join(gameRoot, 'Mods')];
+    return [
+      join(homedir, 'Library', 'Application Support', 'Steam', 'steamapps', 'common', 'Stardew Valley'),
+    ];
   }
   if (platform === 'win32') {
     return [
-      'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Stardew Valley\\Mods',
-      'C:\\Program Files\\Steam\\steamapps\\common\\Stardew Valley\\Mods',
+      'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Stardew Valley',
+      'C:\\Program Files\\Steam\\steamapps\\common\\Stardew Valley',
     ];
   }
   if (platform === 'linux') {
     return [
-      join(homedir, '.steam', 'steam', 'steamapps', 'common', 'Stardew Valley', 'Mods'),
-      join(homedir, '.local', 'share', 'Steam', 'steamapps', 'common', 'Stardew Valley', 'Mods'),
+      join(homedir, '.steam', 'steam', 'steamapps', 'common', 'Stardew Valley'),
+      join(homedir, '.local', 'share', 'Steam', 'steamapps', 'common', 'Stardew Valley'),
     ];
   }
   return [];
+}
+
+/**
+ * 游戏可执行文件所在目录。
+ * macOS 的 Steam 版没有外层 `.app`：真正的游戏运行目录在 `Stardew Valley/Contents/MacOS`，
+ * SMAPI、Mods 与存档入口都在这一层；Windows/Linux 则是游戏根目录本身。
+ */
+export function gameExecutableDir(platform: NodeJS.Platform, gameRoot: string): string {
+  return platform === 'darwin' ? join(gameRoot, 'Contents', 'MacOS') : gameRoot;
+}
+
+/** SMAPI 可执行文件候选（macOS 无扩展名，Windows 为 .exe） */
+export function guessSmapiBinaries(platform: NodeJS.Platform, gameRoot: string): string[] {
+  if (platform === 'win32') return [`${gameRoot}\\StardewModdingAPI.exe`];
+  return [join(gameExecutableDir(platform, gameRoot), 'StardewModdingAPI')];
+}
+
+/** 星露谷 Mods 目录候选（按优先级排序；调用方负责探测哪一个存在） */
+export function guessModsDirs(platform: NodeJS.Platform, homedir: string): string[] {
+  const dirs: string[] = [];
+  for (const gameRoot of guessGameRootDirs(platform, homedir)) {
+    // Windows 用反斜杠拼接，保证在任意宿主上跑单测时输出稳定（与游戏真实路径一致）
+    if (platform === 'win32') {
+      dirs.push(`${gameRoot}\\Mods`);
+      continue;
+    }
+    // macOS：SMAPI 把 Mods 放进 Contents/MacOS 下，其次才是游戏根目录；Linux 只有根目录
+    dirs.push(join(gameExecutableDir(platform, gameRoot), 'Mods'));
+    if (platform === 'darwin') dirs.push(join(gameRoot, 'Mods'));
+  }
+  return dirs;
 }
 
 /**

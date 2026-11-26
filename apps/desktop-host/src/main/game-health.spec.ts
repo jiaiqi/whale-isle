@@ -33,6 +33,22 @@ describe('probeGameHealth · 星露谷（BWF MCP）', () => {
     expect(report.status).toBe('online');
   });
 
+  it('标题画面：HTTP 200 + isError:false +「还没有进入存档」→ reachable，不冒充 online', async () => {
+    const fetchImpl = (async () => json({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        content: [{ type: 'text', text: '游戏还没有进入存档（在标题画面或正在加载）。请玩家先读取存档。' }],
+        isError: false,
+      },
+    })) as unknown as typeof fetch;
+    const report = await probeGameHealth('stardew', { fetchImpl });
+    expect(report.status).toBe('reachable');
+    expect(report.ok).toBe(false);
+    expect(report.detail).toContain('标题画面');
+    expect(report.guidance.length).toBeGreaterThan(0);
+  });
+
   it('MCP 返回 error（游戏在跑但没进存档）→ reachable + 启动指引', async () => {
     const fetchImpl = (async () => json({ jsonrpc: '2.0', id: 1, error: { message: 'no save loaded' } })) as unknown as typeof fetch;
     const report = await probeGameHealth('stardew', { fetchImpl });
