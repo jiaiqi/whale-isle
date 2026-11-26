@@ -47,7 +47,7 @@ import {
 } from './chat-directive';
 import type { VoiceHost, VoiceScene } from './voice-host';
 import type { CharacterRegistry } from './character-registry';
-import type { PetCharacter, PetAvatarManifest } from '@workbench/shared-protocol';
+import type { ChatMessageContent, PetCharacter, PetAvatarManifest } from '@workbench/shared-protocol';
 
 export interface AutodriveHost {
   readonly runner: AutodriveRunner;
@@ -86,6 +86,12 @@ export interface AutodriveHost {
     user: string,
     maxTokens?: number,
   ): Promise<{ content: string; tokensUsed: number } | null>;
+  /** V2-P3-04E：多模态聊天通道（Digital Life 内容理解复用同一 Gateway/Key/饭碗计量）；网关未就绪返回 null */
+  chatViaGateway(
+    slot: WorkbenchRoleSlot,
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: ChatMessageContent }>,
+    opts?: { maxTokens?: number; temperature?: number },
+  ): Promise<{ content: string; modelId: string } | null>;
 }
 
 /** 游戏 → 规划器角色槽位（M7：槽位名按游戏分组，不改星露谷原名） */
@@ -997,6 +1003,11 @@ export function createAutodriveHost(
         content: receipt.content,
         tokensUsed: receipt.usage.inputTokens + receipt.usage.outputTokens,
       };
+    },
+    async chatViaGateway(slot, messages, opts) {
+      if (gateway === null) return null;
+      const receipt = await gateway.chat(slot, messages, opts);
+      return { content: receipt.content, modelId: receipt.route.modelId };
     },
   };
 }

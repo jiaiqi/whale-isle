@@ -128,3 +128,15 @@ describe('SocialRuntime L1 只读浏览内核（V2-P3-04C）', () => {
     expect(runtime.listSessions()).toHaveLength(2);
   });
 });
+
+describe('SocialRuntime 能力热更新（V2-P3-04E）', () => {
+  it('updateCapabilities 后新矩阵立即生效', () => {
+    const { runtime } = makeRuntime([]);
+    expect(() => runtime.planSession({ platform: 'bilibili', objective: 'x' })).toThrowError(
+      expect.objectContaining({ code: 'PERMISSION_DENIED' }),
+    );
+    runtime.updateCapabilities([VERIFIED_READ]);
+    const session = runtime.planSession({ platform: 'bilibili', objective: 'x' });
+    expect(session.status).toBe('planned');
+  });
+});

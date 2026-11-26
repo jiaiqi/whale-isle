@@ -37,6 +37,7 @@ import type {
   BlenderToolchainStatus,
   BrowserComputerSnapshot,
   BrowserTaskOutcome,
+  BrowseSession,
   CharacterCoreSnapshot,
   CoopModCompatibilityReport,
   CoopRuntimeSnapshot,
@@ -48,6 +49,8 @@ import type {
   ProviderQuotaMatrix,
   ProviderQuotaReport,
   SingProviderStatus,
+  SocialPlatformCapabilityEntry,
+  SocialPlatformId,
   StageBackendKind,
   StageRuntimeSnapshot,
   VoiceProviderStatus,
@@ -140,9 +143,16 @@ export function LifeConsoleView({
   const [autoSnap, setAutoSnap] = useState<BrowserComputerSnapshot | null>(null);
   const [lastBrowserOutcome, setLastBrowserOutcome] = useState<BrowserTaskOutcome | null>(null);
   const [acctDraft, setAcctDraft] = useState({ characterId: 'char_xiaojing', platform: 'bilibili', username: '', secret: '' });
+  // V2-P3-04E：Digital Life L1 社区只读浏览
+  const [socialSnap, setSocialSnap] = useState<{
+    sessions: BrowseSession[];
+    capabilities: SocialPlatformCapabilityEntry[];
+    autonomyLevel: 'l1_readonly';
+  } | null>(null);
+  const [socialDraft, setSocialDraft] = useState({ platform: 'bilibili' as SocialPlatformId, objective: '' });
 
   const loadAll = useCallback(async (): Promise<void> => {
-    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop, liveRes, auto] = await Promise.all([
+    const [storage, providers, mix, auditRows, perfRes, blender, bibles, assets, coop, liveRes, auto, social] = await Promise.all([
       window.directorBridge.v2StorageCheck().catch(() => null),
       window.directorBridge.v2VoiceProviders().catch(() => []),
       window.directorBridge.v2VoiceMixerState().catch(() => null),
@@ -154,6 +164,7 @@ export function LifeConsoleView({
       window.directorBridge.v2CoopSnapshot().catch(() => null),
       window.directorBridge.v2LiveSnapshot().catch(() => null),
       window.directorBridge.v2AutoSnapshot().catch(() => null),
+      window.directorBridge.v2SocialSnapshot().catch(() => null),
     ]);
     if (storage !== null) setStorageInfo(storage);
     setVoiceProviders(providers);
@@ -166,6 +177,7 @@ export function LifeConsoleView({
     }
     if (liveRes !== null) setLiveSnap(liveRes);
     if (auto !== null) setAutoSnap(auto);
+    if (social !== null) setSocialSnap(social);
     setP2Summary((prev) => ({
       ...prev,
       blender,
@@ -525,6 +537,51 @@ export function LifeConsoleView({
   };
 
   const activeEmbodiment = snapshot?.embodiments.find((e) => e.active) ?? snapshot?.embodiments[0];
+
+  // ---- V2-P3-04E：Digital Life L1 社区只读浏览操作 ----
+  const refreshSocial = async (): Promise<void> => {
+    setSocialSnap(await window.directorBridge.v2SocialSnapshot().catch(() => null));
+  };
+  const handleSocialPlan = async (): Promise<void> => {
+    if (socialDraft.objective.trim() === '') {
+      toast.error('先写清本次浏览目标（目标必填，禁止无目的漫游）');
+      return;
+    }
+    const res = await window.directorBridge.v2SocialPlan({
+      platform: socialDraft.platform,
+      objective: socialDraft.objective.trim(),
+    });
+    if (res.ok) {
+      toast.success('浏览会话已规划（L1 只读）');
+      setSocialDraft((prev) => ({ ...prev, objective: '' }));
+    } else {
+      toast.error(`规划被拒：${res.error ?? '未知原因'}`);
+    }
+    await refreshSocial();
+  };
+  const handleSocialAction = async (action: 'start' | 'pause' | 'complete' | 'abort', sessionId: string): Promise<void> => {
+    const res =
+      action === 'start' ? await window.directorBridge.v2SocialStart(sessionId)
+        : action === 'pause' ? await window.directorBridge.v2SocialPause(sessionId)
+          : action === 'complete' ? await window.directorBridge.v2SocialComplete(sessionId)
+            : await window.directorBridge.v2SocialAbort({ sessionId, reason: 'user_stopped' });
+    if (!res.ok) toast.error(res.error ?? '操作失败');
+    await refreshSocial();
+  };
+  const handleSocialCapabilityVerify = async (platform: SocialPlatformId): Promise<void> => {
+    // 声明「已实测」：操作者声明刚人工实测过该平台 read_public（诚实口径：由人点，不由程序编）
+    const res = await window.directorBridge.v2SocialCapabilityUpsert({
+      platform,
+      capability: 'read_public',
+      channel: 'browser_ui',
+      allowed: true,
+      riskLevel: 'P2',
+      lastVerifiedAt: Date.now(),
+      notes: '中控台人工声明已实测',
+    });
+    if (res.ok) toast.success(`${platform} read_public 已标记实测`);
+    await refreshSocial();
+  };
 
   return (
     <div data-v2-life-console className="wb-page space-y-4 rise">
@@ -1102,6 +1159,127 @@ export function LifeConsoleView({
               {lastBrowserOutcome.runner.injectionSignals.length > 0 ? ` · 注入特征 ${lastBrowserOutcome.runner.injectionSignals.join('/')}` : ''}
             </span>
           )}
+        </div>
+      </section>
+
+      {/* Section B4: V2-P3-04E Digital Life L1 社区只读浏览（能力矩阵门禁 + 会话状态机） */}
+      <section className="card space-y-3 px-5 py-4" data-v2-social-section>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <Compass size={14} style={{ color: 'var(--blue)' }} />
+            社区数字生活 · L1 只读学习（P3-04）
+          </h2>
+          <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+            自治等级 {socialSnap?.autonomyLevel ?? 'l1_readonly'} · 能力 {socialSnap?.capabilities.length ?? 0} 项 ·
+            会话 {socialSnap?.sessions.length ?? 0} 个
+          </span>
+        </div>
+        <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+          L1 硬边界：只读浏览，互动能力（点赞/关注/评论/发布）契约与运行时双重拦截；
+          平台能力须「已授权 + 已实测」双条件齐备才放行（未实测显示 lastVerifiedAt=0）。
+        </p>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-social-capabilities>
+            <div className="font-semibold" style={{ color: 'var(--text-1)' }}>平台能力矩阵</div>
+            {(socialSnap?.capabilities.length ?? 0) === 0 ? (
+              <div style={{ color: 'var(--text-3)' }}>
+                暂无能力声明。人工实测某平台可读后点下方按钮声明，角色才能开始浏览（不以第三方项目能做为证据）。
+              </div>
+            ) : (
+              socialSnap!.capabilities.map((cap) => (
+                <div key={`${cap.platform}/${cap.capability}`} className="flex flex-wrap items-center gap-1.5" data-v2-social-capability={cap.platform}>
+                  <span className={`pill mono${cap.allowed && cap.lastVerifiedAt > 0 ? ' pill-green' : ''}`} style={{ fontSize: 10 }}>
+                    {cap.platform}/{cap.capability}
+                  </span>
+                  <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                    {cap.channel} · {cap.allowed ? '已授权' : '未授权'} · {cap.lastVerifiedAt > 0 ? '已实测' : '未实测'}
+                  </span>
+                </div>
+              ))
+            )}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {(['bilibili', 'douyin', 'xiaohongshu', 'weibo', 'generic_web'] as const).map((platform) => (
+                <button
+                  key={platform}
+                  type="button"
+                  data-v2-social-verify={platform}
+                  onClick={() => void handleSocialCapabilityVerify(platform)}
+                  className="btn-pill ghost"
+                  style={{ padding: '3px 8px', fontSize: 10.5 }}
+                >
+                  声明 {platform} 已实测可读
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-social-sessions>
+            <div className="font-semibold" style={{ color: 'var(--text-1)' }}>浏览会话</div>
+            {(socialSnap?.sessions.length ?? 0) === 0 ? (
+              <div style={{ color: 'var(--text-3)' }}>暂无会话。写下目标并规划一次只读浏览。</div>
+            ) : (
+              socialSnap!.sessions.map((session) => (
+                <div key={session.sessionId} className="space-y-1 rounded-lg p-1.5" style={{ background: 'var(--surface-solid)' }} data-v2-social-session={session.sessionId}>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="pill pill-blue mono" style={{ fontSize: 10 }}>{session.platform}</span>
+                    <span className="mono text-[10px]" style={{ color: 'var(--text-2)' }}>{session.status}</span>
+                    <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                      {session.itemsViewed}/{session.maxItems} 条
+                      {session.stopReason ? ` · ${session.stopReason}` : ''}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-2)' }}>{session.objective}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {session.status === 'planned' && (
+                      <button type="button" data-v2-social-act="start" onClick={() => void handleSocialAction('start', session.sessionId)} className="btn-pill green" style={{ padding: '2px 8px', fontSize: 10.5 }}>
+                        <Play size={10} />开始
+                      </button>
+                    )}
+                    {session.status === 'active' && (
+                      <button type="button" data-v2-social-act="pause" onClick={() => void handleSocialAction('pause', session.sessionId)} className="btn-pill ghost" style={{ padding: '2px 8px', fontSize: 10.5 }}>
+                        暂停
+                      </button>
+                    )}
+                    {(session.status === 'active' || session.status === 'paused') && (
+                      <>
+                        <button type="button" data-v2-social-act="complete" onClick={() => void handleSocialAction('complete', session.sessionId)} className="btn-pill ghost" style={{ padding: '2px 8px', fontSize: 10.5 }}>
+                          收官
+                        </button>
+                        <button type="button" data-v2-social-act="abort" onClick={() => void handleSocialAction('abort', session.sessionId)} className="btn-pill ghost" style={{ padding: '2px 8px', fontSize: 10.5, color: 'var(--red)' }}>
+                          <Square size={10} />中止
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <select
+                data-v2-social-platform
+                value={socialDraft.platform}
+                onChange={(e) => setSocialDraft((prev) => ({ ...prev, platform: e.target.value as SocialPlatformId }))}
+                className="rounded-lg px-2 py-1 text-[11px] outline-none"
+                style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+              >
+                {(['bilibili', 'douyin', 'xiaohongshu', 'weibo', 'generic_web'] as const).map((platform) => (
+                  <option key={platform} value={platform}>{platform}</option>
+                ))}
+              </select>
+              <input
+                data-v2-social-objective
+                value={socialDraft.objective}
+                onChange={(e) => setSocialDraft((prev) => ({ ...prev, objective: e.target.value }))}
+                placeholder="本次浏览目标（必填）"
+                className="min-w-40 flex-1 rounded-lg px-2 py-1 text-[11px] outline-none"
+                style={{ background: 'var(--surface-solid)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+              />
+              <button type="button" data-v2-social-plan onClick={() => void handleSocialPlan()} className="btn-pill primary" style={{ padding: '4px 10px', fontSize: 11 }}>
+                <Plus size={11} />规划只读浏览
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 

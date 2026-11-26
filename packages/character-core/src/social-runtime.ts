@@ -59,6 +59,13 @@ export class SocialRuntime {
     this.onMutate = options.onMutate;
   }
 
+  /** 能力矩阵热更新（宿主持久化配置变更后调用，运行期只消费 Zod 校验过的条目） */
+  updateCapabilities(entries: SocialPlatformCapabilityEntry[]): void {
+    this.capabilities.length = 0;
+    this.capabilities.push(...entries);
+    this.onMutate?.();
+  }
+
   /** 能力门禁：存在、授权、已实测三者齐备才放行 */
   assertCapability(platform: SocialPlatformId, capability: SocialCapabilityKind): SocialPlatformCapabilityEntry {
     if (this.autonomyLevel === 'l1_readonly' && L1_FORBIDDEN_CAPABILITIES.includes(capability)) {

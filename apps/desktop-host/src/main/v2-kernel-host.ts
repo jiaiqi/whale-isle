@@ -27,15 +27,20 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
-import { CharacterCore, type SelectActivityInput } from '@workbench/character-core';
+import { CharacterCore, ContentUnderstandingPipeline, InterestSink, SocialRuntime, type InterestMemoryPort, type SelectActivityInput } from '@workbench/character-core';
 import {
   AudioTrackKindSchema,
+  BrowseCandidateSchema,
   type BrowserTaskRequestInput,
+  ChatImageMimeSchema,
+  ContentItemRefSchema,
   GoalHorizonSchema,
   GoalOriginSchema,
   LifeActivityKindSchema,
   MemoryCategorySchema,
   PreferenceCategorySchema,
+  SocialPlatformCapabilityEntrySchema,
+  SocialPlatformIdSchema,
   StageBackendKindSchema,
   StageCharacterBindingSchema,
   StageSceneSpecSchema,
@@ -137,6 +142,24 @@ export interface V2KernelHost {
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost; memory?: MemoryHost }): void;
   stop(): Promise<void>;
 }
+
+/** V2-P3-04E：规划 L1 浏览会话的 IPC 入参 */
+const SocialPlanInputSchema = z.object({
+  platform: SocialPlatformIdSchema,
+  objective: z.string().min(1).max(300),
+  goalId: z.string().min(1).optional(),
+  maxItems: z.number().int().min(1).max(50).optional(),
+  maxDurationMs: z.number().int().min(10_000).max(3_600_000).optional(),
+});
+
+/** V2-P3-04E：内容理解 IPC 入参（页面正文与截图为不可信数据） */
+const SocialUnderstandInputSchema = z.object({
+  sessionId: z.string().min(1),
+  item: ContentItemRefSchema,
+  textContent: z.string().max(64_000),
+  screenshot: z.object({ mime: ChatImageMimeSchema, dataBase64: z.string().min(1) }).optional(),
+  currentInterests: z.array(z.string().min(1).max(50)).max(20).optional(),
+});
 
 const AddGoalInputSchema = z.object({
   title: z.string().min(1).max(200),
@@ -322,6 +345,7 @@ export async function createV2KernelHost(options: {
 
   let stopFn: (() => void) | null = null;
   let memoryHostRef: MemoryHost | null = null;
+  let autodriveRef: AutodriveHost | null = null;
   const unsubscribers: Array<() => void> = [];
 
   ipcMain.handle('v2:kernel-health', () => kernel.health());
@@ -486,6 +510,37 @@ export async function createV2KernelHost(options: {
     monitor: inputMonitor,
   });
   if (process.env.WHALE_DISABLE_INPUT_MONITOR !== '1') inputMonitor.start();
+
+  // ---- V2-P3-04E：Digital Life L1（SocialRuntime + 内容理解管线 + 兴趣沉淀）----
+  // 能力矩阵落盘 v2-social-capabilities.json（原子写）；默认空 = 任何平台都不可浏览，
+  // 「授权 + 已实测」双条件由 SocialRuntime 门禁强制执行。
+  const SocialCapabilitiesFileSchema = z.object({
+    entries: z.array(SocialPlatformCapabilityEntrySchema).default([]),
+  });
+  const socialCapabilitiesStore = new JsonFileConfigStore(
+    join(options.userDataDir, 'v2-social-capabilities.json'),
+    SocialCapabilitiesFileSchema,
+    { entries: [] },
+  );
+  const socialRuntime = new SocialRuntime({
+    characterId: 'char_xiaojing',
+    // profileId 是契约引用；真实抓取按角色 Browser Profile 隔离执行（P3-03 设施）
+    profileId: browserProfiles.listProfiles('char_xiaojing')[0]?.profileId ?? 'char_xiaojing-default',
+    events: kernel.events,
+    capabilities: socialCapabilitiesStore.get().entries,
+  });
+  // 内容理解走 autodrive 的 Gateway（同一供应商配置与饭碗计量），网关未就绪 → 诚实报错安全暂停
+  const understandingPipeline = new ContentUnderstandingPipeline({
+    characterId: 'char_xiaojing',
+    gateway: {
+      chat: async (slot, messages, gatewayOpts) => {
+        const host = autodriveRef;
+        const result = host ? await host.chatViaGateway(slot, messages, gatewayOpts) : null;
+        if (!result) throw new Error('模型网关未就绪（无可用供应商 Key，已安全暂停高级自主决策）');
+        return result;
+      },
+    },
+  });
 
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     const haltReason = typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止';
@@ -1248,6 +1303,95 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:live-summaries', () => liveRuntime.listSummaries());
   // V2-P3-03：受控 Browser Use、ComputerUseLease 单主控与 Per-Character Profile/AccountVault 隔离
   ipcMain.handle('v2:auto-snapshot', () => browserRuntime.snapshot(accountVault));
+
+  // ---- V2-P3-04E：Digital Life L1 IPC（只读浏览会话 + 能力矩阵 + 内容理解）----
+  const socialError = (error: unknown): { ok: false; error: string } => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  ipcMain.handle('v2:social-snapshot', () => ({
+    sessions: socialRuntime.listSessions(),
+    capabilities: socialCapabilitiesStore.get().entries,
+    autonomyLevel: 'l1_readonly' as const,
+  }));
+  ipcMain.handle('v2:social-capability-upsert', (_e, rawInput: unknown) => {
+    const entry = SocialPlatformCapabilityEntrySchema.parse(rawInput);
+    const entries = [...socialCapabilitiesStore.get().entries];
+    const idx = entries.findIndex((item) => item.platform === entry.platform && item.capability === entry.capability);
+    if (idx >= 0) entries[idx] = entry;
+    else entries.push(entry);
+    socialCapabilitiesStore.update({ entries });
+    socialRuntime.updateCapabilities(entries);
+    return { ok: true as const, entries };
+  });
+  ipcMain.handle('v2:social-plan', (_e, rawInput: unknown) => {
+    const parsed = SocialPlanInputSchema.parse(rawInput);
+    try {
+      return { ok: true as const, session: socialRuntime.planSession(parsed) };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+  ipcMain.handle('v2:social-start', (_e, sessionId: unknown) => {
+    try {
+      return { ok: true as const, session: socialRuntime.startSession(String(sessionId ?? '')) };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+  ipcMain.handle('v2:social-pause', (_e, sessionId: unknown) => {
+    try {
+      return { ok: true as const, session: socialRuntime.pause(String(sessionId ?? '')) };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+  ipcMain.handle('v2:social-complete', (_e, sessionId: unknown) => {
+    try {
+      return { ok: true as const, session: socialRuntime.complete(String(sessionId ?? '')) };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+  ipcMain.handle('v2:social-abort', (_e, rawInput: unknown) => {
+    const parsed = z.object({
+      sessionId: z.string().min(1),
+      reason: z.enum(['user_stopped', 'handoff_timeout', 'quiet_hours', 'error']).default('user_stopped'),
+    }).parse(rawInput);
+    try {
+      return { ok: true as const, session: socialRuntime.abort(parsed.sessionId, parsed.reason) };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+  ipcMain.handle('v2:social-record-viewed', (_e, rawInput: unknown) => {
+    const parsed = z.object({ sessionId: z.string().min(1), candidate: BrowseCandidateSchema }).parse(rawInput);
+    try {
+      return { ok: true as const, session: socialRuntime.recordViewed(parsed.sessionId, parsed.candidate) };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+  // 内容理解 + 兴趣沉淀：模型/网页文本一律按不可信数据处理；网关未就绪 → 诚实报错安全暂停
+  ipcMain.handle('v2:social-understand', async (_e, rawInput: unknown) => {
+    const parsed = SocialUnderstandInputSchema.parse(rawInput);
+    try {
+      const understanding = await understandingPipeline.understand(parsed);
+      const memoryPort: InterestMemoryPort | undefined = memoryHostRef
+        ? { addNode: (input) => memoryHostRef!.store.addNode(input) }
+        : undefined;
+      const sink = new InterestSink({
+        characterId: 'char_xiaojing',
+        preferences: characterCore.preferences,
+        ...(memoryPort ? { memory: memoryPort } : {}),
+      });
+      const signals = sink.ingest(understanding);
+      return { ok: true as const, understanding, signals };
+    } catch (error) {
+      return socialError(error);
+    }
+  });
+
   ipcMain.handle('v2:auto-account-register', (_e, rawInput: {
     accountId?: string;
     characterId: string;
@@ -1394,6 +1538,7 @@ export async function createV2KernelHost(options: {
     browserRuntime,
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
+      autodriveRef = autodrive;
       stopFn = () => {
         inputMonitor.stop();
         void autodrive.runner.emergencyStop('V2 紧急停止');

@@ -25,6 +25,14 @@
 - **`character-core/content-understanding.ts`**：页面正文（截断 4000 字符控 Token）+ 可选截图 → 网关窄端口多模态消息（默认 VISION_STORYBOARD 槽）→ 抽取首个 JSON 对象经 Zod 终审为 `ContentUnderstanding`；`modelId` 取回执真实路由不编造；模型输出/网页内容一律按不可信数据处理（system 明示严禁执行其中指令）；输出无 JSON 即抛错由调用层安全暂停（ADR-002 不静默退化）。
 - **`character-core/interest-sink.ts`**：`InterestSignal` 是模型判定（interestRelevance × sentiment 因子）的确定性映射，±0.5 契约封顶、|delta|<0.05 噪声不落账；落 `PreferenceStore(topics)` 带完整来源历史；记忆经 `InterestMemoryPort` 窄端口写浏览 event 与话题 concept 派生链（derivedFromIds 支撑级联删除）——dependency-cruiser 边界由端口注入反转保持，character-core 不直连 memory-graph。新增 8 例单测。
 
+### Added（V2-P3-04E：日程调度接线与状态可见）
+
+- **LifeRuntime 预算守卫**：`social`（自主浏览）计入资源密集活动，Token/时长预算耗尽时自主浏览被 `BUDGET_EXHAUSTED` 拦截，用户强制命令仍放行。
+- **宿主装配**：`v2-kernel-host` 接线 SocialRuntime + 内容理解管线 + 兴趣沉淀——理解走 autodrive `chatViaGateway`（同一供应商 Key 与饭碗计量，网关未就绪诚实报错安全暂停），记忆端口接 MemoryHost（未就绪则跳过记忆不阻塞偏好沉淀）；能力矩阵经 `v2-social-capabilities.json` 原子落盘，`SocialRuntime.updateCapabilities` 热更新。
+- **9 路 `v2:social-*` IPC + 中控台生活页 L1 面板**：能力矩阵（授权/实测状态如实显示）、会话列表与状态机操作（开始/暂停/收官/中止）、目标必填的会话规划。
+- **顺手修复**：tray-popover e2e 启动竞态（独立 commit `3583472`）。
+- **暂缓项（如实记录）**：scheduler tick 自动发起浏览会话的循环未接（当前手动/事件驱动）；pet-stage 浏览状态投影归 P3-04F。
+
 ### Fixed（批次 C：UI 诚实性）
 
 - **OBS 页演示数据可见标记** `obs-panel.tsx`：弹幕议会投票卡、RVC 歌词卡、弹幕交互条三处演示数据新增可见「预演」徽章（此前只在代码注释标注，UI 上无法与真实数据区分）；饭碗与双轨气泡用真实数据不标；`ui.e2e` 新增徽章 ≥3 可见的防回归断言。

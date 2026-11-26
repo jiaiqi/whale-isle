@@ -449,3 +449,26 @@ describe('CharacterCore 12-domain & LifeRuntime (V2-P1-01)', () => {
     expect(core.life.activityState().authoritySource).toBe('manual_takeover');
   });
 });
+
+describe('LifeRuntime social 活动预算守卫（V2-P3-04E）', () => {
+  it('预算耗尽拦截自主 social 浏览；用户强制命令仍放行', () => {
+    let tick = 10_000;
+    const bus = new RuntimeEventBus({ now: () => ++tick });
+    const registry = new CharacterRegistryCore(bus, { now: () => ++tick });
+    const core = new CharacterCore({
+      events: bus,
+      registryCore: registry,
+      filePath: join(makeTempDir(), 'v2-character-core.json'),
+      now: () => ++tick,
+    });
+    core.life.updateBudget({ tokensConsumedToday: 1000, dailyTokenBudget: 900 });
+    expect(core.life.activityState().budget.exhausted).toBe(true);
+
+    const blocked = core.life.selectActivity({ mode: 'social', reason: '自主浏览', source: 'life_runtime' });
+    expect(blocked.accepted).toBe(false);
+    expect(blocked.accepted === false && blocked.reason === 'BUDGET_EXHAUSTED').toBe(true);
+
+    const forced = core.life.selectActivity({ mode: 'social', reason: '用户要求刷一会儿', source: 'user_command', force: true });
+    expect(forced.accepted).toBe(true);
+  });
+});

@@ -94,6 +94,9 @@ import type {
   VoiceIdentityDomain,
   VoiceProviderKind,
   VoiceProviderStatus,
+  BrowseSession,
+  SocialPlatformCapabilityEntry,
+  SocialPlatformId,
 } from '@workbench/shared-protocol';
 
 export const GAME_OPTIONS = [
@@ -982,6 +985,24 @@ export interface DirectorBridge {
   v2AutoHandoffs(): Promise<BrowserHumanHandoff[]>;
   v2AutoHandoffComplete(handoffId: string, outcome?: 'completed' | 'cancelled'): Promise<{ ok: boolean; handoff?: BrowserHumanHandoff; error?: string }>;
   v2AutoCharacterPurge(characterId: string): Promise<{ accountsRemoved: number; profilesRemoved: number }>;
+  // V2-P3-04E：Digital Life L1（只读浏览会话 / 能力矩阵 / 内容理解）
+  v2SocialSnapshot(): Promise<{
+    sessions: BrowseSession[];
+    capabilities: SocialPlatformCapabilityEntry[];
+    autonomyLevel: 'l1_readonly';
+  }>;
+  v2SocialCapabilityUpsert(input: unknown): Promise<{ ok: boolean; entries?: SocialPlatformCapabilityEntry[] }>;
+  v2SocialPlan(input: {
+    platform: SocialPlatformId;
+    objective: string;
+    goalId?: string;
+    maxItems?: number;
+    maxDurationMs?: number;
+  }): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
+  v2SocialStart(sessionId: string): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
+  v2SocialPause(sessionId: string): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
+  v2SocialComplete(sessionId: string): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
+  v2SocialAbort(input: { sessionId: string; reason?: string }): Promise<{ ok: boolean; session?: BrowseSession; error?: string }>;
   v2AutoInputStatus(): Promise<{
     monitor: HumanInputMonitorStatus;
     executor: ComputerInputExecutorStatus;

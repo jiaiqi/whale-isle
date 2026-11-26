@@ -127,7 +127,8 @@ export class LifeRuntime {
     ) {
       return { accepted: false, reason: 'MANUAL_TAKEOVER_ACTIVE', state: this.activityState() };
     }
-    const isResourceHeavy = input.mode === 'gaming' || input.mode === 'streaming' || input.mode === 'creative';
+    // social（自主浏览）同样消耗 Token 与设备资源，预算耗尽时一并拦截（V2-P3-04E）
+    const isResourceHeavy = input.mode === 'gaming' || input.mode === 'streaming' || input.mode === 'creative' || input.mode === 'social';
     if (this.activity.budget.exhausted && source === 'life_runtime' && isResourceHeavy && !input.force) {
       return { accepted: false, reason: 'BUDGET_EXHAUSTED', state: this.activityState() };
     }
