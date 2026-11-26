@@ -138,3 +138,48 @@ BWF `load_save` 回执（`artifacts/p3-stardew-launcher/bwf-load-save-smapi.log`
 - 与第 2 节真机冒烟的 14.1s 一致，说明合流后的构建产物没有回退。
 
 **剩余缺口**：中控台按钮的鼠标点击路径未单独录屏（本次走的是同一条 preload/IPC）；Windows / Linux 仍只有纯函数单测。
+
+## 6. 中控台「启动」按钮真实鼠标点击验收（2026-11-26，`[REAL-DEVICE]`）
+
+> 目的：补上第 5 节留下的缺口——**不调 IPC 直接点按钮**，用 computer use 真实 CGEvent 点击走完
+> 「游戏未运行 → 点顶栏「启动」→ 弹窗确认 → 游戏拉起并自动读档 → 自动驾驶接管」全链路。
+
+**手段**：`v2AutoLease` 申请 `ComputerUseLease` → `v2AutoExecInput` 注入真实 CGEvent 点击（`mode=live`）
+→ 坐标由 CDP 实时读取按钮 `getBoundingClientRect()` 换算到屏幕坐标（不硬编码）；窗口置前用
+`Page.bringToFront` + `osascript set frontmost of Electron`（**关键**：CGEvent 点击必须落在前台窗口，
+否则被其他浮窗吃掉，表现为「executed 但无反应」）。
+
+**冷启动链路实测**（游戏进程先被退出，`pgrep StardewModdingAPI` 为空）：
+
+| 步骤 | 证据 |
+| --- | --- |
+| 真实点击顶栏「启动」（1496,170） | `{"ok":true,"executed":true,"mode":"live","code":"executed"}` |
+| 启动弹窗出现 | CDP `waitForSelector('[data-stardew-launch-prompt]')` 命中，确认按钮文本「先启动游戏」 |
+| 真实点击弹窗确认 | 第二次 `executed=true` |
+| 游戏被拉起 | `screencapture -l` 截到 SMAPI 窗口（`running SMAPI 4.5.2 with 4 mods`），`P3-06-title-screen.png` |
+| 自动读档 | `stardewLaunchStatus()` 回执 `saveLoadRequested=true, autoLoadSave=true, attempts=6, state=ready, message="BWF MCP 已就绪"` |
+| BWF 真实应答 | `get_state` 返回第1年夏17日 06:10 / 44047g / FarmHouse(9,9) |
+
+**接管链路实测**（游戏已就绪时直接点「启动」）：帧连拍 0.25s/帧 共 60 帧留下完整状态跃迁——
+
+| 帧 | 画面 |
+| --- | --- |
+| `P3-06-before-click.png` | 顶栏「星露谷 ▾ / ▶ **启动**」，左栏「游戏共玩」无绿点 |
+| `P3-06-after-click-driving.png` | 顶栏「星露谷 ▾ / ■ **停止**」，左栏「游戏共玩」绿点，右下角 toast「✓ **自动驾驶已启动：接管星露谷物语**」，顶部出现「AI 安全暂停」入口 |
+
+`autodriveStatus()` 同步回报 `running=true`（点击后 1 秒内），BWF `get_state` 持续真实应答。
+
+**证据文件**（`artifacts/acceptance/`，按仓库约定不入库）：
+`P3-06-before-click.png`、`P3-06-after-click-driving.png`、`P3-06-title-screen.png`、
+`P3-06-game-in-game.png`、`P3-06-game-under-autodrive.png`、`P3-06-director-click-recording.mov`（屏幕录屏）。
+
+**验收结论**：**通过** —— 中控台「启动」按钮的**真实鼠标点击路径**已端到端验证，取代第 5 节的「剩余缺口」。
+
+**本次抓到的真实缺陷（非阻塞，但需修）**：
+1. **就绪竞态**：游戏刚启动、BWF MCP 尚未稳定应答时立刻调用 `autodriveStart` 会收到
+   「BWF MCP 不可达」而失败（本次第 1 轮冷启动即命中；`gameHealth` 判 offline 与真实端口就绪之间存在窗口期）。
+   建议：`start()` 在 `waitForStardewReady()` 返回 ready 后增加一次短重试/健康确认。
+2. **CGEvent 点击依赖前台窗口**：窗口被其他应用遮挡时点击「executed」但无响应。
+   建议：注入前由宿主确保目标窗口前台（或改用 AXPress 元素级动作而非坐标点击）。
+3. **macOS 录屏取帧不稳**：`screencapture -V -l <窗口ID>` 会对遮挡窗口取到**陈旧缓冲**（连续 10 帧内容完全不变），
+   本次改用 0.25s 间隔的 `screencapture -l` 连拍才拿到真实状态跃迁。
