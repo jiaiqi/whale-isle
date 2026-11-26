@@ -108,7 +108,7 @@ export function ChatAside(props: {
         <button className="mb-1 flex w-full items-center justify-between text-[10.5px]" style={{ color: 'var(--text-2)' }} onClick={() => onSelectTab('memory')}>
           <span>记忆节点</span><span className="mono" style={{ color: 'var(--violet)' }}>{memoryStats?.nodes ?? 0}</span>
         </button>
-        <button className="mb-1 flex w-full items-center justify-between text-[10.5px]" style={{ color: 'var(--text-2)' }} onClick={() => onSelectTab('providers')}>
+        <button className="mb-1 flex w-full items-center justify-between text-[10.5px]" style={{ color: 'var(--text-2)' }} onClick={() => onSelectTab('stardew')}>
           <span>攻略专题</span><span className="mono" style={{ color: 'var(--green)' }}>{guidesCount}</span>
         </button>
         <button className="flex w-full items-center justify-between text-[10.5px]" style={{ color: 'var(--text-2)' }} onClick={() => onSelectTab('life')}>
