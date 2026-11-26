@@ -9,7 +9,7 @@
  * 离线档的体感代价直接引用 shared-protocol 的 `OFFLINE_TIER_COST_TEXT`，不许在这里另写数字。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AudioLines, KeyRound, Lock, Radio, Sliders, Timer, Volume2 } from 'lucide-react';
+import { AudioLines, KeyRound, Lock, Radio, Sliders, Sparkles, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   MIMO_TTS_CANDIDATE_NOTICE,
@@ -18,8 +18,9 @@ import {
   type VoiceEngineTier,
   type VoiceProviderStatus,
 } from '@workbench/shared-protocol';
-import { CANDIDATE_TTS_PROVIDERS, COMMERCIAL_TTS_PROVIDERS, resolveCommercialTtsProvider } from '@workbench/voice-runtime/browser';
+import { CANDIDATE_TTS_PROVIDERS, COMMERCIAL_TTS_PROVIDERS, MIMO_TTS_BUILTIN_VOICES, resolveCommercialTtsProvider } from '@workbench/voice-runtime/browser';
 import type { CharacterSummary } from './bridge';
+import { VoiceDesignLab } from './voice-design-lab';
 import { VoicePanel } from './voice-panel';
 import { VoiceStudioPanel } from './voice-studio-panel';
 
@@ -45,7 +46,7 @@ export function VoiceCenterPanel(props: {
   onSelectCharacter: (id: string) => void;
 }): React.JSX.Element {
   const { characters, characterId, onSelectCharacter } = props;
-  const [tab, setTab] = useState<'catalog' | 'studio'>('catalog');
+  const [tab, setTab] = useState<'catalog' | 'design' | 'studio'>('catalog');
   const [bindings, setBindings] = useState<BindingView[]>([]);
   const [backend, setBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
   const [sfx, setSfx] = useState({ enabled: true, volume: 0.7 });
@@ -53,6 +54,8 @@ export function VoiceCenterPanel(props: {
   const [tier, setTier] = useState<VoiceEngineTier>('commercial_default');
   const [providers, setProviders] = useState<VoiceProviderStatus[]>([]);
   const [commercial, setCommercial] = useState<CommercialTtsProvider>('minimax-tts');
+  const [openRouterModel, setOpenRouterModel] = useState('google/gemini-3.8-flash-tts');
+  const [mimoBuiltinVoice, setMimoBuiltinVoice] = useState<string>('mimo_default');
   const [previewing, setPreviewing] = useState(false);
   /** 凭据掩码（只存掩码，明文只在输入框里停留到保存成功为止） */
   const [credentialMasks, setCredentialMasks] = useState<Record<string, string>>({});
@@ -82,6 +85,8 @@ export function VoiceCenterPanel(props: {
       setSfx({ enabled: prefs.sfxEnabled ?? true, volume: prefs.sfxVolume ?? 0.7 });
       setTier(prefs.voiceEngineTier ?? 'commercial_default');
       setCommercial(prefs.voiceCommercialProvider ?? 'minimax-tts');
+      setOpenRouterModel(prefs.voiceOpenRouterModel ?? 'google/gemini-3.8-flash-tts');
+      setMimoBuiltinVoice(prefs.voiceMimoBuiltinVoice ?? 'mimo_default');
     }).catch(() => undefined);
     void window.directorBridge.v2VoiceProviders().then(setProviders).catch(() => setProviders([]));
   }, []);
@@ -218,6 +223,11 @@ export function VoiceCenterPanel(props: {
     const status = providers.find((p) => p.kind === kind);
     const ready = status?.available === true;
     const candidate = (CANDIDATE_TTS_PROVIDERS as readonly CommercialTtsProvider[]).includes(kind);
+    /**
+     * 「候选」与「限时免费」是两件事：候选 = 不进自动兜底链；限免只适用于 MiMo（官方标价限时免费）。
+     * OpenRouter 是候选但按 token 计费（$0.50/M 入 · $9/M 出），挂「限免」属于错标。
+     */
+    const limitedFree = kind.startsWith('mimo-');
     return (
       <button
         key={kind}
@@ -226,7 +236,7 @@ export function VoiceCenterPanel(props: {
         data-voice-commercial-candidate={candidate ? 'true' : 'false'}
         aria-pressed={on}
         onClick={() => pickCommercial(kind)}
-        title={candidate ? `${status?.detail ?? '尚未探测'} · ${MIMO_TTS_CANDIDATE_NOTICE}` : (status?.detail ?? '尚未探测')}
+        title={limitedFree ? `${status?.detail ?? '尚未探测'} · ${MIMO_TTS_CANDIDATE_NOTICE}` : (status?.detail ?? '尚未探测')}
         className="rounded-full px-2.5 py-0.5 font-semibold transition"
         style={{
           border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}`,
@@ -238,7 +248,8 @@ export function VoiceCenterPanel(props: {
         <span style={{ color: ready ? 'var(--green)' : 'var(--red, #c0392b)', fontWeight: 500 }}>
           {' '}· {status === undefined ? '未探测' : ready ? '可用' : '未配置'}
         </span>
-        {candidate && <span style={{ color: 'var(--amber)', fontWeight: 500 }}> · 限免</span>}
+        {limitedFree && <span style={{ color: 'var(--amber)', fontWeight: 500 }}> · 限免</span>}
+        {candidate && !limitedFree && <span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · 候选</span>}
       </button>
     );
   };
@@ -255,6 +266,9 @@ export function VoiceCenterPanel(props: {
         <div className="seg-tabs" role="tablist" aria-label="语音中心页签">
           <button type="button" role="tab" data-voice-tab-btn="catalog" aria-selected={tab === 'catalog'} className={`seg-tab${tab === 'catalog' ? ' on' : ''}`} onClick={() => setTab('catalog')}>
             <AudioLines size={12} />角色声线与音色
+          </button>
+          <button type="button" role="tab" data-voice-tab-btn="design" aria-selected={tab === 'design'} className={`seg-tab${tab === 'design' ? ' on' : ''}`} onClick={() => setTab('design')}>
+            <Sparkles size={12} />音色设计
           </button>
           <button type="button" role="tab" data-voice-tab-btn="studio" aria-selected={tab === 'studio'} className={`seg-tab${tab === 'studio' ? ' on' : ''}`} onClick={() => setTab('studio')}>
             <Sliders size={12} />高阶精调与 RVC
@@ -363,28 +377,66 @@ export function VoiceCenterPanel(props: {
           <span className="truncate" title={workerDetail} style={{ color: 'var(--text-3)' }}>{workerDetail}</span>
         </div>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5 text-[11px]" style={{ borderColor: 'var(--stroke)', color: 'var(--text-2)' }} data-voice-commercial-provider={commercial}>
-          <span className="font-semibold" style={{ color: 'var(--text-3)' }}>默认档用哪一家：</span>
-          {COMMERCIAL_TTS_PROVIDERS.map(renderProviderPick)}
-          <span className="font-semibold" style={{ color: 'var(--text-3)' }} data-voice-commercial-candidates>
-            候选（可试听，不做默认）：
-          </span>
-          {CANDIDATE_TTS_PROVIDERS.map(renderProviderPick)}
-          <button
-            type="button"
-            data-voice-commercial-preview
-            disabled={previewing}
-            onClick={() => void previewVoice()}
-            className="rounded-full px-2.5 py-0.5 font-semibold"
-            style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
-          >
-            {previewing ? '合成中…' : '试听一句'}
-          </button>
-          {!commercialChoice.honored && (
-            <span data-voice-commercial-fallback style={{ color: 'var(--amber)' }}>{commercialChoice.reason}</span>
-          )}
+        <div className="mt-2.5 grid gap-2 border-t pt-2.5 text-[11px]" style={{ borderColor: 'var(--stroke)', color: 'var(--text-2)' }} data-voice-commercial-provider={commercial}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>默认档（稳定两家）：</span>
+            {COMMERCIAL_TTS_PROVIDERS.map(renderProviderPick)}
+            <button
+              type="button"
+              data-voice-commercial-preview
+              disabled={previewing}
+              onClick={() => void previewVoice()}
+              className="rounded-full px-2.5 py-0.5 font-semibold"
+              style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
+            >
+              {previewing ? '合成中…' : '试听一句'}
+            </button>
+            {!commercialChoice.honored && (
+              <span data-voice-commercial-fallback style={{ color: 'var(--amber)' }}>{commercialChoice.reason}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2" data-voice-commercial-candidates>
+            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>小米 MiMo（候选 · 一个 Key · 三个模型）：</span>
+            {(['mimo-tts', 'mimo-tts-voiceclone', 'mimo-tts-voicedesign'] as const).map(renderProviderPick)}
+            <label className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+              内置音色
+              <select
+                data-voice-mimo-builtin
+                value={mimoBuiltinVoice}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setMimoBuiltinVoice(next);
+                  void window.directorBridge.prefsSet({ voiceMimoBuiltinVoice: next });
+                }}
+                className="rounded-lg px-1.5 py-0.5 outline-none"
+                style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
+              >
+                {MIMO_TTS_BUILTIN_VOICES.map((voice) => <option key={voice} value={voice}>{voice}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>OpenRouter（候选 · 按 token 计费）：</span>
+            {renderProviderPick('openrouter-tts')}
+            <label className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+              模型
+              <input
+                type="text"
+                data-voice-openrouter-model
+                value={openRouterModel}
+                onChange={(event) => setOpenRouterModel(event.target.value)}
+                onBlur={() => {
+                  const next = openRouterModel.trim();
+                  if (next !== '') void window.directorBridge.prefsSet({ voiceOpenRouterModel: next });
+                }}
+                className="w-64 rounded-lg px-1.5 py-0.5 outline-none"
+                style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
+                title="OpenRouter 上的 TTS 模型 id，保存后立即生效（默认 google/gemini-3.8-flash-tts）"
+              />
+            </label>
+          </div>
         </div>
-        {(CANDIDATE_TTS_PROVIDERS as readonly CommercialTtsProvider[]).includes(commercial) && (
+        {commercial.startsWith('mimo-') && (
           <p className="mt-1 text-[10.5px]" style={{ color: 'var(--amber)' }} data-voice-commercial-candidate-notice>
             {MIMO_TTS_CANDIDATE_NOTICE}
           </p>
@@ -462,9 +514,11 @@ export function VoiceCenterPanel(props: {
         </div>
       </div>
 
-      {tab === 'catalog' 
+      {tab === 'catalog'
         ? <VoicePanel bare characterName={characterName} boundVoiceId={boundVoiceId} onBind={bind} />
-        : <VoiceStudioPanel bare characterId={characterId} characterName={characterName} />}
+        : tab === 'design'
+          ? <VoiceDesignLab />
+          : <VoiceStudioPanel bare characterId={characterId} characterName={characterName} />}
     </div>
   );
 }

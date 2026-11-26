@@ -1,7 +1,7 @@
 # 小米 MiMo TTS 候选接入（tts / VoiceClone / VoiceDesign）+ OpenRouter Gemini TTS 第四家候选（`[TYPE-ONLY]` + `[SIMULATION]`）
 
 > 日期：2026-11-27 · owner 决策「MiMo 接入作为候选 provider，不要设成默认」「OpenRouter Gemini 3.8 Flash TTS 接为第四家商用候选」
-> 证据等级：**契约与链路 `[SIMULATION]`（假服务端真 HTTP）/ 真实 API 语音一律未实连（缺 Key）**
+> 证据等级：**链路 `[SIMULATION]` + 真实 API `[REAL-DEVICE]`（2026-11-27 01:29–01:47 已实连，见 §2.4–§2.6）**
 > 关联：[TTS-local-engine-benchmark-verification.md](./TTS-local-engine-benchmark-verification.md) §10、[VOICE-PERSONA-xiaojing.md](../VOICE-PERSONA-xiaojing.md)
 
 ---
@@ -10,9 +10,10 @@
 
 - **适配器与路由已落地**：`MimoTtsProvider` 三个模型各注册一个实例——`mimo-v2.5-tts`（kind `mimo-tts`，内置 9 音色 + 唱歌前缀）、`mimo-v2.5-tts-voiceclone`、`mimo-v2.5-tts-voicedesign`；另有 `OpenRouterTtsProvider`（kind `openrouter-tts`，`google/gemini-3.8-flash-tts`）作为第四家候选。
 - **候选身份是硬约束**：四家候选都**不进自动兜底链**（`COMMERCIAL_TTS_PROVIDERS` 仍只有 MiniMax / OpenAI），默认档仍是 `minimax-tts`；只有用户显式选中才会走。
-- **真实 API 一次都没调过**——本机凭据库与环境变量都没有 MiMo / OpenRouter Key。因此首包、整句耗时、成功率、音色漂移、情绪稳定性、计费实扣，**全部未实测**。
-- 已实测的只有：单测（voice-runtime 178 例全绿，其中 MiMo/OpenRouter 部分 25 例）、假服务端真 HTTP 跑通 bench 全链路（6 个 provider key）、说话人嵌入余弦工具在真实音频上验证可用。
+- **真实 API 已实连**（2026-11-27 01:29–01:47）：`mimo-v2.5-tts`、`mimo-v2.5-tts-voicedesign`、`openrouter-tts` 全部成功合成；`api-key` 与 `Bearer` 两种认证头**都已实测通**（见 §2.4–§2.6）。Key 从 Electron 加密凭据库进程内取得，不落盘、不进日志。
+- 单测 182 例全绿；假服务端真 HTTP 跑通 bench 全链路（6 个 provider key）；说话人嵌入余弦工具在真实音频上验证可用。
 - **纠正一处旧谎报**：上一版 `probe()` 写 `supportsStreaming: true`，但适配器是非流式的。已改为 `false`，detail 里明写「非流式」。
+- **音色漂移、情绪稳定性、唱歌听感、OpenRouter 计费实扣仍未实测**（见 §3），不得拿成功合成去宣称这些能力。
 
 ---
 
@@ -56,13 +57,12 @@
 
 即便如此，`probe()` 仍报 `supportsEmotion: false`——**官方说有 ≠ 我们实测过**。等真跑出稳定性数据再改。
 
-### 1.3 认证头（未实测，做成可配置）
+### 1.3 认证头（两种都已实测通）
 
-官方 curl 示例用 `--header "api-key: $MIMO_API_KEY"`，而 OpenAI 兼容习惯是 `authorization: Bearer`。两种都未实测，所以：
+官方 curl 示例用 `--header "api-key: $MIMO_API_KEY"`，而 OpenAI 兼容习惯是 `authorization: Bearer`。**2026-11-27 真机实测：两种都返回 200 且有音频**（各测过一次，没做一致性对拍）：
 
-- `MimoTtsOptions.authScheme` 支持 `'bearer'`（默认，沿用旧实现）与 `'api-key'`；
-- `probe().detail` 会写出当前用的是哪种，并标「未实测」；
-- 实测时**两种都试**，把通的那种回填到本文 §2.4，并把默认值改掉（一行）。
+- `MimoTtsOptions.authScheme` 支持 `'api-key'`（**默认**，官方文档写法）与 `'bearer'`；
+- `probe().detail` 写出当前用的是哪种，标注「已实测通」。
 
 ### 1.4 `optimize_text_preview` 与流式
 
@@ -120,12 +120,52 @@
 `tools/scripts/speaker-cosine.py` 在 ZipVoice 15 条真实产物上：两两 105 对，余弦均值 0.8563 · 中位 0.8589 · 最小 0.7545 · 最大 0.9104。
 仅证明方法可用；MiMo / OpenRouter 的漂移量未测。
 
-### 2.4 认证头实测记录（待填）
+### 2.4 认证头实测记录
 
 | 方案 | 结果 | 日期 | 备注 |
 | --- | --- | --- | --- |
-| `authorization: Bearer` | **未实测** | — | 默认值 |
-| `api-key` | **未实测** | — | 官方 curl 写法 |
+| `api-key` | ✅ 200 + wav 音频（6/6 + 7/7） | 2026-11-27 01:29–01:31 | 官方文档写法，现为默认 |
+| `authorization: Bearer` | ✅ 200 + wav 音频（一句话，1920ms） | 2026-11-27 01:45 | 通过本仓库适配器实测 |
+
+### 2.5 真实 API 实测（编排方探针，`[REAL-DEVICE]`，原始产物 `artifacts/tts-ab/mimo-real/`）
+
+做法：Electron 进程内用 `safeStorage` 解开本机凭据库 `mimo-tts` 条目，直连 `api.xiaomimimo.com`；Key 不出进程、不落盘、不进日志。**注意**：`artifacts/tts-ab/mimo-real/` 是真机数据，而 `artifacts/tts-ab/mimo-voicedesign/` 曾被 `--fake` 的模拟产物覆盖过，2026-11-27 已被真机 bench 重跑覆盖为真机数据（manifest `simulated:false`）。
+
+`mimo-v2.5-tts` + 内置音色 `冰糖`，6/6 成功：
+
+| 档位 | 墙钟 | 音频时长 |
+| --- | --- | --- |
+| daily | 1215ms | 3.84s |
+| bright | 1207ms | 3.52s |
+| tsundere | 1629ms | 4.64s |
+| sleepy | 1697ms | 4.16s |
+| surprised | 1918ms | 4.00s |
+| 内联标签 | 2657ms | 7.04s |
+
+同一句话 × 六种控制（文案完全相同，唯一变量是风格指令 + 前缀标签）：
+
+| 变量 | 时长 | F0 中位 | 墙钟 |
+| --- | --- | --- | --- |
+| baseline（不控制） | 3.52s | 244.9 Hz | 1611ms |
+| daily `(Sweet)` | 3.84s | 242.4 Hz | 1623ms |
+| bright `(Playful)` | 4.32s | 222.2 Hz | 1721ms |
+| tsundere `(Tsundere)` | 4.00s | 242.4 Hz | **8055ms** |
+| sleepy `(Sleepy)` | 4.96s | 216.2 Hz | 3436ms |
+| surprised `(Excited)` | 3.84s | 255.3 Hz | 1615ms |
+
+两个**客观迹象**：同一句话时长 3.52 → 4.96s（+41%）；F0 中位 216.2–255.3 Hz，慵懒最低、惊喜最高，方向对得上。**这是迹象，不是听感结论**；听感留给 owner。**延迟方差是实数**：tsundere 那次 8055ms，是其它次的 5 倍——报告里必须带方差，不能只写中位数。
+
+VoiceDesign：用 `docs/v2/VOICE-PERSONA-xiaojing.md` 的音色描述，1972ms / 5.6s 音频，一次成功。
+
+### 2.6 真实 API 实测（本仓库适配器走 `bench-tts-ab.mts --from-vault`，`[REAL-DEVICE]`）
+
+`tools/scripts/vault-key.cjs`（Electron 子进程解密）→ `bench --from-vault`，Key 只经管道进父进程内存：
+
+| provider | 成功率 | 墙钟（非流式，首包==整句） | 产物 |
+| --- | --- | --- | --- |
+| `mimo-tts`（内置音色） | 5/5 | 1048–1733ms | `artifacts/tts-ab/mimo-tts/`（`simulated:false`） |
+| `mimo-voicedesign` | 5/5 | 1361–2799ms | `artifacts/tts-ab/mimo-voicedesign/`（覆盖旧 fake 数据） |
+| `openrouter-gemini` | 3/3 | 2437–4487ms | `artifacts/tts-ab/openrouter-gemini/` |
 
 ---
 
@@ -133,15 +173,13 @@
 
 | 项 | 状态 | 缺什么 |
 | --- | --- | --- |
-| MiMo / OpenRouter 真实 API 连通性与成功率 | **未实测** | 凭据库 `mimo-tts` / `openrouter` 条目（语音中心凭据卡片可填） |
-| 首包 / 整句耗时 / RTF | **未实测** | 同上。MiMo 与 OpenRouter 当前都是**非流式**，首包 == 整句 |
-| VoiceDesign 音色漂移（同描述 10 次） | **未实测** | Key + `WHALE_MIMO_VOICE_DESCRIPTION`，跑 `--consistency 10` 后算余弦 |
-| VoiceClone 克隆一致性 | **未实测** | Key + 一段自制或已授权的参考音频 |
-| 五情绪指令 / 前缀标签 / 内联标签是否稳定 | **未实测** | Key |
-| 唱歌前缀听感 | **未实测** | Key |
-| OpenRouter 情绪控制方式 | **未实测（官方无说法）** | Key；只能单开实验组，不进能力声明 |
-| OpenRouter 一句实际花费 | **未实测** | Key；按 token 计费，必须实测不估算 |
-| 与 MiniMax / OpenAI 的同表对拍 | **未实测** | 各家 Key 都不在当前可连实例里 |
+| VoiceDesign 音色漂移（同描述 10 次） | **未实测** | 跑 `--from-vault --provider mimo-voicedesign --consistency 10` 后用 `speaker-cosine.py` 算 |
+| VoiceClone 克隆一致性 | **未实测** | 缺一段自制或已授权的参考音频（`WHALE_MIMO_VOICE_SAMPLE`） |
+| 五情绪指令 / 前缀标签 / 内联标签的**稳定性**（多次重复） | **未实测（只有一次迹象）** | 同描述连跑 ≥10 次 |
+| 唱歌前缀听感 | **未实测** | 跑 `--from-vault --provider mimo-tts`，styleMode=singing 单独实验 |
+| OpenRouter 情绪控制方式 | **未实测（官方无说法）** | 只能单开实验组，不进能力声明 |
+| OpenRouter 一句实际花费 | **未实测** | 按 token 计费，必须实测不估算 |
+| 与 MiniMax / OpenAI 的同表对拍 | **未实测** | MiniMax/OpenAI 凭据不在当前可连实例里 |
 
 ---
 
@@ -151,9 +189,9 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | MiniMax T2A v2 | **未实测** | 未实测 | 未实测 | 不适用（指定 voice_id） | 未实测 | 库里有 `minimax`，当前实例读不到 |
 | OpenAI 兼容 TTS | **未实测** | 未实测 | 未实测 | 不适用（指定 voice） | 未实测 | 缺 `openai-tts` 凭据 |
-| OpenRouter Gemini TTS | **未实测** | 未实测 | 未实测 | 不适用（预置音色） | 未实测（按 token） | 第四家候选 |
-| MiMo 内置音色 | **未实测** | 未实测 | 未实测 | 未实测 | 限时免费 | 9 内置音色 |
-| MiMo VoiceDesign | **未实测** | 未实测 | 未实测 | 未实测 | 限时免费 | 需音色描述 |
+| OpenRouter Gemini TTS | **2437–4487ms**（n=3） | =整句（非流式） | 3/3 | 不适用（预置音色） | 未实测（按 token） | 第四家候选 |
+| MiMo 内置音色 | **1048–1733ms**（适配器 n=5；探针另有 tsundere 8055ms 的方差实例） | =整句（非流式） | 5/5（探针 6/6） | 未实测 | 限时免费 | 9 内置音色 |
+| MiMo VoiceDesign | **1361–2799ms**（n=5）；探针单次 1972ms | =整句（非流式） | 5/5 | 未实测 | 限时免费 | 需音色描述 |
 | MiMo VoiceClone | **未实测** | 未实测 | 未实测 | 未实测 | 限时免费 | 需合法参考音频 |
 
 听感结论不下，留给 owner 自己听。
@@ -225,5 +263,5 @@ uv run --with sherpa-onnx --with numpy python -I tools/scripts/speaker-cosine.py
 ## 8. 证据等级声明
 
 - `[SIMULATION]`：单测 + 假服务端 bench 链路 + 路由/兜底行为。
-- `[REAL-DEVICE]`（仅工具方法）：说话人嵌入余弦在 ZipVoice 真实产物上的分布。
-- **未实连**：MiMo / OpenRouter 真实 API 的任何一项（延迟、成功率、音色漂移、情绪、花费）。缺 Key 是唯一原因，不是没测。
+- `[REAL-DEVICE]`：2026-11-27 01:29–01:47 真实 API 合成（探针 + 本仓库适配器两条路径）、认证头两种方案、说话人嵌入余弦方法验证。
+- **未实连**：音色漂移（≥10 次）、情绪稳定性、唱歌听感、OpenRouter 计费、MiniMax/OpenAI 对拍。

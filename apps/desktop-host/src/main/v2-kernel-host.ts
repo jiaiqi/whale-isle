@@ -46,6 +46,8 @@ import {
   StageCharacterBindingSchema,
   StageSceneSpecSchema,
   VoiceProviderKindSchema,
+  VoiceSynthesisRequestSchema,
+  PetDesktopPrefsSchema,
   type CharacterCoreSnapshot,
   type DanceRoutineInput,
   type ImageGenProviderDescriptor,
@@ -227,6 +229,13 @@ const VoiceSynthesizePreviewSchema = z.object({
   preferredProvider: VoiceProviderKindSchema.optional(),
 });
 
+const VoiceDesignPreviewSchema = z.object({
+  text: z.string().min(1).max(1024),
+  voiceDescription: z.string().min(1).max(1024),
+  emotion: z.string().min(1).optional(),
+  optimizeTextPreview: z.boolean().optional(),
+});
+
 const VoiceIdentityPatchSchema = z.object({
   voiceProfileId: z.string().min(1).optional(),
   voiceDescription: z.string().min(1).optional(),
@@ -362,6 +371,21 @@ export async function createV2KernelHost(options: {
   const resolveMiniMaxKey = (): string | null => resolveWithEnv('minimax', 'WHALE_MINIMAX_API_KEY');
   const resolveOpenAiTtsKey = (): string | null => resolveWithEnv('openai-tts', 'WHALE_OPENAI_TTS_API_KEY');
   const resolveOpenRouterKey = (): string | null => resolveWithEnv('openrouter', 'WHALE_OPENROUTER_API_KEY');
+  /**
+   * 读取 prefs 文件（只读；坏文件回落默认值）。OpenRouter 模型 id 与 MiMo 内置音色都从 UI 改，
+   * provider 构造一次但模型/音色每次合成时重读，不用重启进程。
+   */
+  const readVoicePrefs = (): { voiceOpenRouterModel: string; voiceMimoBuiltinVoice: string } => {
+    try {
+      const parsed = PetDesktopPrefsSchema.safeParse(
+        JSON.parse(readFileSync(join(options.userDataDir, 'pet-desktop-prefs.json'), 'utf8')),
+      );
+      if (parsed.success) return parsed.data;
+    } catch {
+      /* 文件不存在或坏 → 默认值 */
+    }
+    return PetDesktopPrefsSchema.parse({});
+  };
   const mimoVoiceDescription = process.env.WHALE_MIMO_VOICE_DESCRIPTION?.trim();
   const mimoVoiceSamplePath = process.env.WHALE_MIMO_VOICE_SAMPLE?.trim();
   /** 仅 `mimo-v2.5-tts`：内置 9 音色之一，未配时用 mimo_default */
@@ -378,13 +402,15 @@ export async function createV2KernelHost(options: {
     providers: [
       new MiniMaxTtsProvider({ resolveApiKey: resolveMiniMaxKey }),
       new CloudOpenAiTtsProvider({ resolveApiKey: resolveOpenAiTtsKey }),
-      // 第四家商用候选：OpenRouter 托管 Gemini 3.8 Flash TTS（显式选择 / 对拍用，不进自动兜底）
-      new OpenRouterTtsProvider({ resolveApiKey: resolveOpenRouterKey }),
+      // 第四家商用候选：OpenRouter 托管 TTS（显式选择 / 对拍用，不进自动兜底）
+      // 模型 id 从 prefs 每次重读——OpenRouter 的 TTS 模型很多，用户在 UI 里换不用重启
+      new OpenRouterTtsProvider({ resolveApiKey: resolveOpenRouterKey, resolveModel: () => readVoicePrefs().voiceOpenRouterModel }),
       // 五档情绪的风格指令与标签对三个 MiMo 模型共用；官方口径：user 里的自然语言指令对所有模型有效，
       // assistant 前缀标签 `(Tag)…` 也通用，两处都配套才好在实测时对比哪种更稳。
       new MimoTtsProvider({
         mode: 'tts',
         ...(mimoBuiltinVoice === undefined ? {} : { defaultVoice: mimoBuiltinVoice }),
+        resolveDefaultVoice: () => readVoicePrefs().voiceMimoBuiltinVoice,
         emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
         emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
         resolveApiKey: resolveMimoKey,
@@ -392,6 +418,8 @@ export async function createV2KernelHost(options: {
       new MimoTtsProvider({
         mode: 'voicedesign',
         ...(mimoVoiceDescription === undefined ? {} : { voiceDescription: mimoVoiceDescription }),
+        // 音色设计台「设为桌宠声线」写入角色 VoiceDesign 描述后即刻生效；环境变量只是兜底
+        resolveVoiceDescription: () => characterCore.profile.voiceIdentity().voiceDescription ?? mimoVoiceDescription ?? null,
         emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
         emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
         resolveApiKey: resolveMimoKey,
@@ -840,6 +868,29 @@ export async function createV2KernelHost(options: {
   });
   // V2-P1-02：VoiceProvider 探测、独立 VoiceIdentity、多轨 AudioMixer 与口型预览
   ipcMain.handle('v2:voice-providers', () => voiceRouter.listStatuses());
+  /**
+   * 音色设计台（VoiceDesign Lab）：音色描述由用户在 UI 里现场编辑，所以不能走固定实例的 router，
+   * 这里按请求临时构造一个 voicedesign provider，情绪指令/标签与真机实测用的同一份常量。
+   */
+  ipcMain.handle('v2:voice-design-preview', (_e, rawInput: unknown) => {
+    const parsed = VoiceDesignPreviewSchema.parse(rawInput);
+    const provider = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: parsed.voiceDescription,
+      ...(parsed.optimizeTextPreview === undefined ? {} : { optimizeTextPreview: parsed.optimizeTextPreview }),
+      emotionStyleHints: MIMO_EMOTION_STYLE_HINTS,
+      emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
+      resolveApiKey: resolveMimoKey,
+    });
+    const identity = characterCore.profile.voiceIdentity();
+    return provider.synthesize(VoiceSynthesisRequestSchema.parse({
+      requestId: randomUUID(),
+      characterId: identity.characterId,
+      voiceRef: voiceRouter.resolveVoiceRef(identity),
+      text: parsed.text,
+      ...(parsed.emotion === undefined ? {} : { emotion: parsed.emotion }),
+    }));
+  });
   ipcMain.handle('v2:voice-identity', () => characterCore.profile.voiceIdentity());
   ipcMain.handle('v2:voice-identity-update', (_e, rawPatch: unknown) => {
     const patch = VoiceIdentityPatchSchema.parse(rawPatch);

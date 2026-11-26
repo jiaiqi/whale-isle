@@ -25,6 +25,7 @@
  *   WHALE_MIMO_API_KEY=… WHALE_MIMO_VOICE_DESCRIPTION='…' \
  *     npx tsx tools/scripts/bench-tts-ab.mts --provider mimo-voicedesign --consistency 10
  */
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,6 +33,7 @@ import {
   CloudOpenAiTtsProvider,
   MiniMaxTtsProvider,
   MimoTtsProvider,
+  type MimoTtsMode,
   OpenRouterTtsProvider,
   type VoiceProvider,
 } from '../../packages/voice-runtime/src/providers';
@@ -78,6 +80,39 @@ function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : fallback;
 }
+/** `--from-vault`：Key 从 Electron 加密凭据库取，不要求 owner 为跑基准另设环境变量 */
+let fromVault = false;
+/**
+ * 凭据库明文只经管道进入本进程内存：不落盘、不打印、不写 manifest。
+ * 解密必须用 Electron（见 tools/scripts/vault-key.mjs 头注释）。
+ */
+const vaultKeys: Record<string, string | null> = {};
+
+function readVaultKeys(ids: string[]): void {
+  const electronBin = join(process.cwd(), 'apps', 'desktop-host', 'node_modules', '.bin', 'electron');
+  const script = join(process.cwd(), 'tools', 'scripts', 'vault-key.cjs');
+  const result = spawnSync(electronBin, [script, ...ids], {
+    encoding: 'utf8',
+    timeout: 90_000,
+    env: { ...process.env },
+  });
+  if (result.error !== undefined || result.status !== 0) {
+    throw new Error(`读取凭据库失败：${result.error?.message ?? result.stderr}`);
+  }
+  const parsed = JSON.parse(result.stdout) as Record<string, string | null>;
+  for (const id of ids) vaultKeys[id] = parsed[id] ?? null;
+  // 只报告哪些拿到了，绝不打印明文或任何片段
+  console.error(`[from-vault] 已读取：${ids.map((id) => `${id}=${vaultKeys[id] === null ? '未取到' : 'ok'}`).join(' ')}`);
+}
+
+/** Key 优先级：--from-vault 拿到的凭据库 > 环境变量 > --fake 的占位值 */
+function resolveKey(providerId: string, envName: string, fake: boolean): string | null {
+  if (fromVault && vaultKeys[providerId] !== null && vaultKeys[providerId] !== undefined) {
+    return vaultKeys[providerId]!;
+  }
+  return process.env[envName]?.trim() ?? (fake ? 'fake' : null);
+}
+
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
@@ -174,7 +209,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
   const fakeServer = fake ? await startFakeServer() : null;
   const base = fakeServer?.baseUrl;
   const description = process.env.WHALE_MIMO_VOICE_DESCRIPTION?.trim() ?? '年轻女声，中文普通话，音色偏甜，语速中等';
-  const mimo = (mode: 'voicedesign' | 'voiceclone'): MimoTtsProvider =>
+  const mimo = (mode: MimoTtsMode): MimoTtsProvider =>
     new MimoTtsProvider({
       mode,
       voiceDescription: description,
@@ -186,7 +221,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
         return { bytes: new Uint8Array(readFileSync(path)) };
       },
       ...(base === undefined ? {} : { baseUrl: base }),
-      resolveApiKey: () => process.env.WHALE_MIMO_API_KEY?.trim() ?? (fake ? 'fake' : null),
+      resolveApiKey: () => resolveKey('mimo-tts', 'WHALE_MIMO_API_KEY', fake),
     });
 
   switch (key) {
@@ -200,7 +235,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
       return {
         provider: new OpenRouterTtsProvider({
           ...(base === undefined ? {} : { baseUrl: base }),
-          resolveApiKey: () => process.env.OPENROUTER_API_KEY?.trim() ?? (fake ? 'fake' : null),
+          resolveApiKey: () => resolveKey('openrouter', 'OPENROUTER_API_KEY', fake),
         }),
         simulated: fake,
         name: 'openrouter-gemini',
@@ -210,7 +245,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
       return {
         provider: new MiniMaxTtsProvider({
           ...(base === undefined ? {} : { baseUrl: base.replace(/\/v1$/, '') }),
-          resolveApiKey: () => process.env.MINIMAX_API_KEY?.trim() ?? (fake ? 'fake' : null),
+          resolveApiKey: () => resolveKey('minimax', 'MINIMAX_API_KEY', fake),
         }),
         simulated: fake,
         name: 'minimax',
@@ -220,7 +255,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
       return {
         provider: new CloudOpenAiTtsProvider({
           ...(base === undefined ? {} : { baseUrl: base }),
-          resolveApiKey: () => process.env.OPENAI_API_KEY?.trim() ?? (fake ? 'fake' : null),
+          resolveApiKey: () => resolveKey('openai-tts', 'OPENAI_API_KEY', fake),
         }),
         simulated: fake,
         name: 'openai',
@@ -233,6 +268,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
 
 async function main(): Promise<void> {
   const fake = flag('fake');
+  fromVault = flag('from-vault');
   const requested = arg('provider', 'mimo-voicedesign')!;
   const limitRaw = arg('limit');
   const limit = limitRaw === undefined ? SENTENCES.length : Math.max(1, Number.parseInt(limitRaw, 10));
@@ -242,6 +278,17 @@ async function main(): Promise<void> {
   const providers: ProviderKey[] = requested === 'all'
     ? ['minimax', 'openai', 'openrouter', 'mimo-tts', 'mimo-voicedesign', 'mimo-voiceclone']
     : (requested.split(',') as ProviderKey[]);
+
+  if (fromVault) {
+    const ids = new Set<string>();
+    for (const key of providers) {
+      if (key === 'minimax') ids.add('minimax');
+      else if (key === 'openai') ids.add('openai-tts');
+      else if (key === 'openrouter') ids.add('openrouter');
+      else ids.add('mimo-tts');
+    }
+    readVaultKeys([...ids]);
+  }
 
   for (const key of providers) {
     const built = await buildProvider(key, fake);

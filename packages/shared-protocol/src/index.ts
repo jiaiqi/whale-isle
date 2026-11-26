@@ -1035,6 +1035,13 @@ export const PetDesktopPrefsSchema = z.object({
    * 选中的那家不可用时由 `resolveCommercialTtsProvider()` 如实报 `honored:false`，不隐式顶替。
    */
   voiceCommercialProvider: CommercialTtsProviderSchema.default('minimax-tts'),
+  /**
+   * OpenRouter 上用的 TTS 模型 id（可改：OpenRouter 的 TTS 模型很多）。
+   * 默认值是本仓库实测过的那个；用户可换成 OpenRouter 上的其它 TTS 模型 id，改错由请求失败如实暴露。
+   */
+  voiceOpenRouterModel: z.string().min(1).default('google/gemini-3.8-flash-tts'),
+  /** `mimo-v2.5-tts` 用的内置音色 id（9 选 1；命中内置列表才生效） */
+  voiceMimoBuiltinVoice: z.string().min(1).default('mimo_default'),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 

@@ -862,6 +862,25 @@ describe('OpenRouter Gemini 3.8 Flash TTS（第四家商用候选）', () => {
     expect(status.detail).toContain('未实测');
   });
 
+  it('模型可运行时读取：resolveModel 覆盖静态默认，UI 改了立即生效', async () => {
+    const calls: string[] = [];
+    let modelId: string | null = 'custom/tts-model';
+    const provider = new OpenRouterTtsProvider({
+      resolveModel: () => modelId,
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        calls.push((JSON.parse(String(init?.body)) as { model: string }).model);
+        return new Response(wav, { status: 200 });
+      },
+    });
+    expect(provider.probe().detail).toContain('custom/tts-model');
+    await provider.synthesize(request);
+    expect(calls[0]).toBe('custom/tts-model');
+    modelId = null;
+    await provider.synthesize({ ...request, requestId: 'or-2' });
+    expect(calls[1]).toBe(OPENROUTER_GEMINI_TTS_MODEL);
+  });
+
   it('缺 Key / 空音频 / HTTP 500 都抛错，不返回假音频', async () => {
     const noKey = new OpenRouterTtsProvider({ resolveApiKey: () => null });
     expect(noKey.probe().available).toBe(false);
@@ -1101,7 +1120,50 @@ describe('小米 MiMo TTS 候选供应商（tts / VoiceClone / VoiceDesign，候
     expect(bodies[1]!['optimize_text_preview']).toBeUndefined();
   });
 
-  it('认证头可配置：默认 Bearer，api-key 方案发 api-key 头（两种都未实测）', async () => {
+  it('运行时解析优先：resolveVoiceDescription 顶掉静态描述，resolveDefaultVoice 顶掉静态默认音色', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let description: string | null = '运行时描述：深夜电台风';
+    let builtin: string | null = 'Milo';
+    const design = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: '静态描述',
+      resolveVoiceDescription: () => description,
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await design.synthesize(baseRequest);
+    const first = (bodies[0]!['messages'] as Array<{ content: string }>)[0]!;
+    expect(first.content).toContain('运行时描述');
+    description = null;
+    await design.synthesize({ ...baseRequest, requestId: 'mimo-dyn-2' });
+    const second = (bodies[1]!['messages'] as Array<{ content: string }>)[0]!;
+    expect(second.content).toContain('静态描述');
+
+    const tts = new MimoTtsProvider({
+      mode: 'tts',
+      defaultVoice: 'mimo_default',
+      resolveDefaultVoice: () => builtin,
+      resolveApiKey: () => 'k',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    await tts.synthesize({ ...baseRequest, requestId: 'mimo-dyn-3', voiceRef: 'unknown_voice' });
+    expect(bodies[2]!['audio']).toEqual({ format: 'wav', voice: 'Milo' });
+    builtin = null;
+    await tts.synthesize({ ...baseRequest, requestId: 'mimo-dyn-4', voiceRef: 'unknown_voice' });
+    expect(bodies[3]!['audio']).toEqual({ format: 'wav', voice: 'mimo_default' });
+  });
+
+  it('认证头可配置：默认 api-key（已实测），Bearer 保留为可选项（未测）', async () => {
     const headers: Array<Record<string, string>> = [];
     const make = (authScheme?: 'bearer' | 'api-key'): MimoTtsProvider =>
       new MimoTtsProvider({
@@ -1116,12 +1178,12 @@ describe('小米 MiMo TTS 候选供应商（tts / VoiceClone / VoiceDesign，候
         },
       });
     await make().synthesize(baseRequest);
-    expect(headers[0]!['authorization']).toBe('Bearer k');
-    expect(headers[0]!['api-key']).toBeUndefined();
+    expect(headers[0]!['api-key']).toBe('k');
+    expect(headers[0]!['authorization']).toBeUndefined();
 
-    await make('api-key').synthesize({ ...baseRequest, requestId: 'mimo-auth-2' });
-    expect(headers[1]!['api-key']).toBe('k');
-    expect(headers[1]!['authorization']).toBeUndefined();
+    await make('bearer').synthesize({ ...baseRequest, requestId: 'mimo-auth-2' });
+    expect(headers[1]!['authorization']).toBe('Bearer k');
+    expect(headers[1]!['api-key']).toBeUndefined();
   });
 
   it('适配器是非流式的：probe 不许宣称 supportsStreaming', () => {

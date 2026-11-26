@@ -5,6 +5,15 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（MiMo/OpenRouter 真机实连 + 凭据库 bench + 音色设计台 + 供应商分组 UI）
+
+- **真机实测**（2026-11-27 01:29–01:47，产物 `artifacts/tts-ab/`）：`mimo-tts` 5/5（1048–1733ms）、`mimo-voicedesign` 5/5（1361–2799ms）、`openrouter-gemini` 3/3（2437–4487ms）；编排方探针另录 6/6（`artifacts/tts-ab/mimo-real/`）与同一句话六种控制（时长 +41%、F0 中位 216.2–255.3 Hz，tsundere 一次 8055ms 的方差如实记录，听感未下结论）。
+- **认证头**：`api-key` 与 `Bearer` 都已实测通，默认 `api-key`（官方文档写法）。
+- **凭据库 bench**：`tools/scripts/vault-key.cjs`（Electron 子进程解密凭据库，Key 只经管道进父进程内存，不落盘不打印）+ `bench-tts-ab.mts --from-vault`。
+- **音色设计台**：语音中心新页签（对齐官方 VoiceDesign 页）：描述 textarea（4 个原创示例预设 + 字符计数）+ 文本 + 五情绪选择 + `optimize_text_preview` 开关 + 播放器（进度/播放/下载）；「设为桌宠声线」把描述写进角色 VoiceIdentity 并把默认档切到 voicedesign，主进程 `resolveVoiceDescription` 每次合成重读，点完即生效。
+- **供应商分组 UI**：MiMo 三个模型收成「一个 Key · 三个模型」组 + 内置音色下拉（9 选 1，写 `voiceMimoBuiltinVoice`）；OpenRouter 加模型输入框（写 `voiceOpenRouterModel`，每次合成重读，不用重启）；「限免」角标只给 MiMo（OpenRouter 按 token 计费，纠正错标）。
+- **运行时解析**：`OpenRouterTtsProvider.resolveModel`、`MimoTtsProvider.resolveVoiceDescription` / `resolveDefaultVoice`，provider 构造一次但模型/音色/描述每次合成重读；182 例单测全绿（含新增覆盖测试）。
+
 ### Fixed（director 构建：渲染层不再把 Node-only 模块打进浏览器包）
 
 - **根因**：`director/main.tsx` → `@workbench/voice-runtime` 桶入口 → `providers.ts` → `@workbench/runtime-core` 桶 → `WhaleKernel` → `@workbench/plugin-kit`，把 `node:fs/path/url/worker_threads/crypto` 带进 `platform:'browser'` 的 esbuild 包；`pnpm verify:gate` 只跑 `typecheck` + `dependency-cruiser`，不含打包，所以静默坏了。

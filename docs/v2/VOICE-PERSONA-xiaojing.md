@@ -82,16 +82,24 @@ voice when teased, then deflates within two seconds.
 
 ---
 
-## 4. 未实测项（不许在 UI / 文档里说成已支持）
+## 4. 实测与未实测（2026-11-27 更新，证据见 [mimo-tts-candidate-integration.md](./evidence/mimo-tts-candidate-integration.md) §2.5）
 
-- MiMo 三模型的风格指令、前缀标签、内联音频标签**均未实连验证**；`probe()` 因此报 `supportsEmotion: false`。
-- 认证头到底是 `api-key` 还是 `Authorization: Bearer` **未实测**；适配器两种都支持（`authScheme`），
-  实测时两种都试，把通的那种写进 `docs/v2/evidence/mimo-tts-candidate-integration.md`。
-- MiMo 流式（`pcm16` / 24 kHz / 16-bit LE / 单声道）**未实现**，`supportsStreaming` 固定 `false`。
-- OpenRouter Gemini 3.8 Flash TTS 的 `supported_parameters` 是空数组，情绪控制方式官方没有说法，
-  一律按"未验证"处理；要试就在 bench 里单开一组实验。
+已实测（单次迹象，可复现）：
+
+- `api-key` 与 `Bearer` 两种认证头**都已实测通**（各自一次 200 + 音频）。
+- 五种风格控制（baseline / daily / bright / tsundere / sleepy / surprised）在同一句话上**确实产生了可测的差异**：
+  时长 3.52 → 4.96s（+41%），F0 中位 216.2–255.3 Hz（慵懒最低、惊喜最高）。这是**迹象不是听感结论**，
+  听感留给 owner；稳定性（多次重复）未测。
+- 正文内联标签（`(sighs deeply)` + `(pauses for a moment)`）一次成功，音频 7.04s。
+- VoiceDesign 按第 2 节的音色描述一次成功（1972ms / 5.6s）。
+
+仍未实测（不许写成已支持）：
+
+- 情绪稳定性（同指令连跑 ≥10 次的分布）、唱歌听感、VoiceClone 克隆一致性（缺合法参考音频）。
+- MiMo 流式（`pcm16`）**未实现**，`supportsStreaming` 固定 `false`。
+- OpenRouter Gemini 3.8 Flash TTS 的情绪控制方式官方没有说法，一律按"未验证"处理；要试就在 bench 单开实验组。
 - 音高偏移是 mcode 链路的参数，**不能**直接套到 MiMo / OpenRouter 上：它们的 API 没有 pitch 字段。
-  商业 TTS 下只能靠风格指令与标签间接影响音高，效果未实测。
+  商业 TTS 下只能靠风格指令与标签间接影响音高。
 
 ---
 

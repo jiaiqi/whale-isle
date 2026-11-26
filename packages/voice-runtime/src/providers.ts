@@ -341,6 +341,11 @@ export const OPENROUTER_TTS_DEFAULT_VOICE = 'Zephyr';
 export interface OpenRouterTtsOptions {
   baseUrl?: string;
   model?: string;
+  /**
+   * 可选：运行时读取模型 id（OpenRouter 上 TTS 模型很多，UI 可改）；
+   * 返回 null/空串时回落静态 `model`，再回落 `google/gemini-3.8-flash-tts`。
+   */
+  resolveModel?: () => string | null;
   voice?: string;
   responseFormat?: 'wav' | 'mp3' | 'pcm';
   resolveApiKey: () => string | null;
@@ -360,17 +365,22 @@ export interface OpenRouterTtsOptions {
 export class OpenRouterTtsProvider implements VoiceProvider {
   readonly kind = 'openrouter-tts' as const;
   private readonly baseUrl: string;
-  private readonly model: string;
   private readonly voice: string;
   private readonly responseFormat: 'wav' | 'mp3' | 'pcm';
   private readonly fetchImpl: FetchLike;
 
   constructor(private readonly options: OpenRouterTtsOptions) {
     this.baseUrl = (options.baseUrl ?? OPENROUTER_TTS_BASE_URL).replace(/\/+$/, '');
-    this.model = options.model ?? OPENROUTER_GEMINI_TTS_MODEL;
     this.voice = options.voice ?? OPENROUTER_TTS_DEFAULT_VOICE;
     this.responseFormat = options.responseFormat ?? 'wav';
     this.fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
+  }
+
+  /** 生效模型：运行时解析优先（prefs），静态值兜底，最后回落默认 Gemini */
+  private effectiveModel(): string {
+    const resolved = this.options.resolveModel?.()?.trim();
+    if (resolved !== undefined && resolved !== '') return resolved;
+    return this.options.model ?? OPENROUTER_GEMINI_TTS_MODEL;
   }
 
   probe(): VoiceProviderStatus {
@@ -382,7 +392,7 @@ export class OpenRouterTtsProvider implements VoiceProvider {
       degraded: false,
       platform: process.platform,
       detail: hasKey
-        ? `OpenRouter ${this.model} 候选（按 token 计费：$0.50/M 输入 · $9/M 输出）· 情绪控制方式未验证 · 未实测`
+        ? `OpenRouter ${this.effectiveModel()} 候选（按 token 计费：$0.50/M 输入 · $9/M 输出）· 情绪控制方式未验证 · 未实测`
         : `未配置 OpenRouter 凭据（providerId openrouter）· 情绪控制方式未验证`,
       supportsStreaming: false,
       supportsEmotion: false,
@@ -401,7 +411,7 @@ export class OpenRouterTtsProvider implements VoiceProvider {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
         body: JSON.stringify({
-          model: this.model,
+          model: this.effectiveModel(),
           input: request.text,
           voice: this.voice,
           response_format: this.responseFormat,
@@ -475,9 +485,9 @@ export const MIMO_TTS_SAMPLE_RATE = 24_000;
 export const MIMO_TTS_STREAMING_FORMAT = 'pcm16';
 
 /**
- * 认证头：官方 curl 示例用 `--header "api-key: $MIMO_API_KEY"`，
- * 而 OpenAI 兼容习惯是 `authorization: Bearer`。**两种都未实测**，所以做成可配置，
- * 实测时两种都试一遍，把通的那种写进证据文档；默认沿用当前实现的 Bearer。
+ * 认证头：官方 curl 示例用 `--header "api-key: $MIMO_API_KEY"`。
+ * 2026-11-27 真机实测：`api-key` 与 `Bearer` 都返回 200 且有音频（各自测过一次，没做一致性对拍）。
+ * 默认沿用官方文档写法 `api-key`；Bearer 保留为可配置项。
  */
 export const MIMO_TTS_AUTH_SCHEMES = ['bearer', 'api-key'] as const;
 export type MimoTtsAuthScheme = (typeof MIMO_TTS_AUTH_SCHEMES)[number];
@@ -527,6 +537,11 @@ export interface MimoTtsOptions {
   mode: MimoTtsMode;
   /** VoiceDesign 必填：自然语言音色描述（年龄/性别/口音/音色/语速/性格），放进 user 消息 */
   voiceDescription?: string;
+  /**
+   * 可选：运行时读取音色描述（如「音色设计台」写入角色声线后生效），优先于静态 `voiceDescription`。
+   * 返回 null 时回落静态值；两者都没有就按未配置处理。
+   */
+  resolveVoiceDescription?: () => string | null;
   /** VoiceClone 必填：参考音频来源；返回 null 视为未配置 */
   resolveReferenceAudio?: () => MimoTtsReferenceAudio | null;
   /**
@@ -545,10 +560,12 @@ export interface MimoTtsOptions {
    * 官方接受半角 `()`、全角 `（）` 与 `[]` 三种写法，这里统一用半角小括号。
    */
   emotionStyleTags?: Partial<Record<string, string>>;
-  /** 认证头方案（未实测前可切换；默认 bearer） */
+  /** 认证头方案；默认 `api-key`（官方文档写法，2026-11-27 实测通），`bearer` 同样实测通 */
   authScheme?: MimoTtsAuthScheme;
   /** 仅 `tts`：内置音色 id；request.voiceRef 命中内置音色时优先用它 */
   defaultVoice?: MimoBuiltinVoice | string;
+  /** 可选：运行时读取默认音色（如 prefs 里的选择），优先于静态 `defaultVoice` */
+  resolveDefaultVoice?: () => string | null;
   baseUrl?: string;
   model?: string;
   resolveApiKey: () => string | null;
@@ -598,9 +615,9 @@ export class MimoTtsProvider implements VoiceProvider {
     this.fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
   }
 
-  /** 当前配置的认证头方案（证据文档与排查用；不代表已实测可用） */
+  /** 当前配置的认证头方案（`api-key` 与 `bearer` 都已实测通） */
   get authScheme(): MimoTtsAuthScheme {
-    return this.options.authScheme ?? 'bearer';
+    return this.options.authScheme ?? 'api-key';
   }
 
   probe(): VoiceProviderStatus {
@@ -610,7 +627,7 @@ export class MimoTtsProvider implements VoiceProvider {
     const detailParts = [`MiMo ${MIMO_MODE_LABEL[this.mode]} 候选（限时免费 / 无商用条款）`];
     if (!hasKey) detailParts.push('未配置 MiMo API Key');
     if (missing !== null) detailParts.push(missing);
-    detailParts.push(`认证头 ${this.authScheme}（未实测）`);
+    detailParts.push(`认证头 ${this.authScheme}（已实测通）`);
     if (this.mode === 'tts') detailParts.push(`内置音色 ${String(MIMO_TTS_BUILTIN_VOICES.length)} 个`);
     if (this.options.optimizeTextPreview === true && this.mode === 'voicedesign') detailParts.push('optimize_text_preview 已开');
     detailParts.push('非流式；情绪表达未实测，不宣称支持');
@@ -687,7 +704,7 @@ export class MimoTtsProvider implements VoiceProvider {
     }
   }
 
-  /** 认证头：`api-key` 与 `authorization: Bearer` 二选一，未实测前不做假设 */
+  /** 认证头：`api-key`（已实测）与 `authorization: Bearer`（未测）二选一 */
   private buildHeaders(key: string): Record<string, string> {
     if (this.authScheme === 'api-key') {
       return { 'content-type': 'application/json', 'api-key': key };
@@ -702,17 +719,25 @@ export class MimoTtsProvider implements VoiceProvider {
       if (ref === null || ref.bytes.byteLength === 0) return '未配置参考音频（VoiceClone 必需）';
       return null;
     }
-    if (this.mode === 'voicedesign' && (this.options.voiceDescription ?? '').trim() === '') {
+    if (this.mode === 'voicedesign' && this.effectiveVoiceDescription() === '') {
       return '未配置音色描述（VoiceDesign 必需）';
     }
     return null;
   }
 
-  /** 本次请求要用的内置音色：命中内置列表就用它，否则用配置的默认音色 */
+  /** 生效音色描述：运行时解析优先，静态值兜底 */
+  private effectiveVoiceDescription(): string {
+    const resolved = this.options.resolveVoiceDescription?.() ?? null;
+    if (resolved !== null && resolved.trim() !== '') return resolved.trim();
+    return (this.options.voiceDescription ?? '').trim();
+  }
+
+  /** 本次请求要用的内置音色：命中内置列表就用它，否则用运行时/配置的默认音色 */
   private resolveBuiltinVoice(voiceRef: string): string {
     const known = (MIMO_TTS_BUILTIN_VOICES as readonly string[]).includes(voiceRef);
     if (known) return voiceRef;
-    const fallback = this.options.defaultVoice?.trim();
+    const resolved = this.options.resolveDefaultVoice?.() ?? null;
+    const fallback = (resolved !== null && resolved !== '' ? resolved : this.options.defaultVoice)?.trim();
     return fallback === undefined || fallback === '' ? 'mimo_default' : fallback;
   }
 
@@ -757,7 +782,7 @@ export class MimoTtsProvider implements VoiceProvider {
     if (this.mode === 'voicedesign') {
       // voicedesign 的 user 消息本身就是音色描述，风格指令只能拼在后面，不能顶掉描述
       const hint = this.styleInstruction(request);
-      const description = [(this.options.voiceDescription ?? '').trim(), hint === '' ? '' : `风格：${hint}`]
+      const description = [this.effectiveVoiceDescription(), hint === '' ? '' : `风格：${hint}`]
         .filter((part) => part !== '')
         .join('；');
       const messages: Array<{ role: string; content: string }> = [{ role: 'user', content: description }];

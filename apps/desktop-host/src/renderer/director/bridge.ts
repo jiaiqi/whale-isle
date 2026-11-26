@@ -732,6 +732,22 @@ export interface DirectorBridge {
     durationMs: number;
     lipFrames: LipSyncFrame[];
   }>;
+  v2VoiceDesignPreview(input: {
+    text: string;
+    voiceDescription: string;
+    emotion?: string;
+    optimizeTextPreview?: boolean;
+  }): Promise<{
+    requestId: string;
+    providerKind: VoiceProviderKind;
+    quality: string;
+    degraded: boolean;
+    degradedFrom?: VoiceProviderKind;
+    format: string;
+    audioBase64?: string;
+    durationMs: number;
+    lipFrames: LipSyncFrame[];
+  }>;
   v2ProviderQuota(input: {
     providerId: string;
     planType?: 'PAY_AS_YOU_GO' | 'CODING_PLAN' | 'LOCAL_GPU';
