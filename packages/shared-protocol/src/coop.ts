@@ -17,8 +17,27 @@ export type CoopRoomStatus = z.infer<typeof CoopRoomStatusSchema>;
 export const CoopConnectionStateSchema = z.enum(['connected', 'reconnecting', 'offline']);
 export type CoopConnectionState = z.infer<typeof CoopConnectionStateSchema>;
 
-export const CoopParticipantSchema = z.object({
-  participantId: z.string().min(1),
+/**
+ * 分屏/联机实例与游戏内身体的绑定（`V2-P2-09A` / `V2-P2-09C`）。
+ *
+ * `screenId` 对应 SMAPI `Context.ScreenId`（0 为主屏）；`uniqueMultiplayerID` 是
+ * `Farmer.UniqueMultiplayerID`，用十进制字符串避免 JS number 精度丢失。
+ *
+ * 为什么必须有它：同机分屏下同一个游戏进程里跑着多个 `Game1` 实例，
+ * 「哪个 AI 对应屏幕上的哪个身体」如果只靠 participantId 猜，就会控制错人。
+ * 绑定是**唯一事实源**，动作路由与接管判定都必须以它为准。
+ */
+export const StardewScreenBindingSchema = z.object({
+  /** 分屏屏号：0 为主屏；单客户端联机时恒为 0 */
+  screenId: z.number().int().nonnegative(),
+  /** 游戏内唯一多人 ID（Farmer.UniqueMultiplayerID，十进制字符串，避免 JS number 精度丢失） */
+  uniqueMultiplayerID: z.string().regex(/^[0-9]+$/u),
+  /** 该屏身份：房主或农场工人 */
+  role: z.enum(['host', 'farmhand']),
+});
+export type StardewScreenBinding = z.infer<typeof StardewScreenBindingSchema>;
+
+export const CoopParticipantSchema = z.object({  participantId: z.string().min(1),
   kind: z.enum(['human', 'ai']),
   characterId: z.string().min(1),
   displayName: z.string().min(1),
@@ -29,8 +48,31 @@ export const CoopParticipantSchema = z.object({
   lastHeartbeatAt: z.number().int().nonnegative(),
   reconnectDeadlineAt: z.number().int().nonnegative().nullable().default(null),
   reconnectAttempts: z.number().int().nonnegative().default(0),
+  /**
+   * 该成员绑定的游戏内身体；`null` 表示**尚未绑定**。
+   *
+   * 未绑定时该成员**不得**收到任何控制动作（避免误控他人角色），
+   * 这也是「同屏不打架」不能替代「按身体路由」的契约级理由。
+   */
+  bodyBinding: StardewScreenBindingSchema.nullable().default(null),
 });
 export type CoopParticipant = z.infer<typeof CoopParticipantSchema>;
+
+/**
+ * 按身体（`uniqueMultiplayerID`）索引的租约视图（`V2-P2-09C`）。
+ *
+ * host 与 farmhand 各持一份独立租约：人类在 host 身体的操作**不会**夺走
+ * farmhand 身体的 AI 租约，反之亦然。这与「同屏不打架」是两件事：
+ * 后者只保证不同时写两个身体，前者保证**各自身体的控制权归属互不串扰**。
+ */
+export const CoopBodyLeaseViewSchema = z.object({
+  uniqueMultiplayerID: z.string().min(1),
+  screenId: z.number().int().nonnegative(),
+  role: z.enum(['host', 'farmhand']),
+  participantId: z.string().min(1),
+  controlOwner: z.enum(['ai', 'human', 'paused', 'halted']),
+});
+export type CoopBodyLeaseView = z.infer<typeof CoopBodyLeaseViewSchema>;
 
 export const CoopTaskStatusSchema = z.enum([
   'proposed',
@@ -119,6 +161,8 @@ export const CoopRuntimeSnapshotSchema = z.object({
   tasks: z.array(CoopTaskItemSchema),
   reservations: z.array(CoopResourceReservationSchema),
   lastCompatReport: CoopModCompatibilityReportSchema.nullable().default(null),
+  /** 按身体索引的租约视图（`V2-P2-09C`）：host/farmhand 各持一份，互不抢占 */
+  bodyLeases: z.array(CoopBodyLeaseViewSchema).default([]),
   updatedAt: z.number().int().nonnegative(),
 });
 export type CoopRuntimeSnapshot = z.infer<typeof CoopRuntimeSnapshotSchema>;

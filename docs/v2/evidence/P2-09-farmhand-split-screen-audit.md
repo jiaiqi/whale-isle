@@ -179,3 +179,53 @@
 1. **真机隔离生效**：未启动游戏；「隔离目录真的接住了 `Saves`/`startup_preferences`」需要跑一次并核对 owner `~/.config/StardewValley` 的 mtime 不变（`[REAL-DEVICE]`）。
 2. **Steam Cloud 在隔离实例下的行为**：未实测。
 3. **C/D/E/F 未开工**：宿主身份绑定、BWF 分屏路由补丁、按屏接管、沙盒剧本都还没做，farmhand 仍不能由 AI 安全控制。
+
+---
+
+## 7. 已实现部分：`V2-P2-09C` 宿主联机身份绑定（2026-11-26）
+
+### 7.1 改动（4 个业务源码文件 + 2 个测试）
+
+| 文件 | 改动 |
+| --- | --- |
+| `packages/shared-protocol/src/coop.ts` | `StardewScreenBindingSchema` 迁入此文件（与 `CoopParticipantSchema` 同处，协作契约一起演进）；`CoopParticipantSchema` 增 `bodyBinding`（默认 `null`）；新增 `CoopBodyLeaseViewSchema`（按身体索引的租约视图）；`CoopRuntimeSnapshotSchema` 增 `bodyLeases` |
+| `packages/shared-protocol/src/index.ts` | 移除本地重复定义的 `StardewScreenBindingSchema`，改为由末尾的 `export * from './coop'` 统一暴露（对外导入路径不变） |
+| `packages/game-bridge-mcp/src/coop-runtime.ts` | `joinParticipant` 接受 `bodyBinding`；新增 `claimBodyBinding` / `assertBodyBindingAvailable` / `bodyLeaseViews` / `participantOfBody` / `detectHumanTakeover` / `routeActionToBody` |
+| `apps/desktop-host/src/main/v2-kernel-host.ts` | 新增 4 路 IPC：`v2:coop-body-bind` / `v2:coop-body-leases` / `v2:coop-human-takeover` / `v2:coop-action-route` |
+| `apps/desktop-host/src/preload/index.ts` | 暴露上述 4 路 IPC |
+| `apps/desktop-host/src/renderer/director/bridge.ts` | 补齐 4 路 IPC 的类型声明与 `bodyBinding` 入参 |
+
+### 7.2 为什么这样设计
+
+- **绑定是契约事实，不是运行时猜测**：`CoopParticipant.bodyBinding` 缺省 `null` 表示「**未绑定，不得接收控制动作**」。同屏两个 AI「不打架」只能保证不同时写两个身体，**保证不了动作会打到正确的身体**——后者必须由绑定回答。
+- **接管判定按身体，不按房间**：输入是「观测到真人输入的那个身体」。只有该身体属于某个 AI 成员时才把该 AI 的租约交给人类；人类自己的身体不产生接管事件。**拿不到身体标识时一律不判定接管**——宁可漏接管也不误抢 AI 控制权。
+- **冲突显式抛错**：同一 `uniqueMultiplayerID` 或同一 `screenId` 被两个成员占用时 `joinParticipant` 直接抛错，而不是静默改写或后者覆盖前者。
+- **双租约互不抢占**：host 身体的人类租约与 farmhand 身体的 AI 租约是两份独立租约；人类在 host 身体的操作**不会**夺走 farmhand 的 AI 租约，反之亦然。
+
+### 7.3 验证（`[SIMULATION]`/单测 + `[E2E-HOST]`，不是真机分屏）
+
+| 用例 | 结果 |
+| --- | --- |
+| host/farmhand 各持一份身体绑定，`bodyLeaseViews` 按屏分列 | PASS |
+| 人类在 host 身体操作 → `takenOver=false`，farmhand 的 AI 租约仍为 `ai` | PASS |
+| 人类在 farmhand 身体操作 → `takenOver=true` 且只夺该 AI 租约，host 侧不受影响 | PASS |
+| 无身体标识 / 未知身体 → 不判定接管，AI 租约不受影响 | PASS |
+| 动作路由：跨身体写入被拒（理由含「跨身体写入」） | PASS |
+| 未绑定身体的成员 → 动作路由拒绝（理由含「未绑定游戏内身体」） | PASS |
+| 人类接管后 AI 对自己身体的写入立即失效（理由含「控制租约未就绪」） | PASS |
+| 绑定冲突：同身体 / 同屏分别抛错 | PASS |
+| 改绑自身身体允许；抢占他人身体抛错 | PASS |
+| `coop-identity.spec.ts` | **9/9 PASS** |
+| `coop-runtime.spec.ts`（P2-08 既有） | **6/6 PASS** |
+| Electron 45 E2E `coop-identity.e2e.spec.ts`（走真实 IPC） | **1/1 PASS**（8.15s） |
+
+### 7.4 尚未验证（不得当成已完成）
+
+1. **真机分屏下 bodyBinding 的真实来源**：上面的 `uniqueMultiplayerID` / `screenId` 是**契约形状**，
+   真实值必须由 BWF 按 `Context.ScreenId` 与 `Farmer.UniqueMultiplayerID` 上报——
+   **那属于 `V2-P2-09D`（BWF 分屏感知补丁），尚未开工**。当前 host/farmhand 的绑定值来自调用方传入，不是游戏实测。
+2. **「玩家一动即接管」的真机来源**：真实接管事件须由游戏侧观测到「哪一屏有真人输入」并带身体标识回传；
+   当前 `detectHumanTakeover` 的输入由调用方给定，**未与真实输入事件接通**（`V2-P2-09E`）。
+3. **`ABORTED_BY_HUMAN_TAKEOVER` 回执**：契约枚举早已存在（`GameBridgeReceiptStatusSchema`），
+   但「接管 → 取消在飞动作 → 回写该状态」链路属于 `V2-P2-09E`，本单只做到「租约归属判定」。
+4. **D/E/F 未开工**：farmhand 仍不能由 AI 安全控制。

@@ -18,6 +18,7 @@ import {
   CoopResourceReservationSchema,
   CoopRuntimeSnapshotSchema,
   CoopTaskItemSchema,
+  StardewScreenBindingSchema,
   type CoopModCompatibilityReport,
   type CoopModMismatch,
   type CoopModSummary,
@@ -27,6 +28,8 @@ import {
   type CoopRoomStatus,
   type CoopRuntimeSnapshot,
   type CoopTaskItem,
+  type CoopBodyLeaseView,
+  type StardewScreenBinding,
 } from '@workbench/shared-protocol';
 import { GameCharacterControlLease } from './control-lease';
 import { TeamBlackboard } from './team-blackboard';
@@ -206,8 +209,7 @@ export class CoopRuntimeV1 {
     this.leases.clear();
     this.tasks.clear();
     this.reservations.clear();
-    this.updatedAt = this.now();
-    this.blackboard.setGoal({
+    this.updatedAt = this.now();    this.blackboard.setGoal({
       id: this.roomId,
       title: this.sharedGoal,
       gameId: this.gameId,
@@ -226,11 +228,23 @@ export class CoopRuntimeV1 {
     displayName: string;
     endpointId?: string;
     mcpPort?: number;
+    /**
+     * 该成员对应的游戏内身体绑定（`V2-P2-09C`）。
+     *
+     * 省略时 `bodyBinding` 为 `null`：**未绑定身体的成员不得接收任何控制动作**。
+     * 绑定冲突（同屏或同一 `uniqueMultiplayerID` 被两个成员占用）会直接抛错，
+     * 宁可拒绝加入也不允许出现「两个 AI 抢一个身体」的状态。
+     */
+    bodyBinding?: StardewScreenBinding;
   }): CoopParticipant {
     if (this.status === 'idle') {
       this.status = 'preparing';
     }
     const ts = this.now();
+    let bodyBinding: StardewScreenBinding | null = null;
+    if (input.bodyBinding !== undefined) {
+      bodyBinding = this.assertBodyBindingAvailable(input.participantId, input.bodyBinding);
+    }
     const lease = new GameCharacterControlLease({
       characterId: input.characterId,
       gameId: this.gameId,
@@ -255,6 +269,7 @@ export class CoopRuntimeV1 {
       lastHeartbeatAt: ts,
       reconnectDeadlineAt: null,
       reconnectAttempts: 0,
+      bodyBinding,
     });
     this.participants.set(participant.participantId, participant);
     this.blackboard.upsertAssignment({
@@ -270,6 +285,167 @@ export class CoopRuntimeV1 {
     this.syncRoomActiveIfReady();
     this.updatedAt = ts;
     return participant;
+  }
+
+  /**
+   * 校验身体绑定是否可用（不修改状态）。
+   *
+   * 冲突一律抛错而不是静默改写：
+   * - 同一 `uniqueMultiplayerID` 已被别的成员绑定 → 拒绝（防两个 AI 抢一个身体）；
+   * - 同一 `screenId` 已被别的成员绑定 → 拒绝（防同屏两个 AI）。
+   */
+  private assertBodyBindingAvailable(
+    participantId: string,
+    binding: StardewScreenBinding,
+  ): StardewScreenBinding {
+    const parsed = StardewScreenBindingSchema.parse(binding);
+    const conflictByBody = [...this.participants.values()].find((p) =>
+      p.participantId !== participantId
+      && p.bodyBinding?.uniqueMultiplayerID === parsed.uniqueMultiplayerID);
+    if (conflictByBody !== undefined) {
+      throw new Error(
+        `身体 ${parsed.uniqueMultiplayerID} 已被成员 ${conflictByBody.participantId} 绑定，不能重复绑定`,
+      );
+    }
+    const conflictByScreen = [...this.participants.values()].find((p) =>
+      p.participantId !== participantId
+      && p.bodyBinding?.screenId === parsed.screenId);
+    if (conflictByScreen !== undefined) {
+      throw new Error(
+        `屏幕 ${parsed.screenId} 已被成员 ${conflictByScreen.participantId} 绑定，不能重复绑定`,
+      );
+    }
+    return parsed;
+  }
+
+  /**
+   * 绑定/改绑游戏内身体（`V2-P2-09C`）。
+   *
+   * 冲突一律抛错而不是静默改写（见 `assertBodyBindingAvailable`）。
+   */
+  claimBodyBinding(participantId: string, binding: StardewScreenBinding): StardewScreenBinding {
+    const participant = this.participants.get(participantId);
+    if (participant === undefined) {
+      throw new Error(`成员未加入联机房间：${participantId}`);
+    }
+    const parsed = this.assertBodyBindingAvailable(participantId, binding);
+    participant.bodyBinding = parsed;
+    this.updatedAt = this.now();
+    return parsed;
+  }
+
+  /** 按身体列出所有已绑定成员的租约视图（host/farmhand 双租约互不抢占的证据面） */
+  bodyLeaseViews(): CoopBodyLeaseView[] {
+    const views: CoopBodyLeaseView[] = [];
+    for (const participant of this.participants.values()) {
+      const binding = participant.bodyBinding;
+      if (binding === null) continue;
+      views.push({
+        uniqueMultiplayerID: binding.uniqueMultiplayerID,
+        screenId: binding.screenId,
+        role: binding.role,
+        participantId: participant.participantId,
+        controlOwner: participant.controlOwner,
+      });
+    }
+    return views.sort((a, b) => a.screenId - b.screenId);
+  }
+
+  /**
+   * 查找某个游戏内身体对应的参与者（`V2-P2-09C`）。
+   *
+   * 动作路由与接管判定**必须**先经这里解析身体 → 参与者，
+   * 否则分屏下会把动作打到另一个 `Game1` 实例的身体上。
+   */
+  participantOfBody(uniqueMultiplayerID: string): CoopParticipant | null {
+    for (const participant of this.participants.values()) {
+      if (participant.bodyBinding?.uniqueMultiplayerID === uniqueMultiplayerID) {
+        return participant;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 「玩家一动即接管」判定（`V2-P2-09C`）。
+   *
+   * 输入是**观测到真人输入的那个身体**（不是笼统的「有人动了」）。
+   * 只有当该身体属于某个 AI 参与者时，才把该 AI 的租约交给人类；
+   * 人类自己的身体不产生接管事件，也不影响其他 AI 成员。
+   *
+   * 铁律：拿不到身体标识时**不判定接管**——宁可漏接管也不误抢 AI 的控制权。
+   */
+  detectHumanTakeover(input: {
+    /** 观测到真人输入的身体 ID；缺失则不判定 */
+    uniqueMultiplayerID?: string;
+    reason?: string;
+  }): { takenOver: boolean; participantId?: string; reason: string } {
+    const bodyId = input.uniqueMultiplayerID;
+    if (bodyId === undefined || bodyId === '') {
+      return { takenOver: false, reason: '未提供身体标识，无法判定接管（不误抢 AI 控制权）' };
+    }
+    const participant = this.participantOfBody(bodyId);
+    if (participant === null) {
+      return { takenOver: false, reason: `未找到身体 ${bodyId} 的绑定成员，不判定接管` };
+    }
+    if (participant.kind !== 'ai') {
+      return { takenOver: false, reason: `身体 ${bodyId} 属于人类成员 ${participant.participantId}，无需接管` };
+    }
+    const lease = this.leases.get(participant.participantId);
+    /* v8 ignore next 3 -- 防御层：成员在册 ⇒ 租约在册（joinParticipant 同时建档、仅 createRoom 一起清空），此分支构造不出 */
+    if (lease === undefined) {
+      return { takenOver: false, reason: `成员 ${participant.participantId} 无控制租约，无法接管` };
+    }
+    lease.takeOverByHuman(input.reason ?? `人类在身体 ${bodyId} 上操作，已接管该 AI 角色`);
+    participant.controlOwner = lease.owner;
+    this.updatedAt = this.now();
+    return {
+      takenOver: true,
+      participantId: participant.participantId,
+      reason: lease.snapshot().reason,
+    };
+  }
+
+  /**
+   * 动作路由：判断某成员能否对某身体下发控制动作（`V2-P2-09C`）。
+   *
+   * 规则：
+   * - 成员必须**已绑定**身体，未绑定一律拒绝（避免误控他人角色）；
+   * - 动作目标身体必须是该成员自己绑定的身体（防跨身体写入）；
+   * - AI 成员还必须持有有效租约（人类接管/急停后立即拒绝）。
+   */
+  routeActionToBody(input: {
+    participantId: string;
+    targetUniqueMultiplayerID: string;
+  }): { allowed: boolean; reason: string } {
+    const participant = this.participants.get(input.participantId);
+    if (participant === undefined) {
+      return { allowed: false, reason: `成员不存在：${input.participantId}` };
+    }
+    const binding = participant.bodyBinding;
+    if (binding === null) {
+      return { allowed: false, reason: `成员 ${input.participantId} 未绑定游戏内身体，拒绝下发控制动作` };
+    }
+    if (binding.uniqueMultiplayerID !== input.targetUniqueMultiplayerID) {
+      return {
+        allowed: false,
+        reason: `动作目标身体 ${input.targetUniqueMultiplayerID} 与成员 ${input.participantId} 绑定的身体 ${binding.uniqueMultiplayerID} 不一致，拒绝跨身体写入`,
+      };
+    }
+    if (participant.kind === 'ai') {
+      const lease = this.leases.get(input.participantId);
+      /* v8 ignore next 3 -- 防御层：同上，成员在册 ⇒ 租约在册，此分支构造不出 */
+      if (lease === undefined) {
+        return { allowed: false, reason: `成员 ${input.participantId} 无控制租约` };
+      }
+      if (!lease.canAiAct()) {
+        return {
+          allowed: false,
+          reason: `AI 成员 ${input.participantId} 的控制租约未就绪（owner=${lease.owner}）：${lease.snapshot().reason}`,
+        };
+      }
+    }
+    return { allowed: true, reason: '动作已路由到该成员绑定的游戏内身体' };
   }
 
   controlLeaseOf(participantId: string): GameCharacterControlLease | null {
@@ -597,6 +773,7 @@ export class CoopRuntimeV1 {
       tasks: [...this.tasks.values()],
       reservations: [...this.reservations.values()],
       lastCompatReport: this.lastCompatReport,
+      bodyLeases: this.bodyLeaseViews(),
       updatedAt: this.updatedAt,
     });
   }

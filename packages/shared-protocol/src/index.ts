@@ -907,16 +907,8 @@ export const StardewLaunchOptionsSchema = z.object({
 });
 export type StardewLaunchOptions = z.infer<typeof StardewLaunchOptionsSchema>;
 
-/** 分屏/联机实例与游戏内身体的绑定（`V2-P2-09A`；`screenId` 对应 SMAPI `Context.ScreenId`） */
-export const StardewScreenBindingSchema = z.object({
-  /** 分屏屏号：0 为主屏；单客户端联机时恒为 0 */
-  screenId: z.number().int().nonnegative(),
-  /** 游戏内唯一多人 ID（Farmer.UniqueMultiplayerID，十进制字符串，避免 JS number 精度丢失） */
-  uniqueMultiplayerID: z.string().regex(/^[0-9]+$/u),
-  /** 该屏身份：房主或农场工人 */
-  role: z.enum(['host', 'farmhand']),
-});
-export type StardewScreenBinding = z.infer<typeof StardewScreenBindingSchema>;
+// 分屏/联机实例与游戏内身体的绑定（`V2-P2-09A`）单一事实源在 `./coop`
+// （与 `CoopParticipantSchema` 同处），已由文件末尾的 `export * from './coop'` 统一对外暴露。
 
 // ───────────────────────── 记忆图谱视图（T-M6-07 UI v4 记忆页） ─────────────────────────
 /** 记忆节点视图（渲染层/Dexie 只读镜像；正文已消毒） */

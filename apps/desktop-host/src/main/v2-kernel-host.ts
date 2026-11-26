@@ -55,6 +55,7 @@ import {
   type SpeechPerformancePlanInput,
   type StageBackendKind,
   type SongBlacklistEntry,
+  type StardewScreenBinding,
 } from '@workbench/shared-protocol';
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { ElectronBrowserEngine } from './electron-browser-engine';
@@ -1219,6 +1220,34 @@ export async function createV2KernelHost(options: {
     const res = coopRuntime.reconnectParticipant(String(rawInput.participantId ?? ''));
     return { ...res, snapshot: coopRuntime.snapshot() };
   });
+  // V2-P2-09C：宿主联机身份绑定——把「哪个成员对应游戏里哪个身体」显式落成契约事实，
+  // 并把「玩家一动即接管」与动作路由都按身体判定（不是笼统的「同屏不打架」）。
+  ipcMain.handle('v2:coop-body-bind', (_e, rawInput: {
+    participantId: string;
+    bodyBinding?: StardewScreenBinding;
+  }) => {
+    try {
+      const binding = rawInput.bodyBinding === undefined
+        ? null
+        : coopRuntime.claimBodyBinding(rawInput.participantId, rawInput.bodyBinding);
+      return { ok: true, binding, snapshot: coopRuntime.snapshot() };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err), snapshot: coopRuntime.snapshot() };
+    }
+  });
+  ipcMain.handle('v2:coop-body-leases', () => ({ bodyLeases: coopRuntime.bodyLeaseViews() }));
+  ipcMain.handle('v2:coop-human-takeover', (_e, rawInput: { uniqueMultiplayerID?: string; reason?: string }) => {
+    const result = coopRuntime.detectHumanTakeover({
+      ...(rawInput.uniqueMultiplayerID !== undefined ? { uniqueMultiplayerID: rawInput.uniqueMultiplayerID } : {}),
+      ...(rawInput.reason !== undefined ? { reason: rawInput.reason } : {}),
+    });
+    return { ...result, snapshot: coopRuntime.snapshot() };
+  });
+  ipcMain.handle('v2:coop-action-route', (_e, rawInput: { participantId: string; targetUniqueMultiplayerID: string }) =>
+    coopRuntime.routeActionToBody({
+      participantId: rawInput.participantId,
+      targetUniqueMultiplayerID: rawInput.targetUniqueMultiplayerID,
+    }));
   // V2-P3-01：统一表演系统（SingEngine SVS/SVC + 歌词时钟 + 舞蹈 + StageRuntime）
   ipcMain.handle('v2:perf-snapshot', async () => ({
     performance: performanceDirector.snapshot(),

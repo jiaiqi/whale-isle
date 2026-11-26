@@ -133,8 +133,8 @@
 - **`V2-P2-09`（`NEXT`）：星露谷 farmhand 联机 AI 控制与实例隔离**（勘察与方案见 [P2-09-farmhand-split-screen-audit.md](./evidence/P2-09-farmhand-split-screen-audit.md)：farmhand 在同机分屏下**有条件可行**——游戏侧支持多 `Game1` 实例与 `Context.ScreenId`，但现版 BWF 是进程级单例、零分屏感知，直接跑会控制错人；隔离推荐 spawn 注入绝对路径 `XDG_CONFIG_HOME`，不动 `HOME`）。拆为 A–F 六子单：
   - `V2-P2-09A`（`IMPLEMENTED_UNVERIFIED`）契约：`StardewLaunchOptionsSchema` 增 `isolateDataDir`（绝对路径强校验），新增 `StardewScreenBindingSchema`；
   - `V2-P2-09B`（`IMPLEMENTED_UNVERIFIED`）隔离启动：启动器与联机队友实例注入 `XDG_CONFIG_HOME`/`XDG_DATA_HOME`（不动 `HOME`），Steam 策略与相对路径显式拒绝；单测 74 例全绿，真机「owner 存档零写入」待验；
-  - `V2-P2-09C`（`NEXT`）宿主联机身份绑定：host/farmhand 双租约互不抢占；
-  - `V2-P2-09D`（`PENDING`）BWF 分屏感知补丁：按 `Context.ScreenId` 路由动作；
+  - `V2-P2-09C`（`IMPLEMENTED_UNVERIFIED`）宿主联机身份绑定：`CoopParticipant.bodyBinding` + `CoopBodyLeaseViewSchema` 契约先行，`CoopRuntimeV1` 新增按身体的绑定/改绑、`participantOfBody` 解析、按身体的「玩家一动即接管」判定与跨身体动作路由拦截，宿主 4 路 IPC（`v2:coop-body-bind`/`-body-leases`/`-human-takeover`/`-action-route`）；单测 15/15 + Electron 45 E2E 1/1 全绿；**真机 bodyBinding 值来源（BWF 按 `Context.ScreenId` 上报）属 `V2-P2-09D`，尚未开工**；
+  - `V2-P2-09D`（`NEXT`）BWF 分屏感知补丁：按 `Context.ScreenId` 路由动作（前置：owner 完成「单机建 cabin + 接手柄 + Start Local Co-op」，否则 `BLOCKED`）；
   - `V2-P2-09E`（`PENDING`）按屏「玩家一动即接管」与 `ABORTED_BY_HUMAN_TAKEOVER` 回执；
   - `V2-P2-09F`（`PENDING`）分屏 farmhand 沙盒剧本与回归。
 

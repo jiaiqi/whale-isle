@@ -31,6 +31,7 @@ import type {
   CharacterGoal,
   CommercialCleanExportResult,
   CoopModCompatibilityReport,
+  CoopBodyLeaseView,
   CoopParticipant,
   CoopResourceIntent,
   CoopResourceReservation,
@@ -102,6 +103,7 @@ import type {
   InterestSignal,
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
+  StardewScreenBinding,
 } from '@workbench/shared-protocol';
 
 export const GAME_OPTIONS = [
@@ -856,6 +858,7 @@ export interface DirectorBridge {
     displayName: string;
     endpointId?: string;
     mcpPort?: number;
+    bodyBinding?: StardewScreenBinding;
   }): Promise<{ ok: boolean; error?: string; participant?: CoopParticipant; snapshot?: CoopRuntimeSnapshot }>;
   v2CoopTaskAction(input: {
     action: 'propose' | 'accept' | 'start' | 'handoff' | 'outcome';
@@ -892,6 +895,22 @@ export interface DirectorBridge {
     participantId?: string;
     reason?: string;
   }): Promise<{ ok: boolean; error?: string; snapshot?: CoopRuntimeSnapshot; detail?: unknown }>;
+  // V2-P2-09C：宿主联机身份绑定（哪个成员对应游戏里哪个身体）
+  v2CoopBodyBind(input: {
+    participantId: string;
+    bodyBinding?: StardewScreenBinding;
+  }): Promise<{ ok: boolean; error?: string; binding?: StardewScreenBinding | null; snapshot?: CoopRuntimeSnapshot }>;
+  v2CoopBodyLeases(): Promise<{ bodyLeases: CoopBodyLeaseView[] }>;
+  v2CoopHumanTakeover(input: { uniqueMultiplayerID?: string; reason?: string }): Promise<{
+    takenOver: boolean;
+    participantId?: string;
+    reason: string;
+    snapshot?: CoopRuntimeSnapshot;
+  }>;
+  v2CoopActionRoute(input: { participantId: string; targetUniqueMultiplayerID: string }): Promise<{
+    allowed: boolean;
+    reason: string;
+  }>;
   v2SongCapabilities(): Promise<{
     ok: boolean;
     capabilities: SongConsoleCapability[];
