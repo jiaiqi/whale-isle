@@ -126,3 +126,35 @@
 2. **OBS 硬件加速开启下的 Browser Source 观感**：本机已知全黑，未解决（需 OBS/CEF 侧修复或由 owner 关闭该选项——见 §4.1 与运行手册）。
 3. **本 app 音频进 OBS 的实际听感与延迟**：未验证；§5.1 的路径 A/B/C/D 均**未在本机跑通端到端**（D 只验证了「能创建 tap 并销毁」，未验证把 PCM 送进 OBS）。
 4. **推流画面观感/码率**：未开播，无可验证对象。
+
+## 7. 三步前置与「六单重盘」（2026-11-26 追加）
+
+三步前置：① 关闭浏览器源硬件加速；② 开启 obs-websocket（4455）；③ 音频路径 3A（零驱动零授权）。
+**结论先行：三步只解锁 `V2-P3-02` 的画面侧，另加 `V2-P3-01` 的 obs-stage 可见性；其余四单的阻塞项与 OBS 无关。**
+
+| 工单 | 三步前置解锁了什么 | 还差什么才能 `DONE` |
+| --- | --- | --- |
+| `V2-P3-02` 直播中控 + OBS 舞台 | **画面侧全解锁**（硬件加速关闭 + websocket 4455 已开，`pnpm obs:selfcheck --probe` 退出码 0 即闭环）；3A 接线完成后「本 app 声音进 OBS」也闭环 | 真实平台测试直播间 + 推流密钥 + 平台授权（E9）；3A 的代码接线（`obs-client.ts` / `obs-audio-bridge.ts` / `ObsAudioBridgeStatusSchema` / 宿主 IPC / 生活页状态），约 5–6 文件，**等 `--probe` 绿了再立项** |
+| `V2-P3-01` 表演系统 | **只解锁 obs-stage 这一路的可见性验收** | 合法 `.moc3` / `.vrm`；SVS/SVC 推理后端权重与索引；5 组真实情绪参考音频（GPT-SoVITS 是 TTS，不能顶） |
+| `V2-P1-06` 星露谷 AI-First | 不解锁（与 OBS 无关） | 星露谷+SMAPI 已具备，只差人跑满 1 个游戏日 + 8 条控制语义实按 + F7 三处开关同步 |
+| `V2-P2-01` 攻略学习 | 不解锁 | 连续多日实玩 + 装一个影响机制的 Mod 验兼容提示 |
+| `V2-P2-08` Coop v1 联机 | 不解锁 | 第二台机器或第二个 Steam 账号（E3） |
+| `V2-P3-04` Digital Life L1 | 不解锁（桌宠气泡走 Electron 通道，不经 OBS） | 真实供应商多模态 Key；真实平台浏览需人工声明能力矩阵；L1 浏览执行器未接入 |
+
+### 7.1 `--probe` 的判据（owner 自查用）
+
+命令：`OBS_WEBSOCKET_PASSWORD='<密码>' pnpm obs:selfcheck --probe`
+
+| 退出码 | 含义 | 输出特征 |
+| --- | --- | --- |
+| 0 | 通过 | `已连接 OBS …` → `截图尺寸 64x64，中心像素 rgb(204,0,0)` → `结论：browser_source 正常渲染静态红页` → `已清理临时输入与临时场景` |
+| 1 | 全黑（硬件加速未真正关闭 / 未重启 OBS） | `结论：browser_source 渲染全黑——命中本机已知缺陷` |
+| 2 | 连不上（密码错 / OBS 没开 / websocket 未启用） | 连接错误原文 |
+| 3 | 有画面但不是红页 | `结论：browser_source 有内容但不是红页` |
+| 4 | 其它异常（建源失败等） | 原始错误 |
+
+探针动作全集：`GetVersion` → 建**临时**场景 → 建 **64×64 临时** `browser_source` 指向本地红页 → 等 1.5 s → `GetSourceScreenshot` 取中心像素 → `finally` 里 `RemoveInput` + `RemoveScene` 并断开。不碰已有场景、不推流、不录制、不留持久对象。
+
+### 7.2 2026-11-26 22:38 复跑记录（只读）
+
+`pnpm obs:selfcheck` 仍输出 `BrowserHWAccel = true`。证据链：`global.ini` 第 6 行原文为 `true`；该文件 mtime 20:16 且当时 22:38 未再被写过；OBS 进程自 20:16 前启动后未重启。该开关由 OBS 启动时读取、退出/应用时写回，故「界面取消勾选但未应用/未重启」时磁盘仍是旧值。**必须完全退出 OBS 再重开，`pnpm obs:selfcheck` 显示 `BrowserHWAccel = false` 才算真关。**
