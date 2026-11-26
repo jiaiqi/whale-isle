@@ -5,6 +5,22 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（小米 MiMo TTS 接入为候选供应商：VoiceClone + VoiceDesign）
+
+- **`MimoTtsProvider`**（`packages/voice-runtime`）：两种模式各注册一个实例，kind 为 `mimo-tts-voiceclone` / `mimo-tts-voicedesign`。请求体按官方结构分别构造——VoiceClone 的 user 为空串、正文放 assistant、参考音频走 `audio.voice` 的 data URL；VoiceDesign 的 user 放自然语言音色描述、正文放 assistant。响应取 `choices[0].message.audio.data` 的 base64 wav，**不能套用现有 `CloudOpenAiTtsProvider`**。
+- **候选身份写死在架构里**：`CANDIDATE_TTS_PROVIDERS` 与 `COMMERCIAL_TTS_PROVIDERS` 分开，自动兜底链仍只有 MiniMax / OpenAI，默认档仍是 `minimax-tts`；`resolveCommercialTtsProvider()` 永远不会把流量引到候选上。契约新增 `MIMO_TTS_CANDIDATE_NOTICE`，UI 与文档共用同一份风险原文。
+- **UI**：语音中心供应商选择器拆成「稳定两家」与「候选（可试听，不做默认）」两组，候选带「限免」角标，选中后显示风险提示。
+- **情绪能力不宣称**：`probe()` 一律 `supportsEmotion: false` 并写明「未实测」；VoiceDesign 允许把五情绪追加进音色描述（`emotionStyleHints`），VoiceClone 的 user 必须为空串，**不做注入、不造假**。
+- **bench harness**（`tools/scripts/bench-tts-ab.mts`）：25 句 × 5 情绪、四家 provider 可选、产物 `artifacts/tts-ab/<provider>/<emotion>-<n>.<真实扩展名>` + `manifest.json`；扩展名跟真实格式走（MiniMax 是 mp3 就不改名成 wav）；`--fake` 用本地假服务端跑通链路，产物标 `simulated:true`；`--consistency N` 支持音色漂移实验。
+- **音色一致性工具**（`tools/scripts/speaker-cosine.py`）：3D-Speaker CAM++ 说话人嵌入 + 两两余弦。已在 ZipVoice 同音色 15 条真实产物上验证方法（均值 0.8563 / 最小 0.7545），MiMo 自身的漂移量**未实测**。
+- **验证与边界**：新增 8 例单测（请求体结构 / 缺配置 / 失败路径 / 探针不宣称情绪 / 路由不自动选候选），`voice-runtime.spec.ts` 30 例全绿。**真实 MiMo API 一次都没调过**（无 Key），首包/耗时/成功率/音色漂移/情绪稳定性全部未实测，证据 [mimo-tts-candidate-integration.md](./docs/v2/evidence/mimo-tts-candidate-integration.md) 单列「限时免费风险」与切回路径。
+
+### Added（P3-01 素材需求书：原创蓝鲸女仆 VRM 1.0）
+
+- **`docs/v2/P3-01-MATERIALS-NEEDED.md`**：owner 定调「保留蓝鲸女仆设定、素材原创重做」后，把规格写死到可直接执行——VRM 1.0（`VRMC_vrm`）+ `VRMC_springBone` + `VRMC_materials_mtoon`；humanoid 强制 15 骨 + 本项目额外要求；表情必须含 `aa/ih/ou/ee/oh` + `blink` + 五情绪 preset；`meta` 七个许可字段逐项给值（`commercialUsage` 公司主体必须 `corporation`）；预算三角面 ≤ 80k、材质 ≤ 8。
+- **写明两条最容易做错的事实**：VRM 1.0 **没有 viseme 概念**（口型只有 5 个元音 preset）；**生成式 3D 不能直接产出 VRM**（Meshy 官方明说不支持面部绑定，Tripo 的 `spec:"vrm"` 只是骨骼命名），路线只能是 VRoid 或「生成网格 + Blender 人工补表情/springBone」。
+- **许可边界**：设定可留、像素不可复用；Blender VRM 插件是 `MIT OR GPL-3.0-or-later` 双许可，本项目**只能走 MIT 分支**；VRM 规格仓库本身无 LICENSE，禁止把其 schema 复制进仓库。
+
 ### Validated（ZipVoice-Distill 内部验证 `[INTERNAL-VALIDATION-NONCOMMERCIAL]`，权重 CC-BY-NC）
 
 - **结论：能跑通、中文能听懂、CPU 上比 CosyVoice2 快约 5 倍**。`sherpa-onnx` 2.0.3 + `sherpa-onnx-zipvoice-distill-int8-zh-en-emilia`（约 204 MB）+ `vocos_24khz.onnx`，`provider=cpu` / `num_threads=4` / `num_steps=4`，15 句中文。

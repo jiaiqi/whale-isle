@@ -4,11 +4,14 @@ import { VoiceIdentityDomainSchema } from '@workbench/shared-protocol';
 import {
   AudioMixer,
   buildWindowsSapiCommand,
+  CANDIDATE_TTS_PROVIDERS,
   CloudOpenAiTtsProvider,
+  COMMERCIAL_TTS_PROVIDERS,
   extractWavLipSyncFrames,
   LipSyncTimelinePlayer,
   LocalAudioWorkerProvider,
   MiniMaxTtsProvider,
+  MimoTtsProvider,
   resolveCommercialTtsProvider,
   splitSpeechSentences,
   synthesizeTextLipSyncFrames,
@@ -795,5 +798,164 @@ describe('默认档商业供应商选择（显式选择，不靠「有没有 Key
     const choice = resolveCommercialTtsProvider({ preference: 'minimax-tts', available: ['local-audio-worker', 'macos-say'] });
     expect(choice.provider).toBe('minimax-tts');
     expect(choice.honored).toBe(false);
+  });
+});
+
+describe('小米 MiMo TTS 候选供应商（VoiceClone / VoiceDesign，候选不设默认）', () => {
+  const wav = makePcm16Wav(Array.from({ length: 400 }, (_, i) => Math.sin(i / 4) * 8000));
+  const baseRequest = {
+    requestId: 'mimo-1',
+    characterId: 'char_xiaojing',
+    voiceRef: 'xiaojing_voice',
+    text: '开饭啦开饭啦，今天的下饭菜看起来特别香！',
+    emotion: 'happy_rice',
+    styleMode: 'normal' as const,
+    speed: 1,
+    pitchShiftSemitones: 0,
+    volume: 1,
+    timeoutMs: 5000,
+  };
+
+  it('候选不在自动兜底链里，也不进稳定两家', () => {
+    expect(COMMERCIAL_TTS_PROVIDERS).toEqual(['minimax-tts', 'openai-compatible-tts']);
+    expect(CANDIDATE_TTS_PROVIDERS).toEqual(['mimo-tts-voiceclone', 'mimo-tts-voicedesign']);
+  });
+
+  it('显式选了候选但它不可用：回落到稳定两家并标 honored=false，不悄悄留在候选上', () => {
+    const choice = resolveCommercialTtsProvider({ preference: 'mimo-tts-voicedesign', available: ['minimax-tts'] });
+    expect(choice).toMatchObject({ provider: 'minimax-tts', honored: false });
+  });
+
+  it('VoiceDesign：user 放音色描述、assistant 放正文，情绪提示只追加已知情绪', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: '年轻女性，中文普通话，音色偏甜，语速中等，性格活泼',
+      emotionStyleHints: { happy_rice: '开心雀跃，语气上扬' },
+      resolveApiKey: () => 'test-mimo-token',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64'), format: 'wav' } } }],
+        }), { status: 200 });
+      },
+    });
+    expect(provider.kind).toBe('mimo-tts-voicedesign');
+    const out = await provider.synthesize(baseRequest);
+    expect(out.providerKind).toBe('mimo-tts-voicedesign');
+    expect(out.format).toBe('wav');
+    expect(out.lipFrames.length).toBeGreaterThan(0);
+
+    const body = bodies[0]!;
+    expect(body['model']).toBe('mimo-v2.5-tts-voicedesign');
+    const messages = body['messages'] as Array<{ role: string; content: string }>;
+    expect(messages[0]!.role).toBe('user');
+    expect(messages[0]!.content).toContain('年轻女性');
+    expect(messages[0]!.content).toContain('风格：开心雀跃');
+    expect(messages[1]!).toEqual({ role: 'assistant', content: baseRequest.text });
+    expect(body['audio']).toEqual({ format: 'wav' });
+
+    await provider.synthesize({ ...baseRequest, requestId: 'mimo-2', emotion: 'unknown_emotion' });
+    const second = (bodies[1]!['messages'] as Array<{ content: string }>)[0]!;
+    expect(second.content).not.toContain('风格：');
+  });
+
+  it('VoiceDesign 没配描述：探针如实报不可用，合成拒绝而不是发空请求', async () => {
+    const provider = new MimoTtsProvider({ mode: 'voicedesign', resolveApiKey: () => 'k' });
+    const status = provider.probe();
+    expect(status.available).toBe(false);
+    expect(status.detail).toContain('未配置音色描述');
+    await expect(provider.synthesize(baseRequest)).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
+  });
+
+  it('VoiceClone：user 为空串、正文在 assistant、参考音频进 audio.voice 的 data URL', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const provider = new MimoTtsProvider({
+      mode: 'voiceclone',
+      resolveReferenceAudio: () => ({ bytes: wav }),
+      resolveApiKey: () => 'test-mimo-token',
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({
+          choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+        }), { status: 200 });
+      },
+    });
+    expect(provider.kind).toBe('mimo-tts-voiceclone');
+    await provider.synthesize(baseRequest);
+    const body = bodies[0]!;
+    expect(body['model']).toBe('mimo-v2.5-tts-voiceclone');
+    const messages = body['messages'] as Array<{ role: string; content: string }>;
+    expect(messages[0]!).toEqual({ role: 'user', content: '' });
+    expect(messages[1]!).toEqual({ role: 'assistant', content: baseRequest.text });
+    const audio = body['audio'] as { format: string; voice: string };
+    expect(audio.format).toBe('wav');
+    expect(audio.voice.startsWith('data:audio/wav;base64,')).toBe(true);
+  });
+
+  it('VoiceClone 缺参考音频 / 缺 Key：分别给出可读原因', async () => {
+    const noRef = new MimoTtsProvider({ mode: 'voiceclone', resolveApiKey: () => 'k' });
+    expect(noRef.probe().detail).toContain('未配置参考音频');
+    await expect(noRef.synthesize(baseRequest)).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
+
+    const noKey = new MimoTtsProvider({
+      mode: 'voiceclone',
+      resolveReferenceAudio: () => ({ bytes: wav }),
+      resolveApiKey: () => null,
+    });
+    expect(noKey.probe().available).toBe(false);
+    await expect(noKey.synthesize(baseRequest)).rejects.toMatchObject({ code: 'SECRET_UNAVAILABLE' });
+  });
+
+  it('探针不宣称情绪能力（未实测就不许写 true）', () => {
+    const provider = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: '年轻女性，普通话',
+      resolveApiKey: () => 'k',
+    });
+    const status = provider.probe();
+    expect(status.available).toBe(true);
+    expect(status.supportsEmotion).toBe(false);
+    expect(status.detail).toContain('限时免费');
+    expect(status.detail).toContain('未实测');
+  });
+
+  it('失败路径：HTTP 500 / 错误字段 / 空音频都抛错，不返回假音频', async () => {
+    const ok = (): string => Buffer.from(wav).toString('base64');
+    const make = (payload: unknown, status = 200): MimoTtsProvider =>
+      new MimoTtsProvider({
+        mode: 'voicedesign',
+        voiceDescription: '年轻女性，普通话',
+        resolveApiKey: () => 'k',
+        fetchImpl: async () => new Response(JSON.stringify(payload), { status }),
+      });
+
+    await expect(make({}, 500).synthesize(baseRequest)).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
+    await expect(make({ error: { message: 'quota exceeded' } }).synthesize(baseRequest)).rejects.toThrow('quota exceeded');
+    await expect(make({ choices: [{ message: {} }] }).synthesize(baseRequest)).rejects.toThrow('空音频');
+    await expect(make({ choices: [{ message: { audio: { data: '' } } }] }).synthesize(baseRequest)).rejects.toThrow('空音频');
+    const good = await make({ choices: [{ message: { audio: { data: ok() } } }] }).synthesize(baseRequest);
+    expect(good.audioBase64).toBe(ok());
+  });
+
+  it('路由器只按 preferredProvider 优先；未指定时按注册顺序走，不会自动跳到候选', async () => {
+    const mimo = new MimoTtsProvider({
+      mode: 'voicedesign',
+      voiceDescription: '年轻女性，普通话',
+      resolveApiKey: () => 'k',
+      fetchImpl: async () => new Response(JSON.stringify({
+        choices: [{ message: { audio: { data: Buffer.from(wav).toString('base64') } } }],
+      }), { status: 200 }),
+    });
+    const openai = new CloudOpenAiTtsProvider({
+      resolveApiKey: () => 'k',
+      fetchImpl: async () => new Response(wav, { status: 200 }),
+    });
+    // 与宿主注册顺序一致：稳定两家在前，候选在后
+    const router = new VoiceProviderRouter({ providers: [openai, mimo] });
+    const auto = await router.synthesize(baseRequest);
+    expect(auto.providerKind).toBe('openai-compatible-tts');
+    const picked = await router.synthesize({ ...baseRequest, requestId: 'mimo-3' }, { preferredProvider: 'mimo-tts-voicedesign' });
+    expect(picked.providerKind).toBe('mimo-tts-voicedesign');
   });
 });

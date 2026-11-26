@@ -6,7 +6,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, ipcMain, powerMonitor, systemPreferences } from 'electron';
@@ -85,10 +85,12 @@ import {
   CloudOpenAiTtsProvider,
   LocalAudioWorkerProvider,
   MiniMaxTtsProvider,
+  MimoTtsProvider,
   PerformanceDirector,
   SingEngine,
   SystemFallbackVoiceProvider,
   VoiceProviderRouter,
+  type MimoTtsReferenceAudio,
   type SilenceContextInput,
 } from '@workbench/voice-runtime';
 import { StageRuntime } from '@workbench/pet-renderer';
@@ -340,10 +342,41 @@ export async function createV2KernelHost(options: {
   });
 
   const audioMixer = new AudioMixer({ events: kernel.events });
+  /**
+   * MiMo TTS 候选接入（2026-11-27，owner 批准作为候选而非默认）：
+   * - 凭据：优先凭据库 providerId `mimo-tts`，其次环境变量 `WHALE_MIMO_API_KEY`（都不进仓库）。
+   * - VoiceDesign 的音色描述与 VoiceClone 的参考音频同样只从环境变量取，没配就如实报「未配置」。
+   * - 两个实例都不参与自动兜底，只能在 prefs 里被显式选中（`CANDIDATE_TTS_PROVIDERS`）。
+   */
+  const resolveMimoKey = (): string | null =>
+    kernel.secrets.resolve('mimo-tts') ?? (process.env.WHALE_MIMO_API_KEY?.trim() || null);
+  const mimoVoiceDescription = process.env.WHALE_MIMO_VOICE_DESCRIPTION?.trim();
+  const mimoVoiceSamplePath = process.env.WHALE_MIMO_VOICE_SAMPLE?.trim();
+  const resolveMimoReference = (): MimoTtsReferenceAudio | null => {
+    if (mimoVoiceSamplePath === undefined || mimoVoiceSamplePath === '') return null;
+    try {
+      return { bytes: new Uint8Array(readFileSync(mimoVoiceSamplePath)) };
+    } catch {
+      return null;
+    }
+  };
   const voiceRouter = new VoiceProviderRouter({
     providers: [
       new MiniMaxTtsProvider({ resolveApiKey: () => kernel.secrets.resolve('minimax') }),
       new CloudOpenAiTtsProvider({ resolveApiKey: () => kernel.secrets.resolve('openai-tts') }),
+      new MimoTtsProvider({
+        mode: 'voicedesign',
+        ...(mimoVoiceDescription === undefined ? {} : { voiceDescription: mimoVoiceDescription }),
+        emotionStyleHints: {
+          sweet_normal: '温柔甜软，带笑意',
+          tsundere_refuse: '傲娇嘴硬，稍微不服气',
+          rage_spray: '生气反驳，音量偏大',
+          lazy_yawn: '慵懒困倦，语速偏慢',
+          happy_rice: '开心雀跃，语气上扬',
+        },
+        resolveApiKey: resolveMimoKey,
+      }),
+      new MimoTtsProvider({ mode: 'voiceclone', resolveReferenceAudio: resolveMimoReference, resolveApiKey: resolveMimoKey }),
       new LocalAudioWorkerProvider(),
       new SystemFallbackVoiceProvider(process.platform),
     ],

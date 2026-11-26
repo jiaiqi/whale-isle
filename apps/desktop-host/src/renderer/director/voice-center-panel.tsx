@@ -12,12 +12,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { AudioLines, Lock, Radio, Sliders, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  MIMO_TTS_CANDIDATE_NOTICE,
   OFFLINE_TIER_COST_TEXT,
   type CommercialTtsProvider,
   type VoiceEngineTier,
   type VoiceProviderStatus,
 } from '@workbench/shared-protocol';
-import { COMMERCIAL_TTS_PROVIDERS, resolveCommercialTtsProvider } from '@workbench/voice-runtime';
+import { CANDIDATE_TTS_PROVIDERS, COMMERCIAL_TTS_PROVIDERS, resolveCommercialTtsProvider } from '@workbench/voice-runtime';
 import type { CharacterSummary } from './bridge';
 import { VoicePanel } from './voice-panel';
 import { VoiceStudioPanel } from './voice-studio-panel';
@@ -103,7 +104,13 @@ export function VoiceCenterPanel(props: {
     : localWorker.supportsEmotion ? '支持（探针实测）' : '不支持（探针实测）';
 
   const providerLabel = (kind: CommercialTtsProvider): string =>
-    kind === 'minimax-tts' ? 'MiniMax T2A' : 'OpenAI 兼容 TTS';
+    kind === 'minimax-tts'
+      ? 'MiniMax T2A'
+      : kind === 'openai-compatible-tts'
+        ? 'OpenAI 兼容 TTS'
+        : kind === 'mimo-tts-voiceclone'
+          ? 'MiMo VoiceClone'
+          : 'MiMo VoiceDesign';
 
   const pickCommercial = (next: CommercialTtsProvider): void => {
     setCommercial(next);
@@ -127,6 +134,40 @@ export function VoiceCenterPanel(props: {
     } finally {
       setPreviewing(false);
     }
+  };
+
+  /**
+   * 供应商选择按钮。候选（MiMo）与稳定两家共用同一个按钮形态，但多一个「限免」角标与候选提示，
+   * 避免任何人把它误读成「可以默认依赖」。
+   */
+  const renderProviderPick = (kind: CommercialTtsProvider): React.JSX.Element => {
+    const on = commercial === kind;
+    const status = providers.find((p) => p.kind === kind);
+    const ready = status?.available === true;
+    const candidate = (CANDIDATE_TTS_PROVIDERS as readonly CommercialTtsProvider[]).includes(kind);
+    return (
+      <button
+        key={kind}
+        type="button"
+        data-voice-commercial-pick={kind}
+        data-voice-commercial-candidate={candidate ? 'true' : 'false'}
+        aria-pressed={on}
+        onClick={() => pickCommercial(kind)}
+        title={candidate ? `${status?.detail ?? '尚未探测'} · ${MIMO_TTS_CANDIDATE_NOTICE}` : (status?.detail ?? '尚未探测')}
+        className="rounded-full px-2.5 py-0.5 font-semibold transition"
+        style={{
+          border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}`,
+          background: on ? 'var(--blue-dim)' : 'var(--inset)',
+          color: on ? 'var(--blue)' : 'var(--text-2)',
+        }}
+      >
+        {providerLabel(kind)}
+        <span style={{ color: ready ? 'var(--green)' : 'var(--red, #c0392b)', fontWeight: 500 }}>
+          {' '}· {status === undefined ? '未探测' : ready ? '可用' : '未配置'}
+        </span>
+        {candidate && <span style={{ color: 'var(--amber)', fontWeight: 500 }}> · 限免</span>}
+      </button>
+    );
   };
 
   return (
@@ -251,32 +292,11 @@ export function VoiceCenterPanel(props: {
 
         <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5 text-[11px]" style={{ borderColor: 'var(--stroke)', color: 'var(--text-2)' }} data-voice-commercial-provider={commercial}>
           <span className="font-semibold" style={{ color: 'var(--text-3)' }}>默认档用哪一家：</span>
-          {COMMERCIAL_TTS_PROVIDERS.map((kind) => {
-            const on = commercial === kind;
-            const status = providers.find((p) => p.kind === kind);
-            const ready = status?.available === true;
-            return (
-              <button
-                key={kind}
-                type="button"
-                data-voice-commercial-pick={kind}
-                aria-pressed={on}
-                onClick={() => pickCommercial(kind)}
-                title={status?.detail ?? '尚未探测'}
-                className="rounded-full px-2.5 py-0.5 font-semibold transition"
-                style={{
-                  border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}`,
-                  background: on ? 'var(--blue-dim)' : 'var(--inset)',
-                  color: on ? 'var(--blue)' : 'var(--text-2)',
-                }}
-              >
-                {providerLabel(kind)}
-                <span style={{ color: ready ? 'var(--green)' : 'var(--red, #c0392b)', fontWeight: 500 }}>
-                  {' '}· {status === undefined ? '未探测' : ready ? '可用' : '未配置'}
-                </span>
-              </button>
-            );
-          })}
+          {COMMERCIAL_TTS_PROVIDERS.map(renderProviderPick)}
+          <span className="font-semibold" style={{ color: 'var(--text-3)' }} data-voice-commercial-candidates>
+            候选（可试听，不做默认）：
+          </span>
+          {CANDIDATE_TTS_PROVIDERS.map(renderProviderPick)}
           <button
             type="button"
             data-voice-commercial-preview
@@ -291,6 +311,11 @@ export function VoiceCenterPanel(props: {
             <span data-voice-commercial-fallback style={{ color: 'var(--amber)' }}>{commercialChoice.reason}</span>
           )}
         </div>
+        {(CANDIDATE_TTS_PROVIDERS as readonly CommercialTtsProvider[]).includes(commercial) && (
+          <p className="mt-1 text-[10.5px]" style={{ color: 'var(--amber)' }} data-voice-commercial-candidate-notice>
+            {MIMO_TTS_CANDIDATE_NOTICE}
+          </p>
+        )}
       </div>
 
       {tab === 'catalog'

@@ -8,6 +8,8 @@ import { z } from 'zod';
 export const VoiceProviderKindSchema = z.enum([
   'openai-compatible-tts',
   'minimax-tts',
+  'mimo-tts-voiceclone',
+  'mimo-tts-voicedesign',
   'local-audio-worker',
   'mcode-cli',
   'macos-say',
@@ -54,9 +56,27 @@ export const OFFLINE_TIER_COST_TEXT = '一句话等 16–43 秒 / 首包 10–35
 /**
  * 默认档（商业 API）用哪一家：**用户显式选择**，不许靠「有没有配置 Key」隐式决定。
  * 选中的那家不可用时要如实报告「没兑现」，而不是静悄悄换成另一家。
+ *
+ * 前两家是长期可依赖的稳定档；`mimo-*` 两个是**候选**（见 `MIMO_TTS_CANDIDATE_NOTICE`），
+ * 选得中、听得着，但绝不进自动兜底链，也绝不设为默认。
  */
-export const CommercialTtsProviderSchema = z.enum(['minimax-tts', 'openai-compatible-tts']);
+export const CommercialTtsProviderSchema = z.enum([
+  'minimax-tts',
+  'openai-compatible-tts',
+  'mimo-tts-voiceclone',
+  'mimo-tts-voicedesign',
+]);
 export type CommercialTtsProvider = z.infer<typeof CommercialTtsProviderSchema>;
+
+/**
+ * MiMo TTS 候选供应商的如实口径（UI 与文档共用同一份原文，禁止各处另写）。
+ *
+ * 事实来源（2026-11-27 官方模型页 + 编排方转述）：标价「限时免费」，页面**没有任何商用条款**；
+ * 同一站点顶部横幅写明 MiMo-V2.5-Pro / V2.5 文本系列已于 2026-10-21 下线，TTS 是否同命运未明说。
+ * 因此：可以接、可以试听对拍，但不得锁死为默认档，必须随时能切走。
+ */
+export const MIMO_TTS_CANDIDATE_NOTICE =
+  '候选：限时免费、无商用条款、V2.5 文本系列已下线；不得作为默认档长期依赖';
 
 /**
  * 本地 Audio Worker 的 `/health` 自报（宿主探针的唯一数据来源）。
