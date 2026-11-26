@@ -37,7 +37,8 @@ export type AudioPlaybackLease = z.infer<typeof AudioPlaybackLeaseSchema>;
 
 export const AudioPlaybackReceiptSchema = z.object({
   leaseId: z.string().uuid(),
-  status: z.enum(['COMPLETED', 'INTERRUPTED_BY_P0', 'TTL_EXPIRED', 'AUDIO_DEVICE_ERROR']),
+  // CANCELLED：显式取消/应用关闭的主动停止（区别于 P0 抢占 INTERRUPTED_BY_P0）
+  status: z.enum(['COMPLETED', 'INTERRUPTED_BY_P0', 'TTL_EXPIRED', 'AUDIO_DEVICE_ERROR', 'CANCELLED']),
   actualPlayedMs: z.number().nonnegative(),
   timestamp: z.number(),
 });

@@ -93,7 +93,8 @@ export class GlobalAudioLeaseManager {
       return true;
     }
     if (this.active?.request.leaseId === leaseId) {
-      this.finishActive('INTERRUPTED_BY_P0');
+      // 显式取消不是 P0 抢占：如实标记 CANCELLED（此前误标 INTERRUPTED_BY_P0）
+      this.finishActive('CANCELLED');
       this.dequeue();
       return true;
     }
@@ -102,7 +103,7 @@ export class GlobalAudioLeaseManager {
 
   /** 关闭应用时停止在播并丢弃排队。 */
   stopAll(): void {
-    if (this.active !== null) this.finishActive('INTERRUPTED_BY_P0');
+    if (this.active !== null) this.finishActive('CANCELLED');
     this.queue = [];
   }
 

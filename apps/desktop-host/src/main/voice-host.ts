@@ -292,7 +292,7 @@ export function registerVoiceHostIpc(host: VoiceHost): void {
 export interface VoiceHostSpeechResult {
   agentId: string;
   speakerName: string;
-  status: 'completed' | 'failed' | 'timeout' | 'interrupted';
+  status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled';
 }
 
 export interface VoiceHostPlaybackInput {
@@ -320,7 +320,8 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       const status = receipt.status === 'COMPLETED'
         ? 'completed'
         : receipt.status === 'TTL_EXPIRED' ? 'timeout'
-          : receipt.status === 'INTERRUPTED_BY_P0' ? 'interrupted' : 'failed';
+          : receipt.status === 'INTERRUPTED_BY_P0' ? 'interrupted'
+            : receipt.status === 'CANCELLED' ? 'cancelled' : 'failed';
       options.onSpeechResult?.({ agentId: receipt.agentId, speakerName: receipt.speakerName, status });
     },
     onActiveChange: (event) => {

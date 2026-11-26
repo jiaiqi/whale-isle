@@ -474,8 +474,8 @@ contextBridge.exposeInMainWorld('petStage', {
   onCoopSpeaker: (handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void => {
     ipcRenderer.on('coop:speaker', (_e, event) => handler(event));
   },
-  onSpeechResult: (handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }) => void): () => void => {
-    const listener = (_e: unknown, event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }): void => handler(event);
+  onSpeechResult: (handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }) => void): () => void => {
+    const listener = (_e: unknown, event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }): void => handler(event);
     ipcRenderer.on('pet:speech-result', listener);
     return () => ipcRenderer.removeListener('pet:speech-result', listener);
   },

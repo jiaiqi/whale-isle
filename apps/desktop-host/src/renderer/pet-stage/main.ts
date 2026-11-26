@@ -41,7 +41,7 @@ interface PetStageBridge {
   setPeek?(active: boolean): Promise<{ ok: boolean }>;
   onGlobalPrefsChanged?(handler: (prefs: PetDesktopPrefs) => void): () => void;
   onCoopSpeaker?(handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void;
-  onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' }) => void): () => void;
+  onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }) => void): () => void;
   onLipSync?(handler: (event: { agentId: string; frame: { viseme: string; amplitude: number } }) => void): () => void;
   onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
   onPetBubble?(handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void;

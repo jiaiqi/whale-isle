@@ -6,7 +6,7 @@
  * speaking 中绝不因普通 idle 定时器收起；60s TTL 是合成卡死的兜底。
  */
 export type BubblePhase = 'hidden' | 'waiting' | 'speaking' | 'muted';
-export type SpeechResultKind = 'completed' | 'failed' | 'timeout' | 'interrupted';
+export type SpeechResultKind = 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled';
 
 export interface BubbleLifecycleState {
   phase: BubblePhase;
@@ -42,10 +42,10 @@ export function speechStarted(state: BubbleLifecycleState): BubbleEffect {
   return { state: next, show: true, hide: false, muted: false };
 }
 
-/** 语音租约回执：completed 立即收；失败/超时保留文字并标静音。 */
+/** 语音租约回执：completed/cancelled 立即收（主动取消不留残泡）；失败/超时保留文字并标静音。 */
 export function speechResult(state: BubbleLifecycleState, result: SpeechResultKind): BubbleEffect {
   if (state.phase === 'hidden') return { state, show: false, hide: true, muted: false };
-  if (result === 'completed') {
+  if (result === 'completed' || result === 'cancelled') {
     return { state: createBubbleLifecycle(), show: false, hide: true, muted: false };
   }
   const next: BubbleLifecycleState = { ...state, phase: 'muted', muted: true };

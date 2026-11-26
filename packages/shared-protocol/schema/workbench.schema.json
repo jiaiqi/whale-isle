@@ -838,7 +838,8 @@
             "COMPLETED",
             "INTERRUPTED_BY_P0",
             "TTL_EXPIRED",
-            "AUDIO_DEVICE_ERROR"
+            "AUDIO_DEVICE_ERROR",
+            "CANCELLED"
           ]
         },
         "actualPlayedMs": {

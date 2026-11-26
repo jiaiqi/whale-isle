@@ -253,6 +253,7 @@ class Status(StrEnum):
     INTERRUPTED_BY_P0 = 'INTERRUPTED_BY_P0'
     TTL_EXPIRED = 'TTL_EXPIRED'
     AUDIO_DEVICE_ERROR = 'AUDIO_DEVICE_ERROR'
+    CANCELLED = 'CANCELLED'
 
 
 class AudioPlaybackReceipt(BaseModel):
