@@ -248,6 +248,25 @@ function createManagedPetWindow(input: PetWindowCreateInput): ManagedPetWindow {
   };
 }
 
+/**
+ * 中控台标题栏策略（owner 2026-11-26 反馈：macOS 深色模式下系统标题栏是一条黑条，
+ * 与 Tidepaper 暖色纸面内容割裂，要求顶栏自绘并跟随软件主题，但红绿灯必须是真的）。
+ *
+ * - macOS：`hiddenInset` —— 内容一直画到标题栏区域，关闭/最小化/缩放三颗红绿灯仍由
+ *   AppKit 原生绘制（不做假按钮、不接管行为）。`trafficLightPosition` 让灯组与渲染层
+ *   40px 自绘顶栏垂直居中对齐：灯组 12px 高，y=14 → 圆心 20 = 顶栏中线；x=18 → 灯组右缘
+ *   约 74px，渲染层 `.wb-titlebar` 左侧留 80px 安全区。双击拖拽区的「系统缩放」
+ *   （不是最大化）由 AppKit 原生处理，已用真实鼠标事件在本机验证 zoom/unzoom 都可逆。
+ * - Windows：保留 `frame: true` 原生边框。理由：`titleBarOverlay` 需要主进程按主题色
+ *   双向同步按钮区底色与高度，且 Windows 自绘拖拽区没有 macOS 的「双击=系统缩放」语义；
+ *   原生边框零维护成本，并保证窗口按钮永远存在（owner 明确不要「没有按钮的窗口」）。
+ * - Linux：保留原生边框。各发行版 WM 对 hiddenInset / overlay 支持不一致，原生最稳。
+ *
+ * 只作用于中控台：桌宠窗（frameless + transparent + alwaysOnTop）与托盘浮窗的窗口参数
+ * 分别在 pet-window-manager / tray-host 里，互不影响。
+ */
+const DIRECTOR_CUSTOM_TITLEBAR = process.platform === 'darwin';
+
 function createDirectorWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1360,
@@ -259,6 +278,9 @@ function createDirectorWindow(): BrowserWindow {
     autoHideMenuBar: true,
     backgroundColor: '#050507',
     show: false,
+    ...(DIRECTOR_CUSTOM_TITLEBAR
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 14 } }
+      : {}),
     webPreferences: {
       sandbox: true,
       contextIsolation: true,

@@ -57,3 +57,10 @@
 - item 4 `V2-P3-02` 真实开播：等 owner 完成 obs-websocket 密码 / 屏幕录制授权 / D 路径首次弹窗三步；obs-websocket 密码是 owner 凭据，不代开、不代改。
 - `V2-P3-01` 视觉：缺合法 `.moc3`/`.vrm` 与情绪参考音频。
 - 表现力语音（item 10）：方案已出、**未实现、未下载任何权重**，见 [docs/design/expressive-voice-plan.md](../design/expressive-voice-plan.md)；等 owner 拍三件事（CosyVoice2 最小集 ≈4.07 GB 下载批准 / 首装 ≈6 GB 体积口径 / 原创音色走「本地随机嵌入」还是「一次性云端 voice design」）。
+
+## 6. 2026-11-26 owner 直接反馈：中控台顶栏自绘（PR #2 / 分支 `feat-console-titlebar-self`）
+
+- **问题**：macOS 深色模式下系统标题栏是一条黑条，与 Tidepaper 暖色内容割裂。
+- **做法**：仅 `createDirectorWindow` 在 darwin 使用 `titleBarStyle: 'hiddenInset'` + `trafficLightPosition {x:18,y:14}`；渲染层新增 40px `.wb-titlebar`（80px 红绿灯安全区 + 品牌 + 窗口级标签），背景走 Tidepaper token；品牌从侧栏移入顶栏避免重复。Windows/Linux 保留原生边框且不渲染该顶栏。
+- **验证**：拖动、双击 zoom/unzoom、全屏均用真实 CGEvent 在 macOS 真机复核；`pnpm verify:gate` 7/7、`ui.e2e` + `v2-obsidian-ui.e2e` 10 用例 PASS。证据 [P3-director-titlebar-verification.md](./evidence/P3-director-titlebar-verification.md)。
+- **合并状态**：该分支已 rebase 到最新 `origin/feat/whale-isle-v2`（PR #2），不自动合入主线；Windows/Linux 真机未执行，`V2-P3-05` 等主线工单状态不受影响。

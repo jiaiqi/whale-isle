@@ -70,7 +70,8 @@ const MARK = whaleMarkPaths();
 const PET_ASSET = '../pet-stage/assets/blue-whale-maid/';
 const IDLE_CLIP = `${PET_ASSET}${encodeURIComponent('待机呼吸休闲')}.webm`;
 
-function BrandMark(): React.JSX.Element {
+/** 品牌方块 + 鲸鱼 mark；macOS 自绘顶栏与侧栏共用同一份（顶栏出现时侧栏不再重复品牌）。 */
+export function BrandMark(): React.JSX.Element {
   return (
     <span className="mark" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none">
@@ -140,11 +141,13 @@ export interface SidebarProps {
   badges?: Partial<Record<Tab, string>>;
   /** 主角色当前活动/心情摘要 */
   presenceSummary?: string;
+  /** macOS 自绘顶栏已承载品牌时设为 false，避免侧栏顶部重复一遍「鲸屿」；Windows/Linux 保持 true */
+  showBrand?: boolean;
 }
 
 export function Sidebar({
   tab, onSelect, running, rice, riceCap, onFeed, onOpenCommandPalette, isPluginEnabled,
-  characters, characterId, onSelectCharacter, badges, presenceSummary,
+  characters, characterId, onSelectCharacter, badges, presenceSummary, showBrand = true,
 }: SidebarProps): React.JSX.Element {
   const pct = Math.min(100, Math.round((rice / riceCap) * 100));
   const [characterMenuOpen, setCharacterMenuOpen] = useState(false);
@@ -184,13 +187,15 @@ export function Sidebar({
 
   return (
     <aside className="wb-side">
-      <div className="wb-brand" title={APP_TAGLINE}>
-        <BrandMark />
-        <span className="t">
-          {APP_NAME}
-          <small>Whale Isle · V2</small>
-        </span>
-      </div>
+      {showBrand && (
+        <div className="wb-brand" title={APP_TAGLINE}>
+          <BrandMark />
+          <span className="t">
+            {APP_NAME}
+            <small>Whale Isle · V2</small>
+          </span>
+        </div>
+      )}
       <div className="wb-nav-scroll">
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter((item) => isPluginEnabled(item.id));

@@ -732,18 +732,21 @@ input[type='range'].wb-range::-webkit-slider-thumb {
    统一工作台 Shell 布局（Tidepaper 默认 + 多主题切换）
    ========================================================================== */
 .wb-shell {
+  --titlebar-h: 0px; /* 仅 macOS 自绘顶栏时由 .has-titlebar 抬到 40px */
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
-  grid-template-rows: var(--top-h) auto 1fr;
-  grid-template-areas: "side top" "side hud" "side main";
+  grid-template-rows: var(--titlebar-h) var(--top-h) auto 1fr;
+  grid-template-areas: "titlebar titlebar" "side top" "side hud" "side main";
   overflow: hidden;
   position: relative;
 }
+.wb-shell.has-titlebar { --titlebar-h: 40px; }
 .wb-shell.has-aside {
   grid-template-columns: var(--rail-w) 1fr 304px;
-  grid-template-areas: "side top top" "side hud hud" "side main aside";
+  grid-template-areas: "titlebar titlebar titlebar" "side top top" "side hud hud" "side main aside";
 }
 .wb-shell > .wb-side { position: relative; z-index: 15; }
+.wb-shell > .wb-titlebar { position: relative; z-index: 25; }
 .wb-shell > .wb-top { position: relative; z-index: 20; }
 .wb-shell > .wb-hud,
 .wb-hud { grid-area: hud; position: relative; z-index: 5; }
@@ -837,6 +840,8 @@ input[type='range'].wb-range::-webkit-slider-thumb {
 }
 
 .wb-nav-scroll { flex: 1; overflow-y: auto; padding: 2px 0 10px; }
+/* macOS 自绘顶栏承载品牌后侧栏无 .wb-brand，补一点顶部呼吸位 */
+.wb-side:not(:has(.wb-brand)) .wb-nav-scroll { padding-top: 8px; }
 .wb-nav-sec {
   padding: 11px 16px 4px;
   font-size: 10px;
@@ -1037,6 +1042,78 @@ input[type='range'].wb-range::-webkit-slider-thumb {
   transition: all var(--dur-hover) var(--ease);
 }
 .wb-foot-btn:hover { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+
+/* ── macOS 自绘窗口顶栏（40px）：系统红绿灯叠在左侧安全区上 ──
+   仅 darwin 渲染（创建窗口用 titleBarStyle: hiddenInset，见主进程 createDirectorWindow）。
+   左侧 80px = 灯组右缘（x 18 + 三颗 12px + 两道 8px ≈ 74px）+ 6px 呼吸位，保证品牌不与灯重叠。
+   整条是 drag 区；双击由 AppKit 按系统「双击标题栏」偏好执行缩放（非最大化），不需要 IPC。
+   全屏时系统会隐藏红绿灯，故不存在被按钮压住的情况；80px 留白保留，不影响可点内容。 */
+.wb-titlebar {
+  grid-area: titlebar;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--titlebar-h);
+  padding: 0 16px 0 80px;
+  border-bottom: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--bg) 90%, var(--surface));
+  -webkit-app-region: drag;
+  user-select: none;
+  -webkit-user-select: none;
+}
+:root[data-skin='obsidian-tide'] .wb-titlebar,
+:root[data-skin='tide-deep'] .wb-titlebar {
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+.wb-titlebar .sp { flex: 1; }
+.wb-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-1);
+  min-width: 0;
+}
+.wb-titlebar-brand .mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--inverse);
+  color: var(--inverse-ink);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.wb-titlebar-brand .mark svg { width: 14px; height: 14px; }
+.wb-titlebar-brand .t {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.wb-titlebar-brand .t small {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--text-3);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.wb-titlebar-window {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 650;
+  white-space: nowrap;
+}
 
 /* ── 顶栏全局中控条（56px 纸面） ── */
 .wb-top {

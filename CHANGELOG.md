@@ -21,6 +21,14 @@
 - **23 + 12 例确定性单测**（可注入时钟与随机序列，不 sleep），`verify:gate` 7/7。证据 [P3-04G-social-autostart-verification.md](./docs/v2/evidence/P3-04G-social-autostart-verification.md)。
 - **如实记录未接项**：宿主不注册任何候选来源，执行器 `runnable=false`、`executorReady` 仍为 `false`，开关打开也不会发起——真实平台浏览在 owner 逐项声明并实测能力矩阵之前一律不接。
 
+### Changed（中控台 macOS 自绘窗口顶栏：去掉系统黑条，保留原生红绿灯）
+
+- **问题**：中控台沿用系统原生标题栏，macOS 深色模式下是一条黑条，与 Tidepaper 暖色纸面内容割裂（owner 直接反馈）。
+- **macOS**：`createDirectorWindow` 改 `titleBarStyle: 'hiddenInset'` + `trafficLightPosition: { x: 18, y: 14 }`，内容画进标题栏区域，关闭/最小化/缩放三颗灯仍由 AppKit 原生绘制。渲染层新增 40px `.wb-titlebar`：左侧 80px 红绿灯安全区 + 鲸屿品牌（品牌从侧栏移入，避免重复），右侧窗口级标签「桌面中控台」；背景/边框/文字全部走 Tidepaper token，浅色与深色都与内容完全同色。
+- **行为**：整条顶栏 `-webkit-app-region: drag`；拖动移动窗口、双击触发 macOS 原生缩放（不是最大化）均由系统处理，无自造 IPC。全屏时系统隐藏红绿灯，顶栏不被遮挡。
+- **Windows / Linux**：保留原生边框（Windows `titleBarOverlay` 需按主题双向同步且没有 macOS 双击缩放语义；Linux 各 WM 支持不一），渲染层不渲染该顶栏、侧栏品牌保持原样 —— 不会出现「没有窗口按钮」的窗口。
+- **验证**：`pnpm verify:gate` 7/7；`ui.e2e` + `v2-obsidian-ui.e2e` 2 文件 10 用例 PASS；macOS 真机用 CGEvent 复核拖动、双击 zoom/unzoom、全屏。证据 [P3-director-titlebar-verification.md](./docs/v2/evidence/P3-director-titlebar-verification.md)。Windows / Linux 真机未执行。
+
 ### Added（单桌宠全链路 E2E：宿主仿真 BWF 端点 + 启动到记忆一条剧本）
 
 - **宿主可在测试态指向仿真 BWF**：`bwf-settings.ts` 新增 `resolveBwfEndpoint()`（注入端点优先、空串回落真实端口）；`index.ts` 仅在 `PET_STAGE_E2E=1` 时读取 `WHALE_E2E_BWF_ENDPOINT`，并在注入时忽略真实端口联动，生产恒为 `undefined`。
