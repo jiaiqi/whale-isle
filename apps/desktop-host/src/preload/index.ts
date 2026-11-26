@@ -3,6 +3,7 @@
  * forceAlpha 仅在 PET_STAGE_E2E=1 时暴露（运行期安全锁）。
  */
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { PetBubbleKind } from '@workbench/shared-protocol';
 
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
 
@@ -509,7 +510,7 @@ contextBridge.exposeInMainWorld('petStage', {
   onPetAction: (handler: (event: { agentId: string; action: string }) => void): void => {
     ipcRenderer.on('pet:action', (_e, event) => handler(event));
   },
-  onPetBubble: (handler: (event: { agentId: string; text: string; kind?: 'thought' | 'dialog' }) => void): void => {
+  onPetBubble: (handler: (event: { agentId: string; text: string; kind?: PetBubbleKind; ttlMs?: number }) => void): void => {
     ipcRenderer.on('pet:bubble', (_e, event) => handler(event));
   },
   onPetState: (handler: (event: { agentId: string; state?: unknown }) => void): void => {

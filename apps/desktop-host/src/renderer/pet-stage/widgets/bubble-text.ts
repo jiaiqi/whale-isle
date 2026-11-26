@@ -5,10 +5,11 @@
  * 覆盖 pet:say 直达、问候/彩蛋、E2E 注入等所有绕过主进程清洗的路径。
  *
  * 轨语义：
- *   thought（云朵泡）— 内心戏轨：有 think 块时显示标签「内」的内容，无标签则原文；
- *   dialog（对话泡）— 正式发言轨：剥掉 think 块只显示可见部分。
+ *   thought — 内心戏轨：有 think 块时显示标签「内」的内容，无标签则原文；
+ *   dialog / status / notice / reaction / hint — 正式展示轨：剥掉 think 块只显示可见部分。
  * 返回空串 = 无内容可显示，调用方不弹气泡。
  */
+import type { BubbleKind } from './bubble-types';
 
 const THINK_RE = /<think>([\s\S]*?)<\/\/?think>/gi;
 /** 未闭合的半截 think 块（流式中途）也要吃掉，避免标签符号漏出 */
@@ -27,7 +28,7 @@ function visibleOf(text: string): string {
   return text.replace(THINK_RE, ' ').replace(THINK_OPEN_RE, ' ').replace(/\s+/g, ' ').trim();
 }
 
-export function cleanBubbleText(text: string, track: 'thought' | 'dialog'): string {
+export function cleanBubbleText(text: string, track: BubbleKind = 'dialog'): string {
   if (!text.includes('<')) return text.trim();
   if (track === 'thought') {
     const inner = innerOf(text);

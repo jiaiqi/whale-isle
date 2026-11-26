@@ -1570,6 +1570,25 @@ export const PetApiStateSchema = z.object({
 });
 export type PetApiState = z.infer<typeof PetApiStateSchema>;
 
+// ───────────────────────── 桌宠多语义气泡契约 ─────────────────────────
+export const PetBubbleKindSchema = z.enum([
+  'thought',
+  'dialog',
+  'status',
+  'notice',
+  'reaction',
+  'hint',
+]);
+export type PetBubbleKind = z.infer<typeof PetBubbleKindSchema>;
+
+export const PetBubbleEventSchema = z.object({
+  agentId: z.string().min(1).default('default'),
+  text: z.string(),
+  kind: PetBubbleKindSchema.default('dialog'),
+  ttlMs: z.number().int().positive().max(60_000).optional(),
+});
+export type PetBubbleEvent = z.infer<typeof PetBubbleEventSchema>;
+
 // ───────────────────────── 跨 AI 工作跟随（T-M6-49 / T-M6-65） ─────────────────────────
 /** 事件来源通道（面板诚实标注来源 + Hook/日志去重，T-M6-65） */
 export const WorkFollowOriginSchema = z.enum(['hook', 'log-watch', 'acp', 'manual']);

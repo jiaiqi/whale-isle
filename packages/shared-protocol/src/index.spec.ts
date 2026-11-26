@@ -16,6 +16,8 @@ import {
   WorkbenchRoleSlotSchema,
   PetCustomCharacterSchema,
   StardewAvatarSyncSchema,
+  PetBubbleKindSchema,
+  PetBubbleEventSchema,
   statusLabelZh,
   toolLabelZh,
   WORKBENCH_STATUS_LABELS_ZH,
@@ -406,5 +408,23 @@ describe('星露谷外观同步契约（T-M6-62）', () => {
     expect(StardewAvatarSyncSchema.safeParse({ version: 2, characterId: 'x', displayName: 'x', preset: {} }).success).toBe(false);
     expect(StardewAvatarSyncSchema.safeParse({ version: 1, characterId: 'x', displayName: 'x', preset: { hairColor: 'blue' } }).success).toBe(false);
     expect(StardewAvatarSyncSchema.parse({ version: 1, characterId: 'x', displayName: 'x', preset: {} }).preset.hatId).toBe(-1);
+  });
+});
+
+describe('桌宠多语义气泡契约', () => {
+  it('6 种语义枚举全量通过；非法 kind 拒绝', () => {
+    for (const kind of ['thought', 'dialog', 'status', 'notice', 'reaction', 'hint'] as const) {
+      expect(PetBubbleKindSchema.parse(kind)).toBe(kind);
+    }
+    expect(PetBubbleKindSchema.safeParse('unknown').success).toBe(false);
+  });
+
+  it('PetBubbleEventSchema 默认值与 ttlMs 边界校验', () => {
+    const basic = PetBubbleEventSchema.parse({ text: '鱼片晚上好' });
+    expect(basic).toEqual({ agentId: 'default', text: '鱼片晚上好', kind: 'dialog' });
+    const withTtl = PetBubbleEventSchema.parse({ agentId: 'whale-2', text: '打卡', kind: 'notice', ttlMs: 8000 });
+    expect(withTtl).toEqual({ agentId: 'whale-2', text: '打卡', kind: 'notice', ttlMs: 8000 });
+    expect(PetBubbleEventSchema.safeParse({ text: 'bad', ttlMs: 0 }).success).toBe(false);
+    expect(PetBubbleEventSchema.safeParse({ text: 'bad', ttlMs: 60_001 }).success).toBe(false);
   });
 });

@@ -26,7 +26,13 @@ interface PetStageWindow {
   __petStageReady: boolean;
   __petStageTest?: {
     showBubbles(input: { thought: string; dialog: string }): void;
+    hideBubbles(): void;
+    showBubble(kind: 'thought' | 'dialog' | 'status' | 'notice' | 'reaction' | 'hint', text: string): boolean;
+    hideBubble(kind: 'thought' | 'dialog' | 'status' | 'notice' | 'reaction' | 'hint'): void;
+    setBubbleContext(ctx: { anchor?: { xRatio?: number; headYRatio?: number; facing?: 'left' | 'right' | 'center' }; edgeHint?: 'left' | 'right' | null }): void;
+    setBubbleStageBox(box: { width: number; height: number }): void;
     bubbleElements(): { thought: DOMRectJSON | null; dialog: DOMRectJSON | null };
+    allBubbleElements(): Record<string, { rect: DOMRectJSON; tail: string; pointerEvents: string; zIndex: string } | null>;
     setRiceRatio(ratio: number): void;
     riceRatio(): number;
   };
@@ -103,13 +109,77 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       expect(rects.thought).not.toBeNull();
       expect(rects.dialog).not.toBeNull();
       expect(overlap(rects.thought as DOMRectJSON, rects.dialog as DOMRectJSON)).toBe(false); // 几何不重叠
-      const riceRatio = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest?.riceRatio());
-      expect(riceRatio).toBeCloseTo(0.06, 5); // 饿瘪态（<15% 阈值）
 
       // 截图留证（artifacts/ 本地不入库）
       mkdirSync(artifactsDir, { recursive: true });
       const shotPath = join(artifactsDir, 'pet-stage-bubbles.png');
       await stageWin.screenshot({ path: shotPath });
+
+      // 语义气泡智能定位、更大宽度、朝向镜像、多轨不重叠与样式约束校验
+      await stageWin.evaluate(() => {
+        const t = (window as unknown as PetStageWindow).__petStageTest!;
+        t.hideBubbles();
+        t.setBubbleContext({ anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'right' }, edgeHint: null });
+        t.showBubble('dialog', '今天星露谷春天收获了满满一筐防风草和草莓，鱼片晚上要不要一起吃海鲜炖菜呀！');
+      });
+      const singleDialog = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest?.allBubbleElements().dialog ?? null);
+      expect(singleDialog).not.toBeNull();
+      expect(singleDialog!.rect.width).toBeGreaterThan(220);
+      expect(singleDialog!.pointerEvents).toBe('none');
+      expect(singleDialog!.zIndex).toBe('7');
+
+      // 三气泡并发分组 A（status + thought + dialog）零重叠 & 朝向镜像
+      await stageWin.evaluate(() => {
+        const t = (window as unknown as PetStageWindow).__petStageTest!;
+        t.hideBubbles();
+        t.setBubbleContext({ anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'right' } });
+        t.showBubble('status', '星露谷 第1年夏17日 09:30');
+        t.showBubble('thought', '要去矿洞还是海边钓鱼呢');
+        t.showBubble('dialog', '鱼片快看，今天运气超级好！');
+      });
+      const groupRight = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest!.allBubbleElements());
+      const groupRightRects = ['status', 'thought', 'dialog'].map((k) => groupRight[k]!.rect);
+      for (let i = 0; i < groupRightRects.length; i += 1) {
+        expect(groupRight[['status', 'thought', 'dialog'][i]!]!.pointerEvents).toBe('none');
+        expect(groupRight[['status', 'thought', 'dialog'][i]!]!.zIndex).toBe('7');
+        for (let j = i + 1; j < groupRightRects.length; j += 1) {
+          expect(overlap(groupRightRects[i]!, groupRightRects[j]!)).toBe(false);
+        }
+      }
+
+      await stageWin.evaluate(() => {
+        (window as unknown as PetStageWindow).__petStageTest!.setBubbleContext({ anchor: { facing: 'left' } });
+      });
+      const groupLeft = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest!.allBubbleElements());
+      expect(groupLeft.dialog!.rect.x).toBeLessThan(groupRight.dialog!.rect.x);
+      expect(groupLeft.dialog!.tail).not.toBe(groupRight.dialog!.tail);
+
+      // 三气泡并发分组 B（reaction + notice + hint）+ 缩放重排零重叠
+      await stageWin.evaluate(() => {
+        const t = (window as unknown as PetStageWindow).__petStageTest!;
+        t.hideBubbles();
+        t.showBubble('reaction', '哎呀，被鱼片戳到脸啦！');
+        t.showBubble('notice', '大活干完啦，戴上小皇冠！');
+        t.showBubble('hint', '轻点摸头可以触发开心动画哦');
+        t.setBubbleStageBox({ width: 520, height: 338 });
+      });
+      const groupB = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest!.allBubbleElements());
+      const groupBRects = ['reaction', 'notice', 'hint'].map((k) => groupB[k]!.rect);
+      for (let i = 0; i < groupBRects.length; i += 1) {
+        for (let j = i + 1; j < groupBRects.length; j += 1) {
+          expect(overlap(groupBRects[i]!, groupBRects[j]!)).toBe(false);
+        }
+      }
+
+      await stageWin.evaluate(() => {
+        const t = (window as unknown as PetStageWindow).__petStageTest!;
+        t.setBubbleStageBox({ width: 400, height: 260 });
+        t.setBubbleContext({ anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'center' }, edgeHint: null });
+        t.hideBubbles();
+      });
+
+      const riceRatio = await stageWin.evaluate(() => (window as unknown as PetStageWindow).__petStageTest?.riceRatio());
+      expect(riceRatio).toBeCloseTo(0.06, 5); // 饿瘪态（<15% 阈值）
 
       // ---- ② director：模型与服务商 v5（双 Tab / 自定义服务商 / 导入弹窗） ----
       const directorWin = app.windows().find((candidate) => candidate.url().includes('director'));
