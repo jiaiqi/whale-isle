@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed（气泡 `<think>` 标签清洗双保险 + 联机链路真实漏洞）
+
+- **渲染层防御清洗** `pet-stage/widgets/bubble-text.ts`（新增纯函数）+ `bubbles.ts` 入口接入：thought 轨有 think 块时取标签内内容、dialog 轨剥掉 think 块只留可见文本，未闭合的流式半截块也吃掉，清洗后为空不弹气泡；覆盖 pet:say 直达、问候/彩蛋、E2E 注入等所有绕过主进程清洗的路径。
+- **联机链路真实漏洞**：`coop-host.ts` 的 `handleAgentEvent` 此前直接转发 `event.intent`/`event.summary` 发气泡与中控台事件流，未经 `stripThink`——LLM 偶发带出标签时联机桌宠气泡会原样显示；现已与 autodrive-host 同一口径在广播前清洗。
+- **验证**：`bubbles.spec.ts` 8/8（含 4 个清洗用例）；`ui.e2e` 气泡测试注入带标签文本，留证截图确认标签符号不显示。
+
 ### Fixed（桌宠双轨气泡可读性与遮挡）
 
 - **内心戏云朵泡对比度**：`bubbles.ts` 底色从 `rgba(191,90,242,0.30)` 浅紫加深为 `rgba(96,44,150,0.68)` 深紫渐变、文字提亮为 `#f8f1ff`——浅紫底 + 浅字在浅色桌面上几乎不可读（真机截图确认）。

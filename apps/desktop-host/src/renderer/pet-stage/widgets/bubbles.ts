@@ -12,6 +12,7 @@ import {
   type BubbleRect,
   type StageBox,
 } from './bubble-layout';
+import { cleanBubbleText } from './bubble-text';
 
 export { computeBubbleLayout, rectsOverlap, type BubbleLayout, type BubbleRect, type StageBox } from './bubble-layout';
 export interface BubbleWidgets {
@@ -78,8 +79,12 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
   stage.appendChild(dialog);
 
   const setBubbleText = (el: HTMLElement, text: string) => {
+    // 渲染层入口防御性清洗：<think> 标签符号绝不显示给主人（bubble-text.ts，单测覆盖）；
+    // 清洗后为空 = 无内容可显示，不弹气泡
+    const cleaned = cleanBubbleText(text, el === dialog ? 'dialog' : 'thought');
+    if (cleaned === '') return;
     const body = document.createElement('span');
-    body.textContent = text;
+    body.textContent = cleaned;
     el.replaceChildren(...(el === dialog ? [tail, body] : [cloudDot, body]));
     el.style.display = 'block';
     cloudDot.style.display = el === thought ? 'block' : 'none';

@@ -40,6 +40,7 @@ import {
   type TeamPlan,
   type WorkbenchRoleSlot,
 } from '@workbench/shared-protocol';
+import { stripThink } from '@workbench/persona-brain';
 import type { CharacterRegistry } from './character-registry';
 import { characterReflex } from './character-persona';
 import type { PetWindowManager } from './pet-window-manager';
@@ -382,6 +383,10 @@ export function createCoopHost(options: {
   }
 
   const handleAgentEvent = (agent: CoopAgent, event: AutodriveEvent): void => {
+    // 与 autodrive-host 同一清洗口径：LLM 偶发把 <think> 标签带进 intent/summary，
+    // 气泡/中控台事件流/WebUI 订阅都是纯文本渲染，广播前统一剥掉
+    if (event.type === 'decision') event = { ...event, intent: stripThink(event.intent).visible.trim() };
+    if (event.type === 'receipt') event = { ...event, summary: stripThink(event.summary).visible.trim() };
     broadcast('autodrive:event', { ...event, agentId: agent.endpoint.id, sessionId: agent.runner?.sessionId ?? '' });
     options.petWindows?.sendAgent(agent.endpoint.id, 'pet:state', {
       ...(event.type === 'state' ? { state: `${event.location} · 体力 ${event.stamina}/${event.staminaMax}` } : {}),

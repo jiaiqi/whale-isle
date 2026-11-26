@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeBubbleLayout, rectsOverlap } from './bubble-layout';
+import { cleanBubbleText } from './bubble-text';
 
 /** T-M1-05：双轨气泡布局纯函数（不重叠的几何保证） */
 
@@ -38,5 +39,28 @@ describe('computeBubbleLayout（双轨不重叠）', () => {
     expect(rectsOverlap(a, { x: 5, y: 5, width: 10, height: 10 })).toBe(true);
     expect(rectsOverlap(a, { x: 10, y: 0, width: 10, height: 10 })).toBe(false);
     expect(rectsOverlap(a, { x: 0, y: 10, width: 10, height: 10 })).toBe(false);
+  });
+});
+
+describe('cleanBubbleText（<think> 标签渲染层防御清洗）', () => {
+  it('dialog 轨：剥掉 think 块只留可见文本，标签符号绝不显示', () => {
+    expect(cleanBubbleText('<think>想小鱼了</think>哼，本鱼才没有偷懒！', 'dialog')).toBe('哼，本鱼才没有偷懒！');
+    expect(cleanBubbleText('开头<think>偷偷数白米饭</think>结尾', 'dialog')).toBe('开头 结尾');
+    expect(cleanBubbleText('<think>白米饭真香</think>', 'dialog')).toBe(''); // 纯内心戏不进对话泡
+  });
+
+  it('thought 轨：有 think 块取标签内内容，多块拼接', () => {
+    expect(cleanBubbleText('<think>今晚吃几碗白米饭</think>', 'thought')).toBe('今晚吃几碗白米饭');
+    expect(cleanBubbleText('a<think>一</think>b<think>二</think>c', 'thought')).toBe('一 二');
+  });
+
+  it('流式半截未闭合 think 块也吃掉标签符号', () => {
+    expect(cleanBubbleText('开头<think>偷偷数', 'dialog')).toBe('开头');
+    expect(cleanBubbleText('开头<think>偷偷数', 'thought')).toBe('开头'); // 未闭合块无完整内心，回退可见部分
+  });
+
+  it('无标签文本原样返回（快慢路径一致）', () => {
+    expect(cleanBubbleText('  星露谷 第1年夏17日 06:10  ', 'thought')).toBe('星露谷 第1年夏17日 06:10');
+    expect(cleanBubbleText('普通台词', 'dialog')).toBe('普通台词');
   });
 });
