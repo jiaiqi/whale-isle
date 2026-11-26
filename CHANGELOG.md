@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P2-08`：真实星露谷人机联机协作 `CoopRuntime` v1 — `IMPLEMENTED_UNVERIFIED`）
+
+- **联机协作房间与控制权契约** `packages/shared-protocol/src/{coop.ts,index.ts}`：定义 `CoopRoomStatus`、`CoopParticipant`、`CoopTaskItem`、`CoopResourceReservation`、`CoopModCompatibilityReport` 与 `CoopRuntimeSnapshot` Zod 契约。
+- **`CoopRuntimeV1` 核心运行时与 Mod 兼容性预检** `packages/game-bridge-mcp/src/{coop-runtime.ts,coop-runtime.spec.ts,index.ts}`：交付成员独立 `GameCharacterControlLease`（人机互不抢权 + P0 全局急停隔离）、Task Board（原子锁启动/交接/`UNCERTAIN` 转 `blocked` 真实回执）、`sell_forbidden`/`keep` 防误卖资源门禁、`evaluateCoopModsCompatibility` 与断线宽限保活/超时自动释放锁防死锁恢复。
+- **宿主 8 路联机 IPC 与实盘 Mods 扫描** `apps/desktop-host/src/{main/v2-kernel-host.ts,preload/index.ts,renderer/director/bridge.ts}`：挂载 `v2:coop-*` 8 路 IPC（含 `@workbench/stardew-mods` 真实扫描），通过 `verify:gate` 7/7 与 Electron 45 E2E 全套（待双端真实游戏联机游玩验证）。
+
 ### Added / Changed（`V2-P2-07`：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚 — `DONE`）
 
 - **统一十态 AssetRegistry 与音画质检契约** `packages/shared-protocol/src/media.ts`：新增 `AssetRegistryCategory`、`StageSceneInspection`、`SoundAssetInspection`、`AssetVersionRecord`、`AssetRegistryEntry`、`AssetIntegrityCheck` 与 `CommercialCleanExportResult`。

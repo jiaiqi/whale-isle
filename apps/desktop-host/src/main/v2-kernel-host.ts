@@ -6,6 +6,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, ipcMain } from 'electron';
@@ -42,6 +43,8 @@ import {
   type StageSceneTheme,
 } from './asset-registry-v2';
 import { resolvePetPacksDir } from './pet-packs';
+import { CoopRuntimeV1, evaluateCoopModsCompatibility } from '@workbench/game-bridge-mcp';
+import { guessModsDirs, scanModsDir } from '@workbench/stardew-mods';
 import {
   formatMemoryContext,
   retrieve,
@@ -339,12 +342,13 @@ export async function createV2KernelHost(options: {
     };
     return characterCore.life.selectActivity(input);
   });
+  const coopRuntime = new CoopRuntimeV1();
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
+    const haltReason = typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止';
     stopFn?.();
     audioMixer.stopAll();
-    characterCore.life.emergencyHalt(
-      typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止',
-    );
+    coopRuntime.emergencyHaltAll(haltReason);
+    characterCore.life.emergencyHalt(haltReason);
     return kernel.characters.primaryState();
   });
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
@@ -765,6 +769,140 @@ export async function createV2KernelHost(options: {
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
+  });
+  // V2-P2-08：星露谷人机联机协作 CoopRuntime v1 IPC
+  ipcMain.handle('v2:coop-snapshot', () => coopRuntime.snapshot());
+  ipcMain.handle('v2:coop-room-create', (_e, rawInput: {
+    roomId?: string;
+    gameId?: 'stardew' | 'terraria' | 'dst';
+    sharedGoal: string;
+  }) => {
+    try {
+      return { ok: true, snapshot: coopRuntime.createRoom(rawInput) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:coop-participant-join', (_e, rawInput: Parameters<CoopRuntimeV1['joinParticipant']>[0]) => {
+    try {
+      const participant = coopRuntime.joinParticipant(rawInput);
+      return { ok: true, participant, snapshot: coopRuntime.snapshot() };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:coop-task-action', (_e, rawInput: {
+    action: 'propose' | 'accept' | 'start' | 'handoff' | 'outcome';
+    taskId?: string;
+    title?: string;
+    goal?: string;
+    ownerId?: string;
+    toParticipantId?: string;
+    preconditions?: string[];
+    resourceLocks?: string[];
+    priority?: number;
+    note?: string;
+    receipt?: 'COMPLETED' | 'FAILED' | 'UNCERTAIN';
+    resultSummary?: string;
+  }) => {
+    try {
+      if (rawInput.action === 'propose') {
+        const task = coopRuntime.proposeTask({
+          ...(rawInput.taskId ? { taskId: rawInput.taskId } : {}),
+          title: String(rawInput.title ?? ''),
+          goal: String(rawInput.goal ?? ''),
+          ownerId: String(rawInput.ownerId ?? ''),
+          ...(rawInput.preconditions ? { preconditions: rawInput.preconditions } : {}),
+          ...(rawInput.resourceLocks ? { resourceLocks: rawInput.resourceLocks } : {}),
+          ...(rawInput.priority ? { priority: rawInput.priority } : {}),
+        });
+        return { ok: true, task, snapshot: coopRuntime.snapshot() };
+      }
+      if (rawInput.action === 'accept') {
+        const res = coopRuntime.acceptTask(String(rawInput.taskId ?? ''), rawInput.ownerId);
+        return { ...res, snapshot: coopRuntime.snapshot() };
+      }
+      if (rawInput.action === 'start') {
+        const res = coopRuntime.startTask(String(rawInput.taskId ?? ''));
+        return { ...res, snapshot: coopRuntime.snapshot() };
+      }
+      if (rawInput.action === 'handoff') {
+        const res = coopRuntime.handoffTask(
+          String(rawInput.taskId ?? ''),
+          String(rawInput.toParticipantId ?? ''),
+          rawInput.note,
+        );
+        return { ...res, snapshot: coopRuntime.snapshot() };
+      }
+      const res = coopRuntime.reportTaskOutcome(
+        String(rawInput.taskId ?? ''),
+        rawInput.receipt ?? 'FAILED',
+        String(rawInput.resultSummary ?? ''),
+      );
+      return { ...res, snapshot: coopRuntime.snapshot() };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:coop-resource-reserve', (_e, rawInput: Parameters<CoopRuntimeV1['reserveResource']>[0]) =>
+    coopRuntime.reserveResource(rawInput),
+  );
+  ipcMain.handle('v2:coop-resource-check', (_e, rawInput: {
+    participantId: string;
+    resourceKey: string;
+    action: 'use' | 'sell' | 'harvest';
+  }) => coopRuntime.checkResourceAccess(String(rawInput.participantId ?? ''), String(rawInput.resourceKey ?? ''), rawInput.action));
+  ipcMain.handle('v2:coop-mod-compat', async (_e, rawInput?: { hostModsDir?: string; peerModsDir?: string }) => {
+    try {
+      const hostDir =
+        rawInput?.hostModsDir && rawInput.hostModsDir.trim() !== ''
+          ? rawInput.hostModsDir
+          : guessModsDirs(process.platform, process.env.HOME ?? '').find((d) => existsSync(d));
+      if (!hostDir) {
+        return { ok: false, error: '未检测到本机星露谷 Mods 目录' };
+      }
+      const hostScan = await scanModsDir(hostDir);
+      const peerDir = rawInput?.peerModsDir && rawInput.peerModsDir.trim() !== '' ? rawInput.peerModsDir : hostDir;
+      const peerScan = peerDir === hostDir ? hostScan : await scanModsDir(peerDir);
+      const toSummary = (mods: typeof hostScan.mods) =>
+        mods.map((m) => ({
+          uniqueId: m.uniqueId || m.folderName,
+          name: m.name || m.folderName,
+          version: m.version || '0.0.0',
+          enabled: m.enabled,
+          contentType: m.contentType,
+        }));
+      const report = evaluateCoopModsCompatibility({
+        hostMods: toSummary(hostScan.mods),
+        peerMods: toSummary(peerScan.mods),
+        hostModsDir: hostDir,
+        peerModsDir: peerDir,
+      });
+      coopRuntime.recordCompatReport(report);
+      return { ok: true, report };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:coop-recovery', (_e, rawInput: {
+    action: 'heartbeat' | 'disconnect' | 'tick' | 'reconnect';
+    participantId?: string;
+    reason?: string;
+  }) => {
+    if (rawInput.action === 'heartbeat') {
+      const ok = coopRuntime.recordHeartbeat(String(rawInput.participantId ?? ''));
+      return { ok, snapshot: coopRuntime.snapshot() };
+    }
+    if (rawInput.action === 'disconnect') {
+      const p = coopRuntime.markDisconnected(String(rawInput.participantId ?? ''), rawInput.reason);
+      return { ok: p !== null, snapshot: coopRuntime.snapshot(), detail: p };
+    }
+    if (rawInput.action === 'tick') {
+      const detail = coopRuntime.tickRecovery();
+      return { ok: true, snapshot: coopRuntime.snapshot(), detail };
+    }
+    const res = coopRuntime.reconnectParticipant(String(rawInput.participantId ?? ''));
+    return { ...res, snapshot: coopRuntime.snapshot() };
   });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {

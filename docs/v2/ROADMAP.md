@@ -129,13 +129,13 @@
 - **`V2-P2-05`（`IMPLEMENTED_UNVERIFIED`）：Character Bible、2D/Live2D 创作与 CrossPet 全量合法导入**（`@workbench/shared-protocol/media` Character Bible / Live2D QA / 授权门禁 / CrossPet 契约、`CharacterBibleStore` + `inspectLive2dOrLayered2d` + `evaluateAssetDistributionPolicy` + `CharacterStudioV2.importCrossPetPack` 10 路 IPC 完成，`verify:gate` 7/7 + 30 角色真实 CrossPet 全量导入单测 + Electron 45 E2E 全绿，详见 [P2-character-studio-crosspet-verification.md](./evidence/P2-character-studio-crosspet-verification.md)；外部 `.moc3` 真机舞台渲染待 `V2-P3-01` 与实机素材验收）
 - **`V2-P2-06`（`IMPLEMENTED_UNVERIFIED`）：游戏像素人物流水线与 Stardew Avatar Mod 导出真机验证**（`@workbench/shared-protocol/media` 像素与导出核验契约、纯 Node PNG 编解码、`PixelAvatarPipelineV2` 11 步流水线与候选审批导出、`verifyStardewAvatarExport`、`WhaleIsleAvatar.dll` Release 编译暂存、`verify:gate` 7/7 + Electron 45 E2E 全绿，详见 [P2-pixel-stardew-avatar-verification.md](./evidence/P2-pixel-stardew-avatar-verification.md)；星露谷进图内外观目视核验待 `[REAL-DEVICE]`）
 - **`V2-P2-07`（`DONE`）：`AssetRegistry`、舞台/场景/声音资产创作与版本回滚**（`packages/shared-protocol/src/media` 十态仓库/音画质检/清源契约、`AssetRegistryV2` 不可变快照 + SHA-256 防篡改 + 一键回滚 + `CC BY-NC-SA 4.0` 商用/直播强拦截、原创三主题舞台背景与 5 档无削波 WAV 音效合成及 9 路 V2 IPC 完成，`verify:gate` 7/7 + 3 专项单测 + Electron 45 E2E 全绿，详见 [P2-asset-registry-stage-sound-verification.md](./evidence/P2-asset-registry-stage-sound-verification.md)）
-- **`V2-P2-08`（`NEXT`）：真实星露谷人机联机协作（`CoopRuntime` v1）**（人类玩家 + 小鲸各自控制独立角色联机分工、任务板、资源锁、Mod 兼容检测、掉线恢复）
+- **`V2-P2-08`（`IMPLEMENTED_UNVERIFIED`）：真实星露谷人机联机协作（`CoopRuntime` v1）**（`packages/shared-protocol/src/coop` 契约、`CoopRuntimeV1` 任务板/防误卖资源预留/成员独立 `GameCharacterControlLease`/断线宽限与超时释放锁防死锁、`evaluateCoopModsCompatibility` + `@workbench/stardew-mods` 本机实盘兼容预检及 8 路 V2 IPC 完成，`verify:gate` 7/7 + Electron 45 E2E 全绿，详见 [P2-coop-runtime-v1-verification.md](./evidence/P2-coop-runtime-v1-verification.md)；双端星露谷客户端真机联机实玩待 `[REAL-DEVICE]`）
 
 ---
 
 ## P3：统一 2D/3D 表演舞台、自主直播、受控浏览器/桌面与被动多宠
 
-- **`V2-P3-01`：统一表演系统（Sing Engine SVS/SVC + 舞蹈 + 歌词时钟 + 2D/3D StageRuntime）**
+- **`V2-P3-01`（`NEXT`）：统一表演系统（Sing Engine SVS/SVC + 舞蹈 + 歌词时钟 + 2D/3D StageRuntime）**
 - **`V2-P3-02`：LifeRuntime 驱动的直播中控与 OBS 舞台（真实平台流接入 + 曲库版权门禁）**
 - **`V2-P3-03`：受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**
 - **`V2-P3-04`：Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**

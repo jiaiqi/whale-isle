@@ -122,6 +122,24 @@ interface DirectorV2Window {
       ok: boolean;
       result?: { exportedCount: number; blockedCount: number; exportedAssets: Array<{ assetId: string }>; blockedAssets: Array<{ assetId: string }> };
     }>;
+    v2CoopRoomCreate(input: { roomId?: string; gameId?: string; sharedGoal: string }): Promise<{
+      ok: boolean;
+      snapshot?: { roomId: string; status: string };
+    }>;
+    v2CoopParticipantJoin(input: {
+      participantId: string;
+      kind: 'human' | 'ai';
+      characterId: string;
+      displayName: string;
+    }): Promise<{ ok: boolean; participant?: { controlOwner: string }; snapshot?: { status: string } }>;
+    v2CoopResourceReserve(input: { resourceKey: string; ownerId: string; intent: string; reason?: string }): Promise<{ ok: boolean }>;
+    v2CoopResourceCheck(input: { participantId: string; resourceKey: string; action: 'use' | 'sell' | 'harvest' }): Promise<{ allowed: boolean; reason: string }>;
+    v2CoopTaskAction(input: Record<string, unknown>): Promise<{ ok: boolean; task?: { taskId: string; status: string } }>;
+    v2CoopRecovery(input: { action: string; participantId?: string; reason?: string }): Promise<{
+      ok: boolean;
+      snapshot?: { status: string; participants: Array<{ participantId: string; connectionState: string; reconnectAttempts: number }> };
+    }>;
+    v2CoopModCompat(): Promise<{ ok: boolean; report?: { compatible: boolean; canStartCoop: boolean; bwfReady: boolean; hostModCount: number } }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -501,6 +519,46 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(p207.cleanExport.result?.blockedCount).toBe(1);
       expect(p207.cleanExport.result?.exportedAssets[0]?.assetId).toBe(p207.stageId);
       expect(p207.cleanExport.result?.blockedAssets[0]?.assetId).toBe(p207.ncId);
+
+      // V2-P2-08：验证 CoopRuntime v1 人机分工、防误卖保护、任务板闭环、断线重连与真实 Mods 盘兼容扫描
+      const p208 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        const room = await bridge.v2CoopRoomCreate({ roomId: `e2e-coop-${Date.now().toString(36)}`, sharedGoal: 'E2E 人机分工种植' });
+        const host = await bridge.v2CoopParticipantJoin({ participantId: 'human-host', kind: 'human', characterId: 'farmer', displayName: '人类玩家' });
+        const ai = await bridge.v2CoopParticipantJoin({ participantId: 'ai-xiaojing', kind: 'ai', characterId: 'char_xiaojing', displayName: '小鲸' });
+        await bridge.v2CoopResourceReserve({ resourceKey: 'crop:starfruit', ownerId: 'human-host', intent: 'sell_forbidden', reason: '人类留做种子' });
+        const sellCheck = await bridge.v2CoopResourceCheck({ participantId: 'ai-xiaojing', resourceKey: 'crop:starfruit', action: 'sell' });
+        const proposed = await bridge.v2CoopTaskAction({
+          action: 'propose',
+          taskId: 'e2e-task-1',
+          title: '南区浇水',
+          goal: '浇完 8 格防风草',
+          ownerId: 'ai-xiaojing',
+          resourceLocks: ['zone:south-farm'],
+        });
+        await bridge.v2CoopTaskAction({ action: 'accept', taskId: 'e2e-task-1' });
+        const started = await bridge.v2CoopTaskAction({ action: 'start', taskId: 'e2e-task-1' });
+        const outcome = await bridge.v2CoopTaskAction({
+          action: 'outcome',
+          taskId: 'e2e-task-1',
+          receipt: 'COMPLETED',
+          resultSummary: '8 格全部浇水完成',
+        });
+        const disconnected = await bridge.v2CoopRecovery({ action: 'disconnect', participantId: 'ai-xiaojing', reason: 'E2E 模拟掉线' });
+        const reconnected = await bridge.v2CoopRecovery({ action: 'reconnect', participantId: 'ai-xiaojing' });
+        const compat = await bridge.v2CoopModCompat();
+        return { room, host, ai, sellCheck, proposed, started, outcome, disconnected, reconnected, compat };
+      });
+      expect(p208.room.ok).toBe(true);
+      expect(p208.host.participant?.controlOwner).toBe('human');
+      expect(p208.ai.snapshot?.status).toBe('active');
+      expect(p208.sellCheck.allowed).toBe(false);
+      expect(p208.started.task?.status).toBe('running');
+      expect(p208.outcome.task?.status).toBe('completed');
+      expect(p208.disconnected.snapshot?.status).toBe('reconnecting');
+      expect(p208.reconnected.snapshot?.status).toBe('active');
+      expect(p208.compat.ok).toBe(true);
+      expect(p208.compat.report?.bwfReady).toBe(true);
     } finally {
       await app.close();
     }

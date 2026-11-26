@@ -24,7 +24,13 @@ import type {
   CharacterExpression,
   CharacterGoal,
   CommercialCleanExportResult,
+  CoopModCompatibilityReport,
+  CoopParticipant,
+  CoopResourceIntent,
+  CoopResourceReservation,
+  CoopRuntimeSnapshot,
   CoopSpeakerEvent,
+  CoopTaskItem,
   CrossPetImportRequest,
   CrossPetImportResult,
   FuzzyImpression,
@@ -757,6 +763,51 @@ export interface DirectorBridge {
     durationMs?: number;
     sampleRate?: number;
   }): Promise<{ ok: boolean; error?: string; outputPath?: string; inspection?: SoundAssetInspection }>;
+  v2CoopSnapshot(): Promise<CoopRuntimeSnapshot>;
+  v2CoopRoomCreate(input: { roomId?: string; gameId?: 'stardew' | 'terraria' | 'dst'; sharedGoal: string }): Promise<{ ok: boolean; error?: string; snapshot?: CoopRuntimeSnapshot }>;
+  v2CoopParticipantJoin(input: {
+    participantId: string;
+    kind: 'human' | 'ai';
+    characterId: string;
+    displayName: string;
+    endpointId?: string;
+    mcpPort?: number;
+  }): Promise<{ ok: boolean; error?: string; participant?: CoopParticipant; snapshot?: CoopRuntimeSnapshot }>;
+  v2CoopTaskAction(input: {
+    action: 'propose' | 'accept' | 'start' | 'handoff' | 'outcome';
+    taskId?: string;
+    title?: string;
+    goal?: string;
+    ownerId?: string;
+    toParticipantId?: string;
+    preconditions?: string[];
+    resourceLocks?: string[];
+    priority?: number;
+    note?: string;
+    receipt?: 'COMPLETED' | 'FAILED' | 'UNCERTAIN';
+    resultSummary?: string;
+  }): Promise<{ ok: boolean; error?: string; task?: CoopTaskItem; snapshot?: CoopRuntimeSnapshot }>;
+  v2CoopResourceReserve(input: {
+    resourceKey: string;
+    ownerId: string;
+    intent: CoopResourceIntent;
+    ttlMs?: number;
+    reason?: string;
+  }): Promise<{ ok: boolean; reason?: string; reservation?: CoopResourceReservation }>;
+  v2CoopResourceCheck(input: {
+    participantId: string;
+    resourceKey: string;
+    action: 'use' | 'sell' | 'harvest';
+  }): Promise<{ allowed: boolean; reason: string }>;
+  v2CoopModCompat(input?: {
+    hostModsDir?: string;
+    peerModsDir?: string;
+  }): Promise<{ ok: boolean; error?: string; report?: CoopModCompatibilityReport }>;
+  v2CoopRecovery(input: {
+    action: 'heartbeat' | 'disconnect' | 'tick' | 'reconnect';
+    participantId?: string;
+    reason?: string;
+  }): Promise<{ ok: boolean; error?: string; snapshot?: CoopRuntimeSnapshot; detail?: unknown }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

@@ -389,6 +389,14 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2AssetExportClean: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:asset-export-clean', input),
   v2StageSceneCreate: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:stage-scene-create', input),
   v2SoundSfxCreate: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:sound-sfx-create', input),
+  v2CoopSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:coop-snapshot'),
+  v2CoopRoomCreate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-room-create', input),
+  v2CoopParticipantJoin: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-participant-join', input),
+  v2CoopTaskAction: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-task-action', input),
+  v2CoopResourceReserve: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-resource-reserve', input),
+  v2CoopResourceCheck: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-resource-check', input),
+  v2CoopModCompat: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-mod-compat', input),
+  v2CoopRecovery: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-recovery', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE
