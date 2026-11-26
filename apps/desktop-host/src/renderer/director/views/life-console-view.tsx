@@ -13,6 +13,7 @@ import {
   Activity,
   AudioLines,
   Brain,
+  Compass,
   Database,
   Gamepad2,
   Gauge,
@@ -52,6 +53,7 @@ import type {
   VoiceProviderStatus,
 } from '@workbench/shared-protocol';
 import type { V2MemoryQueryResult } from '../bridge';
+import { PageHead } from '../shell/page-head';
 import { LicenseBadge, SonarRing, StageBadge } from '../v2/signature-widgets';
 
 const ACTIVITIES: Array<{ mode: LifeActivityKind; label: string }> = [
@@ -524,20 +526,25 @@ export function LifeConsoleView({
   const activeEmbodiment = snapshot?.embodiments.find((e) => e.active) ?? snapshot?.embodiments[0];
 
   return (
-    <div data-v2-life-console className="mx-auto max-w-[1360px] space-y-4 px-6 py-5 rise">
-      {/* Tidepaper Character-First Editorial Hero */}
-      <section className="card flex flex-wrap items-center gap-4 px-6 py-5">
-        <SonarRing
-          expression={snapshot?.activityState.expression ?? 'idle'}
-          halted={snapshot?.activityState.halted ?? false}
-          size={42}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="wb-eyebrow mb-1">Whale Isle · Character First · 潮汐纸生命总览</div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="wb-display text-2xl">
-              {snapshot?.identity.displayName ?? '小鲸'} · 数字生命与统一舞台
-            </h1>
+    <div data-v2-life-console className="wb-page space-y-4 rise">
+      <PageHead
+        eyebrow="此刻 · 生命中枢"
+        eyebrowIcon={Compass}
+        title={<>{snapshot?.identity.displayName ?? '小鲸'} · 数字生命与统一舞台</>}
+        description={(
+          <>
+            12 域单一事实源（活动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.activityState.mode ?? 'companion'}</b> ·
+            情绪：<b style={{ color: 'var(--text-1)' }}>{snapshot?.emotion.label ?? '平静'}</b> ·
+            驱动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.motivation.reason ?? '桌面陪伴'}</b>）—— 全量直连 Electron 主进程，无虚假数值。
+          </>
+        )}
+        meta={(
+          <>
+            <SonarRing
+              expression={snapshot?.activityState.expression ?? 'idle'}
+              halted={snapshot?.activityState.halted ?? false}
+              size={22}
+            />
             <span className="mono pill">{snapshot?.identity.characterId ?? 'char_xiaojing'}</span>
             {activeEmbodiment && <LicenseBadge scope={activeEmbodiment.licenseScope} compact />}
             {storageInfo && (
@@ -546,21 +553,18 @@ export function LifeConsoleView({
                 {storageInfo.engine} · v{storageInfo.schemaVersion ?? '?'} · {storageInfo.integrity}
               </span>
             )}
-          </div>
-          <p className="mt-1.5 text-xs" style={{ color: 'var(--text-2)' }}>
-            12 域单一事实源（活动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.activityState.mode ?? 'companion'}</b> ·
-            情绪：<b style={{ color: 'var(--text-1)' }}>{snapshot?.emotion.label ?? '平静'}</b> ·
-            驱动：<b style={{ color: 'var(--text-1)' }}>{snapshot?.motivation.reason ?? '桌面陪伴'}</b>）—— 全量直连 Electron 主进程，无虚假数值。
-          </p>
-        </div>
-        <button
-          type="button"
-          className="btn-pill ghost"
-          onClick={() => { void onSnapshotChanged(); void loadAll(); }}
-        >
-          <RefreshCw size={12} />刷新全舱
-        </button>
-      </section>
+          </>
+        )}
+        actions={(
+          <button
+            type="button"
+            className="btn-pill ghost"
+            onClick={() => { void onSnapshotChanged(); void loadAll(); }}
+          >
+            <RefreshCw size={12} />刷新全舱
+          </button>
+        )}
+      />
 
       {/* Grid 1: CharacterCore & LifeRuntime + Multi-Track Voice */}
       <div className="grid gap-4 lg:grid-cols-2">

@@ -7,14 +7,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { Brain, Pin, PinOff, RefreshCw, Search, Trash2 } from 'lucide-react';
 import type { MemoryGraphView, MemoryNodeView } from '@workbench/shared-protocol';
+import { PageHead } from './shell/page-head';
 
 const QUICK_QUERIES = ['钓鱼', '浇水', '威利'];
 
-const NODE_COLOR: Record<string, string> = {
-  event: '#0a84ff',
-  summary: '#30d158',
-  entity: '#ff9f0a',
-  concept: '#bf5af2',
+/** Canvas 不认 CSS 变量：运行时把 token 解析成真实颜色，避免硬编码主题色 */
+function cssToken(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const hex = /^#([\da-f]{6})$/i.exec(color.trim())?.[1];
+  if (hex !== undefined) {
+    const [r, g, b] = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const rgb = /^rgba?\(([^)]+)\)$/i.exec(color.trim())?.[1];
+  if (rgb !== undefined) return `rgba(${rgb.split(',').slice(0, 3).map((part) => part.trim()).join(', ')}, ${alpha})`;
+  return color;
+}
+
+const NODE_TOKEN: Record<string, string> = {
+  event: '--whale',
+  summary: '--green',
+  entity: '--amber',
+  concept: '--violet',
 };
 
 interface GraphLink {
@@ -138,25 +156,23 @@ export function MemoryPanel(): React.JSX.Element {
   const days = [...(graph?.days ?? [])].reverse();
 
   return (
-    <div className="mx-auto max-w-[1220px] px-6 py-5">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold">
-            <Brain size={18} /> 记忆图谱与日记
-          </h1>
-          <p className="mt-1 text-xs" style={{ color: 'var(--text-2)' }}>
-            小鲸的真机记忆：JSONL 图谱 + 换日日记 + 混合检索（2-gram 词法 → 2 跳图扩展 → 加权重排）
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-pill ghost" onClick={() => void load()} disabled={busy}>
-            <RefreshCw size={13} /> 刷新
-          </button>
-          <button className="btn-pill red" onClick={() => void wipe()} disabled={busy} data-memory-wipe>
-            <Trash2 size={13} /> 隐私一键擦除
-          </button>
-        </div>
-      </header>
+    <div className="wb-page">
+      <PageHead
+        eyebrow="角色 · 记忆"
+        eyebrowIcon={Brain}
+        title="记忆图谱与日记"
+        description="小鲸的真机记忆：JSONL 图谱 + 换日日记 + 混合检索（2-gram 词法 → 2 跳图扩展 → 加权重排）"
+        actions={(
+          <>
+            <button className="btn-pill ghost" onClick={() => void load()} disabled={busy}>
+              <RefreshCw size={13} /> 刷新
+            </button>
+            <button className="btn-pill red" onClick={() => void wipe()} disabled={busy} data-memory-wipe>
+              <Trash2 size={13} /> 隐私一键擦除
+            </button>
+          </>
+        )}
+      />
 
       {/* 统计条 */}
       <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
@@ -249,17 +265,21 @@ export function MemoryPanel(): React.JSX.Element {
               width={size.width}
               height={size.height}
               backgroundColor="rgba(0,0,0,0)"
-              linkColor={(l: GraphLink) => (hitIds.has(l.source) && hitIds.has(l.target) ? 'rgba(191,90,242,0.75)' : 'rgba(255,255,255,0.10)')}
+              linkColor={(l: GraphLink) => (hitIds.has(l.source) && hitIds.has(l.target) ? cssToken('--violet', '#6c4ba3') : cssToken('--stroke-2', 'rgba(20,32,54,.16)'))}
               linkWidth={(l: GraphLink) => (hitIds.has(l.source) && hitIds.has(l.target) ? 1.8 : 0.6)}
               nodeLabel={(n: MemoryNodeView) => n.text}
               nodeRelSize={4}
-              nodeColor={(n: MemoryNodeView) => (hitIds.size === 0 || hitIds.has(n.id) ? (n.pinned ? '#ff9f0a' : NODE_COLOR[n.nodeType] ?? '#98989f') : 'rgba(152,152,159,0.25)')}
+              nodeColor={(n: MemoryNodeView) => {
+                if (hitIds.size > 0 && !hitIds.has(n.id)) return withAlpha(cssToken('--text-3', '#5c6475'), 0.28);
+                if (n.pinned) return cssToken('--amber', '#9e6300');
+                return cssToken(NODE_TOKEN[n.nodeType] ?? '--text-3', '#5c6475');
+              }}
               nodeCanvasObjectMode={() => 'after'}
               nodeCanvasObject={(n: MemoryNodeView & { x?: number; y?: number }, ctx: CanvasRenderingContext2D) => {
                 if (selectedId !== n.id) return;
                 ctx.beginPath();
                 ctx.arc(n.x ?? 0, n.y ?? 0, 9, 0, Math.PI * 2);
-                ctx.strokeStyle = '#0a84ff';
+                ctx.strokeStyle = cssToken('--blue', '#2955bb');
                 ctx.lineWidth = 1.6;
                 ctx.stroke();
               }}
