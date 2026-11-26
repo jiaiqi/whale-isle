@@ -2,8 +2,8 @@
  * Obsidian Tide 三游戏共玩与星露谷监控工作区（从 App.tsx Strangler 拆出）
  * 保留所有既有 E2E 选择器（[data-game-panel] / [data-game-select] / [data-game-subtab] / [data-mods-page] 等）。
  */
-import { Brain, Monitor, Target, Zap } from 'lucide-react';
-import { GAME_OPTIONS, type AutodriveEventView, type GameHealthView, type GameId } from '../bridge';
+import { Brain, Monitor, ShieldCheck, Target, Zap } from 'lucide-react';
+import { GAME_OPTIONS, type AutodriveEventView, type GameHealthView, type GameId, type StardewLaunchPrefsView } from '../bridge';
 import { ModsPanel } from '../mods-panel';
 import { TerrariaPanel } from '../terraria-panel';
 import { DstPanel, type DstPanelEvent } from '../dst-panel';
@@ -57,6 +57,8 @@ export interface GameWorkspaceViewProps {
   editingBwfPort: boolean;
   bwfPortDraft: string;
   avatarSync: AvatarSyncViewState | null;
+  stardewPrefs?: StardewLaunchPrefsView | null;
+  onLaunchPrefsChanged?: (prefs: StardewLaunchPrefsView) => void;
   dayPlan: { dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null;
   insights: Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }>;
   stardewHealth: { report: GameHealthView | null; probing: boolean; reprobe: () => void };
@@ -95,6 +97,8 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
     editingBwfPort,
     bwfPortDraft,
     avatarSync,
+    stardewPrefs,
+    onLaunchPrefsChanged,
     dayPlan,
     insights,
     stardewHealth,
@@ -188,9 +192,25 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
       )}
       {gameSubtab === 'monitor' && activeGame === 'stardew' && gameEnabled.stardew && (
         <div className="mx-auto max-w-[1320px] px-6 py-3">
-          <GameConnectionBanner gameId="stardew" report={stardewHealth.report} probing={stardewHealth.probing} onReprobe={stardewHealth.reprobe} />
+          <GameConnectionBanner
+            gameId="stardew"
+            report={stardewHealth.report}
+            probing={stardewHealth.probing}
+            onReprobe={stardewHealth.reprobe}
+            {...(onLaunchPrefsChanged === undefined ? {} : { onPrefsChanged: onLaunchPrefsChanged })}
+          />
           <div className="card mb-4 flex flex-wrap items-center gap-2 px-4 py-2.5">
             <span className="pill pill-violet"><Brain size={11} />{brainMode === 'llm' ? '智能决策' : '本地规则兜底'}</span>
+            {stardewPrefs && (
+              <span
+                data-stardew-storage-badge={stardewPrefs.storageMode}
+                className={`pill ${stardewPrefs.storageMode === 'isolated' ? 'pill-green' : 'pill-amber'}`}
+                title="鲸屿隔离目录仅注入 XDG，不触碰 ~/.config/StardewValley 个人存档；语言跟随中控台（当前中文）"
+              >
+                <ShieldCheck size={11} />
+                {stardewPrefs.storageMode === 'isolated' ? '隔离存档' : '常规目录'} · {stardewPrefs.language}
+              </span>
+            )}
             <span className="pill">78 个可用动作</span>
             <span className="pill pill-amber">30 粒米 / 回执</span>
             <span className="pill pill-green">攻略 {guidesCount} 专题</span>
