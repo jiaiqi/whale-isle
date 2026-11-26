@@ -9,6 +9,7 @@ import {
   VoiceProviderStatusSchema,
   VoiceSynthesisOutputSchema,
   VoiceSynthesisRequestSchema,
+  type CommercialTtsProvider,
   type VoiceIdentityDomain,
   type VoiceProviderKind,
   type VoiceProviderStatus,
@@ -24,6 +25,49 @@ import {
 } from './lip-sync';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** 两家可选商业 TTS 的稳定顺序（UI 展示与兜底顺序一致） */
+export const COMMERCIAL_TTS_PROVIDERS = ['minimax-tts', 'openai-compatible-tts'] as const;
+
+export interface CommercialTtsChoice {
+  /** 本次实际选用的商业供应商 */
+  provider: CommercialTtsProvider;
+  /** 是否就是用户指定的那一家；false = 没兑现，必须让 UI 说出来 */
+  honored: boolean;
+  reason: string;
+}
+
+/**
+ * 按**用户显式选择**决定默认档用哪一家商业 TTS。
+ *
+ * 历史坑：默认档以前由「谁配了 Key 谁上」隐式决定——配了 MiniMax 就永远走 MiniMax，
+ * 用户根本无法指定；某一家 Key 过期时还会静悄悄换到另一家，听起来像"同一家变难听了"。
+ * 现在：选中的那家可用就用它；不可用则回落到另一家，并把 `honored` 置 false。
+ */
+export function resolveCommercialTtsProvider(input: {
+  /** 用户显式选择的那一家 */
+  preference: CommercialTtsProvider;
+  /** 探针实测可用的 provider kind 集合 */
+  available: ReadonlyArray<VoiceProviderKind>;
+}): CommercialTtsChoice {
+  const isAvailable = (kind: CommercialTtsProvider): boolean => input.available.includes(kind);
+  if (isAvailable(input.preference)) {
+    return { provider: input.preference, honored: true, reason: `按你的选择使用 ${input.preference}` };
+  }
+  const alternative = COMMERCIAL_TTS_PROVIDERS.find((kind) => kind !== input.preference && isAvailable(kind));
+  if (alternative !== undefined) {
+    return {
+      provider: alternative,
+      honored: false,
+      reason: `你选的 ${input.preference} 当前不可用（未配置凭据或探活失败），本次落到 ${alternative}`,
+    };
+  }
+  return {
+    provider: input.preference,
+    honored: false,
+    reason: `两家商业 TTS 都不可用，${input.preference} 也没有凭据`,
+  };
+}
 
 export interface VoiceProvider {
   readonly kind: VoiceProviderKind;

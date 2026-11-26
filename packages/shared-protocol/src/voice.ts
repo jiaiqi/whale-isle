@@ -52,6 +52,13 @@ export const OFFLINE_TIER_COST = {
 export const OFFLINE_TIER_COST_TEXT = '一句话等 16–43 秒 / 首包 10–35 秒 / 冷启动首句 30 秒';
 
 /**
+ * 默认档（商业 API）用哪一家：**用户显式选择**，不许靠「有没有配置 Key」隐式决定。
+ * 选中的那家不可用时要如实报告「没兑现」，而不是静悄悄换成另一家。
+ */
+export const CommercialTtsProviderSchema = z.enum(['minimax-tts', 'openai-compatible-tts']);
+export type CommercialTtsProvider = z.infer<typeof CommercialTtsProviderSchema>;
+
+/**
  * 本地 Audio Worker 的 `/health` 自报（宿主探针的唯一数据来源）。
  *
  * `tts` 缺省 = 旧版 Worker 没上报能力，宿主必须按「不支持情绪」处理，不许猜成 true。

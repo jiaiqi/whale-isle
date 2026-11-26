@@ -9,6 +9,7 @@ import {
   LipSyncTimelinePlayer,
   LocalAudioWorkerProvider,
   MiniMaxTtsProvider,
+  resolveCommercialTtsProvider,
   splitSpeechSentences,
   synthesizeTextLipSyncFrames,
   SystemFallbackVoiceProvider,
@@ -762,5 +763,37 @@ describe('本地 Audio Worker 探针实测（item 10：能力不许硬编码）'
     expect(out.placeholder).toBe(true);
     expect(out.degraded).toBe(true);
     expect(out.placeholderReason).toContain('正弦');
+  });
+});
+
+describe('默认档商业供应商选择（显式选择，不靠「有没有 Key」）', () => {
+  it('用户选的那家可用：直接用它且 honored=true', () => {
+    const choice = resolveCommercialTtsProvider({ preference: 'openai-compatible-tts', available: ['minimax-tts', 'openai-compatible-tts'] });
+    expect(choice).toMatchObject({ provider: 'openai-compatible-tts', honored: true });
+    expect(choice.reason).toContain('按你的选择');
+  });
+
+  it('两家都可用时也不会因为顺序而跑到另一家', () => {
+    const choice = resolveCommercialTtsProvider({ preference: 'minimax-tts', available: ['openai-compatible-tts', 'minimax-tts'] });
+    expect(choice.provider).toBe('minimax-tts');
+    expect(choice.honored).toBe(true);
+  });
+
+  it('选的那家不可用：回落到另一家并如实标 honored=false', () => {
+    const choice = resolveCommercialTtsProvider({ preference: 'openai-compatible-tts', available: ['minimax-tts'] });
+    expect(choice).toMatchObject({ provider: 'minimax-tts', honored: false });
+    expect(choice.reason).toContain('不可用');
+  });
+
+  it('两家都不可用：保留用户的选择并说明没有凭据，不假装成功', () => {
+    const choice = resolveCommercialTtsProvider({ preference: 'minimax-tts', available: [] });
+    expect(choice).toMatchObject({ provider: 'minimax-tts', honored: false });
+    expect(choice.reason).toContain('都不可用');
+  });
+
+  it('本地 Worker / 系统语音不算商业供应商，不会被选中', () => {
+    const choice = resolveCommercialTtsProvider({ preference: 'minimax-tts', available: ['local-audio-worker', 'macos-say'] });
+    expect(choice.provider).toBe('minimax-tts');
+    expect(choice.honored).toBe(false);
   });
 });

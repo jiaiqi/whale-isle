@@ -726,6 +726,9 @@ export interface DirectorBridge {
     quality: string;
     degraded: boolean;
     degradedFrom?: VoiceProviderKind;
+    format: string;
+    /** 合成音频（试听播放用）；系统降级后端不给音频，只给口型帧 */
+    audioBase64?: string;
     durationMs: number;
     lipFrames: LipSyncFrame[];
   }>;

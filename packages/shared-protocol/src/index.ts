@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { VoiceEngineTierSchema } from './voice';
+import { CommercialTtsProviderSchema, VoiceEngineTierSchema } from './voice';
 
 // ============================================================================
 // 1. 桌宠渲染与音频锁契约 (源自 dsh-pet 复评结论，预留 Live2D 扩展)
@@ -1030,6 +1030,11 @@ export const PetDesktopPrefsSchema = z.object({
    * 语义是「用户选择」，不是「本地引擎装没装」——装了也不自动优先。
    */
   voiceEngineTier: VoiceEngineTierSchema.default('commercial_default'),
+  /**
+   * 默认档用哪一家商业 TTS：用户显式选择（item 10 后续）。
+   * 选中的那家不可用时由 `resolveCommercialTtsProvider()` 如实报 `honored:false`，不隐式顶替。
+   */
+  voiceCommercialProvider: CommercialTtsProviderSchema.default('minimax-tts'),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 

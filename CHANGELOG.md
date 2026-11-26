@@ -5,6 +5,13 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（默认档商业 TTS：两家都接，供应商由用户显式选择）
+
+- **`CommercialTtsProviderSchema`**（`minimax-tts` / `openai-compatible-tts`）落到共享契约，桌宠偏好新增 `voiceCommercialProvider`，默认 `minimax-tts`。
+- **`resolveCommercialTtsProvider()`**（`packages/voice-runtime`）：选中的那家可用就用它；不可用才回落到另一家并置 `honored:false` + 写明原因。删掉了「谁配了 Key 谁上」的隐式决定——此前配了 MiniMax 就永远走 MiniMax，用户无法指定。5 例单测覆盖两家都可用 / 只一家可用 / 都不可用 / 本地 Worker 不算商业供应商。
+- **语音中心面板**：默认档供应商选择器（状态取自 `v2VoiceProviders()` 探针）+「试听一句」按钮，直接按当前选择调 `v2:voice-synthesize-preview` 并播放返回音频；`bridge.ts` 的预览返回类型补上真实的 `format` / `audioBase64`。
+- **阻塞如实记录**：运行中的中控台是 `--use-mock-keychain` 实例，看不到真实凭据；真实 vault 里有 `minimax` 但没有 `openai-tts`。听感对拍与 20 句产物**未实测**，缺项写在证据文档 §10.2。
+
 ### Changed（表现力语音收尾三件：显式离线档开关 / UI 体感代价 / 修 StubLocalBackend 冒名）
 
 - **显式「本地引擎 = 可选离线档」开关**：`planVoiceFallback()` 不再用「本地引擎装没装」隐式决定优先级，改为接收显式 `tier`——`commercial_default`（默认，商业 API 首跳、本地引擎降为 `role:'optional'`）与 `offline_preferred`（本地引擎首跳，随时可切回）。新增 `tierHonored`：所选档位没兑现（例如选了离线档但本地未安装）时置 `false`，UI 必须说出来。档位持久化在 `PetDesktopPrefsSchema.voiceEngineTier`。

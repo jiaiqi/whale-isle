@@ -13,9 +13,11 @@ import { AudioLines, Lock, Radio, Sliders, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   OFFLINE_TIER_COST_TEXT,
+  type CommercialTtsProvider,
   type VoiceEngineTier,
   type VoiceProviderStatus,
 } from '@workbench/shared-protocol';
+import { COMMERCIAL_TTS_PROVIDERS, resolveCommercialTtsProvider } from '@workbench/voice-runtime';
 import type { CharacterSummary } from './bridge';
 import { VoicePanel } from './voice-panel';
 import { VoiceStudioPanel } from './voice-studio-panel';
@@ -40,7 +42,9 @@ export function VoiceCenterPanel(props: {
   const [sfx, setSfx] = useState({ enabled: true, volume: 0.7 });
   const [speaker, setSpeaker] = useState<{ name: string | null; state: 'speaking' | 'idle' }>({ name: null, state: 'idle' });
   const [tier, setTier] = useState<VoiceEngineTier>('commercial_default');
-  const [localWorker, setLocalWorker] = useState<VoiceProviderStatus | null>(null);
+  const [providers, setProviders] = useState<VoiceProviderStatus[]>([]);
+  const [commercial, setCommercial] = useState<CommercialTtsProvider>('minimax-tts');
+  const [previewing, setPreviewing] = useState(false);
 
   const reloadBindings = useCallback((): void => {
     void window.directorBridge.voiceCharacterBindings().then(setBindings).catch(() => setBindings([]));
@@ -53,11 +57,14 @@ export function VoiceCenterPanel(props: {
     void window.directorBridge.prefsGet().then((prefs) => {
       setSfx({ enabled: prefs.sfxEnabled ?? true, volume: prefs.sfxVolume ?? 0.7 });
       setTier(prefs.voiceEngineTier ?? 'commercial_default');
+      setCommercial(prefs.voiceCommercialProvider ?? 'minimax-tts');
     }).catch(() => undefined);
-    void window.directorBridge.v2VoiceProviders()
-      .then((providers) => setLocalWorker(providers.find((p) => p.kind === 'local-audio-worker') ?? null))
-      .catch(() => setLocalWorker(null));
+    void window.directorBridge.v2VoiceProviders().then(setProviders).catch(() => setProviders([]));
   }, []);
+
+  const localWorker = providers.find((p) => p.kind === 'local-audio-worker') ?? null;
+  const availableKinds = providers.filter((p) => p.available).map((p) => p.kind);
+  const commercialChoice = resolveCommercialTtsProvider({ preference: commercial, available: availableKinds });
 
   useEffect(() => {
     window.directorBridge.onCoopSpeaker((event) => {
@@ -94,6 +101,33 @@ export function VoiceCenterPanel(props: {
   const emotionLabel = localWorker === null || !localWorker.available
     ? '未知'
     : localWorker.supportsEmotion ? '支持（探针实测）' : '不支持（探针实测）';
+
+  const providerLabel = (kind: CommercialTtsProvider): string =>
+    kind === 'minimax-tts' ? 'MiniMax T2A' : 'OpenAI 兼容 TTS';
+
+  const pickCommercial = (next: CommercialTtsProvider): void => {
+    setCommercial(next);
+    void window.directorBridge.prefsSet({ voiceCommercialProvider: next });
+  };
+
+  const previewVoice = async (): Promise<void> => {
+    setPreviewing(true);
+    try {
+      const res = await window.directorBridge.v2VoiceSynthesizePreview({
+        text: '[嘴甜常态] 主人，这是默认档商业 TTS 的试听。',
+        preferredProvider: commercialChoice.provider,
+      });
+      if (res.audioBase64 !== undefined) {
+        const mime = res.format === 'mp3' ? 'audio/mpeg' : res.format === 'ogg' ? 'audio/ogg' : 'audio/wav';
+        void new Audio(`data:${mime};base64,${res.audioBase64}`).play().catch(() => undefined);
+      }
+      toast.success(`试听已生成 · ${res.providerKind}${res.degraded && res.degradedFrom !== undefined ? `（首选 ${res.degradedFrom} 不可用，已降级）` : ''}`);
+    } catch (err) {
+      toast.error(`试听失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPreviewing(false);
+    }
+  };
 
   return (
     <div data-voice-center data-voice-tab={tab}>
@@ -213,6 +247,49 @@ export function VoiceCenterPanel(props: {
           </span>
           <span>情绪 TTS：{emotionLabel}</span>
           <span className="truncate" title={workerDetail} style={{ color: 'var(--text-3)' }}>{workerDetail}</span>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t pt-2.5 text-[11px]" style={{ borderColor: 'var(--stroke)', color: 'var(--text-2)' }} data-voice-commercial-provider={commercial}>
+          <span className="font-semibold" style={{ color: 'var(--text-3)' }}>默认档用哪一家：</span>
+          {COMMERCIAL_TTS_PROVIDERS.map((kind) => {
+            const on = commercial === kind;
+            const status = providers.find((p) => p.kind === kind);
+            const ready = status?.available === true;
+            return (
+              <button
+                key={kind}
+                type="button"
+                data-voice-commercial-pick={kind}
+                aria-pressed={on}
+                onClick={() => pickCommercial(kind)}
+                title={status?.detail ?? '尚未探测'}
+                className="rounded-full px-2.5 py-0.5 font-semibold transition"
+                style={{
+                  border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}`,
+                  background: on ? 'var(--blue-dim)' : 'var(--inset)',
+                  color: on ? 'var(--blue)' : 'var(--text-2)',
+                }}
+              >
+                {providerLabel(kind)}
+                <span style={{ color: ready ? 'var(--green)' : 'var(--red, #c0392b)', fontWeight: 500 }}>
+                  {' '}· {status === undefined ? '未探测' : ready ? '可用' : '未配置'}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            data-voice-commercial-preview
+            disabled={previewing}
+            onClick={() => void previewVoice()}
+            className="rounded-full px-2.5 py-0.5 font-semibold"
+            style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
+          >
+            {previewing ? '合成中…' : '试听一句'}
+          </button>
+          {!commercialChoice.honored && (
+            <span data-voice-commercial-fallback style={{ color: 'var(--amber)' }}>{commercialChoice.reason}</span>
+          )}
         </div>
       </div>
 

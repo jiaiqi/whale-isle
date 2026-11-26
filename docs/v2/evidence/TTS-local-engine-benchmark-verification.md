@@ -289,3 +289,37 @@ synthesize(): { degraded: true, placeholder: true, durationMs: 2200, audioBytes:
 
 **证据等级**：`[REAL-DEVICE]` 仅限「本机真实 FastAPI 进程 + 真实 HTTP 往返」；
 不包含 Electron 宿主内播放、不包含人耳听感判定，那两项仍未验收。
+
+---
+
+## 10. 商业 API 两家接入与听感对拍（2026-11-27，owner 批准两家都接）
+
+### 10.1 已实测
+
+| 项 | 证据 | 结论 |
+| --- | --- | --- |
+| 两家 provider 已进同一条路由 | `apps/desktop-host/src/main/v2-kernel-host.ts` 的 `VoiceProviderRouter` 同时注册 `MiniMaxTtsProvider`（`kernel.secrets.resolve('minimax')`）与 `CloudOpenAiTtsProvider`（`kernel.secrets.resolve('openai-tts')`），再挂本地 Worker 与系统 TTS | 两家都能被同一路由调度，按 `preferredProvider` 优先 |
+| 默认档改为**显式选择**供应商 | `PetDesktopPrefsSchema.voiceCommercialProvider`（`minimax-tts` / `openai-compatible-tts`）+ `resolveCommercialTtsProvider()`：选中的那家可用就用它；不可用才回落另一家并置 `honored:false`、写明原因 | 不再由「谁配了 Key 谁上」隐式决定；5 例单测覆盖两家都可用 / 只一家可用 / 都不可用 / 本地 Worker 不算商业供应商 |
+| UI 可选可试听 | 语音中心「语音引擎档位」卡片：两家的可用状态取自 `v2VoiceProviders()` 探针，切换即写 prefs；「试听一句」按当前选择调 `v2:voice-synthesize-preview` 并直接播放返回音频 | owner 可在界面里逐家试听对比 |
+| 凭据库现状（只读巡检，未取明文） | 运行中的中控台走 `--use-mock-keychain`：`providerVaultStatus()` 返回 `backend=mock-keychain`、`vaultFile=provider-vault.mock-keychain.json`，minimax / openai / openai-tts 全部 `missing` | **这个实例本来就看不到任何真实 Key**，不能拿它跑对拍 |
+
+真实凭据库 `~/Library/Application Support/Whale Isle/provider-vault.json`（v2 格式）里现有的 8 条：
+`deepseek-official`、`minimax`、`opencode-go`、`openrouter`、`custom-1795343797653`、`opencode-zen`、`typesafe-jev`、`kimi-moonshot`。
+
+### 10.2 未实测（阻塞项，逐项写清）
+
+| 项 | 状态 | 缺什么 |
+| --- | --- | --- |
+| MiniMax 听感对拍 | **未实测** | 库里**有** `minimax` 条目（`identity=Electron`，2026-11-26T01:19:42Z 写入），但本次能连上的中控台实例是 mock-keychain 模式，读不到；需要用**不带 `--use-mock-keychain`** 的正常启动方式，在凭据设置页确认 `minimax` 状态为 `loaded`（若显示 `identity-mismatch` 则重存一次） |
+| OpenAI 兼容 TTS | **未实测** | 主进程读的是 `kernel.secrets.resolve('openai-tts')`；vault 里**没有** `openai-tts`，也没有 `openai` 条目 → 缺的是 **`openai-tts` 这一个 providerId 的 API Key**（外加它要用的 baseUrl/model，若走非官方端点） |
+| 20 句 × 5 情绪对拍产物 | **未产出** | 需要上面两家至少各一把可用的 Key；脚本会按 `artifacts/tts-ab/<provider>/<emotion>-<n>.wav` + `manifest.json` 落盘 |
+| 人耳听感结论 | **未做** | owner 自己听；本报告只给客观项 |
+
+### 10.3 商业档 vs 离线档的耗时对照（现有数据）
+
+| 档位 | 一句话（约 7 秒音频）总耗时 | 首包 | 冷启动首句 |
+| --- | --- | --- | --- |
+| 本地离线档（CosyVoice2-0.5B，本机实测 n=150） | P50 17.8s / P95 27.1s / max 43s | P50 11.3s | 30.6s |
+| 商业 API（MiniMax / OpenAI） | **未实测**（缺 Key） | **未实测** | 不适用（无本地冷启动） |
+
+这张表的右两行是空的，原因就是 10.2 的缺 Key——不是没测，是测不了，不许拿估算值填。
