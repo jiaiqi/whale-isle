@@ -7,16 +7,17 @@
   ``ttsClone`` 能力被如实探测并单独上报，**不会**被当作 SVS/SVC 暴露。
 - **绝不就绪就说就绪**：后端缺失或健康检查失败时返回 501 + 具体原因，
   不返回任何伪造音频，也不把 ``neuralVerified`` 置为 true。
+- **有音频 ≠ 有证据**：``neuralVerified`` 只在**权重指纹比对通过**时才置 true；
+  只拿到一段音频字节一律置 false 并给出 ``evidenceMissing`` 原因。
 - **配置只来自环境变量**：不读取任何运行时可写脚本/配置，不执行任意 Shell。
 """
 
 from __future__ import annotations
 
-import base64
-import json
+import hashlib
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -27,6 +28,15 @@ APP_VERSION = "0.1.0"
 SVS_ENDPOINT = os.environ.get("WHALE_SING_SVS_ENDPOINT", "").strip()
 SVC_ENDPOINT = os.environ.get("WHALE_SING_SVC_ENDPOINT", "").strip()
 TTS_ENDPOINT = os.environ.get("WHALE_SING_TTS_ENDPOINT", "").strip()
+
+# 神经推理证据：只有拿到可核实的模型标识 + 权重指纹，才允许置 neuralVerified。
+# 单凭「后端返回了一段音频字节」不构成证据 —— 那可能是占位波形、别的模型或一段转发录音。
+SVS_MODEL_PATH = os.environ.get("WHALE_SING_SVS_MODEL_PATH", "").strip()
+SVS_MODEL_SHA256 = os.environ.get("WHALE_SING_SVS_MODEL_SHA256", "").strip().lower()
+SVS_MODEL_ID = os.environ.get("WHALE_SING_SVS_MODEL_ID", "").strip()
+SVC_MODEL_PATH = os.environ.get("WHALE_SING_SVC_MODEL_PATH", "").strip()
+SVC_MODEL_SHA256 = os.environ.get("WHALE_SING_SVC_MODEL_SHA256", "").strip().lower()
+SVC_MODEL_ID = os.environ.get("WHALE_SING_SVC_MODEL_ID", "").strip()
 PROBE_TIMEOUT_S = float(os.environ.get("WHALE_SING_PROBE_TIMEOUT_S", "2.0"))
 RENDER_TIMEOUT_S = float(os.environ.get("WHALE_SING_RENDER_TIMEOUT_S", "120.0"))
 
@@ -53,7 +63,7 @@ class HealthResponse(BaseModel):
     svc: bool = False
     version: str = APP_VERSION
     backends: list[BackendStatus] = Field(default_factory=list)
-    ttsClone: Optional[BackendStatus] = None
+    ttsClone: BackendStatus | None = None
 
 
 class SingPayload(BaseModel):
@@ -77,6 +87,46 @@ class SingPayload(BaseModel):
 class BackendProbe:
     ready: bool
     detail: str
+
+
+def _sha256_of_file(path: str) -> str:
+    """流式计算权重文件 SHA-256（不整文件读进内存，权重动辄 GB 级）。"""
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        while True:
+            chunk = fh.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_model_evidence(kind: str) -> tuple[dict[str, str] | None, str | None]:
+    """构造可核实的神经推理证据。
+
+    返回 ``(evidence, missing_reason)``：
+      - 拿到证据：``(dict, None)``，其中 ``verifiedBy='weight_fingerprint'``；
+      - 拿不到：``(None, 原因)``，调用方必须把 ``neuralVerified`` 保持 ``False``。
+    """
+    model_path = SVS_MODEL_PATH if kind == "svs" else SVC_MODEL_PATH
+    expected = SVS_MODEL_SHA256 if kind == "svs" else SVC_MODEL_SHA256
+    model_id = SVS_MODEL_ID if kind == "svs" else SVC_MODEL_ID
+    if not model_path:
+        return None, f"未配置 {kind} 模型权重路径（WHALE_SING_{kind.upper()}_MODEL_PATH 为空），无法核实推理来源"
+    if not os.path.isfile(model_path):
+        return None, f"{kind} 模型权重文件不存在：{model_path}"
+    try:
+        actual = _sha256_of_file(model_path)
+    except OSError as exc:
+        return None, f"{kind} 模型权重读取失败：{exc}"
+    if expected and actual != expected:
+        return None, f"{kind} 权重指纹不匹配：期望 {expected[:12]}…，实际 {actual[:12]}…"
+    return {
+        "modelId": model_id or f"{kind}:{os.path.basename(model_path)}",
+        "weightSha256": actual,
+        "backend": "external-backend",
+        "verifiedBy": "weight_fingerprint",
+    }, None
 
 
 async def probe_endpoint(endpoint: str, kind: str, health_path: str = "") -> BackendProbe:
@@ -146,7 +196,7 @@ async def render_via(endpoint: str, payload: SingPayload) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=RENDER_TIMEOUT_S) as client:
             resp = await client.post(endpoint, json=payload.model_dump())
-    except Exception as exc:  # noqa: BLE001 — 网络失败如实上报
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=f"歌声后端调用失败：{exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=f"歌声后端返回 HTTP {resp.status_code}")
@@ -156,14 +206,29 @@ async def render_via(endpoint: str, payload: SingPayload) -> dict[str, Any]:
     return body
 
 
+def _attach_evidence(body: dict[str, Any], kind: str) -> dict[str, Any]:
+    """把可核实的模型证据挂到回执上；拿不到证据就如实置 false 并说明原因。
+
+    注意：**有音频字节 ≠ 有神经推理证据**。只有权重指纹比对通过才置真。
+    """
+    evidence, missing = build_model_evidence(kind)
+    if evidence is not None:
+        body["modelEvidence"] = evidence
+        body["neuralVerified"] = True
+        body.pop("evidenceMissing", None)
+    else:
+        body["neuralVerified"] = False
+        body["evidenceMissing"] = missing or f"{kind} 未能提供可核实证据"
+    return body
+
+
 @app.post("/sing/svs")
 async def sing_svs(payload: SingPayload) -> dict[str, Any]:
     """SVS：歌声合成（旋律 + 歌词 → 歌声）。"""
     body = await render_via(SVS_ENDPOINT, payload)
     body.setdefault("durationMs", payload.song.get("durationMs", 0))
     body.setdefault("sampleRate", 32_000)
-    body["neuralVerified"] = True
-    return body
+    return _attach_evidence(body, "svs")
 
 
 @app.post("/sing/svc")
@@ -172,8 +237,7 @@ async def sing_svc(payload: SingPayload) -> dict[str, Any]:
     body = await render_via(SVC_ENDPOINT, payload)
     body.setdefault("durationMs", payload.song.get("durationMs", 0))
     body.setdefault("sampleRate", 32_000)
-    body["neuralVerified"] = True
-    return body
+    return _attach_evidence(body, "svc")
 
 
 @app.get("/health")

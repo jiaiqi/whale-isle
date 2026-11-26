@@ -311,8 +311,29 @@ interface WorkerSingPayload {
   durationMs?: number;
   sampleRate?: number;
   lipFrames?: LipSyncFrame[];
-  /** Worker 回执：本次输出确实来自真实神经推理（缺失或 false 一律不置真） */
+  /**
+   * Worker 回执：本次输出确实来自真实神经推理。
+   * **单凭这个布尔值不置真** —— 必须同时给出可核实的模型证据（见下）。
+   */
   neuralVerified?: boolean;
+  /** 推理证据：模型标识 + 权重指纹 + 后端 + 证据来源 */
+  modelEvidence?: {
+    modelId?: string;
+    weightSha256?: string;
+    backend?: string;
+    verifiedBy?: string;
+  };
+  /** Worker 未能给出证据时的原因 */
+  evidenceMissing?: string;
+}
+
+/** 证据是否可核实：字段齐全 + 权重指纹格式合法 + 来源必须是权重指纹比对 */
+function isEvidenceVerifiable(evidence: WorkerSingPayload['modelEvidence']): boolean {
+  if (!evidence) return false;
+  const { modelId, weightSha256, backend, verifiedBy } = evidence;
+  if (!modelId || !backend) return false;
+  if (verifiedBy !== 'weight_fingerprint') return false;
+  return typeof weightSha256 === 'string' && /^[0-9a-f]{64}$/.test(weightSha256);
 }
 
 /** Worker /sing/health 的能力明细（可选字段，缺失时不影响既有解析） */
@@ -470,8 +491,25 @@ export class SingEngine {
             sampleRate: body.sampleRate ?? 24_000,
             ...(body.audioBase64 ? { audioBase64: body.audioBase64 } : {}),
             lipFrames,
-            // 只有 Worker 明确回执真实神经推理才置真；缺失即不置真（绝不自我宣称）
-            realNeuralInferenceVerified: body.neuralVerified === true,
+            // 音频字节本身不构成证据：必须有可核实的模型标识 + 权重指纹才置真
+            realNeuralInferenceVerified: body.neuralVerified === true && isEvidenceVerifiable(body.modelEvidence),
+            ...(isEvidenceVerifiable(body.modelEvidence) && body.modelEvidence
+              ? {
+                  neuralEvidence: {
+                    modelId: body.modelEvidence.modelId as string,
+                    weightSha256: body.modelEvidence.weightSha256 as string,
+                    backend: body.modelEvidence.backend as string,
+                    verifiedBy: 'weight_fingerprint' as const,
+                  },
+                }
+              : {}),
+            ...(body.neuralVerified === true && !isEvidenceVerifiable(body.modelEvidence)
+              ? {
+                  neuralEvidenceNote:
+                    body.evidenceMissing
+                    ?? 'Worker 声称神经推理但未提供可核实的模型证据（模型标识 + 权重指纹），不予置真',
+                }
+              : {}),
           });
         }
       } catch {

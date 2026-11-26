@@ -388,11 +388,20 @@ describe('[SIMULATION] V2-P3-01 SingEngine、歌词时钟与 PerformanceDirector
     expect(okDance.snapshot.mode).toBe('dancing');
   });
 
-  it('V2-P3-01：Worker 回执 neuralVerified=true 时才置真（真实神经推理）', async () => {
+  it('V2-P3-01：可核实证据（模型标识 + 权重指纹）齐全时才置真', async () => {
     const wavBytes = buildGuideToneWav(600, 120);
     const wavB64 = Buffer.from(wavBytes).toString('base64');
     const verifiedFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
-      audioBase64: wavB64, durationMs: 600, sampleRate: 32000, neuralVerified: true,
+      audioBase64: wavB64,
+      durationMs: 600,
+      sampleRate: 32000,
+      neuralVerified: true,
+      modelEvidence: {
+        modelId: 'diffsinger:xiaojing-v1',
+        weightSha256: 'a'.repeat(64),
+        backend: 'onnxruntime-cpu',
+        verifiedBy: 'weight_fingerprint',
+      },
     }), { status: 200 }));
     const engine = new SingEngine({ workerEndpoint: 'http://127.0.0.1:19880', fetchImpl: verifiedFetch });
     const result = await engine.synthesize({
@@ -405,5 +414,83 @@ describe('[SIMULATION] V2-P3-01 SingEngine、歌词时钟与 PerformanceDirector
     });
     expect(result.ok).toBe(true);
     expect(result.realNeuralInferenceVerified).toBe(true);
+    expect(result.neuralEvidence?.modelId).toBe('diffsinger:xiaojing-v1');
+    expect(result.neuralEvidence?.verifiedBy).toBe('weight_fingerprint');
+  });
+
+  it('仅有音频字节 + 裸 neuralVerified=true 不置真（音频不构成推理证据）', async () => {
+    const wavBytes = buildGuideToneWav(600, 120);
+    const wavB64 = Buffer.from(wavBytes).toString('base64');
+    const bareFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      audioBase64: wavB64, durationMs: 600, sampleRate: 32000, neuralVerified: true,
+    }), { status: 200 }));
+    const engine = new SingEngine({ workerEndpoint: 'http://127.0.0.1:19880', fetchImpl: bareFetch });
+    const result = await engine.synthesize({
+      requestId: 'sing-neural-bare',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      mode: 'svs',
+      channel: 'livestream_public',
+      song: makeSong(),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.realNeuralInferenceVerified).toBe(false);
+    expect(result.neuralEvidence).toBeUndefined();
+    expect(result.neuralEvidenceNote).toContain('未提供可核实的模型证据');
+  });
+
+  it('self_reported 证据不置真（只有权重指纹比对才算核实）', async () => {
+    const wavBytes = buildGuideToneWav(600, 120);
+    const wavB64 = Buffer.from(wavBytes).toString('base64');
+    const selfReported = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      audioBase64: wavB64,
+      durationMs: 600,
+      sampleRate: 32000,
+      neuralVerified: true,
+      modelEvidence: {
+        modelId: 'rvc:xiaojing',
+        weightSha256: 'b'.repeat(64),
+        backend: 'torch-mps',
+        verifiedBy: 'self_reported',
+      },
+    }), { status: 200 }));
+    const engine = new SingEngine({ workerEndpoint: 'http://127.0.0.1:19880', fetchImpl: selfReported });
+    const result = await engine.synthesize({
+      requestId: 'sing-neural-self-reported',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      mode: 'svc',
+      channel: 'private_desktop',
+      song: makeSong({ referenceVocalPath: 'ref.wav' }),
+    });
+    expect(result.realNeuralInferenceVerified).toBe(false);
+    expect(result.neuralEvidence).toBeUndefined();
+  });
+
+  it('权重指纹格式非法（非 64 位 hex）不置真', async () => {
+    const wavBytes = buildGuideToneWav(600, 120);
+    const wavB64 = Buffer.from(wavBytes).toString('base64');
+    const badHash = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(JSON.stringify({
+      audioBase64: wavB64,
+      durationMs: 600,
+      sampleRate: 32000,
+      neuralVerified: true,
+      modelEvidence: {
+        modelId: 'rvc:xiaojing',
+        weightSha256: 'not-a-sha256',
+        backend: 'torch-mps',
+        verifiedBy: 'weight_fingerprint',
+      },
+    }), { status: 200 }));
+    const engine = new SingEngine({ workerEndpoint: 'http://127.0.0.1:19880', fetchImpl: badHash });
+    const result = await engine.synthesize({
+      requestId: 'sing-neural-bad-hash',
+      characterId: 'char_xiaojing',
+      voiceProfileId: 'qiaopi_mengmei',
+      mode: 'svs',
+      channel: 'private_desktop',
+      song: makeSong(),
+    });
+    expect(result.realNeuralInferenceVerified).toBe(false);
   });
 });

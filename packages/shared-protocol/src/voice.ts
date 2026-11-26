@@ -224,6 +224,25 @@ export const SingRequestSchema = z.object({
 export type SingRequest = z.output<typeof SingRequestSchema>;
 export type SingRequestInput = z.input<typeof SingRequestSchema>;
 
+/**
+ * 神经推理证据（`realNeuralInferenceVerified` 的唯一依据）。
+ *
+ * 为什么需要它：后端返回一段音频字节**不能**证明「这是目标模型真的做了神经推理」——
+ * 它可能是占位波形、可能是别的模型、也可能只是转发了一段录音。只有拿到可核实的
+ * 模型标识 + 权重指纹，并且与宿主注册的期望值比对通过，才算「已核实」。
+ */
+export const NeuralInferenceEvidenceSchema = z.object({
+  /** 推理模型标识（如 `diffsinger:xiaojing-v1` / `rvc:xiaojing`） */
+  modelId: z.string().min(1),
+  /** 权重文件 SHA-256（小写 hex，64 位） */
+  weightSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  /** 推理后端名（如 `onnxruntime-cpu` / `torch-mps`） */
+  backend: z.string().min(1),
+  /** 证据来源：只有 `weight_fingerprint` 可被自动核实 */
+  verifiedBy: z.enum(['weight_fingerprint', 'self_reported']).default('self_reported'),
+});
+export type NeuralInferenceEvidence = z.output<typeof NeuralInferenceEvidenceSchema>;
+
 export const SingRenderResultSchema = z.object({
   ok: z.boolean(),
   requestId: z.string().min(1),
@@ -235,7 +254,12 @@ export const SingRenderResultSchema = z.object({
   audioBase64: z.string().optional(),
   lipFrames: z.array(LipSyncFrameSchema).default([]),
   error: z.string().optional(),
+  /** 仅在拿到可核实证据（模型标识 + 权重指纹匹配）时为 true */
   realNeuralInferenceVerified: z.boolean().default(false),
+  /** 推理证据；未核实或缺失时缺省 */
+  neuralEvidence: NeuralInferenceEvidenceSchema.optional(),
+  /** 未核实原因（`realNeuralInferenceVerified=false` 且曾有音频返回时给出） */
+  neuralEvidenceNote: z.string().optional(),
 });
 export type SingRenderResult = z.output<typeof SingRenderResultSchema>;
 
