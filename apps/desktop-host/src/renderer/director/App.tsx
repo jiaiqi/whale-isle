@@ -962,11 +962,11 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         )}
       </main>
 
-      <CommandPalette open={cmdkOpen} onOpenChange={setCmdkOpen} actions={paletteActions} />
+      <CommandPalette open={cmdkOpen} onOpenChange={setCmdkOpen} actions={paletteActions} onSay={sendText} />
       <Toaster
         theme={resolvedTheme}
         position="bottom-right"
-        toastOptions={{ style: { background: 'var(--surface-solid)', color: 'var(--text-1)', border: '1px solid var(--stroke-2)' } }}
+        toastOptions={{ className: 'wb-toast-item', style: { border: '1px solid transparent' } }}
       />
     </div>
   );
