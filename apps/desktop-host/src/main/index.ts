@@ -1299,7 +1299,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         },
       };
     }
-    if (typeof merged.port === 'number' && Number.isInteger(merged.port)) {
+    if (TEST_BWF_ENDPOINT === undefined && typeof merged.port === 'number' && Number.isInteger(merged.port)) {
       void autodrive.setEndpoint(bwfMcpEndpoint(merged.port));
     }
     return stardewLauncher.launch(merged as never);
