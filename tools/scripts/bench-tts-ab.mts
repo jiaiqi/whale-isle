@@ -333,8 +333,14 @@ async function main(): Promise<void> {
     const dir = join(outRoot, built.name);
     mkdirSync(dir, { recursive: true });
     const manifest: Array<Record<string, unknown>> = [];
+    /**
+     * 情绪稳定性实验：`--consistency 10 --emotion daily` 让 10 次都走同一档情绪
+     * （daily = 温柔甜软 + (Sweet) 标签），再看 F0 / RMS / 时长的离散度；
+     * 不传回落 `consistency`（无风格指令，只测音色本身）。2026-11-27 owner 要求。
+     */
+    const consistencyEmotion = arg('emotion', 'consistency');
     const rows = consistency > 0
-      ? Array.from({ length: consistency }, () => ({ emotion: 'consistency', text: SENTENCES[0]!.text }))
+      ? Array.from({ length: consistency }, () => ({ emotion: consistencyEmotion, text: SENTENCES[0]!.text }))
       : SENTENCES.slice(0, limit);
 
     /**

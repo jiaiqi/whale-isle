@@ -4,6 +4,9 @@
 > 没有标注的一律按**未实测**处理，禁止在代码或 UI 里写成能力声明。
 > 关联：`docs/v2/evidence/mimo-tts-candidate-integration.md`、`docs/v2/evidence/tts-provider-ab-test.md`（对拍协议）。
 
+**owner 决定（2026-11-27）：语音主线定为小米 MiMo（默认档 `mimo-tts`）；MiniMax 额度耗尽已停用（provider 与 BYOK 卡保留，可自行填凭据恢复）。**
+音色描述与情绪映射的正文在下一次 owner 选定音色方向前保持不动。
+
 ---
 
 ## 1. 合规边界（先读这段，再读别的）

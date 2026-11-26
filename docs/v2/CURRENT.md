@@ -10,6 +10,7 @@
 - **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01`/`V2-P3-02`/`V2-P3-03` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
 - **输入抢占口径（`ADR-004`）**：`ComputerUseLease` 只管 OS 合成输入/前台桌面控制；用户物理输入撤销它。`GameCharacterControlLease` 不受普通键鼠影响，只认 F7/UI 开关/P0 急停（T-M6-73）。P0 急停同时撤销两者。
 - **本地客户端常驻约定**：用户要求每次完成任务后保持本地桌面端运行（`pnpm --filter @workbench/desktop-host start`）以便随时测试；推进新工单重新构建后务必保持客户端处于运行状态。
+- **语音主线（2026-11-27 owner 决定）**：**小米 MiMo 定为主线**，默认档 `mimo-tts`（内置音色）；MiniMax 因额度耗尽停用（provider 与 BYOK 卡保留，可自行填凭据恢复）；`CANDIDATE_TTS_PROVIDERS` 本就不含 `minimax-tts`。语音中心「声线来源」重做为三卡：内置 9 音色（逐个试听/选中即切）、克隆声线（上传 wav → 试听 → 设为声线，IPC `v2:voice-clone-sample-info/save/clear`）、设计声线（漂移提示 + 跳设计台）；稳定两家与 OpenRouter 折叠为备用供应商。VoiceClone 锁定（自产参考 ×10 均值 0.8342 / 最小 0.7500）与 daily 情绪稳定性（时长 CV 6.2% / RMS σ 1.39dB / F0 中位 230.8–266.7Hz）已实测；`tools/scripts/voice-stability.py` 可复跑。**owner 判定当前音色与桌宠形象不匹配**，正在跑 VoiceDesign 描述矩阵选方向，定稿前 `VOICE-PERSONA-xiaojing.md` 正文不改。`verify:gate` 新增 **Gate 1 打包护栏**（`desktop-host build` 必过，owner 批准，由来：分支曾整天打不出 director 包而旧 dist 掩盖）。
 
 ## 2. 本次 `V2-P3-01` 真机补验实际交付与验证证据
 

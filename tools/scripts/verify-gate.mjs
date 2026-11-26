@@ -4,6 +4,8 @@
  *
  * 当前进度（与 docs/ROADMAP.md 同步，随工单推进接线）：
  *   Gate 1 类型与边界    ✅ tsc -b + dependency-cruiser（T-M0-01）+ Python ruff/mypy（T-M0-02）
+ *   Gate 1 打包护栏      ✅ desktop-host build（2026-11-27 owner 批准）：分支曾整整一天打不出 director 包
+ *                        （渲染层经包桶拖进 node:*），本地跑旧 dist 掩盖，gate 不含 build 就静默通过
  *   Gate 2 许可证与密钥  ✅ 台账校验 + 密钥泄漏/禁源痕迹扫描；T-M6-29 增补依赖漏洞
  *                        （pnpm audit high，离线/超时 SKIP）与 DST Lua 语法（luac -p，缺 luac SKIP）
  *   Gate 3 确定性单测    ✅ vitest（TS 契约单测）+ pytest（Python 夹具回放）（T-M0-02 接线；
@@ -126,6 +128,18 @@ if (gate1Detail !== null) {
       gate('Gate 1 类型与边界(Python)', 'FAIL', truncate(`${pyType.stdout}\n${pyType.stderr}`));
     }
   }
+}
+
+// ---- Gate 1 补充：渲染层打包护栏（2026-11-27 owner 批准「加，必过」） ----
+// 由来：分支曾坏了一整天无人发现——director 包把 node:* 模块拖进浏览器包构建失败，但本地跑的是旧 dist，
+// verify:gate 又不含 build，于是门禁全绿。构建挂 = gate 不过，防止「旧产物掩盖坏源码」再次发生。
+const build = spawnSync('pnpm', ['--filter', '@workbench/desktop-host', 'build'], { cwd: ROOT, encoding: 'utf8' });
+if (build.error) {
+  gate('Gate 1 打包护栏', 'FAIL', `无法启动 desktop-host build：${build.error.message}`);
+} else if (build.status !== 0) {
+  gate('Gate 1 打包护栏', 'FAIL', truncate(`${build.stdout}\n${build.stderr}`, 20));
+} else {
+  gate('Gate 1 打包护栏', 'PASS', 'desktop-host build：main / preload / pet-stage / director 四入口打包通过');
 }
 
 // ---- Gate 2：许可证台账 + 密钥/禁源扫描（T-M0-04 起委托 tools/mock-harness 独立扫描器） ----

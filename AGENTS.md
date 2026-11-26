@@ -65,7 +65,7 @@
 
 任何工单在标记为 `DONE` 之前，必须完整执行 `pnpm verify:gate` 并通过全部 4 道门禁：
 
-- **Gate 1 (Type & Boundary)**：`pnpm typecheck`（TS `strict: true` 零错误）+ `pnpm lint:deps`（通过 `dependency-cruiser` 确保 UI 不越权直接调外部 API 或跨层污染）+ Python `ruff check`。
+- **Gate 1 (Type & Boundary)**：`pnpm typecheck`（TS `strict: true` 零错误）+ `pnpm lint:deps`（通过 `dependency-cruiser` 确保 UI 不越权直接调外部 API 或跨层污染）+ Python `ruff check` + `pnpm --filter @workbench/desktop-host build`（2026-11-27 owner 批准新增，构建挂 = gate 不过；由来：分支曾整整一天打不出 director 包，本地旧 dist 掩盖）。
 - **Gate 2 (License & Secret Scan)**：校验 `docs/THIRD_PARTY_NOTICES.md` 完整性，扫描是否存在硬编码 API Key 或未授权代码片段。
 - **Gate 3 (Deterministic Unit Tests)**：核心逻辑包（`persona-brain`、`model-gateway`、`game-bridge-mcp`、`live-stream-hub`）单元测试通过且分支覆盖率 ≥ 90%。
 - **Gate 4 (Loopback Sandbox E2E)**：在 `tools/mock-harness` 仿真沙盒下跑通端到端回归测试。

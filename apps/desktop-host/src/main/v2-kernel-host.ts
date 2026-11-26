@@ -6,7 +6,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, ipcMain, powerMonitor, systemPreferences } from 'electron';
@@ -95,6 +95,7 @@ import {
   SingEngine,
   SystemFallbackVoiceProvider,
   VoiceProviderRouter,
+  extractWavLipSyncFrames,
   type MimoTtsReferenceAudio,
   type SilenceContextInput,
 } from '@workbench/voice-runtime';
@@ -227,6 +228,8 @@ const VoiceSynthesizePreviewSchema = z.object({
   styleMode: z.enum(['normal', 'inner', 'p0', 'singing']).optional(),
   speed: z.number().min(0.5).max(2.0).optional(),
   preferredProvider: VoiceProviderKindSchema.optional(),
+  /** 可选：覆盖音色（内置音色试听等场景）；不传则用角色当前声线 */
+  voiceRef: z.string().min(1).optional(),
 });
 
 const VoiceDesignPreviewSchema = z.object({
@@ -390,12 +393,35 @@ export async function createV2KernelHost(options: {
   const mimoVoiceSamplePath = process.env.WHALE_MIMO_VOICE_SAMPLE?.trim();
   /** 仅 `mimo-v2.5-tts`：内置 9 音色之一，未配时用 mimo_default */
   const mimoBuiltinVoice = process.env.WHALE_MIMO_VOICE?.trim();
+  /**
+   * 克隆参考音频的落地路径（用户在 UI 上传的优先，环境变量兜底）。
+   * 参考音频必须是自产或已获授权的录音；UI 上传只做本地拷贝，不接触任何网络。
+   */
+  const cloneSamplePath = join(options.userDataDir, 'voice-clone-sample.wav');
   const resolveMimoReference = (): MimoTtsReferenceAudio | null => {
+    try {
+      if (existsSync(cloneSamplePath)) {
+        return { bytes: new Uint8Array(readFileSync(cloneSamplePath)) };
+      }
+    } catch {
+      /* 读不到就继续看环境变量 */
+    }
     if (mimoVoiceSamplePath === undefined || mimoVoiceSamplePath === '') return null;
     try {
       return { bytes: new Uint8Array(readFileSync(mimoVoiceSamplePath)) };
     } catch {
       return null;
+    }
+  };
+  const cloneSampleInfo = (): { exists: boolean; bytes: number; durationMs: number | null } => {
+    if (!existsSync(cloneSamplePath)) return { exists: false, bytes: 0, durationMs: null };
+    try {
+      const bytes = readFileSync(cloneSamplePath);
+      const frames = extractWavLipSyncFrames(new Uint8Array(bytes));
+      const last = frames.at(-1);
+      return { exists: true, bytes: bytes.byteLength, durationMs: last === undefined ? null : last.timestampMs + last.durationMs };
+    } catch {
+      return { exists: true, bytes: 0, durationMs: null };
     }
   };
   const voiceRouter = new VoiceProviderRouter({
@@ -868,6 +894,27 @@ export async function createV2KernelHost(options: {
   });
   // V2-P1-02：VoiceProvider 探测、独立 VoiceIdentity、多轨 AudioMixer 与口型预览
   ipcMain.handle('v2:voice-providers', () => voiceRouter.listStatuses());
+  // 克隆参考音频：只接受本地 wav，做 RIFF 校验与 20MB 上限，落地 userData，不接触网络
+  ipcMain.handle('v2:voice-clone-sample-info', () => cloneSampleInfo());
+  ipcMain.handle('v2:voice-clone-sample-save', (_e, rawInput: unknown) => {
+    const parsed = z.object({ filePath: z.string().min(1).max(2000) }).parse(rawInput);
+    const bytes = readFileSync(parsed.filePath);
+    if (bytes.byteLength > 20 * 1024 * 1024) {
+      throw new Error('参考音频超过 20MB 上限，请用更短的片段');
+    }
+    if (bytes.byteLength < 44
+      || bytes.subarray(0, 4).toString('latin1') !== 'RIFF'
+      || bytes.subarray(8, 12).toString('latin1') !== 'WAVE') {
+      throw new Error('只接受 wav 文件（需要 RIFF/WAVE 头），请转换后再上传');
+    }
+    writeFileSync(cloneSamplePath, bytes);
+    return cloneSampleInfo();
+  });
+  ipcMain.handle('v2:voice-clone-sample-clear', () => {
+    if (existsSync(cloneSamplePath)) rmSync(cloneSamplePath);
+    return cloneSampleInfo();
+  });
+
   /**
    * 音色设计台（VoiceDesign Lab）：音色描述由用户在 UI 里现场编辑，所以不能走固定实例的 router，
    * 这里按请求临时构造一个 voicedesign provider，情绪指令/标签与真机实测用的同一份常量。
@@ -925,7 +972,7 @@ export async function createV2KernelHost(options: {
       {
         requestId: randomUUID(),
         characterId: identity.characterId,
-        voiceRef: voiceRouter.resolveVoiceRef(identity),
+        voiceRef: parsed.voiceRef ?? voiceRouter.resolveVoiceRef(identity),
         text: parsed.text,
         ...(parsed.emotion === undefined ? {} : { emotion: parsed.emotion }),
         ...(parsed.styleMode === undefined ? {} : { styleMode: parsed.styleMode }),

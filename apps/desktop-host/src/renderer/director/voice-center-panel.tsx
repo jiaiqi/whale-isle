@@ -8,7 +8,7 @@
  * item 10 增补：语音引擎档位（默认商业 API / 可选离线档）与本地 Audio Worker 的实测探针。
  * 离线档的体感代价直接引用 shared-protocol 的 `OFFLINE_TIER_COST_TEXT`，不许在这里另写数字。
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioLines, KeyRound, Lock, Radio, Sliders, Sparkles, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -26,11 +26,13 @@ import { VoiceStudioPanel } from './voice-studio-panel';
 
 /** 语音中心的凭据卡片：providerId 必须与主进程 `kernel.secrets.resolve(...)` 查的 id 完全一致 */
 const VOICE_CREDENTIALS = [
-  { id: 'minimax', label: 'MiniMax T2A', unlocks: '默认档 minimax-tts' },
-  { id: 'openai-tts', label: 'OpenAI 兼容 TTS', unlocks: '默认档 openai-compatible-tts' },
-  { id: 'openrouter', label: 'OpenRouter', unlocks: '候选 openrouter-tts（Gemini 3.8 Flash TTS）' },
-  { id: 'mimo-tts', label: '小米 MiMo', unlocks: '候选 mimo-tts / VoiceClone / VoiceDesign（三种模式共用一个 Key）' },
+  { id: 'mimo-tts', label: '小米 MiMo（主力）', unlocks: '内置音色 / VoiceClone / VoiceDesign（三种模式共用一个 Key）' },
+  { id: 'minimax', label: 'MiniMax T2A（已停用）', unlocks: '额度耗尽，已停用，可自行填入凭据恢复（provider 代码保留）' },
+  { id: 'openai-tts', label: 'OpenAI 兼容 TTS', unlocks: '备用稳定档 openai-compatible-tts' },
+  { id: 'openrouter', label: 'OpenRouter', unlocks: '候选 openrouter-tts（Gemini 3.8 Flash TTS，按 token 计费）' },
 ] as const;
+
+type CloneSampleInfo = { exists: boolean; bytes: number; durationMs: number | null };
 
 interface BindingView {
   characterId: string;
@@ -53,10 +55,13 @@ export function VoiceCenterPanel(props: {
   const [speaker, setSpeaker] = useState<{ name: string | null; state: 'speaking' | 'idle' }>({ name: null, state: 'idle' });
   const [tier, setTier] = useState<VoiceEngineTier>('commercial_default');
   const [providers, setProviders] = useState<VoiceProviderStatus[]>([]);
-  const [commercial, setCommercial] = useState<CommercialTtsProvider>('minimax-tts');
+  const [commercial, setCommercial] = useState<CommercialTtsProvider>('mimo-tts');
   const [openRouterModel, setOpenRouterModel] = useState('google/gemini-3.8-flash-tts');
   const [mimoBuiltinVoice, setMimoBuiltinVoice] = useState<string>('mimo_default');
-  const [previewing, setPreviewing] = useState(false);
+  const [previewingKey, setPreviewingKey] = useState<string | null>(null);
+  const [cloneInfo, setCloneInfo] = useState<CloneSampleInfo | null>(null);
+  const [cloneBusy, setCloneBusy] = useState(false);
+  const cloneInputRef = useRef<HTMLInputElement | null>(null);
   /** 凭据掩码（只存掩码，明文只在输入框里停留到保存成功为止） */
   const [credentialMasks, setCredentialMasks] = useState<Record<string, string>>({});
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
@@ -80,11 +85,15 @@ export function VoiceCenterPanel(props: {
   useEffect(() => { void reloadCredentials(); }, [reloadCredentials]);
 
   useEffect(() => {
+    void window.directorBridge.v2VoiceCloneSampleInfo().then(setCloneInfo).catch(() => setCloneInfo(null));
+  }, []);
+
+  useEffect(() => {
     void window.directorBridge.voiceBackend().then(setBackend).catch(() => setBackend(null));
     void window.directorBridge.prefsGet().then((prefs) => {
       setSfx({ enabled: prefs.sfxEnabled ?? true, volume: prefs.sfxVolume ?? 0.7 });
       setTier(prefs.voiceEngineTier ?? 'commercial_default');
-      setCommercial(prefs.voiceCommercialProvider ?? 'minimax-tts');
+      setCommercial(prefs.voiceCommercialProvider ?? 'mimo-tts');
       setOpenRouterModel(prefs.voiceOpenRouterModel ?? 'google/gemini-3.8-flash-tts');
       setMimoBuiltinVoice(prefs.voiceMimoBuiltinVoice ?? 'mimo_default');
     }).catch(() => undefined);
@@ -195,12 +204,17 @@ export function VoiceCenterPanel(props: {
     return providers.some((p) => p.kind === kind && p.available);
   };
 
-  const previewVoice = async (): Promise<void> => {
-    setPreviewing(true);
+  /**
+   * 统一试听入口：`key` 只用于按钮忙碌态；voiceRef 覆盖音色（内置音色逐个试听），
+   * 不传就按角色当前声线走路由。合成失败的报错原样透出，不做静默降级伪装。
+   */
+  const playPreview = async (key: string, text: string, preferredProvider?: CommercialTtsProvider, voiceRef?: string): Promise<void> => {
+    setPreviewingKey(key);
     try {
       const res = await window.directorBridge.v2VoiceSynthesizePreview({
-        text: '[嘴甜常态] 主人，这是默认档商业 TTS 的试听。',
-        preferredProvider: commercialChoice.provider,
+        text,
+        ...(preferredProvider === undefined ? {} : { preferredProvider }),
+        ...(voiceRef === undefined ? {} : { voiceRef }),
       });
       if (res.audioBase64 !== undefined) {
         const mime = res.format === 'mp3' ? 'audio/mpeg' : res.format === 'ogg' ? 'audio/ogg' : 'audio/wav';
@@ -210,7 +224,40 @@ export function VoiceCenterPanel(props: {
     } catch (err) {
       toast.error(`试听失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setPreviewing(false);
+      setPreviewingKey(null);
+    }
+  };
+  const previewVoice = (): Promise<void> =>
+    playPreview('default', '[嘴甜常态] 主人，这是默认档商业 TTS 的试听。', commercialChoice.provider);
+
+  /** 内置音色：选中即切默认档到 mimo-tts，并把内置音色 id 写进 prefs（主进程每次合成重读，无需重启） */
+  const selectBuiltinVoice = (voice: string): void => {
+    setMimoBuiltinVoice(voice);
+    setCommercial('mimo-tts');
+    void window.directorBridge.prefsSet({ voiceMimoBuiltinVoice: voice, voiceCommercialProvider: 'mimo-tts' });
+  };
+
+  const uploadCloneSample = async (file: File): Promise<void> => {
+    setCloneBusy(true);
+    try {
+      const info = await window.directorBridge.v2VoiceCloneSampleSave(window.directorBridge.pathForFile(file));
+      setCloneInfo(info);
+      toast.success(`参考音频已保存（${(info.bytes / 1024).toFixed(0)} KB）`);
+    } catch (err) {
+      toast.error(`保存参考音频失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setCloneBusy(false);
+    }
+  };
+
+  const clearCloneSample = async (): Promise<void> => {
+    try {
+      const info = await window.directorBridge.v2VoiceCloneSampleClear();
+      setCloneInfo(info);
+      if (commercial === 'mimo-tts-voiceclone') pickCommercial('mimo-tts');
+      toast.success('已清除参考音频，默认档回到 MiMo 内置音色');
+    } catch (err) {
+      toast.error(`清除失败：${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -377,64 +424,192 @@ export function VoiceCenterPanel(props: {
           <span className="truncate" title={workerDetail} style={{ color: 'var(--text-3)' }}>{workerDetail}</span>
         </div>
 
-        <div className="mt-2.5 grid gap-2 border-t pt-2.5 text-[11px]" style={{ borderColor: 'var(--stroke)', color: 'var(--text-2)' }} data-voice-commercial-provider={commercial}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>默认档（稳定两家）：</span>
-            {COMMERCIAL_TTS_PROVIDERS.map(renderProviderPick)}
-            <button
-              type="button"
-              data-voice-commercial-preview
-              disabled={previewing}
-              onClick={() => void previewVoice()}
-              className="rounded-full px-2.5 py-0.5 font-semibold"
-              style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
-            >
-              {previewing ? '合成中…' : '试听一句'}
-            </button>
-            {!commercialChoice.honored && (
-              <span data-voice-commercial-fallback style={{ color: 'var(--amber)' }}>{commercialChoice.reason}</span>
-            )}
+        <div className="mt-2.5 grid gap-2 border-t pt-2.5" style={{ borderColor: 'var(--stroke)' }} data-voice-commercial-provider={commercial}>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>声线来源（小米 MiMo 为主：一个 Key、三个模型）</span>
+            <span data-voice-commercial-current style={{ color: 'var(--text-3)' }}>
+              当前默认档：{providerLabel(commercial)}
+              {commercialChoice.honored ? '' : `（${commercialChoice.reason}）`}
+            </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2" data-voice-commercial-candidates>
-            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>小米 MiMo（候选 · 一个 Key · 三个模型）：</span>
-            {(['mimo-tts', 'mimo-tts-voiceclone', 'mimo-tts-voicedesign'] as const).map(renderProviderPick)}
-            <label className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-              内置音色
-              <select
-                data-voice-mimo-builtin
-                value={mimoBuiltinVoice}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setMimoBuiltinVoice(next);
-                  void window.directorBridge.prefsSet({ voiceMimoBuiltinVoice: next });
-                }}
-                className="rounded-lg px-1.5 py-0.5 outline-none"
-                style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
+          <div className="grid gap-2 md:grid-cols-3">
+            <section className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-voice-source="builtin">
+              <div className="flex items-center justify-between text-[11px] font-semibold">
+                <span>内置音色<span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · 官方九选一</span></span>
+                <span className="pill pill-green" style={{ fontSize: 10 }}>固定声线零漂移</span>
+              </div>
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--text-3)' }}>选中即写入默认档并切到 mimo-tts，不用重启。</p>
+              <div className="mt-1.5 flex flex-wrap gap-1" data-voice-mimo-builtin-grid>
+                {MIMO_TTS_BUILTIN_VOICES.map((voice) => {
+                  const on = mimoBuiltinVoice === voice && commercial === 'mimo-tts';
+                  return (
+                    <button
+                      key={voice}
+                      type="button"
+                      data-voice-mimo-builtin={voice}
+                      aria-pressed={on}
+                      onClick={() => selectBuiltinVoice(voice)}
+                      className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                      style={{
+                        border: `1px solid ${on ? 'var(--blue-line)' : 'var(--stroke)'}`,
+                        background: on ? 'var(--blue-dim)' : 'var(--surface)',
+                        color: on ? 'var(--blue)' : 'var(--text-2)',
+                      }}
+                    >
+                      {voice}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                data-voice-mimo-builtin-preview
+                disabled={previewingKey !== null}
+                onClick={() => void playPreview('builtin', '主人，我是' + mimoBuiltinVoice + '，今天也请多关照。', 'mimo-tts', mimoBuiltinVoice)}
+                className="mt-1.5 w-full rounded-lg px-2 py-1 text-[10.5px] font-semibold"
+                style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
               >
-                {MIMO_TTS_BUILTIN_VOICES.map((voice) => <option key={voice} value={voice}>{voice}</option>)}
-              </select>
-            </label>
+                {previewingKey === 'builtin' ? '合成中…' : `试听 ${mimoBuiltinVoice}`}
+              </button>
+            </section>
+
+            <section className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-voice-source="clone">
+              <div className="flex items-center justify-between text-[11px] font-semibold">
+                <span>克隆声线<span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · 自己的参考音频</span></span>
+                <span className="pill pill-amber" style={{ fontSize: 10 }}>需人工挑参考</span>
+              </div>
+              <p className="mt-1 text-[10px]" data-voice-clone-status style={{ color: cloneInfo?.exists === true ? 'var(--text-2)' : 'var(--text-3)' }}>
+                {cloneInfo === null
+                  ? '读取参考音频状态…'
+                  : cloneInfo.exists
+                    ? `已保存 ${(cloneInfo.bytes / 1024).toFixed(0)} KB${cloneInfo.durationMs !== null ? ` · ${(cloneInfo.durationMs / 1000).toFixed(1)}s` : ''}`
+                    : '未上传参考音频（只收本地 .wav，RIFF 校验 + 20MB 上限）'}
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                <input
+                  ref={cloneInputRef}
+                  type="file"
+                  accept=".wav,audio/wav"
+                  data-voice-clone-upload-input
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    if (file !== undefined) void uploadCloneSample(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  data-voice-clone-upload
+                  disabled={cloneBusy}
+                  onClick={() => cloneInputRef.current?.click()}
+                  className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+                >
+                  {cloneBusy ? '保存中…' : cloneInfo?.exists === true ? '换一条 wav' : '选择 wav'}
+                </button>
+                <button
+                  type="button"
+                  data-voice-clone-preview
+                  disabled={previewingKey !== null || cloneInfo?.exists !== true}
+                  onClick={() => void playPreview('clone', '主人，这条声线是照着我的录音克隆的，你听得出差别吗？', 'mimo-tts-voiceclone')}
+                  className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+                >
+                  {previewingKey === 'clone' ? '合成中…' : '试听'}
+                </button>
+                <button
+                  type="button"
+                  data-voice-clone-bind
+                  disabled={cloneInfo?.exists !== true || commercial === 'mimo-tts-voiceclone'}
+                  onClick={() => {
+                    pickCommercial('mimo-tts-voiceclone');
+                    toast.success('已把默认档切到 MiMo VoiceClone：之后每次合成都用这条参考音频');
+                  }}
+                  className="rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+                >
+                  设为声线
+                </button>
+                {cloneInfo?.exists === true && (
+                  <button
+                    type="button"
+                    data-voice-clone-clear
+                    onClick={() => void clearCloneSample()}
+                    className="rounded-full px-2 py-0.5 text-[10.5px]"
+                    style={{ color: 'var(--text-3)' }}
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+                实测（自产参考音频 ×10）：余弦均值 0.8342、最低 0.7500。样本小、只听余弦、未做听感盲测；限免服务无商用条款。
+              </p>
+            </section>
+
+            <section className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-voice-source="design">
+              <div className="flex items-center justify-between text-[11px] font-semibold">
+                <span>设计声线<span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · 探索新音色</span></span>
+                <span className="pill pill-amber" style={{ fontSize: 10 }}>漂移已实测</span>
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
+                一段自然语言描述生成声线。同一描述连跑 10 次说话人余弦最低 0.4145，不能直接当固定声线；
+                路径是「出候选 → 人工挑一条 → 用那条音频走克隆锁死」。
+              </p>
+              <button
+                type="button"
+                data-voice-design-open
+                onClick={() => setTab('design')}
+                className="mt-1.5 w-full rounded-lg px-2 py-1 text-[10.5px] font-semibold"
+                style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+              >
+                打开音色设计台
+              </button>
+            </section>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold" style={{ color: 'var(--text-3)' }}>OpenRouter（候选 · 按 token 计费）：</span>
-            {renderProviderPick('openrouter-tts')}
-            <label className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-              模型
-              <input
-                type="text"
-                data-voice-openrouter-model
-                value={openRouterModel}
-                onChange={(event) => setOpenRouterModel(event.target.value)}
-                onBlur={() => {
-                  const next = openRouterModel.trim();
-                  if (next !== '') void window.directorBridge.prefsSet({ voiceOpenRouterModel: next });
-                }}
-                className="w-64 rounded-lg px-1.5 py-0.5 outline-none"
-                style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
-                title="OpenRouter 上的 TTS 模型 id，保存后立即生效（默认 google/gemini-3.8-flash-tts）"
-              />
-            </label>
-          </div>
+          <details className="rounded-xl px-2.5 py-1.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-commercial-backup>
+            <summary className="cursor-pointer text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>备用供应商（不参与默认档，未来本地模型也走这里）</summary>
+            <div className="mt-1.5 grid gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold" style={{ color: 'var(--text-3)' }}>稳定两家：</span>
+                {COMMERCIAL_TTS_PROVIDERS.map(renderProviderPick)}
+                <button
+                  type="button"
+                  data-voice-commercial-preview
+                  disabled={previewingKey !== null}
+                  onClick={() => void previewVoice()}
+                  className="rounded-full px-2.5 py-0.5 font-semibold"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-2)' }}
+                >
+                  {previewingKey === 'default' ? '合成中…' : '试听一句'}
+                </button>
+                {!commercialChoice.honored && (
+                  <span data-voice-commercial-fallback style={{ color: 'var(--amber)' }}>{commercialChoice.reason}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold" style={{ color: 'var(--text-3)' }}>OpenRouter（候选 · 按 token 计费）：</span>
+                {renderProviderPick('openrouter-tts')}
+                <label className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                  模型
+                  <input
+                    type="text"
+                    data-voice-openrouter-model
+                    value={openRouterModel}
+                    onChange={(event) => setOpenRouterModel(event.target.value)}
+                    onBlur={() => {
+                      const next = openRouterModel.trim();
+                      if (next !== '') void window.directorBridge.prefsSet({ voiceOpenRouterModel: next });
+                    }}
+                    className="w-64 rounded-lg px-1.5 py-0.5 outline-none"
+                    style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-2)' }}
+                    title="OpenRouter 上的 TTS 模型 id，保存后立即生效（默认 google/gemini-3.8-flash-tts）"
+                  />
+                </label>
+              </div>
+            </div>
+          </details>
         </div>
         {commercial.startsWith('mimo-') && (
           <p className="mt-1 text-[10.5px]" style={{ color: 'var(--amber)' }} data-voice-commercial-candidate-notice>

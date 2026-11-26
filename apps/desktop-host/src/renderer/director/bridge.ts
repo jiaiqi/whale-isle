@@ -720,6 +720,8 @@ export interface DirectorBridge {
     styleMode?: 'normal' | 'inner' | 'p0' | 'singing';
     speed?: number;
     preferredProvider?: VoiceProviderKind;
+    /** 覆盖音色（内置音色试听）；不传用角色当前声线 */
+    voiceRef?: string;
   }): Promise<{
     requestId: string;
     providerKind: VoiceProviderKind;
@@ -748,6 +750,10 @@ export interface DirectorBridge {
     durationMs: number;
     lipFrames: LipSyncFrame[];
   }>;
+  /** 克隆参考音频（固定声线）：只存本地 wav，RIFF 校验 + 20MB 上限 */
+  v2VoiceCloneSampleInfo(): Promise<{ exists: boolean; bytes: number; durationMs: number | null }>;
+  v2VoiceCloneSampleSave(filePath: string): Promise<{ exists: boolean; bytes: number; durationMs: number | null }>;
+  v2VoiceCloneSampleClear(): Promise<{ exists: boolean; bytes: number; durationMs: number | null }>;
   v2ProviderQuota(input: {
     providerId: string;
     planType?: 'PAY_AS_YOU_GO' | 'CODING_PLAN' | 'LOCAL_GPU';

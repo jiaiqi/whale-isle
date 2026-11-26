@@ -5,6 +5,38 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（声线来源重做：owner 定「就用小米 MiMo」，默认档改为 mimo-tts）
+
+- **默认档**：`PetDesktopPrefsSchema.voiceCommercialProvider` 默认值改为 `mimo-tts`（内置音色固定声线）。这是**显式选择**，候选不进自动兜底链的约束不变；MiniMax / OpenAI 降为备用档。
+- **声线来源三卡**（语音中心）：① 内置音色——9 个官方音色逐个可选、单独试听（`v2VoiceSynthesizePreview` 新增 `voiceRef` 覆盖），选中即写 prefs 切到 `mimo-tts`；② 克隆声线——上传本地 `.wav`（新 IPC `v2:voice-clone-sample-info/save/clear`，RIFF 校验 + 20MB 上限，存 userData）、试听、设为声线（切 `mimo-tts-voiceclone`）、清除；③ 设计声线——漂移实测提示 + 跳转音色设计台。
+- **备用供应商收进折叠区**：稳定两家与 OpenRouter 不再占主视觉，模型输入框保留；凭据卡顺序改为 MiMo 在首位，各卡标注当前状态（MiMo 主力 / MiniMax 额度耗尽 / OpenAI 无凭据 / OpenRouter 按 token 计费）。
+- **未来本地模型**：仍是 `voiceEngineTier` 的离线档与 `local-audio-worker` 探针，不在这三卡里伪装已支持。
+
+### Changed（owner 定 MiMo 主线 + verify:gate 加构建必过）
+
+- **默认档**：`voiceCommercialProvider` 默认 `mimo-tts`；MiniMax 因 Token Plan 额度耗尽停用，provider 类与 BYOK 卡保留，卡上写「额度耗尽，已停用，可自行填入凭据恢复」。`CANDIDATE_TTS_PROVIDERS` 本就不含 `minimax-tts`，未改。
+- **`pnpm verify:gate` 新增「Gate 1 打包护栏」**：`pnpm --filter @workbench/desktop-host build` 成为必过项，构建挂 = gate 不过（owner 批准）。由来：分支曾整整一天打不出 director 包（渲染层经包桶拖进 `node:*`），本地跑旧 dist、gate 不含 build，于是门禁全绿无人发现。`AGENTS.md` §2.3 Gate 1 同步。
+
+### Validated（daily 情绪稳定性 `[REAL-DEVICE]`：同一指令 ×10）
+
+- `--provider mimo-tts --consistency 10 --emotion daily --from-vault`（bench 新增 `--emotion`），同一句 ×10、10/10 成功：时长均值 3.808s / σ 0.236（CV 6.2%）；RMS 均值 −18.93 dBFS / σ 1.39dB；F0 中位均值 250.3Hz / 230.8–266.7Hz（CV 4.4%）。
+- 新增 `tools/scripts/voice-stability.py`（40ms 帧 / 10ms hop 自相关 F0 + RMS + 时长），产物 `artifacts/tts-ab/mimo-tts-daily-consistency/`（含 `stability.json`）。口径：这是客观读数，不是听感结论；只测 daily 一档一句话。
+
+### Docs（OpenRouter 音色池 + 计费实扣仍未测）
+
+- Gemini 3.8 Flash TTS 官方文档列 30 个预置音色（Zephyr…Sulafat）；本仓库实调过 Zephyr（历史 3/3）与 Kore（1 次 200/3625ms/80204B），其余 28 个未逐个验证，当备选池用时先单条试调。端点元数据 `supports_voice_cloning:false`、`supported_parameters:[]`。
+
+### Validated（VoiceClone 锁定一致性 `[REAL-DEVICE]`：管线成立）
+
+- **`--provider mimo-voiceclone --consistency 10 --from-vault`**（参考音频 = VoiceDesign 漂移组人工挑出的自产 `consistency-1.wav`）：10/10 成功，说话人余弦均值 **0.8342** / 最小 **0.7500** / 最大 0.8990 / 标准差 0.0430；对照 VoiceDesign 同描述 ×10（均值 0.7124 / 最小 0.4145 / 标准差 0.0862）与 ZipVoice 同音色基线（均值 0.8563 / 最小 0.7545）。
+- **结论**：最低 0.7500 与同音色基线同量级，漂移被压住，「VoiceDesign 出候选 → 人工挑 → VoiceClone 锁死」管线实测成立。
+- **边界原样写清**：验证的是对**自产参考音频**的一致性，不是「和某个真人/目标音色像不像」；参考音频只有一条、10 次生成，样本小；只听余弦，未做听感盲测；仍走 MiMo 限免服务，无商用条款。
+
+### Docs（可用性快照 + OpenRouter 计费口径核对）
+
+- **可用性快照**（2026-11-27）：MiMo 限免可用；MiniMax 额度耗尽（Token Plan 用量上限，账单层）；OpenAI 兼容 TTS 无凭据；OpenRouter 可用但情绪控制未测。
+- **OpenRouter 计费口径**（只查文档，未实扣）：TTS 集合页明说计费单位按模型而异（百万字符 / 百万 token / 音频秒），`google/gemini-3.8-flash-tts` 模型页列 token 价 $0.50/M 输入 · $9/M 输出（AI Studio 与 Vertex 同价），页面未写死 TTS 走哪种单位；一句话花费取决于文本 token + 生成音频 token，实扣仍未测。
+
 ### Fixed（bench 音色占位串 + MiniMax emotion 枚举，参数层实测）
 
 - **`voiceRef: 'bench_voice'`**：bench 给所有 provider 统一传占位串，MiniMax 25/25 报 `voice id not exist`。改为 `--voice <id>` 覆盖 + 各 provider 默认音色：MiniMax → `qiaopi_mengmei`（账号已注册定制音色）、OpenAI → `alloy`、`mimo-tts` → `mimo_default`。

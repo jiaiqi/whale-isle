@@ -8,12 +8,13 @@
 
 ## 0. 结论
 
+- **owner 决定（2026-11-27）：语音主线定为小米 MiMo。** 默认档切到 `mimo-tts`（内置音色，固定声线零漂移）；MiniMax 因账号额度耗尽停用（provider 类与 BYOK 卡保留，可自行填凭据恢复）。`CANDIDATE_TTS_PROVIDERS` 本来就不含 `minimax-tts`（候选只有 openrouter-tts + MiMo 三态），无需改动。
 - **适配器与路由已落地**：`MimoTtsProvider` 三个模型各注册一个实例——`mimo-v2.5-tts`（kind `mimo-tts`，内置 9 音色 + 唱歌前缀）、`mimo-v2.5-tts-voiceclone`、`mimo-v2.5-tts-voicedesign`；另有 `OpenRouterTtsProvider`（kind `openrouter-tts`，`google/gemini-3.8-flash-tts`）作为第四家候选。
-- **候选身份是硬约束**：四家候选都**不进自动兜底链**（`COMMERCIAL_TTS_PROVIDERS` 仍只有 MiniMax / OpenAI），默认档仍是 `minimax-tts`；只有用户显式选中才会走。
+- **候选身份是硬约束**：四家候选都**不进自动兜底链**（`COMMERCIAL_TTS_PROVIDERS` 仍只有 MiniMax / OpenAI）；只有用户显式选中才会走。2026-11-27 owner 决定把**默认档显式设为 `mimo-tts`**（内置音色固定声线），这不是自动兜底，MiniMax / OpenAI 仍留作备用档。
 - **真实 API 已实连**（2026-11-27 01:29–01:47）：`mimo-v2.5-tts`、`mimo-v2.5-tts-voicedesign`、`openrouter-tts` 全部成功合成；`api-key` 与 `Bearer` 两种认证头**都已实测通**（见 §2.4–§2.6）。Key 从 Electron 加密凭据库进程内取得，不落盘、不进日志。
 - 单测 182 例全绿；假服务端真 HTTP 跑通 bench 全链路（6 个 provider key）；说话人嵌入余弦工具在真实音频上验证可用。
 - **纠正一处旧谎报**：上一版 `probe()` 写 `supportsStreaming: true`，但适配器是非流式的。已改为 `false`，detail 里明写「非流式」。
-- **音色漂移、情绪稳定性、唱歌听感、OpenRouter 计费实扣仍未实测**（见 §3），不得拿成功合成去宣称这些能力。
+- **音色漂移与 VoiceClone 锁定一致性已实测**（§2.8 / §2.9）：VoiceDesign 不能当固定声线，VoiceClone 用自产参考音频能把漂移压住；**情绪稳定性、唱歌听感、OpenRouter 计费实扣仍未实测**（见 §3），不得拿成功合成去宣称这些能力。
 
 ---
 
@@ -197,7 +198,74 @@ MiniMax 把它直接当 `voice_id` 打进请求，账号里没这个音色。修
 **结论：VoiceDesign 同一段描述的漂移是实的**。最小 0.4145 已经是「听着不是同一个人」的量级（参照同音色基线 0.75+），
 不能拿来做角色的固定声线。**推荐路径：VoiceDesign 出候选 → 人工挑一条 → VoiceClone 拿自产音频锁死**。
 「音色设计台」的「设为桌宠声线」按钮因此只做候选写入，界面里明确提示漂移与锁声线路径。
-VoiceClone 的锁定稳定性（同一参考音频 ×10 的余弦）由编排方在跑，结果出来再回填。
+VoiceClone 的锁定稳定性见 §2.9（已实测）。
+
+### 2.9 VoiceClone 锁定一致性（已实测，2026-11-27）
+
+`--provider mimo-voiceclone --consistency 10 --from-vault`，参考音频是 VoiceDesign 漂移组里**人工挑出的自产 `consistency-1.wav`**，
+10/10 成功。说话人嵌入余弦（CAM++，两两 45 对），产物 `artifacts/tts-ab/mimo-voiceclone-consistency/`：
+
+| | 均值 | 最小 | 最大 | 标准差 |
+| --- | --- | --- | --- | --- |
+| MiMo VoiceClone（同一自产参考 ×10） | **0.8342** | **0.7500** | 0.8990 | 0.0430 |
+| 对照：VoiceDesign 同描述 ×10（§2.8） | 0.7124 | 0.4145 | 0.8407 | 0.0862 |
+| 对照：ZipVoice 同音色基线 | 0.8563 | 0.7545 | — | 0.027 |
+
+**结论：VoiceClone 能把漂移压住**——最低 0.7500 已与同音色基线（最低 0.7545）同量级，标准差从 0.0862 降到 0.0430。
+所以「VoiceDesign 出候选 → 人工挑一条 → VoiceClone 锁死」这条管线是**实测成立**的，音色设计台的提示与这句一致。
+
+**这份数据不能用来宣称什么**（原样写清，避免被读大）：
+
+- 它验证的是**对自产参考音频的一致性**，不是「和某个真人/目标音色像不像」——后者需要目标音色的合法参考音频才能测。
+- 参考音频只有一条、生成 10 次，**样本小**；只看余弦，**没做主观听感盲测**。
+- VoiceClone 仍然走 MiMo **限免服务，无商用条款**——技术上通 ≠ 能上线（§5）。
+
+### 2.10 供应商可用性快照（2026-11-27，本机凭据库 + 探针）
+
+| 供应商 | 状态 | 依据 |
+| --- | --- | --- |
+| 小米 MiMo（tts / voiceclone / voicedesign） | **限免可用** | §2.5–§2.9 真实合成全部成功 |
+| MiniMax T2A | **额度耗尽**（账单层拒绝） | §2.7：`已达到 Token Plan 用量上限`，参数层已修 |
+| OpenAI 兼容 TTS | **无凭据** | 凭据库与环境变量都没有 `openai-tts` |
+| OpenRouter Gemini TTS | **可用，但情绪控制未测** | §2.6 三次真实合成成功；`supported_parameters` 为空，情绪方式无官方说法 |
+
+### 2.11 OpenRouter 计费口径（文档核对，未实扣）
+
+2026-11-27 查官方页面（不需要额度）：
+
+- OpenRouter 的 TTS 集合页明说**计费单位按模型而异，三种并存**：百万字符（多数 TTS 模型）/ 百万 token（如 Gemini TTS）/ 生成音频秒数；
+  并提醒「比价前先统一单位」。<https://openrouter.ai/collections/text-to-speech-models/>
+- `google/gemini-3.8-flash-tts` 模型页只列 token 价：**输入 $0.50 / M tokens，输出 $9 / M tokens**，Google AI Studio 与 Vertex 同价；
+  页面没有单独的音频输入/输出价，也没写死 TTS 走哪种计费单位。<https://openrouter.ai/google/gemini-3.8-flash-tts>
+- OpenRouter 本身不加每请求加价，费用按上游 token 用量从余额扣；平台费在充值时收（Standard 5.5%），并建议请求带 `usage: {include: true}` 取回用量。<https://openrouter.ai/pricing>
+- 因此**一句话的花费取决于文本 token + 生成音频 token**，不能按字符或秒估；要写进产品对比必须拿真实账单实扣（当前未测，§3 保持未实测）。
+- 这也解释了为什么它不能挂「限免」角标：候选 ≠ 免费（代码里 `limitedFree` 只对 `mimo-*` 生效）。
+
+### 2.12 同一情绪指令的稳定性（daily ×10，已实测）
+
+`--provider mimo-tts --consistency 10 --emotion daily --from-vault`，同一句
+「主人，今天也辛苦啦，我给你倒杯热茶好不好呀。」连跑 10 次，全部走 daily 档
+（user 侧「温柔甜软，带笑意，语速适中」+ assistant 前缀 `(Sweet)`），10/10 成功，wall 1202–3825ms。
+产物 `artifacts/tts-ab/mimo-tts-daily-consistency/`（含 `stability.json`），读数用新脚本
+`tools/scripts/voice-stability.py`（40ms 帧 / 10ms hop 自相关 F0，只统计浊音帧）：
+
+| 指标 | 均值 | 标准差 | 最小 | 最大 | CV |
+| --- | --- | --- | --- | --- | --- |
+| 时长 s | 3.808 | 0.2361 | 3.36 | 4.16 | 6.2% |
+| RMS dBFS | −18.93 | 1.39 | −21.65 | −16.90 | 7.4% |
+| F0 中位 Hz | 250.3 | 10.97 | 230.77 | 266.67 | 4.4% |
+
+**怎么读**：同一档情绪下，音高是最稳的一维（F0 中位 230.8–266.7 Hz，跨度约 2.5 个半音）；
+时长与响度有可感波动（±0.4s、±1.4dB），最极端两次相差 0.8s / 4.75dB。
+这是「同一档情绪十次像不像同一次」的**客观读数**：像，但不是复制粘贴——情绪标签没有把声学参数钉死。
+听感结论仍留给 owner；本次只测一档（daily）一句话，其它四档与长句未测。
+
+### 2.13 OpenRouter 音色备选池（Gemini 3.8 Flash TTS）
+
+- 官方文档列 **30 个预置音色**：Zephyr、Puck、Charon、Kore、Fenrir、Leda、Orus、Aoede、Callirrhoe、Autonoe、Enceladus、Iapetus、Umbriel、Algieba、Despina、Erinome、Algenib、Rasalgethi、Laomedeia、Achernar、Alnilam、Schedar、Gacrux、Pulcherrima、Achird、Zubenelgenubi、Vindemiatrix、Sadachbia、Sadaltager、Sulafat（另有扩展音色库，需 `client.voices.list()`）。
+  文档还写明情绪/风格走 `style` 字段与内联 `<sigh>` 类标签——**这是 Gemini 原生 API 的形态，不是 OpenRouter `/audio/speech` 的形态**，后者只收 `{model,input,voice,response_format}`，所以在本仓库里情绪控制仍按「未验证」处理。来源：<https://aistudio.google.com/docs/speech-generation>
+- **本仓库适配器默认 `Zephyr`**（此前 3/3 实测就是它）。2026-11-27 用凭据库 Key 试调 `voice:'Kore'`：HTTP 200 / 3625ms / 80204 bytes；试调 `voice:'NotAVoice'`：HTTP 400（`Request contains an invalid argument`，不回显合法清单）。
+- **结论口径**：30 个名字来自 Google 官方文档，OpenRouter 侧只逐个实调过 `Zephyr`（历史 3/3）与 `Kore`（1 次）；其余 28 个**未逐个验证**，当备选池用时先单条试调。OpenRouter 端点元数据 `supports_voice_cloning:false`、`supported_parameters:[]`。
 
 ---
 
@@ -206,11 +274,12 @@ VoiceClone 的锁定稳定性（同一参考音频 ×10 的余弦）由编排方
 | 项 | 状态 | 缺什么 |
 | --- | --- | --- |
 | VoiceDesign 音色漂移 | ✅ **已实测**（§2.8）：最小 0.4145，不能当固定声线 | 漂移路径已写死为「候选→人工挑→VoiceClone 锁死」 |
-| VoiceClone 克隆一致性 | **在跑**（编排方用自产 `consistency-1.wav` 当参考音频，×10） | 结果出来回填 |
-| 五情绪指令 / 前缀标签 / 内联标签的**稳定性**（多次重复） | **未实测（只有一次迹象）** | 同描述连跑 ≥10 次 |
+| VoiceClone 克隆一致性 | ✅ **已实测**（§2.9）：均值 0.8342 / 最小 0.7500，能锁住；但对自产参考、样本小、未听感盲测 | 与目标音色的相似度需合法参考音频另测 |
+| 五情绪指令 / 前缀标签 / 内联标签的**稳定性** | ✅ **daily 档已实测**（§2.12，×10）；bright / tsundere / sleepy / surprised 与长句**未实测** | 其余四档同法各跑 ≥10 次 |
 | 唱歌前缀听感 | **未实测** | 跑 `--from-vault --provider mimo-tts`，styleMode=singing 单独实验 |
 | OpenRouter 情绪控制方式 | **未实测（官方无说法）** | 只能单开实验组，不进能力声明 |
-| OpenRouter 一句实际花费 | **未实测** | 按 token 计费，必须实测不估算 |
+| OpenRouter 一句实际花费 | **未实测**（口径已核对，§2.11） | 按 token 计费，必须拿真实账单实扣 |
+| OpenRouter 音色池 | 文档 30 个，**实调过 2 个**（Zephyr / Kore，§2.13） | 其余 28 个用时先单条试调 |
 | 与 MiniMax / OpenAI 的同表对拍 | **未实测** | MiniMax/OpenAI 凭据不在当前可连实例里 |
 
 ---
@@ -224,7 +293,7 @@ VoiceClone 的锁定稳定性（同一参考音频 ×10 的余弦）由编排方
 | OpenRouter Gemini TTS | **2437–4487ms**（n=3） | =整句（非流式） | 3/3 | 不适用（预置音色） | 未实测（按 token） | 第四家候选 |
 | MiMo 内置音色 | **1048–1733ms**（适配器 n=5；探针另有 tsundere 8055ms 的方差实例） | =整句（非流式） | 5/5（探针 6/6） | 未实测 | 限时免费 | 9 内置音色 |
 | MiMo VoiceDesign | **1361–2799ms**（n=5）；探针单次 1972ms | =整句（非流式） | 5/5 + 10/10（漂移组） | **已实测：余弦最小 0.4145，不能当固定声线** | 限时免费 | 需音色描述 |
-| MiMo VoiceClone | **未实测** | 未实测 | 未实测 | 未实测 | 限时免费 | 需合法参考音频 |
+| MiMo VoiceClone | 未单独记录（同 bench 轮次） | =整句（非流式） | 10/10 | **已实测：均值 0.8342 / 最小 0.7500（对自产参考）** | 限时免费 | 需合法参考音频（§2.9） |
 
 听感结论不下，留给 owner 自己听。
 
