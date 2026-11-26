@@ -91,7 +91,7 @@
 
 - **`V2-P2-01`..`V2-P2-04`**：均已通过 `pnpm verify:gate` 7/7 与 Electron 45 E2E，因缺少真实星露谷联机客户端、外部新 CLI、在线生图 Key 或本机 Blender 二进制，诚实保持 `IMPLEMENTED_UNVERIFIED`。
 - **`V2-P2-05`（Character Bible、2D/Live2D QA 与 CrossPet 全量导入）**：`character-studio-v2.spec.ts`（含随包 30 角色真实目录全量导入、`.provenance.json`、`CC BY-NC-SA 4.0` 直播/商用拦截）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；外部真实 Cubism `.moc3` 舞台渲染切换待 `V2-P3-01` 实机补验，状态记为 `IMPLEMENTED_UNVERIFIED`。
-- **`V2-P2-06`（11 步游戏像素流水线与 Stardew Avatar Mod 导出）**：`dotnet build` Release 编译暂存 `WhaleIsleAvatar.dll`（0 警告）、`pixel-avatar-v2.spec.ts`（4/4 PASS）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；因尚未人工启动星露谷 GUI 进图目视核验，`realDeviceInGameVisualVerified` 诚实保持 `false`，状态记为 `IMPLEMENTED_UNVERIFIED`。
+- **`V2-P2-06`（11 步游戏像素流水线与 Stardew Avatar Mod 导出，`DONE`）**：`dotnet build` Release 编译暂存 `WhaleIsleAvatar.dll`（0 警告）、`pixel-avatar-v2.spec.ts`（4/4 PASS）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；2026-11-26 `[REAL-DEVICE]` 真机目视核验通过——游戏内玩家外观为蓝鲸女仆像素形象（蓝紫长发 + 白蓝女仆装），与导出贴图 `stardew-sprite-50c65bb7.png`（192×256，2x）正/背帧一致，`move_to` 移动落位与 `use_tool` 浇水动作帧正常，BWF `get_state` 与画面 HUD 逐项吻合（证据 `artifacts/acceptance/P2-06-*.png`，详见 [P2-pixel-stardew-avatar-verification.md](./evidence/P2-pixel-stardew-avatar-verification.md)；1×/4× 档未逐一进图目视，sheet 全帧已经流水线 QA 校验）。
 - **`V2-P2-07`（十态 `AssetRegistry`、舞台/声音工坊、商用清源与一键回滚）**：纯本地资产治理与创作闭环，`asset-registry-v2.spec.ts`（3/3 PASS）、`verify:gate` 7/7 与 Electron 45 E2E（v1→v2→回滚→SHA-256→商业清源阻断）全绿，状态记为 `DONE`。
 - **`V2-P2-08`（`CoopRuntime` v1 星露谷人机联机协作）**：`coop-runtime.spec.ts`（5/5 PASS，90% 分支覆盖）、本机真实 `Mods/` 兼容扫描（`v2CoopModCompat`）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；双端真实游戏客户端开房协同实玩待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。
 
