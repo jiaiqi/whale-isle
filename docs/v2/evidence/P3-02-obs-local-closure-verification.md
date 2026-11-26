@@ -180,3 +180,34 @@
 - 新增「假服务端按协议独立校验」用例：密码错回 4009、密码对才 `Identified`。
 
 **边界**：真实密码全程未写入任何文件、注释、测试或提交信息；真机探针由 owner 亲自执行。`obs-selfcheck` 全量 **56 例通过**，`pnpm verify:gate` 7/7。
+
+### 7.4 opcode 读错：RequestResponse 是 7，不是 9（2026-11-26，owner 真机定位）
+
+**症状**：认证通过（真机确认收到 `op=2 Identified`）后，**第一个请求必超时**。
+
+**根因**：`obs-websocket-client.ts` 把 RequestResponse 判断成 `op === 9`，而 9 是 `RequestBatchResponse`，单条应答永远是 7，于是 `pending` 表里的 Promise 只能等满 15 秒超时。
+
+**协议 opcode 表（obs-websocket 5.x `Protocol.md`）与修复后逐条核对**：
+
+| opcode | 协议含义 | 本客户端是否使用 | 位置 |
+| --- | --- | --- | --- |
+| 0 | Hello | 读 | `OBS_OP.HELLO`（收 Hello 取 salt/challenge） |
+| 1 | Identify | 发 | `OBS_OP.IDENTIFY`（带 rpcVersion + authentication） |
+| 2 | Identified | 读 | `OBS_OP.IDENTIFIED`（认证通过） |
+| 3 | Reidentify | 不用 | 本探针不改会话参数 |
+| 5 | Event | 不用 | 不订阅事件，收到也直接忽略 |
+| 6 | Request | 发 | `OBS_OP.REQUEST`（GetVersion / 建源 / 截图 / 清理） |
+| 7 | RequestResponse | 读 | `OBS_OP.REQUEST_RESPONSE`——**修复点** |
+| 8 | RequestBatch | 不用 | 不发批量 |
+| 9 | RequestBatchResponse | 不用 | **曾被误当成 7** |
+
+**修复与防退化**：
+
+- 文件内不再出现裸 opcode 数字，全部走 `OBS_OP` 常量表（表项注释对齐协议）。
+- 文件头协议表注释改正（原写「9=RequestResponse」）。
+- 假服务端 5 处 `op: 9` 全部改为 `op: 7`。
+- 新增两条回归：① `OBS_OP` 与协议表逐条相等、且 `REQUEST_RESPONSE !== REQUEST_BATCH_RESPONSE`；② 服务端先发 `op=9` 再发 `op=7`，断言请求只在 7 上结算、500ms 内返回而不是超时。
+
+**同类病根**：两次错误的共同形态是「实现读错协议 → 假服务端照抄实现 → 测试只验证自洽」。所以从现在起，凡涉及外部协议的常量与公式，假服务端必须按协议**独立实现**，并用字面量向量钉住。
+
+`obs-selfcheck` 全量 **58 例通过**，`pnpm verify:gate` 7/7。

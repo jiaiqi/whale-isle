@@ -8,7 +8,9 @@
  * 发 CLOSE（code 4009），早期实现只等 op=2，导致 `connect()` 永远不 settle——
  * 现在 close / error / 超时三条路径都会让等待者立刻抛错，并给出能直接给 owner 看的文案。
  *
- * 协议参考：obs-websocket v5（op 0=Hello, 1=Identify, 2=Identified, 6=Request, 9=RequestResponse）。
+ * 协议参考：obs-websocket 5.x `Protocol.md` 的 opcode 表——
+ * 0=Hello / 1=Identify / 2=Identified / 3=Reidentify / 5=Event / 6=Request / 7=RequestResponse /
+ * 8=RequestBatch / 9=RequestBatchResponse。**RequestResponse 是 7，不是 9**（9 是批量应答）。
  */
 import { createHash } from 'node:crypto';
 
@@ -30,6 +32,19 @@ export interface ObsConnectOptions {
 }
 
 export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
+/** obs-websocket 5.x opcode 表（`Protocol.md`）：名字对齐协议，别再写裸数字 */
+export const OBS_OP = {
+  HELLO: 0,
+  IDENTIFY: 1,
+  IDENTIFIED: 2,
+  REIDENTIFY: 3,
+  EVENT: 5,
+  REQUEST: 6,
+  REQUEST_RESPONSE: 7,
+  REQUEST_BATCH: 8,
+  REQUEST_BATCH_RESPONSE: 9,
+} as const;
+
 /** obs-websocket 认证失败关闭码（v5 规范 4009 Authentication failed） */
 export const AUTH_FAILED_CLOSE_CODE = 4009;
 
@@ -95,7 +110,7 @@ export class ObsWebsocketClient {
       }
       auth.authentication = computeAuthentication(password, authentication.salt ?? '', authentication.challenge ?? '');
     }
-    this.socket.send(JSON.stringify({ op: 1, d: auth }));
+    this.socket.send(JSON.stringify({ op: OBS_OP.IDENTIFY, d: auth }));
     await this.waitIdentified(options.identifiedTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
   }
 
@@ -120,16 +135,16 @@ export class ObsWebsocketClient {
       } catch {
         return;
       }
-      if (payload.op === 0) {
+      if (payload.op === OBS_OP.HELLO) {
         this.lastHello = payload.d ?? {};
         this.helloWaiters.shift()?.(this.lastHello);
         return;
       }
-      if (payload.op === 2) {
+      if (payload.op === OBS_OP.IDENTIFIED) {
         this.identifiedWaiters.shift()?.(payload.d ?? {});
         return;
       }
-      if (payload.op === 9) {
+      if (payload.op === OBS_OP.REQUEST_RESPONSE) {
         const data = payload.d ?? {};
         const requestId = String(data.requestId ?? '');
         const entry = this.pending.get(requestId);
@@ -226,7 +241,7 @@ export class ObsWebsocketClient {
       }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
       this.socket.send(JSON.stringify({
-        op: 6,
+        op: OBS_OP.REQUEST,
         d: {
           requestType: options.requestType,
           requestId,

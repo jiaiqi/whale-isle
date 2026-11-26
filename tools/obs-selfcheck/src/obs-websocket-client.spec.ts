@@ -1,7 +1,7 @@
 /**
  * `ObsWebsocketClient` 的真协议测试（item 4 / `V2-P3-02`）。
  *
- * 用真实 WebSocket 服务端（`ws`）把 obs-websocket v5 的 op 0/1/2/6/9 走一遍，
+ * 用真实 WebSocket 服务端（`ws`）把 obs-websocket 5.x 的 op 0/1/2/6/7 走一遍，
  * 而不是 mock 掉 socket——这样握手、认证哈希、请求超时、失败回执都必须真的对。
  * 依然是 `[SIMULATION]`：对端是本地假服务端，不是真实 OBS。
  */
@@ -67,7 +67,7 @@ async function startFakeObs(options: FakeObsOptions = {}): Promise<FakeObsServer
           return;
         }
         socket.send(JSON.stringify({
-          op: 9,
+          op: 7,
           d: {
             requestType: d.requestType,
             requestId: d.requestId,
@@ -126,7 +126,7 @@ describe('ObsWebsocketClient · obs-websocket v5 握手与请求', () => {
     const server = await startFakeObs({
       onRequest: (socket, request) => {
         socket.send(JSON.stringify({
-          op: 9,
+          op: 7,
           d: { requestId: request.requestId, requestStatus: { result: false, comment: '场景不存在' } },
         }));
       },
@@ -140,7 +140,7 @@ describe('ObsWebsocketClient · obs-websocket v5 握手与请求', () => {
   it('result=false 且无 comment → 报请求失败并带 requestId', async () => {
     const server = await startFakeObs({
       onRequest: (socket, request) => {
-        socket.send(JSON.stringify({ op: 9, d: { requestId: request.requestId, requestStatus: { result: false } } }));
+        socket.send(JSON.stringify({ op: 7, d: { requestId: request.requestId, requestStatus: { result: false } } }));
       },
     });
     const client = new ObsWebsocketClient(server.url);
@@ -164,10 +164,10 @@ describe('ObsWebsocketClient · obs-websocket v5 握手与请求', () => {
         if (first) {
           first = false;
           socket.send('这不是 JSON');
-          socket.send(JSON.stringify({ op: 9, d: { requestId: 'whale-selfcheck-999', requestStatus: { result: true } } }));
+          socket.send(JSON.stringify({ op: 7, d: { requestId: 'whale-selfcheck-999', requestStatus: { result: true } } }));
         }
         socket.send(JSON.stringify({
-          op: 9,
+          op: 7,
           d: { requestId: request.requestId, requestStatus: { result: true }, responseData: { ok: 1 } },
         }));
       },
@@ -356,5 +356,49 @@ describe('obs-websocket 认证算法（协议两步）', () => {
     const right = new ObsWebsocketClient(server.url);
     await expect(right.connect('pw-123')).resolves.toBeUndefined();
     right.close();
+  });
+});
+
+/**
+ * opcode 表回归（owner 2026-11-26 第二次定点修复）。
+ *
+ * 同一类病已经出现两次：实现读错协议 → 假服务端照抄实现 → 测试只验证「自己和自己一致」。
+ * 这里把协议 opcode 表按 `Protocol.md` 写成字面量断言，并把「op=9 不能当 RequestResponse」钉死。
+ */
+describe('obs-websocket opcode 表（Protocol.md）', () => {
+  it('opcode 常量与协议表逐条相等', async () => {
+    const { OBS_OP } = await import('./obs-websocket-client.js');
+    expect(OBS_OP).toEqual({
+      HELLO: 0,
+      IDENTIFY: 1,
+      IDENTIFIED: 2,
+      REIDENTIFY: 3,
+      EVENT: 5,
+      REQUEST: 6,
+      REQUEST_RESPONSE: 7,
+      REQUEST_BATCH: 8,
+      REQUEST_BATCH_RESPONSE: 9,
+    });
+    // 单独再钉一遍最容易错的那个：7 才是 RequestResponse，9 是 RequestBatchResponse
+    expect(OBS_OP.REQUEST_RESPONSE).toBe(7);
+    expect(OBS_OP.REQUEST_RESPONSE).not.toBe(OBS_OP.REQUEST_BATCH_RESPONSE);
+  });
+
+  it('服务端回 op=7 才结算请求；回 op=9（批量应答）绝不能被当成单条应答', async () => {
+    const { OBS_OP } = await import('./obs-websocket-client.js');
+    const server = await startFakeObs({
+      onRequest: (socket, request) => {
+        // 先发一条 op=9，旧实现会误当 RequestResponse；正确实现必须忽略它，继续等 op=7
+        socket.send(JSON.stringify({ op: OBS_OP.REQUEST_BATCH_RESPONSE, d: { requestId: request.requestId, requestStatus: { result: true } } }));
+        socket.send(JSON.stringify({
+          op: OBS_OP.REQUEST_RESPONSE,
+          d: { requestId: request.requestId, requestStatus: { result: true }, responseData: { via: 'op7' } },
+        }));
+      },
+    });
+    const client = new ObsWebsocketClient(server.url);
+    await client.connect();
+    await expect(client.request({ requestType: 'GetVersion', timeoutMs: 500 })).resolves.toEqual({ via: 'op7' });
+    client.close();
   });
 });
