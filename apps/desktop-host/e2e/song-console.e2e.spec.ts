@@ -92,7 +92,19 @@ describe('[E2E-HOST] V2-P3-01 中控台点歌台面板', () => {
       expect(statusText).toContain('缺失能力');
       expect(statusText).not.toContain('completed');
 
-      // ④ 播放回执：没有真实首切片 → 保持空态（不写假回执）
+      // ④ 真实播放头：macOS 上必须由原生播放器承担（afplay 回退时如实标注无位置回报）
+      await director.waitForSelector('[data-song-playhead]', { timeout: 10_000 });
+      const headText = await director.locator('[data-song-playhead]').innerText();
+      expect(headText).toMatch(/真实播放头|afplay 回退/);
+      const head = await director.evaluate(() =>
+        (window as unknown as { directorBridge: { v2SongPlaybackHead(): Promise<{ realPlayhead: boolean; active: boolean }> } })
+          .directorBridge.v2SongPlaybackHead(),
+      );
+      // 本机 macOS 且源码在仓库内 → 必须编译成功；若环境缺 swiftc 则这里会暴露成 afplay 回退（不是静默成功）
+      expect(head.realPlayhead).toBe(process.platform === 'darwin');
+      expect(head.active).toBe(false);
+
+      // ⑤ 播放回执：没有真实首切片 → 保持空态（不写假回执）
       const receiptText = await director.locator('[data-song-receipts]').innerText();
       expect(receiptText).toContain('还没有真实播放回执');
 

@@ -413,6 +413,7 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2SongCapabilities: (): Promise<unknown> => ipcRenderer.invoke('v2:song-capabilities'),
   v2SongRequest: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:song-request', input),
   v2SongSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:song-snapshot'),
+  v2SongPlaybackHead: (): Promise<unknown> => ipcRenderer.invoke('v2:song-playback-head'),
   v2SongCancel: (requestId: string): Promise<unknown> => ipcRenderer.invoke('v2:song-cancel', requestId),
   v2SongShutdown: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:song-shutdown', reason),
   v2LiveSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:live-snapshot'),

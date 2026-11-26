@@ -59,6 +59,7 @@ import {
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { ElectronBrowserEngine } from './electron-browser-engine';
 import { createNativeInjector, ensureNativeInputHelper } from './native-input-helper';
+import { createNativeAudioPlayer, ensureNativeAudioHelper } from './native-audio-player';
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
@@ -407,13 +408,39 @@ export async function createV2KernelHost(options: {
     ...(process.env.WHALE_SING_WORKER ? { workerEndpoint: process.env.WHALE_SING_WORKER } : {}),
   });
   // V2-P3-01 点歌台：编排内核 + audio-ai-worker 真实 HTTP 客户端 + SQLite song_cache_index。
-  // 首切片就绪后用 macOS afplay 挂真实播放（无后端时永远走不到这里，也不假装播过）。
+  // 首切片就绪后用 macOS 原生播放器挂真实播放（无后端时永远走不到这里，也不假装播过）。
   // 单端互斥：开唱前先停 TTS（复用 V1 VoiceHost 的 stopAll），避免两路声音叠在一起。
+  //
+  // 真实播放头：`whale-audio-helper`（AVAudioPlayer）每 100ms 回报 `currentTime`，
+  // 用它驱动 `PerformanceDirector.tickClock()`，歌词/口型才对得上真实声音；
+  // swiftc 不可用时回退 `afplay`，此时没有任何位置回报，如实标 `realPlayhead=false`。
+  const nativeAudioHelper = ensureNativeAudioHelper({
+    appPath: app.getAppPath(),
+    cacheDir: join(options.userDataDir, 'native'),
+  });
+  const nativeAudioPlayer = nativeAudioHelper.ok && nativeAudioHelper.helperPath !== undefined
+    ? createNativeAudioPlayer({ helperPath: nativeAudioHelper.helperPath })
+    : null;
+  /** 真实播放头 → 表演时钟（performanceDirector 创建后注入，避免前向引用） */
+  let playbackHeadSink: ((positionMs: number) => void) | null = null;
   let playingSong: ReturnType<typeof spawn> | null = null;
   let voiceStopAll: (() => void) | null = null;
   const songPlayback: SongPlaybackPort = {
-    playFile: ({ filePath }) => {
+    playFile: ({ filePath, durationMs }) => {
       voiceStopAll?.();
+      if (nativeAudioPlayer !== null) {
+        return nativeAudioPlayer
+          .play({
+            filePath,
+            ...(durationMs > 0 ? { durationMs } : {}),
+            onPosition: (positionMs) => playbackHeadSink?.(positionMs),
+          })
+          .then((result) => ({
+            ok: result.ok,
+            playedMs: result.playedMs,
+            ...(result.reason === undefined ? {} : { reason: result.reason }),
+          }));
+      }
       return new Promise((resolve) => {
         const startedAt = Date.now();
         const settle = (ok: boolean, reason?: string): void => {
@@ -435,6 +462,7 @@ export async function createV2KernelHost(options: {
       });
     },
     stop: () => {
+      nativeAudioPlayer?.stop();
       const player = playingSong;
       playingSong = null;
       if (player !== null && player.exitCode === null) {
@@ -468,6 +496,12 @@ export async function createV2KernelHost(options: {
     events: kernel.events,
   });
   const stageRuntime = new StageRuntime();
+  // 真实播放头驱动表演时钟：位置来自 AVAudioPlayer.currentTime，而非宿主墙钟推算
+  playbackHeadSink = (positionMs: number): void => {
+    const perf = performanceDirector.tickClock(positionMs);
+    stageRuntime.applyLipSync(perf.lipSync);
+    stageRuntime.showLyrics(perf.lyrics);
+  };
   stageRuntime.registerBinding({
     characterId: 'char_xiaojing',
     displayName: '小鲸',
@@ -1274,6 +1308,12 @@ export async function createV2KernelHost(options: {
     status: songConsoleHost.snapshot(),
     lastPlayback: songConsoleHost.lastPlayback(),
     playbackReceipts: songConsoleHost.playbackReceipts(),
+  }));
+  ipcMain.handle('v2:song-playback-head', () => ({
+    /** 是否由固定功能原生播放器承担（false = afplay 回退，没有位置回报） */
+    realPlayhead: nativeAudioPlayer !== null,
+    active: nativeAudioPlayer?.active() ?? false,
+    positionMs: nativeAudioPlayer?.positionMs() ?? null,
   }));
   ipcMain.handle('v2:song-shutdown', (_e, reason?: string) =>
     songConsoleHost.shutdown(typeof reason === 'string' && reason.trim() !== '' ? reason : 'user_quit'),

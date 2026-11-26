@@ -81,6 +81,20 @@ interface SnapshotView {
   playbackReceipts: SongPlaybackReceiptView[];
 }
 
+interface PlaybackHeadView {
+  realPlayhead: boolean;
+  active: boolean;
+  positionMs: number | null;
+}
+
+function formatHead(positionMs: number | null): string {
+  if (positionMs === null) return '—';
+  const totalSeconds = Math.max(0, Math.floor(positionMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${String(Math.floor((positionMs % 1000) / 100))}`;
+}
+
 interface FormState {
   title: string;
   artist: string;
@@ -124,6 +138,7 @@ function newRequestId(): string {
 export function SongConsolePanel(): React.JSX.Element {
   const [capabilities, setCapabilities] = useState<CapabilityView | null>(null);
   const [snapshot, setSnapshot] = useState<SnapshotView | null>(null);
+  const [head, setHead] = useState<PlaybackHeadView | null>(null);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -144,6 +159,10 @@ export function SongConsolePanel(): React.JSX.Element {
       .v2SongSnapshot()
       .then((result) => setSnapshot(result))
       .catch(() => undefined);
+    void window.directorBridge
+      .v2SongPlaybackHead()
+      .then((result) => setHead(result))
+      .catch(() => setHead(null));
   }, []);
 
   useEffect(() => {
@@ -153,11 +172,13 @@ export function SongConsolePanel(): React.JSX.Element {
 
   // 进行中的管线才轮询；终态后停止轮询，避免无意义 IPC
   useEffect(() => {
-    const active = status?.state === 'preparing' || status?.state === 'streaming' || status?.state === 'completing';
-    if (!active) return undefined;
-    const timer = window.setInterval(loadSnapshot, 1000);
+    const preparing = status?.state === 'preparing' || status?.state === 'streaming' || status?.state === 'completing';
+    // 播放头单独轮询：真实声音在播时即使管线已 completed 也要继续显示位置
+    const playing = head?.active === true;
+    if (!preparing && !playing) return undefined;
+    const timer = window.setInterval(loadSnapshot, playing ? 250 : 1000);
     return () => window.clearInterval(timer);
-  }, [status?.state, loadSnapshot]);
+  }, [status?.state, head?.active, loadSnapshot]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]): void => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -466,9 +487,27 @@ export function SongConsolePanel(): React.JSX.Element {
 
           {/* 4b. 播放回执 */}
           <section className="card p-3.5" data-song-receipts>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold">播放回执</h2>
               <span className="pill">{snapshot?.playbackReceipts.length ?? 0} 条</span>
+            </div>
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]" data-song-playhead>
+              <span
+                className="pill"
+                style={{ fontFamily: 'var(--font-mono)' }}
+                data-song-playhead-position={head?.positionMs ?? ''}
+              >
+                播放头 {formatHead(head?.positionMs ?? null)}
+              </span>
+              {head === null ? (
+                <span style={{ color: 'var(--text-3)' }}>播放头状态未知</span>
+              ) : !head.realPlayhead ? (
+                <span style={{ color: 'var(--amber)' }}>afplay 回退：无位置回报（非真实播放头）</span>
+              ) : head.active ? (
+                <span style={{ color: 'var(--green)' }}>真实播放头 · AVAudioPlayer.currentTime</span>
+              ) : (
+                <span style={{ color: 'var(--text-3)' }}>真实播放头就绪 · 待播放</span>
+              )}
             </div>
             {(snapshot?.playbackReceipts ?? []).length === 0 ? (
               <p className="text-xs" style={{ color: 'var(--text-3)' }}>还没有真实播放回执（首切片就绪并播放后才会写入）。</p>

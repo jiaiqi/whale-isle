@@ -908,6 +908,12 @@ export interface DirectorBridge {
     lastPlayback: SongPlaybackReceiptView | null;
     playbackReceipts: SongPlaybackReceiptView[];
   }>;
+  /** 真实播放头：realPlayhead=false 表示走 afplay 回退，没有位置回报 */
+  v2SongPlaybackHead(): Promise<{
+    realPlayhead: boolean;
+    active: boolean;
+    positionMs: number | null;
+  }>;
   v2SongCancel(requestId: string): Promise<{ ok: boolean; cancelled: boolean; reason?: string }>;
   v2SongShutdown(reason?: string): Promise<{ cancelledRequestId: string | null }>;
   v2PerfSnapshot(): Promise<{

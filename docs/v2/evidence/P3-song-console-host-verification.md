@@ -97,7 +97,7 @@
 2. **RVC 声线转换未实测**：全盘无 `.pth`，`rvcModelPath/rvcIndexPath` 的真实推理效果无从谈起。
 3. **首切片真实播放未实测**：`afplay` 挂载分支未被真实音频触发（E2E 明确断言 `lastPlayback === null`）。
 4. **真实音频路径的延迟指标未测**：「缓存命中 <50ms」只有 `cacheLookupMs` 度量字段，无真实曲库样本支撑。
-5. **`positionMs` ↔ 真实播放头仍未闭环**：与 P3-01 的歌词时钟缺口同源，属实现缺口而非素材缺口。
+5. ~~`positionMs` ↔ 真实播放头仍未闭环~~ → 已于 2026-11-26 以独立原子工单闭合（见第 7 节）；真机「边唱边对歌词」仍需真实歌声后端。
 6. ~~中控台尚无点歌 UI 面板~~ → 已于 2026-11-26 以独立原子工单接入（见第 6 节）。
 
 ---
@@ -138,3 +138,38 @@
 
 1. **真唱**：本机无 Demucs/RVC 后端与授权声线权重，面板只验证了「缺能力如实报缺」。
 2. **真实播放头**：`positionMs` 仍未被绑定到真实音频播放位置（`afplay` 不回报进度），面板只能显示播放回执的开始/结束与时长；该缺口单独立工单（Swift 播放器回报真实播放头）。
+
+---
+
+## 7. 真实音频播放头接线（2026-11-26）
+
+### 7.1 为什么不是 afplay
+
+`afplay` 只回报进程退出码，拿不到播放位置；此前宿主用 `Date.now() - startedAt` 当 `playedMs`，歌词/口型只能靠墙钟推算。本节把 `positionMs` 接到**真实播放位置**。
+
+### 7.2 改动（8 个业务源码文件，达单工单上限）
+
+| 文件 | 作用 |
+| --- | --- |
+| `tools/native/macos-audio-helper.swift`（新建） | `AVAudioPlayer` 播放器：`probe` 报可解码时长，`play` 每 100ms 输出 `{"type":"position","positionMs":N,"wallMs":N}`，结束/停止/失败分别输出 `ended`/`stopped`/`error`；SIGTERM 走 `DispatchSource` 转标志位，能停止并回报停止位置 |
+| `apps/desktop-host/src/main/native-audio-player.ts`（新建） | 编译缓存（源码 SHA-256 版本化）+ spawn 参数数组 + 逐行 JSON 解析；`playedMs` 取真实播放头最远位置；未收到 `ended` 的 0 退出码**不算成功** |
+| `apps/desktop-host/src/main/native-audio-player.spec.ts`（新建） | 9 例：位置回报/停止/报错/异常退出/并发拒绝/非法行忽略/spawn 失败/编译缓存与失败 |
+| `apps/desktop-host/src/main/v2-kernel-host.ts` | 启动时装配原生播放器；`songPlayback.playFile` 优先原生播放器（带 `durationMs`），不可用时回退 `afplay`；播放头回调驱动 `PerformanceDirector.tickClock()` + 舞台口型/歌词；新增 `v2:song-playback-head` |
+| `apps/desktop-host/src/preload/index.ts` / `renderer/director/bridge.ts` | 暴露 `v2SongPlaybackHead()` 与类型 |
+| `apps/desktop-host/src/renderer/director/song-console-panel.tsx` | 面板显示「播放头 m:ss.d」，并区分「真实播放头就绪/在播」与「afplay 回退：无位置回报」；在播时 250ms 轮询 |
+| `apps/desktop-host/e2e/song-console.e2e.spec.ts` | 断言面板出现播放头区块，且 darwin 上 `realPlayhead=true`、未播放时 `active=false` |
+
+### 7.3 实测证据
+
+1. **helper 本体（本机 `[REAL-DEVICE]` 级本地执行）**：`swiftc -O` 编译 2000ms 440Hz WAV，`probe` 返回 `{"durationMs":2000}`；`play --duration-ms 1200` 连续输出位置 `0→79→180→…→1289`（wallMs 与 positionMs 基本同步），`SIGTERM` 后输出 `{"type":"stopped","positionMs":583}`。
+2. **TS 客户端（真实子进程）**：`createNativeAudioPlayer` 走完整编译缓存（`compileMs: 645`）后播放同一 WAV（`--duration-ms 800`），回调 10 次位置，结果 `{"ok":true,"playedMs":884,"realPlayhead":true}` —— `playedMs` 来自真实播放头而非墙钟。
+3. **单测**：`native-audio-player.spec.ts` **9/9 PASS**。
+4. **Electron 真实渲染**：`song-console.e2e.spec.ts` **1/1 PASS（2.51s）**，`v2SongPlaybackHead()` 返回 `realPlayhead=true`、`active=false`，面板文案落在「真实播放头就绪 · 待播放」。
+5. **门禁**：`pnpm verify:gate` **7 过 / 0 跳过 / 0 待接线**。
+
+### 7.4 仍未验证（不得当成已闭环）
+
+1. **真实歌声下的音画同步**：无 Demucs/RVC 后端与授权声线权重，`playFile` 的真实分支仍未被真实歌声触发；「边唱边对歌词」需要后端到位后再验。
+2. **长音频（≥25s）位置精度与漂移**：只用 2s 正弦波验证；长曲需真实产物。
+3. **afplay 回退路径**：本机 `swiftc` 可用，回退分支只有单测覆盖，未在真机触发。
+4. **首次启动编译开销**：源码哈希未命中时同步编译约 0.6–1s（本机实测 645ms），打包态找不到源码会直接回退 afplay（如实标 `realPlayhead=false`）。
