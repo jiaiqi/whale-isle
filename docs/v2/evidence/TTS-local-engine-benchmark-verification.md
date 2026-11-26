@@ -323,3 +323,19 @@ synthesize(): { degraded: true, placeholder: true, durationMs: 2200, audioBytes:
 | 商业 API（MiniMax / OpenAI） | **未实测**（缺 Key） | **未实测** | 不适用（无本地冷启动） |
 
 这张表的右两行是空的，原因就是 10.2 的缺 Key——不是没测，是测不了，不许拿估算值填。
+
+---
+
+## 11. 另一条路：ZipVoice-Distill 内部验证（2026-11-27，`[INTERNAL-VALIDATION-NONCOMMERCIAL]`）
+
+CosyVoice2 在本机不可用，不等于「本地引擎这条路彻底死了」。同机另跑一条 onnx 路线，结论见
+[zipvoice-internal-validation.md](./zipvoice-internal-validation.md)：
+RTF P50 **0.475** / 一句话 **1.2–2.9 秒** / 冷启动 **0.61 秒** / **678 MB**，中文 ASR 回环 11/15 逐字一致。
+
+但**它不能拿来替代本文档的处置结论**，原因三条：
+
+- 权重 **CC-BY-NC**（Emilia 训练数据），不可商用、不可随产品分包——这条单独就否掉了产品化。
+- **没有情绪 instruct 通道**，产品要的 5 情绪它做不到。
+- 还没接产品那条路：`fetch-engine.mjs` 只能下 HF 单文件、无压缩包解压；`audio-ai-worker` 没有 onnxruntime 后端。
+
+所以本文档 §5 的处置（默认商业 API、本地引擎留作可选离线档）**保持不变**。

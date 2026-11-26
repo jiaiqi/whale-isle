@@ -5,6 +5,14 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Validated（ZipVoice-Distill 内部验证 `[INTERNAL-VALIDATION-NONCOMMERCIAL]`，权重 CC-BY-NC）
+
+- **结论：能跑通、中文能听懂、CPU 上比 CosyVoice2 快约 5 倍**。`sherpa-onnx` 2.0.3 + `sherpa-onnx-zipvoice-distill-int8-zh-en-emilia`（约 204 MB）+ `vocos_24khz.onnx`，`provider=cpu` / `num_threads=4` / `num_steps=4`，15 句中文。
+- **实测数字**：RTF P50 **0.475** / P95 0.543 / 最慢 0.642；一句话 **1.2–2.9 秒**；冷启动（含权重加载）**0.61 秒**；峰值 RSS **678 MB**；NaN 0，削波合计 11 个样本点。对标本机 CosyVoice2-0.5B 的 RTF P50 2.42 / 一句话 17–43 秒 / 冷启动 30.6 秒 / 4.63 GB。
+- **可懂度代理**：产物送中文 Paraformer 回环，11/15 逐字还原，字级近似错率 P50 0.000 / 均值 0.023；错的 4 句都只差 1–3 字且集中在语气词与拟声词。**这是客观代理，不是人耳听感结论。**
+- **许可与边界**：权重 CC-BY-NC（Emilia 训练数据），**不进仓库、不进主安装包、不得商用**；产物落在 `artifacts/tts-ab/zipvoice-internal-noncommercial/`（`artifacts/` 已 gitignore），仓库内只留本文档与证据文档。
+- **如实记录的缺口**：`fetch-engine.mjs` 只支持 HF 单文件下载、无压缩包解压，本次权重是 `/tmp` 手工解压（**没走产品按需下载路径**）；`audio-ai-worker` 无 onnxruntime 后端，**未接入**；模型无情绪 instruct 通道，产品要的 5 情绪它做不到；Windows、多音色、长句、人耳听感均未测。证据 [zipvoice-internal-validation.md](./docs/v2/evidence/zipvoice-internal-validation.md)。
+
 ### Added（默认档商业 TTS：两家都接，供应商由用户显式选择）
 
 - **`CommercialTtsProviderSchema`**（`minimax-tts` / `openai-compatible-tts`）落到共享契约，桌宠偏好新增 `voiceCommercialProvider`，默认 `minimax-tts`。

@@ -72,7 +72,7 @@
 
 ### `V2-P1-02`：真实 `VoiceProvider`、独立 `VoiceIdentity`、口型联动与多轨 `AudioMixer`
 - **状态**：`IMPLEMENTED_UNVERIFIED`（2026-11-25 代码/单测/门禁 7/7/Electron 45 E2E 完成；待真机人工听感、云端 TTS Key 实测与 Windows SAPI 硬件验收）
-  - **2026-11-27 增补**：默认档切商业 API 已落地为显式档位（`voiceEngineTier`，本地引擎降为可选离线档，`tierHonored` 如实报告是否兑现）；UI 直接渲染离线档体感代价；`StubLocalBackend` 冒名与 `supportsEmotion` 硬编码已修，`/health.tts` 走实测探针。仍待：**两家商业 TTS 真实 Key 的听感对拍**（owner 已批：MiniMax + OpenAI 都接）与 ZipVoice 内部验证（非商用权重），见 [TTS-local-engine-benchmark-verification.md](./evidence/TTS-local-engine-benchmark-verification.md) §9。
+  - **2026-11-27 增补**：默认档切商业 API 已落地为显式档位（`voiceEngineTier`，本地引擎降为可选离线档，`tierHonored` 如实报告是否兑现）；UI 直接渲染离线档体感代价；`StubLocalBackend` 冒名与 `supportsEmotion` 硬编码已修，`/health.tts` 走实测探针。仍待：**两家商业 TTS 真实 Key 的听感对拍**（owner 已批：MiniMax + OpenAI 都接；当前实例为 `--use-mock-keychain` 读不到真实凭据，真实 vault 缺 `openai-tts`，缺项见证据文档 §10.2）与 ZipVoice 内部验证（**已跑完**：RTF P50 0.475 / 一句话 1.2–2.9 秒 / 冷启动 0.61 秒 / 678 MB / ASR 回环 11/15 逐字一致，但权重 CC-BY-NC 不可商用不可随包、无情绪通道、未接 `fetch-engine.mjs` 与 Worker，见 [zipvoice-internal-validation.md](./evidence/zipvoice-internal-validation.md)），见 [TTS-local-engine-benchmark-verification.md](./evidence/TTS-local-engine-benchmark-verification.md) §9。
 - **目标**：P1 即交付真实可用角色语音与口型联动（不捆绑重型本地模型），改造 `AudioLeaseManager` 解除单音轨对伴奏/音效的阻塞。
 - **依赖**：`V2-P1-01`
 - **实现方案**：抽象 `VoiceProvider`（真实云端情绪 TTS API + 本地 Worker 接入，macOS `say`/Win SAPI 仅标为降级方案）；拆分发言权（Speech Floor）与 `AudioMixer` 多轨播放；输出音量包络/Viseme 驱动桌宠嘴型。
