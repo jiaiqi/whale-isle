@@ -49,5 +49,5 @@
 ## 四、验证口径（诚实区分）
 
 - **单测验证（`bubbles.spec.ts`、`bubble-lifecycle.spec.ts`、`packages/shared-protocol/src/index.spec.ts`）**：覆盖 6 种契约、自适应尺寸、朝向/屏边/障碍物智能求解、6 轨并发裁剪、极端尺寸舞台无重叠与 `<think>` 清洗。
-- **`[E2E-HOST]`（`ui.e2e.spec.ts`、`pet-evolution.e2e.spec.ts`）**：真实启动 Electron 校验 `pointer-events: none`、`z-index: 7`、`ShangShouGummy` 字体链、单气泡突破 `220px`、多气泡组合零重叠、朝向切换 DOM 镜像与 `data-tail` 翻转及截图留证。
+- **`[E2E-HOST]`（`ui.e2e.spec.ts`、`pet-evolution.e2e.spec.ts`）**：真实启动 Electron 校验 `pointer-events: none`、`z-index: 7`、`ShangShouGummy` 字体链、单气泡突破 `220px`、多气泡组合零重叠、朝向切换 DOM 镜像与 `data-tail` 翻转及截图留证。实测同时定性：原 `pet-evolution.e2e.spec.ts:138` 的彩蛋关窗超时并非气泡回归，而是共享 `e2e-profile` 下本机运行中 AI CLI 经 `cliLogWatcher` 自动召唤跨 AI 桌宠窗导致的窗口计数过宽误报（目标彩蛋窗本身在 `eggCatch` 后 6s 准时销毁），现已收敛为精确校验目标 `egg.agentId` 窗口关闭。
 - **待人类宿主真机验收项**：在 macOS / Windows 桌面真实明暗壁纸下抽检 6 种语义气泡的视觉观感、文字排版呼吸感与连播节奏。
