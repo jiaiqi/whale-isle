@@ -17,6 +17,19 @@ const LAYERS = [
 ] as const;
 type LayerId = (typeof LAYERS)[number]['id'];
 
+/** 「预演」可见徽章：演示数据必须在 UI 上如实标记，不得只在代码注释里说明（审计红线：严禁虚假指标冒充真实数据） */
+function PreviewBadge(): React.JSX.Element {
+  return (
+    <span
+      className="mono"
+      style={{
+        fontSize: 8.5, padding: '1px 5px', borderRadius: 99, letterSpacing: 0.5,
+        color: 'var(--amber)', border: '1px dashed var(--amber-line)', background: 'var(--amber-dim)',
+      }}
+    >预演</span>
+  );
+}
+
 export interface ObsPanelProps {
   rice: number;
   riceCap: number;
@@ -146,8 +159,8 @@ export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.El
 
         {on.vote && (
           <div className="absolute right-3 top-3 w-44 rounded-xl p-2.5" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', backdropFilter: 'blur(12px)' }}>
-            <div className="mono mb-1.5 flex justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
-              <span>弹幕议会</span><span>0:20</span>
+            <div className="mono mb-1.5 flex items-center justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
+              <span>弹幕议会 <PreviewBadge /></span><span>0:20</span>
             </div>
             {['继续钓鱼', '回家睡觉', '下矿碰碰运气'].map((label, i) => {
               const p = Math.round(((votes[i] ?? 0) / Math.max(1, total)) * 100);
@@ -185,13 +198,13 @@ export function ObsPanel({ rice, riceCap, events }: ObsPanelProps): React.JSX.El
 
         {on.bar && (
           <div className="absolute bottom-4 left-1/2 w-[70%] -translate-x-1/2 rounded-full px-4 py-1.5 text-center text-[11px]" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', color: 'var(--text-2)' }}>
-            弹幕交互条：发送 <span className="mono" style={{ color: 'var(--blue)' }}>点歌 晴天</span> / <span className="mono" style={{ color: 'var(--violet)' }}>投票 2</span>
+            弹幕交互条 <PreviewBadge />：发送 <span className="mono" style={{ color: 'var(--blue)' }}>点歌 晴天</span> / <span className="mono" style={{ color: 'var(--violet)' }}>投票 2</span>
           </div>
         )}
 
         {on.lyrics && (
           <div className="absolute bottom-16 right-3 w-52 rounded-xl p-2.5" style={{ background: 'var(--surface)', border: '1px solid var(--stroke-2)', backdropFilter: 'blur(12px)' }}>
-            <div className="mono mb-1 text-[10px]" style={{ color: 'var(--text-3)' }}>正在演唱 · 学猫叫</div>
+            <div className="mono mb-1 flex items-center gap-1 text-[10px]" style={{ color: 'var(--text-3)' }}>正在演唱 · 学猫叫 <PreviewBadge /></div>
             <div className="text-[11px]" style={{ color: 'var(--blue)' }}>我们一起学猫叫</div>
             <div className="text-[10px]" style={{ color: 'var(--text-3)' }}>一起喵喵喵喵喵</div>
             <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: 'var(--inset)' }}>

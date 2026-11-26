@@ -630,6 +630,8 @@ export default {
         directorBridge: { liveSnapshot(): Promise<{ received: number; accepted: number }> };
       }).directorBridge.liveSnapshot());
       expect(snapshot.received).toBeGreaterThanOrEqual(4);
+      // 演示挂件必须带可见「预演」徽章（审计红线：演示数据不得只在代码注释标注而 UI 上冒充真实数据）
+      expect(await page.locator('text=预演').count()).toBeGreaterThanOrEqual(3);
     } finally {
       await app.close();
     }
