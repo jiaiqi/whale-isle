@@ -11,6 +11,11 @@
 - **`shared-protocol/src/model.ts`**：多模态消息契约——`ChatContentPart`（text/image，base64 与 url 双源）、单图 base64 ≤6M 字符、单消息 ≤8 parts，供 P3-04B 网关映射与内容理解管线消费。
 - 两域不进 `CONTRACT_SCHEMAS` 跨语言注册（C#/Python 无消费方，沿用 P3-03 browser-computer 先例），`gen:contracts` 零漂移；新增 9 例契约单测。
 
+### Added（V2-P3-04B：模型网关多模态）
+
+- **`model-gateway/gateway.ts`**：`ChatMessage.content` 扩展为纯文本或多模态 parts（消费 P3-04A 契约）；OpenAI 兼容协议映射 `image_url`（base64 → `data:` URI、url 直传），Anthropic 协议映射 image block（base64/url 双源，system 仅文本、带图片即 BAD_REQUEST 不上行）；入站消息先过 `GatewayChatMessageSchema` 契约校验；脱敏覆盖文本 part 与图片外链 URL（base64 图像数据不做文本脱敏）。
+- **视觉预检（诚实口径）**：`discoveredModels` 清单明确 `supportsVision=false` 的模型记 `MODEL_NO_VISION` 直接跳过不浪费请求；清单无描述（未知）则放行由供应商真实 400 回答。新增 6 例单测，包分支覆盖 94.27%。
+
 ### Fixed（批次 C：UI 诚实性）
 
 - **OBS 页演示数据可见标记** `obs-panel.tsx`：弹幕议会投票卡、RVC 歌词卡、弹幕交互条三处演示数据新增可见「预演」徽章（此前只在代码注释标注，UI 上无法与真实数据区分）；饭碗与双轨气泡用真实数据不标；`ui.e2e` 新增徽章 ≥3 可见的防回归断言。

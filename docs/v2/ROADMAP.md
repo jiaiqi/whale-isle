@@ -139,9 +139,9 @@
 - **`V2-P3-02`（`IMPLEMENTED_UNVERIFIED`）：LifeRuntime 驱动的直播中控与 OBS 舞台（真实平台流接入 + 曲库版权门禁）**（`packages/shared-protocol/src/live` 契约、`LiveRuntimeV2` 弹幕去重护栏/礼物合并/四重版权点歌门禁/`probeLivePlatformEndpoint` 诚实降级探测、OBS 舞台同步、场次摘要、宿主 7 路 `v2:live-*` IPC 与 Tidepaper 中控控件完成；`live-runtime.ts` `91.66%` 分支 + `verify:gate` 7/7 + Electron 45 E2E 4 套件全绿，详见 [P3-live-runtime-obs-verification.md](./evidence/P3-live-runtime-obs-verification.md)；真实抖音/B站/YouTube 测试直播间开播实测待 `[REAL-DEVICE]`）
 - **`V2-P3-03`（`IMPLEMENTED_UNVERIFIED`）：受控 Browser Use 与 Computer Use（Per-Character Profile 隔离 + `ComputerUseLease` 单主控互斥）**（`packages/shared-protocol/src/browser-computer.ts` 契约、`AccountVault` / `BrowserProfileMgr` 按角色隔离与级联删除、`ComputerUseLeaseManager` 设备级单主控 + 心跳/TTL + 用户物理输入 ≤1s 抢占、`DeterministicBrowserRunner` 确定性动作与逐步 guard、CAPTCHA/登录挑战 `awaiting_human` 人工交接、P5 一次性确认 token、提示词注入按数据处理不提权、`powerMonitor` 输入监控与 feature flag 默认关闭的 OS 输入执行器骨架，及宿主 `v2:auto-*` IPC 与 HUD 双租约胶囊；ADR-004 回归验证游戏租约不受用户输入影响；runtime-core `90.16%` 分支 + `verify:gate` 7/7 + Electron 45 E2E 3/3 与 `ui.e2e` 9/9 全绿，详见 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)；真实 CGEvent/SendInput 注入、macOS TCC 打包态授权与真实站点风控待 `[REAL-DEVICE]`）
 - **`V2-P3-04`（`DOING`）：Digital Life L1（自主浏览、多模态内容理解、兴趣形成与日常调度）**（owner 2026-11-26 批准拆分为 A–F 六个原子工单，依赖 A →（B ∥ C）→ D → E → F）
-  - `P3-04A`（`DOING`）：契约先行——`social.ts` L1 只读浏览会话/平台能力矩阵/内容理解/兴趣信号 + `model.ts` 多模态消息 parts
-  - `P3-04B`（`PENDING`）：model-gateway 多模态映射与脱敏
-  - `P3-04C`（`PENDING`）：SocialRuntime L1 只读浏览内核
+  - `P3-04A`（`DONE`）：契约先行——`social.ts` L1 只读浏览会话/平台能力矩阵/内容理解/兴趣信号 + `model.ts` 多模态消息 parts（9 例契约单测，纯本地可验）
+  - `P3-04B`（`DONE`）：model-gateway 多模态映射与脱敏（OpenAI image_url / Anthropic image block 双协议映射、文本与图片 URL 脱敏、supportsVision=false 预检跳过、入站契约校验；6 例新单测，包分支覆盖 94.27%；真实供应商多模态调用联调随 P3-04 整链验收）
+  - `P3-04C`（`DOING`）：SocialRuntime L1 只读浏览内核
   - `P3-04D`（`PENDING`）：内容理解管线与兴趣沉淀
   - `P3-04E`（`PENDING`）：日程调度接线与状态可见
   - `P3-04F`（`PENDING`）：mock-harness 站点仿真与 E2E 验收

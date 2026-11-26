@@ -728,3 +728,177 @@ describe('ModelGateway · Anthropic 协议', () => {
     expect('reasoning_effort' in bodyWithout).toBe(false);
   });
 });
+
+// ---- 多模态消息（V2-P3-04B：text/image parts 双协议映射 + 视觉预检 + 脱敏）----
+describe('ModelGateway · 多模态消息（V2-P3-04B）', () => {
+  const PNG_B64 = 'aVBORw0KGgoAAAANSUhEUgAAAAE=';
+
+  it('OpenAI 兼容：image parts 映射为 image_url（base64 → data: URI；url 直传），文本 part 脱敏', async () => {
+    const bodies: string[] = [];
+    const gateway = new ModelGateway({
+      profile: PROFILE,
+      providers: PROVIDERS,
+      groups: [GROUP],
+      keys: KEYS,
+      fetchImpl: async (_url, init) => {
+        bodies.push(init.body);
+        return okResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '看看这张图，密钥是 sk-abcdef0123456789abcd' },
+          { type: 'image', source: { kind: 'base64', mime: 'image/png', dataBase64: PNG_B64 } },
+          { type: 'image', source: { kind: 'url', url: 'https://example.com/cover.jpg' } },
+        ],
+      },
+    ]);
+    const body = JSON.parse(bodies[0] ?? '{}') as {
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    const parts = body.messages[0]!.content;
+    expect(parts[0]).toEqual({ type: 'text', text: expect.stringContaining('{{MASKED}}') });
+    expect(parts[1]).toEqual({ type: 'image_url', image_url: { url: `data:image/png;base64,${PNG_B64}` } });
+    expect(parts[2]).toEqual({ type: 'image_url', image_url: { url: 'https://example.com/cover.jpg' } });
+  });
+
+  it('Anthropic：image parts 映射为 image block（base64/url 双源），system 仅文本拼接', async () => {
+    const bodies: string[] = [];
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async (_url, init) => {
+        bodies.push(init.body);
+        return anthropicOkResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [
+      { role: 'system', content: [{ type: 'text', text: '你是大肥鱼' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '这是啥' },
+          { type: 'image', source: { kind: 'base64', mime: 'image/jpeg', dataBase64: PNG_B64 } },
+          { type: 'image', source: { kind: 'url', url: 'https://example.com/x.webp' } },
+        ],
+      },
+    ]);
+    const body = JSON.parse(bodies[0] ?? '{}') as {
+      system?: string;
+      messages: Array<{ role: string; content: Array<Record<string, unknown>> }>;
+    };
+    expect(body.system).toBe('你是大肥鱼');
+    const parts = body.messages[0]!.content;
+    expect(parts[0]).toEqual({ type: 'text', text: '这是啥' });
+    expect(parts[1]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: PNG_B64 } });
+    expect(parts[2]).toEqual({ type: 'image', source: { type: 'url', url: 'https://example.com/x.webp' } });
+  });
+
+  it('Anthropic：system 消息带图片 → BAD_REQUEST 直接抛出（不发请求）', async () => {
+    let called = 0;
+    const gateway = new ModelGateway({
+      profile: ANTHROPIC_PROFILE,
+      providers: [ANTHROPIC_PROVIDER],
+      keys: ANTHROPIC_KEYS,
+      fetchImpl: async () => {
+        called += 1;
+        return anthropicOkResponse();
+      },
+    });
+    await expect(
+      gateway.chat('MAIN_PERSONA_BRAIN', [
+        { role: 'system', content: [{ type: 'image', source: { kind: 'url', url: 'https://example.com/x.png' } }] },
+        { role: 'user', content: 'hi' },
+      ]),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(called).toBe(0);
+  });
+
+  it('视觉预检：清单明确 supportsVision=false 的模型不浪费请求（MODEL_NO_VISION），未知清单放行', async () => {
+    const seen: string[] = [];
+    const textOnlyProvider = {
+      id: 'text-only',
+      name: '纯文本',
+      category: 'OFFICIAL_LLM',
+      variants: [{ region: 'CN', planType: 'PAY_AS_YOU_GO', baseUrl: 'https://api.text-only.com/v1', isFullUrl: false }],
+      apiKeyMaskedOrRef: '',
+      discoveredModels: [{ id: 'plain-1', supportsVision: false }],
+    } satisfies z.input<typeof ModelProviderConfigSchema>;
+    const gateway = new ModelGateway({
+      profile: {
+        profileId: 'DELUXE_LIVESTREAM',
+        displayName: 'x',
+        roleBindings: { MAIN_PERSONA_BRAIN: 'group/vision-pool' },
+        secretMaskingEnabled: true,
+      },
+      providers: [textOnlyProvider, PROVIDERS[0]!],
+      groups: [
+        {
+          groupId: 'vision-pool',
+          strategy: 'PROMPT_CACHE_STICKY',
+          candidates: [
+            { providerId: 'text-only', modelId: 'plain-1', weight: 90 },
+            { providerId: 'deepseek-official', modelId: 'deepseek-reasoner', weight: 10 },
+          ],
+        },
+      ],
+      keys: { 'text-only': 'sk-text-only', 'deepseek-official': KEYS['deepseek-official']! },
+      fetchImpl: async (url, init) => {
+        seen.push(url);
+        return okResponse();
+      },
+    });
+    const receipt = await gateway.chat('MAIN_PERSONA_BRAIN', [
+      { role: 'user', content: [{ type: 'image', source: { kind: 'base64', mime: 'image/png', dataBase64: PNG_B64 } }] },
+    ]);
+    // text-only 被预检跳过（清单明确无视觉），落到清单为空（未知放行）的 deepseek-official
+    expect(seen).toEqual(['https://api.deepseek.com/v1/chat/completions']);
+    expect(receipt.route.providerId).toBe('deepseek-official');
+  });
+
+  it('入站契约校验：parts 超上限 / 非法角色在网关入口直接抛出，不上行', async () => {
+    let called = 0;
+    const gateway = new ModelGateway({
+      profile: PROFILE,
+      providers: PROVIDERS,
+      groups: [GROUP],
+      keys: KEYS,
+      fetchImpl: async () => {
+        called += 1;
+        return okResponse();
+      },
+    });
+    await expect(
+      gateway.chat('MAIN_PERSONA_BRAIN', [
+        {
+          role: 'user',
+          content: Array.from({ length: 9 }, () => ({ type: 'text' as const, text: 'x' })),
+        },
+      ]),
+    ).rejects.toThrow();
+    await expect(
+      gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'tool' as never, content: 'x' }]),
+    ).rejects.toThrow();
+    expect(called).toBe(0);
+  });
+
+  it('纯文本 content 行为不变（兼容存量调用），sanitizer 关闭时原文直传', async () => {
+    const bodies: string[] = [];
+    const gateway = new ModelGateway({
+      profile: { ...PROFILE, secretMaskingEnabled: false },
+      providers: PROVIDERS,
+      groups: [GROUP],
+      keys: KEYS,
+      fetchImpl: async (_url, init) => {
+        bodies.push(init.body);
+        return okResponse();
+      },
+    });
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: '原文 sk-live-primary-key-000000000001' }]);
+    const body = JSON.parse(bodies[0] ?? '{}') as { messages: Array<{ content: string }> };
+    expect(body.messages[0]!.content).toBe('原文 sk-live-primary-key-000000000001');
+  });
+});

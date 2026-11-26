@@ -9,7 +9,9 @@
  */
 import type { z } from 'zod';
 import {
+  GatewayChatMessageSchema,
   ModelProviderConfigSchema,
+  type ChatMessageContent,
   type DiningProfilePreset,
   type ModelProviderConfig,
   type StickyRoutingGroup,
@@ -53,7 +55,8 @@ export interface UsageRecord {
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  /** 纯文本或多模态 parts（V2-P3-04B；契约见 shared-protocol/src/model.ts） */
+  content: ChatMessageContent;
 }
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
@@ -107,20 +110,77 @@ interface ChatCompletionResponse {
   error?: { message?: string };
 }
 
+/** Anthropic Messages 内容块（text / image；image 支持 base64 与 url 双源） */
+type AnthropicContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } | { type: 'url'; url: string } };
+
 interface AnthropicRequestMessages {
   system: string;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: Array<{ role: 'user' | 'assistant'; content: string | AnthropicContentBlock[] }>;
 }
 
-/** Anthropic 不支持 system 角色：抽取 system 消息拼成顶层 system 字符串 */
+/** 多模态 parts → Anthropic 内容块 */
+function toAnthropicContent(content: ChatMessageContent): string | AnthropicContentBlock[] {
+  if (typeof content === 'string') return content;
+  return content.map((part): AnthropicContentBlock =>
+    part.type === 'text'
+      ? { type: 'text', text: part.text }
+      : {
+          type: 'image',
+          source:
+            part.source.kind === 'base64'
+              ? { type: 'base64', media_type: part.source.mime, data: part.source.dataBase64 }
+              : { type: 'url', url: part.source.url },
+        },
+  );
+}
+
+/** 多模态 parts → OpenAI 兼容内容（image_url 统一走 data: URI 或外链） */
+function toOpenAiContent(content: ChatMessageContent): string | Array<Record<string, unknown>> {
+  if (typeof content === 'string') return content;
+  return content.map((part) =>
+    part.type === 'text'
+      ? { type: 'text', text: part.text }
+      : {
+          type: 'image_url',
+          image_url: {
+            url: part.source.kind === 'base64' ? `data:${part.source.mime};base64,${part.source.dataBase64}` : part.source.url,
+          },
+        },
+  );
+}
+
+/** 脱敏：文本 part 与图片外链 URL 过 sanitizer；base64 图像数据是二进制内容，不做文本脱敏 */
+function sanitizeContent(sanitize: Sanitize, content: ChatMessageContent): ChatMessageContent {
+  if (typeof content === 'string') return sanitize(content);
+  return content.map((part) => {
+    if (part.type === 'text') return { ...part, text: sanitize(part.text) };
+    if (part.source.kind === 'url') return { ...part, source: { ...part.source, url: sanitize(part.source.url) } };
+    return part;
+  });
+}
+
+function contentHasImage(content: ChatMessageContent): boolean {
+  return typeof content !== 'string' && content.some((part) => part.type === 'image');
+}
+
+/** Anthropic 不支持 system 角色：抽取 system 消息拼成顶层 system 字符串（system 只允许文本） */
 function splitAnthropicMessages(messages: ChatMessage[]): AnthropicRequestMessages {
   const systemParts: string[] = [];
   const conversation: AnthropicRequestMessages['messages'] = [];
   for (const message of messages) {
     if (message.role === 'system') {
-      systemParts.push(message.content);
+      if (contentHasImage(message.content)) {
+        throw new GatewayError('BAD_REQUEST', 'Anthropic system 消息不支持图片内容', { status: 400 });
+      }
+      systemParts.push(
+        typeof message.content === 'string'
+          ? message.content
+          : message.content.map((part) => (part.type === 'text' ? part.text : '')).join(''),
+      );
     } else {
-      conversation.push({ role: message.role, content: message.content });
+      conversation.push({ role: message.role, content: toAnthropicContent(message.content) });
     }
   }
   return { system: systemParts.join('\n\n'), messages: conversation };
@@ -196,7 +256,13 @@ export class ModelGateway {
     }
 
     const sanitized = this.options.profile.secretMaskingEnabled;
-    const outbound = messages.map((message) => ({ ...message, content: this.sanitize(message.content) }));
+    // 入站契约校验（运行时只消费 Schema 校验过的消息；形状非法在此直接抛出，不上行）
+    const validatedMessages = messages.map((message) => GatewayChatMessageSchema.parse(message));
+    const outbound = validatedMessages.map((message) => ({
+      ...message,
+      content: sanitizeContent(this.sanitize, message.content),
+    }));
+    const needsVision = validatedMessages.some((message) => contentHasImage(message.content));
 
     const attempts: Array<{ providerId: string; modelId: string; reason: string }> = [];
     // 未注入 fetchImpl 时走全局 fetch（测试以 globalThis.fetch stub 覆盖此回退）
@@ -216,6 +282,16 @@ export class ModelGateway {
         attempts.push({ providerId: candidate.providerId, modelId: candidate.modelId, reason: 'KEY_MISSING' });
         attemptIndex += 1;
         continue;
+      }
+      // 视觉预检（诚实口径）：模型清单明确声明不支持视觉时不浪费请求直接跳过；
+      // 清单无该模型描述（未知）则放行，由供应商真实 400 回答
+      if (needsVision) {
+        const descriptor = provider.discoveredModels.find((model) => model.id === candidate.modelId);
+        if (descriptor && !descriptor.supportsVision) {
+          attempts.push({ providerId: candidate.providerId, modelId: candidate.modelId, reason: 'MODEL_NO_VISION' });
+          attemptIndex += 1;
+          continue;
+        }
       }
 
       // 契约没有 variant 索引字段：渲染层（providers-panel toConfig / App 水合）把当前选中变体的
@@ -246,7 +322,7 @@ export class ModelGateway {
         headers.authorization = `Bearer ${apiKey}`;
         requestBody = JSON.stringify({
           model: candidate.modelId,
-          messages: outbound,
+          messages: outbound.map((message) => ({ role: message.role, content: toOpenAiContent(message.content) })),
           ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
           ...(opts?.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
           ...(opts?.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
