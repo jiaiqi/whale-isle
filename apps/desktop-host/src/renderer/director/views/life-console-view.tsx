@@ -51,6 +51,7 @@ import type {
   SingProviderStatus,
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
+  SocialAutostartSnapshot,
   StageBackendKind,
   StageRuntimeSnapshot,
   VoiceProviderStatus,
@@ -148,6 +149,7 @@ export function LifeConsoleView({
     sessions: BrowseSession[];
     capabilities: SocialPlatformCapabilityEntry[];
     autonomyLevel: 'l1_readonly';
+    autostart: SocialAutostartSnapshot;
   } | null>(null);
   const [socialDraft, setSocialDraft] = useState({ platform: 'bilibili' as SocialPlatformId, objective: '' });
 
@@ -541,6 +543,16 @@ export function LifeConsoleView({
   // ---- V2-P3-04E：Digital Life L1 社区只读浏览操作 ----
   const refreshSocial = async (): Promise<void> => {
     setSocialSnap(await window.directorBridge.v2SocialSnapshot().catch(() => null));
+  };
+  /** 自主发起开关：默认关闭；改完立即生效（宿主侧持久化到 v2-social-autostart.json） */
+  const handleSocialAutostart = async (patch: { enabled?: boolean }): Promise<void> => {
+    const res = await window.directorBridge.v2SocialAutostartSettings(patch);
+    if (!res.ok) {
+      toast.error(`设置未生效：${res.error ?? '未知原因'}`);
+    } else {
+      toast.success(patch.enabled === undefined ? '已更新自主发起设置' : patch.enabled ? '自主发起已开启' : '自主发起已关闭');
+    }
+    await refreshSocial();
   };
   const handleSocialPlan = async (): Promise<void> => {
     if (socialDraft.objective.trim() === '') {
@@ -1178,6 +1190,80 @@ export function LifeConsoleView({
           L1 硬边界：只读浏览，互动能力（点赞/关注/评论/发布）契约与运行时双重拦截；
           平台能力须「已授权 + 已实测」双条件齐备才放行（未实测显示 lastVerifiedAt=0）。
         </p>
+
+        <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-social-autostart>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-semibold" style={{ color: 'var(--text-1)' }}>自主发起（默认关闭）</div>
+            <button
+              type="button"
+              data-v2-social-autostart-toggle
+              onClick={() => void handleSocialAutostart({ enabled: !(socialSnap?.autostart.settings.enabled ?? false) })}
+              className={`btn-pill ${socialSnap?.autostart.settings.enabled ? 'green' : 'ghost'}`}
+              style={{ padding: '3px 10px', fontSize: 10.5 }}
+            >
+              {socialSnap?.autostart.settings.enabled ? '已开启 · 点击关闭' : '已关闭 · 点击开启'}
+            </button>
+          </div>
+          {socialSnap === null ? (
+            <div style={{ color: 'var(--text-3)' }}>尚未读取到自主发起状态。</div>
+          ) : (
+            <div className="grid gap-1.5 md:grid-cols-2">
+              <div data-v2-social-autostart-next>
+                <div className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>下次可发起</div>
+                <div style={{ color: 'var(--text-2)' }}>
+                  {socialSnap.autostart.decision.canStart
+                    ? '现在可以发起'
+                    : socialSnap.autostart.decision.nextEligibleAt !== null
+                      ? `不早于 ${new Date(socialSnap.autostart.decision.nextEligibleAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+                      : '暂无排期'}
+                </div>
+                <div className="mono text-[10px]" data-v2-social-autostart-reason style={{ color: 'var(--text-3)' }}>
+                  {socialSnap.autostart.decision.canStart ? '—' : `${socialSnap.autostart.decision.blockReason ?? ''}：${socialSnap.autostart.decision.detail}`}
+                </div>
+              </div>
+              <div data-v2-social-autostart-active>
+                <div className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>当前会话</div>
+                {socialSnap.autostart.activeSession === null ? (
+                  <div style={{ color: 'var(--text-2)' }}>无进行中的会话</div>
+                ) : (
+                  <div style={{ color: 'var(--text-2)' }}>
+                    {socialSnap.autostart.activeSession.platform} · {socialSnap.autostart.activeSession.itemsViewed}/
+                    {socialSnap.autostart.activeSession.maxItems} 条 · {socialSnap.autostart.activeSession.status}
+                  </div>
+                )}
+              </div>
+              <div data-v2-social-autostart-today>
+                <div className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>今日用量（{socialSnap.autostart.dayKey}）</div>
+                <div style={{ color: 'var(--text-2)' }}>
+                  {socialSnap.autostart.today.sessions}/{socialSnap.autostart.settings.maxSessionsPerDay} 次 ·{' '}
+                  {Math.round(socialSnap.autostart.today.usedMs / 60000)}/{Math.round(socialSnap.autostart.settings.dailyBudgetMs / 60000)} 分钟
+                  {socialSnap.autostart.consecutiveFailures > 0 ? ` · 连续失败 ${socialSnap.autostart.consecutiveFailures} 次` : ''}
+                </div>
+              </div>
+              <div data-v2-social-autostart-recent>
+                <div className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>最近 5 次</div>
+                {socialSnap.autostart.recent.length === 0 ? (
+                  <div style={{ color: 'var(--text-3)' }}>还没有自主发起的记录。</div>
+                ) : (
+                  socialSnap.autostart.recent
+                    .slice()
+                    .reverse()
+                    .map((record) => (
+                      <div key={record.sessionId} className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        {new Date(record.startedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                        {record.outcome} · {record.stopReason} · {record.itemsViewed} 条
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          )}
+          {socialSnap !== null && !socialSnap.autostart.executorReady ? (
+            <div className="text-[10.5px]" data-v2-social-autostart-executor style={{ color: 'var(--amber, #b45309)' }}>
+              L1 浏览执行器尚未接入（候选来源 + 逐条读取 + 内容理解）：即使开关打开也不会发起，避免空会话白吃当日预算。
+            </div>
+          ) : null}
+        </div>
 
         <div className="grid gap-2 md:grid-cols-2">
           <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-social-capabilities>

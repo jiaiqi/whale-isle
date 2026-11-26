@@ -103,6 +103,8 @@ import type {
   BrowseSession,
   ContentUnderstanding,
   InterestSignal,
+  SocialAutostartSettings,
+  SocialAutostartSnapshot,
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
   StardewScreenBinding,
@@ -1070,6 +1072,13 @@ export interface DirectorBridge {
     sessions: BrowseSession[];
     capabilities: SocialPlatformCapabilityEntry[];
     autonomyLevel: 'l1_readonly';
+    autostart: SocialAutostartSnapshot;
+  }>;
+  /** V2-P3-04E 补：自主发起设置（默认关闭；改完立即生效） */
+  v2SocialAutostartSettings(input: Partial<SocialAutostartSettings>): Promise<{
+    ok: boolean;
+    error?: string;
+    snapshot: SocialAutostartSnapshot;
   }>;
   v2SocialCapabilityUpsert(input: unknown): Promise<{ ok: boolean; entries?: SocialPlatformCapabilityEntry[] }>;
   v2SocialPlan(input: {

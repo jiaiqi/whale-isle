@@ -27,7 +27,7 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
-import { CharacterCore, ContentUnderstandingPipeline, InterestSink, SocialRuntime, type InterestMemoryPort, type SelectActivityInput } from '@workbench/character-core';
+import { CharacterCore, ContentUnderstandingPipeline, InterestSink, SocialAutostartScheduler, SocialRuntime, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts } from '@workbench/character-core';
 import {
   AudioTrackKindSchema,
   BrowseCandidateSchema,
@@ -39,6 +39,7 @@ import {
   LifeActivityKindSchema,
   MemoryCategorySchema,
   PreferenceCategorySchema,
+  SocialAutostartSettingsSchema,
   SocialPlatformCapabilityEntrySchema,
   SocialPlatformIdSchema,
   StageBackendKindSchema,
@@ -652,6 +653,92 @@ export async function createV2KernelHost(options: {
     },
   });
 
+  // ---- V2-P3-04E 补：自主发起社交会话（owner 口径 2026-11-26，默认关闭）----
+  // 策略层只决定「何时可以开始」；看什么、怎么互动仍归模型（ADR-002）。
+  const socialAutostartStore = new JsonFileConfigStore(
+    join(options.userDataDir, 'v2-social-autostart.json'),
+    SocialAutostartSettingsSchema,
+    SocialAutostartSettingsSchema.parse({}),
+  );
+  const socialAutostart = new SocialAutostartScheduler({ settings: socialAutostartStore.get() });
+  /** 本调度器真正发起过的会话（只有这些计入自主预算，owner 手动发起的会话不占额度） */
+  const autoStartedSessions = new Set<string>();
+  const socialAutostartFacts = (): SocialAutostartFacts => {
+    const active = socialRuntime
+      .listSessions()
+      .find((session) => session.status === 'active' || session.status === 'paused' || session.status === 'awaiting_human');
+    const liveSnap = liveRuntime.snapshot();
+    return {
+      halted: characterCore.life.activityState().halted,
+      // 让路：玩游戏（autodrive 在跑）/ 直播中 / 有控制租约在用电脑
+      userBusy: Boolean(autodriveRef?.runner.isRunning()) || liveSnap.active || computerLeaseMgr.listActive().length > 0,
+      platformReady: socialCapabilitiesStore
+        .get()
+        .entries.some((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public'),
+      // L1 浏览执行器（候选来源 + 逐条读取 + 内容理解）尚未接入：不发起，避免空会话白吃预算
+      executorReady: false,
+      modelReady: autodriveRef?.getBrainMode().llmReady ?? false,
+      activeSessionId: active?.sessionId ?? null,
+    };
+  };
+  const socialAutostartSnapshot = () => {
+    const facts = socialAutostartFacts();
+    const active = socialRuntime
+      .listSessions()
+      .find((session) => session.status === 'active' || session.status === 'paused' || session.status === 'awaiting_human');
+    return socialAutostart.snapshot(facts, active ?? null);
+  };
+  /** 一轮 tick：收官/推进在跑的会话 → 否则按策略判定是否发起 */
+  const tickSocialAutostart = (): void => {
+    const active = socialRuntime
+      .listSessions()
+      .find((session) => session.status === 'active' || session.status === 'paused' || session.status === 'awaiting_human');
+    if (active) {
+      if (autoStartedSessions.has(active.sessionId)) {
+        if (socialAutostart.shouldAbortActive()) socialRuntime.abort(active.sessionId, 'quiet_hours');
+        else if (active.status === 'active') socialRuntime.tick(active.sessionId);
+      }
+      return;
+    }
+    const decision = socialAutostart.evaluate(socialAutostartFacts());
+    if (!decision.canStart) return;
+    const platform = socialCapabilitiesStore
+      .get()
+      .entries.find((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public')?.platform;
+    if (platform === undefined) return;
+    const session = socialRuntime.planSession({
+      platform,
+      objective: '自主看看今天有什么值得留意的事（L1 只读）',
+      maxItems: decision.maxItems,
+      maxDurationMs: decision.maxDurationMs,
+    });
+    socialRuntime.startSession(session.sessionId);
+    autoStartedSessions.add(session.sessionId);
+    socialAutostart.noteStarted();
+  };
+  const socialAutostartTimer = setInterval(tickSocialAutostart, 60_000);
+  socialAutostartTimer.unref?.();
+  // 会话收官（无论手动还是自动）都要结算：只有自动发起的会话计入自主预算与连续失败
+  for (const eventType of ['social.session.completed', 'social.session.aborted'] as const) {
+    kernel.events.subscribe(eventType, (event) => {
+      const payload = event.payload as { session?: { sessionId: string; platform: string; startedAt: number; endedAt?: number; itemsViewed: number; status: string; stopReason?: string } };
+      const session = payload.session;
+      if (!session || !autoStartedSessions.has(session.sessionId)) return;
+      autoStartedSessions.delete(session.sessionId);
+      socialAutostart.noteEnded({
+        sessionId: session.sessionId,
+        platform: session.platform as Parameters<typeof socialAutostart.noteEnded>[0]['platform'],
+        startedAt: session.startedAt,
+        endedAt: session.endedAt ?? Date.now(),
+        itemsViewed: session.itemsViewed,
+        status: session.status as Parameters<typeof socialAutostart.noteEnded>[0]['status'],
+        ...(session.stopReason === undefined
+          ? {}
+          : { stopReason: session.stopReason as Parameters<typeof socialAutostart.noteEnded>[0]['stopReason'] }),
+      });
+    });
+  }
+
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     const haltReason = typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止';
     stopFn?.();
@@ -662,6 +749,12 @@ export async function createV2KernelHost(options: {
     computerLeaseMgr.emergencyHalt(haltReason);
     coopRuntime.emergencyHaltAll(haltReason);
     characterCore.life.emergencyHalt(haltReason);
+    // P0 急停：立即中止在跑的自主浏览会话（走既有 abort 语义，回执如实记 user_stopped）
+    for (const session of socialRuntime.listSessions()) {
+      if (session.status === 'active' || session.status === 'paused' || session.status === 'awaiting_human') {
+        socialRuntime.abort(session.sessionId, 'user_stopped');
+      }
+    }
     return kernel.characters.primaryState();
   });
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
@@ -1504,7 +1597,19 @@ export async function createV2KernelHost(options: {
     sessions: socialRuntime.listSessions(),
     capabilities: socialCapabilitiesStore.get().entries,
     autonomyLevel: 'l1_readonly' as const,
+    autostart: socialAutostartSnapshot(),
   }));
+  // owner 口径的可调项（默认关闭；改完立即生效，不重启宿主）
+  ipcMain.handle('v2:social-autostart-settings', (_e, rawInput: unknown) => {
+    const patch = SocialAutostartSettingsSchema.partial().parse(rawInput);
+    try {
+      const settings = socialAutostartStore.update(patch);
+      socialAutostart.updateSettings(settings);
+      return { ok: true as const, snapshot: socialAutostartSnapshot() };
+    } catch (error) {
+      return { ok: false as const, error: error instanceof Error ? error.message : String(error), snapshot: socialAutostartSnapshot() };
+    }
+  });
   ipcMain.handle('v2:social-capability-upsert', (_e, rawInput: unknown) => {
     const entry = SocialPlatformCapabilityEntrySchema.parse(rawInput);
     const entries = [...socialCapabilitiesStore.get().entries];

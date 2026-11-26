@@ -18,6 +18,16 @@ import {
   type SocialCapabilityKind,
   type SocialPlatformCapabilityEntry,
   type SocialPlatformId,
+  SocialAutostartDecisionSchema,
+  SocialAutostartRecordSchema,
+  SocialAutostartSettingsSchema,
+  SocialAutostartSnapshotSchema,
+  type SocialAutostartBlockReason,
+  type SocialAutostartDecision,
+  type SocialAutostartOutcome,
+  type SocialAutostartRecord,
+  type SocialAutostartSettings,
+  type SocialAutostartSnapshot,
 } from '@workbench/shared-protocol';
 import { WhaleError, type RuntimeEventBus } from '@workbench/runtime-core';
 
@@ -226,4 +236,250 @@ export class SocialRuntime {
     if (event) this.options.events.publish(event, { session: parsed });
     return parsed;
   }
+}
+
+/** 外部世界告诉策略层的事实（策略层不自己去问世界） */
+export interface SocialAutostartFacts {
+  /** 自主生活已暂停/急停（LifeRuntime.activityState().halted） */
+  halted: boolean;
+  /** 用户正在玩游戏 / 正在直播 / 正在用电脑 */
+  userBusy: boolean;
+  /** 平台能力矩阵里存在「已授权 + 已实测」的只读能力 */
+  platformReady: boolean;
+  /** L1 浏览执行器是否已接入（未接入不发起，避免空会话白吃预算） */
+  executorReady: boolean;
+  /** 模型网关是否就绪（未就绪按 ADR-002 安全暂停并提示，不静默退化） */
+  modelReady: boolean;
+  /** 当前是否有会话在跑 */
+  activeSessionId?: string | null;
+}
+
+export interface SocialAutostartSessionEnd {
+  sessionId: string;
+  platform: SocialPlatformId;
+  startedAt: number;
+  endedAt: number;
+  itemsViewed: number;
+  status: BrowseSession['status'];
+  stopReason?: BrowseSession['stopReason'];
+  detail?: string;
+}
+
+const DAY_MS = 24 * 3_600_000;
+
+/** 本地自然日键（YYYY-MM-DD）；跨日重置用，不做时区运算 */
+export function localDayKey(at: number): string {
+  const d = new Date(at);
+  const month = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+export interface SocialAutostartSchedulerOptions {
+  now?: () => number;
+  /** 均匀随机 [0,1)；测试注入固定序列即可得到确定的间隔 */
+  random?: () => number;
+  settings?: Partial<SocialAutostartSettings>;
+}
+
+export class SocialAutostartScheduler {
+  private settingsValue: SocialAutostartSettings;
+  private readonly now: () => number;
+  private readonly random: () => number;
+
+  private dayKey: string;
+  private sessionsToday = 0;
+  private usedMsToday = 0;
+  private consecutiveFailures = 0;
+  private lastEndedAt: number | null = null;
+  private lastOutcome: SocialAutostartOutcome | null = null;
+  private nextEligibleAt: number | null = null;
+  private records: SocialAutostartRecord[] = [];
+
+  constructor(options: SocialAutostartSchedulerOptions = {}) {
+    this.now = options.now ?? Date.now;
+    this.random = options.random ?? Math.random;
+    this.settingsValue = normalizeSettings(SocialAutostartSettingsSchema.parse(options.settings ?? {}));
+    this.dayKey = localDayKey(this.now());
+  }
+
+  settings(): SocialAutostartSettings {
+    return { ...this.settingsValue };
+  }
+
+  /** 运行期只消费 Zod 校验过的配置；非法值直接抛错，不做「悄悄夹紧」的假宽容 */
+  updateSettings(patch: Partial<SocialAutostartSettings>): SocialAutostartSettings {
+    const parsed = SocialAutostartSettingsSchema.parse({ ...this.settingsValue, ...patch });
+    this.settingsValue = normalizeSettings(parsed);
+    return { ...this.settingsValue };
+  }
+
+  /** 判定现在能不能发起；reason/detail 直接喂给生活页，不许只说「未到时间」 */
+  evaluate(facts: SocialAutostartFacts): SocialAutostartDecision {
+    const now = this.now();
+    this.rollDay(now);
+    const s = this.settingsValue;
+    const remainingMs = Math.max(0, s.dailyBudgetMs - this.usedMsToday);
+    const maxDurationMs = Math.min(s.sessionMaxDurationMs, remainingMs);
+
+    const block = (reason: SocialAutostartBlockReason, detail: string): SocialAutostartDecision =>
+      SocialAutostartDecisionSchema.parse({
+        canStart: false,
+        blockReason: reason,
+        detail,
+        nextEligibleAt: this.nextEligibleAt,
+        maxItems: s.sessionMaxItems,
+        maxDurationMs: Math.max(1_000, maxDurationMs),
+        maxUnderstandingCalls: s.maxUnderstandingCalls,
+      });
+
+    if (!s.enabled) return block('autostart_off', '自主发起已关闭（默认关闭，需在生活页显式打开）');
+    if (facts.halted) return block('life_halted', '自主生活已暂停或已急停，直接不触发');
+    if ((facts.activeSessionId ?? null) !== null) return block('session_active', '已有浏览会话进行中');
+    if (this.inQuietHours(now)) {
+      return block('quiet_hours', `夜间禁发时段 ${pad2(s.quietHoursStart)}:00–${pad2(s.quietHoursEnd)}:00`);
+    }
+    if (this.consecutiveFailures >= s.maxConsecutiveFailures) {
+      return block('consecutive_failures', `连续 ${this.consecutiveFailures} 次失败，当日停发（次日重置）`);
+    }
+    if (this.sessionsToday >= s.maxSessionsPerDay) {
+      return block('daily_sessions_exhausted', `今日已发起 ${this.sessionsToday} 次，达到每日上限 ${s.maxSessionsPerDay} 次`);
+    }
+    if (remainingMs < 60_000) {
+      return block('daily_budget_exhausted', `今日累计时长已用 ${Math.round(this.usedMsToday / 60_000)} 分钟，达到上限 ${Math.round(s.dailyBudgetMs / 60_000)} 分钟`);
+    }
+    if (this.nextEligibleAt !== null && now < this.nextEligibleAt) {
+      const reason: SocialAutostartBlockReason = this.lastOutcome === 'ok' ? 'interval_wait' : 'cooldown';
+      const minutes = Math.ceil((this.nextEligibleAt - now) / 60_000);
+      const detail =
+        reason === 'cooldown'
+          ? `上一次会话${this.lastOutcome === 'failed' ? '失败' : '中止'}，冷却中，还需 ${minutes} 分钟`
+          : `距上次会话不足最小间隔，还需 ${minutes} 分钟`;
+      return block(reason, detail);
+    }
+    if (!facts.platformReady) return block('platform_unverified', '没有「已授权且已实测」的平台只读能力，不发起');
+    if (!facts.executorReady) return block('executor_not_ready', 'L1 浏览执行器未接入，发起也只会得到空会话，因此不发起');
+    if (!facts.modelReady) return block('model_unavailable', '模型网关不可用，按 ADR-002 安全暂停自主决策');
+    if (facts.userBusy) return block('user_busy', '用户正在玩游戏 / 直播 / 用电脑，让路不发起');
+
+    return SocialAutostartDecisionSchema.parse({
+      canStart: true,
+      blockReason: null,
+      detail: '可以发起',
+      nextEligibleAt: this.nextEligibleAt,
+      maxItems: s.sessionMaxItems,
+      maxDurationMs: Math.max(1_000, maxDurationMs),
+      maxUnderstandingCalls: s.maxUnderstandingCalls,
+    });
+  }
+
+  /** 发起即计数（在开始时刻计数，避免崩溃循环把当日额度刷爆） */
+  noteStarted(): void {
+    const now = this.now();
+    this.rollDay(now);
+    this.sessionsToday += 1;
+  }
+
+  /** 收官结算：写当日用量、连续性失败、下一次可发起时间与最近 5 次记录 */
+  noteEnded(end: SocialAutostartSessionEnd): SocialAutostartRecord {
+    const settings = this.settingsValue;
+    this.rollDay(end.endedAt);
+    const durationMs = Math.max(0, end.endedAt - end.startedAt);
+    this.usedMsToday += durationMs;
+    const outcome = resolveOutcome(end);
+    if (outcome === 'failed') this.consecutiveFailures += 1;
+    if (outcome === 'ok') this.consecutiveFailures = 0;
+    this.lastEndedAt = end.endedAt;
+    this.lastOutcome = outcome;
+    this.nextEligibleAt =
+      outcome === 'ok'
+        ? end.endedAt + this.nextIntervalMs()
+        : end.endedAt + settings.cooldownMs;
+
+    const record = SocialAutostartRecordSchema.parse({
+      sessionId: end.sessionId,
+      platform: end.platform,
+      startedAt: end.startedAt,
+      endedAt: end.endedAt,
+      durationMs,
+      itemsViewed: end.itemsViewed,
+      stopReason: end.stopReason ?? (outcome === 'ok' ? 'objective_met' : 'error'),
+      outcome,
+      detail: end.detail ?? '',
+    });
+    this.records = [...this.records, record].slice(-5);
+    return record;
+  }
+
+  /** 夜间跨点：正在跑的会话到 00:00 必须按 quiet_hours 收官，不许跨夜继续 */
+  shouldAbortActive(at = this.now()): boolean {
+    return this.inQuietHours(at);
+  }
+
+  snapshot(facts: SocialAutostartFacts, activeSession: BrowseSession | null): SocialAutostartSnapshot {
+    const now = this.now();
+    this.rollDay(now);
+    const s = this.settingsValue;
+    return SocialAutostartSnapshotSchema.parse({
+      settings: s,
+      decision: this.evaluate(facts),
+      dayKey: this.dayKey,
+      today: {
+        sessions: this.sessionsToday,
+        usedMs: this.usedMsToday,
+        remainingSessions: Math.max(0, s.maxSessionsPerDay - this.sessionsToday),
+        remainingMs: Math.max(0, s.dailyBudgetMs - this.usedMsToday),
+      },
+      activeSession,
+      recent: this.records,
+      consecutiveFailures: this.consecutiveFailures,
+      executorReady: facts.executorReady,
+    });
+  }
+
+  private nextIntervalMs(): number {
+    const s = this.settingsValue;
+    const span = Math.max(0, s.maxIntervalMs - s.minIntervalMs);
+    const base = s.minIntervalMs + span * this.random();
+    const jitter = base * s.jitterRatio * (this.random() * 2 - 1);
+    return Math.max(s.cooldownMs, Math.round(base + jitter));
+  }
+
+  private inQuietHours(at: number): boolean {
+    const s = this.settingsValue;
+    if (s.quietHoursStart === s.quietHoursEnd) return false; // 起止相同 = 不设禁发时段
+    const d = new Date(at);
+    const minute = d.getHours() * 60 + d.getMinutes();
+    const start = s.quietHoursStart * 60;
+    const end = s.quietHoursEnd * 60;
+    return start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  }
+
+  private rollDay(at: number): void {
+    const key = localDayKey(at);
+    if (key === this.dayKey) return;
+    this.dayKey = key;
+    this.sessionsToday = 0;
+    this.usedMsToday = 0;
+    this.consecutiveFailures = 0;
+    // nextEligibleAt 保留：昨日最后一次的冷却不该因为跨日就被绕过
+    if (this.nextEligibleAt !== null && this.nextEligibleAt > at + DAY_MS) this.nextEligibleAt = null;
+  }
+}
+
+function resolveOutcome(end: SocialAutostartSessionEnd): SocialAutostartOutcome {
+  if (end.status === 'aborted') return 'aborted';
+  if (end.status !== 'completed') return 'failed';
+  if (end.stopReason === 'error') return 'failed';
+  if (end.itemsViewed === 0) return 'failed';
+  return 'ok';
+}
+
+function normalizeSettings(parsed: SocialAutostartSettings): SocialAutostartSettings {
+  if (parsed.minIntervalMs <= parsed.maxIntervalMs) return parsed;
+  return { ...parsed, minIntervalMs: parsed.maxIntervalMs, maxIntervalMs: parsed.minIntervalMs };
+}
+
+function pad2(value: number): string {
+  return `${value}`.padStart(2, '0');
 }

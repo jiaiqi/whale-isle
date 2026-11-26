@@ -5,6 +5,21 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added（表现力语音：引擎下载器 + 本地引擎安装状态判定）
+
+- **`tools/scripts/fetch-engine.mjs`**：按清单逐文件下载 + sha256 校验 + 原子安装（全部通过才写 `installed.json` 并 rename），单文件 3 次失败即清空分片目录、绝不留半包；支持 `--check` / `--remove` / `--dry-run`；优先走系统 curl（实测 18.7 MB/s，Node fetch 同链路仅 ~0.2 MB/s），curl 缺失时回退 fetch。
+- **`engine-manifests/cosyvoice2-0.5b.json`**：钉死 HF commit `eec1ae6c` 与 14 个文件的字节数 / LFS sha256（最小运行集 4,073,955,371 B）；权重本体不进 git。
+- **`packages/voice-runtime/src/local-engine.ts`**：`resolveLocalEngine()` 唯一判据是 `installed.json` 存在且清单文件齐全、字节数正确——`--remove` 之后立刻读成未安装；`planVoiceFallback()` 落方案 §5.5 降级链（本地 → 商业 API → 系统 TTS），每跳标 degraded 并写明原因。13 例单测覆盖 no_marker / corrupt_marker / wrong_engine / file_missing / size_mismatch 与多版本选择。
+
+### Added（自主社交发起策略 `P3-04G`）
+
+- **owner 四条口径落成**：默认关闭；每日 ≤2 次且累计 ≤30 分钟；间隔 90–150 分钟 ±20% 抖动；收官/失败后冷却 ≥60 分钟；本地 00:00–08:00 禁发；连续 2 次失败当日停发。单次预算 20 条 / 10 分钟 / 内容理解 ≤8 次，且当日剩余预算不足时把单次时长钳到剩余。
+- **拦截原因逐项可读**：暂停/急停、已有会话、夜间、连续失败、次数用尽、时长用尽、冷却、间隔未到、平台未实测、执行器未接入、模型不可用、用户玩游戏/直播/用电脑——生活页直接显示「被谁拦住」。
+- **P0 急停立即 abort 在跑会话**（记 `user_stopped`）；会话跨 00:00 按 `quiet_hours` 收官。
+- **桌宠气泡改为只报开始/收官**，移除逐条浏览投影（owner 口径：不逐条刷屏）。
+- **23 例确定性单测**（可注入时钟与随机序列，不 sleep），`verify:gate` 7/7。证据 [P3-04G-social-autostart-verification.md](./docs/v2/evidence/P3-04G-social-autostart-verification.md)。
+- **如实记录未接项**：L1 浏览执行器未接入，`executorReady` 恒 `false`，开关打开也不会发起——避免空会话白吃当日额度。
+
 ### Added（单桌宠全链路 E2E：宿主仿真 BWF 端点 + 启动到记忆一条剧本）
 
 - **宿主可在测试态指向仿真 BWF**：`bwf-settings.ts` 新增 `resolveBwfEndpoint()`（注入端点优先、空串回落真实端口）；`index.ts` 仅在 `PET_STAGE_E2E=1` 时读取 `WHALE_E2E_BWF_ENDPOINT`，并在注入时忽略真实端口联动，生产恒为 `undefined`。

@@ -196,3 +196,99 @@ export const InterestSignalSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 });
 export type InterestSignal = z.output<typeof InterestSignalSchema>;
+
+// ---------------------------------------------------------------------------
+// 自主发起策略（V2-P3-04E 补：scheduler tick 自动发起社交会话）
+// owner 口径（2026-11-26）：默认关闭 / 每日 ≤2 次且累计 ≤30 分钟 / 间隔 90–150 分钟 ±20% 抖动 /
+// 收官或失败后冷却 ≥60 分钟 / 本地 00:00–08:00 完全禁发 / 连续 2 次失败当日停发（不做 3 小时后重试）。
+// 单次预算：maxItems 20 / maxDurationMs 10 分钟 / 内容理解最多 8 次模型调用。
+// 程序只决定「何时可以开始」，不决定「看什么」——后者仍归模型（ADR-002 AI-First 红线）。
+// ---------------------------------------------------------------------------
+
+export const SocialAutostartSettingsSchema = z.object({
+  /** 默认关闭：owner 在生活页显式打开才生效，一键关立即回退到手动/事件驱动 */
+  enabled: z.boolean().default(false),
+  maxSessionsPerDay: z.number().int().min(1).max(6).default(2),
+  dailyBudgetMs: z.number().int().min(60_000).max(6 * 3_600_000).default(30 * 60_000),
+  minIntervalMs: z.number().int().min(60_000).max(12 * 3_600_000).default(90 * 60_000),
+  maxIntervalMs: z.number().int().min(60_000).max(12 * 3_600_000).default(150 * 60_000),
+  /** 间隔抖动比例（±20%），避免整点机械感 */
+  jitterRatio: z.number().min(0).max(0.5).default(0.2),
+  cooldownMs: z.number().int().min(60_000).max(6 * 3_600_000).default(60 * 60_000),
+  /** 禁发时段（本地时间，左闭右开；start > end 表示跨午夜） */
+  quietHoursStart: z.number().int().min(0).max(23).default(0),
+  quietHoursEnd: z.number().int().min(0).max(23).default(8),
+  maxConsecutiveFailures: z.number().int().min(1).max(5).default(2),
+  /** 单次预算（沿用 BrowseSession 既有字段，不新增语义） */
+  sessionMaxItems: z.number().int().min(1).max(50).default(20),
+  sessionMaxDurationMs: z.number().int().min(60_000).max(3_600_000).default(10 * 60_000),
+  /** 单会话内容理解最多几次模型调用（超额只记浏览事实，不再理解） */
+  maxUnderstandingCalls: z.number().int().min(0).max(20).default(8),
+});
+export type SocialAutostartSettings = z.output<typeof SocialAutostartSettingsSchema>;
+
+/** 拦截原因：生活页必须显示「被谁拦住」，不允许只显示「未到时间」 */
+export const SocialAutostartBlockReasonSchema = z.enum([
+  'autostart_off',
+  'life_halted',
+  'session_active',
+  'quiet_hours',
+  'consecutive_failures',
+  'daily_sessions_exhausted',
+  'daily_budget_exhausted',
+  'cooldown',
+  'interval_wait',
+  'platform_unverified',
+  'executor_not_ready',
+  'user_busy',
+  'model_unavailable',
+]);
+export type SocialAutostartBlockReason = z.infer<typeof SocialAutostartBlockReasonSchema>;
+
+export const SocialAutostartOutcomeSchema = z.enum(['ok', 'failed', 'aborted']);
+export type SocialAutostartOutcome = z.infer<typeof SocialAutostartOutcomeSchema>;
+
+/** 最近 5 次自主发起的收官记录（只记事实，不记内容摘要） */
+export const SocialAutostartRecordSchema = z.object({
+  sessionId: z.string().min(1),
+  platform: SocialPlatformIdSchema,
+  startedAt: z.number().int().nonnegative(),
+  endedAt: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  itemsViewed: z.number().int().nonnegative(),
+  stopReason: BrowseSessionStopReasonSchema,
+  outcome: SocialAutostartOutcomeSchema,
+  detail: z.string().max(200).default(''),
+});
+export type SocialAutostartRecord = z.output<typeof SocialAutostartRecordSchema>;
+
+/** 一次「能否发起」的判定结果：宿主据此决定发起或如实显示拦截原因 */
+export const SocialAutostartDecisionSchema = z.object({
+  canStart: z.boolean(),
+  blockReason: SocialAutostartBlockReasonSchema.nullable().default(null),
+  detail: z.string().max(200).default(''),
+  nextEligibleAt: z.number().int().nonnegative().nullable().default(null),
+  /** 实际生效的单次预算（会被当日剩余预算钳制，绝不超发） */
+  maxItems: z.number().int().positive(),
+  maxDurationMs: z.number().int().positive(),
+  maxUnderstandingCalls: z.number().int().nonnegative(),
+});
+export type SocialAutostartDecision = z.output<typeof SocialAutostartDecisionSchema>;
+
+/** 生活页四块的数据源：下次可发起/当前会话/今日用量/最近 5 次 */
+export const SocialAutostartSnapshotSchema = z.object({
+  settings: SocialAutostartSettingsSchema,
+  decision: SocialAutostartDecisionSchema,
+  dayKey: z.string().min(1),
+  today: z.object({
+    sessions: z.number().int().nonnegative(),
+    usedMs: z.number().int().nonnegative(),
+    remainingSessions: z.number().int().nonnegative(),
+    remainingMs: z.number().int().nonnegative(),
+  }),
+  activeSession: BrowseSessionSchema.nullable().default(null),
+  recent: z.array(SocialAutostartRecordSchema).max(5).default([]),
+  consecutiveFailures: z.number().int().nonnegative().default(0),
+  executorReady: z.boolean().default(false),
+});
+export type SocialAutostartSnapshot = z.output<typeof SocialAutostartSnapshotSchema>;

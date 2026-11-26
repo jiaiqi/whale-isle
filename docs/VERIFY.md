@@ -234,6 +234,8 @@
 | planner 语义留痕 | `[SIMULATION]` 单测 | `planner-utils.spec.ts` 13 例锁定两处现状（`NON_SELLABLE` 不含「木箱」、`pickTrashableFallback` 后命中覆盖前命中），实现未改，结论见 [P3-planner-semantics-findings.md](./v2/evidence/P3-planner-semantics-findings.md) | 2026-11-26 |
 
 | 单桌宠全链路 E2E | `[E2E-HOST]` + `[SIMULATION]` | `single-pet-chain.e2e.spec.ts` 1/1（6.22s）：宿主在 `PET_STAGE_E2E` 下经 `WHALE_E2E_BWF_ENDPOINT` 指向活农场仿真；点顶栏「启动」→ 勾选自动启动 → 确认 → `running=true` → 仿真收到 `get_state` 与真实动作 → 三态回执 → `v2MemoryQuery` 命中该回执；已加入 macOS CI。证据 [P3-single-pet-chain-verification.md](./v2/evidence/P3-single-pet-chain-verification.md) | 2026-11-26 |
+| `P3-04G` 自主发起策略 | `[SIMULATION]` 确定性单测 | `social-runtime.spec.ts` **29 例**（新增 23 例）：夜间 00:00 / 07:59 拦、08:00 放行与跨午夜两侧拦；连续 2 次失败当日停发且跨日重置；失败冷却 60 分钟、成功按注入随机序列算出 +120 / +72 分钟；每日 ≤2 次、用 25 分钟后单次预算被钳到 5 分钟、用满后拦；跨日不绕过昨夜冷却；六类拦截原因各异；`verify:gate` **7 过 / 0 跳过** | 2026-11-26 |
+| 本地语音引擎安装判定 | `[SIMULATION]` 单测（真实临时目录 + 内存 fs 替身） | `local-engine.spec.ts` **13 例**：缺 `installed.json`（= `--remove` 之后）→ `no_marker` 未安装；损坏清单 / 引擎不符 / 权重缺失 / 字节数不符逐项判未安装；完整安装 → installed；降级链本地→商业→系统逐跳标 degraded，系统 TTS 也关时返回空计划。**尚未在真实 4 GB 权重上跑过 `--check`**（下载中） | 2026-11-26 |
 
 ### 待人类宿主真机验收项
 
@@ -241,3 +243,5 @@
 | --- | --- | --- |
 | P3-06 缺陷① 真机冷启动 | 退出游戏后立刻点中控台顶栏「启动」：应看到「游戏/Mod 尚未就绪（启动竞态）：第 N 次重探…」事件而不是「BWF MCP 不可达」失败；游戏就绪后自动驾驶自动接管 | ⏳ |
 | P3-06 缺陷② 窗口前台 | 该缺陷只影响自动验收脚本坐标点击（产品内按钮由人点）；如需自动化点击自家按钮，先 `bringToFront`，或另立「按 AX 元素点击」工单 | ⏳ 待 owner 决定是否立项 |
+| `P3-04G` 生活页四块 | 打开中控台「生活」页：应看到「自主发起（默认关闭）」开关、下次可发起时间与拦截原因、当前会话、今日用量、最近 5 次；点开关应持续化并在重启后保持 | ⏳ |
+| `P3-04G` tick 浸泡 | 开关打开且执行器接入后连续跑 24 小时：确认 00:00 自动停、每日不超 2 次、连续 2 次失败后当日静默、急停能立刻中止在跑会话 | ⏳ 阻塞于执行器（当前 `executorReady=false`，不会发起） |
