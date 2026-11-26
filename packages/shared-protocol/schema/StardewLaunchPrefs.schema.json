@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewLaunchPrefs",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewLaunchPrefs",
+  "$defs": {
+    "StardewLaunchPrefs": {
+      "type": "object",
+      "properties": {
+        "storageMode": {
+          "default": "isolated",
+          "type": "string",
+          "enum": [
+            "isolated",
+            "standard"
+          ]
+        },
+        "language": {
+          "default": "zh",
+          "type": "string",
+          "enum": [
+            "zh",
+            "en",
+            "ja",
+            "ko",
+            "ru",
+            "pt",
+            "es",
+            "de",
+            "th",
+            "fr",
+            "it",
+            "tr",
+            "hu"
+          ]
+        },
+        "farmName": {
+          "default": "鲸屿",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "pattern": "^[^<>:\"/\\\\|?*\\u0000-\\u001f]+$"
+        },
+        "favoriteThing": {
+          "default": "白米饭",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "pattern": "^[^<>:\"/\\\\|?*\\u0000-\\u001f]+$"
+        },
+        "farmType": {
+          "default": "standard",
+          "type": "string",
+          "enum": [
+            "standard",
+            "riverland",
+            "forest",
+            "hilltop",
+            "wilderness",
+            "four_corners",
+            "beach",
+            "meadowlands"
+          ]
+        },
+        "startingCabins": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "cabinLayout": {
+          "default": "nearby",
+          "type": "string",
+          "enum": [
+            "nearby",
+            "separate"
+          ]
+        },
+        "skipIntro": {
+          "default": true,
+          "type": "boolean"
+        },
+        "syncPixelAvatar": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

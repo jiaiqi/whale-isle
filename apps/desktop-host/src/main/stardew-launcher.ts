@@ -216,6 +216,14 @@ function baseStatus(): StardewLaunchStatus {
     timeoutMs: DEFAULT_LAUNCH_TIMEOUT_MS,
     message: '尚未探测安装',
     hint: '',
+    phase: 'idle',
+    errorCode: 'NONE',
+    savePolicy: 'load_only',
+    gameMode: 'singleplayer',
+    storageMode: 'standard',
+    language: 'zh',
+    createdSaveSlot: null,
+    lanHost: null,
   };
 }
 

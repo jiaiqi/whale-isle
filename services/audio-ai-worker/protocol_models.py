@@ -623,6 +623,8 @@ class TtsSynthesisResult(BaseModel):
     refAudioPath: Annotated[str, Field(min_length=1)]
     backend: Annotated[str, Field(min_length=1)]
     degraded: bool | None = False
+    placeholder: bool | None = False
+    placeholderReason: str | None = None
     format: Format
     durationMs: Annotated[float, Field(ge=0.0)]
     audioBase64: Annotated[str, Field(min_length=1)]
@@ -1805,6 +1807,20 @@ class BubbleFontId(StrEnum):
     formal = 'formal'
 
 
+class VoiceEngineTier(StrEnum):
+    commercial_default = 'commercial_default'
+    offline_preferred = 'offline_preferred'
+
+
+class VoiceCommercialProvider(StrEnum):
+    minimax_tts = 'minimax-tts'
+    openai_compatible_tts = 'openai-compatible-tts'
+    openrouter_tts = 'openrouter-tts'
+    mimo_tts = 'mimo-tts'
+    mimo_tts_voiceclone = 'mimo-tts-voiceclone'
+    mimo_tts_voicedesign = 'mimo-tts-voicedesign'
+
+
 class PetDesktopPrefs(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1831,6 +1847,12 @@ class PetDesktopPrefs(BaseModel):
     peakOutfitEnabled: bool | None = False
     peakOutfitDay: str | None = 'crosspet-deepseek'
     peakOutfitOffPeak: str | None = 'crosspet-deepseek-pajamas'
+    voiceEngineTier: VoiceEngineTier | None = 'commercial_default'
+    voiceCommercialProvider: VoiceCommercialProvider | None = 'mimo-tts'
+    voiceOpenRouterModel: Annotated[str | None, Field(min_length=1)] = (
+        'google/gemini-3.8-flash-tts'
+    )
+    voiceMimoBuiltinVoice: Annotated[str | None, Field(min_length=1)] = 'mimo_default'
 
 
 class Kind(StrEnum):
@@ -2511,6 +2533,7 @@ class StardewAvatarSync(BaseModel):
     spriteSheetPath: Annotated[str | None, Field(max_length=260)] = None
     spriteTier: SpriteTier | None = None
     liveliness: bool | None = True
+    syncDisplayName: bool | None = True
 
 
 class Scene(StrEnum):
@@ -2646,6 +2669,364 @@ class WorkFollowStatus(BaseModel):
     presencePolicy: PresencePolicy | None = 'idle-leave'
     logWatchEnabled: bool | None = True
     activeOrigins: dict[str, ActiveOrigins] | None = {}
+
+
+class FarmType(StrEnum):
+    standard = 'standard'
+    riverland = 'riverland'
+    forest = 'forest'
+    hilltop = 'hilltop'
+    wilderness = 'wilderness'
+    four_corners = 'four_corners'
+    beach = 'beach'
+    meadowlands = 'meadowlands'
+
+
+class Mode2(StrEnum):
+    singleplayer = 'singleplayer'
+    coop_host = 'coop_host'
+
+
+class CabinLayout(StrEnum):
+    nearby = 'nearby'
+    separate = 'separate'
+
+
+class ProfitMargin(StrEnum):
+    field_25 = '25'
+    field_50 = '50'
+    field_75 = '75'
+    normal = 'normal'
+
+
+class Type(StrEnum):
+    Cat = 'Cat'
+    Dog = 'Dog'
+
+
+class Pet(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Type | None = 'Cat'
+    breed: Annotated[str | None, Field(max_length=32, min_length=1)] = '0'
+
+
+class Gender(StrEnum):
+    male = 'male'
+    female = 'female'
+
+
+class Appearance(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    characterId: Annotated[str | None, Field(max_length=64, min_length=1)] = None
+    syncPixelAvatar: bool | None = True
+    gender: Gender | None = 'female'
+    skin: Annotated[int | None, Field(ge=0, le=23)] = None
+    hair: Annotated[int | None, Field(ge=0, le=120)] = None
+    hairColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = None
+    shirt: Annotated[int | None, Field(ge=0)] = None
+    pantsColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = None
+    eyeColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = None
+    hatId: Annotated[int | None, Field(ge=-1)] = None
+
+
+class StardewNewSaveConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    farmerName: Annotated[
+        str,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ]
+    farmName: Annotated[
+        str,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ]
+    favoriteThing: Annotated[
+        str,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ]
+    farmType: FarmType | None = 'standard'
+    modFarmId: Annotated[str | None, Field(max_length=128, min_length=1)] = None
+    mode: Mode2 | None = 'singleplayer'
+    startingCabins: Annotated[int | None, Field(ge=0, le=7)] = 0
+    cabinLayout: CabinLayout | None = 'nearby'
+    skipIntro: bool | None = True
+    separateWallets: bool | None = False
+    profitMargin: ProfitMargin | None = 'normal'
+    pet: Pet | None = None
+    appearance: Appearance | None = None
+
+
+class Strategy1(StrEnum):
+    auto = 'auto'
+    smapi = 'smapi'
+    steam = 'steam'
+
+
+class StorageMode(StrEnum):
+    isolated = 'isolated'
+    standard = 'standard'
+
+
+class Language(StrEnum):
+    zh = 'zh'
+    en = 'en'
+    ja = 'ja'
+    ko = 'ko'
+    ru = 'ru'
+    pt = 'pt'
+    es = 'es'
+    de = 'de'
+    th = 'th'
+    fr = 'fr'
+    it = 'it'
+    tr = 'tr'
+    hu = 'hu'
+
+
+class SavePolicy(StrEnum):
+    load_only = 'load_only'
+    continue_or_create = 'continue_or_create'
+    always_new = 'always_new'
+    manual = 'manual'
+
+
+class GameMode(StrEnum):
+    singleplayer = 'singleplayer'
+    coop_host = 'coop_host'
+
+
+class Pet1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Type | None = 'Cat'
+    breed: Annotated[str | None, Field(max_length=32, min_length=1)] = '0'
+
+
+class Appearance1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    characterId: Annotated[str | None, Field(max_length=64, min_length=1)] = None
+    syncPixelAvatar: bool | None = True
+    gender: Gender | None = 'female'
+    skin: Annotated[int | None, Field(ge=0, le=23)] = None
+    hair: Annotated[int | None, Field(ge=0, le=120)] = None
+    hairColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = None
+    shirt: Annotated[int | None, Field(ge=0)] = None
+    pantsColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = None
+    eyeColor: Annotated[str | None, Field(pattern='^#[0-9a-fA-F]{6}$')] = None
+    hatId: Annotated[int | None, Field(ge=-1)] = None
+
+
+class NewSave(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    farmerName: Annotated[
+        str,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ]
+    farmName: Annotated[
+        str,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ]
+    favoriteThing: Annotated[
+        str,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ]
+    farmType: FarmType | None = 'standard'
+    modFarmId: Annotated[str | None, Field(max_length=128, min_length=1)] = None
+    mode: Mode2 | None = 'singleplayer'
+    startingCabins: Annotated[int | None, Field(ge=0, le=7)] = 0
+    cabinLayout: CabinLayout | None = 'nearby'
+    skipIntro: bool | None = True
+    separateWallets: bool | None = False
+    profitMargin: ProfitMargin | None = 'normal'
+    pet: Pet1 | None = None
+    appearance: Appearance1 | None = None
+
+
+class StardewLaunchOptions(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    port: Annotated[int | None, Field(ge=1024, le=65535)] = None
+    timeoutMs: Annotated[int | None, Field(ge=5000, le=600000)] = None
+    autoLoadSave: bool | None = None
+    strategy: Strategy1 | None = None
+    isolateDataDir: Annotated[
+        str | None, Field(min_length=1, pattern='^(\\/|[A-Za-z]:[\\\\/])')
+    ] = None
+    storageMode: StorageMode | None = None
+    language: Language | None = None
+    savePolicy: SavePolicy | None = None
+    gameMode: GameMode | None = None
+    saveSlotName: Annotated[str | None, Field(max_length=64, min_length=1)] = None
+    newSave: NewSave | None = None
+    modsPath: Annotated[
+        str | None, Field(min_length=1, pattern='^(\\/|[A-Za-z]:[\\\\/])')
+    ] = None
+
+
+class State2(StrEnum):
+    not_installed = 'not_installed'
+    launching = 'launching'
+    waiting_mcp = 'waiting_mcp'
+    ready = 'ready'
+    timeout = 'timeout'
+    failed = 'failed'
+
+
+class Install(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    gameInstalled: bool
+    smapiInstalled: bool
+    bwfInstalled: bool
+    steamAppPresent: bool | None = False
+    gameDir: str | None = ''
+    executableDir: str | None = ''
+    smapiBinary: str | None = ''
+    modsDir: str | None = ''
+
+
+class Strategy2(StrEnum):
+    smapi = 'smapi'
+    steam = 'steam'
+
+
+class FallbackStrategy(StrEnum):
+    smapi = 'smapi'
+    steam = 'steam'
+
+
+class Phase2(StrEnum):
+    idle = 'idle'
+    probing = 'probing'
+    spawning = 'spawning'
+    waiting_bwf = 'waiting_bwf'
+    waiting_title = 'waiting_title'
+    syncing_avatar = 'syncing_avatar'
+    creating_save = 'creating_save'
+    loading_save = 'loading_save'
+    waiting_world = 'waiting_world'
+    waiting_lan_server = 'waiting_lan_server'
+    ready = 'ready'
+    failed = 'failed'
+
+
+class ErrorCode(StrEnum):
+    NONE = 'NONE'
+    INVALID_OPTIONS = 'INVALID_OPTIONS'
+    GAME_NOT_INSTALLED = 'GAME_NOT_INSTALLED'
+    SMAPI_NOT_INSTALLED = 'SMAPI_NOT_INSTALLED'
+    BWF_NOT_INSTALLED = 'BWF_NOT_INSTALLED'
+    ISOLATION_REJECTED = 'ISOLATION_REJECTED'
+    SPAWN_FAILED = 'SPAWN_FAILED'
+    MCP_UNREACHABLE = 'MCP_UNREACHABLE'
+    BWF_PATCH_MISSING = 'BWF_PATCH_MISSING'
+    LANGUAGE_LOADING = 'LANGUAGE_LOADING'
+    TITLE_NOT_READY = 'TITLE_NOT_READY'
+    TOO_MANY_FARMS = 'TOO_MANY_FARMS'
+    SAVE_NOT_FOUND = 'SAVE_NOT_FOUND'
+    CREATE_SAVE_FAILED = 'CREATE_SAVE_FAILED'
+    LOAD_SAVE_FAILED = 'LOAD_SAVE_FAILED'
+    COOP_SERVER_NOT_READY = 'COOP_SERVER_NOT_READY'
+    TIMEOUT = 'TIMEOUT'
+    CANCELLED = 'CANCELLED'
+
+
+class LanHost(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    isHost: bool | None = False
+    multiplayerMode: Annotated[int | None, Field(ge=0, le=2)] = 0
+    serverRunning: bool | None = False
+    lanListening: bool | None = False
+    lanPort: Annotated[int | None, Field(ge=1, le=65535)] = 24642
+    acceptIpConnections: bool | None = False
+    inviteCode: str | None = None
+    startingCabins: Annotated[int | None, Field(ge=0)] = 0
+    availableFarmhandSlots: Annotated[int | None, Field(ge=0)] = 0
+    worldReady: bool | None = False
+    saveFolderName: str | None = None
+    languageCode: str | None = None
+
+
+class StardewLaunchStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    state: State2
+    install: Install
+    strategy: Strategy2 | None = None
+    fallbackStrategy: FallbackStrategy | None = None
+    endpoint: str | None = ''
+    mcpPort: int | None = 18088
+    gameRunning: bool | None = False
+    saveLoadRequested: bool | None = False
+    autoLoadSave: bool | None = True
+    attempts: int | None = 0
+    startedAt: float | None = None
+    elapsedMs: int | None = 0
+    timeoutMs: int | None = 120000
+    message: str | None = ''
+    hint: str | None = ''
+    phase: Phase2 | None = 'idle'
+    errorCode: ErrorCode | None = 'NONE'
+    savePolicy: SavePolicy | None = 'load_only'
+    gameMode: GameMode | None = 'singleplayer'
+    storageMode: StorageMode | None = 'standard'
+    language: Language | None = 'zh'
+    createdSaveSlot: str | None = None
+    lanHost: LanHost | None = None
+
+
+class StardewLanHostStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    isHost: bool | None = False
+    multiplayerMode: Annotated[int | None, Field(ge=0, le=2)] = 0
+    serverRunning: bool | None = False
+    lanListening: bool | None = False
+    lanPort: Annotated[int | None, Field(ge=1, le=65535)] = 24642
+    acceptIpConnections: bool | None = False
+    inviteCode: str | None = None
+    startingCabins: Annotated[int | None, Field(ge=0)] = 0
+    availableFarmhandSlots: Annotated[int | None, Field(ge=0)] = 0
+    worldReady: bool | None = False
+    saveFolderName: str | None = None
+    languageCode: str | None = None
+
+
+class StardewLaunchPrefs(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    storageMode: StorageMode | None = 'isolated'
+    language: Language | None = 'zh'
+    farmName: Annotated[
+        str | None,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ] = '鲸屿'
+    favoriteThing: Annotated[
+        str | None,
+        Field(max_length=24, min_length=1, pattern='^[^<>:"/\\\\|?*\\u0000-\\u001f]+$'),
+    ] = '白米饭'
+    farmType: FarmType | None = 'standard'
+    startingCabins: Annotated[int | None, Field(ge=1, le=7)] = 1
+    cabinLayout: CabinLayout | None = 'nearby'
+    skipIntro: bool | None = True
+    syncPixelAvatar: bool | None = True
 
 
 class AIWorkbenchContracts(BaseModel):
@@ -2804,3 +3185,18 @@ class AIWorkbenchContracts(BaseModel):
     PetApiState_1: Annotated[PetApiState, Field(alias='PetApiState')]
     WorkFollowEvent_1: Annotated[WorkFollowEvent, Field(alias='WorkFollowEvent')]
     WorkFollowStatus_1: Annotated[WorkFollowStatus, Field(alias='WorkFollowStatus')]
+    StardewNewSaveConfig_1: Annotated[
+        StardewNewSaveConfig, Field(alias='StardewNewSaveConfig')
+    ]
+    StardewLaunchOptions_1: Annotated[
+        StardewLaunchOptions, Field(alias='StardewLaunchOptions')
+    ]
+    StardewLaunchStatus_1: Annotated[
+        StardewLaunchStatus, Field(alias='StardewLaunchStatus')
+    ]
+    StardewLanHostStatus_1: Annotated[
+        StardewLanHostStatus, Field(alias='StardewLanHostStatus')
+    ]
+    StardewLaunchPrefs_1: Annotated[
+        StardewLaunchPrefs, Field(alias='StardewLaunchPrefs')
+    ]

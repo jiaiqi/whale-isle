@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CommercialTtsProviderSchema, VoiceEngineTierSchema } from './voice';
+import { DEFAULT_BWF_MCP_PORT } from './stardew-launch';
 
 // ============================================================================
 // 1. 桌宠渲染与音频锁契约 (源自 dsh-pet 复评结论，预留 Live2D 扩展)
@@ -808,9 +809,6 @@ export const StardewModsOpResultSchema = z.object({
 });
 export type StardewModsOpResult = z.infer<typeof StardewModsOpResultSchema>;
 
-/** 星露谷 BWF Mod 默认 MCP 端口（避开 Amazon Quick 等工具写死的 18080，也不撞泰拉瑞亚 18090 / 饥荒 18100） */
-export const DEFAULT_BWF_MCP_PORT = 18088;
-
 /** Mod 目录配置（userData/stardew-mods.json） */
 export const StardewModsConfigSchema = z.object({
   modsDir: z.string().default(''),
@@ -821,99 +819,8 @@ export const StardewModsConfigSchema = z.object({
 });
 export type StardewModsConfig = z.infer<typeof StardewModsConfigSchema>;
 
-// ───────────────────── 星露谷一键启动器（V2-P3-05） ─────────────────────
-/**
- * 启动状态机：只按真实探测结果推进，`ready` 必须由 MCP `get_state` 真实应答触发。
- * - not_installed：没找到游戏目录
- * - launching：已 spawn，尚未开始轮询 MCP
- * - waiting_mcp：进程/端口在，但 MCP 尚未就绪（常见于标题画面）
- * - ready：MCP `get_state` 正常应答
- * - timeout：超过等待上限仍未就绪
- * - failed：spawn 失败或游戏在但 SMAPI/Mod 缺失
- */
-export const StardewLaunchStateSchema = z.enum([
-  'not_installed',
-  'launching',
-  'waiting_mcp',
-  'ready',
-  'timeout',
-  'failed',
-]);
-export type StardewLaunchState = z.infer<typeof StardewLaunchStateSchema>;
-
-/** 启动方式：smapi=直接 spawn SMAPI 可执行文件；steam=open steam://rungameid/413150 */
-export const StardewLaunchStrategySchema = z.enum(['smapi', 'steam']);
-export type StardewLaunchStrategy = z.infer<typeof StardewLaunchStrategySchema>;
-
-export const StardewInstallInfoSchema = z.object({
-  /** 游戏目录存在（即使 SMAPI 缺失） */
-  gameInstalled: z.boolean(),
-  /** SMAPI 可执行文件存在（缺失时无法保证 Mod 被加载） */
-  smapiInstalled: z.boolean(),
-  /** BWF Mod 的 manifest 存在 */
-  bwfInstalled: z.boolean(),
-  /** Steam appmanifest_413150.acf 存在 */
-  steamAppPresent: z.boolean().default(false),
-  /** 游戏根目录（macOS 为 `.../Stardew Valley`，Windows/Linux 为安装目录） */
-  gameDir: z.string().default(''),
-  /** 可执行文件目录（macOS 为 `.../Stardew Valley/Contents/MacOS`） */
-  executableDir: z.string().default(''),
-  smapiBinary: z.string().default(''),
-  modsDir: z.string().default(''),
-});
-export type StardewInstallInfo = z.infer<typeof StardewInstallInfoSchema>;
-
-export const StardewLaunchStatusSchema = z.object({
-  state: StardewLaunchStateSchema,
-  install: StardewInstallInfoSchema,
-  /** 本次实际使用的启动方式（已在运行时为 null） */
-  strategy: StardewLaunchStrategySchema.nullable().default(null),
-  /** 主方式失败后回退到的方式（未回退为 null） */
-  fallbackStrategy: StardewLaunchStrategySchema.nullable().default(null),
-  /** MCP 端点（始终 127.0.0.1，见 T-M6-74） */
-  endpoint: z.string().default(''),
-  mcpPort: z.number().int().default(DEFAULT_BWF_MCP_PORT),
-  /** 探测时游戏进程是否已在运行（避免重复启动） */
-  gameRunning: z.boolean().default(false),
-  /** 是否已向 BWF 发送 load_save */
-  saveLoadRequested: z.boolean().default(false),
-  autoLoadSave: z.boolean().default(true),
-  /** MCP 轮询次数（真实探测） */
-  attempts: z.number().int().default(0),
-  startedAt: z.number().nullable().default(null),
-  elapsedMs: z.number().int().default(0),
-  timeoutMs: z.number().int().default(120_000),
-  /** 人类可读的一行状态 */
-  message: z.string().default(''),
-  /** 失败/超时时的下一步提示（标题画面、Mod 缺失等） */
-  hint: z.string().default(''),
-});
-export type StardewLaunchStatus = z.infer<typeof StardewLaunchStatusSchema>;
-
-export const StardewLaunchOptionsSchema = z.object({
-  port: z.number().int().min(1024).max(65535).optional(),
-  /** 等待 MCP 就绪的上限（毫秒），默认 120s */
-  timeoutMs: z.number().int().min(5_000).max(600_000).optional(),
-  /** 是否在 MCP 可达但未就绪时调用 BWF `load_save`，默认 true */
-  autoLoadSave: z.boolean().optional(),
-  /** auto=smapi 失败后回退 steam；smapi=只直接 spawn；steam=只走 Steam */
-  strategy: z.enum(['auto', 'smapi', 'steam']).optional(),
-  /**
-   * 联机隔离实例的数据目录（**必须是绝对路径**）。
-   *
-   * 给出时宿主给游戏子进程注入 `XDG_CONFIG_HOME=<dir>/xdg-config` 与
-   * `XDG_DATA_HOME=<dir>/xdg-data`：游戏的 `Saves`、`startup_preferences`、`default_options`
-   * 与 SMAPI 的 `mod-data` 全部落在隔离目录，**不触碰 owner 的 `~/.config/StardewValley`**。
-   *
-   * 为什么是绝对路径：macOS 的 .NET 运行时只在 `XDG_CONFIG_HOME` 以 `/` 开头时采纳，
-   * 否则静默回退 `$HOME/.config`（隔离会失效却不报错）。
-   *
-   * 为什么不能配 `strategy='steam'`：`open steam://…` 无法携带环境变量，
-   * 用 Steam 启动等于共用 owner 存档，宿主必须如实拒绝而不是静默放行。
-   */
-  isolateDataDir: z.string().min(1).regex(/^(\/|[A-Za-z]:[\\/])/u, 'isolateDataDir 必须是绝对路径').optional(),
-});
-export type StardewLaunchOptions = z.infer<typeof StardewLaunchOptionsSchema>;
+// 星露谷一键启动器 / 从 0 建档 / 隔离存储 / 语言映射 / LAN 状态契约（V2-P3-05 / V2-P3-07A）
+// 唯一事实源位于 ./stardew-launch，并由文件末尾 `export * from './stardew-launch'` 统一对外暴露。
 
 // 分屏/联机实例与游戏内身体的绑定（`V2-P2-09A`）单一事实源在 `./coop`
 // （与 `CoopParticipantSchema` 同处），已由文件末尾的 `export * from './coop'` 统一对外暴露。
@@ -1573,6 +1480,8 @@ export const StardewAvatarSyncSchema = z.object({
   spriteTier: StardewSpriteTierSchema.optional(),
   /** 程序化灵动动画开关（脚底阴影、待机微呼吸、走路轻弹跳与微倾、动作弹性） */
   liveliness: z.boolean().default(true),
+  /** 是否把 displayName 同步覆写到游戏内 Farmer.Name（默认 true 兼容旧版；新建档传 false 可防覆写） */
+  syncDisplayName: z.boolean().default(true),
 });
 export type StardewAvatarSync = z.infer<typeof StardewAvatarSyncSchema>;
 
@@ -1714,3 +1623,4 @@ export * from './browser-computer';
 export * from './model';
 export * from './social';
 export * from './song-console';
+export * from './stardew-launch';

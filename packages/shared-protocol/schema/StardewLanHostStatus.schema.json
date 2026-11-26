@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewLanHostStatus",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewLanHostStatus",
+  "$defs": {
+    "StardewLanHostStatus": {
+      "type": "object",
+      "properties": {
+        "isHost": {
+          "default": false,
+          "type": "boolean"
+        },
+        "multiplayerMode": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "serverRunning": {
+          "default": false,
+          "type": "boolean"
+        },
+        "lanListening": {
+          "default": false,
+          "type": "boolean"
+        },
+        "lanPort": {
+          "default": 24642,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "acceptIpConnections": {
+          "default": false,
+          "type": "boolean"
+        },
+        "inviteCode": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startingCabins": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        },
+        "availableFarmhandSlots": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        },
+        "worldReady": {
+          "default": false,
+          "type": "boolean"
+        },
+        "saveFolderName": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "languageCode": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
