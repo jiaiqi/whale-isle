@@ -21,6 +21,9 @@
   --rail-w: 232px;
   --top-h: 56px;
   --ring: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent-line);
+  /* 急停表面：亮色直接用 rose，暗色统一压深，保证白字 ≥ 4.5:1（见 ui.e2e 对比度断言） */
+  --halt-bg: var(--rose);
+  --halt-ink: #ffffff;
   /* 海图等高线 + 纸纹（Tidepaper 签名质感，静态、不动画） */
   --map-contour: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='620' height='620' viewBox='0 0 620 620' fill='none' stroke='%23142036' stroke-opacity='.05' stroke-width='1'%3E%3Cpath d='M-40 500c95-42 168-30 250 10s186 50 268 8 132-18 182 2'/%3E%3Cpath d='M-40 540c95-42 168-30 250 10s186 50 268 8 132-18 182 2'/%3E%3Cpath d='M-40 460c95-42 168-30 250 10s186 50 268 8 132-18 182 2'/%3E%3Cpath d='M-20 150c112-72 214-70 306-10s194 70 346 0'/%3E%3Cpath d='M-20 190c112-72 214-70 306-10s194 70 346 0'/%3E%3Cpath d='M-20 230c112-72 214-70 306-10s194 70 346 0'/%3E%3Cpath d='M130 620c-42-94-30-176 20-248s42-146 0-228-10-146 42-208'/%3E%3Cpath d='M170 620c-42-94-30-176 20-248s42-146 0-228-10-146 42-208'/%3E%3Cpath d='M210 620c-42-94-30-176 20-248s42-146 0-228-10-146 42-208'/%3E%3Ccircle cx='470' cy='118' r='30'/%3E%3Ccircle cx='470' cy='118' r='52'/%3E%3Ccircle cx='470' cy='118' r='74'/%3E%3Ccircle cx='112' cy='418' r='26'/%3E%3Ccircle cx='112' cy='418' r='46'/%3E%3Ccircle cx='112' cy='418' r='66'/%3E%3C/svg%3E");
   --paper-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
@@ -381,6 +384,12 @@
   --paper-noise: none;
 }
 
+/* 所有暗色主题的急停表面统一压深：#ff6b7f 配白字仅 2.74:1，压到 68% 后为 5.43:1 */
+:root.dark {
+  --halt-bg: color-mix(in srgb, var(--rose) 68%, #000);
+  --halt-ink: #ffffff;
+}
+
 /* 注意：不要加全局 * 重置——它属于 unlayered CSS，会压过 Tailwind @layer utilities */
 html, body { height: 100%; }
 body {
@@ -580,8 +589,8 @@ button, .clickable { cursor: pointer; font-family: inherit; }
   height: 30px;
   padding: 0 11px 0 10px;
   border-radius: var(--r-sm);
-  background: var(--rose);
-  color: #ffffff;
+  background: var(--halt-bg);
+  color: var(--halt-ink);
   border: 1px solid transparent;
   font-weight: 650;
   font-size: 12px;
@@ -590,13 +599,13 @@ button, .clickable { cursor: pointer; font-family: inherit; }
   transition: all var(--dur-hover) var(--ease);
   white-space: nowrap;
 }
-.btn-stop:hover { filter: brightness(1.06); }
+.btn-stop:hover { filter: brightness(0.95); }
 .btn-stop:active { transform: translateY(0.5px); }
 .btn-stop .kbd {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.34);
-  color: #ffffff;
-  opacity: 0.92;
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--halt-ink);
+  opacity: 1;
 }
 
 .sheen {
@@ -1255,14 +1264,14 @@ input[type='range'].wb-range::-webkit-slider-thumb {
 }
 .wb-hud.is-takeover { background: color-mix(in srgb, var(--amber) 9%, var(--bg)); }
 .wb-hud.is-halted {
-  background: var(--rose);
-  color: #ffffff;
+  background: var(--halt-bg);
+  color: var(--halt-ink);
   border-bottom-color: transparent;
   min-height: 48px;
   box-shadow: 0 8px 24px -16px var(--rose);
 }
 .wb-hud.is-halted .wb-hud-name,
-.wb-hud.is-halted .wb-hud-id { color: #ffffff; }
+.wb-hud.is-halted .wb-hud-id { color: var(--halt-ink); }
 .wb-hud.is-halted .wb-sonar-core { background: #ffffff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.6); }
 .wb-hud.is-halted .wb-sonar-halo { border-color: #ffffff; opacity: 0.6; }
 .wb-hud-name {
@@ -1286,7 +1295,7 @@ input[type='range'].wb-range::-webkit-slider-thumb {
   transition: background var(--dur-hover) var(--ease);
 }
 .wb-hud-person:hover { background: color-mix(in srgb, var(--text-1) 7%, transparent); }
-.wb-hud.is-halted .wb-hud-person:hover { background: rgba(255, 255, 255, 0.14); }
+.wb-hud.is-halted .wb-hud-person:hover { background: rgba(0, 0, 0, 0.14); }
 .wb-lease {
   display: flex;
   align-items: stretch;
@@ -1394,19 +1403,24 @@ input[type='range'].wb-range::-webkit-slider-thumb {
 .wb-hud.is-halted .wb-lease-item + .wb-lease-item { border-left-color: rgba(255, 255, 255, 0.3); }
 .wb-hud-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .wb-hud.is-halted .wb-ctrl {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.34);
-  color: #ffffff;
+  background: #ffffff;
+  border-color: transparent;
+  color: var(--halt-bg);
+}
+.wb-hud.is-halted .wb-ctrl:hover {
+  background: #ffffff;
+  border-color: transparent;
+  color: var(--halt-bg);
 }
 .wb-hud.is-halted .btn-stop {
   background: #ffffff;
-  color: var(--rose);
+  color: var(--halt-bg);
   box-shadow: none;
 }
 .wb-hud.is-halted .btn-stop .kbd {
-  background: rgba(190, 43, 65, 0.1);
-  border-color: rgba(190, 43, 65, 0.28);
-  color: var(--rose);
+  background: color-mix(in srgb, var(--halt-bg) 12%, transparent);
+  border-color: color-mix(in srgb, var(--halt-bg) 30%, transparent);
+  color: var(--halt-bg);
 }
 .wb-halt-copy { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 12px; }
 
