@@ -192,3 +192,127 @@ describe('ObsWebsocketClient · obs-websocket v5 握手与请求', () => {
     expect(() => client.close()).not.toThrow();
   });
 });
+
+/**
+ * 连接阶段「不许无限挂起」的回归（owner 2026-11-26 定点修复）。
+ * 用假 socket 直接制造 close(4009) / close(1006) / 永不响应，断言都抛错而不是挂死。
+ */
+class FakeSocket {
+  readonly listeners = new Map<string, Array<{ handler: (event: unknown) => void; once: boolean }>>();
+  readonly sent: string[] = [];
+  closed = false;
+
+  addEventListener(type: string, handler: (event: unknown) => void, options?: { once?: boolean }): void {
+    const list = this.listeners.get(type) ?? [];
+    list.push({ handler, once: options?.once === true });
+    this.listeners.set(type, list);
+  }
+
+  removeEventListener(type: string, handler: (event: unknown) => void): void {
+    const list = this.listeners.get(type) ?? [];
+    this.listeners.set(type, list.filter((entry) => entry.handler !== handler));
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.closed = true;
+    this.emit('close', { code: 1000, reason: '' });
+  }
+
+  emit(type: string, event: unknown): void {
+    const list = [...(this.listeners.get(type) ?? [])];
+    for (const entry of list) {
+      if (entry.once) this.removeEventListener(type, entry.handler);
+      entry.handler(event);
+    }
+  }
+
+  hello(authentication?: { salt: string; challenge: string }): void {
+    this.emit('message', {
+      data: JSON.stringify({ op: 0, d: { obsWebSocketVersion: '5.7.6', rpcVersion: 1, ...(authentication ? { authentication } : {}) } }),
+    });
+  }
+
+  identified(): void {
+    this.emit('message', { data: JSON.stringify({ op: 2, d: { negotiatedRpcVersion: 1 } }) });
+  }
+}
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+function makeFake(): { socket: FakeSocket; client: ObsWebsocketClient } {
+  const socket = new FakeSocket();
+  const client = new ObsWebsocketClient('ws://fake', { socketFactory: () => socket as unknown as WebSocket });
+  return { socket, client };
+}
+
+describe('ObsWebsocketClient · 连接阶段失败必须立刻抛错（禁止无限挂起）', () => {
+  it('密码错误（服务端 CLOSE 4009）→ 明确报「密码不正确」，不再等 op=2', async () => {
+    const { socket, client } = makeFake();
+    const connecting = client.connect('wrong-password');
+    socket.emit('open', {});
+    await flush();
+    socket.hello({ salt: 'salt-abc', challenge: 'chal-xyz' });
+    await flush();
+    expect(socket.sent.some((raw) => JSON.parse(raw).op === 1)).toBe(true);
+    socket.emit('close', { code: 4009, reason: 'Authentication failed.' });
+    await expect(connecting).rejects.toThrow(/认证失败：密码不正确/);
+    await expect(connecting).rejects.toThrow(/4009/);
+  });
+
+  it('对端异常断开（CLOSE 1006）→ 报「连接已断开」，退出路径同样落错', async () => {
+    const { socket, client } = makeFake();
+    const connecting = client.connect();
+    socket.emit('open', {});
+    await flush();
+    socket.emit('close', { code: 1006, reason: '' });
+    await expect(connecting).rejects.toThrow(/连接已断开（关闭码 1006）/);
+  });
+
+  it('连接阶段 error 事件 → 同一错误出口，报「无法连接 obs-websocket」', async () => {
+    const { socket, client } = makeFake();
+    const connecting = client.connect();
+    socket.emit('error', new Error('ECONNREFUSED'));
+    await expect(connecting).rejects.toThrow(/无法连接 obs-websocket/);
+  });
+
+  it('永不响应（连上但没有任何 Hello）→ 按 helloTimeoutMs 超时抛错，不挂起', async () => {
+    const { socket, client } = makeFake();
+    const connecting = client.connect(undefined, { helloTimeoutMs: 30 });
+    socket.emit('open', {});
+    await expect(connecting).rejects.toThrow(/等待 obs-websocket Hello 超时/);
+  });
+
+  it('回了 Hello 但不回 Identified（认证无响应）→ 按 identifiedTimeoutMs 超时抛错', async () => {
+    const { socket, client } = makeFake();
+    const connecting = client.connect(undefined, { identifiedTimeoutMs: 30 });
+    socket.emit('open', {});
+    await flush();
+    socket.hello();
+    await expect(connecting).rejects.toThrow(/Identified 超时/);
+    await expect(connecting).rejects.toThrow(/密码不正确/);
+  });
+
+  it('已连接后在途请求遇到对端 close → 请求被拒绝而不是等满 15 秒', async () => {
+    const { socket, client } = makeFake();
+    const connecting = client.connect();
+    socket.emit('open', {});
+    await flush();
+    socket.hello();
+    await flush();
+    socket.identified();
+    await connecting;
+    const pending = client.request({ requestType: 'GetVersion', timeoutMs: 5_000 });
+    socket.emit('close', { code: 1006, reason: '' });
+    await expect(pending).rejects.toThrow(/连接已断开/);
+  });
+
+  it('describeClose 文案：4009 与其它关闭码给出不同且可读的说明', async () => {
+    const { describeClose } = await import('./obs-websocket-client.js');
+    expect(describeClose(4009, 'Authentication failed.')).toContain('密码不正确');
+    expect(describeClose(1006, '')).toContain('连接已断开');
+  });
+});

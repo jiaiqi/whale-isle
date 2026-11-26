@@ -252,6 +252,20 @@ describe('runProbe', () => {
     expect(lines.join('\n')).toContain('连接被拒绝');
   });
 
+  it('密码错误（服务端 CLOSE 4009）→ 退出码 2，并打印「密码不正确」而不是「超时」', async () => {
+    const paths = writeConfigs('[General]\nBrowserHWAccel=false\n', { server_enabled: true, server_port: 4455 });
+    const lines: string[] = [];
+    const code = await runProbe({
+      configPaths: paths,
+      log: (l) => lines.push(l),
+      startRedPage: async () => ({ url: 'http://127.0.0.1:1/red', close: async () => undefined }),
+      createClient: () => new FakeClient({ connectError: new Error('OBS WebSocket 认证失败：密码不正确（服务端关闭码 4009，Authentication failed.）') }).asClient(),
+    });
+    expect(code).toBe(PROBE_EXIT.UNAVAILABLE);
+    expect(lines.join('\n')).toContain('密码不正确');
+    expect(lines.join('\n')).not.toContain('请求超时');
+  });
+
   it('渲染全黑 → 退出码 1，且临时场景与临时输入都被删除', async () => {
     const paths = writeConfigs('[General]\nBrowserHWAccel=true\n', { server_enabled: true, server_port: 4455 });
     const client = new FakeClient({ screenshot: colorPngDataUri([0, 0, 0]) });

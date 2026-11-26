@@ -4,6 +4,10 @@
  * 只实现自检探针需要的部分：握手（含认证 challenge/salt）、Request/RequestResponse。
  * 任何异常都**如实抛出**，绝不吞掉并伪装成成功——探针结论必须可信。
  *
+ * 连接阶段的失败出口统一收口（`rejectAll`）：认证失败时服务端不发 op=2 而是直接
+ * 发 CLOSE（code 4009），早期实现只等 op=2，导致 `connect()` 永远不 settle——
+ * 现在 close / error / 超时三条路径都会让等待者立刻抛错，并给出能直接给 owner 看的文案。
+ *
  * 协议参考：obs-websocket v5（op 0=Hello, 1=Identify, 2=Identified, 6=Request, 9=RequestResponse）。
  */
 import { createHash } from 'node:crypto';
@@ -14,10 +18,36 @@ export interface ObsRequestOptions {
   timeoutMs?: number;
 }
 
+export interface ObsConnectOptions {
+  /** 等 TCP/WebSocket 打开 */
+  openTimeoutMs?: number;
+  /** 等 op=0 Hello */
+  helloTimeoutMs?: number;
+  /** 等 op=2 Identified（认证失败时永远不会来） */
+  identifiedTimeoutMs?: number;
+  /** 测试注入：替换真实的全局 WebSocket */
+  socketFactory?: (url: string) => WebSocket;
+}
+
+export const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
+/** obs-websocket 认证失败关闭码（v5 规范 4009 Authentication failed） */
+export const AUTH_FAILED_CLOSE_CODE = 4009;
+
 interface PendingRequest {
   resolve: (data: Record<string, unknown>) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
+}
+
+type SocketFactory = (url: string) => WebSocket;
+
+/** 关闭码 → 能直接给 owner 看的文案 */
+export function describeClose(code: number, reason?: string): string {
+  const suffix = reason !== undefined && reason !== '' ? `，${reason}` : '';
+  if (code === AUTH_FAILED_CLOSE_CODE || /auth/i.test(reason ?? '')) {
+    return `OBS WebSocket 认证失败：密码不正确（服务端关闭码 ${code}${suffix}）`;
+  }
+  return `obs-websocket 连接已断开（关闭码 ${code}${suffix}）`;
 }
 
 export class ObsWebsocketClient {
@@ -26,38 +56,62 @@ export class ObsWebsocketClient {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly helloWaiters: Array<(data: Record<string, unknown>) => void> = [];
   private readonly identifiedWaiters: Array<(data: Record<string, unknown>) => void> = [];
+  /** 连接阶段所有等待者的统一失败出口 */
+  private readonly failureRejecters = new Set<(error: Error) => void>();
+  private connectFailure: Error | null = null;
+  private closing = false;
 
-  constructor(url: string) {
-    this.socket = new WebSocket(url);
+  constructor(url: string, options: ObsConnectOptions = {}) {
+    const factory: SocketFactory = options.socketFactory ?? ((target: string) => new WebSocket(target));
+    this.socket = factory(url);
+    this.attachLifecycleListeners();
   }
 
-  async connect(password?: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      const onOpen = (): void => {
-        this.socket.removeEventListener('error', onError);
-        resolve();
-      };
-      const onError = (): void => {
-        this.socket.removeEventListener('open', onOpen);
-        reject(new Error('无法连接 obs-websocket（OBS 未运行或 WebSocket 服务器未开启）'));
-      };
-      this.socket.addEventListener('open', onOpen, { once: true });
-      this.socket.addEventListener('error', onError, { once: true });
-    });
+  async connect(password?: string, options: ObsConnectOptions = {}): Promise<void> {
+    await this.waitOpen(options.openTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
+    await this.waitHello(options.helloTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
 
+    const auth: Record<string, unknown> = { rpcVersion: 1 };
+    const hello = this.lastHello;
+    const authentication = hello.authentication as { salt?: string; challenge?: string } | null | undefined;
+    if (authentication != null) {
+      if (password === undefined || password === '') {
+        throw new Error('OBS WebSocket 开启了认证：需要通过 --password 或环境变量 OBS_WEBSOCKET_PASSWORD 提供密码');
+      }
+      const secretHash = createHash('sha256').update(password).digest('base64');
+      const saltHash = createHash('sha256').update(`${authentication.salt ?? ''}${secretHash}`).digest('base64');
+      auth.authentication = createHash('sha256')
+        .update(`${authentication.challenge ?? ''}${saltHash}`)
+        .digest('base64');
+    }
+    this.socket.send(JSON.stringify({ op: 1, d: auth }));
+    await this.waitIdentified(options.identifiedTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
+  }
+
+  private lastHello: Record<string, unknown> = {};
+
+  /** close / error 都走同一个失败出口：不让任何一个等待者悬在半空 */
+  private attachLifecycleListeners(): void {
+    this.socket.addEventListener('close', (event: Event) => {
+      const detail = event as unknown as { code?: number; reason?: string };
+      if (this.closing) return;
+      this.failEveryone(new Error(describeClose(detail.code ?? 0, detail.reason)));
+    });
+    this.socket.addEventListener('error', () => {
+      if (this.closing) return;
+      this.failEveryone(new Error('无法连接 obs-websocket（OBS 未运行或 WebSocket 服务器未开启）'));
+    });
     this.socket.addEventListener('message', (event: MessageEvent) => {
       const text = typeof event.data === 'string' ? event.data : String(event.data);
-      let payload: {
-        op?: number;
-        d?: Record<string, unknown>;
-      };
+      let payload: { op?: number; d?: Record<string, unknown> };
       try {
         payload = JSON.parse(text) as typeof payload;
       } catch {
         return;
       }
       if (payload.op === 0) {
-        this.helloWaiters.shift()?.(payload.d ?? {});
+        this.lastHello = payload.d ?? {};
+        this.helloWaiters.shift()?.(this.lastHello);
         return;
       }
       if (payload.op === 2) {
@@ -79,37 +133,78 @@ export class ObsWebsocketClient {
         }
       }
     });
+  }
 
-    const hello = await this.waitHello();
-    const auth: Record<string, unknown> = { rpcVersion: 1 };
-    const authentication = hello.authentication as { salt?: string; challenge?: string } | null | undefined;
-    if (authentication != null) {
-      if (password === undefined || password === '') {
-        throw new Error('OBS WebSocket 开启了认证：需要通过 --password 或环境变量 OBS_WEBSOCKET_PASSWORD 提供密码');
-      }
-      const secretHash = createHash('sha256').update(password).digest('base64');
-      const saltHash = createHash('sha256').update(`${authentication.salt ?? ''}${secretHash}`).digest('base64');
-      auth.authentication = createHash('sha256')
-        .update(`${authentication.challenge ?? ''}${saltHash}`)
-        .digest('base64');
+  /** 统一失败出口：连接阶段等待者 + 在途请求一起拒绝，且只记第一条原因 */
+  private failEveryone(error: Error): void {
+    if (this.connectFailure === null) this.connectFailure = error;
+    for (const reject of [...this.failureRejecters]) reject(error);
+    this.failureRejecters.clear();
+    for (const [requestId, entry] of [...this.pending]) {
+      this.pending.delete(requestId);
+      clearTimeout(entry.timer);
+      entry.reject(error);
     }
-    this.socket.send(JSON.stringify({ op: 1, d: auth }));
-    await this.waitIdentified();
   }
 
-  private waitHello(): Promise<Record<string, unknown>> {
-    return new Promise((resolve) => {
-      this.helloWaiters.push(resolve);
+  /**
+   * 等一个信号：要么被 resolve，要么被失败出口拒绝，要么超时——三者必有其一。
+   * 这是「不许无限挂起」的唯一实现点。
+   */
+  private awaitSignal<T>(
+    register: (resolve: (value: T) => void) => void,
+    timeoutMs: number,
+    timeoutMessage: string,
+  ): Promise<T> {
+    return new Promise<T>((resolvePromise, rejectPromise) => {
+      if (this.connectFailure !== null) {
+        rejectPromise(this.connectFailure);
+        return;
+      }
+      const onFailure = (error: Error): void => {
+        clearTimeout(timer);
+        rejectPromise(error);
+      };
+      const timer = setTimeout(() => {
+        this.failureRejecters.delete(onFailure);
+        rejectPromise(new Error(timeoutMessage));
+      }, timeoutMs);
+      timer.unref?.();
+      this.failureRejecters.add(onFailure);
+      register((value) => {
+        clearTimeout(timer);
+        this.failureRejecters.delete(onFailure);
+        resolvePromise(value);
+      });
     });
   }
 
-  private waitIdentified(): Promise<Record<string, unknown>> {
-    return new Promise((resolve) => {
-      this.identifiedWaiters.push(resolve);
-    });
+  private waitOpen(timeoutMs: number): Promise<void> {
+    return this.awaitSignal<void>(
+      (resolve) => this.socket.addEventListener('open', () => resolve(), { once: true }),
+      timeoutMs,
+      '连接 obs-websocket 超时（OBS 未运行，或 WebSocket 服务器地址/端口不对）',
+    );
+  }
+
+  private waitHello(timeoutMs: number): Promise<Record<string, unknown>> {
+    return this.awaitSignal<Record<string, unknown>>(
+      (resolve) => this.helloWaiters.push(resolve),
+      timeoutMs,
+      '等待 obs-websocket Hello 超时（服务端不是 obs-websocket v5，或 WebSocket 服务器未正常响应）',
+    );
+  }
+
+  private waitIdentified(timeoutMs: number): Promise<Record<string, unknown>> {
+    return this.awaitSignal<Record<string, unknown>>(
+      (resolve) => this.identifiedWaiters.push(resolve),
+      timeoutMs,
+      '等待 obs-websocket Identified 超时（服务端没有确认认证，常见原因：密码不正确）',
+    );
   }
 
   request(options: ObsRequestOptions): Promise<Record<string, unknown>> {
+    if (this.connectFailure !== null) return Promise.reject(this.connectFailure);
     const requestId = `whale-selfcheck-${this.nextId[0]}`;
     this.nextId[0] = (this.nextId[0] ?? 1) + 1;
     const timeoutMs = options.timeoutMs ?? 15_000;
@@ -131,6 +226,7 @@ export class ObsWebsocketClient {
   }
 
   close(): void {
+    this.closing = true;
     try {
       this.socket.close();
     } catch {
