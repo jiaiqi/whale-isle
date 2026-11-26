@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Added / Changed（`V2-P3-01`：统一表演系统 `SingEngine` / `PerformanceDirector` / `StageRuntime` — `IMPLEMENTED_UNVERIFIED`）
+
+- **歌唱授权、双语歌词时钟、舞蹈与舞台切换契约** `packages/shared-protocol/src/voice.ts`：定义 `PerformanceChannel`、`SongRights` / `SongRightsCheck`、`SingMode` / `SingBackendMode` / `SingRequest` / `SingRenderResult`、`BilingualLyricLine` / `LyricsClockFrame`、`DanceRoutine`、`SpeechPerformancePlan` / `SilenceDecision` / `PerformanceSnapshot` 与 `StageBackendKind` / `StageCharacterBinding` / `StageRuntimeSnapshot` Zod 契约。
+- **歌唱引擎、音频时钟歌词同步与 6 层表演仲裁总控** `packages/voice-runtime/src/{performance.ts,performance.spec.ts,index.ts}`：实现 `evaluateSongRights`（四重版权拦截 `dev_only_non_commercial` / `unlicensed` 与无声线授权）、`parseBilingualLrc` / `LyricsClockSync`、`SingEngine`（严格隔离 SVS/SVC 与普通 TTS，诚实探针与导唱 WAV 提取 `preview_guide_tone`）及 `PerformanceDirector`（6 层动作优先级仲裁、`decideSpeechSilence` 自然沉默权、`AudioMixer` 并发唱伴音效与急停清零）。
+- **2D / Live2D / VRM 3D / OBS 统一舞台化身调度与宿主 8 路 IPC** `packages/pet-renderer/src/{stage-runtime.ts,stage-runtime.spec.ts,index.ts}` & `apps/desktop-host/src/{main/v2-kernel-host.ts,preload/index.ts,renderer/director/bridge.ts}`：交付 `Desktop2dStageAdapter` / `Live2dStageAdapter` / `Vrm3dStageAdapter`（含 `visemeToVrmBlendShapes` / `visemeToLive2dParams` 映射）与 `StageRuntime` 无缝切维保留歌词/表情/口型状态，挂载 8 路 `v2:perf-*` / `v2:stage-*` IPC，通过 `verify:gate` 7/7 与 Electron 45 E2E 4 套件（真实神经歌声 Worker 与实机 3D/Live2D 画布渲染待后续真机验证）。
+
 ### Added / Changed（`V2-P2-08`：真实星露谷人机联机协作 `CoopRuntime` v1 — `IMPLEMENTED_UNVERIFIED`）
 
 - **联机协作房间与控制权契约** `packages/shared-protocol/src/{coop.ts,index.ts}`：定义 `CoopRoomStatus`、`CoopParticipant`、`CoopTaskItem`、`CoopResourceReservation`、`CoopModCompatibilityReport` 与 `CoopRuntimeSnapshot` Zod 契约。

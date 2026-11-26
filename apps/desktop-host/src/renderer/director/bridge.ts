@@ -33,6 +33,7 @@ import type {
   CoopTaskItem,
   CrossPetImportRequest,
   CrossPetImportResult,
+  DanceRoutineInput,
   FuzzyImpression,
   GoalHorizon,
   GoalOrigin,
@@ -40,6 +41,7 @@ import type {
   LifeActivityKind,
   LipSyncFrame,
   Live2dAssetInspection,
+  LyricsDisplayPolicyInput,
   McpEndpoint,
   MediaJobSnapshot,
   MediaJobSubmitRequest,
@@ -47,6 +49,7 @@ import type {
   MemoryCategory,
   MemoryDeletionAudit,
   MemoryUncertaintyLevel,
+  PerformanceSnapshot,
   PetDesktopPrefs,
   PetWindowView,
   PixelAvatarJobRequest,
@@ -56,8 +59,18 @@ import type {
   PreferenceCategory,
   ProviderQuotaMatrix,
   ProviderQuotaReport,
+  SilenceDecision,
+  SingProviderStatus,
+  SingRenderResult,
+  SingRequestInput,
   SoundAssetInspection,
+  SpeechPerformancePlan,
+  SpeechPerformancePlanInput,
+  StageBackendKind,
+  StageCharacterBindingInput,
+  StageRuntimeSnapshot,
   StageSceneInspection,
+  StageSceneSpecInput,
   StardewAvatarExportVerification,
   TeamBlackboardSnapshot,
   TeamCommsMessage,
@@ -808,6 +821,71 @@ export interface DirectorBridge {
     participantId?: string;
     reason?: string;
   }): Promise<{ ok: boolean; error?: string; snapshot?: CoopRuntimeSnapshot; detail?: unknown }>;
+  v2PerfSnapshot(): Promise<{
+    performance: PerformanceSnapshot;
+    stage: StageRuntimeSnapshot;
+    singBackends: SingProviderStatus[];
+  }>;
+  v2PerfSilenceCheck(input?: {
+    priority?: 'P0_INTERRUPT' | 'P1_CADENCE' | 'P2_IDLE';
+    quietCompanionMode?: boolean;
+    socialEnergy?: number;
+    msSinceLastSpeech?: number;
+    minCooldownMs?: number;
+    isUserDirectAddress?: boolean;
+  }): Promise<SilenceDecision>;
+  v2PerfSpeechPlan(input: {
+    plan: SpeechPerformancePlanInput;
+    silenceContext?: {
+      priority?: 'P0_INTERRUPT' | 'P1_CADENCE' | 'P2_IDLE';
+      quietCompanionMode?: boolean;
+      socialEnergy?: number;
+      msSinceLastSpeech?: number;
+      minCooldownMs?: number;
+      isUserDirectAddress?: boolean;
+    };
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    speaking?: boolean;
+    plan?: SpeechPerformancePlan;
+    silence?: SilenceDecision;
+    lipFrames?: LipSyncFrame[];
+    snapshot?: PerformanceSnapshot;
+    stage?: StageRuntimeSnapshot;
+  }>;
+  v2PerfSingStart(input: {
+    request: SingRequestInput;
+    danceRoutine?: DanceRoutineInput;
+  }): Promise<{
+    ok: boolean;
+    error?: string;
+    result?: SingRenderResult;
+    snapshot?: PerformanceSnapshot;
+    stage?: StageRuntimeSnapshot;
+  }>;
+  v2PerfTick(positionMs: number): Promise<{
+    ok: boolean;
+    performance: PerformanceSnapshot;
+    stage: StageRuntimeSnapshot;
+  }>;
+  v2PerfStop(reason?: string): Promise<{
+    ok: boolean;
+    performance: PerformanceSnapshot;
+    stage: StageRuntimeSnapshot;
+  }>;
+  v2StageSwitchBackend(input: {
+    backend: StageBackendKind;
+    binding?: StageCharacterBindingInput;
+  }): Promise<{ ok: boolean; error?: string; stage?: StageRuntimeSnapshot }>;
+  v2StageCommand(input: {
+    action: 'load_scene' | 'set_expression' | 'play_animation' | 'set_lyrics_policy';
+    scene?: StageSceneSpecInput;
+    expression?: string;
+    intensity?: number;
+    animationId?: string;
+    lyricsPolicy?: LyricsDisplayPolicyInput;
+  }): Promise<{ ok: boolean; error?: string; stage?: StageRuntimeSnapshot; policy?: unknown }>;
   v2StorageCheck(): Promise<{
     ok: boolean;
     engine: string;

@@ -140,6 +140,37 @@ interface DirectorV2Window {
       snapshot?: { status: string; participants: Array<{ participantId: string; connectionState: string; reconnectAttempts: number }> };
     }>;
     v2CoopModCompat(): Promise<{ ok: boolean; report?: { compatible: boolean; canStartCoop: boolean; bwfReady: boolean; hostModCount: number } }>;
+    v2PerfSnapshot(): Promise<{
+      performance: { characterId: string; mode: string; halted: boolean };
+      stage: { characterId: string; activeBackend: string; registeredBackends: string[]; devWatermarkActive: boolean };
+      singBackends: Array<{ mode: string; backend: string; available: boolean }>;
+    }>;
+    v2PerfSilenceCheck(input?: Record<string, unknown>): Promise<{ shouldSpeak: boolean; reason: string }>;
+    v2PerfSingStart(input: Record<string, unknown>): Promise<{
+      ok: boolean;
+      error?: string;
+      result?: { ok: boolean; backendMode: string; rightsCheck: { allowed: boolean }; lipFrames: Array<{ viseme: string }> };
+      snapshot?: { mode: string; mixer: { tracks: Array<{ kind: string }> } };
+    }>;
+    v2PerfTick(positionMs: number): Promise<{
+      ok: boolean;
+      performance: {
+        lyrics: { activeIndex: number; activeLine: { primaryText: string; secondaryText?: string } | null };
+        activeDanceCue: { cueId: string } | null;
+      };
+      stage: {
+        lyrics: { activeIndex: number } | null;
+      };
+    }>;
+    v2StageSwitchBackend(input: { backend: string }): Promise<{
+      ok: boolean;
+      stage?: {
+        characterId: string;
+        activeBackend: string;
+        lyrics: { activeIndex: number } | null;
+        adapterState: Record<string, unknown>;
+      };
+    }>;
     characterList(): Promise<Array<{ id: string }>>;
     characterSelect(id: string): Promise<{ ok: boolean }>;
   };
@@ -559,6 +590,98 @@ describe('[E2E-HOST] V2 WhaleKernel Electron 宿主集成', () => {
       expect(p208.reconnected.snapshot?.status).toBe('active');
       expect(p208.compat.ok).toBe(true);
       expect(p208.compat.report?.bwfReady).toBe(true);
+
+      // V2-P3-01：验证统一表演系统（SingEngine 授权拦截 + 导唱 + 歌词/舞蹈时钟 + 2D/Live2D/VRM StageRuntime + 急停）
+      const p301 = await director.evaluate(async () => {
+        const bridge = (window as unknown as DirectorV2Window).directorBridge;
+        await bridge.v2Resume('autonomous');
+        const initSnap = await bridge.v2PerfSnapshot();
+        const blockedLive = await bridge.v2PerfSingStart({
+          request: {
+            requestId: 'e2e-sing-blocked',
+            characterId: 'char_xiaojing',
+            voiceProfileId: 'qiaopi_mengmei',
+            mode: 'svs',
+            channel: 'livestream_public',
+            song: {
+              songId: 'nc-song',
+              title: 'NC 测试歌',
+              durationMs: 4000,
+              rights: {
+                songLicense: 'dev_only_non_commercial',
+                accompanimentLicense: 'original_owned',
+                lyricsLicense: 'original_owned',
+                voiceModelAuthorized: true,
+                voiceConsentSource: 'test-consent',
+              },
+            },
+          },
+        });
+        const quietSkip = await bridge.v2PerfSilenceCheck({ quietCompanionMode: true, priority: 'P2_IDLE' });
+        const p0Speak = await bridge.v2PerfSilenceCheck({ quietCompanionMode: true, priority: 'P0_INTERRUPT' });
+        await bridge.v2PerfSilenceCheck({ quietCompanionMode: false, priority: 'P1_CADENCE' });
+
+        const singOk = await bridge.v2PerfSingStart({
+          request: {
+            requestId: 'e2e-sing-ok',
+            characterId: 'char_xiaojing',
+            voiceProfileId: 'qiaopi_mengmei',
+            mode: 'svs',
+            channel: 'livestream_public',
+            song: {
+              songId: 'e2e-tide-song',
+              title: '鲸屿晨光',
+              durationMs: 5000,
+              accompanimentTrackPath: 'assets/audio/accomp.wav',
+              lyrics: [
+                { index: 0, startMs: 0, endMs: 2000, primaryText: '第一句潮汐', secondaryText: 'First tide line' },
+                { index: 1, startMs: 2000, endMs: 5000, primaryText: '第二句星光', secondaryText: 'Second starlight' },
+              ],
+              rights: {
+                songLicense: 'original_owned',
+                accompanimentLicense: 'original_owned',
+                lyricsLicense: 'original_owned',
+                voiceModelAuthorized: true,
+                voiceConsentSource: 'whale-isle-original',
+              },
+            },
+          },
+          danceRoutine: {
+            routineId: 'e2e-dance',
+            title: '鲸跃舞',
+            durationMs: 5000,
+            cues: [
+              { cueId: 'e2e-cue-1', atMs: 0, durationMs: 2000, poseId: 'wave', vrmMotionTag: 'dance_wave' },
+              { cueId: 'e2e-cue-2', atMs: 2000, durationMs: 3000, poseId: 'spin', vrmMotionTag: 'dance_spin', expressionId: 'happy' },
+            ],
+          },
+        });
+        const ticked = await bridge.v2PerfTick(2500);
+        const live2dSwitch = await bridge.v2StageSwitchBackend({ backend: 'live2d' });
+        const vrmSwitch = await bridge.v2StageSwitchBackend({ backend: 'vrm-3d' });
+        await bridge.v2EmergencyHalt('E2E P3 急停验证');
+        const afterHalt = await bridge.v2PerfSnapshot();
+        await bridge.v2Resume('autonomous');
+        return { initSnap, blockedLive, quietSkip, p0Speak, singOk, ticked, live2dSwitch, vrmSwitch, afterHalt };
+      });
+      expect(p301.initSnap.stage.characterId).toBe('char_xiaojing');
+      expect(p301.initSnap.singBackends.length).toBe(2);
+      expect(p301.blockedLive.ok).toBe(false);
+      expect(p301.blockedLive.result?.rightsCheck.allowed).toBe(false);
+      expect(p301.quietSkip.shouldSpeak).toBe(false);
+      expect(p301.p0Speak.shouldSpeak).toBe(true);
+      expect(p301.singOk.ok).toBe(true);
+      expect(p301.singOk.result?.backendMode).toBe('preview_guide_tone');
+      expect(p301.singOk.snapshot?.mode).toBe('singing_and_dancing');
+      expect(p301.ticked.performance.lyrics.activeIndex).toBe(1);
+      expect(p301.ticked.performance.lyrics.activeLine?.secondaryText).toBe('Second starlight');
+      expect(p301.ticked.performance.activeDanceCue?.cueId).toBe('e2e-cue-2');
+      expect(p301.live2dSwitch.stage?.activeBackend).toBe('live2d');
+      expect(p301.live2dSwitch.stage?.characterId).toBe('char_xiaojing');
+      expect(p301.vrmSwitch.stage?.activeBackend).toBe('vrm-3d');
+      expect(p301.vrmSwitch.stage?.lyrics?.activeIndex).toBe(1);
+      expect(p301.afterHalt.performance.halted).toBe(true);
+      expect(p301.afterHalt.performance.mode).toBe('halted');
     } finally {
       await app.close();
     }

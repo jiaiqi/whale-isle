@@ -94,3 +94,7 @@
 - **`V2-P2-06`（11 步游戏像素流水线与 Stardew Avatar Mod 导出）**：`dotnet build` Release 编译暂存 `WhaleIsleAvatar.dll`（0 警告）、`pixel-avatar-v2.spec.ts`（4/4 PASS）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；因尚未人工启动星露谷 GUI 进图目视核验，`realDeviceInGameVisualVerified` 诚实保持 `false`，状态记为 `IMPLEMENTED_UNVERIFIED`。
 - **`V2-P2-07`（十态 `AssetRegistry`、舞台/声音工坊、商用清源与一键回滚）**：纯本地资产治理与创作闭环，`asset-registry-v2.spec.ts`（3/3 PASS）、`verify:gate` 7/7 与 Electron 45 E2E（v1→v2→回滚→SHA-256→商业清源阻断）全绿，状态记为 `DONE`。
 - **`V2-P2-08`（`CoopRuntime` v1 星露谷人机联机协作）**：`coop-runtime.spec.ts`（5/5 PASS，90% 分支覆盖）、本机真实 `Mods/` 兼容扫描（`v2CoopModCompat`）、`verify:gate` 7/7 与 Electron 45 E2E 全绿；双端真实游戏客户端开房协同实玩待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。
+
+## 七、P3 阶段近期实测状态快照
+
+- **`V2-P3-01`（统一表演系统：`SingEngine` SVS/SVC + 歌词时钟 + 舞蹈 + 2D/3D `StageRuntime`）**：`performance.spec.ts` + `stage-runtime.spec.ts`（6/6 PASS，合并 90.88% 分支覆盖）、`verify:gate` 7/7 与 Electron 45 E2E 4 套件全绿，详见 [P3-performance-stage-verification.md](./evidence/P3-performance-stage-verification.md)；真实神经 SVS/SVC Worker 推理听感与外部 Cubism `.moc3` / WebGL VRM 真机画布渲染待 `[REAL-DEVICE]`，状态记为 `IMPLEMENTED_UNVERIFIED`。

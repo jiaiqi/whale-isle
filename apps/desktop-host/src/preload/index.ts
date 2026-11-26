@@ -397,6 +397,14 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2CoopResourceCheck: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-resource-check', input),
   v2CoopModCompat: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-mod-compat', input),
   v2CoopRecovery: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:coop-recovery', input),
+  v2PerfSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:perf-snapshot'),
+  v2PerfSilenceCheck: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:perf-silence-check', input),
+  v2PerfSpeechPlan: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:perf-speech-plan', input),
+  v2PerfSingStart: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:perf-sing-start', input),
+  v2PerfTick: (positionMs: number): Promise<unknown> => ipcRenderer.invoke('v2:perf-tick', positionMs),
+  v2PerfStop: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:perf-stop', reason),
+  v2StageSwitchBackend: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:stage-switch-backend', input),
+  v2StageCommand: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:stage-command', input),
   v2StorageCheck: (): Promise<{ ok: boolean; engine: string; schemaVersion: string | null; recovered: boolean; integrity: string }> =>
     ipcRenderer.invoke('v2:storage-check'),
   ...(TEST_MODE

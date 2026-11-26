@@ -27,9 +27,17 @@ import {
   LifeActivityKindSchema,
   MemoryCategorySchema,
   PreferenceCategorySchema,
+  StageBackendKindSchema,
+  StageCharacterBindingSchema,
+  StageSceneSpecSchema,
   VoiceProviderKindSchema,
   type CharacterCoreSnapshot,
+  type DanceRoutineInput,
   type ImageGenProviderDescriptor,
+  type LyricsDisplayPolicyInput,
+  type SingRequestInput,
+  type SpeechPerformancePlanInput,
+  type StageBackendKind,
 } from '@workbench/shared-protocol';
 import { MediaGenerationGateway } from './media-gateway';
 import { Pipeline3dManager } from './pipeline-3d';
@@ -54,9 +62,13 @@ import {
   CloudOpenAiTtsProvider,
   LocalAudioWorkerProvider,
   MiniMaxTtsProvider,
+  PerformanceDirector,
+  SingEngine,
   SystemFallbackVoiceProvider,
   VoiceProviderRouter,
+  type SilenceContextInput,
 } from '@workbench/voice-runtime';
+import { StageRuntime } from '@workbench/pet-renderer';
 import {
   BUILTIN_PROVIDER_PRESETS,
   probeProviderQuota,
@@ -103,6 +115,8 @@ export interface V2KernelHost {
   readonly characterCore: CharacterCore;
   readonly audioMixer: AudioMixer;
   readonly voiceRouter: VoiceProviderRouter;
+  readonly performanceDirector: PerformanceDirector;
+  readonly stageRuntime: StageRuntime;
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost; memory?: MemoryHost }): void;
   stop(): Promise<void>;
 }
@@ -343,15 +357,59 @@ export async function createV2KernelHost(options: {
     return characterCore.life.selectActivity(input);
   });
   const coopRuntime = new CoopRuntimeV1();
+  const singEngine = new SingEngine();
+  const performanceDirector = new PerformanceDirector({
+    characterId: 'char_xiaojing',
+    audioMixer,
+    singEngine,
+    events: kernel.events,
+  });
+  const stageRuntime = new StageRuntime();
+  stageRuntime.registerBinding({
+    characterId: 'char_xiaojing',
+    displayName: '小鲸',
+    backend: 'live2d',
+    assetPath: 'assets/stage/live2d/char_xiaojing.model3.json',
+    licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+    capabilities: ['ParamMouthOpenY', 'ParamMouthForm', 'MotionGroup'],
+  });
+  stageRuntime.registerBinding({
+    characterId: 'char_xiaojing',
+    displayName: '小鲸',
+    backend: 'vrm-3d',
+    assetPath: 'assets/stage/vrm/char_xiaojing.vrm',
+    licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+    capabilities: ['humanoid', 'viseme-blendshapes', 'emotion-blendshapes'],
+  });
+  stageRuntime.registerBinding({
+    characterId: 'char_xiaojing',
+    displayName: '小鲸',
+    backend: 'obs-stage',
+    assetPath: 'assets/pet-packs/crosspet/characters/blue-whale-maid/manifest.json',
+    licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+    capabilities: ['transparent-obs', 'lyrics-overlay'],
+  });
+  stageRuntime.loadCharacter({
+    characterId: 'char_xiaojing',
+    displayName: '小鲸',
+    backend: 'desktop-2d',
+    assetPath: 'assets/pet-packs/crosspet/characters/blue-whale-maid/manifest.json',
+    licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+    capabilities: ['webm-alpha', 'spritesheet', 'footline-align'],
+  });
+
   ipcMain.handle('v2:emergency-halt', (_e, reason?: string) => {
     const haltReason = typeof reason === 'string' && reason.trim() !== '' ? reason : '用户在工作台触发紧急停止';
     stopFn?.();
     audioMixer.stopAll();
+    performanceDirector.emergencyHalt(haltReason);
+    stageRuntime.stopPerformance(haltReason);
     coopRuntime.emergencyHaltAll(haltReason);
     characterCore.life.emergencyHalt(haltReason);
     return kernel.characters.primaryState();
   });
   ipcMain.handle('v2:resume', (_e, mode?: 'autonomous' | 'coop' | 'command' | 'manual_takeover') => {
+    performanceDirector.resumeFromHalt();
     characterCore.life.resume(mode ?? 'autonomous');
     return kernel.characters.primaryState();
   });
@@ -904,6 +962,112 @@ export async function createV2KernelHost(options: {
     const res = coopRuntime.reconnectParticipant(String(rawInput.participantId ?? ''));
     return { ...res, snapshot: coopRuntime.snapshot() };
   });
+  // V2-P3-01：统一表演系统（SingEngine SVS/SVC + 歌词时钟 + 舞蹈 + StageRuntime）
+  ipcMain.handle('v2:perf-snapshot', async () => ({
+    performance: performanceDirector.snapshot(),
+    stage: stageRuntime.snapshot(),
+    singBackends: await singEngine.probeBackends(),
+  }));
+  ipcMain.handle('v2:perf-silence-check', (_e, rawInput?: SilenceContextInput & { quietCompanionMode?: boolean }) => {
+    if (typeof rawInput?.quietCompanionMode === 'boolean') {
+      performanceDirector.setQuietCompanionMode(rawInput.quietCompanionMode);
+    }
+    return performanceDirector.decideSpeechSilence(rawInput ?? {});
+  });
+  ipcMain.handle('v2:perf-speech-plan', (_e, rawInput: { plan: SpeechPerformancePlanInput; silenceContext?: SilenceContextInput }) => {
+    try {
+      const outcome = performanceDirector.planSpeech(rawInput.plan, rawInput.silenceContext ?? {});
+      if (outcome.speaking) {
+        stageRuntime.startSpeech(outcome.plan);
+        if (outcome.lipFrames[0]) {
+          stageRuntime.applyLipSync(outcome.lipFrames[0]);
+        }
+      }
+      return {
+        ok: true,
+        ...outcome,
+        stage: stageRuntime.snapshot(),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:perf-sing-start', async (_e, rawInput: { request: SingRequestInput; danceRoutine?: DanceRoutineInput }) => {
+    try {
+      const outcome = await performanceDirector.startSinging(rawInput.request, rawInput.danceRoutine);
+      if (outcome.ok) {
+        stageRuntime.startSinging(
+          rawInput.request.song.songId,
+          outcome.snapshot.lyrics,
+          Boolean(rawInput.danceRoutine),
+        );
+        stageRuntime.applyLipSync(outcome.snapshot.lipSync);
+      }
+      return {
+        ...outcome,
+        stage: stageRuntime.snapshot(),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:perf-tick', (_e, positionMs: number) => {
+    const perf = performanceDirector.tickClock(Number(positionMs) || 0);
+    stageRuntime.applyLipSync(perf.lipSync);
+    stageRuntime.showLyrics(perf.lyrics);
+    if (perf.activeDanceCue) {
+      stageRuntime.playAnimation(perf.activeDanceCue.vrmMotionTag ?? perf.activeDanceCue.live2dMotionGroup ?? perf.activeDanceCue.poseId);
+      if (perf.activeDanceCue.expressionId) {
+        stageRuntime.setExpression(perf.activeDanceCue.expressionId, perf.activeDanceCue.energy);
+      }
+    }
+    return { ok: true, performance: perf, stage: stageRuntime.snapshot() };
+  });
+  ipcMain.handle('v2:perf-stop', (_e, reason?: string) => {
+    const why = typeof reason === 'string' && reason.trim() !== '' ? reason : 'user_stop';
+    const perf = performanceDirector.stopPerformance(why);
+    const stage = stageRuntime.stopPerformance(why);
+    return { ok: true, performance: perf, stage };
+  });
+  ipcMain.handle('v2:stage-switch-backend', (_e, rawInput: { backend: StageBackendKind; binding?: unknown }) => {
+    try {
+      const backend = StageBackendKindSchema.parse(rawInput.backend);
+      if (rawInput.binding !== undefined) {
+        const parsedBinding = StageCharacterBindingSchema.parse(rawInput.binding);
+        stageRuntime.registerBinding(parsedBinding);
+      }
+      const stage = stageRuntime.switchBackend(backend);
+      return { ok: true, stage };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  ipcMain.handle('v2:stage-command', (_e, rawInput: {
+    action: 'load_scene' | 'set_expression' | 'play_animation' | 'set_lyrics_policy';
+    scene?: unknown;
+    expression?: string;
+    intensity?: number;
+    animationId?: string;
+    lyricsPolicy?: LyricsDisplayPolicyInput;
+  }) => {
+    try {
+      if (rawInput.action === 'load_scene') {
+        const scene = StageSceneSpecSchema.parse(rawInput.scene);
+        return { ok: true, stage: stageRuntime.loadScene(scene) };
+      }
+      if (rawInput.action === 'set_expression') {
+        return { ok: true, stage: stageRuntime.setExpression(String(rawInput.expression ?? 'idle'), rawInput.intensity) };
+      }
+      if (rawInput.action === 'play_animation') {
+        return { ok: true, stage: stageRuntime.playAnimation(String(rawInput.animationId ?? 'idle')) };
+      }
+      const policy = performanceDirector.lyricsClock.setPolicy(rawInput.lyricsPolicy ?? {});
+      const lyrics = performanceDirector.lyricsClock.snapshot();
+      return { ok: true, policy, stage: stageRuntime.showLyrics(lyrics) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
   // V2-P0-03：在真实 Electron 主进程内验证 node:sqlite 文件库读写、事务与完整性
   ipcMain.handle('v2:storage-check', () => {
     const dbPath = join(options.userDataDir, 'workbench.db');
@@ -930,6 +1094,8 @@ export async function createV2KernelHost(options: {
     characterCore,
     audioMixer,
     voiceRouter,
+    performanceDirector,
+    stageRuntime,
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
       stopFn = () => {
@@ -965,6 +1131,8 @@ export async function createV2KernelHost(options: {
     async stop() {
       for (const unsub of unsubscribers) unsub();
       unsubscribers.length = 0;
+      performanceDirector.stopPerformance('kernel_stop');
+      stageRuntime.stopPerformance('kernel_stop');
       audioMixer.stopAll();
       characterCore.save();
       await kernel.stop();
