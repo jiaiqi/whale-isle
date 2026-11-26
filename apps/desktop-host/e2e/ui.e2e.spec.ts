@@ -78,7 +78,7 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       // 测试用 mock keychain 隔离（CI 同理）。
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       // ---- ① pet-stage：双轨气泡 + 饭碗挂件 ----
@@ -379,7 +379,7 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       // 测试用 mock keychain 隔离（CI 同理）。
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       const stageWin = await waitForWindow(app, 'pet-stage');
@@ -478,7 +478,7 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       // 测试用 mock keychain 隔离（CI 同理）。
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       // 只依赖 preload 桥（不等 React/Dexie 启动），避免与并行 Electron 实例抢 e2e-profile
@@ -525,7 +525,7 @@ describe('[E2E-HOST] T-M1-05 舞台挂件与中控台', () => {
       // 测试用 mock keychain 隔离（CI 同理）。
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       const page = await waitForWindow(app, 'director', 40_000);
@@ -578,7 +578,7 @@ export default {
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       const page = await waitForWindow(app, 'director', 40_000);
@@ -613,7 +613,7 @@ export default {
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       const page = await waitForWindow(app, 'director', 40_000);
@@ -640,7 +640,7 @@ export default {
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       const page = await waitForWindow(app, 'director', 40_000);
@@ -719,7 +719,7 @@ export default {
       personaPrompt: '你是 E2E 蓝蓝。', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1.2,
       packId: 'dsh-pet', actionCount: 1, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: false,
     }));
-    const app = await electron.launch({ args: ['--use-mock-keychain', mainEntry], executablePath: electronBinary, env: { ...process.env, PET_STAGE_E2E: '1' } });
+    const app = await electron.launch({ args: ['--use-mock-keychain', mainEntry], executablePath: electronBinary, env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' } });
     let page: import('playwright-core').Page | undefined;
     try {
       page = await waitForWindow(app, 'director', 40_000);
@@ -778,7 +778,7 @@ export default {
     const app = await electron.launch({
       args: ['--use-mock-keychain', mainEntry],
       executablePath: electronBinary,
-      env: { ...process.env, PET_STAGE_E2E: '1' },
+      env: { ...process.env, PET_STAGE_E2E: '1', WHALE_DISABLE_INPUT_MONITOR: '1' },
     });
     try {
       const page = await waitForWindow(app, 'director', 40_000);
