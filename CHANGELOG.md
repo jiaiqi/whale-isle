@@ -5,6 +5,11 @@
 
 ## [Unreleased] — 2026-11-26
 
+### Fixed（批次 C：UI 诚实性）
+
+- **OBS 页演示数据可见标记** `obs-panel.tsx`：弹幕议会投票卡、RVC 歌词卡、弹幕交互条三处演示数据新增可见「预演」徽章（此前只在代码注释标注，UI 上无法与真实数据区分）；饭碗与双轨气泡用真实数据不标；`ui.e2e` 新增徽章 ≥3 可见的防回归断言。
+- **攻略专题死导航** `chat-view.tsx`：上下文卡片「攻略专题」从错误跳转到模型与饭碗页改为游戏共玩页（心得本所在）。
+
 ### Fixed（批次 B：审计遗留 4 个低危 bug 清零）
 
 - **Cookie 单向导入不回写** `electron-browser-engine.ts`：dispose 时把 Chromium partition 现状按 origin 分组原子回写 cookies.json（与导入互逆），人工交接登录态跨任务存活；补首批引擎单测 3 例。
