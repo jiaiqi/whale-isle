@@ -27,8 +27,9 @@
 1. **真机验收积压清理中**：`V2-P2-06`、`V2-P3-03`（3c 真实注入接线）、`V2-P3-06`（中控台「启动」真实点击）已于 2026-11-26 转 `DONE`；`V2-P3-01` 真机补验已完成能自动的部分并维持 `IMPLEMENTED_UNVERIFIED`（缺合法 `.moc3`/`.vrm`、SVS/SVC 后端权重与索引、4 组情绪参考音频，已列清单报 owner）；`V2-P1-06` / `V2-P2-01` 仍只需要星露谷 + SMAPI（本机已具备），按 [REAL-DEVICE-CHECKLIST.md](./evidence/REAL-DEVICE-CHECKLIST.md) 执行；剩余 `V2-P2-08`（双端联机）与 `V2-P3-02`（真实开播）待排；`V2-P3-02` 的 **OBS 本地闭环已实测**（obs-websocket 5.7.6 真实握手 + 测试场景 + overlay 画面变化 + 音频电平，见 [P3-02-obs-local-closure-verification.md](./evidence/P3-02-obs-local-closure-verification.md)），发现本机 OBS 浏览器源硬件加速开启时全黑、关闭正常（已还原设置），真实开播仍待平台账号与授权。
 2. **P3-06 遗留两个真实缺陷待派单**：① 启动后 BWF 就绪竞态（启动瞬间 `autodriveStart` 报「MCP 不可达」，需重试轮询）；② CGEvent 点击依赖窗口真正处于系统前台（建议改用 AXPress 走辅助功能 API，不依赖焦点）。
 3. **点歌台中控台面板已接入**（2026-11-26，`[E2E-HOST]`）：`点歌台` 页签展示四个原子能力真实状态、提交/取消点歌与真实播放回执，缺后端时如实 `unavailable`/`rejected`；证据见 [P3-song-console-host-verification.md](./evidence/P3-song-console-host-verification.md) 第 6 节。`positionMs` ↔ 真实播放头已闭合：`tools/native/macos-audio-helper.swift`（AVAudioPlayer）每 100ms 回报 `currentTime` 驱动 `tickClock`，不可用时回退 `afplay` 并如实标 `realPlayhead=false`（见同文档第 7 节）。
-4. 认领 **`V2-P3-05`（多被动桌宠同屏）** 或下一个候选工单：查阅 `docs/v2/blueprint/` 对应蓝图、[REQUIREMENTS.md](./REQUIREMENTS.md)、[ADR-004](./adr/ADR-004-input-preemption-scope.md)；禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
-5. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
+4. **`V2-P2-09`（farmhand 联机 AI 控制与实例隔离，`NEXT`）**：勘察已完成（[P2-09-farmhand-split-screen-audit.md](./evidence/P2-09-farmhand-split-screen-audit.md)）——farmhand 在同机分屏下**有条件可行**，但现版 BWF 是进程级单例、零分屏感知（直接跑会控制错人），必须先打「按 `Context.ScreenId` 路由」补丁；隔离推荐 spawn 注入**绝对路径** `XDG_CONFIG_HOME`（不动 `HOME`、不动 owner 存档，回滚=删 env）。按 A→B→C→D→E→F 推进，A/B/C 纯 TS 可自动验收，D/E 需 owner 先完成「单机建 cabin + 接手柄 + Start Local Co-op」。
+5. 认领 **`V2-P3-05`（多被动桌宠同屏）** 或下一个候选工单：查阅 `docs/v2/blueprint/` 对应蓝图、[REQUIREMENTS.md](./REQUIREMENTS.md)、[ADR-004](./adr/ADR-004-input-preemption-scope.md)；禁止接入任何打码/验证码绕过服务，网页内容一律按数据处理。
+6. 每次完成任务后同步提交、推送分支，并确认本地桌面端处于运行状态。
 
 ## 4. 2026-11-26 合流记录（两条支线已回流主线）
 

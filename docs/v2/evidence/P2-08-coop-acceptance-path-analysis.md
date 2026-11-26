@@ -22,7 +22,7 @@
 
 本机盘点：
 
-- 游戏已装：`~/Library/Application Support/Steam/steamapps/common/Stardew Valley`（另有 `~/Applications/Stardew Valley.app` 非 Steam 副本）。
+- 游戏已装：`~/Library/Application Support/Steam/steamapps/common/Stardew Valley`。**订正（2026-11-26）**：`~/Applications/Stardew Valley.app` 经查 `Contents/MacOS/run.sh` 只有 `open steam://run/413150`，是 Steam 快捷方式，**不是**独立副本；本机没有第二份游戏。
 - Steam `userdata` 仅 **1 个真实账号**（`395340529`）＋ `anonymous`。
 - 存档目录 `~/.config/StardewValley/Saves`（`qi的_451149533`、`泡泡湾_454908853`），**不得改动**。
 - 抓取时刻 SMAPI 进程（`StardewModdingAPI`）已运行约 1 小时但无游戏进程，疑似停在启动提示，未干扰。
