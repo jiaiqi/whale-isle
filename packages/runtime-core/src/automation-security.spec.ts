@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RuntimeEventBus } from './event-bus';
 import { MemorySecretVault } from './config-secrets';
 import {
@@ -231,6 +231,28 @@ describe('[SIMULATION] V2-P3-03 AccountVault / BrowserProfile 隔离与 Computer
     expect(leases.releaseLease(a5.lease!.leaseId, 'agent-x')).toBe(true);
     expect(leases.releaseLease('missing')).toBe(false);
     expect(leases.auditCount()).toBeGreaterThan(0);
+  });
+
+  it('租约审计配置 auditFilePath 后逐条追加 JSONL 落盘，写失败不炸业务', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lease-audit-'));
+    const auditFile = join(dir, 'lease-audit.jsonl');
+    const leases = new ComputerUseLeaseManager({ auditFilePath: auditFile });
+
+    const acquired = leases.acquireLease({ holderId: 'agent-xiaojing', characterId: 'char_xiaojing', purpose: '落盘验证' });
+    expect(acquired.ok).toBe(true);
+    leases.releaseLease(acquired.lease!.leaseId, 'agent-xiaojing');
+
+    const lines = readFileSync(auditFile, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(2);
+    const parsed = lines.map((line) => JSON.parse(line) as { action: string; holderId: string });
+    expect(parsed.map((entry) => entry.action)).toEqual(['acquire', 'release']);
+
+    // 写失败（目录已删）只告警不抛错
+    rmSync(dir, { recursive: true, force: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(() => leases.acquireLease({ holderId: 'a', characterId: 'char_xiaojing', purpose: 'x' })).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
 

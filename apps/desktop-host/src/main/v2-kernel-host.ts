@@ -450,7 +450,10 @@ export async function createV2KernelHost(options: {
   const browserProfiles = new BrowserProfileMgr({
     rootDir: join(options.userDataDir, 'browser-profiles'),
   });
-  const computerLeaseMgr = new ComputerUseLeaseManager({ events: kernel.events });
+  const computerLeaseMgr = new ComputerUseLeaseManager({
+    events: kernel.events,
+    auditFilePath: join(options.userDataDir, 'lease-audit.jsonl'),
+  });
   const inputMonitor = new HumanInputMonitor({
     readIdleSeconds: () => {
       // powerMonitor.getSystemIdleTime() 精度约 1s；只用来撤销桌面租约，不接游戏租约（ADR-004）

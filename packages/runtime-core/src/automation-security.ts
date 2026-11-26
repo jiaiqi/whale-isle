@@ -6,7 +6,7 @@
  * - BrowserRuntime：确定性脚本（DOM/API/Accessibility）优先于视觉 GUI；遇验证码/反自动化/P5 风险操作立即暂停交还人类
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import {
   AccountVaultEntrySchema,
@@ -398,11 +398,14 @@ export class ComputerUseLeaseManager {
   private readonly now: () => number;
   private readonly events: RuntimeEventBus | undefined;
   private readonly humanOverrideHoldMs: number;
+  /** 审计 JSONL 落盘路径（可选）：配置后每条审计追加落盘，重启不丢 */
+  private readonly auditFilePath: string | undefined;
 
-  constructor(options: { events?: RuntimeEventBus; now?: () => number; humanOverrideHoldMs?: number } = {}) {
+  constructor(options: { events?: RuntimeEventBus; now?: () => number; humanOverrideHoldMs?: number; auditFilePath?: string } = {}) {
     this.events = options.events;
     this.now = options.now ?? Date.now;
     this.humanOverrideHoldMs = Math.max(0, Math.round(options.humanOverrideHoldMs ?? 2_000));
+    this.auditFilePath = options.auditFilePath;
   }
 
   acquireLease(input: {
@@ -612,8 +615,17 @@ export class ComputerUseLeaseManager {
   }
 
   private recordAudit(deviceId: string, action: string, holderId: string, detail: string): void {
-    this.audits.push({ at: this.now(), deviceId, action, holderId, detail });
+    const entry: LeaseAuditEntry = { at: this.now(), deviceId, action, holderId, detail };
+    this.audits.push(entry);
     if (this.audits.length > 200) this.audits.shift();
+    // 落盘是旁路：审计写失败绝不炸业务，但如实告警（此前的纯内存实现重启即丢审计）
+    if (this.auditFilePath !== undefined) {
+      try {
+        appendFileSync(this.auditFilePath, `${JSON.stringify(entry)}\n`, 'utf8');
+      } catch (error) {
+        console.warn('[lease-audit] 审计落盘失败：', error instanceof Error ? error.message : error);
+      }
+    }
   }
 }
 
