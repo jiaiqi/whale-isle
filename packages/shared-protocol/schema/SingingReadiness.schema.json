@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SingingReadiness",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SingingReadiness",
+  "$defs": {
+    "SingingReadiness": {
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "commercialReady": {
+          "type": "boolean"
+        },
+        "blockers": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missingEmotionKeys": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "sweet_normal",
+              "tsundere_refuse",
+              "rage_spray",
+              "lazy_yawn",
+              "clumsy_panic",
+              "happy_rice"
+            ]
+          }
+        }
+      },
+      "required": [
+        "ready",
+        "commercialReady"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

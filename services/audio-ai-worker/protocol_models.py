@@ -11,6 +11,7 @@ from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
+from typing_extensions import TypeAliasType
 
 
 class Channel(StrEnum):
@@ -261,6 +262,200 @@ class SongCapabilitiesResult(BaseModel):
     capabilities: list[Capability]
     ready: bool
     missing: list[str]
+
+
+class Source(StrEnum):
+    builtin_reference = 'builtin_reference'
+    owner_authorized_recording = 'owner_authorized_recording'
+    licensed_model = 'licensed_model'
+    dev_baseline = 'dev_baseline'
+
+
+class ConsentScope(StrEnum):
+    training = 'training'
+    synthesis = 'synthesis'
+    commercial_livestream = 'commercial_livestream'
+    redistribution = 'redistribution'
+    internal_eval_only = 'internal_eval_only'
+
+
+class WeightLicense(StrEnum):
+    commercial_ok = 'commercial_ok'
+    dev_only_non_commercial = 'dev_only_non_commercial'
+    unlicensed = 'unlicensed'
+    unknown = 'unknown'
+
+
+class VoiceIdentity(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    identityId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    displayName: Annotated[str, Field(min_length=1)]
+    source: Source
+    consentScopes: list[ConsentScope] | None = []
+    consentEvidenceRef: str | None = ''
+    minorVoice: bool | None = False
+    guardianConsent: bool | None = False
+    weightLicense: WeightLicense | None = 'unknown'
+    svcModelPath: str | None = ''
+    svcIndexPath: str | None = ''
+    svsVoicebankPath: str | None = ''
+    notes: str | None = ''
+
+
+class Route(StrEnum):
+    svc = 'svc'
+    svs = 'svs'
+    svs_svc = 'svs_svc'
+
+
+class Voice(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    identityId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    displayName: Annotated[str, Field(min_length=1)]
+    source: Source
+    consentScopes: list[ConsentScope] | None = []
+    consentEvidenceRef: str | None = ''
+    minorVoice: bool | None = False
+    guardianConsent: bool | None = False
+    weightLicense: WeightLicense | None = 'unknown'
+    svcModelPath: str | None = ''
+    svcIndexPath: str | None = ''
+    svsVoicebankPath: str | None = ''
+    notes: str | None = ''
+
+
+class Range(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    lowestNote: Annotated[str, Field(pattern='^[A-G]#?\\d$')]
+    highestNote: Annotated[str, Field(pattern='^[A-G]#?\\d$')]
+    comfortableLow: Annotated[str, Field(pattern='^[A-G]#?\\d$')]
+    comfortableHigh: Annotated[str, Field(pattern='^[A-G]#?\\d$')]
+
+
+class Vibrato(StrEnum):
+    none = 'none'
+    light = 'light'
+    medium = 'medium'
+    strong = 'strong'
+
+
+class Attack(StrEnum):
+    soft = 'soft'
+    natural = 'natural'
+    sharp = 'sharp'
+
+
+class Style(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    vibrato: Vibrato | None = 'light'
+    breathiness: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.3
+    attack: Attack | None = 'natural'
+    timbreNotes: list[str] | None = []
+
+
+EmotionReferenceIdsAdditionalProperty = TypeAliasType(
+    "EmotionReferenceIdsAdditionalProperty", Annotated[str, Field(min_length=1)]
+)
+
+
+class SingingProfile(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    profileId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    characterId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    route: Route | None = 'svc'
+    voice: Voice
+    range: Range
+    style: Style
+    emotionReferenceIds: (
+        dict[
+            Literal[
+                'sweet_normal',
+                'tsundere_refuse',
+                'rage_spray',
+                'lazy_yawn',
+                'clumsy_panic',
+                'happy_rice',
+            ],
+            EmotionReferenceIdsAdditionalProperty,
+        ]
+        | None
+    ) = {}
+    notes: str | None = ''
+
+
+class Kind(StrEnum):
+    emotion_reference = 'emotion_reference'
+    svc_training_dry_vocal = 'svc_training_dry_vocal'
+
+
+class Emotion(StrEnum):
+    sweet_normal = 'sweet_normal'
+    tsundere_refuse = 'tsundere_refuse'
+    rage_spray = 'rage_spray'
+    lazy_yawn = 'lazy_yawn'
+    clumsy_panic = 'clumsy_panic'
+    happy_rice = 'happy_rice'
+
+
+class File(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    materialId: Annotated[str, Field(min_length=1)]
+    kind: Kind
+    emotion: Emotion | None = None
+    filePath: Annotated[str, Field(min_length=1)]
+    sha256: Annotated[str, Field(pattern='^[0-9a-f]{64}$')]
+    sampleRate: Annotated[int, Field(gt=0)]
+    bitDepth: Annotated[int, Field(gt=0)]
+    channels: Annotated[int, Field(gt=0)]
+    durationMs: Annotated[int, Field(gt=0)]
+    peakDbfs: Annotated[float, Field(le=0.0)]
+    headSilenceMs: Annotated[float | None, Field(ge=0.0)] = 0
+    tailSilenceMs: Annotated[float | None, Field(ge=0.0)] = 0
+    source: Source
+    consentEvidenceRef: str | None = ''
+    recordedAt: str | None = None
+
+
+class SingingMaterialManifest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    version: Annotated[str, Field(min_length=1)]
+    characterId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
+    files: Annotated[list[File] | None, Field(validate_default=True)] = []
+    updatedAt: Annotated[int, Field(ge=0)]
+
+
+class MissingEmotionKey(StrEnum):
+    sweet_normal = 'sweet_normal'
+    tsundere_refuse = 'tsundere_refuse'
+    rage_spray = 'rage_spray'
+    lazy_yawn = 'lazy_yawn'
+    clumsy_panic = 'clumsy_panic'
+    happy_rice = 'happy_rice'
+
+
+class SingingReadiness(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ready: bool
+    commercialReady: bool
+    blockers: list[str] | None = []
+    warnings: list[str] | None = []
+    missingEmotionKeys: list[MissingEmotionKey] | None = []
 
 
 class PetRendererType(StrEnum):
@@ -1855,7 +2050,7 @@ class PetDesktopPrefs(BaseModel):
     voiceMimoBuiltinVoice: Annotated[str | None, Field(min_length=1)] = 'mimo_default'
 
 
-class Kind(StrEnum):
+class Kind1(StrEnum):
     base = 'base'
     skin = 'skin'
     egg = 'egg'
@@ -1869,7 +2064,7 @@ class Skin(BaseModel):
     name: Annotated[str, Field(min_length=1)]
     outfit: str | None = ''
     accent: str | None = ''
-    kind: Kind
+    kind: Kind1
     previewUrl: str | None = ''
     frameCount: Annotated[int | None, Field(ge=0)] = 0
 
@@ -1981,7 +2176,7 @@ class CoopSpeakerEvent(BaseModel):
     voiceId: str | None = None
 
 
-class Source(StrEnum):
+class Source3(StrEnum):
     manual = 'manual'
     team_money = 'team_money'
     shared_wood = 'shared_wood'
@@ -1995,7 +2190,7 @@ class Metric(BaseModel):
     current: float
     target: float
     unit: str | None = ''
-    source: Source | None = 'manual'
+    source: Source3 | None = 'manual'
 
 
 class Status6(StrEnum):
@@ -2050,7 +2245,7 @@ class Metric1(BaseModel):
     current: float
     target: float
     unit: str | None = ''
-    source: Source | None = 'manual'
+    source: Source3 | None = 'manual'
 
 
 class Status8(StrEnum):
@@ -2128,7 +2323,7 @@ class FromRole(StrEnum):
     system = 'system'
 
 
-class Kind1(StrEnum):
+class Kind2(StrEnum):
     chat = 'chat'
     proposal = 'proposal'
     plan_commit = 'plan_commit'
@@ -2167,7 +2362,7 @@ class TeamCommsMessage(BaseModel):
     fromName: Annotated[str, Field(min_length=1)]
     fromRole: FromRole
     mentions: list[str] | None = []
-    kind: Kind1
+    kind: Kind2
     text: str
     planCard: PlanCard | None = None
 
@@ -2193,7 +2388,7 @@ class MemoryNodeView(BaseModel):
     instanceCount: Annotated[int | None, Field(ge=1)] = 1
 
 
-class Kind2(StrEnum):
+class Kind3(StrEnum):
     temporal = 'temporal'
     causal = 'causal'
     semantic = 'semantic'
@@ -2207,7 +2402,7 @@ class MemoryEdgeView(BaseModel):
     )
     from_: Annotated[str, Field(alias='from')]
     to: str
-    kind: Kind2
+    kind: Kind3
     weight: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -2231,7 +2426,7 @@ class Edge(BaseModel):
     )
     from_: Annotated[str, Field(alias='from')]
     to: str
-    kind: Kind2
+    kind: Kind3
     weight: Annotated[float, Field(ge=0.0, le=1.0)]
 
 
@@ -2387,7 +2582,7 @@ class Slot(BaseModel):
     clipIds: list[str] | None = []
 
 
-class Kind4(StrEnum):
+class Kind5(StrEnum):
     base = 'base'
     skin = 'skin'
     egg = 'egg'
@@ -2401,7 +2596,7 @@ class Skin1(BaseModel):
     name: Annotated[str, Field(min_length=1)]
     outfit: str | None = ''
     accent: str | None = ''
-    kind: Kind4
+    kind: Kind5
     previewUrl: str | None = ''
     frameCount: Annotated[int | None, Field(ge=0)] = 0
 
@@ -2573,7 +2768,7 @@ class PetApiState(BaseModel):
     bounds: Bounds
 
 
-class Source2(StrEnum):
+class Source5(StrEnum):
     acp = 'acp'
     claude = 'claude'
     codex = 'codex'
@@ -2585,7 +2780,7 @@ class Source2(StrEnum):
     grok = 'grok'
 
 
-class Kind5(StrEnum):
+class Kind6(StrEnum):
     start = 'start'
     tool = 'tool'
     stop = 'stop'
@@ -2605,9 +2800,9 @@ class WorkFollowEvent(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    source: Source2
+    source: Source5
     sessionId: Annotated[str, Field(max_length=128, min_length=1)]
-    kind: Kind5
+    kind: Kind6
     toolName: Annotated[str | None, Field(max_length=120)] = ''
     modelName: Annotated[str | None, Field(max_length=120)] = ''
     taskTitle: Annotated[str | None, Field(max_length=120)] = ''
@@ -3054,6 +3249,12 @@ class AIWorkbenchContracts(BaseModel):
     SongCapabilitiesResult_1: Annotated[
         SongCapabilitiesResult, Field(alias='SongCapabilitiesResult')
     ]
+    VoiceIdentity_1: Annotated[VoiceIdentity, Field(alias='VoiceIdentity')]
+    SingingProfile_1: Annotated[SingingProfile, Field(alias='SingingProfile')]
+    SingingMaterialManifest_1: Annotated[
+        SingingMaterialManifest, Field(alias='SingingMaterialManifest')
+    ]
+    SingingReadiness_1: Annotated[SingingReadiness, Field(alias='SingingReadiness')]
     PetRendererType_1: Annotated[PetRendererType, Field(alias='PetRendererType')]
     PetActionState_1: Annotated[PetActionState, Field(alias='PetActionState')]
     PetAvatarClip_1: Annotated[PetAvatarClip, Field(alias='PetAvatarClip')]

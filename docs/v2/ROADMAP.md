@@ -183,7 +183,8 @@
   **阶段划分（三阶段，顺序不可颠倒）**：
 
   - **阶段一（`V2-P3-07A`~`V2-P3-07D`，`PENDING`）：SVC 翻唱 + VRM 1.0 一个完整角色跑通**
-    - `V2-P3-07A`（`PENDING`）**契约先行**：`SingingProfile` / `SingingMode`（`svc | svs | svs_svc`）/ `VoiceIdentity` 的 Zod 契约（`packages/shared-protocol`），以及 `Embodiment` 域「多形态并存」数据模型；契约层从第一天就按三种实现设计，不做只支持 SVC 的窄契约。
+    - `V2-P3-07A`（`IMPLEMENTED_UNVERIFIED`）**契约先行**：`SingingProfile` / `SingingMode`（`svc | svs | svs_svc`）/ `VoiceIdentity` 的 Zod 契约（`packages/shared-protocol`），以及 `Embodiment` 域「多形态并存」数据模型；契约层从第一天就按三种实现设计，不做只支持 SVC 的窄契约。
+      - **2026-11-27 已落部分**：`packages/shared-protocol/src/singing.ts`（`VoiceIdentity` 含授权声明/监护人/权重许可、`SingingProfile` 含路线/音域/风格/情绪参考、`SingingMaterialManifest` 含逐文件事实与问题码、`SingingReadiness`，以及 24kHz/5s/−3dBFS 情绪素材与 ≥10 分钟训练干声规格常量，已登记 `registry.ts` 并生成 JSON Schema + Pydantic）；`packages/voice-runtime/src/singing-profile.ts`（`checkSingingMaterial` / `summarizeSingingMaterials` / `resolveSingingReadiness`，商用渠道 + 非商用权重/未授权声源/儿童无监护人授权一律 blocker，文案写死「商用必须自训底模/声库」）；单测 39/39。**`Embodiment` 多形态模型仍未做**，故本项不标 `DONE`；UI/IPC 接线为下一单。
     - `V2-P3-07B`（`PENDING`）**SVC 落地**：干声分离 → 目标音色转换 → 伴奏混音的端到端链路接上现有点歌台；歌声模型走**独立 Worker + 按需下载**（`fetch-engine.mjs` 模式），主安装包不含权重；GPL/AGPL 项目禁入；普通 TTS / GPT-SoVITS 一律不得当 SVC。
     - `V2-P3-07C`（`PENDING`）**VRM 1.0 真实渲染**：Electron 舞台窗口内的 WebGL VRM 运行时，覆盖加载/骨骼/待机呼吸/视线表情/音频驱动口型/歌舞/节拍同步/摄像机灯光场景；桌面与 OBS 双输出一致；与现有 `WebmVideoRenderer`（双 `<video>`，不占 WebGL）资源隔离。  - **2026-11-27 素材侧先行**：owner 定调「保留蓝鲸女仆设定、素材必须原创重做」，规格已写死到 [P3-01-MATERIALS-NEEDED.md](./P3-01-MATERIALS-NEEDED.md)（VRM 1.0 结构、humanoid 骨骼、必须含 `aa/ih/ou/ee/oh` 与五情绪 preset、`meta` 七个许可字段取值、≤80k 面 / ≤8 材质）。同文件写清两条硬事实：VRM 1.0 **没有 viseme 概念**；生成式 3D **不能直接产出 VRM**，必须先 VRoid 或生成网格后进 Blender 人工补表情与 springBone（插件只能走 MIT 分支）。素材到位前本单维持 `PENDING`。
     - `V2-P3-07D`（`PENDING`）**一个完整角色端到端**：同一角色走完「点歌 → 演唱 → 伴奏混音 → 歌词 → 口型 → 舞蹈 → 桌面 + OBS 输出」，并以真实素材（owner 提供的授权声源与 `.vrm` 资产）完成真机听感与画面验收。

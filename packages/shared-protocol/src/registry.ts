@@ -5,6 +5,10 @@ import {
   SongAudioResultSchema, SongConcatRequestSchema, SongCapabilitiesResultSchema,
 } from './song-console';
 import {
+  VoiceIdentitySchema, SingingProfileSchema, SingingMaterialManifestSchema,
+  SingingReadinessSchema,
+} from './singing';
+import {
   PauseConfigSchema,
   TtsEmotionTuningParamsSchema,
   SvcSingingTuningParamsSchema,
@@ -102,6 +106,10 @@ export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
   SongAudioResult: SongAudioResultSchema,
   SongConcatRequest: SongConcatRequestSchema,
   SongCapabilitiesResult: SongCapabilitiesResultSchema,
+  VoiceIdentity: VoiceIdentitySchema,
+  SingingProfile: SingingProfileSchema,
+  SingingMaterialManifest: SingingMaterialManifestSchema,
+  SingingReadiness: SingingReadinessSchema,
   PetRendererType: PetRendererTypeSchema,
   PetActionState: PetActionStateSchema,
   PetAvatarClip: PetAvatarClipSchema,

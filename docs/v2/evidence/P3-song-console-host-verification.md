@@ -173,3 +173,22 @@
 2. **长音频（≥25s）位置精度与漂移**：只用 2s 正弦波验证；长曲需真实产物。
 3. **afplay 回退路径**：本机 `swiftc` 可用，回退分支只有单测覆盖，未在真机触发。
 4. **首次启动编译开销**：源码哈希未命中时同步编译约 0.6–1s（本机实测 645ms），打包态找不到源码会直接回退 afplay（如实标 `realPlayhead=false`）。
+
+---
+
+## 8. 验收口径：许可红线（任何后续验收不得弱化）
+
+> 本节由 `V2-P3-07A` 契约落地时补入（2026-11-27），原因：点歌台一旦跑通，容易被误读成「开源 = 可商用」。
+
+- **RVC 代码 MIT ≠ 权重可商用**：官方底模（`lj1995/VoiceConversionWebUI`）带「仅供研究使用」条款，RMVPE 上游无 LICENSE。
+- **DiffSinger 官方 OpenCpop 检查点未声明权重许可**，数据集 CC BY-NC-ND 4.0，OpenVPI 声码器权重 CC BY-NC-SA 4.0。
+- 因此：**商用必须自训底模/声库（并换 FCPE/CREPE）**；随包参考音频只标 `DEV_ONLY_NON_COMMERCIAL`，`builtin_reference` 声源在公开直播/商用分发渠道一律 blocker。
+- 商用渠道还要求声音授权含 `commercial_livestream`、权重许可为 `commercial_ok`；儿童声线无监护人授权一律 blocker。
+- 代码位置：`packages/voice-runtime/src/singing-profile.ts` 的 `resolveSingingReadiness()`；契约：`packages/shared-protocol/src/singing.ts`。
+- 逐文件结论见 [O5-svs-svc-weight-license-per-file.md](./O5-svs-svc-weight-license-per-file.md)，选型定稿见 [V2-P3-07-svc-svs-selection.md](./V2-P3-07-svc-svs-selection.md)。
+
+**验收时的判定顺序**（不得跳步）：
+
+1. 先看 `readiness.blockers` 是否为空（空才可唱）；
+2. 再看 `commercialReady`（false 就只能桌面私用，不得开播）；
+3. 最后才看听感与音画同步——前两步没过，听感没有意义。

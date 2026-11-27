@@ -331,3 +331,18 @@
 | 授权声源素材 | owner 提供/授权五组情绪参考音（含 `clumsy_panic` 是否保留 `happy_rice` 第六组）与 RVC 训练干声，并签授权声明；儿童声线需监护人签字 | ⏳ 等 owner 素材 |
 | `.pth` 与音色来源 | owner 确认目标音色的来源可追溯（谁的声音、授权范围、训练日期），不接受来源不明模型 | ⏳ 等 owner 确认 |
 | 真唱听感 | RVC 转换出的歌声是否「像角色本人在唱」——本阶段无音频可听，PoC 出来后另行验收 | ⏳ 未开始（阻塞：素材与权重） |
+
+## 2026-11-27 批次（唱歌链路 `V2-P3-07A` 契约先行：VoiceIdentity / SingingProfile / 素材与就绪判定）
+
+### Mock/沙盒/单测已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `V2-P3-07A` 契约部分（`IMPLEMENTED_UNVERIFIED`） | 单测 + 契约生成 + 门禁 | ① `packages/shared-protocol/src/singing.spec.ts` + `packages/voice-runtime/src/singing-profile.spec.ts` **39/39**：默认值、路线枚举、情绪键、音域格式、sha256/峰值约束；素材规格（采样率/位深/声道/时长/静音/削波）判定；五组覆盖与重复组；商用渠道缺 `commercial_livestream`、非商用权重、`builtin_reference` 声源、儿童无监护人授权、引擎未装、`.pth` 未配、SVS 缺 DiffSinger 全部进 blockers；`ready` 与 `commercialReady` 分离；blockers 去重。② `pnpm gen:contracts` 生成 `VoiceIdentity` / `SingingProfile` / `SingingMaterialManifest` / `SingingReadiness` 四份 JSON Schema + Pydantic，`pnpm py:check` 绿（68 passed）。③ `pnpm verify:gate` **8/8**。④ 点歌台验收文档补 §8「许可红线」：**商用必须自训底模/声库**。**未做**：`Embodiment` 多形态模型、宿主 IPC 与素材面板。 | 2026-11-27 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| 素材扫描与面板 | 宿主 IPC + 中控台「演唱素材」面板落地后，由 owner 实际放入素材目录，确认校验结果与文案可读 | ⏳ 未开始（下一单） |
+| 就绪判定与真实链路一致 | 引擎/权重/`.pth` 到位后，确认 `ready` / `commercialReady` 与实际能否开唱一致 | ⏳ 阻塞：等授权素材与权重 |

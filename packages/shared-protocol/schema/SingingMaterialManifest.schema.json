@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SingingMaterialManifest",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/SingingMaterialManifest",
+  "$defs": {
+    "SingingMaterialManifest": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "files": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "materialId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "emotion_reference",
+                  "svc_training_dry_vocal"
+                ]
+              },
+              "emotion": {
+                "type": "string",
+                "enum": [
+                  "sweet_normal",
+                  "tsundere_refuse",
+                  "rage_spray",
+                  "lazy_yawn",
+                  "clumsy_panic",
+                  "happy_rice"
+                ]
+              },
+              "filePath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "sampleRate": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "bitDepth": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "channels": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "durationMs": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "peakDbfs": {
+                "type": "number",
+                "maximum": 0
+              },
+              "headSilenceMs": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "tailSilenceMs": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "builtin_reference",
+                  "owner_authorized_recording",
+                  "licensed_model",
+                  "dev_baseline"
+                ]
+              },
+              "consentEvidenceRef": {
+                "default": "",
+                "type": "string"
+              },
+              "recordedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "materialId",
+              "kind",
+              "filePath",
+              "sha256",
+              "sampleRate",
+              "bitDepth",
+              "channels",
+              "durationMs",
+              "peakDbfs",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "characterId",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

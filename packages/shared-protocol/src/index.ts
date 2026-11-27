@@ -1623,4 +1623,5 @@ export * from './browser-computer';
 export * from './model';
 export * from './social';
 export * from './song-console';
+export * from './singing';
 export * from './stardew-launch';

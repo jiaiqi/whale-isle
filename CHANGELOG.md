@@ -5,6 +5,15 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（唱歌链路 `V2-P3-07A` 契约先行：VoiceIdentity / SingingProfile / 素材与就绪判定）
+
+- **契约**：`packages/shared-protocol/src/singing.ts` 新增 `VoiceIdentity`（来源、授权范围、授权声明编号、儿童/监护人、权重许可、`.pth`/声库路径）、`SingingProfile`（`svc | svs | svs_svc` 路线 + 音域 + 风格 + 情绪参考 id）、`SingingMaterialManifest`（逐文件事实与问题码）、`SingingReadiness`（ready / commercialReady / blockers / warnings / 缺组）；已登记 `registry.ts` 并重生成 JSON Schema 与 Pydantic。
+- **素材规格写死**：情绪参考音 24 kHz / mono / 16-bit / 5.0 s ± 0.3 s / 峰值 −3 dBFS / 前后 0.2 s 静音；SVC 训练干声 ≥10 分钟、3–10 s 切片；五组必录键 `sweet_normal` / `tsundere_refuse` / `rage_spray` / `lazy_yawn` / `clumsy_panic`（`happy_rice` 保留为可选第六组）。
+- **判定逻辑**：`packages/voice-runtime/src/singing-profile.ts` 的 `checkSingingMaterial()` / `summarizeSingingMaterials()` / `resolveSingingReadiness()`——削波、缺授权声明、缺情绪组、训练干声过短、引擎未装、`.pth` 未配、儿童无监护人授权、商用渠道非商用权重全部进 blockers；`ready` 与 `commercialReady` 分开，避免「能唱但不能开播」被说成可商用。
+- **许可口径写死**：RVC 代码 MIT ≠ 权重可商用，**商用必须自训底模/声库**；该句同时写进点歌台验收文档 `P3-song-console-host-verification.md` §8，防止后续被误读成「开源=可商用」。
+- **测试**：`singing.spec.ts` + `singing-profile.spec.ts` 共 **39/39**；`pnpm verify:gate` **8/8**。
+- **未做**：`Embodiment` 多形态模型（故 07A 不标 `DONE`）、宿主 IPC 与素材面板；阶段二真唱最小闭环仍 `BLOCKED` 于 owner 授权素材与可追溯 `.pth`。
+
 ### Added（唱歌链路阶段一：SVC/SVS 选型结论 + 素材清单，`[DOC-ONLY]`，不接入）
 
 - **选型定稿**：SVC 代码许可只剩 **RVC（MIT）** 可进产品路径；Seed-VC（GPL-3.0）、so-vits-svc（AGPL-3.0，已归档）按 AGENTS §2.2 直接排除；DDSP-SVC 备选但默认声码器 CC BY-NC-SA。SVS 主线为 **DiffSinger（Apache-2.0）+ OpenUtau（MIT）**。

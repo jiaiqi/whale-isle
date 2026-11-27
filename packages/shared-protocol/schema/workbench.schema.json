@@ -13,6 +13,10 @@
     "SongAudioResult",
     "SongConcatRequest",
     "SongCapabilitiesResult",
+    "VoiceIdentity",
+    "SingingProfile",
+    "SingingMaterialManifest",
+    "SingingReadiness",
     "PetRendererType",
     "PetActionState",
     "PetAvatarClip",
@@ -115,6 +119,18 @@
     },
     "SongCapabilitiesResult": {
       "$ref": "#/$defs/SongCapabilitiesResult"
+    },
+    "VoiceIdentity": {
+      "$ref": "#/$defs/VoiceIdentity"
+    },
+    "SingingProfile": {
+      "$ref": "#/$defs/SingingProfile"
+    },
+    "SingingMaterialManifest": {
+      "$ref": "#/$defs/SingingMaterialManifest"
+    },
+    "SingingReadiness": {
+      "$ref": "#/$defs/SingingReadiness"
     },
     "PetRendererType": {
       "$ref": "#/$defs/PetRendererType"
@@ -963,6 +979,451 @@
         "capabilities",
         "ready",
         "missing"
+      ],
+      "additionalProperties": false
+    },
+    "VoiceIdentity": {
+      "type": "object",
+      "properties": {
+        "identityId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "builtin_reference",
+            "owner_authorized_recording",
+            "licensed_model",
+            "dev_baseline"
+          ]
+        },
+        "consentScopes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "training",
+              "synthesis",
+              "commercial_livestream",
+              "redistribution",
+              "internal_eval_only"
+            ]
+          }
+        },
+        "consentEvidenceRef": {
+          "default": "",
+          "type": "string"
+        },
+        "minorVoice": {
+          "default": false,
+          "type": "boolean"
+        },
+        "guardianConsent": {
+          "default": false,
+          "type": "boolean"
+        },
+        "weightLicense": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "commercial_ok",
+            "dev_only_non_commercial",
+            "unlicensed",
+            "unknown"
+          ]
+        },
+        "svcModelPath": {
+          "default": "",
+          "type": "string"
+        },
+        "svcIndexPath": {
+          "default": "",
+          "type": "string"
+        },
+        "svsVoicebankPath": {
+          "default": "",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "identityId",
+        "displayName",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "SingingProfile": {
+      "type": "object",
+      "properties": {
+        "profileId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "characterId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "route": {
+          "default": "svc",
+          "type": "string",
+          "enum": [
+            "svc",
+            "svs",
+            "svs_svc"
+          ]
+        },
+        "voice": {
+          "type": "object",
+          "properties": {
+            "identityId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$"
+            },
+            "displayName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "builtin_reference",
+                "owner_authorized_recording",
+                "licensed_model",
+                "dev_baseline"
+              ]
+            },
+            "consentScopes": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "training",
+                  "synthesis",
+                  "commercial_livestream",
+                  "redistribution",
+                  "internal_eval_only"
+                ]
+              }
+            },
+            "consentEvidenceRef": {
+              "default": "",
+              "type": "string"
+            },
+            "minorVoice": {
+              "default": false,
+              "type": "boolean"
+            },
+            "guardianConsent": {
+              "default": false,
+              "type": "boolean"
+            },
+            "weightLicense": {
+              "default": "unknown",
+              "type": "string",
+              "enum": [
+                "commercial_ok",
+                "dev_only_non_commercial",
+                "unlicensed",
+                "unknown"
+              ]
+            },
+            "svcModelPath": {
+              "default": "",
+              "type": "string"
+            },
+            "svcIndexPath": {
+              "default": "",
+              "type": "string"
+            },
+            "svsVoicebankPath": {
+              "default": "",
+              "type": "string"
+            },
+            "notes": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "required": [
+            "identityId",
+            "displayName",
+            "source"
+          ],
+          "additionalProperties": false
+        },
+        "range": {
+          "type": "object",
+          "properties": {
+            "lowestNote": {
+              "type": "string",
+              "pattern": "^[A-G]#?\\d$"
+            },
+            "highestNote": {
+              "type": "string",
+              "pattern": "^[A-G]#?\\d$"
+            },
+            "comfortableLow": {
+              "type": "string",
+              "pattern": "^[A-G]#?\\d$"
+            },
+            "comfortableHigh": {
+              "type": "string",
+              "pattern": "^[A-G]#?\\d$"
+            }
+          },
+          "required": [
+            "lowestNote",
+            "highestNote",
+            "comfortableLow",
+            "comfortableHigh"
+          ],
+          "additionalProperties": false
+        },
+        "style": {
+          "type": "object",
+          "properties": {
+            "vibrato": {
+              "default": "light",
+              "type": "string",
+              "enum": [
+                "none",
+                "light",
+                "medium",
+                "strong"
+              ]
+            },
+            "breathiness": {
+              "default": 0.3,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "attack": {
+              "default": "natural",
+              "type": "string",
+              "enum": [
+                "soft",
+                "natural",
+                "sharp"
+              ]
+            },
+            "timbreNotes": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "emotionReferenceIds": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "sweet_normal",
+              "tsundere_refuse",
+              "rage_spray",
+              "lazy_yawn",
+              "clumsy_panic",
+              "happy_rice"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profileId",
+        "characterId",
+        "voice",
+        "range",
+        "style"
+      ],
+      "additionalProperties": false
+    },
+    "SingingMaterialManifest": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "files": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "materialId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "emotion_reference",
+                  "svc_training_dry_vocal"
+                ]
+              },
+              "emotion": {
+                "type": "string",
+                "enum": [
+                  "sweet_normal",
+                  "tsundere_refuse",
+                  "rage_spray",
+                  "lazy_yawn",
+                  "clumsy_panic",
+                  "happy_rice"
+                ]
+              },
+              "filePath": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "sampleRate": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "bitDepth": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "channels": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "durationMs": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "peakDbfs": {
+                "type": "number",
+                "maximum": 0
+              },
+              "headSilenceMs": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "tailSilenceMs": {
+                "default": 0,
+                "type": "number",
+                "minimum": 0
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "builtin_reference",
+                  "owner_authorized_recording",
+                  "licensed_model",
+                  "dev_baseline"
+                ]
+              },
+              "consentEvidenceRef": {
+                "default": "",
+                "type": "string"
+              },
+              "recordedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "materialId",
+              "kind",
+              "filePath",
+              "sha256",
+              "sampleRate",
+              "bitDepth",
+              "channels",
+              "durationMs",
+              "peakDbfs",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "updatedAt": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "version",
+        "characterId",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "SingingReadiness": {
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "commercialReady": {
+          "type": "boolean"
+        },
+        "blockers": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missingEmotionKeys": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "sweet_normal",
+              "tsundere_refuse",
+              "rage_spray",
+              "lazy_yawn",
+              "clumsy_panic",
+              "happy_rice"
+            ]
+          }
+        }
+      },
+      "required": [
+        "ready",
+        "commercialReady"
       ],
       "additionalProperties": false
     },

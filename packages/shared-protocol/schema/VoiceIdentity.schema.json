@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VoiceIdentity",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/VoiceIdentity",
+  "$defs": {
+    "VoiceIdentity": {
+      "type": "object",
+      "properties": {
+        "identityId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "builtin_reference",
+            "owner_authorized_recording",
+            "licensed_model",
+            "dev_baseline"
+          ]
+        },
+        "consentScopes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "training",
+              "synthesis",
+              "commercial_livestream",
+              "redistribution",
+              "internal_eval_only"
+            ]
+          }
+        },
+        "consentEvidenceRef": {
+          "default": "",
+          "type": "string"
+        },
+        "minorVoice": {
+          "default": false,
+          "type": "boolean"
+        },
+        "guardianConsent": {
+          "default": false,
+          "type": "boolean"
+        },
+        "weightLicense": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "commercial_ok",
+            "dev_only_non_commercial",
+            "unlicensed",
+            "unknown"
+          ]
+        },
+        "svcModelPath": {
+          "default": "",
+          "type": "string"
+        },
+        "svcIndexPath": {
+          "default": "",
+          "type": "string"
+        },
+        "svsVoicebankPath": {
+          "default": "",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "identityId",
+        "displayName",
+        "source"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
