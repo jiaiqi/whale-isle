@@ -27,7 +27,7 @@ import { createVoiceHost, registerVoiceHostIpc } from './voice-host';
 import { createVoiceBindingStore, registerVoiceBindingIpc } from './voice-bindings';
 import { createFriendshipHost, registerFriendshipIpc } from './friendship-host';
 import { backfillCliHistory } from './cli-history-backfill';
-import { createPetControlHost, matchPetViewForCharacter } from './pet-control-host';
+import { characterFamilyOf, createPetControlHost, matchPetViewForCharacter } from './pet-control-host';
 import { createCoopLaunchHost } from './coop-launch-host';
 import { createAcpSessionCache } from './acp-session-cache';
 import { createCustomCharacterHost } from './custom-character-host';
@@ -408,8 +408,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     const previous = prefs.get().characterId;
     const manager = petWindowManager;
     if (manager !== null && previous !== '' && previous !== id) {
-      const pajamaOf = (value: string): string => value.replace(/^crosspet-(deepseek|claude|gemini|gpt)$/, 'crosspet-$1-pajamas');
-      const targetVariants = new Set([id, pajamaOf(id)]);
+      // 与 pet-control-host 共用同一份「基础角色 + 睡衣变体」归一，绝不重影（含夜间睡衣目标）。
+      const targetVariants = characterFamilyOf(id);
       const twin = manager.list().find((view) => view.agentId !== 'default' && targetVariants.has(view.characterId));
       if (twin !== undefined) {
         const replacement = characters.list().find((character) => character.id === previous);
@@ -593,6 +593,9 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     openEgg: async (script) => {
       const manager = petWindowManager;
       if (manager === null) return { ok: false, error: '桌宠窗未就绪' };
+      // 同角色不并存：彩蛋角色若已作为宠物在场，绝不再开第二只同款彩蛋。
+      const available = petControl.assertCharacterAvailable(script.characterId);
+      if (!available.ok) return { ok: false, error: available.error };
       const agentId = `egg-${script.characterId.replace(/[^A-Za-z0-9._-]/g, '').slice(-20)}-${Date.now().toString(36).slice(-4)}`;
       const opened = await manager.open(agentId, script.characterId);
       if (!opened.ok) return { ok: false, error: opened.error ?? '彩蛋窗打开失败' };
@@ -723,7 +726,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       // 多 AI 同屏最多 4 只跨 AI 桌宠，避免会话多开时窗口爆量
       const crossPets = petWindowManager?.list().filter((view) => view.characterId.startsWith('crosspet-')) ?? [];
       if (crossPets.length >= 4) return;
-      void summonPet(characterId);
+      // 角色未安装（crosspet 素材包未同步）或同角色已在场都不再静默开窗：如实记日志便于排查。
+      void summonPet(characterId).then((result) => {
+        if (!result.ok) console.warn(`[work-follow] 召唤 ${characterId} 未开窗：${result.error ?? '未知原因'}`);
+      });
     },
     switchCharacter: (characterId) => {
       if (isQuitting) return;
@@ -833,13 +839,24 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   ipcMain.handle('pet:window-open', async (_event, agentId: string, characterId?: string) => {
     const known = characterId === undefined ? undefined : characters.list().find((character) => character.id === characterId);
     if (characterId !== undefined && known === undefined) return { ok: false, error: `未知角色：${characterId}` };
-    return petWindowManager!.open(agentId, known?.id ?? prefs.get().characterId);
+    // characterId 缺省时回退「当前主宠角色」（已保证存在于注册表）——同样要校验，否则会开出第二只主宠。
+    const target = known?.id ?? characters.selected().id;
+    const available = petControl.assertCharacterAvailable(target, { exceptAgentId: agentId });
+    if (!available.ok) return { ok: false, error: available.error };
+    return petWindowManager!.open(agentId, target);
   });
   ipcMain.handle('pet:window-close', (_event, agentId: string) => ({ ok: petWindowManager!.close(agentId) }));
   ipcMain.handle('pet:window-list', () => petWindowManager!.list());
   ipcMain.handle('pet:window-prefs-get', (_event, agentId: string) => petWindowManager!.prefs(agentId));
-  ipcMain.handle('pet:window-prefs-set', (_event, agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }) =>
-    petWindowManager!.patch(agentId, update ?? {}));
+  ipcMain.handle('pet:window-prefs-set', (_event, agentId: string, update: { scale?: number; locked?: boolean; characterId?: string }) => {
+    const next = update ?? {};
+    // 只在真正要换角色时校验；纯 scale/locked 更新必须原样放行（pet-stage 启动即调 scale=1）。
+    if (typeof next.characterId === 'string' && next.characterId !== '') {
+      const available = petControl.assertCharacterAvailable(next.characterId, { exceptAgentId: agentId });
+      if (!available.ok) return { ok: false, error: available.error };
+    }
+    return petWindowManager!.patch(agentId, next);
+  });
   ipcMain.handle('pet:window-dock', (_event, agentId: string, edge: 'left' | 'right') => petWindowManager!.dock(agentId, edge));
   const autoHiddenAgents = new Set<string>();
   const applyFullscreenRect = (rect: RectLike | null): void => {
@@ -1115,6 +1132,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     voiceHost: voice,
     petWindows: petWindowManager,
     characters,
+    assertCharacterAvailable: (characterId, exceptAgentId) => petControl.assertCharacterAvailable(characterId, { exceptAgentId }),
     isEndpointBusyByMain: (endpoint) => endpoint === mainGameEndpoint() && autodrive.runner.isRunning(),
     // 联机求助接力 / 共同目标完成 → 对应角色涨好感（T-M6-48）
     onFriendshipEvent: (kind, agentId) => {

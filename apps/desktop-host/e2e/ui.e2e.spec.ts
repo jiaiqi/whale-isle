@@ -832,16 +832,33 @@ export default {
       expect(await page.locator('[data-coop-endpoint-input]').inputValue()).toBe('http://127.0.0.1:18090');
       await page.getByRole('button', { name: '关闭添加队友' }).click();
 
+      // 同角色不并存（2026-11-27）：副窗必须用「主宠之外」的角色，否则会被入口校验拒绝。
+      // CI 干净 checkout 没有随包素材，这里落一个最小自定义角色供副窗使用（与 aboutme 用例同法）。
+      const charRoot = joinPath(homedir(), 'Library', 'Application Support', 'Whale Isle', 'e2e-profile', 'pet-characters');
+      const secondaryDir = joinPath(charRoot, 'e2e-secondary');
+      mkdirSync(secondaryDir, { recursive: true });
+      writeFileSync(joinPath(secondaryDir, 'manifest.json'), JSON.stringify({
+        petId: 'e2e-secondary-sprite', renderer: 'sprite-sheet', licenseScope: 'DEV_ONLY_NON_COMMERCIAL', attribution: 'e2e',
+        width: 640, height: 360, defaultAction: 'idle',
+        actions: [{ actionState: 'idle', clips: [{ clipId: 'idle', webmPath: 'file:///idle.webp', sprite: { frameWidth: 640, frameHeight: 360, columns: 8, frameCount: 15, sampleFps: 12 } }] }],
+        ambientPool: [],
+      }));
+      writeFileSync(joinPath(charRoot, 'e2e-secondary.json'), JSON.stringify({
+        id: 'e2e-secondary', displayName: 'E2E 副宠', manifestPath: joinPath(secondaryDir, 'manifest.json'),
+        personaPrompt: '你是 E2E 副宠。', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1.2,
+        packId: 'dsh-pet', actionCount: 1, audioClipCount: 0, anchorRatio: 0.5, licenseScope: 'DEV_ONLY_NON_COMMERCIAL', builtin: false,
+      }));
+
       const opened = await page.evaluate(() => (window as unknown as {
         directorBridge: { petWindowOpen(agentId: string, characterId?: string): Promise<{ ok: boolean; error?: string }> };
-      }).directorBridge.petWindowOpen('agent-e2e', 'blue-whale-maid'));
+      }).directorBridge.petWindowOpen('agent-e2e', 'e2e-secondary'));
       expect(opened, opened.error).toMatchObject({ ok: true });
       const extra = await waitForWindow(app, 'agentId=agent-e2e', 20_000);
       await extra.waitForFunction(() => Boolean((window as unknown as { __petStageReady?: boolean }).__petStageReady), { timeout: 20_000 });
       const list = await page.evaluate(() => (window as unknown as {
         directorBridge: { petWindowList(): Promise<Array<{ agentId: string; characterId: string }>> };
       }).directorBridge.petWindowList());
-      expect(list.find((item) => item.agentId === 'agent-e2e')).toMatchObject({ characterId: 'blue-whale-maid' });
+      expect(list.find((item) => item.agentId === 'agent-e2e')).toMatchObject({ characterId: 'e2e-secondary' });
 
       await page.evaluate(() => (window as unknown as {
         directorBridge: { petWindowClose(agentId: string): Promise<{ ok: boolean }> };
@@ -854,6 +871,9 @@ export default {
       }, 10_000);
     } finally {
       await app.close();
+      const cleanupRoot = joinPath(homedir(), 'Library', 'Application Support', 'Whale Isle', 'e2e-profile', 'pet-characters');
+      rmSync(joinPath(cleanupRoot, 'e2e-secondary.json'), { force: true });
+      rmSync(joinPath(cleanupRoot, 'e2e-secondary'), { recursive: true, force: true });
     }
   }, 90_000);
 
