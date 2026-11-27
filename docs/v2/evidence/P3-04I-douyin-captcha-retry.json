@@ -1,0 +1,40 @@
+{
+  "at": "2026-11-27T03:40:11.855Z",
+  "note": "owner 2026-11-27 口头称验证码已处理后的单次复核；自动化 Profile 仍返回验证码中间页且 loggedIn=false，已停止，未再重试。",
+  "waitedForScan": false,
+  "ok": false,
+  "smoke": {
+    "ok": false,
+    "evidence": {
+      "schemaVersion": 1,
+      "sourceId": "douyin-public-jingxuan",
+      "feedUrl": "https://www.douyin.com/?recommend=1",
+      "requestedFeed": "recommended",
+      "usedFeed": "recommended",
+      "loggedIn": false,
+      "fallbackReason": "",
+      "verifiedAt": 1795750833765,
+      "durationMs": 21336,
+      "candidates": 0,
+      "itemsRead": 0,
+      "readFailures": 0,
+      "ok": false,
+      "failureReason": "抖音触发验证码/风控门槛，立即停止，绝不绕过；请 owner 亲手处理后再试",
+      "samples": []
+    }
+  },
+  "executorReady": false,
+  "executor": {
+    "wired": true,
+    "sources": [
+      {
+        "sourceId": "douyin-public-jingxuan",
+        "platform": "douyin",
+        "kind": "platform",
+        "verified": false,
+        "note": "抖音只读信息流（公开精选 / 推荐 / 关注，未登录时回落公开精选）；不点赞/不关注/不评论/不发私信"
+      }
+    ],
+    "runnable": false
+  }
+}
