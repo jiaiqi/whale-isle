@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { BrowseCandidate, SocialPlatformCapabilityEntry } from '@workbench/shared-protocol';
+import type { BrowseCandidate, SocialCommentAction, SocialPlatformCapabilityEntry } from '@workbench/shared-protocol';
+import { SocialCommentSettingsSchema } from '@workbench/shared-protocol';
 import { RuntimeEventBus } from '@workbench/runtime-core';
 import {
   DOUYIN_FEED_URLS,
@@ -7,14 +8,20 @@ import {
   DOUYIN_SMOKE_MIN_ITEMS,
   DouyinBrowseCandidateSource,
   DouyinBrowseEvidenceSchema,
+  DouyinCommentExecutor,
   buildDouyinItemText,
   detectDouyinBlock,
   douyinFeedKindFromUrl,
   extractDouyinTopics,
+  guardDouyinCommentText,
   isDouyinEvidenceUsable,
   isDouyinRequestedFeedVerified,
   parseDouyinCardText,
   runDouyinSmoke,
+  type DouyinCommentComposer,
+  type DouyinCommentLedgerPort,
+  type DouyinCommentReceipt,
+  type DouyinCommentThread,
   type DouyinPageSnapshot,
   type DouyinWebSession,
 } from './social-douyin';
@@ -22,6 +29,7 @@ import { SocialBrowseExecutor } from './social-executor';
 import { SocialRuntime } from './social-runtime';
 
 const T0 = 1_764_000_000_000;
+const NOON = new Date(2026, 10, 27, 12, 0, 0).getTime();
 const VIDEO_BASE = '76814179753662743';
 
 /** 测试专用合成能力：只声明「douyin/read_public 在单测里已授权+已实测」，不构成对真实平台的人工验收声明 */
@@ -615,3 +623,408 @@ describe('候选类型对齐', () => {
     expect(viewed.itemsViewed).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// V2-P3-04K：L3 受限自主评论互动
+// ---------------------------------------------------------------------------
+
+const COMMENT_CAPABILITY: SocialPlatformCapabilityEntry = {
+  platform: 'douyin',
+  capability: 'comment_reply',
+  channel: 'browser_ui',
+  allowed: true,
+  riskLevel: 'P2',
+  accountType: 'owner',
+  rateLimitNote: 'test-only',
+  region: '',
+  lastVerifiedAt: T0,
+  notes: 'test-only; 真实平台尚未验证',
+};
+
+function commentSettings(overrides: Record<string, unknown> = {}) {
+  return SocialCommentSettingsSchema.parse({
+    enabled: true,
+    maxPerDay: 10,
+    maxPerHour: 3,
+    minIntervalMs: 180_000,
+    minChars: 4,
+    maxChars: 80,
+    sameVideoCooldownMs: 30 * 24 * 3_600_000,
+    quietHoursStart: 0,
+    quietHoursEnd: 8,
+    ...overrides,
+  });
+}
+
+function commentCandidate(url = `https://www.douyin.com/video/${VIDEO_BASE}0`): BrowseCandidate {
+  return {
+    candidateId: 'douyin-comment-test',
+    platform: 'douyin',
+    url,
+    title: '一条公开科普视频',
+    previewText: '@公开作者0 · 一条公开科普视频',
+    contentKind: 'video',
+    sourceKind: 'recommendation',
+  };
+}
+
+class MemoryCommentLedger implements DouyinCommentLedgerPort {
+  readonly actions: SocialCommentAction[] = [];
+  appendError: Error | null = null;
+
+  countSentSince(ts: number): number {
+    return this.actions.filter((a) => a.attemptedAt > 0 && a.attemptedAt >= ts).length;
+  }
+
+  lastSentAt(): number | null {
+    const sent = this.actions.filter((a) => a.attemptedAt > 0);
+    return sent.length === 0 ? null : Math.max(...sent.map((a) => a.attemptedAt));
+  }
+
+  hasCommentedVideo(videoId: string, since: number): boolean {
+    return this.actions.some((a) => a.attemptedAt > 0 && a.videoId === videoId && a.attemptedAt >= since);
+  }
+
+  recentSentTexts(since: number): string[] {
+    return this.actions.filter((a) => a.attemptedAt > 0 && a.attemptedAt >= since).map((a) => a.text);
+  }
+
+  append(action: SocialCommentAction): void {
+    if (this.appendError) throw this.appendError;
+    const idx = this.actions.findIndex(row => row.actionId === action.actionId);
+    if (idx < 0) this.actions.push(action); else this.actions[idx] = action;
+  }
+}
+
+class FakeCommentWeb {
+  readonly readCalls: string[] = [];
+  readonly postCalls: Array<{ url: string; text: string }> = [];
+  thread: DouyinCommentThread = {
+    url: `https://www.douyin.com/video/${VIDEO_BASE}0`,
+    title: '公开科普视频 - 抖音',
+    text: '评论区\n说点什么...',
+    comments: [{ commentId: 'c1', authorAlias: '观众甲', text: '讲得真清楚' }],
+    inputAvailable: true,
+  };
+  receipt: DouyinCommentReceipt = { ok: true, commentId: 'new-1', detail: '评论已发布' };
+  readError: Error | null = null;
+  postError: Error | null = null;
+
+  async readComments(url: string): Promise<DouyinCommentThread> {
+    this.readCalls.push(url);
+    if (this.readError) throw this.readError;
+    return { ...this.thread, url };
+  }
+
+  async postComment(input: { url: string; text: string }): Promise<DouyinCommentReceipt> {
+    this.postCalls.push(input);
+    if (this.postError) throw this.postError;
+    return this.receipt;
+  }
+}
+
+function commentRuntime(entries: SocialPlatformCapabilityEntry[] = [COMMENT_CAPABILITY]): SocialRuntime {
+  return new SocialRuntime({
+    characterId: 'char_xiaojing',
+    profileId: 'prof',
+    events: new RuntimeEventBus({ now: () => NOON }),
+    capabilities: entries,
+    autonomyLevel: 'l3_bounded',
+    now: () => NOON,
+  });
+}
+
+function buildCommentExecutor(options: {
+  web?: FakeCommentWeb;
+  ledger?: MemoryCommentLedger;
+  compose?: DouyinCommentComposer['compose'];
+  runtime?: SocialRuntime;
+  now?: number;
+  interrupted?: boolean;
+  onError?: (message: string) => void;
+} = {}) {
+  const web = options.web ?? new FakeCommentWeb();
+  const ledger = options.ledger ?? new MemoryCommentLedger();
+  const executor = new DouyinCommentExecutor({
+    web,
+    ledger,
+    runtime: options.runtime ?? commentRuntime(),
+    composer: {
+      compose:
+        options.compose ??
+        (async () => ({ shouldComment: true, text: '这个科普讲得很清楚，学到了', reason: '', modelId: 'test/model' })),
+    },
+    now: () => options.now ?? NOON,
+    isInterrupted: () => options.interrupted ?? false,
+
+  });
+  return { executor, web, ledger };
+}
+
+describe('抖音评论本地护栏', () => {
+  it('去掉链接与 @，保留正文', () => {
+    const guard = guardDouyinCommentText('讲得好 @某人 见 https://x.test/a 学到了', commentSettings());
+    expect(guard.ok).toBe(true);
+    expect(guard.text).toBe('讲得好 见 学到了');
+  });
+
+  it('拒绝太短/太长/联系方式/手机号/重复', () => {
+    expect(guardDouyinCommentText('好', commentSettings()).reason).toContain('太短');
+    expect(guardDouyinCommentText('好'.repeat(81), commentSettings()).reason).toContain('太长');
+    expect(guardDouyinCommentText('想聊的加微信一起玩', commentSettings()).reason).toContain('导流');
+    expect(guardDouyinCommentText('联系我 13800138000', commentSettings()).reason).toContain('手机号');
+    expect(guardDouyinCommentText('这个科普讲得很清楚', commentSettings(), ['这个科普讲得很清楚！']).reason).toContain('重复');
+  });
+});
+
+describe('抖音评论执行器', () => {
+  it('能力已实测且全部条件满足 → 真实发送并记账', async () => {
+    const { executor, web, ledger } = buildCommentExecutor();
+    const action = await executor.execute({
+      sessionId: 's1',
+      candidate: commentCandidate(),
+      itemText: '标题：公开科普',
+      settings: commentSettings(),
+    });
+    expect(action.status).toBe('sent');
+    expect(action.text).toBe('这个科普讲得很清楚，学到了');
+    expect(action.modelId).toBe('test/model');
+    expect(web.postCalls).toHaveLength(1);
+    expect(ledger.actions).toHaveLength(1);
+  });
+
+  it('默认关闭时直接跳过且不记账、不读页面', async () => {
+    const { executor, web, ledger } = buildCommentExecutor();
+    const action = await executor.execute({
+      sessionId: 's1',
+      candidate: commentCandidate(),
+      itemText: '',
+      settings: commentSettings({ enabled: false }),
+    });
+    expect(action.failureKind).toBe('disabled');
+    expect(web.readCalls).toHaveLength(0);
+    expect(ledger.actions).toHaveLength(1);
+  });
+
+  it('能力未实测 → 跳过，绝不发送', async () => {
+    const { executor, web, ledger } = buildCommentExecutor({ runtime: commentRuntime([]) });
+    const action = await executor.execute({
+      sessionId: 's1',
+      candidate: commentCandidate(),
+      itemText: '',
+      settings: commentSettings(),
+    });
+    expect(action.failureKind).toBe('capability_unverified');
+    expect(web.postCalls).toHaveLength(0);
+    expect(ledger.actions).toHaveLength(1);
+  });
+
+  it('禁发时段/急停/日额度/小时额度/间隔/同视频冷却都会拦下', async () => {
+    const quiet = buildCommentExecutor({ now: new Date(2026, 10, 27, 3, 0, 0).getTime() });
+    expect((await quiet.executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    })).failureKind).toBe('quiet_hours');
+
+    const halted = buildCommentExecutor({ interrupted: true });
+    expect((await halted.executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    })).failureKind).toBe('interrupted');
+
+    const dailyLedger = new MemoryCommentLedger();
+    dailyLedger.actions.push({ ...makeSentAction(NOON), actionId: 'a1' });
+    const daily = buildCommentExecutor({ ledger: dailyLedger });
+    expect((await daily.executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings({ maxPerDay: 1 }),
+    })).failureKind).toBe('quota');
+
+    const hourlyLedger = new MemoryCommentLedger();
+    hourlyLedger.actions.push({ ...makeSentAction(NOON - 60_000), actionId: 'a2' });
+    const hourly = buildCommentExecutor({ ledger: hourlyLedger });
+    expect((await hourly.executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings({ maxPerHour: 1 }),
+    })).failureKind).toBe('quota');
+
+    const intervalLedger = new MemoryCommentLedger();
+    intervalLedger.actions.push({ ...makeSentAction(NOON - 60_000), actionId: 'a3' });
+    const interval = buildCommentExecutor({ ledger: intervalLedger });
+    expect((await interval.executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    })).failureKind).toBe('quota');
+
+    const videoLedger = new MemoryCommentLedger();
+    videoLedger.actions.push({ ...makeSentAction(NOON - 86_400_000), actionId: 'a4' });
+    const video = buildCommentExecutor({ ledger: videoLedger });
+    expect((await video.executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    })).failureKind).toBe('quota');
+  });
+
+  it('验证码 / 未登录 / 页面异常 → failed，且不发送', async () => {
+    const captchaWeb = new FakeCommentWeb();
+    captchaWeb.thread = { ...captchaWeb.thread, title: '验证码中间页', text: '' };
+    const captcha = await buildCommentExecutor({ web: captchaWeb }).executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(captcha.failureKind).toBe('captcha');
+    expect(captchaWeb.postCalls).toHaveLength(0);
+
+    const loginWeb = new FakeCommentWeb();
+    loginWeb.thread = { ...loginWeb.thread, inputAvailable: false, text: '请先登录后发表评论' };
+    const login = await buildCommentExecutor({ web: loginWeb }).executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(login.failureKind).toBe('login_required');
+
+    const errorWeb = new FakeCommentWeb();
+    errorWeb.readError = new Error('页面加载超时');
+    const readError = await buildCommentExecutor({ web: errorWeb }).executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(readError.failureKind).toBe('page_error');
+  });
+
+  it('模型拒绝 / 模型异常 / 护栏拒绝', async () => {
+    const declined = await buildCommentExecutor({
+      compose: async () => ({ shouldComment: false, text: '', reason: '内容不适合评论' }),
+    }).executor.execute({ sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings() });
+    expect(declined.failureKind).toBe('model_declined');
+
+    const unavailable = await buildCommentExecutor({
+      compose: async () => { throw new Error('模型网关未就绪'); },
+    }).executor.execute({ sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings() });
+    expect(unavailable.failureKind).toBe('model_unavailable');
+
+    const { executor, ledger } = buildCommentExecutor({
+      compose: async () => ({ shouldComment: true, text: '加微信一起聊', reason: '', modelId: 'm' }),
+    });
+    const rejected = await executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(rejected.failureKind).toBe('guard_rejected');
+    expect(ledger.actions).toHaveLength(1);
+    expect(ledger.actions[0]!.status).toBe('skipped');
+  });
+
+  it('发送回执失败 / 发送撞验证码 / 发送抛错 → failed', async () => {
+    const failWeb = new FakeCommentWeb();
+    failWeb.receipt = { ok: false, detail: '发送按钮无响应' };
+    const failed = await buildCommentExecutor({ web: failWeb }).executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(failed.failureKind).toBe('receipt_failed');
+
+    const captchaWeb = new FakeCommentWeb();
+    captchaWeb.receipt = { ok: false, detail: '发送后跳验证码', blocked: 'captcha' };
+    const captcha = await buildCommentExecutor({ web: captchaWeb }).executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(captcha.failureKind).toBe('captcha');
+
+    const throwWeb = new FakeCommentWeb();
+    throwWeb.postError = new Error('按钮点击失败');
+    const thrown = await buildCommentExecutor({ web: throwWeb }).executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(thrown.failureKind).toBe('receipt_failed');
+    expect(thrown.status).toBe('uncertain');
+  });
+
+  it('账本写入失败必须停止，发送前无法落盘时绝不点击', async () => {
+    const ledger = new MemoryCommentLedger();
+    ledger.appendError = new Error('磁盘只读');
+    const { executor, web } = buildCommentExecutor({ ledger });
+    await expect(executor.execute({ sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings() }))
+      .rejects.toThrow('磁盘只读');
+    expect(web.postCalls).toHaveLength(0);
+  });
+
+  it('宿主未提供评论端口 → failed，不假装已发送', async () => {
+    const ledger = new MemoryCommentLedger();
+    const executor = new DouyinCommentExecutor({
+      web: {},
+      ledger,
+      runtime: commentRuntime(),
+      composer: { compose: async () => ({ shouldComment: true, text: '不错不错', reason: '' }) },
+      now: () => NOON,
+    });
+    const action = await executor.execute({
+      sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings(),
+    });
+    expect(action.failureKind).toBe('page_error');
+  });
+});
+
+describe('评论撤销与回执持久化边界', () => {
+  it('模型等待期间急停：取消旧结果；并发第二个执行请求不发送', async () => {
+    let resolve!: (result: { shouldComment: boolean; text: string; reason: string }) => void;
+    let composing!: () => void;
+    const started = new Promise<void>(r => { composing = r; });
+    const composition = new Promise<{ shouldComment: boolean; text: string; reason: string }>(r => { resolve = r; });
+    let interrupted = false;
+    const web = new FakeCommentWeb();
+    const ledger = new MemoryCommentLedger();
+    const executor = new DouyinCommentExecutor({ web, ledger, runtime: commentRuntime(), now: () => NOON,
+      isInterrupted: () => interrupted, composer: { compose: async () => { composing(); return composition; } } });
+    const input = { sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings() };
+    const first = executor.execute(input);
+    await started;
+    expect((await executor.execute(input)).failureKind).toBe('busy');
+    interrupted = true;
+    resolve({ shouldComment: true, text: '这个解释很有帮助，学到了', reason: '' });
+    expect((await first).failureKind).toBe('interrupted');
+    expect(web.postCalls).toHaveLength(0);
+  });
+  it('点击之前 pending 已落盘；结果不明占用额度，下次不可重发', async () => {
+    const web = new FakeCommentWeb();
+    const ledger = new MemoryCommentLedger();
+    web.postComment = async () => {
+      expect(ledger.actions[0]?.status).toBe('pending');
+      expect(ledger.countSentSince(NOON - 1)).toBe(1);
+      return { ok: false, uncertain: true, detail: '没有真实回执' };
+    };
+    const { executor } = buildCommentExecutor({ web, ledger });
+    const input = { sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings() };
+    expect((await executor.execute(input)).status).toBe('uncertain');
+    expect((await executor.execute(input)).failureKind).toBe('quota');
+    expect(ledger.actions[0]?.status).toBe('uncertain');
+  });
+  it('发送前 journal 不可写时停发；发送后写入失败保留 pending 而非吞错', async () => {
+    const web = new FakeCommentWeb(); const ledger = new MemoryCommentLedger();
+    const { executor } = buildCommentExecutor({ web, ledger, compose: async () => {
+      ledger.appendError = new Error('磁盘已满'); return { shouldComment: true, text: '这个解释很有帮助', reason: '' };
+    } });
+    const input = { sessionId: 's', candidate: commentCandidate(), itemText: '', settings: commentSettings() };
+    await expect(executor.execute(input)).rejects.toThrow('磁盘已满');
+    expect(web.postCalls).toHaveLength(0);
+    ledger.appendError = null;
+    web.postComment = async () => { ledger.appendError = new Error('磁盘已满'); return { ok: true, detail: '已确认' }; };
+    const second = buildCommentExecutor({ web, ledger }).executor;
+    await expect(second.execute(input)).rejects.toThrow('磁盘已满');
+    expect(ledger.actions[0]?.status).toBe('pending');
+  });
+  it('非抖音域名与错误平台不读取页面、不发送', async () => {
+    const { executor, web } = buildCommentExecutor();
+    const action = await executor.execute({ sessionId: 's', candidate: commentCandidate('https://example.com/video/1234567'), itemText: '', settings: commentSettings() });
+    expect(action.failureKind).toBe('page_error'); expect(web.readCalls).toEqual([]);
+  });
+});
+
+function makeSentAction(createdAt: number): SocialCommentAction {
+  return {
+    actionId: `sent-${createdAt}`,
+    platform: 'douyin',
+    sessionId: 's',
+    targetUrl: `https://www.douyin.com/video/${VIDEO_BASE}0`,
+    targetTitle: '',
+    targetAuthor: '',
+    videoId: `${VIDEO_BASE}0`,
+    text: '之前发过的评论',
+    status: 'sent',
+    failureKind: '',
+    reason: '',
+    modelId: 'm',
+    createdAt,
+    completedAt: createdAt,
+    attemptedAt: createdAt,
+  };
+}

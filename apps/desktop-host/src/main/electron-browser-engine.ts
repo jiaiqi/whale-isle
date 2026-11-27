@@ -12,6 +12,9 @@ import type { BrowserEnginePort, BrowserPageSnapshot } from '@workbench/runtime-
 import type { BrowserProfile } from '@workbench/shared-protocol';
 import {
   DOUYIN_FEED_URLS,
+  detectDouyinBlock,
+  type DouyinCommentReceipt,
+  type DouyinCommentThread,
   type DouyinFeedKind,
   type DouyinLoginState,
   type DouyinPageSnapshot,
@@ -214,6 +217,127 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
     return this.loginWindow !== null && !this.loginWindow.isDestroyed();
   }
 
+  // -------------------------------------------------------------------------
+  // 抖音 L3 受限评论（V2-P3-04K）：只读评论区 + owner 授权后的真实发送
+  // 页面文本永远按不可信数据处理；验证码/登录墙立即停手，绝不绕过。
+  // -------------------------------------------------------------------------
+
+  /** 只允许站内详情页；不跟随外站重定向发送，也不在任意页面查找通用「发布」按钮。 */
+  private assertDouyinVideoUrl(url: string): void {
+    if (!/^https:\/\/www\.douyin\.com\/video\/\d{6,}\/?$/u.test(url)) throw new Error('只允许抖音视频详情页');
+  }
+
+  async readComments(url: string): Promise<DouyinCommentThread> {
+    this.assertDouyinVideoUrl(url);
+    await this.load(url);
+    const deadline = Date.now() + 6_000;
+    let thread = await this.extractCommentThread();
+    while (Date.now() < deadline && !thread.inputAvailable) {
+      if (detectDouyinBlock(thread)?.kind === 'captcha') break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      thread = await this.extractCommentThread();
+    }
+    return thread;
+  }
+
+  /**
+   * 必须由已读取的同一视频页发送；输入框和发送按钮必须是评论专属 data-e2e 控件。
+   * 页面结构未知就失败；只有新增的稳定评论 ID + 完整文本匹配才视为成功。
+   */
+  async postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt> {
+    this.assertDouyinVideoUrl(input.url);
+    const before = await this.extractCommentThread();
+    const block = detectDouyinBlock(before);
+    if (block?.kind === 'captcha') return { ok: false, detail: block.detail, blocked: 'captcha' };
+    if (!before.inputAvailable) return { ok: false, detail: '评论输入框不可用', ...(block?.kind === 'login' ? { blocked: 'login' as const } : {}) };
+    if (before.url.replace(/\/$/u, '') !== input.url.replace(/\/$/u, '')) return { ok: false, detail: '视频页已变化，取消发送' };
+    if (!canSend()) return { ok: false, detail: '发送已取消' };
+    const filled = await this.evaluate<boolean>(`
+      (() => {
+        const el = document.querySelector('[data-e2e="comment-input"] textarea, [data-e2e="comment-input"] [contenteditable="true"], textarea[data-e2e="comment-input"], [data-e2e="comment-input"][contenteditable="true"]');
+        if (!el || !el.getClientRects().length || el.disabled) return false;
+        const text = ${JSON.stringify(input.text)};
+        el.focus();
+        if (el instanceof HTMLTextAreaElement) {
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, text);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        } else if (el.isContentEditable) {
+          const range = document.createRange(); range.selectNodeContents(el);
+          const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+          if (!document.execCommand('insertText', false, text)) return false;
+        } else return false;
+        return (el.value ?? el.innerText ?? '').trim() === text;
+      })()
+    `);
+    if (!filled) return { ok: false, detail: '评论专属编辑器未就绪，未点击发送' };
+    // 给受控输入一次渲染机会，然后再次检查急停/撤销；不重新加载、不换按钮硬试。
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const current = await this.extractCommentThread();
+    const currentBlock = detectDouyinBlock(current);
+    if (currentBlock?.kind === 'captcha') return { ok: false, detail: currentBlock.detail, blocked: 'captcha' };
+    if (!canSend()) return { ok: false, detail: '发送已取消' };
+    const clicked = await this.evaluate<boolean>(`
+      (() => {
+        if (location.href.replace(/\\/$/, '') !== ${JSON.stringify(input.url.replace(/\/$/u, ''))}) return false;
+        const editor = document.querySelector('[data-e2e="comment-input"] textarea, [data-e2e="comment-input"] [contenteditable="true"], textarea[data-e2e="comment-input"], [data-e2e="comment-input"][contenteditable="true"]');
+        if (!editor || (editor.value ?? editor.innerText ?? '').trim() !== ${JSON.stringify(input.text)}) return false;
+        const buttons = [...document.querySelectorAll('[data-e2e="comment-publish"], [data-e2e="comment-send"], [data-e2e="comment-submit"]')]
+          .filter(el => el.getClientRects().length && !el.disabled && el.getAttribute('aria-disabled') !== 'true');
+        if (buttons.length !== 1) return false;
+        buttons[0].click(); return true;
+      })()
+    `);
+    if (!clicked) return { ok: false, detail: '未找到唯一可用的评论专属发送按钮，未发送' };
+    const knownIds = new Set(before.comments.map(item => item.commentId));
+    const deadline = Date.now() + 8_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const after = await this.extractCommentThread();
+      const afterBlock = detectDouyinBlock(after);
+      if (afterBlock?.kind === 'captcha') return { ok: false, detail: afterBlock.detail, blocked: 'captcha', uncertain: true };
+      if (after.url !== before.url) return { ok: false, uncertain: true, detail: '点击发送后页面变化，结果不确定' };
+      const posted = after.comments.find(item => !knownIds.has(item.commentId) && /^\d{6,}$/u.test(item.commentId) && item.text === input.text);
+      if (posted) {
+        // 排除前端乐观插入：重新加载后仍有相同 ID 与全文，才确认已发布。
+        // 真实站点评论区异步渲染，重载后给一个有界等待窗口重复抽取；判定条件不放宽。
+        await this.load(input.url);
+        const persistedDeadline = Date.now() + 5_000;
+        for (;;) {
+          const persisted = await this.extractCommentThread();
+          const persistedBlock = detectDouyinBlock(persisted);
+          if (persistedBlock?.kind === 'captcha') return { ok: false, uncertain: true, blocked: 'captcha', detail: persistedBlock.detail };
+          if (persisted.comments.some(item => item.commentId === posted.commentId && item.text === input.text))
+            return { ok: true, commentId: posted.commentId, detail: '重新加载后评论 ID 与完整原文仍匹配，已确认发布' };
+          if (Date.now() >= persistedDeadline) break;
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+        return { ok: false, uncertain: true, detail: '页面曾显示评论，但重新加载后无法确认；不自动重发' };
+      }
+    }
+    return { ok: false, uncertain: true, detail: '已点击发送，8 秒内没有可靠回执；不得自动重发' };
+  }
+
+  private async extractCommentThread(): Promise<DouyinCommentThread> {
+    return this.evaluate<DouyinCommentThread>(`
+      (() => {
+        const comments = [...document.querySelectorAll('[data-e2e="comment-item"]')].slice(0, 50).map(el => {
+          const content = el.querySelector('[data-e2e="comment-content"]');
+          const author = el.querySelector('[data-e2e="comment-author"], a[href*="/user/"]');
+          return {
+            commentId: el.getAttribute('data-e2e-comment-id') || el.getAttribute('data-comment-id') || '',
+            authorAlias: (author?.innerText || '').trim().slice(0, 100),
+            text: (content?.innerText || '').trim().slice(0, 500),
+          };
+        }).filter(item => item.text !== '');
+        const editor = document.querySelector('[data-e2e="comment-input"] textarea, [data-e2e="comment-input"] [contenteditable="true"], textarea[data-e2e="comment-input"], [data-e2e="comment-input"][contenteditable="true"]');
+        return { url: location.href, title: document.title || '', comments,
+          text: (document.body?.innerText || '').slice(0, 20000),
+          inputAvailable: Boolean(editor && editor.getClientRects().length && !editor.disabled && editor.getAttribute('aria-disabled') !== 'true'),
+        };
+      })()
+    `);
+  }
+
   async dispose(): Promise<void> {
     // 回写 Cookie 再关窗：人工交接登录后的新登录态必须落盘，否则下轮任务无登录态（单向导入缺陷修复）
     await this.persistCookies();
@@ -332,7 +456,7 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
  * 抖音只读会话适配器（V2-P3-04H）：
  * 复用 ElectronBrowserEngine 的独立 partition / Cookie 落盘 / 隐藏窗口，
  * 只向 character-core 暴露「加载页面 + 登录态 + 打开可见登录窗」三个只读能力。
- * 不提供点赞/关注/评论/发布等任何写操作入口。
+ * 评论端口只由独立 L3 执行器调用，L1 来源保持只读。
  */
 export class ElectronDouyinSession implements DouyinWebSession {
   readonly driverKind = 'electron' as const;
@@ -348,6 +472,14 @@ export class ElectronDouyinSession implements DouyinWebSession {
 
   openFeed(feed: DouyinFeedKind): Promise<DouyinPageSnapshot> {
     return this.engine.openFeed(feed);
+  }
+
+  readComments(url: string): Promise<DouyinCommentThread> {
+    return this.engine.readComments(url);
+  }
+
+  postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt> {
+    return this.engine.postComment(input, canSend);
   }
 
   loginState(): Promise<DouyinLoginState> {

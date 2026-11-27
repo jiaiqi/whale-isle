@@ -26,6 +26,16 @@
 - `BrainRuntimeConfig` 新增显式 `allowRuleStandin` 与有界 `plannerTimeoutMs`（100–120000ms，宿主默认 30s）；主进程在规划 HTTP 上实际传入超时信号，服务不可用/超时/非法工具/缺 Key 可进入标明「规则代驾」的确定性动作，旧配置默认安全暂停。重建大脑时保留自定义供应商与故障策略，跨语言生成产物同步。
 - 能力域对照复用既有 Magpie 思想网关与 BWF 执行链，重写本地协议 stub 和故障剧本，拒绝 Mod 内直连及无许可证源码；完整逐项结论与真机待验项见 `docs/v2/evidence/P4-01-llm-chain-verification.md`，总工单保持 `NEXT`。
 
+### Added（`V2-P3-04K` 抖音受限自动顶层评论，`IMPLEMENTED_UNVERIFIED`）
+
+- **授权边界**：owner 2026-11-27 明确要求沿用当前非日常账号对**他人公开视频**做有限自动顶层评论、无逐条审核，但所有发送内容与结果必须在本软件按日可查；[ADR-006](./docs/v2/adr/ADR-006-douyin-bounded-comments.md) 记录这次对 L1 只读红线的局部例外。仍不绕验证码/风控/登录墙、不新建账号、不写凭据、不自动合并分支。
+- **契约**：`packages/shared-protocol/src/social.ts` 新增评论设置（默认关闭、日/时/间隔/同视频冷却/静默时段/字数）、动作与失败类型、日快照、查询/历史/核验输入、模型输出 Schema；`comment_reply` 不再允许通过通用「人工已实测」接口伪造验证时间。
+- **执行器**：`packages/character-core/src/social-douyin.ts` 新增 `DouyinCommentExecutor`——浏览会话保持 `readonly`，浏览正常收官后独立执行；模型决定是否评论，确定性护栏拒绝导流/联系方式/最近重复；发送前先写 SQLite `pending` 并原子预留额度，落盘失败禁止点击；只有「评论区新增稳定数字 ID + 全文回读 + 重载仍在」才判 `sent`，点击后无可靠回执判 `uncertain` 且不自动重发；验证码/登录墙即停。
+- **持久化**：`apps/desktop-host/src/main/social-comment-ledger.ts` 用 `node:sqlite` 建 `social_comment_actions`，按账号隔离；启动时把残留 `pending` 转 `uncertain` 并保留额度。
+- **宿主与 UI**：`v2-kernel-host.ts` 接模型网关（复用 `MAIN_PERSONA_BRAIN` 与现有饭碗计量）、换设置/急停时按世代撤销在途模型与发送、3 路 IPC；生活页新增「抖音 · 有限自动评论」面板（总开关、未验证提示、暂停原因、首次真实单条核验、按日期 25 条分页查看原文/状态/原因/模型）。
+- **验证**：46 例单测、真实 Electron 本地仿真 E2E 1/1（16.99s）、真实构建主应用 UI/IPC 实测（默认关闭、开关不伪造实测、种入 `simulation-only` 记录可见）、`pnpm verify:gate` **8/8**。**未向抖音发起任何真实评论请求**，真实登录态 DOM 与平台发送仍待 `[REAL-DEVICE]`；证据 [P3-04K-douyin-bounded-comments-verification.md](./docs/v2/evidence/P3-04K-douyin-bounded-comments-verification.md)。
+- **参考复评留痕**：`REFERENCE-dsh-douyin-agent.md` 记录「公开评论超出第一阶段」被本次 owner 授权局部推翻，仅放开顶层评论；浏览器自动化链路与私信/好友互动仍不采用，弹幕主线仍为 dyhub。
+
 ### Changed / Fixed（抖音 CDP 四项补强，item 20 / P0-1，源自 31 仓审计）
 
 - **防后台节流**：`buildLaunchArgs` 追加 `--disable-backgrounding-occluded-windows`、`--disable-renderer-backgrounding`、`--disable-background-timer-throttling`，避免专用 Chrome 窗口被遮挡/后台化后停止绘制与计时器节流导致 feed 不 hydrate；**未**新增 `--disable-blink-features=AutomationControlled`、UA 覆盖或任何 stealth 参数（参考 `dsh-douyin-bridge/lib/browser.mjs:11-35`）。
