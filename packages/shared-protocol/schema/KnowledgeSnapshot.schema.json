@@ -1,0 +1,413 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeSnapshot",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/KnowledgeSnapshot",
+  "$defs": {
+    "KnowledgeSnapshot": {
+      "type": "object",
+      "properties": {
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "knowledgeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "gameId": {
+                "default": "stardew",
+                "type": "string",
+                "minLength": 1
+              },
+              "gameVersion": {
+                "type": "string",
+                "minLength": 1
+              },
+              "modContext": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "topic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceType": {
+                "type": "string",
+                "enum": [
+                  "official",
+                  "wiki",
+                  "community",
+                  "video",
+                  "user",
+                  "experience"
+                ]
+              },
+              "sourceUri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceTitle": {
+                "type": "string",
+                "minLength": 1
+              },
+              "retrievedAt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidenceSummary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "applicability": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "knownLimitations": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "contradictoryEvidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "unverified",
+                  "partially-verified",
+                  "verified",
+                  "outdated",
+                  "rejected"
+                ]
+              },
+              "evidenceRefs": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "evidenceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "materialId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "locator": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "startLine": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "endLine": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "startLine",
+                            "endLine"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "web"
+                            },
+                            "url": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "video"
+                            },
+                            "startMs": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "endMs": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "startMs",
+                            "endMs"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "pdf"
+                            },
+                            "page": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "page"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "image-region"
+                            },
+                            "x": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "w": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            },
+                            "h": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "sourceRevision": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "materialSha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "extraction": {
+                      "default": "unknown",
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "partial",
+                        "failed",
+                        "unknown"
+                      ]
+                    },
+                    "capturedAt": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "evidenceId",
+                    "materialId",
+                    "locator",
+                    "capturedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "unitState": {
+                "default": "candidate",
+                "type": "string",
+                "enum": [
+                  "candidate",
+                  "verified",
+                  "promoted",
+                  "archived"
+                ]
+              },
+              "evidenceLevel": {
+                "default": "unverified",
+                "type": "string",
+                "enum": [
+                  "real-device",
+                  "real-platform",
+                  "e2e-host",
+                  "simulation",
+                  "unverified"
+                ]
+              },
+              "supersedes": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "supersededBy": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expiresAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "knowledgeId",
+              "topic",
+              "claim",
+              "sourceType",
+              "retrievedAt",
+              "confidence",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "materialId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "originUri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "sourceRevision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "licenseScope": {
+                "default": "unknown",
+                "type": "string",
+                "enum": [
+                  "owner-authorized",
+                  "cc-by-nc-sa",
+                  "cc-by-4.0",
+                  "apache-2.0",
+                  "mit",
+                  "unknown"
+                ]
+              },
+              "licenseNote": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "readAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "materialId",
+              "originUri",
+              "title",
+              "sha256",
+              "sourceRevision",
+              "readAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "localTopics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "units",
+        "materials",
+        "localTopics"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

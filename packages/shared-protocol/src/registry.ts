@@ -1,5 +1,15 @@
 import type { ZodType } from 'zod';
 import {
+  EvidenceLocatorSchema, EvidenceRefSchema, GameKnowledgeItemSchema,
+} from './knowledge';
+import {
+  KnowledgeMaterialSchema, MaterialChunkSchema, EvidencePackSchema,
+  KnowledgeSourceStatusSchema, KnowledgeApplicabilitySchema, PlayReceiptSchema,
+  KnowledgeImportMaterialInputSchema, KnowledgeExecuteInputSchema, KnowledgeImportResultSchema,
+  KnowledgeExecutionResultSchema, KnowledgeSourceConfigSchema, EnvoyReadResponseSchema, EnvoyToolResultSchema,
+  KnowledgeSnapshotSchema,
+} from './knowledge-evidence';
+import {
   SongConsoleRequestSchema, SongConsoleStatusSchema, SongConsoleCapabilitySchema,
   SongSeparateRequestSchema, SongSeparateResultSchema, SongRenderSliceRequestSchema,
   SongAudioResultSchema, SongConcatRequestSchema, SongCapabilitiesResultSchema,
@@ -97,6 +107,23 @@ import {
 export const CONTRACT_VERSION = '1.0.0';
 
 export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
+  EvidenceLocator: EvidenceLocatorSchema,
+  EvidenceRef: EvidenceRefSchema,
+  GameKnowledgeItem: GameKnowledgeItemSchema,
+  KnowledgeMaterial: KnowledgeMaterialSchema,
+  MaterialChunk: MaterialChunkSchema,
+  EvidencePack: EvidencePackSchema,
+  KnowledgeSourceStatus: KnowledgeSourceStatusSchema,
+  KnowledgeApplicability: KnowledgeApplicabilitySchema,
+  PlayReceipt: PlayReceiptSchema,
+  KnowledgeImportMaterialInput: KnowledgeImportMaterialInputSchema,
+  KnowledgeExecuteInput: KnowledgeExecuteInputSchema,
+  KnowledgeImportResult: KnowledgeImportResultSchema,
+  KnowledgeExecutionResult: KnowledgeExecutionResultSchema,
+  KnowledgeSnapshot: KnowledgeSnapshotSchema,
+  KnowledgeSourceConfig: KnowledgeSourceConfigSchema,
+  EnvoyReadResponse: EnvoyReadResponseSchema,
+  EnvoyToolResult: EnvoyToolResultSchema,
   SongConsoleRequest: SongConsoleRequestSchema,
   SongConsoleStatus: SongConsoleStatusSchema,
   SongConsoleCapability: SongConsoleCapabilitySchema,

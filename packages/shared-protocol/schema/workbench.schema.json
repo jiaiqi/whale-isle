@@ -4,6 +4,23 @@
   "contractVersion": "1.0.0",
   "type": "object",
   "required": [
+    "EvidenceLocator",
+    "EvidenceRef",
+    "GameKnowledgeItem",
+    "KnowledgeMaterial",
+    "MaterialChunk",
+    "EvidencePack",
+    "KnowledgeSourceStatus",
+    "KnowledgeApplicability",
+    "PlayReceipt",
+    "KnowledgeImportMaterialInput",
+    "KnowledgeExecuteInput",
+    "KnowledgeImportResult",
+    "KnowledgeExecutionResult",
+    "KnowledgeSnapshot",
+    "KnowledgeSourceConfig",
+    "EnvoyReadResponse",
+    "EnvoyToolResult",
     "SongConsoleRequest",
     "SongConsoleStatus",
     "SongConsoleCapability",
@@ -93,6 +110,57 @@
     "StardewLaunchPrefs"
   ],
   "properties": {
+    "EvidenceLocator": {
+      "$ref": "#/$defs/EvidenceLocator"
+    },
+    "EvidenceRef": {
+      "$ref": "#/$defs/EvidenceRef"
+    },
+    "GameKnowledgeItem": {
+      "$ref": "#/$defs/GameKnowledgeItem"
+    },
+    "KnowledgeMaterial": {
+      "$ref": "#/$defs/KnowledgeMaterial"
+    },
+    "MaterialChunk": {
+      "$ref": "#/$defs/MaterialChunk"
+    },
+    "EvidencePack": {
+      "$ref": "#/$defs/EvidencePack"
+    },
+    "KnowledgeSourceStatus": {
+      "$ref": "#/$defs/KnowledgeSourceStatus"
+    },
+    "KnowledgeApplicability": {
+      "$ref": "#/$defs/KnowledgeApplicability"
+    },
+    "PlayReceipt": {
+      "$ref": "#/$defs/PlayReceipt"
+    },
+    "KnowledgeImportMaterialInput": {
+      "$ref": "#/$defs/KnowledgeImportMaterialInput"
+    },
+    "KnowledgeExecuteInput": {
+      "$ref": "#/$defs/KnowledgeExecuteInput"
+    },
+    "KnowledgeImportResult": {
+      "$ref": "#/$defs/KnowledgeImportResult"
+    },
+    "KnowledgeExecutionResult": {
+      "$ref": "#/$defs/KnowledgeExecutionResult"
+    },
+    "KnowledgeSnapshot": {
+      "$ref": "#/$defs/KnowledgeSnapshot"
+    },
+    "KnowledgeSourceConfig": {
+      "$ref": "#/$defs/KnowledgeSourceConfig"
+    },
+    "EnvoyReadResponse": {
+      "$ref": "#/$defs/EnvoyReadResponse"
+    },
+    "EnvoyToolResult": {
+      "$ref": "#/$defs/EnvoyToolResult"
+    },
     "SongConsoleRequest": {
       "$ref": "#/$defs/SongConsoleRequest"
     },
@@ -357,6 +425,3254 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "EvidenceLocator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "text"
+            },
+            "startLine": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "endLine": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "startLine",
+            "endLine"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "web"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "type": "string",
+              "minLength": 1
+            },
+            "quote": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "video"
+            },
+            "startMs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "endMs": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "startMs",
+            "endMs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pdf"
+            },
+            "page": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "page"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "image-region"
+            },
+            "x": {
+              "type": "number",
+              "minimum": 0
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0
+            },
+            "w": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "h": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "x",
+            "y",
+            "w",
+            "h"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "properties": {
+        "evidenceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "materialId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locator": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "text"
+                },
+                "startLine": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "endLine": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "startLine",
+                "endLine"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "web"
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "selector": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "kind",
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "video"
+                },
+                "startMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "endMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "startMs",
+                "endMs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "pdf"
+                },
+                "page": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "page"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "image-region"
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "x",
+                "y",
+                "w",
+                "h"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "materialSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "extraction": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "failed",
+            "unknown"
+          ]
+        },
+        "capturedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "evidenceId",
+        "materialId",
+        "locator",
+        "capturedAt"
+      ],
+      "additionalProperties": false
+    },
+    "GameKnowledgeItem": {
+      "type": "object",
+      "properties": {
+        "knowledgeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gameId": {
+          "default": "stardew",
+          "type": "string",
+          "minLength": 1
+        },
+        "gameVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modContext": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "official",
+            "wiki",
+            "community",
+            "video",
+            "user",
+            "experience"
+          ]
+        },
+        "sourceUri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceTitle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retrievedAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceSummary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "applicability": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "knownLimitations": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "contradictoryEvidence": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "unverified",
+            "partially-verified",
+            "verified",
+            "outdated",
+            "rejected"
+          ]
+        },
+        "evidenceRefs": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidenceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "materialId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "locator": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "text"
+                      },
+                      "startLine": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "endLine": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "startLine",
+                      "endLine"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "web"
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "selector": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "video"
+                      },
+                      "startMs": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "endMs": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "startMs",
+                      "endMs"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "pdf"
+                      },
+                      "page": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "page"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "image-region"
+                      },
+                      "x": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "w": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "h": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "x",
+                      "y",
+                      "w",
+                      "h"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "sourceRevision": {
+                "type": "string",
+                "minLength": 1
+              },
+              "materialSha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "extraction": {
+                "default": "unknown",
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "failed",
+                  "unknown"
+                ]
+              },
+              "capturedAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "evidenceId",
+              "materialId",
+              "locator",
+              "capturedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "unitState": {
+          "default": "candidate",
+          "type": "string",
+          "enum": [
+            "candidate",
+            "verified",
+            "promoted",
+            "archived"
+          ]
+        },
+        "evidenceLevel": {
+          "default": "unverified",
+          "type": "string",
+          "enum": [
+            "real-device",
+            "real-platform",
+            "e2e-host",
+            "simulation",
+            "unverified"
+          ]
+        },
+        "supersedes": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "supersededBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expiresAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "knowledgeId",
+        "topic",
+        "claim",
+        "sourceType",
+        "retrievedAt",
+        "confidence",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeMaterial": {
+      "type": "object",
+      "properties": {
+        "materialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "originUri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "licenseScope": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "owner-authorized",
+            "cc-by-nc-sa",
+            "cc-by-4.0",
+            "apache-2.0",
+            "mit",
+            "unknown"
+          ]
+        },
+        "licenseNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "readAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "materialId",
+        "originUri",
+        "title",
+        "sha256",
+        "sourceRevision",
+        "readAt"
+      ],
+      "additionalProperties": false
+    },
+    "MaterialChunk": {
+      "type": "object",
+      "properties": {
+        "chunkId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "locator": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "text"
+                },
+                "startLine": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "endLine": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "startLine",
+                "endLine"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "web"
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "selector": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "kind",
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "video"
+                },
+                "startMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "endMs": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "startMs",
+                "endMs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "pdf"
+                },
+                "page": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "page"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "image-region"
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "w": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "h": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "x",
+                "y",
+                "w",
+                "h"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin": {
+          "default": "source",
+          "type": "string",
+          "enum": [
+            "source",
+            "asr",
+            "ocr",
+            "vision",
+            "derived"
+          ]
+        }
+      },
+      "required": [
+        "chunkId",
+        "locator",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "EvidencePack": {
+      "type": "object",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "materialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "materialSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "extraction": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "failed",
+            "unknown"
+          ]
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "chunks": {
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "chunkId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "locator": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "text"
+                      },
+                      "startLine": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      },
+                      "endLine": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "startLine",
+                      "endLine"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "web"
+                      },
+                      "url": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "selector": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "video"
+                      },
+                      "startMs": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "endMs": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "startMs",
+                      "endMs"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "pdf"
+                      },
+                      "page": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "page"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "image-region"
+                      },
+                      "x": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "w": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "h": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "x",
+                      "y",
+                      "w",
+                      "h"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "origin": {
+                "default": "source",
+                "type": "string",
+                "enum": [
+                  "source",
+                  "asr",
+                  "ocr",
+                  "vision",
+                  "derived"
+                ]
+              }
+            },
+            "required": [
+              "chunkId",
+              "locator",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "capturedAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "originUri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "licenseScope": {
+              "type": "string",
+              "enum": [
+                "owner-authorized",
+                "cc-by-nc-sa",
+                "cc-by-4.0",
+                "apache-2.0",
+                "mit",
+                "unknown"
+              ]
+            },
+            "licenseNote": {
+              "type": "string"
+            },
+            "readerVersion": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "title",
+            "originUri",
+            "licenseScope",
+            "readerVersion"
+          ],
+          "additionalProperties": false
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "topic": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sourceType": {
+              "type": "string",
+              "enum": [
+                "official",
+                "wiki",
+                "community",
+                "video",
+                "user",
+                "experience"
+              ]
+            },
+            "gameVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "modContext": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "applicability": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "topic",
+            "sourceType"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "packId",
+        "materialId",
+        "materialSha256",
+        "sourceRevision",
+        "extraction",
+        "digest",
+        "chunks",
+        "capturedAt",
+        "source",
+        "parameters"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeSourceStatus": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "default": "envoy",
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "starting",
+            "error"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "materialsRoot": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "materialCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0
+        },
+        "readOnly": {
+          "default": true,
+          "type": "boolean",
+          "const": true
+        },
+        "checkedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "state",
+        "checkedAt"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeApplicability": {
+      "type": "object",
+      "properties": {
+        "knowledgeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "compatible",
+            "uncertain",
+            "outdated",
+            "mod-mismatch",
+            "not-applicable"
+          ]
+        },
+        "executable": {
+          "type": "boolean"
+        },
+        "versionMatch": {
+          "type": "string",
+          "enum": [
+            "match",
+            "mismatch",
+            "not-declared",
+            "unreadable"
+          ]
+        },
+        "modMatch": {
+          "type": "string",
+          "enum": [
+            "match",
+            "missing-mods",
+            "not-declared",
+            "unreadable"
+          ]
+        },
+        "matchedConditions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unsatisfiedConditions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unverifiableConditions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reasons": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "missingMods": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "runtimeGameVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSeason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeDay": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "runtimeLocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stateDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "assessedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "knowledgeId",
+        "status",
+        "executable",
+        "versionMatch",
+        "modMatch",
+        "assessedAt"
+      ],
+      "additionalProperties": false
+    },
+    "PlayReceipt": {
+      "type": "object",
+      "properties": {
+        "receiptId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "knowledgeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "receiptStatus": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "observedStateDelta": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "stateChanged": {
+          "type": "boolean"
+        },
+        "suspicious": {
+          "default": false,
+          "type": "boolean"
+        },
+        "evidenceLevel": {
+          "type": "string",
+          "enum": [
+            "real-device",
+            "real-platform",
+            "e2e-host",
+            "simulation",
+            "unverified"
+          ]
+        },
+        "beforeState": {
+          "type": "string"
+        },
+        "afterState": {
+          "type": "string"
+        },
+        "rawReceipt": {
+          "type": "string"
+        },
+        "simulation": {
+          "type": "boolean"
+        },
+        "beforeStateDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "afterStateDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "receiptId",
+        "knowledgeId",
+        "actionId",
+        "tool",
+        "receiptStatus",
+        "summary",
+        "stateChanged",
+        "evidenceLevel",
+        "beforeState",
+        "rawReceipt",
+        "simulation",
+        "capturedAt"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeImportMaterialInput": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "licenseScope": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "owner-authorized",
+            "cc-by-nc-sa",
+            "cc-by-4.0",
+            "apache-2.0",
+            "mit",
+            "unknown"
+          ]
+        },
+        "licenseNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "sourceType": {
+          "default": "wiki",
+          "type": "string",
+          "enum": [
+            "official",
+            "wiki",
+            "community",
+            "video",
+            "user",
+            "experience"
+          ]
+        },
+        "maxChunks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gameVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modContext": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "applicability": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "filePath",
+        "topic"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeExecuteInput": {
+      "type": "object",
+      "properties": {
+        "knowledgeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "args": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 600000
+        }
+      },
+      "required": [
+        "knowledgeId",
+        "tool"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeImportResult": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "material": {
+          "type": "object",
+          "properties": {
+            "materialId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "originUri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "sourceRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "licenseScope": {
+              "default": "unknown",
+              "type": "string",
+              "enum": [
+                "owner-authorized",
+                "cc-by-nc-sa",
+                "cc-by-4.0",
+                "apache-2.0",
+                "mit",
+                "unknown"
+              ]
+            },
+            "licenseNote": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "readAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "materialId",
+            "originUri",
+            "title",
+            "sha256",
+            "sourceRevision",
+            "readAt"
+          ],
+          "additionalProperties": false
+        },
+        "pack": {
+          "type": "object",
+          "properties": {
+            "packId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "materialId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "materialSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "sourceRevision": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "extraction": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "failed",
+                "unknown"
+              ]
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "chunks": {
+              "maxItems": 500,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "chunkId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "locator": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "text"
+                          },
+                          "startLine": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          },
+                          "endLine": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "startLine",
+                          "endLine"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "web"
+                          },
+                          "url": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "selector": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "url"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "video"
+                          },
+                          "startMs": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "endMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "startMs",
+                          "endMs"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "pdf"
+                          },
+                          "page": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "page"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "image-region"
+                          },
+                          "x": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "w": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "h": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "x",
+                          "y",
+                          "w",
+                          "h"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "origin": {
+                    "default": "source",
+                    "type": "string",
+                    "enum": [
+                      "source",
+                      "asr",
+                      "ocr",
+                      "vision",
+                      "derived"
+                    ]
+                  }
+                },
+                "required": [
+                  "chunkId",
+                  "locator",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "capturedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "originUri": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "licenseScope": {
+                  "type": "string",
+                  "enum": [
+                    "owner-authorized",
+                    "cc-by-nc-sa",
+                    "cc-by-4.0",
+                    "apache-2.0",
+                    "mit",
+                    "unknown"
+                  ]
+                },
+                "licenseNote": {
+                  "type": "string"
+                },
+                "readerVersion": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "title",
+                "originUri",
+                "licenseScope",
+                "readerVersion"
+              ],
+              "additionalProperties": false
+            },
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "topic": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceType": {
+                  "type": "string",
+                  "enum": [
+                    "official",
+                    "wiki",
+                    "community",
+                    "video",
+                    "user",
+                    "experience"
+                  ]
+                },
+                "gameVersion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "modContext": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "applicability": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "topic",
+                "sourceType"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "packId",
+            "materialId",
+            "materialSha256",
+            "sourceRevision",
+            "extraction",
+            "digest",
+            "chunks",
+            "capturedAt",
+            "source",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        "units": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "knowledgeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "gameId": {
+                "default": "stardew",
+                "type": "string",
+                "minLength": 1
+              },
+              "gameVersion": {
+                "type": "string",
+                "minLength": 1
+              },
+              "modContext": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "topic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceType": {
+                "type": "string",
+                "enum": [
+                  "official",
+                  "wiki",
+                  "community",
+                  "video",
+                  "user",
+                  "experience"
+                ]
+              },
+              "sourceUri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceTitle": {
+                "type": "string",
+                "minLength": 1
+              },
+              "retrievedAt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidenceSummary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "applicability": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "knownLimitations": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "contradictoryEvidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "unverified",
+                  "partially-verified",
+                  "verified",
+                  "outdated",
+                  "rejected"
+                ]
+              },
+              "evidenceRefs": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "evidenceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "materialId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "locator": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "startLine": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "endLine": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "startLine",
+                            "endLine"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "web"
+                            },
+                            "url": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "video"
+                            },
+                            "startMs": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "endMs": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "startMs",
+                            "endMs"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "pdf"
+                            },
+                            "page": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "page"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "image-region"
+                            },
+                            "x": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "w": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            },
+                            "h": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "sourceRevision": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "materialSha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "extraction": {
+                      "default": "unknown",
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "partial",
+                        "failed",
+                        "unknown"
+                      ]
+                    },
+                    "capturedAt": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "evidenceId",
+                    "materialId",
+                    "locator",
+                    "capturedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "unitState": {
+                "default": "candidate",
+                "type": "string",
+                "enum": [
+                  "candidate",
+                  "verified",
+                  "promoted",
+                  "archived"
+                ]
+              },
+              "evidenceLevel": {
+                "default": "unverified",
+                "type": "string",
+                "enum": [
+                  "real-device",
+                  "real-platform",
+                  "e2e-host",
+                  "simulation",
+                  "unverified"
+                ]
+              },
+              "supersedes": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "supersededBy": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expiresAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "knowledgeId",
+              "topic",
+              "claim",
+              "sourceType",
+              "retrievedAt",
+              "confidence",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1
+        },
+        "degradedReason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeExecutionResult": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "blocked"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "applicability": {
+          "type": "object",
+          "properties": {
+            "knowledgeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "compatible",
+                "uncertain",
+                "outdated",
+                "mod-mismatch",
+                "not-applicable"
+              ]
+            },
+            "executable": {
+              "type": "boolean"
+            },
+            "versionMatch": {
+              "type": "string",
+              "enum": [
+                "match",
+                "mismatch",
+                "not-declared",
+                "unreadable"
+              ]
+            },
+            "modMatch": {
+              "type": "string",
+              "enum": [
+                "match",
+                "missing-mods",
+                "not-declared",
+                "unreadable"
+              ]
+            },
+            "matchedConditions": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "unsatisfiedConditions": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "unverifiableConditions": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "reasons": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "missingMods": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "runtimeGameVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runtimeSeason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runtimeDay": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "runtimeLocation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stateDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "assessedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "knowledgeId",
+            "status",
+            "executable",
+            "versionMatch",
+            "modMatch",
+            "assessedAt"
+          ],
+          "additionalProperties": false
+        },
+        "receipt": {
+          "type": "object",
+          "properties": {
+            "receiptId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "knowledgeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "actionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "receiptStatus": {
+              "type": "string",
+              "enum": [
+                "COMPLETED",
+                "FAILED",
+                "UNCERTAIN"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "observedStateDelta": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "stateChanged": {
+              "type": "boolean"
+            },
+            "suspicious": {
+              "default": false,
+              "type": "boolean"
+            },
+            "evidenceLevel": {
+              "type": "string",
+              "enum": [
+                "real-device",
+                "real-platform",
+                "e2e-host",
+                "simulation",
+                "unverified"
+              ]
+            },
+            "beforeState": {
+              "type": "string"
+            },
+            "afterState": {
+              "type": "string"
+            },
+            "rawReceipt": {
+              "type": "string"
+            },
+            "simulation": {
+              "type": "boolean"
+            },
+            "beforeStateDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "afterStateDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "capturedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "receiptId",
+            "knowledgeId",
+            "actionId",
+            "tool",
+            "receiptStatus",
+            "summary",
+            "stateChanged",
+            "evidenceLevel",
+            "beforeState",
+            "rawReceipt",
+            "simulation",
+            "capturedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "availability"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeSnapshot": {
+      "type": "object",
+      "properties": {
+        "units": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "knowledgeId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "gameId": {
+                "default": "stardew",
+                "type": "string",
+                "minLength": 1
+              },
+              "gameVersion": {
+                "type": "string",
+                "minLength": 1
+              },
+              "modContext": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "topic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "claim": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceType": {
+                "type": "string",
+                "enum": [
+                  "official",
+                  "wiki",
+                  "community",
+                  "video",
+                  "user",
+                  "experience"
+                ]
+              },
+              "sourceUri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceTitle": {
+                "type": "string",
+                "minLength": 1
+              },
+              "retrievedAt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidenceSummary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "applicability": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "knownLimitations": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "contradictoryEvidence": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "unverified",
+                  "partially-verified",
+                  "verified",
+                  "outdated",
+                  "rejected"
+                ]
+              },
+              "evidenceRefs": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "evidenceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "materialId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "locator": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "startLine": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            "endLine": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "startLine",
+                            "endLine"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "web"
+                            },
+                            "url": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "selector": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "quote": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "url"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "video"
+                            },
+                            "startMs": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "endMs": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "startMs",
+                            "endMs"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "pdf"
+                            },
+                            "page": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "page"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "image-region"
+                            },
+                            "x": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "w": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            },
+                            "h": {
+                              "type": "number",
+                              "exclusiveMinimum": 0
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "sourceRevision": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "materialSha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "extraction": {
+                      "default": "unknown",
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "partial",
+                        "failed",
+                        "unknown"
+                      ]
+                    },
+                    "capturedAt": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "evidenceId",
+                    "materialId",
+                    "locator",
+                    "capturedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "unitState": {
+                "default": "candidate",
+                "type": "string",
+                "enum": [
+                  "candidate",
+                  "verified",
+                  "promoted",
+                  "archived"
+                ]
+              },
+              "evidenceLevel": {
+                "default": "unverified",
+                "type": "string",
+                "enum": [
+                  "real-device",
+                  "real-platform",
+                  "e2e-host",
+                  "simulation",
+                  "unverified"
+                ]
+              },
+              "supersedes": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "supersededBy": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expiresAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "knowledgeId",
+              "topic",
+              "claim",
+              "sourceType",
+              "retrievedAt",
+              "confidence",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "materialId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "originUri": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "sourceRevision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "licenseScope": {
+                "default": "unknown",
+                "type": "string",
+                "enum": [
+                  "owner-authorized",
+                  "cc-by-nc-sa",
+                  "cc-by-4.0",
+                  "apache-2.0",
+                  "mit",
+                  "unknown"
+                ]
+              },
+              "licenseNote": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "readAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "materialId",
+              "originUri",
+              "title",
+              "sha256",
+              "sourceRevision",
+              "readAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "localTopics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "units",
+        "materials",
+        "localTopics"
+      ],
+      "additionalProperties": false
+    },
+    "KnowledgeSourceConfig": {
+      "type": "object",
+      "properties": {
+        "envoy": {
+          "default": {
+            "enabled": true
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnvoyReadResponse": {
+      "type": "object",
+      "properties": {
+        "material_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "partial",
+            "needs_host",
+            "blocked",
+            "empty"
+          ]
+        },
+        "blocks": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "origin": {
+                "type": "string"
+              },
+              "content": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "locator": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "page_number": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "locator_valid": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "origin",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "coverage": {
+          "default": {
+            "modalities": {},
+            "unresolved": []
+          },
+          "type": "object",
+          "properties": {
+            "modalities": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "extraction": {
+                    "default": "unknown",
+                    "type": "string",
+                    "enum": [
+                      "complete",
+                      "partial",
+                      "failed",
+                      "unknown"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "unresolved": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "errors": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "EnvoyToolResult": {
+      "type": "object",
+      "properties": {
+        "isError": {
+          "type": "boolean"
+        },
+        "structuredContent": {
+          "type": "object",
+          "properties": {
+            "material_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source_revision": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "result": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "partial",
+                "needs_host",
+                "blocked",
+                "empty"
+              ]
+            },
+            "blocks": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "origin": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "locator": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "page_number": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "locator_valid": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "origin",
+                  "content"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "coverage": {
+              "default": {
+                "modalities": {},
+                "unresolved": []
+              },
+              "type": "object",
+              "properties": {
+                "modalities": {
+                  "default": {},
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "extraction": {
+                        "default": "unknown",
+                        "type": "string",
+                        "enum": [
+                          "complete",
+                          "partial",
+                          "failed",
+                          "unknown"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "unresolved": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "errors": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "SongConsoleRequest": {
       "type": "object",
       "properties": {

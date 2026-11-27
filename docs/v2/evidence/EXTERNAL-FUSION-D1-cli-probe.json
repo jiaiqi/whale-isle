@@ -1,0 +1,29 @@
+{
+  "note": "2026-11-27 本机真实环境探测的摘要（非仿真）；完整 JSON 含本地攻略正文，未入库以免复制 guide-forager 素材。",
+  "command": "pnpm exec tsx tools/scripts/knowledge-slice.ts --data-dir /tmp/fusion-cli-probe --output /tmp/fusion-cli-probe.json",
+  "exitCode": 2,
+  "environment": {
+    "envoy": "未安装（PATH 中无 envoy）",
+    "uv": "已安装（0.11.17），但未安装 Envoy 包",
+    "materialsRoot": "~/WhaleIsle/knowledge-materials/owner-authorized（不存在）"
+  },
+  "sourceStatus": {
+    "sourceId": "envoy",
+    "state": "unavailable",
+    "reason": "外部知识源不可用：未找到 envoy；owner 授权材料目录不存在；回退本地攻略",
+    "materialsRoot": "~/WhaleIsle/knowledge-materials/owner-authorized",
+    "materialCount": 0,
+    "readOnly": true,
+    "checkedAt": "2026-11-27T12:32:07.427Z"
+  },
+  "evidenceLevel": "unverified",
+  "persisted": {
+    "unitCount": 157,
+    "localTopics": 12,
+    "packCount": 0,
+    "receiptCount": 0,
+    "firstUnitState": "candidate",
+    "firstUnitEvidenceRefs": 0
+  },
+  "conclusion": "真实环境缺少 Envoy 与 owner 材料，外部读取与 Evidence Pack 复现无法验收；本地攻略候选如实为 candidate 且无证据引用，未冒充外部证据，也未生成任何实玩回执。"
+}

@@ -18,6 +18,16 @@
 - 兼容新增 `FOLLOW` 和点赞/礼物正增量数量字段；进房不触发关注规则，点赞不再计入关注感谢。规则经去重、同人冷却与全局节流，阈值本周期每条至多触发一次；点歌仍过四重版权门禁，仅排队不自动真唱；气泡不抢语音/游戏动作，睡眠与自驾繁忙时只留 OBS。
 - 新增 12 项编排单测和隔离 Electron `/obs` 全链路 E2E，加入 macOS CI；专项 90/90、Electron 1/1、完整门禁修复后 8/8。首次门禁 7/8 的兼容失败及两次 E2E 失败均保留原始日志，详见 [验证证据](./docs/v2/evidence/P3-02A-live-engagement-verification.md)；真实平台/OBS 实播未验，状态 `IMPLEMENTED_UNVERIFIED`。
 
+### Added（`V2-P4-04A–D` 外部参考融合第一垂直切片，`IMPLEMENTED_UNVERIFIED`）
+
+- **四段链路**：Envoy 外部 MCP 只读材料 → Evidence Pack（来源/版本/SHA-256/许可/digest，同材料同参数可复现）→ `GameKnowledgeItem` 候选知识（`candidate|verified|promoted|archived` 四态，与既有五态事实可信度正交）→ 真实 `get_state` 适用性 + 复用 `ActionLock` 的 BWF 三态回执 → 现有 `workbench.db` 持久化。
+- **契约**：`shared-protocol` 新增材料/证据/适用性/回执/来源状态/导入与执行入参、Envoy 只读投影与快照契约，已登记 `registry.ts` 并重生成 JSON Schema 与 Pydantic；`GameKnowledgeItem` 新字段全部带默认值，旧记录兼容。
+- **存储**：`node:sqlite` 升 schema v3，新增 4 张知识表（材料、证据包、知识单元、实玩回执），导入/回执在事务内原子写入并保留历史版本；迁移失败回滚、不留半迁移表、不悄悄重建权威库。
+- **Envoy 适配**：只调用 `envoy_read` 白名单；realpath 授权目录校验（拒绝软链接逃逸、目录、URL、>2 MB）、隔离子进程 cwd/HOME/缓存目录、不继承凭据类环境变量、POSIX 进程组回收；缺 envoy/uv/材料目录逐项 `unavailable` 并回退本地攻略，不自动安装。
+- **宿主与 IPC**：新增 `knowledge-host.ts` 与 7 条固定 `v2:knowledge-*` 通道，无任意 MCP 工具或命令入口；执行前核对游戏会话、自主游玩、人类接管/急停/暂停、联机占用与并发；仅开放 `water_crops/harvest_crops/travel_to/wait`；状态无变化的「完成」判 `UNCERTAIN/suspicious`；许可未知或非商用只允许查看。新增 `tools/scripts/knowledge-slice.ts` 人类复跑 CLI（必须显式 `--data-dir`）。
+- **验证**：`pnpm verify:gate` **8/8**；本单 5 文件 **38 用例**、Electron E2E **1/1（2968ms，已进 macOS CI）**；新增核心文件分支覆盖率 99.17% / 95.45% / 91.2%；真实环境 probe 如实 `unavailable`（本机无 envoy、无 `~/WhaleIsle` 授权材料）。
+- **明确未做**：真实 Envoy/owner 材料读取与两次 digest 复现、真实游戏同链路、Windows 子进程树回收；04A 的 social 观察版本/Outbox 留 04F/G，04E 知识 UI 页面未实现。参考 Envoy 本地材料不支持 Markdown 的冲突已记录。证据 [EXTERNAL-FUSION-D1-slice-verification.md](./docs/v2/evidence/EXTERNAL-FUSION-D1-slice-verification.md)。
+
 ### Added（内部开发预览构建 `0.2.0-dev.2`，`V2-P4-05`）
 
 - **原生 helper 随包**：`whale-input-helper` / `whale-audio-helper` 改为预编译产物随包分发（`Contents/Resources/native/darwin-arm64/` + `sha256.json`），安装态不再依赖仓库 `tools/native/*.swift`，也不要求用户机器装 Xcode Command Line Tools；源码编译保留为开发态回退。随包目录存在但二进制缺失 / 清单损坏 / 哈希不符 / 不可执行时 **fail-closed**，不回退编译、不冒充成功；`electron-builder` 的 `beforePack` 钩子在打包前再次校验，缺产物直接中断打包。新增 `build:native-helpers` 脚本（`swiftc -O -target <arch>-apple-macos12.0`）与 `native-helper-bundle.ts` 统一解析层；启动日志打印 helper 来源（`prebuilt` / `compiled` / `cache`）或不可用原因。

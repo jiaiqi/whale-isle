@@ -85,6 +85,15 @@ export class WhaleMcpClient {
         } catch { /* 非 JSON 行忽略 */ }
       });
     }
+    proc.on('error', (error) => {
+      for (const [id, waiter] of this.pending.entries()) {
+        clearTimeout(waiter.timer);
+        this.pending.delete(id);
+        waiter.reject(error);
+      }
+    });
+    // 避免服务端大量 stderr 堵塞管道；默认不把材料正文写进宿主日志。
+    proc.stderr?.resume();
     proc.on('exit', (code) => {
       for (const [id, waiter] of this.pending.entries()) {
         clearTimeout(waiter.timer);
@@ -143,6 +152,12 @@ export class WhaleMcpClient {
       protocolVersion: '2025-03-26',
       clientInfo: { name: 'whale-isle', version: '2.0.0' },
     });
+  }
+
+  /** MCP STDIO 初始化握手的单向通知（不分配 pending request）。 */
+  notifyInitialized(): void {
+    const proc = this.ensureStdio();
+    proc.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   }
 
   async listTools(): Promise<McpToolDescriptor[]> {

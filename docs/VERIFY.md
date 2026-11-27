@@ -482,7 +482,7 @@
 | 浏览 → 评论闭环 | 开启自动评论跑一次「浏览正常结束 → 模型决定 → 最多一条」，确认生活页当日记录可查、额度正确、失败即暂停 | ⏳ 待真实链路 |
 | 验证码/风控体感 | 真实命中时确认立即停止、人话报错、不硬刷、自动关闭评论开关 | ⏳ 待真实触发 |
 
-## 2026-11-27 批次（`V2-P3-02A` 直播互动编排第一切片，`IMPLEMENTED_UNVERIFIED`）
+## 2026-11-27 批次（`V2-P3-02A` 直播互动编排 + `V2-P4-04A–D` 外部参考融合第一垂直切片，`IMPLEMENTED_UNVERIFIED`，真实平台/Envoy/游戏待 `[REAL-DEVICE]`）
 
 ### Mock / 沙盒 / 宿主 E2E 已通过项
 
@@ -492,6 +492,22 @@
 | `P3-02A` 专项回归 | `[SIMULATION]` + `[E2E-HOST]` | `pnpm exec vitest run apps/desktop-host/src/webui/webui-server.spec.ts packages/live-stream-hub/src --coverage.enabled=false` → 4 文件 **90/90**；首次 60 过 1 败为曲库 fixture 缺 `voiceConsentSource` 被 Zod 拦截，补齐后通过（未放宽断言） | 2026-11-27 |
 | `P3-02A` OBS 互动挂件 E2E | `[E2E-HOST]` | `live-engagement.e2e.spec.ts` **1/1**（最终构建 9.89s）：临时 profile 隔离；中控台开关/目标保存并重启恢复；同 eventId 点赞两次只累计 12；礼物 3/3/1；恶意昵称纯文本（无 `img` DOM）；真实鉴权 `/obs` 三卡、`12 / 10`、`progress` 截断、`[SIMULATION]` 来源、1/1/3 并列、窄屏不溢出、改口径即时更新、关闭/再开保留进度、停播隐藏、`pageerror` 为空 | 2026-11-27 |
 | `P3-02A` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**：Gate 1 `tsc -b` + depcruise + ruff/mypy + 四入口 build；Gate 2 license-scanner 356 文件 0 违规 + audit 0 high/critical + luac 5 文件；Gate 3 vitest + pytest + 7 个卡死剧本；Gate 4 回环 0.4s。首轮 7/8（WebUI 新空字段破坏旧精确断言），改可选输出后通过；原始 `.log` 按仓库 `*.log` 忽略约定保留本地，关键断言摘录见 [P3-02A 证据](./v2/evidence/P3-02A-live-engagement-verification.md) | 2026-11-27 |
+| `P4-04A` 知识证据契约 | `[SIMULATION]` 确定性单测 | `knowledge-evidence.spec.ts`：旧 `GameKnowledgeItem` 记录默认 `candidate/unverified/evidenceRefs=[]`；locator 非法组合、SHA 格式、`readOnly=true`、未知许可、无 `ownerOverride` 绕过字段、非法 Envoy `result` 全部拒绝；契约已登记并重生成 JSON Schema / Pydantic | 2026-11-27 |
+| `P4-04B` 证据内核与四态 | `[SIMULATION]` 确定性单测 | `packages/game-bridge-mcp/src/knowledge-evidence.spec.ts`：固定期望包与 digest 复现/篡改、原文定位、derived 不入候选、四态合法迁移、编辑降级、版本/Mod/季节/日期/天气/地点核对、不可达/unknown/expired/archived/rejected 拒绝、实玩可信度演进 | 2026-11-27 |
+| `P4-04B` SQLite 持久化 | 真实临时磁盘数据库（非 mock） | `knowledge-repo.spec.ts`：导入幂等、历史版本、真实 close/reopen 后材料/pack/回执/原始状态保留、重复回执原子回滚、`wipeAllData` 清空、无效导入回滚；构造 v2 库并故意坏 `knowledge_play_receipts` 使迁移失败 → 无半迁移表、`user_version` 仍 2 | 2026-11-27 |
+| `P4-04C` Envoy 只读边界 | `[SIMULATION]` + 真实子进程 | `mcp-envoy.spec.ts` **16 例**：缺 envoy/uv/材料目录逐项 `unavailable`；真实握手/读取/材料未被改写/审计 `READ:`；并发 probe 共用进程；secret 环境变量不继承；close 后 PID 消失；白名单拒绝 `envoy_knowledge/comment/publish/delete`；目录外/软链接/目录/大于 2 MB 拒绝；hang/exit/no-tool/is-error/blocked 降级并保留「不支持本地 Markdown」原因；无版本记 `unknown` | 2026-11-27 |
+| `P4-04D` 四段链路与四反例 | `[SIMULATION]` + 真实 HTTP 回环 | `knowledge-host.spec.ts`（真实独立 fake Envoy 子进程 + 本地 HTTP JSON-RPC BWF + 磁盘 SQLite）：导入两次 digest 一致、候选入库、真实 `get_state` 参与适用性、动作回执与原文落库、7 条 IPC 注册；材料修订 `partial` / 删除 `failed` 不发动作；Envoy missing/blocked/unlocatable/derived 不造证据并回退本地；BWF 端口缺失 → `unavailable` 且无回执、`ownerOverride` 无效；`NO_CHANGE/FAILED/UNCERTAIN` 三态；版本/Mod/季节/许可/急停/非白名单全阻断 | 2026-11-27 |
+| `P4-04D` Electron 宿主 E2E | `[E2E-HOST]` + `[SIMULATION]` | `knowledge-slice.e2e.spec.ts` **1/1，2968ms**：真实 Electron/preload/磁盘 SQLite；probe `available/readOnly` → 两次导入 digest 相同 → `candidate` → `water_crops` 回执 `COMPLETED/stateChanged/simulation` → 关闭重启后回执原文与前后状态仍在 → 再浇水无变化判 `UNCERTAIN/suspicious` → 删除材料后 `failed`。已加入 CI macOS E2E 列表 | 2026-11-27 |
+| `P4-04D` 人类复跑 CLI | 真实本机环境探测 | `tools/scripts/knowledge-slice.ts` 实跑：`sourceStatus.state=unavailable`（未找到 envoy；材料目录不存在），`materialCount=0 / packCount=0 / receiptCount=0`，本地攻略 157 条候选 `evidenceRefs=[]`。摘要归档 [EXTERNAL-FUSION-D1-cli-probe.json](./v2/evidence/EXTERNAL-FUSION-D1-cli-probe.json) | 2026-11-27 |
+| `P4-04A–D` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**；license-scanner 362 文件 0 违规。同日首次门禁曾因 Electron 二进制安装残缺（`File exists (os error 17)`）在 `pixel-avatar-v2.spec.ts` 导入阶段失败，重装后该 spec 3 passed / 1 skipped，再跑门禁通过；失败原始日志在本机 `.verify-gate/`（gitignored） | 2026-11-27 |
+
+### 真实环境失败 / 阻塞（不得写成通过）
+
+| 项目 | 真实现象 | 当前状态 |
+| --- | --- | --- |
+| 真实 Envoy 读取 | 本机 `envoy` 未安装，`~/WhaleIsle/knowledge-materials/owner-authorized` 不存在；真实 probe 如实 `unavailable`，未下载安装、未伪造材料 | **BLOCKED（缺 Envoy 与 owner 授权材料）** |
+| 真实 Evidence Pack 复现 | 只在本地 fixture 与仿真 MCP 上验证 digest；真实 Envoy 的 `material_id/source_revision` 与两次读取一致性未验 | **IMPLEMENTED_UNVERIFIED** |
+| 真实 Envoy 读 Markdown | 参考仓 `local_source.py` 只支持 PDF/音视频；设计书 `.md` 示例与实际不一致，真实 Markdown 会得到 `blocked` | **已知冲突，已记录，未改设计结论** |
 
 ### 待人类宿主真机验收项
 
@@ -500,3 +516,9 @@
 | 真实平台事件归一 | 真实直播间关注、礼物连击、点赞增量进入 `LiveRuntime` 后，规则匹配、点赞累计与投喂榜数值与平台侧显示一致 | ⏳ 待 `[REAL-DEVICE]` |
 | OBS 实播观感 | OBS Studio 实际开播画面中三卡可读、角色气泡出现且不抢语音/游戏动作 | ⏳ 待 `[REAL-DEVICE]` |
 | 多规则 / Top10 纵向布局 | 12 条规则 + Top10 在常用 OBS 画布高度内不裁切（本轮仅验证窄屏横向不溢出） | ⏳ 待验收 |
+| owner 授权材料 + Envoy | 放置带许可声明的材料并安装 Envoy，记录版本与材料 SHA，确认 `sourceStatus.available` | ⏳ 待 owner 操作 |
+| 两次 digest 复现 | 同材料同参数连续导入两次，确认 `packId/digest` 相同 | ⏳ 待真实 Envoy |
+| 真实状态适用性 | 真实 `get_state` 的版本/Mod/季节/日期可解析且参与适用性；不可解析时 `uncertain` 不执行 | ⏳ 待真实游戏 |
+| 真实实玩回执 | 人类在场执行一次 `water_crops` 等动作，记录 BWF 原文与前后状态；不可达记录 `unavailable` | ⏳ 待真实游戏 |
+| 重启复查 | 真实重启后从 SQLite 回查回执与知识状态（04E 页面未做） | ⏳ 待真实游戏 |
+| Windows 子进程回收 | Windows x64 上确认真实 Envoy 子进程退出后无残留 | ⏳ 未验证 |

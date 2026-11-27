@@ -1,0 +1,31 @@
+{
+  "packId": "pack_32e8be672958eb8005f55c525e8b0489b6b8a7f20c7b08eebd699abe4a8e79c9",
+  "materialId": "mat-fixture-spring",
+  "materialSha256": "116bc0d157fc58ada7483f428dd3f8a64b5cbbca7e0bb8d53cda207f29fdf2ea",
+  "sourceRevision": "fixture-rev-1",
+  "extraction": "complete",
+  "digest": "32e8be672958eb8005f55c525e8b0489b6b8a7f20c7b08eebd699abe4a8e79c9",
+  "chunks": [
+    {
+      "chunkId": "blk-body",
+      "locator": {
+        "kind": "text",
+        "startLine": 7,
+        "endLine": 7
+      },
+      "text": "春季需要给尚未浇水的作物浇水，已浇水的地块无需重复浇水。",
+      "origin": "source"
+    }
+  ],
+  "capturedAt": "2026-11-27T00:00:00Z",
+  "source": {
+    "title": "spring-guide.md",
+    "originUri": "file:///fixture/spring-guide.md",
+    "licenseScope": "mit",
+    "readerVersion": "fixture-1"
+  },
+  "parameters": {
+    "topic": "春季浇水",
+    "sourceType": "wiki"
+  }
+}

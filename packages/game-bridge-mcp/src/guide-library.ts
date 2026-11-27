@@ -5,7 +5,10 @@
  *   - 结合当前 GameRuntimeContext 评估兼容状态（compatible | uncertain | outdated | mod-mismatch），旧版本/缺 Mod 明确降权并标示不确定；
  *   - 每轮只把 ≤800 字的相关索引放进 prompt，LLM 通过宿主侧伪工具 read_guide{topic, section} 按需读全文。
  */
+import { createHash } from 'node:crypto';
 import {
+  GameKnowledgeItemSchema,
+  type GameKnowledgeItem,
   GameKnowledgeSourceTypeSchema,
   type GameRuntimeContext,
   type GuideCompatibilityReport,
@@ -333,6 +336,18 @@ export class GuideLibrary {
 
   topics(): string[] {
     return [...this.sectionsByTopic.keys()];
+  }
+
+  /** 04B：旧攻略幂等迁为 candidate，不虚构 Envoy 证据或真实验收级别；旧 API 原样保留。 */
+  knowledgeCandidates(retrievedAt: string): GameKnowledgeItem[] {
+    return this.allSections().map((section) => GameKnowledgeItemSchema.parse({
+      ...section.provenance,
+      knowledgeId: `kn_${createHash('sha256').update(JSON.stringify([section.provenance.gameId, section.topic, section.text])).digest('hex')}`,
+      topic: section.topic, claim: section.text,
+      retrievedAt: section.provenance.retrievedAt ?? retrievedAt,
+      confidence: 0, status: 'unverified',
+      knownLimitations: ['本地攻略尚未证据化，不能用于切片实玩验证'],
+    }));
   }
 
   sectionsOf(topic: string): GuideSection[] {

@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeImportMaterialInput",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/KnowledgeImportMaterialInput",
+  "$defs": {
+    "KnowledgeImportMaterialInput": {
+      "type": "object",
+      "properties": {
+        "filePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "licenseScope": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "owner-authorized",
+            "cc-by-nc-sa",
+            "cc-by-4.0",
+            "apache-2.0",
+            "mit",
+            "unknown"
+          ]
+        },
+        "licenseNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "sourceType": {
+          "default": "wiki",
+          "type": "string",
+          "enum": [
+            "official",
+            "wiki",
+            "community",
+            "video",
+            "user",
+            "experience"
+          ]
+        },
+        "maxChunks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gameVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modContext": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "applicability": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "filePath",
+        "topic"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

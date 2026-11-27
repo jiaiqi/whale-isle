@@ -1,0 +1,248 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeExecutionResult",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/KnowledgeExecutionResult",
+  "$defs": {
+    "KnowledgeExecutionResult": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "availability": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "blocked"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "applicability": {
+          "type": "object",
+          "properties": {
+            "knowledgeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "compatible",
+                "uncertain",
+                "outdated",
+                "mod-mismatch",
+                "not-applicable"
+              ]
+            },
+            "executable": {
+              "type": "boolean"
+            },
+            "versionMatch": {
+              "type": "string",
+              "enum": [
+                "match",
+                "mismatch",
+                "not-declared",
+                "unreadable"
+              ]
+            },
+            "modMatch": {
+              "type": "string",
+              "enum": [
+                "match",
+                "missing-mods",
+                "not-declared",
+                "unreadable"
+              ]
+            },
+            "matchedConditions": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "unsatisfiedConditions": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "unverifiableConditions": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "reasons": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "missingMods": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "runtimeGameVersion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runtimeSeason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runtimeDay": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "runtimeLocation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stateDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "assessedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "knowledgeId",
+            "status",
+            "executable",
+            "versionMatch",
+            "modMatch",
+            "assessedAt"
+          ],
+          "additionalProperties": false
+        },
+        "receipt": {
+          "type": "object",
+          "properties": {
+            "receiptId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "knowledgeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "actionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "receiptStatus": {
+              "type": "string",
+              "enum": [
+                "COMPLETED",
+                "FAILED",
+                "UNCERTAIN"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "observedStateDelta": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "stateChanged": {
+              "type": "boolean"
+            },
+            "suspicious": {
+              "default": false,
+              "type": "boolean"
+            },
+            "evidenceLevel": {
+              "type": "string",
+              "enum": [
+                "real-device",
+                "real-platform",
+                "e2e-host",
+                "simulation",
+                "unverified"
+              ]
+            },
+            "beforeState": {
+              "type": "string"
+            },
+            "afterState": {
+              "type": "string"
+            },
+            "rawReceipt": {
+              "type": "string"
+            },
+            "simulation": {
+              "type": "boolean"
+            },
+            "beforeStateDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "afterStateDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "capturedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "receiptId",
+            "knowledgeId",
+            "actionId",
+            "tool",
+            "receiptStatus",
+            "summary",
+            "stateChanged",
+            "evidenceLevel",
+            "beforeState",
+            "rawReceipt",
+            "simulation",
+            "capturedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "ok",
+        "availability"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
