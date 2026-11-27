@@ -222,7 +222,8 @@ export function detectDouyinBlock(page: Pick<DouyinPageSnapshot, 'title' | 'text
   if (CAPTCHA_RE.test(haystack)) {
     return {
       kind: 'captcha',
-      detail: '抖音触发验证码/风控门槛，立即停止，绝不绕过；请 owner 亲手处理后再试',
+      detail:
+        '抖音需要验证码（真实风控门槛）。本轮已立即停止、未重试、未绕过；浏览器窗口已保留，请在该窗口手动完成后重新发起。',
     };
   }
   if (LOGIN_RE.test(haystack)) {

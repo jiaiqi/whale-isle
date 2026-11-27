@@ -333,12 +333,15 @@
 | `P3-04I` owner 扫码登录 | **`[REAL-DEVICE]`** | 2026-11-27 09:56:49 CST，独立 `e2e-profile` 分区出现 `sessionid` / `sessionid_ss` / `sid_guard` / `passport_csrf_token`（**只检查名称，未读取值**）；AI 未代填密码、未导出凭据 | 2026-11-27 |
 | `P3-04I` 个性化流只读探测 | **`[REAL-DEVICE]`（非生产冒烟，不能置真）** | 09:59:20 在精选页内点击「推荐」标签 → `/?recommend=1`，真实读到 **8 张推荐卡片**；09:59:42 直接打开 `/follow` 真实读到 **2 张关注卡片**（低于冒烟门槛 3）。证据 [推荐探测](./v2/evidence/P3-04I-douyin-recommended-probe.json) / [关注探测](./v2/evidence/P3-04I-douyin-following-probe.json) | 2026-11-27 |
 | `P3-04I` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**。首次为 **7 过 / 1 败**（Gate 1 打包护栏：渲染层值导入 character-core 把 `node:fs/path/crypto` 打进包），修正为本地标签 + type-only 导入后通过；失败日志保留在 `.verify-gate/` | 2026-11-27 |
+| `P3-04K` 真浏览器驱动 | **`[REAL-DEVICE]`** | Google Chrome **158.0.8127.88**，专用 Profile `~/Library/Application Support/Whale Isle/douyin-browser-profile`，CDP `127.0.0.1:9333` 仅回环；启动参数无 headless / 无 `AutomationControlled` / 无 UA 覆盖；单实例复用，未拉第二个浏览器 | 2026-11-27 |
+| `P3-04K` 真机只读复验 | **`[REAL-DEVICE]`** | owner 11:12:54 扫码后只检查 Cookie 名称（`sessionid/sessionid_ss/sid_guard`）；未登录公开精选 **60 卡**、推荐探测 **9 卡**、关注探测 **0 卡**（「暂时没有更多作品」）；生产冒烟连续两轮 `candidates=5 / itemsRead=3 / readFailures=0 / ok=true`（6.9s、6.3s）。**登录后全程未出现「验证码中间页」**。推荐流本轮置真；关注流因账号无可读作品仍不可运行。证据 [P3-04K-verification.md](./v2/evidence/P3-04K-douyin-real-browser-verification.md) | 2026-11-27 |
 
 ### 真实冒烟失败 / 阻塞（不得写成通过）
 
 | 项目 | 真实现象 | 当前状态 |
 | --- | --- | --- |
 | `P3-04I` 生产链路个性化冒烟 | 10:04:01 CST，`v2:social-douyin-smoke`（feed=recommended）：`loggedIn=true`、`requestedFeed=recommended`、`usedFeed=public`、`fallbackReason=platform_redirected`、候选 0 / 读到 0、`ok=false`；真实页面标题 **「验证码中间页」**、正文为空，归档证据显式记 `failureKind=captcha`（原始归因保留在 `rawFailureReason`）。按红线立即停止，未识别/绕过验证码、未再发起真实请求；`runnable=false`。证据 [冒烟失败](./v2/evidence/P3-04I-douyin-personalized-smoke.json) / [验证码诊断](./v2/evidence/P3-04I-douyin-captcha-intermediate.json) | **BLOCKED（待 owner 处理验证码并冷却后重约）** |
+| `P3-04K` 中途两轮冒烟未达标（如实保留，未掩盖） | 11:16:40 `itemsRead=1/readFailures=4`（10.2s）、11:22:12 `itemsRead=2/readFailures=3`（10.7s），均 `ok=false`；**不是验证码**，是视频详情页渲染时序：单页诊断证明同一页约 15s 后才出现标题/h1/作者。修正就绪判据（详情页等 h1/detail，不拿侧栏卡片当已读完）后连续两轮 `itemsRead=3`。证据 [smoke](./v2/evidence/P3-04K-douyin-real-browser-smoke.json) / [smoke-after-item-render-fix](./v2/evidence/P3-04K-douyin-real-browser-smoke-after-item-render-fix.json) | 已由后续两轮通过；原始失败读数保留 |
 
 ### 待人类宿主真机验收项
 
@@ -348,6 +351,9 @@
 | `P3-04I` 关注流门槛 | 当前账号 `/follow` 只渲染 2 张可读卡片；需更多关注内容或后续只读翻页实现后再验 ≥3 条 | ⏳ |
 | `P3-04I` 生活页新控件 | 在 owner 正在用的桌面端点一次信息流下拉、「真实冒烟」「打开登录窗」，确认回落原因与请求/实际流展示符合直觉（本轮经 IPC 调同一处理逻辑，未做 CGEvent 点击） | ⏳ 待 owner 试用 |
 | `P3-04I` 真实验证码恢复流程 | 记录 owner 处理验证码后是否需要重新扫码、登录态是否仍有效、冷却时长 | ⏳ |
+| `P3-04K` 桌面端生产冒烟置真 | owner 在正式桌面端点「真实冒烟（读 3 条）」并选「推荐流」，确认推荐流被登记为已实测、`runnable` 转真；本轮用的是与 IPC 同源的会话/冒烟链路，未做 CGEvent 点击 | ⏳ 待 owner 试用 |
+| `P3-04K` 风控长期观察 | 本轮单账号单时段未再撞「验证码中间页」，**不构成规避保证**；后续多日/多时段复跑若再撞，仍按红线停止、保留窗口、交 owner 手动处理 | ⏳ 长期 |
+| `P3-04K` 关注流可读性 | 当前账号 `/follow` 为 0 卡片（「暂时没有更多作品」）；需 owner 关注更多创作者或平台出现新作品后，再验 ≥3 条才可置真 | ⏳ |
 | `P3-04I` 真实模型理解 / 多日浸泡 | 真实供应商理解调用；默认关、每日 ≤2 次 / ≤30 分钟、00–08 禁发、失败冷却的多日真机浸泡 | ⏳ 未验 |
 
 ## 2026-11-27 批次（`V2-P3-04H` 抖音 L1 只读真实平台接入，`IMPLEMENTED_UNVERIFIED`）

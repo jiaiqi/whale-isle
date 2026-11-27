@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "stage": "status",
+  "recordedAt": "2026-11-27T03:12:02.200Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "running": true,
+  "browser": "Google Chrome",
+  "browserVersion": "Chrome/158.0.8127.88",
+  "cookies": {
+    "names": [],
+    "cookieCount": 33,
+    "loggedIn": false
+  },
+  "currentUrl": "https://www.douyin.com/jingxuan"
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "stage": "read-url",
+  "recordedAt": "2026-11-27T03:20:20.351Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "requestedUrl": "https://www.douyin.com/video/7682712994194722091",
+  "diagnostic": {
+    "url": "https://www.douyin.com/video/7682712994194722091",
+    "title": "",
+    "textChars": 977,
+    "bodyHead": "开启读屏标签\n读屏标签已关闭\n精选\n推荐\nAI抖音\n关注\n朋友\n我的\n直播\n放映厅\n短剧\n搜索\n\n充钻石\n\n客户端\n\n壁纸\n\n通知\n\n消息\n\n投稿\n\n视频数据加载中\n广告投放\n用户服务协议\n隐私政策\n账号找回\n联系我们\n加入我们\n友情链接\n站点地图\n下载抖音\n抖音电商\n网络谣言曝光台 ｜\n网上有害信息举报\n｜ 违法和不良信息举报：400-140-2108 feedback@douyin.com ｜ 算法推荐专项举报：sfjubao@bytedance.com | 体育饭圈专项举报：tyfq@bytedance.com\n京ICP备16016397号-3\n｜ 信息网络传播视听节目许可证 01267",
+    "h1": "",
+    "detailInfo": "",
+    "publishTime": "",
+    "hasLoginText": false,
+    "hasCaptchaText": false
+  }
+}

@@ -17,6 +17,7 @@ import {
   type DouyinPageSnapshot,
   type DouyinWebSession,
 } from '@workbench/character-core';
+import { DOUYIN_PAGE_READER_SCRIPT, DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT } from './douyin-page-reader';
 
 const LOAD_TIMEOUT_MS = 20_000;
 
@@ -145,15 +146,7 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
     const clickDeadline = Date.now() + 8_000;
     let clicked = false;
     while (Date.now() < clickDeadline) {
-      clicked = await this.evaluate<boolean>(`
-        (() => {
-          const anchors = Array.from(document.querySelectorAll('a'));
-          const target = anchors.find((el) => ((el.innerText || el.textContent || '').trim()) === '推荐');
-          if (!target) return false;
-          target.click();
-          return true;
-        })()
-      `);
+      clicked = await this.evaluate<boolean>(DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT);
       if (clicked) break;
       await new Promise((resolve) => setTimeout(resolve, 400));
     }
@@ -232,60 +225,7 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
 
   /** 读取抖音页面结构化公开字段 + 首页候选卡片（data-aweme-id，缺失时回退 href） */
   private async readRichPage(): Promise<DouyinPageSnapshot> {
-    return this.evaluate<DouyinPageSnapshot>(`
-      (() => {
-        const text = document.body && document.body.innerText ? document.body.innerText.slice(0, 200000) : '';
-        const cards = [];
-        const seen = new Set();
-        const push = (id, value) => {
-          if (!/^\\d{6,}$/.test(id) || seen.has(id)) return;
-          const cardText = String(value || '').trim();
-          if (!cardText) return;
-          seen.add(id);
-          cards.push({ videoId: id, text: cardText.slice(0, 800) });
-        };
-        for (const el of document.querySelectorAll('[data-aweme-id]')) {
-          push((el.getAttribute('data-aweme-id') || '').trim(), el.innerText);
-        }
-        // 关注流是单屏轮播：卡片没有 data-aweme-id / video 链接，公开 id 在 video-info 的 data-e2e-aweme-id 上
-        for (const el of document.querySelectorAll('[data-e2e="video-info"][data-e2e-aweme-id]')) {
-          const item = el.closest('[data-e2e="feed-item"]');
-          push(
-            (el.getAttribute('data-e2e-aweme-id') || '').trim(),
-            item ? item.innerText : el.innerText,
-          );
-        }
-        if (cards.length === 0) {
-          for (const el of document.querySelectorAll('[href*="/video/"]')) {
-            const match = /\\/video\\/(\\d{6,})/.exec(el.getAttribute('href') || '');
-            if (match) push(match[1], el.innerText);
-          }
-        }
-        const pick = (selector) => {
-          const el = document.querySelector(selector);
-          return el ? ((el.innerText || el.textContent || '').trim()) : '';
-        };
-        const authorLink = document.querySelector('[data-e2e="user-info"] a[href*="/user/"]');
-        const userInfos = Array.from(document.querySelectorAll('[data-e2e="user-info"]'));
-        const userInfo = userInfos.find((el) => ((el.innerText || '').indexOf('\\n') >= 0)) || userInfos[0];
-        const authorFromInfo = userInfo
-          ? ((userInfo.innerText || '').trim().split('\\n')[0] || '').replace(/粉丝[\\d.万亿].*$/u, '').trim()
-          : '';
-        return {
-          url: location.href,
-          title: document.title || '',
-          text,
-          cards,
-          heading: (() => {
-            const h = document.querySelector('h1');
-            return h ? ((h.innerText || h.textContent || '').trim()) : '';
-          })().slice(0, 300),
-          author: (((authorLink && authorLink.innerText) || authorFromInfo) || '').trim().slice(0, 100),
-          publishTimeText: pick('[data-e2e="detail-video-publish-time"]').slice(0, 100),
-          detailText: pick('[data-e2e="detail-video-info"]').slice(0, 4000),
-        };
-      })()
-    `);
+    return this.evaluate<DouyinPageSnapshot>(DOUYIN_PAGE_READER_SCRIPT);
   }
 
   private ensureWindow(): BrowserWindow {
@@ -395,6 +335,7 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
  * 不提供点赞/关注/评论/发布等任何写操作入口。
  */
 export class ElectronDouyinSession implements DouyinWebSession {
+  readonly driverKind = 'electron' as const;
   private readonly engine: ElectronBrowserEngine;
 
   constructor(profile: BrowserProfile) {

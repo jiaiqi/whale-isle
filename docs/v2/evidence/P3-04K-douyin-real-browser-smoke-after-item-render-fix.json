@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "stage": "smoke",
+  "recordedAt": "2026-11-27T03:22:12.086Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "loggedIn": true,
+  "evidence": {
+    "schemaVersion": 1,
+    "sourceId": "douyin-public-jingxuan",
+    "feedUrl": "https://www.douyin.com/?recommend=1",
+    "requestedFeed": "recommended",
+    "usedFeed": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "verifiedAt": 1795749742805,
+    "durationMs": 10696,
+    "candidates": 5,
+    "itemsRead": 2,
+    "readFailures": 3,
+    "ok": false,
+    "failureReason": "视频页没有可读公开字段：https://www.douyin.com/video/7711592121379065115",
+    "samples": [
+      {
+        "url": "https://www.douyin.com/video/7686879236015131942",
+        "title": "14:289.4万我只是想洗个澡，却查到了一个不存在的班【消失的23班】！ 注意：本视频为虚构网页解谜游戏《消失的23班》的剧情解说。",
+        "authorAlias": "游点有趣",
+        "topics": [
+          "网页解谜游戏",
+          "推理",
+          "悬疑",
+          "解谜游戏",
+          "网页解谜"
+        ],
+        "textChars": 484
+      },
+      {
+        "url": "https://www.douyin.com/video/7707896142347930890",
+        "title": "27:1253.4万原来有些友谊，可以跨越整个宇宙 #挽救计划 #了不起的精讲团@空蝉记 · 6天前",
+        "authorAlias": "空蝉记",
+        "topics": [
+          "挽救计划",
+          "了不起的精讲团"
+        ],
+        "textChars": 229
+      }
+    ]
+  },
+  "wallClockMs": 10697,
+  "selection": {
+    "requested": "recommended",
+    "used": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "detail": ""
+  }
+}

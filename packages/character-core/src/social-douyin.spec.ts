@@ -178,6 +178,14 @@ describe('抖音公开内容字段抽取', () => {
     expect(detectDouyinBlock({ title: '抖音精选', text: '精选 推荐 登录' })).toBeNull();
     expect(detectDouyinBlock({ title: '视频', text: '登录后即可参与互动讨论' })?.kind).toBe('login');
   });
+
+  it('验证码文案给 owner 可操作的恢复指引：停止、保留窗口、处理后重新发起', () => {
+    const block = detectDouyinBlock({ title: '验证码中间页', text: '' });
+    expect(block?.kind).toBe('captcha');
+    expect(block?.detail).toContain('窗口已保留');
+    expect(block?.detail).toContain('手动完成后重新发起');
+    expect(block?.detail).toContain('未重试');
+  });
 });
 
 describe('抖音候选来源', () => {
