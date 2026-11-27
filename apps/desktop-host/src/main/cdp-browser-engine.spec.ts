@@ -28,7 +28,7 @@ import {
   type DouyinCdpDriver,
   type WebSocketLike,
 } from './cdp-browser-engine';
-import { DOUYIN_PAGE_READER_SCRIPT, DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT } from './douyin-page-reader';
+import { DOUYIN_CAPTCHA_VISIBILITY_SCRIPT, DOUYIN_PAGE_READER_SCRIPT, DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT } from './douyin-page-reader';
 
 const CHROME: DiscoveredBrowser = {
   name: 'Google Chrome',
@@ -104,6 +104,8 @@ interface FakeBrowserState {
   cookies: Array<{ name: string; value: string }>;
   broughtToFront: number;
   navigations: string[];
+  /** >0 时模拟 Page.navigate 静默失败：请求发出但页面不跳转 */
+  navigateFailures: number;
 }
 
 function emptySnapshot(overrides: Partial<DouyinPageSnapshot> = {}): DouyinPageSnapshot {
@@ -132,6 +134,7 @@ function createFakeBrowserState(): FakeBrowserState {
     cookies: [],
     broughtToFront: 0,
     navigations: [],
+    navigateFailures: 0,
   };
 }
 
@@ -156,8 +159,9 @@ function fakeBrowserHandler(state: FakeBrowserState) {
         respond(socket, message, {});
         return;
       case 'Page.navigate':
-        state.url = String(message.params.url ?? '');
-        state.navigations.push(state.url);
+        state.navigations.push(String(message.params.url ?? ''));
+        if (state.navigateFailures > 0) state.navigateFailures -= 1;
+        else state.url = String(message.params.url ?? '');
         respond(socket, message, { frameId: 'F1' });
         return;
       case 'Runtime.evaluate': {
@@ -290,6 +294,82 @@ describe('CdpPageDriver', () => {
     const { driver } = await connectFake(state, async () => undefined, () => (clock += 5_000));
     await expect(driver.navigate('https://www.douyin.com/follow', 12_000)).rejects.toThrow('页面加载超时');
   });
+
+  it('Page.navigate 静默失败（停在 about:blank）：校验 location.href 后重试一次再报错', async () => {
+    const state = createFakeBrowserState();
+    state.url = 'about:blank';
+    state.navigateFailures = 2; // 两次都不跳
+    let clock = 0;
+    const { driver } = await connectFake(state, async () => undefined, () => (clock += 1_000));
+    await expect(driver.navigate('https://www.douyin.com/jingxuan', 3_000)).rejects.toThrow('页面导航失败');
+    expect(state.navigations).toEqual([
+      'https://www.douyin.com/jingxuan',
+      'https://www.douyin.com/jingxuan',
+    ]);
+  });
+
+  it('第一次静默失败、重试生效时导航成功（只重试一次）', async () => {
+    const state = createFakeBrowserState();
+    state.url = 'about:blank';
+    state.navigateFailures = 1;
+    let clock = 0;
+    const { driver } = await connectFake(state, async () => undefined, () => (clock += 1_000));
+    await expect(driver.navigate('https://www.douyin.com/jingxuan', 3_000)).resolves.toBeUndefined();
+    expect(state.url).toBe('https://www.douyin.com/jingxuan');
+    expect(state.navigations).toHaveLength(2);
+  });
+
+  it('两次都没离开原来的真实页面：不误判为失败（可能是平台重定向），继续交给读取逻辑', async () => {
+    const state = createFakeBrowserState();
+    state.url = 'https://www.douyin.com/jingxuan';
+    state.navigateFailures = 2;
+    let clock = 0;
+    const { driver } = await connectFake(state, async () => undefined, () => (clock += 1_000));
+    await expect(driver.navigate('https://www.douyin.com/video/76814179753662743', 3_000)).resolves.toBeUndefined();
+    // 仍重试了一次，但不会把「重定向回同一列表页」误判成导航失败
+    expect(state.navigations).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 验证码候选元素的可见性过滤（隐藏 verify iframe 误报）
+// ---------------------------------------------------------------------------
+
+describe('验证码可见性过滤', () => {
+  interface FakeElement {
+    getBoundingClientRect: () => { width: number; height: number };
+    style: Record<string, string>;
+  }
+
+  function visible(width: number, height: number, style: Record<string, string> = {}): boolean {
+    const elements: FakeElement[] = [
+      {
+        getBoundingClientRect: () => ({ width, height }),
+        style: { display: 'block', visibility: 'visible', opacity: '1', ...style },
+      },
+    ];
+    const doc = { querySelectorAll: () => elements };
+    const getStyle = (el: FakeElement): Record<string, string> => el.style;
+    const run = new Function('document', 'getComputedStyle', `return ${DOUYIN_CAPTCHA_VISIBILITY_SCRIPT}`) as unknown as (
+      document: unknown,
+      getComputedStyle: (el: FakeElement) => Record<string, string>,
+    ) => boolean;
+    return run(doc, getStyle);
+  }
+
+  it('没有候选元素、隐藏、过小、透明的都不算验证码', () => {
+    expect(visible(300, 200, { display: 'none' })).toBe(false);
+    expect(visible(300, 200, { visibility: 'hidden' })).toBe(false);
+    expect(visible(300, 200, { opacity: '0' })).toBe(false);
+    expect(visible(120, 200)).toBe(false); // 必须严格 >120×120
+    expect(visible(300, 120)).toBe(false);
+    expect(visible(0, 0)).toBe(false);
+  });
+
+  it('可见且尺寸 >120×120 的候选元素才算真验证码', () => {
+    expect(visible(300, 200)).toBe(true);
+    expect(visible(121, 121)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -314,6 +394,10 @@ describe('浏览器发现与启动参数', () => {
     expect(args).toContain('--user-data-dir=/tmp/whale-profile');
     expect(args).toContain('--remote-debugging-port=9333');
     expect(args).toContain('--remote-debugging-address=127.0.0.1');
+    // 防后台节流三参数：窗口被遮挡/后台化后仍继续绘制与跑计时器
+    expect(args).toContain('--disable-backgrounding-occluded-windows');
+    expect(args).toContain('--disable-renderer-backgrounding');
+    expect(args).toContain('--disable-background-timer-throttling');
     const joined = args.join(' ');
     expect(joined).not.toContain('0.0.0.0');
     expect(joined).not.toContain('--disable-blink-features=AutomationControlled');
@@ -696,6 +780,113 @@ describe('RealBrowserDouyinSession 契约', () => {
     const snapshot = await session.load('https://www.douyin.com/video/7711592121379065115');
     expect(driver.evaluateCalls.filter((call) => call === DOUYIN_PAGE_READER_SCRIPT).length).toBeGreaterThan(1);
     expect(snapshot.heading).toBe('示例视频标题');
+  });
+
+  it('直跳 /video/<id> 被重定向回精选页：降级用 ?modal_id=<id> 再读一次', async () => {
+    const driver = new FakeDriver();
+    const awemeId = '7682712994194722091';
+    driver.snapshotQueue = [
+      emptySnapshot({
+        url: 'https://www.douyin.com/jingxuan',
+        title: '抖音精选',
+        text: '精选 推荐',
+        cards: [{ videoId: awemeId, text: '公开视频' }],
+      }),
+      emptySnapshot({
+        url: `https://www.douyin.com/?modal_id=${awemeId}`,
+        title: '示例视频 - 抖音',
+        text: '正文',
+        heading: '示例视频标题',
+        detailText: '示例视频标题\n发布时间：2026-11-01',
+      }),
+    ];
+    const { session } = makeSession(driver, new FakeHost(), {
+      renderTimeoutMs: 1_000,
+      itemRenderTimeoutMs: 5_000,
+    });
+
+    const snapshot = await session.load(`https://www.douyin.com/video/${awemeId}`);
+    expect(driver.navigations).toEqual([
+      `https://www.douyin.com/video/${awemeId}`,
+      `https://www.douyin.com/?modal_id=${awemeId}`,
+    ]);
+    expect(snapshot.heading).toBe('示例视频标题');
+  });
+
+  it('modal_id 备用路径是「列表 + 弹层」：不会因卡片存在就提前结束等待', async () => {
+    const driver = new FakeDriver();
+    const awemeId = '7682712994194722091';
+    driver.snapshotQueue = [
+      emptySnapshot({
+        url: 'https://www.douyin.com/jingxuan',
+        title: '抖音精选',
+        text: '精选',
+        cards: [{ videoId: awemeId, text: '公开视频' }],
+      }),
+      emptySnapshot({
+        url: `https://www.douyin.com/?modal_id=${awemeId}`,
+        title: '抖音精选',
+        text: '精选',
+        cards: [{ videoId: awemeId, text: '公开视频' }],
+      }),
+      emptySnapshot({
+        url: `https://www.douyin.com/?modal_id=${awemeId}`,
+        title: '示例视频 - 抖音',
+        text: '正文',
+        heading: '示例视频标题',
+        detailText: '示例视频标题\n发布时间：2026-11-01',
+      }),
+    ];
+    const { session } = makeSession(driver, new FakeHost(), {
+      renderTimeoutMs: 1_000,
+      itemRenderTimeoutMs: 5_000,
+    });
+
+    const snapshot = await session.load(`https://www.douyin.com/video/${awemeId}`);
+    expect(snapshot.heading).toBe('示例视频标题');
+  });
+
+  it('直跳视频页撞验证码：立即返回真实快照，绝不借 modal_id 降级再导航', async () => {
+    const driver = new FakeDriver();
+    const awemeId = '7682712994194722091';
+    driver.snapshot = emptySnapshot({
+      url: 'https://www.douyin.com/verify/captcha',
+      title: '安全验证',
+      text: '请完成下方验证',
+    });
+    const { session } = makeSession(driver, new FakeHost(), {
+      renderTimeoutMs: 1_000,
+      itemRenderTimeoutMs: 5_000,
+    });
+    const snapshot = await session.load(`https://www.douyin.com/video/${awemeId}`);
+    expect(snapshot.title).toBe('安全验证');
+    expect(driver.navigations).toEqual([`https://www.douyin.com/video/${awemeId}`]);
+  });
+
+  it('直跳视频页本身可读时不做 modal_id 降级；非详情地址也不走备用路径', async () => {
+    const driver = new FakeDriver();
+    const awemeId = '7682712994194722091';
+    driver.snapshot = emptySnapshot({
+      url: `https://www.douyin.com/video/${awemeId}`,
+      title: '示例视频 - 抖音',
+      text: '正文',
+      heading: '示例视频标题',
+      detailText: '示例视频标题\n发布时间：2026-11-01',
+    });
+    const { session } = makeSession(driver);
+    await session.load(`https://www.douyin.com/video/${awemeId}`);
+    expect(driver.navigations).toEqual([`https://www.douyin.com/video/${awemeId}`]);
+
+    const feedDriver = new FakeDriver();
+    feedDriver.snapshot = emptySnapshot({
+      url: 'https://www.douyin.com/jingxuan',
+      title: '抖音精选',
+      text: '精选',
+      cards: [{ videoId: awemeId, text: '公开视频' }],
+    });
+    const feedSession = makeSession(feedDriver).session;
+    await feedSession.load('https://www.douyin.com/jingxuan');
+    expect(feedDriver.navigations).toEqual(['https://www.douyin.com/jingxuan']);
   });
 
   it('openFeed(recommended) 走精选页 + 页内点「推荐」标签；openFeed(following) 直接打开 /follow', async () => {

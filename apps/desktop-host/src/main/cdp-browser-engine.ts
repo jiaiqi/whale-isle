@@ -403,6 +403,37 @@ interface TargetInfo {
   url: string;
 }
 
+/** 真正的网页地址：不是空白页/新标签页/Chrome 错误页 */
+function isRealPageHref(href: string): boolean {
+  return href !== '' && href !== 'about:blank' && href !== 'chrome://newtab/' && !href.startsWith('chrome-error://');
+}
+
+/** `Page.navigate` 静默失败时窗口会停在 about:blank / 错误页，或压根没离开原页面 */
+function isNavigationSettled(href: string, before: string, requested: string): boolean {
+  if (!isRealPageHref(href)) return false;
+  if (href !== before || before === '' || before === 'about:blank') return true;
+  // 停在原来的真实页面上：只有「本来就要去同一条地址」（重载）才算导航成功
+  return sameUrlTarget(href, requested);
+}
+
+function sameUrlTarget(a: string, b: string): boolean {
+  try {
+    const left = new URL(a);
+    const right = new URL(b);
+    return left.origin === right.origin && left.pathname === right.pathname && left.search === right.search;
+  } catch {
+    return a === b;
+  }
+}
+
+function hostOf(raw: string): string {
+  try {
+    return new URL(raw).host;
+  } catch {
+    return raw;
+  }
+}
+
 export class CdpPageDriver implements DouyinCdpDriver {
   private sessionId: string | null = null;
 
@@ -438,21 +469,52 @@ export class CdpPageDriver implements DouyinCdpDriver {
 
   async navigate(url: string, timeoutMs: number): Promise<void> {
     await this.ensurePage();
-    const result = await this.connection.request<{ errorText?: string } | undefined>(
-      'Page.navigate',
-      { url },
-      this.requireSession(),
-    );
-    if (result?.errorText !== undefined && result.errorText !== '') {
-      throw new Error(`页面导航失败：${result.errorText}`);
+    const before = await this.evaluate<string>('location.href').catch(() => '');
+    const maxAttempts = 2;
+    let lastHref = '';
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const result = await this.connection.request<{ errorText?: string } | undefined>(
+        'Page.navigate',
+        { url },
+        this.requireSession(),
+      );
+      if (result?.errorText !== undefined && result.errorText !== '') {
+        throw new Error(`页面导航失败：${result.errorText}`);
+      }
+      // Page.navigate 可能静默失败：窗口还在，但页面停在 about:blank 或压根没离开原页面。
+      // 先等 href 真正落到目标，再等文档加载完成；href 一直不生效则按现有口径重试一次后报错。
+      const hrefDeadline = this.now() + timeoutMs;
+      let settled = false;
+      while (this.now() < hrefDeadline) {
+        lastHref = await this.evaluate<string>('location.href').catch(() => '');
+        if (isNavigationSettled(lastHref, before, url)) {
+          settled = true;
+          break;
+        }
+        await this.sleep(200);
+      }
+      if (!settled) {
+        if (attempt + 1 < maxAttempts) {
+          await this.sleep(800);
+          continue;
+        }
+        // 两次都停在空白页/错误页 → 真正的导航失败。
+        if (!isRealPageHref(lastHref)) {
+          throw new Error(
+            `页面导航失败：期望 ${hostOf(url)}，实际停在 ${lastHref || 'about:blank'}（可能被拦截或 CDP 会话失效）`,
+          );
+        }
+        // 真实页面 URL 没变：可能是平台把详情页重定向回同一列表页（例如 /video/<id> → 精选）。
+        // 这里不能误判成导航失败，否则上层 `?modal_id=` 降级永远走不到；交给读取逻辑判断。
+      }
+      const loadDeadline = this.now() + timeoutMs;
+      while (this.now() < loadDeadline) {
+        const state = await this.evaluate<string>('document.readyState');
+        if (state === 'complete') return;
+        await this.sleep(200);
+      }
+      throw new Error(`页面加载超时（${Math.round(timeoutMs / 1000)}s）：${url}`);
     }
-    const deadline = this.now() + timeoutMs;
-    while (this.now() < deadline) {
-      const state = await this.evaluate<string>('document.readyState');
-      if (state === 'complete') return;
-      await this.sleep(200);
-    }
-    throw new Error(`页面加载超时（${Math.round(timeoutMs / 1000)}s）：${url}`);
   }
 
   async evaluate<T>(expression: string): Promise<T> {
@@ -774,12 +836,20 @@ export class CdpBrowserHost {
   }
 }
 
-/** 启动参数：只开回环调试端口，不加任何 UA 覆盖 / stealth / 反检测参数（R4） */
+/**
+ * 启动参数：只开回环调试端口，不加任何 UA 覆盖 / stealth / 反检测参数（R4）。
+ * 三参数 `--disable-backgrounding-occluded-windows` / `--disable-renderer-backgrounding` /
+ * `--disable-background-timer-throttling` 用于防止窗口被遮挡/后台化后停止绘制与计时器节流
+ * （否则抖音 feed 永远不 hydrate）。参考 dsh-douyin-bridge `lib/browser.mjs:11-35`。
+ */
 export function buildLaunchArgs(profileDir: string, port: number): string[] {
   return [
     `--user-data-dir=${profileDir}`,
     `--remote-debugging-port=${port}`,
     '--remote-debugging-address=127.0.0.1',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-background-timer-throttling',
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-search-engine-choice-screen',
@@ -905,13 +975,25 @@ export class RealBrowserDouyinSession implements DouyinWebSession {
 
   async load(rawUrl: string): Promise<DouyinPageSnapshot> {
     const url = assertHttpUrl(rawUrl);
+    const target = url.toString();
     const driver = await this.requireDriver(true);
-    await driver.navigate(url.toString(), this.navigateTimeoutMs);
+    await driver.navigate(target, this.navigateTimeoutMs);
     // 视频详情页的判据是 h1/detail 字段，不是侧栏推荐卡片：
     // 用 cards 当「已就绪」会让还在加载的视频页被误判成读完了。
-    return isDouyinDetailUrl(url.toString())
-      ? this.readRich(driver, this.itemRenderTimeoutMs, hasDetailContent)
-      : this.readRich(driver, this.renderTimeoutMs, hasFeedContent);
+    if (!isDouyinDetailUrl(target)) {
+      return this.readRich(driver, this.renderTimeoutMs, hasFeedContent);
+    }
+    const first = await this.readRich(driver, this.itemRenderTimeoutMs, hasDetailContent);
+    // 直跳 `/video/<id>` 有时会被抖音重定向回精选页（视频还在，但详情壳读不到）。
+    // 此时降级到参考仓验证过的 `/?modal_id=<awemeId>` 备用路径再读一次（只读导航，只降级一次）。
+    // 红线：撞到验证码必须立即停、保留窗口、不重试——绝不借降级再导航一次。
+    const blocked = first.captchaVisible === true || detectDouyinBlock(first)?.kind === 'captcha';
+    const awemeId = extractDouyinAwemeId(target);
+    if (!blocked && awemeId !== null && !isDouyinDetailUrl(first.url)) {
+      await driver.navigate(`https://www.douyin.com/?modal_id=${awemeId}`, this.navigateTimeoutMs);
+      return this.readRich(driver, this.itemRenderTimeoutMs, hasDetailContent, { stopOnFeedRedirect: false });
+    }
+    return first;
   }
 
   async openFeed(feed: DouyinFeedKind): Promise<DouyinPageSnapshot> {
@@ -997,6 +1079,7 @@ export class RealBrowserDouyinSession implements DouyinWebSession {
     driver: DouyinCdpDriver,
     timeoutMs = this.renderTimeoutMs,
     ready: (snapshot: DouyinPageSnapshot) => boolean = hasRichContent,
+    options: { stopOnFeedRedirect?: boolean } = {},
   ): Promise<DouyinPageSnapshot> {
     const startedAt = this.now();
     const deadline = startedAt + timeoutMs;
@@ -1005,8 +1088,9 @@ export class RealBrowserDouyinSession implements DouyinWebSession {
       // 只对「已确认是验证码」的页面早退：抖音视频详情页在 SPA 过渡期会短暂呈现
       // 「旧标题 + 空正文」，用形状猜验证码会把正在加载的正常页面误判为风控页。
       if (detectDouyinBlock(snapshot)?.kind === 'captcha') break;
-      // 已被重定向回列表页（视频被删/不可见）：不再空等详情字段
-      if (!isDouyinDetailUrl(snapshot.url) && snapshot.cards.length > 0) break;
+      // 已被重定向回列表页（视频被删/不可见）：不再空等详情字段。
+      // modal_id 备用路径下页面本身就是列表 + 弹层，不能据此早退。
+      if (options.stopOnFeedRedirect !== false && !isDouyinDetailUrl(snapshot.url) && snapshot.cards.length > 0) break;
       await this.sleep(400);
       snapshot = await driver.evaluate<DouyinPageSnapshot>(DOUYIN_PAGE_READER_SCRIPT);
     }
@@ -1020,6 +1104,16 @@ function isDouyinDetailUrl(raw: string): boolean {
     return path.startsWith('/video/') || path.startsWith('/note/');
   } catch {
     return false;
+  }
+}
+
+/** 从 `/video/<id>` 或 `/note/<id>` 里取 awemeId；不是详情地址返回 null */
+function extractDouyinAwemeId(raw: string): string | null {
+  try {
+    const match = /\/(?:video|note)\/(\d{6,})/u.exec(new URL(raw).pathname);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
   }
 }
 
