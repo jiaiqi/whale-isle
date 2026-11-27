@@ -74,6 +74,12 @@
 3. 看到验证码标题后**立即停止**，没有再发起真实请求，也没有尝试识别/绕过验证码。临时诊断代码随后已移除。
 4. 已补上「验证码中间页」识别与单测：今后遇到该页会在动手前抛 `PERMISSION_DENIED / CAPTCHA_REQUIRED`，`recoverable:false`，执行器立即中止。因红线要求停止，本次没有重跑验证该修复后的真实表现。
 
+### 4.3.1 验证码复核（2026-11-27 10:20 CST，仍未通过）
+
+- owner 口头告知「验证码处理过了」后，按约定只做**一次**复核；生产链路仍返回验证码：`requestedFeed=recommended`、`usedFeed=recommended`、`loggedIn=false`、候选 0、`ok=false`，`failureReason` 为「抖音触发验证码/风控门槛，立即停止，绝不绕过」。
+- 说明：验证码可能是在 owner 日常浏览器里处理，而自动化隔离 Profile 未通过；同时登录态已丢失（`loggedIn=false`）。已立即停止，**未再重试、未尝试换 IP/UA/延时绕过**。
+- 原始证据：[P3-04I-douyin-captcha-retry.json](./P3-04I-douyin-captcha-retry.json)。
+
 ### 4.4 证据与 runnable 口径
 
 - 证据文件按流分开存：`byFeed.public / recommended / following`；旧文件只有 `latest` 时按 `requestedFeed` 自动回填。
@@ -140,3 +146,4 @@
 - [P3-04I-douyin-following-probe.json](./P3-04I-douyin-following-probe.json)：已登录 `/follow` 真实页面结构（2 张卡片）。
 - [P3-04I-douyin-personalized-smoke.json](./P3-04I-douyin-personalized-smoke.json)：生产链路真实冒烟失败结果与执行器状态。归档时按同批验证码诊断补 `failureKind=captcha` 与显式 `failureReason`，原始归因保留在 `rawFailureReason`，未改写原始读数。
 - [P3-04I-douyin-captcha-intermediate.json](./P3-04I-douyin-captcha-intermediate.json)：真实「验证码中间页」临时诊断输出（诊断代码已移除）。
+- [P3-04I-douyin-captcha-retry.json](./P3-04I-douyin-captcha-retry.json)：owner 称验证码已处理后的单次复核，仍返回验证码且 `loggedIn=false`，已停止。
