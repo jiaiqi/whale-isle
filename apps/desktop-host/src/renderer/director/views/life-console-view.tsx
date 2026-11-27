@@ -61,11 +61,13 @@ import type {
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
   SocialAutostartSnapshot,
+  SocialCommentHistory,
+  SocialCommentActionStatus,
   StageBackendKind,
   StageRuntimeSnapshot,
   VoiceProviderStatus,
 } from '@workbench/shared-protocol';
-import type { V2MemoryQueryResult } from '../bridge';
+import type { DirectorBridge, V2MemoryQueryResult } from '../bridge';
 import { PageHead } from '../shell/page-head';
 import { EmptyIllustration } from '../shell/empty-illustration';
 import { LicenseBadge, SonarRing, StageBadge } from '../v2/signature-widgets';
@@ -154,24 +156,31 @@ export function LifeConsoleView({
   const [lastBrowserOutcome, setLastBrowserOutcome] = useState<BrowserTaskOutcome | null>(null);
   const [acctDraft, setAcctDraft] = useState({ characterId: 'char_xiaojing', platform: 'bilibili', username: '', secret: '' });
   // V2-P3-04E：Digital Life L1 社区只读浏览
-  const [socialSnap, setSocialSnap] = useState<{
-    sessions: BrowseSession[];
-    capabilities: SocialPlatformCapabilityEntry[];
-    autonomyLevel: 'l1_readonly';
-    autostart: SocialAutostartSnapshot;
-    douyin: {
-      available: boolean;
-      loggedIn: boolean;
-      loginWindowOpen: boolean;
-      feed: DouyinFeedKind;
-      feedVerified: boolean;
-      requestedFeedVerified: boolean;
-      selection: DouyinFeedSelection | null;
-      sourceVerified: boolean;
-      evidence: DouyinBrowseEvidence | null;
-      byFeed: Record<DouyinFeedKind, DouyinBrowseEvidence | null>;
+  const [socialSnap, setSocialSnap] = useState<Awaited<ReturnType<DirectorBridge['v2SocialSnapshot']>> | null>(null);
+  const [commentDay, setCommentDay] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [commentOffset, setCommentOffset] = useState(0);
+  const [commentHistory, setCommentHistory] = useState<SocialCommentHistory | null>(null);
+  const [commentError, setCommentError] = useState('');
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [commentVideoUrl, setCommentVideoUrl] = useState('');
+  // 只轮询本机状态；此处不加载抖音、不触发模型或发送。
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const [snapshot, history] = await Promise.all([
+          window.directorBridge.v2SocialSnapshot(),
+          window.directorBridge.v2SocialCommentHistory({ dayKey: commentDay, offset: commentOffset, limit: 25 }),
+        ]);
+        if (!cancelled) { setSocialSnap(snapshot); setCommentHistory(history); setCommentError(''); }
+      } catch (error) { if (!cancelled) setCommentError(error instanceof Error ? error.message : String(error)); }
     };
-  } | null>(null);
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [commentDay, commentOffset]);
   const [socialDraft, setSocialDraft] = useState({ platform: 'bilibili' as SocialPlatformId, objective: '' });
 
   const loadAll = useCallback(async (): Promise<void> => {
@@ -652,6 +661,28 @@ export function LifeConsoleView({
     if (res.ok) toast.success('已打开独立 Profile 登录窗，请用抖音 App 扫码（登录态只留本机）');
     else toast.error(res.error ?? '打开登录窗失败');
     await refreshSocial();
+  };
+
+  const handleCommentToggle = async (): Promise<void> => {
+    setCommentBusy(true);
+    try {
+      const result = await window.directorBridge.v2SocialCommentSettings({ enabled: !socialSnap?.douyin.comments.settings.enabled });
+      if (!result.ok) toast.error(result.error ?? '评论设置失败');
+      await refreshSocial();
+    } catch (error) { toast.error(String(error)); } finally { setCommentBusy(false); }
+  };
+  const handleCommentVerify = async (): Promise<void> => {
+    setCommentBusy(true);
+    try {
+      const result = await window.directorBridge.v2SocialCommentVerify({ url: commentVideoUrl.trim() });
+      if (result.ok) toast.success('真实单条评论回读确认，评论能力已验证');
+      else toast.error(result.error ?? result.action?.reason ?? '没有确认发送成功');
+      await refreshSocial();
+      setCommentHistory(await window.directorBridge.v2SocialCommentHistory({ dayKey: commentDay, offset: commentOffset, limit: 25 }));
+    } catch (error) { toast.error(String(error)); } finally { setCommentBusy(false); }
+  };
+  const commentStatusLabels: Record<SocialCommentActionStatus, string> = {
+    pending: '等待回执', sent: '已确认发送', failed: '失败并暂停', skipped: '已跳过', uncertain: '结果不确定 · 不重发',
   };
 
   return (
@@ -1238,7 +1269,7 @@ export function LifeConsoleView({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold">
             <Compass size={14} style={{ color: 'var(--blue)' }} />
-            社区数字生活 · L1 只读学习（P3-04）
+            社区数字生活 · 浏览与受限评论
           </h2>
           <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
             自治等级 {socialSnap?.autonomyLevel ?? 'l1_readonly'} · 能力 {socialSnap?.capabilities.length ?? 0} 项 ·
@@ -1246,7 +1277,7 @@ export function LifeConsoleView({
           </span>
         </div>
         <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-          L1 硬边界：只读浏览，互动能力（点赞/关注/评论/发布）契约与运行时双重拦截；
+          浏览会话保持 L1 只读；抖音顶层评论使用下方独立开关与额度，不经逐条人工审核。
           平台能力须「已授权 + 已实测」双条件齐备才放行（未实测显示 lastVerifiedAt=0）。
         </p>
 
@@ -1382,7 +1413,7 @@ export function LifeConsoleView({
               <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
                 公开精选匿名可读；推荐/关注需 owner 亲手扫码登录，且登录后仍要跑一次真实冒烟才算该流已验证。
                 未登录、被平台重定向或所选流无候选时，会如实回落公开精选，并把「请求流/实际流/回落原因」写进证据，不假装已登录。
-                只读硬边界：不点赞、不关注、不评论、不发私信，触发验证码/风控立即停下，不绕过。
+                此处只验证只读浏览；评论须单独核验。触发验证码/风控立即停下，不绕过。
               </div>
               <div className="mono text-[10px]" data-v2-social-douyin-selection style={{ color: 'var(--text-3)' }}>
                 {socialSnap.douyin.selection === null
@@ -1401,6 +1432,72 @@ export function LifeConsoleView({
               </div>
             </>
           )}
+        </div>
+
+        <div className="inset space-y-3 p-4 text-xs" data-v2-social-comments>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">抖音 · 有限自动评论</h3>
+            <button type="button" className={`btn-pill ${socialSnap?.douyin.comments.settings.enabled ? 'green' : 'ghost'}`}
+              data-v2-comment-toggle aria-pressed={socialSnap?.douyin.comments.settings.enabled ?? false}
+              disabled={!socialSnap?.douyin.comments.ledgerReady || (commentBusy && !socialSnap.douyin.comments.settings.enabled)}
+              onClick={() => void handleCommentToggle()} style={{ minHeight: 32 }}>
+              {socialSnap?.douyin.comments.settings.enabled ? '立即停止评论' : '开启有限自动评论'}
+            </button>
+          </div>
+          <p style={{ color: 'var(--text-2)' }}>
+            使用当前账号，覆盖他人公开视频；模型决定是否评论，无需逐条审核。默认关闭。
+            浏览正常结束后最多尝试发送一条；发送原文与结果都保存在本机，可按日期查看。
+          </p>
+          {socialSnap && <>
+            <p data-v2-comment-status role="status" style={{ color: 'var(--text-2)' }}>
+              {socialSnap.douyin.comments.settings.enabled ? '开关已开启' : '开关已关闭'} · {socialSnap.douyin.comments.capability.verified ? '真实单条核验有效' : '真实发送尚未验证，自动评论不会执行'}
+              {socialSnap.douyin.comments.busy ? ' · 正在执行抖音任务' : ''}
+            </p>
+            <p style={{ color: 'var(--text-2)' }}>
+              今日已确认 {socialSnap.douyin.comments.today.sent} 条 · 不确定 {socialSnap.douyin.comments.today.uncertain} 条 · 失败 {socialSnap.douyin.comments.today.failed} 条 · 跳过 {socialSnap.douyin.comments.today.skipped} 条 · 剩余尝试 {socialSnap.douyin.comments.remainingToday} 次
+            </p>
+            <p style={{ color: 'var(--text-3)' }}>
+              每日 ≤{socialSnap.douyin.comments.settings.maxPerDay} 次尝试，最近一小时 ≤{socialSnap.douyin.comments.settings.maxPerHour} 次，间隔 ≥{socialSnap.douyin.comments.settings.minIntervalMs / 60000} 分钟；00–08 禁发，同视频 30 天冷却。失败和不确定同样占用尝试额度，不自动重发。
+            </p>
+            {socialSnap.douyin.comments.blockedReason && <p role="alert" data-v2-comment-blocked style={{ color: 'var(--text-1)' }}>已暂停：{socialSnap.douyin.comments.blockedReason}</p>}
+          </>}
+          <details>
+            <summary className="cursor-pointer py-1">首次真实单条核验（会尝试公开发送一条）</summary>
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <label className="min-w-0 flex-1 space-y-1">公开视频链接
+                <input type="url" className="w-full" data-v2-comment-video-url value={commentVideoUrl}
+                  onChange={event => setCommentVideoUrl(event.target.value)} placeholder="https://www.douyin.com/video/…" />
+              </label>
+              <button type="button" className="btn-pill ghost" data-v2-comment-verify style={{ minHeight: 32 }}
+                disabled={commentBusy || !socialSnap?.douyin.comments.settings.enabled || !commentVideoUrl.trim() || socialSnap.douyin.comments.busy}
+                onClick={() => void handleCommentVerify()}>{commentBusy ? '正在核验…' : '发送一条并核验'}</button>
+            </div>
+            <p className="mt-2" style={{ color: 'var(--text-3)' }}>需先在本软件登录窗扫码；仍受额度、内容与风控约束。模型可以选择跳过，只有可靠回读确认后才验证评论能力。</p>
+          </details>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+            <h3 className="font-semibold">AI 每天做了什么 · 评论记录</h3>
+            <label className="flex items-center gap-2">查看日期
+              <input type="date" value={commentDay} data-v2-comment-history-day
+                onChange={event => { if (event.target.value) { setCommentDay(event.target.value); setCommentOffset(0); setCommentHistory(null); } }} />
+            </label>
+          </div>
+          {commentError ? <p role="alert">记录读取失败：{commentError}</p> : commentHistory === null ? <p>正在读取本机记录…</p> : commentHistory.actions.length === 0 ? (
+            <p style={{ color: 'var(--text-3)' }} data-v2-comment-empty>这一天没有评论动作记录。开关关闭时不会自动发送。</p>
+          ) : <ol className="space-y-3" data-v2-comment-history>
+            {commentHistory.actions.map(action => <li key={action.actionId} className="space-y-1 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex flex-wrap justify-between gap-2"><time dateTime={new Date(action.createdAt).toISOString()}>{new Date(action.createdAt).toLocaleString('zh-CN')}</time><strong>{commentStatusLabels[action.status]}</strong></div>
+              <p style={{ color: 'var(--text-2)' }}>{action.targetTitle || '视频'}{action.targetAuthor ? ` · ${action.targetAuthor}` : ''}</p>
+              <p className="select-text break-words" style={{ overflowWrap: 'anywhere', color: 'var(--text-2)' }}>{action.targetUrl}</p>
+              <blockquote className="select-text whitespace-pre-wrap" style={{ color: 'var(--text-1)', overflowWrap: 'anywhere' }}>{action.text || '（未生成发送文本）'}</blockquote>
+              <p style={{ color: 'var(--text-2)' }}>{action.reason}</p>
+              {action.modelId && <p style={{ color: 'var(--text-3)' }}>生成模型：{action.modelId}</p>}
+            </li>)}
+          </ol>}
+          <div className="flex items-center justify-end gap-3">
+            <button type="button" className="btn-pill ghost" disabled={commentOffset === 0} onClick={() => setCommentOffset(Math.max(0, commentOffset - 25))}>上一页</button>
+            <span>{commentHistory?.total ?? 0} 条记录 · 第 {Math.floor(commentOffset / 25) + 1} 页</span>
+            <button type="button" className="btn-pill ghost" disabled={!commentHistory || commentOffset + 25 >= commentHistory.total} onClick={() => setCommentOffset(commentOffset + 25)}>下一页</button>
+          </div>
         </div>
 
         <div className="grid gap-2 md:grid-cols-2">

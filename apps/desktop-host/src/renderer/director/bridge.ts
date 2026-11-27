@@ -106,6 +106,12 @@ import type {
   InterestSignal,
   SocialAutostartSettings,
   SocialAutostartSnapshot,
+  SocialCommentSettings,
+  SocialCommentSnapshot,
+  SocialCommentQuery,
+  SocialCommentHistory,
+  SocialCommentVerifyInput,
+  SocialCommentResult,
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
   StardewScreenBinding,
@@ -1341,6 +1347,7 @@ export interface DirectorBridge {
       sourceVerified: boolean;
       evidence: DouyinBrowseEvidence | null;
       byFeed: Record<DouyinFeedKind, DouyinBrowseEvidence | null>;
+      comments: SocialCommentSnapshot;
     };
   }>;
   /** V2-P3-04H：真实冒烟（候选来源 → 逐条读取 ≥3 条公开内容 → 落证据） */
@@ -1360,6 +1367,10 @@ export interface DirectorBridge {
   }>;
   /** V2-P3-04H：打开独立 Profile 的可见登录窗，由 owner 亲手扫码 */
   v2SocialDouyinLogin(): Promise<{ ok: boolean; loginWindowOpen?: boolean; error?: string }>;
+  /** 受限评论：总开关、按日历史与首次真实单条核验。所有发送均先记 SQLite。 */
+  v2SocialCommentSettings(input: Partial<SocialCommentSettings>): Promise<SocialCommentResult>;
+  v2SocialCommentHistory(input?: SocialCommentQuery): Promise<SocialCommentHistory>;
+  v2SocialCommentVerify(input: SocialCommentVerifyInput): Promise<SocialCommentResult>;
   /** V2-P3-04E 补：自主发起设置（默认关闭；改完立即生效） */
   v2SocialAutostartSettings(input: Partial<SocialAutostartSettings>): Promise<{
     ok: boolean;

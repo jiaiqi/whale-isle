@@ -3,7 +3,8 @@
  *   ① PET_STAGE_E2E=1 不创建真实系统 Tray，但复用浮窗仍可打开；
  *   ② 三段 Tab（桌宠/自驾/饭碗）与真实 IPC 数据渲染；
  *   ③ 溢出区回退坐标不是 (0,0) 且大小固定 360×500；
- *   ④ 隐藏后 visible=false（blur/点击共用的防抖路径由纯函数单测覆盖）。
+ *   ④ 隐藏后 visible=false（blur/点击共用的防抖路径由纯函数单测覆盖；
+ *      测试模式下不启用「失焦自动隐藏」，否则 CI 运行器的窗口焦点会让「打开后可见」变成环境抽奖）。
  */
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';

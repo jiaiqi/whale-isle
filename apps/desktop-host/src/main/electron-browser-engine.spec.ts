@@ -37,7 +37,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-import { ElectronBrowserEngine } from './electron-browser-engine';
+import { ElectronBrowserEngine, ElectronDouyinSession } from './electron-browser-engine';
 import type { BrowserProfile } from '@workbench/shared-protocol';
 
 let dir = '';
@@ -102,5 +102,14 @@ describe('ElectronBrowserEngine Cookie 双向同步', () => {
     await expect(engine.dispose()).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('Electron 驱动的受限评论端口（ADR-006）', () => {
+  it('ElectronDouyinSession 与 CDP 会话实现同一个评论端口契约', () => {
+    dir = mkdtempSync(join(tmpdir(), 'browser-engine-comment-'));
+    const session = new ElectronDouyinSession(makeProfile());
+    expect(typeof session.readComments).toBe('function');
+    expect(typeof session.postComment).toBe('function');
   });
 });

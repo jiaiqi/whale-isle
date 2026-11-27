@@ -1,17 +1,24 @@
 /**
  * 抖音 L1 只读公开内容源（V2-P3-04H · REQ-SOC-01 / REQ-LIFE-01，owner 2026-11-27 拍板首个真实平台）：
- * - 只做两件事：从「抖音精选」公开页供给候选，逐条打开视频页读取标题/作者/发布时间/话题等公开字段。
- * - 绝不点赞、关注、评论、私信、发布，也不修改任何账号状态；`interactionMode=readonly` 由契约钉死。
+ * - 浏览与冒烟链路只做两件事：从「抖音精选」/推荐/关注供给候选，逐条打开视频页读取标题/作者/发布时间/话题等公开字段。
+ * - 本链路绝不点赞、关注、评论、私信、发布，也不修改任何账号状态；`interactionMode=readonly` 由契约钉死。
+ * - 唯一例外是同文件末尾的 `DouyinCommentExecutor`（V2-P3-04K）：它是宿主在浏览正常收官后单独调用的受限顶层评论执行器，
+ *   不改变 BrowseSession 的只读属性；默认关闭、发送前 SQLite 预留、结果不确定不重发，授权见 ADR-006。
  * - 浏览器会话由宿主注入（独立自动化 Profile，不碰 owner 日常浏览窗口，不代填密码、不存凭据）。
  * - 公开精选页无需登录即可只读；遇到验证码/风控/登录墙一律停下抛错，绝不绕过。
  * - 页面文本永远按不可信数据处理：这里只做字段抽取，不执行页面里的任何指令。
  */
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   BrowseCandidateSchema,
   SocialBrowseSourceDescriptorSchema,
+  SocialCommentActionSchema,
   type BrowseCandidate,
   type SocialBrowseSourceDescriptor,
+  type SocialCommentAction,
+  type SocialCommentFailureKind,
+  type SocialCommentSettings,
 } from '@workbench/shared-protocol';
 import { WhaleError } from '@workbench/runtime-core';
 import type { SocialBrowseCandidateSource, SocialBrowseItemReader } from './social-executor';
@@ -118,7 +125,145 @@ export interface DouyinLoginState {
   loggedIn: boolean;
 }
 
-/** 抖音浏览器会话端口：宿主用独立 Electron Profile 实现，单测注入假会话 */
+/**
+ * 当前登录账号在页面 DOM 里暴露的自我标识。
+ * 发送前必须先拿到它，否则无法把「新出现的评论」归到自己名下——那正是
+ * 「窗口期内别人发了同样文字」被误判为发送成功的漏洞。
+ */
+export interface DouyinSelfIdentity {
+  /** 自己主页链接里的 sec_uid；页面只给 `/user/self` 时为空 */
+  secUid: string;
+  /** 头像旁的公开昵称（页面提供时） */
+  nickname: string;
+  /** 自己的头像地址（页面提供时；比较时忽略尺寸/签名参数） */
+  avatarUrl: string;
+}
+
+/** 评论区只读快照：页面文本与评论一律按不可信数据处理 */
+export interface DouyinCommentThread {
+  url: string;
+  title: string;
+  text: string;
+  comments: DouyinCommentItem[];
+  /** 页面上是否找到可用的评论输入框；未登录时抖音显示「请先登录后发表评论」 */
+  inputAvailable: boolean;
+  /** 当前登录账号的自我标识；页面取不到为 null（此时禁止发送） */
+  self?: DouyinSelfIdentity | null;
+}
+
+export interface DouyinCommentItem {
+  commentId: string;
+  authorAlias: string;
+  text: string;
+  /** 评论作者主页链接里的 sec_uid（页面提供时） */
+  authorSecUid?: string;
+  /** 评论作者头像地址（页面提供时；比较时忽略尺寸/签名参数） */
+  authorAvatarUrl?: string;
+}
+
+/** 一次真实发送的回执：宿主必须等页面出现成功信号才允许 ok=true */
+export interface DouyinCommentReceipt {
+  ok: boolean;
+  commentId?: string;
+  detail: string;
+  /** 发送过程中撞到风控/登录墙时如实上报，执行器立即停手 */
+  blocked?: 'captcha' | 'login' | null;
+  /** 已点击但没有可靠回执；不可自动重试，该条占额度与同视频冷却。 */
+  uncertain?: boolean;
+}
+
+/**
+ * 受限评论端口（ADR-006）：Electron 隔离 partition 与真浏览器 CDP 两个驱动
+ * **实现同一契约**，宿主按当前 `driver` 注入。只允许「他人公开视频的顶层评论」，
+ * 默认关闭；两驱动的护栏、回执三态判定必须完全一致。
+ */
+export interface DouyinCommentPort {
+  /** 读取评论区（含输入框可用性）；页面不是视频详情页直接抛错 */
+  readComments(url: string): Promise<DouyinCommentThread>;
+  /** 真实发送一条评论；只有「新增稳定 ID + 全文回读 + 重载仍在」才允许 ok=true */
+  postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt>;
+}
+
+/** 受限评论只允许抖音站内视频详情页（`/video/<数字>`），不做外站/列表页发送 */
+export const DOUYIN_VIDEO_URL_RE = /^https:\/\/www\.douyin\.com\/video\/\d{6,}\/?$/u;
+
+export function isDouyinVideoUrl(raw: string): boolean {
+  return DOUYIN_VIDEO_URL_RE.test(raw);
+}
+
+/** 比较页面地址时忽略末尾斜杠（`/video/123/` 与 `/video/123` 视为同一页） */
+export function normalizeDouyinUrl(raw: string): string {
+  return raw.replace(/\/$/u, '');
+}
+
+/** 稳定评论 ID：抖音真实评论 ID 是纯数字；前端乐观插入的临时 ID 不算 */
+export function isStableDouyinCommentId(commentId: string): boolean {
+  return /^\d{6,}$/u.test(commentId);
+}
+
+/** 自我标识是否足以支撑回执归属：sec_uid 单独可用；否则必须「昵称 + 头像」双要素 */
+export function hasDouyinSelfIdentity(self: DouyinSelfIdentity | null | undefined): self is DouyinSelfIdentity {
+  if (!self) return false;
+  if (self.secUid.trim() !== '') return true;
+  return self.nickname.trim() !== '' && self.avatarUrl.trim() !== '';
+}
+
+/** 头像地址归一化：去掉查询串与尺寸段，只保留稳定路径，避免签名/缩略图参数造成假不等 */
+export function normalizeDouyinAvatarUrl(raw: string): string {
+  const base = raw.trim().split(/[?#]/u)[0] ?? '';
+  return base.replace(/\/\d+x\d+\//u, '/');
+}
+
+/**
+ * 回执归属：这条评论的作者是不是当前登录账号。
+ * sec_uid 双方都有时以 sec_uid 为准（唯一、不可伪造的站内标识）；
+ * 否则退回「昵称 + 归一化头像」双要素，缺一不可。
+ * 页面没给足作者信息 → false（宁可判 uncertain，也不能把别人的同文评论算成自己的）。
+ */
+export function isOwnDouyinComment(
+  item: Pick<DouyinCommentItem, 'authorAlias' | 'authorSecUid' | 'authorAvatarUrl'>,
+  self: DouyinSelfIdentity | null | undefined,
+): boolean {
+  if (!hasDouyinSelfIdentity(self)) return false;
+  if (self.secUid.trim() !== '' && (item.authorSecUid ?? '').trim() !== '') {
+    return self.secUid.trim() === item.authorSecUid?.trim();
+  }
+  const nickname = self.nickname.trim();
+  const avatar = normalizeDouyinAvatarUrl(self.avatarUrl);
+  if (nickname === '' || avatar === '') return false;
+  return item.authorAlias.trim() === nickname && normalizeDouyinAvatarUrl(item.authorAvatarUrl ?? '') === avatar;
+}
+
+/** 只看「新出现 + 稳定数字 ID + 全文一致」，不判归属；端口用它区分「没有回执」与「有同文但不是自己」 */
+export function findNewDouyinCommentByText(
+  before: readonly DouyinCommentItem[],
+  after: readonly DouyinCommentItem[],
+  text: string,
+): DouyinCommentItem | null {
+  const knownIds = new Set(before.map((item) => item.commentId));
+  return (
+    after.find(
+      (item) => !knownIds.has(item.commentId) && isStableDouyinCommentId(item.commentId) && item.text === text,
+    ) ?? null
+  );
+}
+
+/**
+ * 回执判定（两驱动共用）：在「点击后」快照里找一条
+ * 「发送前不存在 + 稳定数字 ID + 全文完全一致 + 作者是当前账号」的新评论。
+ * 作者拿不到或对不上返回 null（上层判 uncertain，绝不自动重发）。
+ */
+export function findNewDouyinComment(
+  before: readonly DouyinCommentItem[],
+  after: readonly DouyinCommentItem[],
+  text: string,
+  self: DouyinSelfIdentity | null | undefined,
+): DouyinCommentItem | null {
+  const candidate = findNewDouyinCommentByText(before, after, text);
+  return candidate !== null && isOwnDouyinComment(candidate, self) ? candidate : null;
+}
+
+/** 抖音浏览器会话端口：宿主用独立 Electron Profile 或真浏览器 CDP 实现，单测注入假会话 */
 export interface DouyinWebSession {
   load(url: string): Promise<DouyinPageSnapshot>;
   /**
@@ -130,6 +275,10 @@ export interface DouyinWebSession {
   loginState(): Promise<DouyinLoginState>;
   /** 打开可见登录窗，由 owner 亲手扫码；本类绝不代填密码 */
   openLoginWindow?(): Promise<void>;
+  /** 受限评论端口（ADR-006）；两个驱动都必须实现，未实现时执行器拒绝发送 */
+  readComments?: DouyinCommentPort['readComments'];
+  /** 真实发送一条评论；只有页面出现成功信号才允许 ok=true */
+  postComment?: DouyinCommentPort['postComment'];
   dispose?(): Promise<void>;
 }
 
@@ -537,6 +686,263 @@ function dedupeCards(cards: DouyinFeedCard[]): DouyinFeedCard[] {
     out.push({ videoId: id, text });
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// V2-P3-04K：L3 受限自主评论互动（owner 2026-11-27 授权）
+// 只做「读评论区 → 模型决定是否评论 → 本地护栏 → 真实发送 → 回执记账」。
+// 默认关闭；能力未实测、禁发时段、额度、同视频冷却、验证码/登录墙任一命中即停手。
+// ---------------------------------------------------------------------------
+
+/** 本地自然日 key（YYYY-MM-DD，按宿主本地时区） */
+export function douyinLocalDayKey(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 本地自然日 00:00:00 的时间戳 */
+export function douyinStartOfLocalDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** 左侧闭区间、右侧开区间的禁发时段；start === end 视为不设禁发时段 */
+export function isInQuietHours(ts: number, start: number, end: number): boolean {
+  if (start === end) return false;
+  const hour = new Date(ts).getHours();
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
+export interface DouyinCommentComposerInput {
+  candidate: BrowseCandidate;
+  itemText: string;
+  comments: DouyinCommentItem[];
+  /** 最近已发送文本，供模型避免重复 */
+  recentComments: string[];
+  settings: SocialCommentSettings;
+}
+
+export interface DouyinCommentComposition {
+  shouldComment: boolean;
+  text: string;
+  reason: string;
+  /** 模型网关回报的实际模型；空 = 未调用模型 */
+  modelId?: string;
+}
+
+/** 模型只负责「要不要评论、评论什么」；发不发由本地护栏决定（ADR-002 AI-First） */
+export interface DouyinCommentComposer {
+  compose(input: DouyinCommentComposerInput): Promise<DouyinCommentComposition>;
+}
+
+/** 评论动作账本端口：宿主用本地 SQLite 实现，单测注入内存账本 */
+export interface DouyinCommentLedgerPort {
+  countSentSince(ts: number): number;
+  lastSentAt(): number | null;
+  hasCommentedVideo(videoId: string, since: number): boolean;
+  recentSentTexts(since: number): string[];
+  /** 以 actionId 幂等写入/更新；必须同步持久化成功后返回，失败抛错并停止发送。 */
+  append(action: SocialCommentAction, settings?: SocialCommentSettings): void;
+}
+
+export interface DouyinCommentExecutorOptions {
+  web: Pick<DouyinWebSession, 'readComments' | 'postComment'>;
+  runtime: { assertCapability(platform: 'douyin', capability: 'comment_reply'): unknown };
+  ledger: DouyinCommentLedgerPort;
+  composer: DouyinCommentComposer;
+  now?: () => number;
+  isInterrupted?: () => boolean;
+}
+
+export interface DouyinCommentExecuteInput {
+  sessionId: string;
+  candidate: BrowseCandidate;
+  itemText: string;
+  settings: SocialCommentSettings;
+}
+
+export interface DouyinCommentTextGuardResult {
+  ok: boolean;
+  text: string;
+  reason: string;
+}
+
+const COMMENT_URL_RE = /(?:https?:\/\/|www\.)\S+/giu;
+const COMMENT_MENTION_RE = /@[^\s@]{1,30}/gu;
+/**
+ * 导流短语黑名单：在「去空白 + 去标点 + 全角转半角」的归一化文本上匹配，
+ * 以覆盖「加 微 信」「VX：」「vx:」「威信」这类插空格/全角符号/变体写法。
+ */
+const COMMENT_CONTACT_RE =
+  /(微信|威信|薇信|v信|v薇|vx|weixin|wechat|whatsapp|telegram|加v(?![a-z])|私信我|互关|互粉|关注我|点赞我|点我主页|抽奖|二维码|手机号|联系电话)/u;
+/** 手机号：同样在归一化文本上匹配（`+86 138 0000 0000` 归一后是 8613800000000），并拒绝嵌在更长数字串里 */
+const COMMENT_PHONE_RE = /(?<!\d)(?:86)?1[3-9]\d{9}(?!\d)/u;
+const COMMENT_HAS_WORDS_RE = /[A-Za-z一-鿿]/u;
+
+/** 全角 → 半角（含全角空格），避免用全角标点拆分黑名单短语绕过护栏 */
+function toHalfWidthComment(text: string): string {
+  return text
+    .replace(/[！-～]/gu, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/　/gu, ' ');
+}
+
+/** 联系方式探针：去空白、去全部标点/符号、统一小写，专供黑名单与手机号匹配 */
+function commentContactProbe(text: string): string {
+  return toHalfWidthComment(text)
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '');
+}
+
+function compactComment(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '')
+    .trim();
+}
+
+/**
+ * 本地评论护栏：去链接/去 @、长度、联系方式、重复度。
+ * 模型输出永远按不可信数据处理；护栏失败只跳过，不改写成别的文本硬发。
+ *
+ * **护栏是兜底，不是安全边界**：插空格、全角符号、谐音变体都可能绕过黑名单，
+ * 真正的边界是「默认关闭 + 人工开关 + 逐日审计 + 能力实测门禁」，不要把本函数
+ * 当成防滥用的唯一防线。
+ */
+export function guardDouyinCommentText(
+  raw: string,
+  settings: Pick<SocialCommentSettings, 'minChars' | 'maxChars'>,
+  recentTexts: readonly string[] = [],
+): DouyinCommentTextGuardResult {
+  const stripped = raw
+    .replace(/​|‌|‍|﻿/gu, '')
+    .replace(COMMENT_URL_RE, '')
+    .replace(COMMENT_MENTION_RE, '')
+    .replace(/[ \t]+/gu, ' ')
+    .replace(/\n{2,}/gu, '\n')
+    .trim()
+    .replace(/^["'「『]+|["'」』]+$/gu, '')
+    .trim();
+  if (!COMMENT_HAS_WORDS_RE.test(stripped)) {
+    return { ok: false, text: stripped, reason: '评论没有可读文字' };
+  }
+  const length = [...stripped].length;
+  if (length < settings.minChars) {
+    return { ok: false, text: stripped, reason: `评论太短（${length} < ${settings.minChars} 字）` };
+  }
+  if (length > settings.maxChars) {
+    return { ok: false, text: stripped, reason: `评论太长（${length} > ${settings.maxChars} 字）` };
+  }
+  const probe = commentContactProbe(stripped);
+  if (COMMENT_CONTACT_RE.test(probe)) {
+    return { ok: false, text: stripped, reason: '评论包含导流/索要互动等不适合自动发送的内容' };
+  }
+  if (COMMENT_PHONE_RE.test(probe)) {
+    return { ok: false, text: stripped, reason: '评论包含手机号等联系方式' };
+  }
+  const compact = compactComment(stripped);
+  if (compact !== '' && recentTexts.some((item) => compactComment(item) === compact)) {
+    return { ok: false, text: stripped, reason: '与最近发送过的评论重复' };
+  }
+  return { ok: true, text: stripped, reason: '' };
+}
+
+/**
+ * 评论执行器：能力门禁 + 额度 + 护栏 + 真实回执 + 本地账本。
+ * 任何一步不满足都返回如实的 skipped/failed，不把「没发」写成「发过了」。
+ */
+export class DouyinCommentExecutor {
+  private readonly now: () => number;
+  private readonly isInterrupted: () => boolean;
+  private busy = false;
+
+  constructor(private readonly options: DouyinCommentExecutorOptions) {
+    this.now = options.now ?? Date.now;
+    this.isInterrupted = options.isInterrupted ?? (() => false);
+  }
+
+  async execute(input: DouyinCommentExecuteInput): Promise<SocialCommentAction> {
+    const createdAt = this.now();
+    const videoId = /^https:\/\/www\.douyin\.com\/video\/(\d{6,})\/?$/u.exec(input.candidate.url)?.[1] ?? '';
+    const base = {
+      actionId: `ca-${randomUUID()}`, platform: 'douyin' as const,
+      sessionId: input.sessionId, targetUrl: input.candidate.url,
+      targetTitle: input.candidate.title.slice(0, 200),
+      targetAuthor: input.candidate.previewText.replace(/^@/u, '').split(' · ')[0]?.slice(0, 100) ?? '',
+      videoId, createdAt,
+    };
+    let text = '';
+    let modelId = '';
+    let attemptedAt = 0;
+    const finish = (status: SocialCommentAction['status'], failureKind: SocialCommentFailureKind, reason: string) => {
+      const action = SocialCommentActionSchema.parse({ ...base, text: text.slice(0, 300), modelId, attemptedAt,
+        status, failureKind, reason: reason.slice(0, 300), completedAt: status === 'pending' ? 0 : this.now() });
+      // 账本失败必须上抛：发送前不落盘就不发送；发送后保留 pending 供恢复，绝不静默漏记。
+      this.options.ledger.append(action, status === 'pending' ? input.settings : undefined);
+      return action;
+    };
+    if (this.busy) return finish('skipped', 'busy', '已有评论任务正在运行');
+    this.busy = true;
+    try {
+      const check = (): [SocialCommentFailureKind, string] | null => {
+        const at = this.now();
+        if (!input.settings.enabled) return ['disabled', '评论互动开关未打开'];
+        if (this.isInterrupted()) return ['interrupted', '开关关闭、角色暂停或急停，未发送'];
+        if (isInQuietHours(at, input.settings.quietHoursStart, input.settings.quietHoursEnd))
+          return ['quiet_hours', '当前处于禁发时段'];
+        try { this.options.runtime.assertCapability('douyin', 'comment_reply'); }
+        catch (error) { return ['capability_unverified', error instanceof Error ? error.message : '评论能力未实测']; }
+        if (this.options.ledger.countSentSince(douyinStartOfLocalDay(at)) >= input.settings.maxPerDay)
+          return ['quota', '今日发送尝试已达到上限'];
+        if (this.options.ledger.countSentSince(at - 3_600_000) >= input.settings.maxPerHour)
+          return ['quota', '最近一小时发送尝试已达到上限'];
+        const last = this.options.ledger.lastSentAt();
+        if (last !== null && at - last < input.settings.minIntervalMs) return ['quota', '距离上一条评论间隔不足'];
+        if (this.options.ledger.hasCommentedVideo(videoId, at - input.settings.sameVideoCooldownMs))
+          return ['quota', '该视频已在冷却期内评论或尝试发送过'];
+        return null;
+      };
+      const blocked = check();
+      if (blocked) return finish('skipped', ...blocked);
+      if (input.candidate.platform !== 'douyin' || !videoId) return finish('failed', 'page_error', '只允许抖音站内视频详情页');
+      const { web, ledger, composer } = this.options;
+      if (!web.readComments || !web.postComment) return finish('failed', 'page_error', '宿主未提供评论区读写端口');
+      let thread: DouyinCommentThread;
+      try { thread = await web.readComments(input.candidate.url); }
+      catch (error) { return finish('failed', 'page_error', String(error)); }
+      const block = detectDouyinBlock(thread);
+      if (block?.kind === 'captcha') return finish('failed', 'captcha', block.detail);
+      if (!thread.inputAvailable) return finish('failed', block?.kind === 'login' ? 'login_required' : 'page_error', '评论输入框不可用，未发送');
+      let composition: DouyinCommentComposition;
+      try {
+        composition = await composer.compose({ candidate: input.candidate, itemText: input.itemText.slice(0, 2_000),
+          comments: thread.comments.slice(0, 8), settings: input.settings,
+          recentComments: ledger.recentSentTexts(createdAt - 7 * 24 * 3_600_000).slice(0, 10) });
+      } catch (error) { return finish('failed', 'model_unavailable', String(error)); }
+      modelId = composition.modelId ?? '';
+      text = composition.text;
+      if (!composition.shouldComment) return finish('skipped', 'model_declined', composition.reason || '模型判断不适合评论');
+      const guard = guardDouyinCommentText(text, input.settings, ledger.recentSentTexts(createdAt - 7 * 24 * 3_600_000));
+      text = guard.text;
+      if (!guard.ok) return finish('skipped', 'guard_rejected', guard.reason);
+      // 模型调用后复核禁发时段、撤销授权、急停、最新额度；pending 在点击之前持久化。
+      const revoked = check();
+      if (revoked) return finish('skipped', ...revoked);
+      attemptedAt = this.now();
+      finish('pending', '', '已预留发送额度，等待页面回执；重启后不得自动重试');
+      let receipt: DouyinCommentReceipt;
+      try {
+        receipt = await web.postComment({ url: input.candidate.url, text }, () => !this.isInterrupted() &&
+          !isInQuietHours(this.now(), input.settings.quietHoursStart, input.settings.quietHoursEnd));
+      } catch (error) { return finish('uncertain', 'receipt_failed', String(error)); }
+      if (receipt.uncertain) return finish('uncertain', receipt.blocked === 'captcha' ? 'captcha' : 'receipt_failed', receipt.detail);
+      if (receipt.blocked) return finish('failed', receipt.blocked === 'captcha' ? 'captcha' : 'login_required', receipt.detail);
+      return finish(receipt.ok ? 'sent' : 'failed', receipt.ok ? '' : 'receipt_failed', receipt.detail);
+    } finally {
+      this.busy = false;
+    }
+  }
 }
 
 /**

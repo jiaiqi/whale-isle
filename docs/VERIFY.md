@@ -447,3 +447,35 @@
 | 波形拖拽与统一试听条手感 | 裁剪选区拖拽、A/B 并排对比、吸底试听条在多页签间的互斥与打断，属 OS 级手感，只能人工确认 | ⏳ 未开始 |
 | 儿童声音监护人授权 | 已补契约与 UI 双闸；**授权文件的法律效力与留存方式需 owner/法务确认**，本单不代替授权流程 | ⏳ 等 owner 确认 |
 | `studio.e2e` 在 CI 的定位 | 该 spec 依赖 2GB 随包素材，当前不在 CI 列表；是否改为「素材就位才跑」的独立 job 由 owner 决定 | ⏳ 待 owner 拍板 |
+
+## 2026-11-27 批次（`V2-P3-04K` 抖音受限自动顶层评论，`IMPLEMENTED_UNVERIFIED`，真实发送待 `[REAL-DEVICE]`）
+
+### Mock / 沙盒 / 宿主 UI 已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `P3-04K` 评论执行器与 SQLite 审计单测 | `[SIMULATION]` 确定性单测 | `social-douyin.spec.ts` + `social-comment-ledger.spec.ts` **2 文件 46 例通过**（约 240ms）：成功发送、默认关闭、能力未验证、日/时/间隔/同视频额度、静默时段、急停、验证码/登录/页面异常、模型跳过/不可用、护栏拒绝、回执失败、账本不可写、缺端口、模型等待中急停 + 并发 second busy、发送前 pending 已落盘、落盘失败禁止点击、SQLite 重启 `pending → uncertain`、两个连接争最后额度 `BEGIN IMMEDIATE` 拒绝第二次 | 2026-11-27 |
+| `P3-04K` 真实 DOM 发送与回读 E2E | `[E2E-HOST]` + `[SIMULATION]` | `apps/desktop-host/e2e/douyin-comments.e2e.spec.ts` **1/1 通过，16.99s**：esbuild 打包**实际** `ElectronBrowserEngine` + `SocialCommentLedger` → Playwright 拉起真实 Electron；隔离 partition 内 https 全拦为本地仿真页；断言 `canSend=false` 零发送、真实点击后重载仍见同一数字 ID + 全文才 `ok`（重载确认 5 秒有界轮询、每 300ms 重抽，判定条件不放宽）、原文写入真实临时磁盘 SQLite、切验证码后读/发停止且不再新增发送 | 2026-11-27 |
+| `P3-04K` 主应用中控台 UI/IPC | `[E2E-HOST]`（展示数据为种入的 `[SIMULATION]`） | 测试专用 bootstrap 改 `appData` 到临时目录后加载**真实构建产物** `dist/main/index.js`（`PET_STAGE_E2E=1`，不碰真实 `e2e-profile`）：默认 `enabled=false` / `verified=false` / `lastVerifiedAt=0` / `ledgerReady=true`；点开关后 `enabled=true` 但 `lastVerifiedAt` 仍 `0`（不伪造实测）；种入 `simulation-only` 的 `sent` / `skipped` 两条后 UI 显示中文状态、原文全文、URL、原因与模型，计数「今日已确认 1 · 跳过 1 · 剩余尝试 9」；切前一日 0 条空态；再点一次恢复关闭。已固化为仓库内 `apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts`（**1/1，12.85s**，并加入 CI macOS Electron E2E 列表） | 2026-11-27 |
+| `P3-04K` 评论端口两驱动一致性 | `[SIMULATION]` 确定性单测 | `douyin-comment-port.spec.ts` **22 例**（护栏拒绝分支：非视频页 / 输入框缺失 / 页面变化 / `canSend=false` / 填入后撤销 / 编辑器缺失 / 填入后验证码 / 发送按钮不唯一 / 无自我标识；回执三态：sent / uncertain / failed；归属：别人的同文、作者缺失、重载后作者变化）+ `social-douyin.spec.ts` 共用判定 5 例 + `cdp-browser-engine.spec.ts` 端口 4 例 + `electron-browser-engine.spec.ts` 端口 1 例。全部走 fake 页面原语，不访问抖音 | 2026-11-27 |
+| `P3-04K` 评论暂停口径 | `[SIMULATION]` 确定性单测 | `social-comment-pause.spec.ts` **3 例**：`captcha` / `login_required` 才暂停；`page_error` / `receipt_failed`（`uncertain`）/ `model_unavailable` / `quota` / `sent` 都不暂停，`applyCommentPausePolicy` 如实返回是否暂停 | 2026-11-27 |
+| `P3-04K` 评论护栏归一化 | `[SIMULATION]` 确定性单测 | `social-douyin.spec.ts` 新增 3 例：5 个实测绕过样本（`加 微 信` / `VX:` / `vx：` / `威信` / `+86 138 0000 0000`）全部拦下；正常文本不误伤；`谢谢@张三 分享` 的 @ 无需前置空白即可剥离。文档明确「护栏是兜底，不是安全边界」 | 2026-11-27 |
+| `P3-04K` 缺端口与结构性错误 E2E | `[E2E-HOST]` + `[SIMULATION]` | `douyin-comments.e2e.spec.ts` 新增断言（真 Electron + 真 DOM + 真 SQLite）：驱动缺 `readComments/postComment` → `failed` / `page_error`、账本无 `sent`、页面提交数不增加（0 次点击）；结构性错误（页面变化）→ `uncertain` / `receipt_failed` 且**不**暂停、开关保持开启；验证码对照组 → `failed` / `captcha` 触发暂停 | 2026-11-27 |
+| `P3-04K` cdp-real 评论端口注入 E2E | `[E2E-HOST]` + `[SIMULATION]` | `apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts` **1/1**：本机回环仿真 CDP 端点（`node:http` + `ws`，不启动真 Chrome）→ 真实 `CdpConnection` / `CdpPageDriver` → 共用评论端口；断言端口存在、`readComments` 读到评论区、`postComment` 走通 sent 回执、验证码立即停手。**不是真机证据**，真实发送仍待 `[REAL-DEVICE]` | 2026-11-27 |
+| `P3-04K` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**：Gate 1 `tsc -b` + depcruise + ruff/mypy + 四入口 build；Gate 2 license-scanner 348 文件 0 违规 + audit 0 high + luac 5 文件；Gate 3 vitest + pytest + 7 个卡死剧本；Gate 4 回环 0.4s | 2026-11-27 |
+
+### 真实平台失败 / 阻塞（不得写成通过）
+
+| 项目 | 真实现象 | 当前状态 |
+| --- | --- | --- |
+| `P3-04K` 真实评论发送 | 本轮**未向抖音发起任何真实评论请求**；写控件选择器（`data-e2e="comment-input"` / `comment-publish`）尚未在真实已登录页面核验，未知结构会安全失败而非退回全页面通用按钮 | **BLOCKED（等待 owner 处理验证码并恢复登录态）** |
+| `P3-04I` 验证码遗留 | P3-04I 生产冒烟仍停在抖音「验证码中间页」，本轮未重试、未识别/绕过；`douyin/comment_reply` 的 `lastVerifiedAt` 保持 `0`，自动评论不会执行 | **BLOCKED（同上）** |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收动作 | 状态 |
+| --- | --- | --- |
+| 真实登录态评论 DOM | 在真实已登录隔离 Profile 打开一条他人公开视频，确认评论区可读、输入框与发送按钮可被评论专属选择器命中 | ⏳ 阻塞于验证码/登录态 |
+| 「首次真实单条核验」 | 生活页点一次显式核验，确认平台侧可见、回读 ID 与全文一致，且能力矩阵 `lastVerifiedAt` 只在 `sent` 后更新 | ⏳ 待 owner 操作 |
+| 浏览 → 评论闭环 | 开启自动评论跑一次「浏览正常结束 → 模型决定 → 最多一条」，确认生活页当日记录可查、额度正确、失败即暂停 | ⏳ 待真实链路 |
+| 验证码/风控体感 | 真实命中时确认立即停止、人话报错、不硬刷、自动关闭评论开关 | ⏳ 待真实触发 |

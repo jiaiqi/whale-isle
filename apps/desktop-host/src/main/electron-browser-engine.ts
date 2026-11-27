@@ -4,6 +4,10 @@
  * - 只允许 http/https；页面正文仅作为数据返回，绝不执行页面给出的指令。
  * - Cookie 双向同步：启动时从隔离 Profile 的 cookies.json 导入 Chromium partition，dispose 时把 partition 现状回写 cookies.json（人工交接登录的登录态因此跨任务存活）。不进 Git、不进导出。
  * - Playwright 引擎可在同一 BrowserEnginePort 下替换，本文件是当前无额外依赖的默认可执行引擎。
+ *
+ * 抖音写能力边界（ADR-006）：本文件对抖音**只读**，唯一例外是 owner 授权的「受限顶层评论」
+ * （`readComments` / `postComment`，默认关闭、只认评论专属 `data-e2e` 控件）。
+ * 不提供点赞、关注、私信、发布或楼中楼回复；不绕过验证码/登录墙。
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,12 +16,15 @@ import type { BrowserEnginePort, BrowserPageSnapshot } from '@workbench/runtime-
 import type { BrowserProfile } from '@workbench/shared-protocol';
 import {
   DOUYIN_FEED_URLS,
+  type DouyinCommentReceipt,
+  type DouyinCommentThread,
   type DouyinFeedKind,
   type DouyinLoginState,
   type DouyinPageSnapshot,
   type DouyinWebSession,
 } from '@workbench/character-core';
 import { DOUYIN_PAGE_READER_SCRIPT, DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT } from './douyin-page-reader';
+import { createDouyinCommentPort } from './douyin-comment-port';
 
 const LOAD_TIMEOUT_MS = 20_000;
 
@@ -45,6 +52,15 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
   private window: BrowserWindow | null = null;
   /** 可见登录窗：只在 owner 需要扫码时打开；与隐藏读写窗共享同一隔离 partition */
   private loginWindow: BrowserWindow | null = null;
+  /** 受限评论端口（ADR-006）：与 CDP 驱动共用同一实现，这里只注入 Electron 的三个原语 */
+  private readonly commentPort = createDouyinCommentPort({
+    navigate: async (url) => {
+      await this.load(url);
+    },
+    evaluate: <T>(expression: string) => this.evaluate<T>(expression),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now: () => Date.now(),
+  });
 
   constructor(options: { profile: BrowserProfile; show?: boolean }) {
     this.profile = options.profile;
@@ -214,6 +230,20 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
     return this.loginWindow !== null && !this.loginWindow.isDestroyed();
   }
 
+  // -------------------------------------------------------------------------
+  // 抖音 L3 受限评论（V2-P3-04K）：只读评论区 + owner 授权后的真实发送
+  // 与 CDP 驱动共用 `createDouyinCommentPort` 的同一套护栏与回执判定（ADR-006）。
+  // 页面文本永远按不可信数据处理；验证码/登录墙立即停手，绝不绕过。
+  // -------------------------------------------------------------------------
+
+  readComments(url: string): Promise<DouyinCommentThread> {
+    return this.commentPort.readComments(url);
+  }
+
+  postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt> {
+    return this.commentPort.postComment(input, canSend);
+  }
+
   async dispose(): Promise<void> {
     // 回写 Cookie 再关窗：人工交接登录后的新登录态必须落盘，否则下轮任务无登录态（单向导入缺陷修复）
     await this.persistCookies();
@@ -332,7 +362,7 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
  * 抖音只读会话适配器（V2-P3-04H）：
  * 复用 ElectronBrowserEngine 的独立 partition / Cookie 落盘 / 隐藏窗口，
  * 只向 character-core 暴露「加载页面 + 登录态 + 打开可见登录窗」三个只读能力。
- * 不提供点赞/关注/评论/发布等任何写操作入口。
+ * 评论端口只由独立 L3 执行器调用，L1 来源保持只读。
  */
 export class ElectronDouyinSession implements DouyinWebSession {
   readonly driverKind = 'electron' as const;
@@ -348,6 +378,14 @@ export class ElectronDouyinSession implements DouyinWebSession {
 
   openFeed(feed: DouyinFeedKind): Promise<DouyinPageSnapshot> {
     return this.engine.openFeed(feed);
+  }
+
+  readComments(url: string): Promise<DouyinCommentThread> {
+    return this.engine.readComments(url);
+  }
+
+  postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt> {
+    return this.engine.postComment(input, canSend);
   }
 
   loginState(): Promise<DouyinLoginState> {

@@ -130,6 +130,14 @@ jobs:
         # Gate 1/2/3/4 全跑；若 uv 缺失 Python 侧会 SKIP（这里已安装 uv，故要求真跑）。
         run: pnpm verify:gate
 
+      - name: Electron E2E · 托盘浮窗（独立进程）
+        # 托盘快捷浮窗的“可见”断言对焦点敏感：主进程按设计在 blur 时隐藏浮窗。
+        # 与其它 Electron 用例同进程串行时，前序应用退出/抢焦点会让浮窗被判为 hidden
+        # （2026-11-27 起在本分支稳定复现，单独运行时稳定通过）。因此单独起一个进程跑。
+        run: >
+          pnpm exec vitest run --config vitest.e2e.config.mts
+          apps/desktop-host/e2e/tray-popover.e2e.spec.ts
+
       - name: Electron E2E（[E2E-HOST]，仅 macOS）
         # 宿主 E2E 文件；Gate 4 回环已在 verify:gate 内跑过，避免重复。
         # studio.e2e.spec.ts 需要本地 2GB 随包素材（assets/pet-packs，gitignored），CI 干净 checkout
@@ -138,10 +146,12 @@ jobs:
           pnpm exec vitest run --config vitest.e2e.config.mts
           apps/desktop-host/e2e/desktop.e2e.spec.ts
           apps/desktop-host/e2e/ui.e2e.spec.ts
-          apps/desktop-host/e2e/tray-popover.e2e.spec.ts
           apps/desktop-host/e2e/pet-evolution.e2e.spec.ts
           apps/desktop-host/e2e/song-console.e2e.spec.ts
           apps/desktop-host/e2e/coop-identity.e2e.spec.ts
           apps/desktop-host/e2e/single-pet-chain.e2e.spec.ts
           apps/desktop-host/e2e/single-pet-llm-chain.e2e.spec.ts
           apps/desktop-host/e2e/voice-studio.e2e.spec.ts
+          apps/desktop-host/e2e/douyin-comments.e2e.spec.ts
+          apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts
+          apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts

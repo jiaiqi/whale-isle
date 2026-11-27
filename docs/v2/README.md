@@ -27,6 +27,7 @@
 | [adr/ADR-003-uiux-tidepaper-primary-and-themes.md](./adr/ADR-003-uiux-tidepaper-primary-and-themes.md) | 确立 **Tidepaper** 为主 UI/UX 基线并保留历史方案为可选主题 |
 | [adr/ADR-004-input-preemption-scope.md](./adr/ADR-004-input-preemption-scope.md) | 桌面租约与游戏租约分离（用户物理输入只抢桌面租约） |
 | [adr/ADR-005-singing-and-stage-technology-route.md](./adr/ADR-005-singing-and-stage-technology-route.md) | 歌声系统与舞台形象技术路线：**SVC 优先、VRM 1.0 优先、多形象共存**（owner 原文逐字收录） |
+| [adr/ADR-006-douyin-bounded-comments.md](./adr/ADR-006-douyin-bounded-comments.md) | 抖音受限自动顶层评论：owner 授权局部例外、默认关闭、SQLite 发送前预留、结果不确定不重发、逐日可查 |
 | [P3-01-MATERIALS-NEEDED.md](./P3-01-MATERIALS-NEEDED.md) | 歌声与形象素材清单、许可约束与获取路径；VRM 渲染器选型、SVS/SVC 选型明细（VRM 优先重排） |
 
 ## 3. 执行、交接与验收

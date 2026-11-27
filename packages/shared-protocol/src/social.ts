@@ -1,8 +1,9 @@
 /**
- * Whale Isle V2 — 社区数字生活 L1（只读学习与兴趣沉淀）契约
+ * Whale Isle V2 — 社区数字生活契约
  * （V2-P3-04 · REQ-SOC-01 / REQ-LIFE-01，蓝图 08 对齐）
- * L1 硬边界：BrowseSession.interactionMode 恒为 readonly，契约层钉死；
- * L2 草稿审核与 L3 受限自主的字段不在本文件定义（后续工单单独立项）。
+ * L1 浏览的 interactionMode 恒为 readonly，契约层钉死。
+ * V2-P3-04K 起新增 L3 受限自主的「评论互动」契约（owner 2026-11-27 授权）：
+ * 默认关闭、有限额度、只走 owner 自己的账号会话，所有发送/失败/拦截都落本地账本供 owner 查看。
  * 平台能力按矩阵逐项声明（渠道 / 授权 / 最近验证日期 / 风险级别），
  * 严禁以「第三方项目能做」作为平台允许的证据（蓝图 08 §4）。
  */
@@ -343,3 +344,137 @@ export const SocialAutostartSnapshotSchema = z.object({
   executor: SocialBrowseExecutorStatusSchema.default({ wired: false, sources: [], runnable: false }),
 });
 export type SocialAutostartSnapshot = z.output<typeof SocialAutostartSnapshotSchema>;
+
+// ---------------------------------------------------------------------------
+// L3 受限自主：评论互动（V2-P3-04K，owner 2026-11-27 授权）
+// 边界：默认关闭；只使用 owner 自己的账号会话；不绕过验证码/风控/登录墙；
+// 有限额度 + 同视频长冷却 + 内容护栏；每一条发送/失败/拦截都落本地 SQLite 账本。
+// ---------------------------------------------------------------------------
+
+export const SocialCommentSettingsSchema = z.object({
+  /** 默认关闭：owner 在生活页显式打开才生效，一键关立即停止后续发送 */
+  enabled: z.boolean().default(false),
+  /** 每日最多发送尝试；pending / uncertain 同样占额度，防止结果不明后重复发送 */
+  maxPerDay: z.number().int().min(1).max(50).default(10),
+  /** 每小时最多发送条数 */
+  maxPerHour: z.number().int().min(1).max(20).default(3),
+  /** 两条评论之间的最小间隔（默认 3 分钟，避免机械刷屏） */
+  minIntervalMs: z.number().int().min(30_000).max(3_600_000).default(180_000),
+  /** 评论文本长度（按 Unicode 码点计） */
+  minChars: z.number().int().min(2).max(100).default(8),
+  maxChars: z.number().int().min(10).max(300).default(80),
+  /** 同一视频的冷却期（默认 30 天，避免反复骚扰同一条内容） */
+  sameVideoCooldownMs: z
+    .number()
+    .int()
+    .min(3_600_000)
+    .max(365 * 24 * 3_600_000)
+    .default(30 * 24 * 3_600_000),
+  /** 禁发时段（本地时间，左闭右开；start > end 表示跨午夜） */
+  quietHoursStart: z.number().int().min(0).max(23).default(0),
+  quietHoursEnd: z.number().int().min(0).max(23).default(8),
+});
+export type SocialCommentSettings = z.output<typeof SocialCommentSettingsSchema>;
+export const SocialCommentStateSchema = z.object({
+  settings: SocialCommentSettingsSchema.default(() => SocialCommentSettingsSchema.parse({})),
+  blockedReason: z.string().max(300).default(''),
+});
+
+export const SocialCommentActionStatusSchema = z.enum(['pending', 'sent', 'failed', 'skipped', 'uncertain']);
+export type SocialCommentActionStatus = z.infer<typeof SocialCommentActionStatusSchema>;
+
+/** 失败/拦截归因：生活页必须显示「为什么没发」，不允许只显示「失败了」 */
+export const SocialCommentFailureKindSchema = z.enum([
+  '',
+  'disabled',
+  'capability_unverified',
+  'quota',
+  'quiet_hours',
+  'interrupted',
+  'model_declined',
+  'model_unavailable',
+  'guard_rejected',
+  'captcha',
+  'login_required',
+  'receipt_failed',
+  'page_error',
+  'ledger_error',
+  'busy',
+]);
+export type SocialCommentFailureKind = z.infer<typeof SocialCommentFailureKindSchema>;
+
+/** 一条评论动作的本地审计记录（owner 在生活页可直接查看 AI 今天做了什么） */
+export const SocialCommentActionSchema = z.object({
+  actionId: z.string().min(1),
+  platform: SocialPlatformIdSchema,
+  sessionId: z.string().max(100).default(''),
+  targetUrl: z.string().url().max(2048),
+  targetTitle: z.string().max(200).default(''),
+  targetAuthor: z.string().max(100).default(''),
+  videoId: z.string().max(50).default(''),
+  text: z.string().max(300).default(''),
+  status: SocialCommentActionStatusSchema,
+  failureKind: SocialCommentFailureKindSchema.default(''),
+  reason: z.string().max(300).default(''),
+  /** 诚实记录生成该评论的模型（provider/model 由网关回报）；空 = 未走到模型 */
+  modelId: z.string().max(200).default(''),
+  createdAt: z.number().int().nonnegative(),
+  completedAt: z.number().int().nonnegative().default(0),
+  attemptedAt: z.number().int().nonnegative().default(0),
+});
+export type SocialCommentAction = z.output<typeof SocialCommentActionSchema>;
+
+/** 生活页「AI 今日做了什么」快照 */
+export const SocialCommentSnapshotSchema = z.object({
+  settings: SocialCommentSettingsSchema,
+  blockedReason: z.string().max(300).default(''),
+  busy: z.boolean().default(false),
+  ledgerReady: z.boolean().default(false),
+  /** comment_reply 能力是否已授权且已实测；未实测时执行器绝不发送 */
+  capability: z.object({
+    allowed: z.boolean().default(false),
+    verified: z.boolean().default(false),
+    lastVerifiedAt: z.number().int().nonnegative().default(0),
+    note: z.string().max(300).default(''),
+  }),
+  dayKey: z.string().min(1),
+  today: z.object({
+    sent: z.number().int().nonnegative().default(0),
+    failed: z.number().int().nonnegative().default(0),
+    skipped: z.number().int().nonnegative().default(0),
+    uncertain: z.number().int().nonnegative().default(0),
+    pending: z.number().int().nonnegative().default(0),
+  }),
+  thisHour: z.object({
+    sent: z.number().int().nonnegative().default(0),
+  }),
+  remainingToday: z.number().int().nonnegative().default(0),
+  remainingThisHour: z.number().int().nonnegative().default(0),
+  nextEligibleAt: z.number().int().nonnegative().nullable().default(null),
+  recent: z.array(SocialCommentActionSchema).max(100).default([]),
+});
+export type SocialCommentSnapshot = z.output<typeof SocialCommentSnapshotSchema>;
+
+/** IPC 与模型输出均先校验；时间查询使用本地自然日，历史记录分页，不截断持久账本。 */
+export const SocialCommentQuerySchema = z.object({
+  dayKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional(),
+  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(100).default(25),
+});
+export type SocialCommentQuery = z.input<typeof SocialCommentQuerySchema>;
+export const SocialCommentHistorySchema = z.object({
+  dayKey: z.string(), total: z.number().int().nonnegative(),
+  actions: z.array(SocialCommentActionSchema).max(100),
+});
+export type SocialCommentHistory = z.output<typeof SocialCommentHistorySchema>;
+export const SocialCommentVerifyInputSchema = z.object({
+  url: z.string().url().max(2048).regex(/^https:\/\/www\.douyin\.com\/video\/\d{6,}\/?$/u),
+});
+export type SocialCommentVerifyInput = z.infer<typeof SocialCommentVerifyInputSchema>;
+export const SocialCommentCompositionSchema = z.object({
+  shouldComment: z.boolean(), text: z.string().max(300), reason: z.string().max(300),
+});
+export const SocialCommentResultSchema = z.object({
+  ok: z.boolean(), error: z.string().optional(), action: SocialCommentActionSchema.optional(),
+});
+export type SocialCommentResult = z.output<typeof SocialCommentResultSchema>;

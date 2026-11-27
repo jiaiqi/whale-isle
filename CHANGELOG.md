@@ -26,6 +26,33 @@
 - `BrainRuntimeConfig` 新增显式 `allowRuleStandin` 与有界 `plannerTimeoutMs`（100–120000ms，宿主默认 30s）；主进程在规划 HTTP 上实际传入超时信号，服务不可用/超时/非法工具/缺 Key 可进入标明「规则代驾」的确定性动作，旧配置默认安全暂停。重建大脑时保留自定义供应商与故障策略，跨语言生成产物同步。
 - 能力域对照复用既有 Magpie 思想网关与 BWF 执行链，重写本地协议 stub 和故障剧本，拒绝 Mod 内直连及无许可证源码；完整逐项结论与真机待验项见 `docs/v2/evidence/P4-01-llm-chain-verification.md`，总工单保持 `NEXT`。
 
+### Changed / Fixed（`V2-P3-04K` 评论复核返工：归属、代际、暂停口径与护栏，PR #10）
+
+- **回执归属**：`DouyinCommentThread` 新增 `self`（`sec_uid` / 昵称 / 头像），评论项新增 `authorSecUid` / `authorAvatarUrl`；`findNewDouyinComment` 现在要求「新出现 + 稳定数字 ID + 全文一致 + **作者是当前账号**」才继续重载确认。发送前拿不到自我标识 → 不发；作者缺失或对不上 → `uncertain`，永不判 `sent`、不自动重发。修复「窗口期内别人发了同样文字被误判成功、进而写 `lastVerifiedAt`」的漏洞。
+- **验证 IPC 代际**：`v2:social-comment-verify` 入口先抓 `commentGeneration`，`loginState()`/`load()` 等每个 await 后比对；中途暂停/改设置/急停立即中止，不再继续发送。`CommentRiskControlError` 只用于验证码/登录墙/账号异常。
+- **暂停口径**：新增 `apps/desktop-host/src/main/social-comment-pause.ts`；执行完一条评论后只有 `captcha` / `login_required` 才 `pauseComments`，`page_error` / `receipt_failed`（含 `uncertain`）等结构性结果只回报、不替 owner 关开关。ADR-006 前文「任一故障立即关闭」的口径已同步修正。
+- **IPC sender/frame 校验**：`v2:social-comment-settings` / `-history` / `-verify` 只接受本应用 `renderer` 目录的**主框架**；子框架与非 `file://` 页面一律拒绝。
+- **护栏归一化**：`guardDouyinCommentText` 匹配前先全角转半角、去空白与全部标点/符号，补齐 `威信` / `vx` / `v信` / `v薇` 等变体；手机号允许空格与分隔符（`+86 138 0000 0000`）；@ 剥离不再要求前置空白。注释与 ADR 明确「**护栏是兜底，不是安全边界**」。
+- **验证**：新增 11 例单测（端口 4、character-core 4、暂停策略 3）；Electron E2E 新增两条断言——驱动缺端口 → `failed` / 无 `sent` / 0 次点击；结构性错误不暂停、验证码才暂停。`pnpm verify:gate` 8/8，覆盖率阈值未改。默认关闭、`lastVerifiedAt=0`、**未向抖音发起任何真实评论**均不变。
+
+### Changed（`V2-P3-04K` 评论端口下沉到 CDP 驱动，PR #10）
+
+- **两驱动共用端口**：评论能力从 `ElectronBrowserEngine` 私有实现提取为 `DouyinCommentPort`（`packages/character-core/src/social-douyin.ts`），时序与回执判定收敛到 `apps/desktop-host/src/main/douyin-comment-port.ts` 的 `createDouyinCommentPort`；Electron 与 CDP 各自只注入 `navigate / evaluate / sleep / now`。此前 macOS 默认驱动 `cdp-real` 缺少评论入口，等于生产环境功能不可用。
+- **共享 DOM 脚本**：评论区读取、填入、点击三个脚本移入 `douyin-page-reader.ts`，两驱动共用同一套评论专属 `data-e2e` 选择器；页面结构未知即失败，绝不退回全页面通用按钮。
+- **红线更新**：`cdp-browser-engine.ts` 的 R1 由「严格只读」改为「只读 + **受限评论**（owner 授权，见 ADR-006）」，逐条保留不点赞、不关注、不发私信、不发布、不逆向签名接口、不改 UA、不做 stealth、不绕过验证码；评论仍是唯一被授权的写能力且**默认关闭**。
+- **ADR-006 补记**：记录路线变更原因、端口边界与审计要求，明确这仍是 owner 授权的一次例外而非通用写能力。
+- **验证**：新增 `douyin-comment-port.spec.ts` 18 例（护栏拒绝分支 + 回执三态）、character-core 共用判定 4 例、CDP 会话端口 4 例、Electron 会话端口 1 例；新增 `douyin-cdp-comment-port.e2e.spec.ts` 1/1（本机回环仿真 CDP 端点，证明 `cdp-real` 下端口已注入）。**未向抖音发起任何真实评论**，不登录、不扫码、不碰验证码；`lastVerifiedAt` 保持 0。
+
+### Added（`V2-P3-04K` 抖音受限自动顶层评论，`IMPLEMENTED_UNVERIFIED`）
+
+- **授权边界**：owner 2026-11-27 明确要求沿用当前非日常账号对**他人公开视频**做有限自动顶层评论、无逐条审核，但所有发送内容与结果必须在本软件按日可查；[ADR-006](./docs/v2/adr/ADR-006-douyin-bounded-comments.md) 记录这次对 L1 只读红线的局部例外。仍不绕验证码/风控/登录墙、不新建账号、不写凭据、不自动合并分支。
+- **契约**：`packages/shared-protocol/src/social.ts` 新增评论设置（默认关闭、日/时/间隔/同视频冷却/静默时段/字数）、动作与失败类型、日快照、查询/历史/核验输入、模型输出 Schema；`comment_reply` 不再允许通过通用「人工已实测」接口伪造验证时间。
+- **执行器**：`packages/character-core/src/social-douyin.ts` 新增 `DouyinCommentExecutor`——浏览会话保持 `readonly`，浏览正常收官后独立执行；模型决定是否评论，确定性护栏拒绝导流/联系方式/最近重复；发送前先写 SQLite `pending` 并原子预留额度，落盘失败禁止点击；只有「评论区新增稳定数字 ID + 全文回读 + 重载仍在」才判 `sent`，点击后无可靠回执判 `uncertain` 且不自动重发；验证码/登录墙即停。
+- **持久化**：`apps/desktop-host/src/main/social-comment-ledger.ts` 用 `node:sqlite` 建 `social_comment_actions`，按账号隔离；启动时把残留 `pending` 转 `uncertain` 并保留额度。
+- **宿主与 UI**：`v2-kernel-host.ts` 接模型网关（复用 `MAIN_PERSONA_BRAIN` 与现有饭碗计量）、换设置/急停时按世代撤销在途模型与发送、3 路 IPC；生活页新增「抖音 · 有限自动评论」面板（总开关、未验证提示、暂停原因、首次真实单条核验、按日期 25 条分页查看原文/状态/原因/模型）。
+- **验证**：46 例单测、真实 Electron 本地仿真 E2E 1/1（16.99s）、主应用评论面板 E2E 1/1（12.85s，已进 CI）、真实构建主应用 UI/IPC 实测（默认关闭、开关不伪造实测、种入 `simulation-only` 记录可见）、`pnpm verify:gate` **8/8**。**未向抖音发起任何真实评论请求**，真实登录态 DOM 与平台发送仍待 `[REAL-DEVICE]`；证据 [P3-04K-douyin-bounded-comments-verification.md](./docs/v2/evidence/P3-04K-douyin-bounded-comments-verification.md)。
+- **参考复评留痕**：`REFERENCE-dsh-douyin-agent.md` 记录「公开评论超出第一阶段」被本次 owner 授权局部推翻，仅放开顶层评论；浏览器自动化链路与私信/好友互动仍不采用，弹幕主线仍为 dyhub。
+
 ### Changed / Fixed（抖音 CDP 四项补强，item 20 / P0-1，源自 31 仓审计）
 
 - **防后台节流**：`buildLaunchArgs` 追加 `--disable-backgrounding-occluded-windows`、`--disable-renderer-backgrounding`、`--disable-background-timer-throttling`，避免专用 Chrome 窗口被遮挡/后台化后停止绘制与计时器节流导致 feed 不 hydrate；**未**新增 `--disable-blink-features=AutomationControlled`、UA 覆盖或任何 stealth 参数（参考 `dsh-douyin-bridge/lib/browser.mjs:11-35`）。

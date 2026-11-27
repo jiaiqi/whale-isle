@@ -282,6 +282,10 @@ export async function createTrayHost(options: TrayHostOptions): Promise<TrayHost
     });
     win.on('blur', () => {
       if (destroying || options.isQuitting()) return;
+      // E2E/CI：没有真实系统 Tray，窗口焦点由运行器环境决定（同一份用例单独跑与混跑结果不同），
+      // 失焦自动隐藏会让「打开后可见」断言变成环境抽奖。测试模式只保留显式 hide，
+      // 失焦防抖语义仍由 createPopoverToggleGuard 的纯函数单测覆盖。
+      if (options.testMode) return;
       if (!win.isVisible()) return;
       win.hide();
       guard.markHidden(Date.now());
