@@ -8,6 +8,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerStageIpc } from './passthrough';
+import { installBootErrorRecorder, registerEarlyIpc } from './boot-ipc';
 import { createPetPacksProtocolHandler, PET_PACKS_SCHEME, readBundledAboutmePacks, readCrossPetCharacters, readCrossPetEggScripts, registerPetPacksIpc, resolvePetPacksDir } from './pet-packs';
 import { createEggTheater } from './egg-theater';
 import { decidePeakOutfit, isPeakOutfitFamily, resolvePeakPeriod, type PeakOutfitState } from './peak-schedule';
@@ -70,6 +71,9 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TEST_MODE = process.env.PET_STAGE_E2E === '1';
+// [E2E-HOST] 启动期 console.error 留档（原样转发 stderr，只多存一份到 globalThis），
+// 供 boot-ipc.e2e 断言「renderer 抢跑 → No handler registered」不再复现。生产环境不安装。
+if (TEST_MODE) installBootErrorRecorder();
 /**
  * [SIMULATION] 单桌宠链路 E2E：宿主指向测试进程里起的仿真 BWF（mock-harness 农场仿真），
  * 只在 `PET_STAGE_E2E=1` 时生效；不读也不写真实 Mods 配置，生产环境永远为 undefined。
@@ -341,6 +345,17 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     iconPath: brandAssetPath(BRAND_ASSETS.iconIcns),
   });
   registerStageIpc({ getWindow: () => stageWindow, testMode: TEST_MODE });
+  // V2-P2-10：pet:sleep-status 必须在中控台窗创建之前注册——中控台 renderer 首挂即调用
+  // （director/App.tsx），历史实现在 createDirectorWindow() 之后注册，冷启动在
+  // `await petWindowManager.open(...)` 让出事件循环时 renderer 跑赢 boot，报「No handler registered」。
+  // 只前移这一条：它只依赖模块级 asleepAgents + 惰性读取的 petWindowManager，无 TDZ 风险；
+  // 其余 pet:* handler 的闭包引用 boot 内后声明的 const（prefs/characters/petControl 等），
+  // 整组前移会在早期调用时撞 TDZ，因此保持原位。
+  registerEarlyIpc({
+    ipcMain,
+    asleepAgents,
+    listAgentIds: () => (petWindowManager?.list() ?? []).map((view) => view.agentId),
+  });
   // 随包素材（T-M6-45）：assets/pet-packs → 只读 whale-pet:// 协议；打包后取 Resources/pet-packs
   const petPacksRoot = resolvePetPacksDir({
     isPackaged: app.isPackaged,
@@ -1513,11 +1528,6 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       manager.sendAgent(view.agentId, 'pet:bench-sleep', { asleep: Boolean(asleep) });
     }
     return { ok: true, asleep: Boolean(asleep), count: list.length };
-  });
-  ipcMain.handle('pet:sleep-status', () => {
-    const list = petWindowManager?.list() ?? [];
-    const sleeping = list.filter((view) => asleepAgents.has(view.agentId)).length;
-    return { ok: true, asleep: sleeping > 0, count: sleeping };
   });
   ipcMain.handle('pet:dock-all', () => {
     const manager = petWindowManager;

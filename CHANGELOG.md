@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Fixed（`V2-P2-10` 启动期 `pet:sleep-status` IPC 注册竞态）
+
+- **竞态**：`apps/desktop-host/src/main/index.ts` 先 `createDirectorWindow()`、再在 `await petWindowManager.open(...)` 之后注册 `ipcMain.handle('pet:sleep-status')`，而中控台 renderer 首挂即调用 `petSleepStatus()`，冷启动会跑赢 boot 报 `No handler registered`。现把这一条注册前移到 boot 顶部（与 `test:tray-popover` 同一模式，抽出 `registerEarlyIpc()` + 纯函数 `computeSleepStatus()`）；不加重试、不整组前移（其余 `pet:*` handler 闭包引用 boot 内后声明的 `const`，会撞 TDZ）。
+- **影响面纠正**：冷启动 `asleepAgents` 为空、`interaction.asleep` 初值 false 且无睡眠态持久化，`asleep:false` 本就是正确答案——真实影响只有一条主进程 stderr 日志 + 丢失一次读取机会，不改产品行为。
+- **验证**：`boot-ipc.spec.ts` 5/5；新增 `boot-ipc.e2e.spec.ts`（真实 Electron 冷启动，`[E2E-HOST]`），直接调用返回 `{ ok: true, asleep: false, count: 0 }` 且启动期 `console.error` 留档无该错误；把早期注册临时回退时该 E2E 稳定复现 `Error invoking remote method 'pet:sleep-status': ... No handler registered`。`pnpm verify:gate` 结果见 PR。
+
 ### Added（内部开发预览构建 `0.2.0-dev.2`，`V2-P4-05`）
 
 - **原生 helper 随包**：`whale-input-helper` / `whale-audio-helper` 改为预编译产物随包分发（`Contents/Resources/native/darwin-arm64/` + `sha256.json`），安装态不再依赖仓库 `tools/native/*.swift`，也不要求用户机器装 Xcode Command Line Tools；源码编译保留为开发态回退。随包目录存在但二进制缺失 / 清单损坏 / 哈希不符 / 不可执行时 **fail-closed**，不回退编译、不冒充成功；`electron-builder` 的 `beforePack` 钩子在打包前再次校验，缺产物直接中断打包。新增 `build:native-helpers` 脚本（`swiftc -O -target <arch>-apple-macos12.0`）与 `native-helper-bundle.ts` 统一解析层；启动日志打印 helper 来源（`prebuilt` / `compiled` / `cache`）或不可用原因。
