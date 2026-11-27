@@ -14,6 +14,7 @@
 | C# / Lua 模组 | `dotnet build` / `luac -p` 属编译期证据，**不等于**游戏内加载与游玩通过。 |
 | 直播 / 插件 / OBS / 点歌 | `LiveEventHub`、`plugin-kit` 等目前仅在包与测试中存在，**未接入 desktop-host 生产收流路径**；界面存在不代表能力可用。 |
 | 语音 | 桌面主路径为 macOS `mcode-tools → say → afplay`；`audio-ai-worker` 的合成仍含 stub；Windows 语音明确未适配。 |
+| 门禁失败留档（2026-11-27） | `pnpm verify:gate` 失败时**必须**留下「哪道 gate 败 + 未截断原始输出」：脚本自动写 `.verify-gate/failure-<stamp>.log`（gitignored），终端同时打印失败 gate 名与日志路径。**重试通过不代表该次失败没发生**——报告里要如实写「第一次 7/8、随后两次 8/8、原因未定位」。由来：一次 pre-commit 出现 7 过/1 败但终端只留尾部，无法定位。 |
 | SQLite 引擎（2026-11-24） | 友谊/小本子表改用 Electron/Node 内置 `node:sqlite`（Electron 45 = Node 24.22），避免 better-sqlite3 原生模块 ABI 重编译；常客账本/Token 流水/点歌缓存仍用 better-sqlite3。两者都是标准 SQLite，语义一致。 |
 
 ## 状态总览（按里程碑）

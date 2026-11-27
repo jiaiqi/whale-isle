@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Changed（verify:gate 失败必留档：哪道 gate 败 + 未截断原始输出）
+
+- `tools/scripts/verify-gate.mjs`：所有外部命令统一走 `run()` 录制原始 stdout/stderr；失败时写 `.verify-gate/failure-<stamp>.log`（含各 gate 结论与该次全部命令输出），终端打印失败 gate 名与日志路径；`.verify-gate/` 已 gitignore。
+- 由来：2026-11-27 一次 pre-commit 出现 7 过 / 1 败，终端只留下尾部无法定位；重试通过不能当作没发生过。已用注入式自检验证失败路径（日志含 9 道结论 + 16 段原始输出），自检后恢复脚本并删除测试日志。
+- 口径写进 `docs/VERIFY.md` 顶部「验证口径修订」表。
+
 ### Changed（owner 2026-11-27 拍板：放弃自托管语音，唱歌链路不受影响）
 
 - **说话语音**定为「开发期 MiMo 主线（限免、无商用条款）+ 长期商业授权 TTS」；「自托管优先 / 本机可跑通」不再作为目标（依据替代引擎速评 `b9d2632`，本机全部不过）。

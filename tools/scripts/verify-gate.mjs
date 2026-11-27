@@ -17,12 +17,32 @@
  * 注意：本脚本自身包含检测规则字面量，已被排除在扫描范围之外。
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SELF = fileURLToPath(import.meta.url);
+
+/**
+ * 所有外部命令统一走这里：失败时要把**原始输出**留档。
+ * 2026-11-27 起：pre-commit 曾出现一次 7/8，但终端只留了尾部、看不出是哪道 gate；
+ * 重试通过不能当作「没发生过」，因此失败时写 `.verify-gate/failure-<stamp>.log`（gitignored）。
+ */
+const rawLog = [];
+function run(cmd, args, options = {}, label = cmd) {
+  const result = spawnSync(cmd, args, options);
+  rawLog.push({
+    label,
+    cmd: [cmd, ...args].join(' '),
+    status: result.status,
+    signal: result.signal ?? null,
+    error: result.error === undefined ? null : result.error.message,
+    stdout: typeof result.stdout === 'string' ? result.stdout : '',
+    stderr: typeof result.stderr === 'string' ? result.stderr : '',
+  });
+  return result;
+}
 const SCAN_DIRS = ['packages', 'apps', 'services', 'tools', 'mods'];
 const SKIP_DIR_NAMES = new Set([
   'node_modules', 'dist', 'build', 'coverage', '.git', '.venv', '__pycache__',
@@ -91,8 +111,8 @@ console.log('│ pnpm verify:gate — 四道自动化准入门禁               
 console.log('╰──────────────────────────────────────────────────────────╯');
 
 // ---- Gate 1：类型编译 + dependency-cruiser 架构边界 ----
-const tsc = spawnSync('pnpm', ['typecheck'], { cwd: ROOT, encoding: 'utf8' });
-const depcruise = spawnSync('pnpm', ['lint:deps'], { cwd: ROOT, encoding: 'utf8' });
+const tsc = run('pnpm', ['typecheck'], { cwd: ROOT, encoding: 'utf8' });
+const depcruise = run('pnpm', ['lint:deps'], { cwd: ROOT, encoding: 'utf8' });
 const gate1Errors = [];
 let gate1Detail = null;
 if (tsc.error) {
@@ -114,14 +134,14 @@ if (gate1Errors.length === 0) {
 
 // ---- Gate 1 补充：Python 契约模型（ruff + mypy --strict；uv 缺失或未生成时 SKIP 并明示） ----
 const PY_MODEL = join(ROOT, 'services', 'audio-ai-worker', 'protocol_models.py');
-const uvProbe = spawnSync('uv', ['--version'], { encoding: 'utf8' });
+const uvProbe = run('uv', ['--version'], { encoding: 'utf8' });
 if (gate1Detail !== null) {
   if (!existsSync(PY_MODEL)) {
     gate('Gate 1 类型与边界(Python)', 'SKIP', 'protocol_models.py 尚未生成（pnpm gen:contracts）');
   } else if (uvProbe.error || uvProbe.status !== 0) {
     gate('Gate 1 类型与边界(Python)', 'SKIP', 'uv 未安装，无法校验 Python 契约模型（安装 uv 后重跑）');
   } else {
-    const pyType = spawnSync('pnpm', ['py:type'], { cwd: ROOT, encoding: 'utf8' });
+    const pyType = run('pnpm', ['py:type'], { cwd: ROOT, encoding: 'utf8' });
     if (pyType.status === 0) {
       gate('Gate 1 类型与边界(Python)', 'PASS', 'ruff 全绿 + mypy --strict 通过（生成物 assignment 豁免见 mypy.ini 注释）');
     } else {
@@ -133,7 +153,7 @@ if (gate1Detail !== null) {
 // ---- Gate 1 补充：渲染层打包护栏（2026-11-27 owner 批准「加，必过」） ----
 // 由来：分支曾坏了一整天无人发现——director 包把 node:* 模块拖进浏览器包构建失败，但本地跑的是旧 dist，
 // verify:gate 又不含 build，于是门禁全绿。构建挂 = gate 不过，防止「旧产物掩盖坏源码」再次发生。
-const build = spawnSync('pnpm', ['--filter', '@workbench/desktop-host', 'build'], { cwd: ROOT, encoding: 'utf8' });
+const build = run('pnpm', ['--filter', '@workbench/desktop-host', 'build'], { cwd: ROOT, encoding: 'utf8' });
 if (build.error) {
   gate('Gate 1 打包护栏', 'FAIL', `无法启动 desktop-host build：${build.error.message}`);
 } else if (build.status !== 0) {
@@ -145,7 +165,7 @@ if (build.error) {
 // ---- Gate 2：许可证台账 + 密钥/禁源扫描（T-M0-04 起委托 tools/mock-harness 独立扫描器） ----
 const scannerPath = join(ROOT, 'tools', 'mock-harness', 'src', 'license-scanner.mjs');
 if (existsSync(scannerPath)) {
-  const scan = spawnSync('node', [scannerPath, ROOT], { cwd: ROOT, encoding: 'utf8' });
+  const scan = run('node', [scannerPath, ROOT], { cwd: ROOT, encoding: 'utf8' });
   const detail = truncate(`${scan.stdout ?? ''}\n${scan.stderr ?? ''}`);
   gate('Gate 2 许可证与密钥', scan.status === 0 ? 'PASS' : 'FAIL', detail);
 } else {
@@ -154,7 +174,7 @@ if (existsSync(scannerPath)) {
 
 // ---- Gate 2 补充：依赖漏洞（high/critical；离线/超时 SKIP，避免把网络问题伪装成代码问题） ----
 {
-  const audit = spawnSync('pnpm', ['audit', '--audit-level', 'high'], {
+  const audit = run('pnpm', ['audit', '--audit-level', 'high'], {
     cwd: ROOT,
     encoding: 'utf8',
     timeout: 120_000,
@@ -174,7 +194,7 @@ if (existsSync(scannerPath)) {
 
 // ---- Gate 2 补充：DST Lua 语法（luac -p；未安装 luac 时 SKIP 并明示） ----
 {
-  const luacProbe = spawnSync('luac', ['-v'], { encoding: 'utf8' });
+  const luacProbe = run('luac', ['-v'], { encoding: 'utf8' });
   if (luacProbe.error || luacProbe.status !== 0) {
     gate('Gate 2 DST Lua 语法', 'SKIP', '未安装 luac（Lua 编译器），跳过；CI ubuntu 会安装 lua5.4 强制执行');
   } else {
@@ -192,7 +212,7 @@ if (existsSync(scannerPath)) {
     collectLua(luaRoot);
     const failures = [];
     for (const file of luaFiles) {
-      const check = spawnSync('luac', ['-p', file], { encoding: 'utf8' });
+      const check = run('luac', ['-p', file], { encoding: 'utf8' });
       if (check.status !== 0) failures.push(`${file}\n${truncate(`${check.stdout}\n${check.stderr}`, 4)}`);
     }
     if (luaFiles.length === 0) gate('Gate 2 DST Lua 语法', 'FAIL', 'mods/dst-bridge 下未找到 .lua 文件');
@@ -202,7 +222,7 @@ if (existsSync(scannerPath)) {
 }
 
 // ---- Gate 3：确定性单测（TS vitest + Python pytest；覆盖率门槛随 T-M0-03 起逐包生效） ----
-const vitest = spawnSync('pnpm', ['test'], { cwd: ROOT, encoding: 'utf8' });
+const vitest = run('pnpm', ['test'], { cwd: ROOT, encoding: 'utf8' });
 const gate3Notes = [];
 let gate3Ok = true;
 if (vitest.error) {
@@ -214,7 +234,7 @@ if (vitest.error) {
 }
 let gate3Label = 'vitest 全绿';
 if (gate3Ok && existsSync(PY_MODEL) && !(uvProbe.error || uvProbe.status !== 0)) {
-  const pytest = spawnSync('pnpm', ['py:test'], { cwd: ROOT, encoding: 'utf8' });
+  const pytest = run('pnpm', ['py:test'], { cwd: ROOT, encoding: 'utf8' });
   if (pytest.status !== 0) {
     gate3Ok = false;
     gate3Notes.push(truncate(`${pytest.stdout}\n${pytest.stderr}`));
@@ -238,7 +258,7 @@ gate(
 
 // ---- Gate 4：回环契约 E2E（[SIMULATION] 测试内组合：雷区 → 喷水 → 语音锁(假适配器) → SQLite(:memory:) 账本；不是生产端到端） ----
 const e2eStarted = Date.now();
-const e2e = spawnSync(
+const e2e = run(
   'pnpm',
   ['exec', 'vitest', 'run', '--config', 'vitest.e2e.config.mts', 'apps/desktop-host/e2e/gate4-loopback.spec.ts'],
   { cwd: ROOT, encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' } },
@@ -266,7 +286,34 @@ const skipped = gates.filter((g) => g.status === 'SKIP').length;
 const pending = gates.filter((g) => g.status === 'PENDING').length;
 
 if (failed.length > 0) {
+  const logDir = join(ROOT, '.verify-gate');
+  mkdirSync(logDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const logPath = join(logDir, `failure-${stamp}.log`);
+  const failedNames = failed.map((g) => g.name).join(' / ');
+  const body = [
+    `verify:gate 失败 @ ${new Date().toISOString()}`,
+    `失败 gate：${failedNames}`,
+    `node ${process.version} · ${process.platform} ${process.arch} · cwd ${ROOT}`,
+    '',
+    '== 各 gate 结论 ==',
+    ...gates.map((g) => `[${g.status}] ${g.name}\n${g.detail}`),
+    '',
+    '== 原始命令输出（未截断，按执行顺序）==',
+    ...rawLog.map((r) => [
+      `--- ${r.label} :: ${r.cmd}`,
+      `status=${String(r.status)} signal=${String(r.signal)} error=${String(r.error)}`,
+      '[stdout]',
+      r.stdout,
+      '[stderr]',
+      r.stderr,
+    ].join('\n')),
+    '',
+  ].join('\n');
+  writeFileSync(logPath, body, 'utf8');
   console.log(`❌ verify:gate 未通过：${passed} 过 / ${failed.length} 败 / ${skipped} 跳过 / ${pending} 待接线（工单不得标记 DONE）`);
+  console.log(`   失败 gate：${failedNames}`);
+  console.log(`   原始输出已留档：${logPath}（.verify-gate/ 已 gitignore；重试通过不代表该次失败没发生）`);
   process.exit(1);
 }
 console.log(`✅ verify:gate 通过：${passed} 过 / ${skipped} 跳过 / ${pending} 待接线`);
