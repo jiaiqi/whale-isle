@@ -88,6 +88,61 @@ export const LiveObsDanmakuItemSchema = z.object({
 });
 export type LiveObsDanmakuItem = z.output<typeof LiveObsDanmakuItemSchema>;
 
+/** 规则只描述确定性条件；giftValue 是该事件合计币值，数量字段都是增量，禁止传累计快照。 */
+export const LiveEngagementRuleSchema = z.object({
+  id: z.string().min(1).max(48),
+  enabled: z.boolean().default(true),
+  trigger: z.enum(['follow', 'gift', 'like_goal']),
+  minGiftValue: z.number().min(0).max(1_000_000).default(0),
+  cooldownMs: z.number().int().min(1000).max(86_400_000).default(120_000),
+  action: z.discriminatedUnion('type', [
+    z.object({ type: z.literal('bubble'), text: z.string().trim().min(1).max(120) }),
+    z.object({ type: z.literal('song_request'), title: z.string().trim().min(1).max(120) }),
+  ]),
+});
+export type LiveEngagementRule = z.output<typeof LiveEngagementRuleSchema>;
+
+export const LiveEngagementConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  showRules: z.boolean().default(true),
+  showLikeGoal: z.boolean().default(true),
+  showLeaderboard: z.boolean().default(true),
+  likeGoal: z.number().int().min(1).max(1_000_000_000).default(15_000),
+  /** 0 = 每场重置；非零 = 从开播时起按固定周期重置点赞，榜单仍按场次。 */
+  resetAfterMs: z.number().int().min(0).max(86_400_000).refine((value) => value === 0 || value >= 60_000, '重置周期至少一分钟，或设为 0 表示每场重置').default(0),
+  globalCooldownMs: z.number().int().min(1000).max(300_000).default(5000),
+  leaderboardMetric: z.enum(['count', 'value']).default('count'),
+  topN: z.number().int().min(1).max(10).default(5),
+  rules: z.array(LiveEngagementRuleSchema).max(12).default([
+    { id: 'welcome', enabled: true, trigger: 'follow', minGiftValue: 0, cooldownMs: 120_000, action: { type: 'bubble', text: '欢迎新朋友！一起看看今天的节目吧。' } },
+    { id: 'gift-thanks', enabled: true, trigger: 'gift', minGiftValue: 0, cooldownMs: 120_000, action: { type: 'bubble', text: '收到这份心意啦，谢谢你的支持！' } },
+    { id: 'like-celebration', enabled: true, trigger: 'like_goal', minGiftValue: 0, cooldownMs: 120_000, action: { type: 'bubble', text: '今天的点赞目标达成，送上小鲸的感谢！' } },
+  ]).refine((rules) => new Set(rules.map((rule) => rule.id)).size === rules.length, '规则 id 不可重复'),
+});
+export type LiveEngagementConfig = z.output<typeof LiveEngagementConfigSchema>;
+
+export const LiveEngagementActionSchema = z.object({
+  eventId: z.string(), ruleId: z.string(), at: z.number().nonnegative(),
+  action: LiveEngagementRuleSchema.shape.action,
+});
+export type LiveEngagementAction = z.output<typeof LiveEngagementActionSchema>;
+
+export const LiveEngagementSnapshotSchema = z.object({
+  config: LiveEngagementConfigSchema,
+  ruleCards: z.array(z.object({ id: z.string(), text: z.string() })),
+  likes: z.number().int().nonnegative(),
+  goalReached: z.boolean(),
+  cycleStartedAt: z.number().nonnegative(),
+  leaderboard: z.array(z.object({
+    rank: z.number().int().positive(), uid: z.string(), nickname: z.string(),
+    count: z.number().int().nonnegative(), value: z.number().nonnegative(),
+  })),
+  latestAction: LiveEngagementActionSchema.nullable(),
+  /** 榜单容量达到 10000 后不接受新用户，保留现有用户累计并如实提示。 */
+  leaderboardLimited: z.boolean().default(false),
+});
+export type LiveEngagementSnapshot = z.output<typeof LiveEngagementSnapshotSchema>;
+
 export const LiveObsStagePayloadSchema = z.object({
   liveActive: z.boolean(),
   sessionId: z.string().nullable(),
@@ -101,6 +156,7 @@ export const LiveObsStagePayloadSchema = z.object({
   lyrics: LyricsClockFrameSchema.nullable(),
   recentDanmaku: z.array(LiveObsDanmakuItemSchema).default([]),
   recentGifts: z.array(LiveGiftThankBatchSchema).default([]),
+  engagement: LiveEngagementSnapshotSchema.optional(),
   moderationAlerts: z.number().int().nonnegative().default(0),
   realPlatformVerified: z.boolean().default(false),
 });

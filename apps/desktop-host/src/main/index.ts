@@ -392,6 +392,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   void modsHost;
   // 桌宠角色注册表（T-M6-21）：内置 + userData 自定义角色，切换落 PetDesktopPrefs（单点事实源）
   const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'), (prev, next) => {
+    v2KernelHost.liveRuntime.engagement.configure(next.liveEngagement);
     if (prev.shortcutHideEnabled !== next.shortcutHideEnabled) registerShortcut();
     // T-M6-63：气泡字号/显示层级等全局字段必须广播给所有桌宠窗（不依赖 default 窗口是否已创建）
     for (const target of petBrowserWindows.values()) {
@@ -411,6 +412,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       petWindowManager?.setPosition('default', next.position);
     }
   }));
+  v2KernelHost.liveRuntime.engagement.configure(prefs.get().liveEngagement);
   /**
    * 全局角色切换（唯一实现）：写 prefs → 同步 persona → 只改 default 主桌宠 → 广播。
    * 工作跟随「单宠换装」复用此函数，绝不关闭 default（T-M6-51 P0）。
@@ -1128,6 +1130,12 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     const win = petBrowserWindows.get('default');
     if (win && !win.isDestroyed()) win.webContents.send('pet:bubble', { agentId: 'default', text, kind: 'thought' });
   };
+  const stopEngagement = v2KernelHost.liveRuntime.subscribeEngagement((event) => {
+    // 第一切片只投影短气泡，不夺取语音锁、不改游戏动作/活动态；繁忙或睡眠时留在 OBS 呈现。
+    if (event.action.type !== 'bubble' || autodrive.runner.isRunning() || asleepAgents.has('default')) return;
+    petBubbleToDefault(event.action.text);
+  });
+  app.on('will-quit', stopEngagement);
   v2KernelHost.kernel.events.subscribe('social.session.started', () => {
     petBubbleToDefault('我去看看大家最近在聊什么～');
   });
@@ -1398,6 +1406,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         running: autodrive.runner.isRunning(),
         brainMode: autodrive.getBrainMode().mode,
         characterName: characters.selected().displayName,
+        liveStage: v2KernelHost.liveRuntime.obsStageSnapshot(),
         memoryStats: { nodes: memory.store.size, edges: memory.store.allEdges().length },
         voice: {
           enabled: voice.config.enabled,

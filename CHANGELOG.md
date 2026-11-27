@@ -11,6 +11,13 @@
 - **影响面纠正**：冷启动 `asleepAgents` 为空、`interaction.asleep` 初值 false 且无睡眠态持久化，`asleep:false` 本就是正确答案——真实影响只有一条主进程 stderr 日志 + 丢失一次读取机会，不改产品行为。
 - **验证**：`boot-ipc.spec.ts` 5/5；新增 `boot-ipc.e2e.spec.ts`（真实 Electron 冷启动，`[E2E-HOST]`），直接调用返回 `{ ok: true, asleep: false, count: 0 }` 且启动期 `console.error` 留档无该错误；把早期注册临时回退时该 E2E 稳定复现 `Error invoking remote method 'pet:sleep-status': ... No handler registered`。`pnpm verify:gate` 结果见 PR。
 
+### Added / Fixed（V2-P3-02A 直播互动第一切片）
+
+- OBS `/obs` 新增确定性规则卡、点赞目标进度与按礼物份数/币值排列的 Top N 投喂榜，实时读取 `LiveRuntimeV2`；无礼物显示空状态，同分同名次，标价不冒充到账。
+- 中控台「生活 → 直播互动编排」支持总开关、三组件开关、点赞目标与重置周期、榜单口径/人数、冷却以及气泡/点歌请求配置；复用 `pet:prefs-*` 落 `userData/pet-desktop-prefs.json.liveEngagement`，默认关闭、点赞目标 15000、每场重置、份数榜 Top 5、同人冷却 120 秒、全局间隔 5 秒。
+- 兼容新增 `FOLLOW` 和点赞/礼物正增量数量字段；进房不触发关注规则，点赞不再计入关注感谢。规则经去重、同人冷却与全局节流，阈值本周期每条至多触发一次；点歌仍过四重版权门禁，仅排队不自动真唱；气泡不抢语音/游戏动作，睡眠与自驾繁忙时只留 OBS。
+- 新增 12 项编排单测和隔离 Electron `/obs` 全链路 E2E，加入 macOS CI；专项 90/90、Electron 1/1、完整门禁修复后 8/8。首次门禁 7/8 的兼容失败及两次 E2E 失败均保留原始日志，详见 [验证证据](./docs/v2/evidence/P3-02A-live-engagement-verification.md)；真实平台/OBS 实播未验，状态 `IMPLEMENTED_UNVERIFIED`。
+
 ### Added（内部开发预览构建 `0.2.0-dev.2`，`V2-P4-05`）
 
 - **原生 helper 随包**：`whale-input-helper` / `whale-audio-helper` 改为预编译产物随包分发（`Contents/Resources/native/darwin-arm64/` + `sha256.json`），安装态不再依赖仓库 `tools/native/*.swift`，也不要求用户机器装 Xcode Command Line Tools；源码编译保留为开发态回退。随包目录存在但二进制缺失 / 清单损坏 / 哈希不符 / 不可执行时 **fail-closed**，不回退编译、不冒充成功；`electron-builder` 的 `beforePack` 钩子在打包前再次校验，缺产物直接中断打包。新增 `build:native-helpers` 脚本（`swiftc -O -target <arch>-apple-macos12.0`）与 `native-helper-bundle.ts` 统一解析层；启动日志打印 helper 来源（`prebuilt` / `compiled` / `cache`）或不可用原因。

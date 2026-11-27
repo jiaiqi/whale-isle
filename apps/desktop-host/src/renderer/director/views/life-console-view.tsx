@@ -8,6 +8,7 @@
  *   - P2/P3 未实现能力以 StageBadge 诚实标注阶段状态，不放假按钮
  */
 import { useCallback, useEffect, useState } from 'react';
+import { LiveEngagementConfigSchema, type LiveEngagementConfig } from '@workbench/shared-protocol';
 import { toast } from 'sonner';
 import {
   Activity,
@@ -111,6 +112,89 @@ function formatQuotaMetric(report: ProviderQuotaReport): string {
     else if (w.usedPercent !== null) parts.push(`${w.label}: 已用 ${w.usedPercent}%`);
   }
   return parts.length > 0 ? parts.join(' · ') : report.summary;
+}
+
+function LiveEngagementSettings(): React.JSX.Element {
+  const [draft, setDraft] = useState<LiveEngagementConfig | null>(null);
+  const [state, setState] = useState<LiveRuntimeSnapshot | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    let disposed = false;
+    void window.directorBridge.prefsGet().then((prefs) => {
+      if (!disposed) setDraft(LiveEngagementConfigSchema.parse(prefs.liveEngagement));
+    }).catch(() => { if (!disposed) setMessage('配置读取失败，请重新进入本页。'); });
+    const refresh = (): void => {
+      void window.directorBridge.v2LiveSnapshot().then((snapshot) => { if (!disposed) setState(snapshot); })
+        .catch(() => { if (!disposed) setState(null); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1500);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, []);
+  if (!draft) return <p role="status">{message || '正在读取直播互动设置…'}</p>;
+  const patch = (update: Partial<LiveEngagementConfig>): void => { setDraft({ ...draft, ...update }); setMessage(''); };
+  const validation = LiveEngagementConfigSchema.safeParse(draft);
+  const progress = state?.obsStage.engagement;
+  const save = async (): Promise<void> => {
+    if (!validation.success) return;
+    setSaving(true);
+    try {
+      await window.directorBridge.prefsSet({ liveEngagement: validation.data });
+      const stored = LiveEngagementConfigSchema.parse((await window.directorBridge.prefsGet()).liveEngagement);
+      if (JSON.stringify(stored) !== JSON.stringify(validation.data)) throw new Error('设置未保存，请检查输入后重试');
+      setState(await window.directorBridge.v2LiveSnapshot());
+      setMessage('已保存，本场立即生效；进度与冷却保持。');
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setSaving(false); }
+  };
+  return (
+    <section className="inset space-y-3 p-3 text-xs" data-live-engagement-settings>
+      <h3 className="text-sm font-semibold">直播互动编排</h3>
+      <p style={{ color: 'var(--text-2)' }}>默认关闭。只消费本场关注、礼物与点赞事件；气泡不抢语音，点歌须过版权门禁，当前切片不自动真唱。</p>
+      <label className="flex min-h-8 items-center gap-2"><input type="checkbox" data-engagement-enabled checked={draft.enabled} onChange={(e) => patch({ enabled: e.target.checked })} />启用互动规则与 OBS 挂件</label>
+      <div className="flex flex-wrap gap-3">
+        {([['showRules', '规则卡'], ['showLikeGoal', '点赞进度'], ['showLeaderboard', '投喂榜']] as const).map(([field, text]) => (
+          <label key={field} className="flex min-h-8 items-center gap-2"><input type="checkbox" checked={draft[field]} onChange={(e) => patch({ [field]: e.target.checked })} />{text}</label>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="space-y-1">点赞目标<input className="input w-full" type="number" min="1" max="1000000000" data-engagement-goal value={draft.likeGoal} onChange={(e) => patch({ likeGoal: e.target.valueAsNumber })} /></label>
+        <label className="space-y-1">点赞重置周期<select className="input w-full" value={draft.resetAfterMs} onChange={(e) => patch({ resetAfterMs: Number(e.target.value) })}><option value="0">每场重置</option><option value="3600000">每小时</option><option value="86400000">每 24 小时</option></select></label>
+        <label className="space-y-1">投喂榜口径<select className="input w-full" data-engagement-metric value={draft.leaderboardMetric} onChange={(e) => patch({ leaderboardMetric: e.target.value === 'value' ? 'value' : 'count' })}><option value="count">份心意（礼物份数）</option><option value="value">币值（事件合计标价）</option></select></label>
+        <label className="space-y-1">榜单人数<input className="input w-full" type="number" min="1" max="10" value={draft.topN} onChange={(e) => patch({ topN: e.target.valueAsNumber })} /></label>
+        <label className="space-y-1">全局最短间隔（秒）<input className="input w-full" type="number" min="1" max="300" value={draft.globalCooldownMs / 1000} onChange={(e) => patch({ globalCooldownMs: e.target.valueAsNumber * 1000 })} /></label>
+      </div>
+      <details>
+        <summary className="cursor-pointer py-2">编辑触发规则与表演</summary>
+        <div className="space-y-3">
+          {draft.rules.map((rule, index) => {
+            const updateRule = (update: Partial<typeof rule>): void => patch({ rules: draft.rules.map((item, i) => i === index ? { ...item, ...update } : item) });
+            return <fieldset key={rule.id} className="space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--stroke)' }}>
+              <legend>{rule.trigger === 'follow' ? '关注' : rule.trigger === 'gift' ? '礼物' : '点赞目标'}</legend>
+              <label className="flex min-h-8 items-center gap-2"><input type="checkbox" checked={rule.enabled} onChange={(e) => updateRule({ enabled: e.target.checked })} />启用此规则</label>
+              {rule.trigger === 'gift' && <label className="block">单次合计币值下限（0 = 任意礼物）<input className="input w-full" type="number" min="0" max="1000000" value={rule.minGiftValue} onChange={(e) => updateRule({ minGiftValue: e.target.valueAsNumber })} /></label>}
+              <label className="block">同人冷却（秒）<input className="input w-full" type="number" min="1" max="86400" value={rule.cooldownMs / 1000} onChange={(e) => updateRule({ cooldownMs: e.target.valueAsNumber * 1000 })} /></label>
+              <label className="block">表演类型<select className="input w-full" value={rule.action.type} onChange={(e) => updateRule({ action: e.target.value === 'song_request' ? { type: 'song_request', title: '小鲸原创欢迎曲' } : { type: 'bubble', text: '谢谢大家的陪伴！' } })}><option value="bubble">感谢气泡</option><option value="song_request">提交点歌请求（须授权）</option></select></label>
+              <label className="block">{rule.action.type === 'bubble' ? '气泡台词' : '点歌曲名'}<input className="input w-full" maxLength={120} value={rule.action.type === 'bubble' ? rule.action.text : rule.action.title} onChange={(e) => updateRule({ action: rule.action.type === 'bubble' ? { type: 'bubble', text: e.target.value } : { type: 'song_request', title: e.target.value } })} /></label>
+            </fieldset>;
+          })}
+        </div>
+      </details>
+      <p style={{ color: 'var(--text-2)' }}>使用确定性规则文案；请勿填写概率诱导、抽奖、未成年人消费或刷量引导内容。币值为事件标价，不是结算到账。</p>
+      {!validation.success && <p role="alert">配置无效：{validation.error.issues[0]?.message}</p>}
+      <button type="button" className="btn-pill primary" data-engagement-save disabled={saving || !validation.success} onClick={() => void save()}>{saving ? '保存中…' : '保存互动设置'}</button>
+      <p role="status">{message}</p>
+      {progress && <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--stroke)' }} data-engagement-preview>
+        <p>{state?.active ? state.adapter.platform === 'local_replay' ? '[SIMULATION] 本地回放' : '本场事件' : '未开播'} · {progress.config.enabled ? '互动已启用' : '互动已关闭'}</p>
+        <p className="mono">点赞 {progress.likes.toLocaleString()} / {progress.config.likeGoal.toLocaleString()} {progress.goalReached ? '· 目标已达成' : ''}</p>
+        <progress aria-label="本周期点赞进度" value={Math.min(progress.likes, progress.config.likeGoal)} max={progress.config.likeGoal} style={{ width: '100%', accentColor: 'var(--accent)' }} />
+        <ul className="space-y-1">{progress.ruleCards.map((rule) => <li key={rule.id}>{rule.text}</li>)}</ul>
+        <p>投喂榜：{progress.leaderboard.length ? progress.leaderboard.map((donor) => `${donor.rank}. ${donor.nickname} ${donor[progress.config.leaderboardMetric]}${progress.config.leaderboardMetric === 'count' ? '份' : '币'}`).join('；') : '尚无礼物事件'}</p>
+        <p style={{ color: 'var(--text-2)' }}>OBS 页面沿用「OBS 透明挂件 → 复制 OBS 源地址」，三张卡在开播且启用后可见。</p>
+      </div>}
+    </section>
+  );
 }
 
 export function LifeConsoleView({
@@ -1065,6 +1149,7 @@ export function LifeConsoleView({
             )}
           </div>
 
+          <LiveEngagementSettings />
           <div className="inset space-y-2 p-3 text-[11.5px]" data-v2-live-section>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold" style={{ color: 'var(--text-1)' }}>

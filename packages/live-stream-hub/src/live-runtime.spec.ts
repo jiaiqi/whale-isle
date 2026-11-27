@@ -178,7 +178,7 @@ describe('[SIMULATION] V2-P3-02 LiveRuntimeV2 直播中控、版权门禁与 OBS
       multiRuntime.ingestEvent({
         eventId: randomUUID(),
         platform: 'douyin',
-        eventType: 'LIKE',
+        eventType: 'FOLLOW',
         sender: { uid: `mf-${g}`, nickname: `粉${g}`, intimacyScore: 1, grudgeTags: [] },
         payload: { mergedCount: 1 },
         assignedPriority: 'P2_IDLE',
@@ -193,7 +193,7 @@ describe('[SIMULATION] V2-P3-02 LiveRuntimeV2 直播中控、版权门禁与 OBS
       fourPeopleRuntime.ingestEvent({
         eventId: randomUUID(),
         platform: 'douyin',
-        eventType: 'LIKE',
+        eventType: 'FOLLOW',
         sender: { uid: `mf4-${i}`, nickname: `四位${i}`, intimacyScore: 1, grudgeTags: [] },
         payload: { mergedCount: 1 },
         assignedPriority: 'P2_IDLE',

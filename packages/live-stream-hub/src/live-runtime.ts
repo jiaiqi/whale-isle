@@ -32,6 +32,8 @@ import {
   type SongRightsInput,
 } from '@workbench/shared-protocol';
 import { LiveEventHub, type IngestOutcome } from './hub';
+import { LiveEngagement } from './engagement';
+import type { LiveEngagementAction } from '@workbench/shared-protocol';
 
 function isLivestreamScopeAllowed(scope: SongLicenseScope): boolean {
   return scope === 'original_owned' || scope === 'licensed_livestream' || scope === 'licensed_commercial';
@@ -153,10 +155,19 @@ interface GiftBufferEntry {
   uid: string;
   nickname: string;
   value: number;
+  count: number;
+  platform: string;
 }
 
 export class LiveRuntimeV2 {
   readonly hub: LiveEventHub;
+  readonly engagement = new LiveEngagement();
+  private readonly engagementListeners = new Set<(action: LiveEngagementAction) => void>();
+
+  subscribeEngagement(listener: (action: LiveEngagementAction) => void): () => void {
+    this.engagementListeners.add(listener);
+    return () => { this.engagementListeners.delete(listener); };
+  }
   private readonly characterId: string;
   private readonly fetchImpl: typeof fetch | undefined;
   private readonly giftBatchThreshold: number;
@@ -237,6 +248,7 @@ export class LiveRuntimeV2 {
     this.sessionId = `live-${randomUUID().slice(0, 8)}`;
     this.active = true;
     this.startedAt = this.now();
+    this.engagement.reset(this.startedAt);
     this.sceneId = input.sceneId ?? 'obs-live-stage';
     this.adapter = probe;
     this.songQueue = [];
@@ -302,6 +314,23 @@ export class LiveRuntimeV2 {
     this.counts.totalEvents += 1;
     this.adapter = { ...this.adapter, lastEventAt: ts };
 
+    // 离线、下播和 P0 锁定期间不得触发编排，也不得污染下一场进度。
+    if (this.active && !this.halted) {
+      for (const action of this.engagement.ingest(ev, ts)) {
+        if (action.action.type === 'song_request') {
+          this.requestSong({
+            title: action.action.title,
+            requesterUid: ev.sender.uid || 'viewer-anon',
+            requesterName: ev.sender.nickname || '观众',
+            priorityBoost: ev.payload.giftDiamondValue ?? 0,
+          });
+        }
+        for (const listener of this.engagementListeners) {
+          try { listener(action); } catch { /* 展示端异常不能中断收流。 */ }
+        }
+      }
+    }
+
     if (ev.eventType === 'DANMAKU') {
       this.counts.danmakuCount += 1;
       const text = String(ev.payload.sanitizedText ?? ev.payload.rawText ?? '');
@@ -316,7 +345,7 @@ export class LiveRuntimeV2 {
       return { outcome };
     }
 
-    if (ev.eventType === 'GIFT' || ev.eventType === 'ENTER_ROOM' || ev.eventType === 'LIKE') {
+    if (ev.eventType === 'GIFT' || ev.eventType === 'ENTER_ROOM' || ev.eventType === 'FOLLOW') {
       const kind = ev.eventType === 'GIFT' ? 'gift' : 'follow';
       if (kind === 'gift') this.counts.giftCount += 1;
       else this.counts.followCount += 1;
@@ -325,6 +354,8 @@ export class LiveRuntimeV2 {
         uid: ev.sender.uid,
         nickname: ev.sender.nickname,
         value: typeof ev.payload.giftDiamondValue === 'number' ? ev.payload.giftDiamondValue : 0,
+        count: ev.eventType === 'GIFT' ? (ev.payload.giftCount ?? Math.max(1, ev.payload.mergedCount)) : 1,
+        platform: ev.platform,
       });
       if (this.giftBuffer.length >= this.giftBatchThreshold) {
         const flushedBatch = this.flushGiftThanks();
@@ -438,9 +469,14 @@ export class LiveRuntimeV2 {
     if (this.giftBuffer.length === 0) return null;
     const hasGift = this.giftBuffer.some((entry) => entry.kind === 'gift');
     const kind = hasGift ? 'gift' : 'follow';
-    const senders = [...new Set(this.giftBuffer.map((entry) => entry.nickname))];
+    const entries = [...this.giftBuffer];
+    if (this.engagement.snapshot(this.now()).config.enabled) {
+      entries.sort((a, b) => Number(b.kind === 'gift') - Number(a.kind === 'gift')
+        || this.engagement.thanksScore(b.platform, b.uid) - this.engagement.thanksScore(a.platform, a.uid));
+    }
+    const senders = [...new Set(entries.map((entry) => entry.nickname))];
     const totalValue = this.giftBuffer.reduce((acc, entry) => acc + entry.value, 0);
-    const count = this.giftBuffer.length;
+    const count = this.giftBuffer.reduce((acc, entry) => acc + entry.count, 0);
     this.giftBuffer = [];
 
     const namesPreview = senders.slice(0, 3).join('、') + (senders.length > 3 ? ` 等 ${senders.length} 位` : '');
@@ -551,6 +587,7 @@ export class LiveRuntimeV2 {
       lyrics: this.lyrics,
       recentDanmaku: [...this.recentDanmaku],
       recentGifts: [...this.recentGiftThanks],
+      engagement: this.engagement.snapshot(this.now()),
       moderationAlerts: this.counts.moderationAlerts,
       realPlatformVerified: this.adapter.realPlatformVerified,
     });

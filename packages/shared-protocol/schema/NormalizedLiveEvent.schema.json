@@ -25,6 +25,7 @@
             "DANMAKU",
             "GIFT",
             "LIKE",
+            "FOLLOW",
             "ENTER_ROOM",
             "SONG_REQUEST",
             "VOTE_CHOICE"
@@ -76,6 +77,16 @@
             "giftDiamondValue": {
               "type": "number",
               "minimum": 0
+            },
+            "likeCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "giftCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
             },
             "songTitle": {
               "type": "string"

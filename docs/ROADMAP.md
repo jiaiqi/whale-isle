@@ -1,5 +1,7 @@
 # ROADMAP — 冻结的阶段迭代计划与工单状态
 
+> **V2 独立支线同步（2026-11-27）**：owner 授权 `V2-P3-02A` 直播互动规则卡/点赞目标/投喂榜，状态 `IMPLEMENTED_UNVERIFIED`；正式工单、范围、回滚与证据见 [V2 ROADMAP](./v2/ROADMAP.md) 和 [P3-02A 验证](./v2/evidence/P3-02A-live-engagement-verification.md)。主线 `V2-P4-01` 的 `NEXT` 不变，下方为 V1 历史记录。
+
 > **工单状态机**：`NEXT`（当前唯一激活）→ `DOING` → `DONE`（verify:gate 全绿 + 文档同步完成）/ `BLOCKED`。
 > **铁律**：任何时刻只能有一个 `NEXT` 工单，严禁跨工单抢跑；单工单修改业务源码文件 ≤ 8 个（详见 [AGENTS.md](../AGENTS.md) §2）。**M7 双泳道例外（2026-11-22 用户指令）**：泰拉瑞亚与饥荒 DST 两条泳道并行推进，每泳道各允许一个激活工单（泳道内仍唯一；M7 共享地基工单串行先行）。
 >
