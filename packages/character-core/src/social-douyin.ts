@@ -125,6 +125,20 @@ export interface DouyinLoginState {
   loggedIn: boolean;
 }
 
+/**
+ * 当前登录账号在页面 DOM 里暴露的自我标识。
+ * 发送前必须先拿到它，否则无法把「新出现的评论」归到自己名下——那正是
+ * 「窗口期内别人发了同样文字」被误判为发送成功的漏洞。
+ */
+export interface DouyinSelfIdentity {
+  /** 自己主页链接里的 sec_uid；页面只给 `/user/self` 时为空 */
+  secUid: string;
+  /** 头像旁的公开昵称（页面提供时） */
+  nickname: string;
+  /** 自己的头像地址（页面提供时；比较时忽略尺寸/签名参数） */
+  avatarUrl: string;
+}
+
 /** 评论区只读快照：页面文本与评论一律按不可信数据处理 */
 export interface DouyinCommentThread {
   url: string;
@@ -133,12 +147,18 @@ export interface DouyinCommentThread {
   comments: DouyinCommentItem[];
   /** 页面上是否找到可用的评论输入框；未登录时抖音显示「请先登录后发表评论」 */
   inputAvailable: boolean;
+  /** 当前登录账号的自我标识；页面取不到为 null（此时禁止发送） */
+  self?: DouyinSelfIdentity | null;
 }
 
 export interface DouyinCommentItem {
   commentId: string;
   authorAlias: string;
   text: string;
+  /** 评论作者主页链接里的 sec_uid（页面提供时） */
+  authorSecUid?: string;
+  /** 评论作者头像地址（页面提供时；比较时忽略尺寸/签名参数） */
+  authorAvatarUrl?: string;
 }
 
 /** 一次真实发送的回执：宿主必须等页面出现成功信号才允许 ok=true */
@@ -181,12 +201,41 @@ export function isStableDouyinCommentId(commentId: string): boolean {
   return /^\d{6,}$/u.test(commentId);
 }
 
+/** 自我标识是否足以支撑回执归属：sec_uid 单独可用；否则必须「昵称 + 头像」双要素 */
+export function hasDouyinSelfIdentity(self: DouyinSelfIdentity | null | undefined): self is DouyinSelfIdentity {
+  if (!self) return false;
+  if (self.secUid.trim() !== '') return true;
+  return self.nickname.trim() !== '' && self.avatarUrl.trim() !== '';
+}
+
+/** 头像地址归一化：去掉查询串与尺寸段，只保留稳定路径，避免签名/缩略图参数造成假不等 */
+export function normalizeDouyinAvatarUrl(raw: string): string {
+  const base = raw.trim().split(/[?#]/u)[0] ?? '';
+  return base.replace(/\/\d+x\d+\//u, '/');
+}
+
 /**
- * 回执判定（两驱动共用）：在「点击后」快照里找一条
- * 「发送前不存在 + 稳定数字 ID + 全文完全一致」的新评论。
- * 找不到返回 null（上层判 uncertain，绝不自动重发）。
+ * 回执归属：这条评论的作者是不是当前登录账号。
+ * sec_uid 双方都有时以 sec_uid 为准（唯一、不可伪造的站内标识）；
+ * 否则退回「昵称 + 归一化头像」双要素，缺一不可。
+ * 页面没给足作者信息 → false（宁可判 uncertain，也不能把别人的同文评论算成自己的）。
  */
-export function findNewDouyinComment(
+export function isOwnDouyinComment(
+  item: Pick<DouyinCommentItem, 'authorAlias' | 'authorSecUid' | 'authorAvatarUrl'>,
+  self: DouyinSelfIdentity | null | undefined,
+): boolean {
+  if (!hasDouyinSelfIdentity(self)) return false;
+  if (self.secUid.trim() !== '' && (item.authorSecUid ?? '').trim() !== '') {
+    return self.secUid.trim() === item.authorSecUid?.trim();
+  }
+  const nickname = self.nickname.trim();
+  const avatar = normalizeDouyinAvatarUrl(self.avatarUrl);
+  if (nickname === '' || avatar === '') return false;
+  return item.authorAlias.trim() === nickname && normalizeDouyinAvatarUrl(item.authorAvatarUrl ?? '') === avatar;
+}
+
+/** 只看「新出现 + 稳定数字 ID + 全文一致」，不判归属；端口用它区分「没有回执」与「有同文但不是自己」 */
+export function findNewDouyinCommentByText(
   before: readonly DouyinCommentItem[],
   after: readonly DouyinCommentItem[],
   text: string,
@@ -197,6 +246,21 @@ export function findNewDouyinComment(
       (item) => !knownIds.has(item.commentId) && isStableDouyinCommentId(item.commentId) && item.text === text,
     ) ?? null
   );
+}
+
+/**
+ * 回执判定（两驱动共用）：在「点击后」快照里找一条
+ * 「发送前不存在 + 稳定数字 ID + 全文完全一致 + 作者是当前账号」的新评论。
+ * 作者拿不到或对不上返回 null（上层判 uncertain，绝不自动重发）。
+ */
+export function findNewDouyinComment(
+  before: readonly DouyinCommentItem[],
+  after: readonly DouyinCommentItem[],
+  text: string,
+  self: DouyinSelfIdentity | null | undefined,
+): DouyinCommentItem | null {
+  const candidate = findNewDouyinCommentByText(before, after, text);
+  return candidate !== null && isOwnDouyinComment(candidate, self) ? candidate : null;
 }
 
 /** 抖音浏览器会话端口：宿主用独立 Electron Profile 或真浏览器 CDP 实现，单测注入假会话 */
@@ -706,11 +770,30 @@ export interface DouyinCommentTextGuardResult {
 }
 
 const COMMENT_URL_RE = /(?:https?:\/\/|www\.)\S+/giu;
-const COMMENT_MENTION_RE = /(^|\s)@[^\s@]{1,30}/gu;
+const COMMENT_MENTION_RE = /@[^\s@]{1,30}/gu;
+/**
+ * 导流短语黑名单：在「去空白 + 去标点 + 全角转半角」的归一化文本上匹配，
+ * 以覆盖「加 微 信」「VX：」「vx:」「威信」这类插空格/全角符号/变体写法。
+ */
 const COMMENT_CONTACT_RE =
-  /(加微信|加个微信|加vx|加v信|微信号|私信我|互关|互粉|关注我|点赞我|点我主页|抽奖|二维码|手机号|联系电话)/iu;
-const COMMENT_PHONE_RE = /(?:\+?86[- ]?)?1[3-9]\d{9}/u;
+  /(微信|威信|薇信|v信|v薇|vx|weixin|wechat|whatsapp|telegram|加v(?![a-z])|私信我|互关|互粉|关注我|点赞我|点我主页|抽奖|二维码|手机号|联系电话)/u;
+/** 手机号：同样在归一化文本上匹配（`+86 138 0000 0000` 归一后是 8613800000000），并拒绝嵌在更长数字串里 */
+const COMMENT_PHONE_RE = /(?<!\d)(?:86)?1[3-9]\d{9}(?!\d)/u;
 const COMMENT_HAS_WORDS_RE = /[A-Za-z一-鿿]/u;
+
+/** 全角 → 半角（含全角空格），避免用全角标点拆分黑名单短语绕过护栏 */
+function toHalfWidthComment(text: string): string {
+  return text
+    .replace(/[！-～]/gu, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/　/gu, ' ');
+}
+
+/** 联系方式探针：去空白、去全部标点/符号、统一小写，专供黑名单与手机号匹配 */
+function commentContactProbe(text: string): string {
+  return toHalfWidthComment(text)
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '');
+}
 
 function compactComment(text: string): string {
   return text
@@ -722,6 +805,10 @@ function compactComment(text: string): string {
 /**
  * 本地评论护栏：去链接/去 @、长度、联系方式、重复度。
  * 模型输出永远按不可信数据处理；护栏失败只跳过，不改写成别的文本硬发。
+ *
+ * **护栏是兜底，不是安全边界**：插空格、全角符号、谐音变体都可能绕过黑名单，
+ * 真正的边界是「默认关闭 + 人工开关 + 逐日审计 + 能力实测门禁」，不要把本函数
+ * 当成防滥用的唯一防线。
  */
 export function guardDouyinCommentText(
   raw: string,
@@ -731,7 +818,7 @@ export function guardDouyinCommentText(
   const stripped = raw
     .replace(/​|‌|‍|﻿/gu, '')
     .replace(COMMENT_URL_RE, '')
-    .replace(COMMENT_MENTION_RE, '$1')
+    .replace(COMMENT_MENTION_RE, '')
     .replace(/[ \t]+/gu, ' ')
     .replace(/\n{2,}/gu, '\n')
     .trim()
@@ -747,10 +834,11 @@ export function guardDouyinCommentText(
   if (length > settings.maxChars) {
     return { ok: false, text: stripped, reason: `评论太长（${length} > ${settings.maxChars} 字）` };
   }
-  if (COMMENT_CONTACT_RE.test(stripped)) {
+  const probe = commentContactProbe(stripped);
+  if (COMMENT_CONTACT_RE.test(probe)) {
     return { ok: false, text: stripped, reason: '评论包含导流/索要互动等不适合自动发送的内容' };
   }
-  if (COMMENT_PHONE_RE.test(stripped)) {
+  if (COMMENT_PHONE_RE.test(probe)) {
     return { ok: false, text: stripped, reason: '评论包含手机号等联系方式' };
   }
   const compact = compactComment(stripped);

@@ -26,6 +26,15 @@
 - `BrainRuntimeConfig` 新增显式 `allowRuleStandin` 与有界 `plannerTimeoutMs`（100–120000ms，宿主默认 30s）；主进程在规划 HTTP 上实际传入超时信号，服务不可用/超时/非法工具/缺 Key 可进入标明「规则代驾」的确定性动作，旧配置默认安全暂停。重建大脑时保留自定义供应商与故障策略，跨语言生成产物同步。
 - 能力域对照复用既有 Magpie 思想网关与 BWF 执行链，重写本地协议 stub 和故障剧本，拒绝 Mod 内直连及无许可证源码；完整逐项结论与真机待验项见 `docs/v2/evidence/P4-01-llm-chain-verification.md`，总工单保持 `NEXT`。
 
+### Changed / Fixed（`V2-P3-04K` 评论复核返工：归属、代际、暂停口径与护栏，PR #10）
+
+- **回执归属**：`DouyinCommentThread` 新增 `self`（`sec_uid` / 昵称 / 头像），评论项新增 `authorSecUid` / `authorAvatarUrl`；`findNewDouyinComment` 现在要求「新出现 + 稳定数字 ID + 全文一致 + **作者是当前账号**」才继续重载确认。发送前拿不到自我标识 → 不发；作者缺失或对不上 → `uncertain`，永不判 `sent`、不自动重发。修复「窗口期内别人发了同样文字被误判成功、进而写 `lastVerifiedAt`」的漏洞。
+- **验证 IPC 代际**：`v2:social-comment-verify` 入口先抓 `commentGeneration`，`loginState()`/`load()` 等每个 await 后比对；中途暂停/改设置/急停立即中止，不再继续发送。`CommentRiskControlError` 只用于验证码/登录墙/账号异常。
+- **暂停口径**：新增 `apps/desktop-host/src/main/social-comment-pause.ts`；执行完一条评论后只有 `captcha` / `login_required` 才 `pauseComments`，`page_error` / `receipt_failed`（含 `uncertain`）等结构性结果只回报、不替 owner 关开关。ADR-006 前文「任一故障立即关闭」的口径已同步修正。
+- **IPC sender/frame 校验**：`v2:social-comment-settings` / `-history` / `-verify` 只接受本应用 `renderer` 目录的**主框架**；子框架与非 `file://` 页面一律拒绝。
+- **护栏归一化**：`guardDouyinCommentText` 匹配前先全角转半角、去空白与全部标点/符号，补齐 `威信` / `vx` / `v信` / `v薇` 等变体；手机号允许空格与分隔符（`+86 138 0000 0000`）；@ 剥离不再要求前置空白。注释与 ADR 明确「**护栏是兜底，不是安全边界**」。
+- **验证**：新增 11 例单测（端口 4、character-core 4、暂停策略 3）；Electron E2E 新增两条断言——驱动缺端口 → `failed` / 无 `sent` / 0 次点击；结构性错误不暂停、验证码才暂停。`pnpm verify:gate` 8/8，覆盖率阈值未改。默认关闭、`lastVerifiedAt=0`、**未向抖音发起任何真实评论**均不变。
+
 ### Changed（`V2-P3-04K` 评论端口下沉到 CDP 驱动，PR #10）
 
 - **两驱动共用端口**：评论能力从 `ElectronBrowserEngine` 私有实现提取为 `DouyinCommentPort`（`packages/character-core/src/social-douyin.ts`），时序与回执判定收敛到 `apps/desktop-host/src/main/douyin-comment-port.ts` 的 `createDouyinCommentPort`；Electron 与 CDP 各自只注入 `navigate / evaluate / sleep / now`。此前 macOS 默认驱动 `cdp-real` 缺少评论入口，等于生产环境功能不可用。

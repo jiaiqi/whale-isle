@@ -11,14 +11,17 @@
  * - 只允许 `https://www.douyin.com/video/<数字>`；其他页面直接抛错。
  * - 输入框/发送按钮只认评论专属 `data-e2e` 控件；页面结构未知即失败，
  *   绝不退回全页面通用按钮或通用输入框。
- * - 只有「新增稳定数字 ID + 全文回读 + 重载仍在」判 `sent`；
- *   点击后无可靠回执判 `uncertain`，不自动重发。
+ * - 只有「新增稳定数字 ID + 全文回读 + **作者是当前登录账号** + 重载仍在」判 `sent`；
+ *   作者拿不到或对不上判 `uncertain`，不自动重发（防止窗口期内别人的同文评论被误判）。
  * - 验证码/登录墙立即停手，绝不识别/绕过/重试。
  */
 import {
   detectDouyinBlock,
   findNewDouyinComment,
+  findNewDouyinCommentByText,
+  hasDouyinSelfIdentity,
   isDouyinVideoUrl,
+  isOwnDouyinComment,
   normalizeDouyinUrl,
   type DouyinCommentPort,
   type DouyinCommentReceipt,
@@ -93,6 +96,11 @@ export function createDouyinCommentPort(ops: DouyinCommentPageOps): DouyinCommen
       if (normalizeDouyinUrl(before.url) !== normalizeDouyinUrl(input.url)) {
         return { ok: false, detail: '视频页已变化，取消发送' };
       }
+      // 归属是回执的一部分：拿不到自己的账号标识就不发，否则无法证明新评论是自己发的。
+      const self = before.self ?? null;
+      if (!hasDouyinSelfIdentity(self)) {
+        return { ok: false, detail: '无法从页面确认当前登录账号标识，未发送' };
+      }
       if (!canSend()) return { ok: false, detail: '发送已取消' };
 
       const filled = await ops.evaluate<boolean>(buildDouyinCommentFillScript(input.text));
@@ -109,6 +117,7 @@ export function createDouyinCommentPort(ops: DouyinCommentPageOps): DouyinCommen
       if (!clicked) return { ok: false, detail: '未找到唯一可用的评论专属发送按钮，未发送' };
 
       const deadline = ops.now() + RECEIPT_TIMEOUT_MS;
+      let foreignSameText = false;
       while (ops.now() < deadline) {
         await ops.sleep(RECEIPT_POLL_MS);
         const after = await readThread();
@@ -119,30 +128,37 @@ export function createDouyinCommentPort(ops: DouyinCommentPageOps): DouyinCommen
         if (after.url !== before.url) {
           return { ok: false, uncertain: true, detail: '点击发送后页面变化，结果不确定' };
         }
-        const posted = findNewDouyinComment(before.comments, after.comments, input.text);
-        if (posted !== null) {
-          // 排除前端乐观插入：重新加载后仍有相同 ID 与全文，才确认已发布。
-          // 真实站点评论区异步渲染，重载后给一个有界等待窗口重复抽取；判定条件不放宽。
-          await ops.navigate(input.url);
-          const persistedDeadline = ops.now() + PERSISTED_TIMEOUT_MS;
-          for (;;) {
-            const persisted = await readThread();
-            const persistedBlock = detectDouyinBlock(persisted);
-            if (persistedBlock?.kind === 'captcha') {
-              return { ok: false, uncertain: true, blocked: 'captcha', detail: persistedBlock.detail };
-            }
-            if (persisted.comments.some((item) => item.commentId === posted.commentId && item.text === input.text)) {
-              return {
-                ok: true,
-                commentId: posted.commentId,
-                detail: '重新加载后评论 ID 与完整原文仍匹配，已确认发布',
-              };
-            }
-            if (ops.now() >= persistedDeadline) break;
-            await ops.sleep(PERSISTED_POLL_MS);
-          }
-          return { ok: false, uncertain: true, detail: '页面曾显示评论，但重新加载后无法确认；不自动重发' };
+        const own = findNewDouyinComment(before.comments, after.comments, input.text, self);
+        if (own === null) {
+          // 同文新评论不是自己发的：继续等自己的回执，但绝不把它当成 sent。
+          if (findNewDouyinCommentByText(before.comments, after.comments, input.text) !== null) foreignSameText = true;
+          continue;
         }
+        // 排除前端乐观插入：重新加载后仍有相同 ID、全文与作者，才确认已发布。
+        // 真实站点评论区异步渲染，重载后给一个有界等待窗口重复抽取；判定条件不放宽。
+        await ops.navigate(input.url);
+        const persistedDeadline = ops.now() + PERSISTED_TIMEOUT_MS;
+        for (;;) {
+          const persisted = await readThread();
+          const persistedBlock = detectDouyinBlock(persisted);
+          if (persistedBlock?.kind === 'captcha') {
+            return { ok: false, uncertain: true, blocked: 'captcha', detail: persistedBlock.detail };
+          }
+          if (persisted.comments.some((item) => item.commentId === own.commentId && item.text === input.text &&
+            isOwnDouyinComment(item, self))) {
+            return {
+              ok: true,
+              commentId: own.commentId,
+              detail: '重新加载后评论 ID、完整原文与作者仍匹配，已确认发布',
+            };
+          }
+          if (ops.now() >= persistedDeadline) break;
+          await ops.sleep(PERSISTED_POLL_MS);
+        }
+        return { ok: false, uncertain: true, detail: '页面曾显示评论，但重新加载后无法确认；不自动重发' };
+      }
+      if (foreignSameText) {
+        return { ok: false, uncertain: true, detail: '新增同文评论的作者不是当前账号，结果不确定；不得自动重发' };
       }
       return { ok: false, uncertain: true, detail: '已点击发送，8 秒内没有可靠回执；不得自动重发' };
     },

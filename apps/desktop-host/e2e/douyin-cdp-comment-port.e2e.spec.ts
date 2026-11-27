@@ -23,12 +23,13 @@ import {
 const VIDEO_URL = 'https://www.douyin.com/video/7703599797286223291';
 const NEW_TEXT = '这个解释让我理解了光的折射原理';
 const EXISTING = { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' };
-const POSTED = { commentId: '700002', authorAlias: '', text: NEW_TEXT };
+const SELF = { secUid: 'MS4wLjSELF', nickname: '小鲸', avatarUrl: 'https://p3.test/aweme/100x100/self.jpeg' };
+const POSTED = { commentId: '700002', authorAlias: '小鲸', text: NEW_TEXT, authorSecUid: 'MS4wLjSELF' };
 
 interface FakePageState {
   url: string;
   title: string;
-  comments: Array<{ commentId: string; authorAlias: string; text: string }>;
+  comments: Array<{ commentId: string; authorAlias: string; text: string; authorSecUid?: string }>;
   pendingText: string;
 }
 
@@ -66,6 +67,7 @@ async function startFakeCdpEndpoint(): Promise<{
         text: state.title,
         comments: state.comments,
         inputAvailable: true,
+        self: SELF,
       };
     }
     if (expression.includes('execCommand')) {

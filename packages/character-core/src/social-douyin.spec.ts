@@ -15,10 +15,13 @@ import {
   extractDouyinTopics,
   findNewDouyinComment,
   guardDouyinCommentText,
+  hasDouyinSelfIdentity,
   isDouyinEvidenceUsable,
   isDouyinRequestedFeedVerified,
   isDouyinVideoUrl,
+  isOwnDouyinComment,
   isStableDouyinCommentId,
+  normalizeDouyinAvatarUrl,
   normalizeDouyinUrl,
   parseDouyinCardText,
   runDouyinSmoke,
@@ -772,12 +775,30 @@ describe('抖音评论本地护栏', () => {
     expect(guard.text).toBe('讲得好 见 学到了');
   });
 
+  it('@ 剥离不要求前置空白（谢谢@张三 分享）', () => {
+    const guard = guardDouyinCommentText('谢谢@张三 分享', commentSettings());
+    expect(guard.ok).toBe(true);
+    expect(guard.text).toBe('谢谢 分享');
+  });
+
   it('拒绝太短/太长/联系方式/手机号/重复', () => {
     expect(guardDouyinCommentText('好', commentSettings()).reason).toContain('太短');
     expect(guardDouyinCommentText('好'.repeat(81), commentSettings()).reason).toContain('太长');
     expect(guardDouyinCommentText('想聊的加微信一起玩', commentSettings()).reason).toContain('导流');
     expect(guardDouyinCommentText('联系我 13800138000', commentSettings()).reason).toContain('手机号');
     expect(guardDouyinCommentText('这个科普讲得很清楚', commentSettings(), ['这个科普讲得很清楚！']).reason).toContain('重复');
+  });
+
+  it('实测绕过样本必须被归一化后拦下（插空格 / 全角符号 / 变体写法）', () => {
+    const cases = ['加 微 信abc123', 'VX:abc123', 'vx：abc123', '威信abc123', '+86 138 0000 0000'];
+    for (const sample of cases) {
+      expect(guardDouyinCommentText(sample, commentSettings()).ok, sample).toBe(false);
+    }
+  });
+
+  it('归一化不误伤正常评论', () => {
+    expect(guardDouyinCommentText('这个讲解让我理解了潮汐锁定的原理', commentSettings()).ok).toBe(true);
+    expect(guardDouyinCommentText('视频里的 138 亿年怎么算出来的？', commentSettings()).ok).toBe(true);
   });
 });
 
@@ -1035,21 +1056,50 @@ describe('受限评论端口共用判定（ADR-006）', () => {
     expect(isStableDouyinCommentId('12345')).toBe(false);
   });
 
-  it('回执判定：新出现 + 稳定 ID + 全文一致；乐观插入与非数字 ID 都不算', () => {
+  it('回执判定：新出现 + 稳定 ID + 全文一致 + 作者是自己；乐观插入、非数字 ID、别人的同文都不算', () => {
     const before = [{ commentId: '700001', authorAlias: '甲', text: '旧评论' }];
+    const self = { secUid: 'MS4wLjSELF', nickname: '小鲸', avatarUrl: 'https://p3.test/aweme/100x100/self.jpeg?x=1' };
     expect(
-      findNewDouyinComment(before, [...before, { commentId: '700002', authorAlias: '', text: '新评论' }], '新评论'),
+      findNewDouyinComment(before, [...before, { commentId: '700002', authorAlias: '小鲸', text: '新评论', authorSecUid: 'MS4wLjSELF' }], '新评论', self),
     ).toMatchObject({ commentId: '700002' });
     // 全文不一致
     expect(
-      findNewDouyinComment(before, [...before, { commentId: '700002', authorAlias: '', text: '新评论' }], '别的文本'),
+      findNewDouyinComment(before, [...before, { commentId: '700002', authorAlias: '小鲸', text: '新评论', authorSecUid: 'MS4wLjSELF' }], '别的文本', self),
     ).toBeNull();
     // 非数字临时 ID（前端乐观插入）
     expect(
-      findNewDouyinComment(before, [...before, { commentId: 'tmp-9', authorAlias: '', text: '新评论' }], '新评论'),
+      findNewDouyinComment(before, [...before, { commentId: 'tmp-9', authorAlias: '小鲸', text: '新评论', authorSecUid: 'MS4wLjSELF' }], '新评论', self),
     ).toBeNull();
     // 发送前就存在的同文评论不是本次回执
-    expect(findNewDouyinComment(before, before, '旧评论')).toBeNull();
+    expect(findNewDouyinComment(before, before, '旧评论', self)).toBeNull();
+    // 窗口期内别人发了同样文字：ID/文本都对，但作者不是自己
+    expect(
+      findNewDouyinComment(before, [...before, { commentId: '700003', authorAlias: '路人', text: '新评论', authorSecUid: 'MS4wLjOTHER' }], '新评论', self),
+    ).toBeNull();
+    // 作者信息完全缺失：宁可不算，也不猜
+    expect(
+      findNewDouyinComment(before, [...before, { commentId: '700004', authorAlias: '', text: '新评论' }], '新评论', self),
+    ).toBeNull();
+    // 没有自我标识时永远不判 sent
+    expect(
+      findNewDouyinComment(before, [...before, { commentId: '700005', authorAlias: '小鲸', text: '新评论', authorSecUid: 'MS4wLjSELF' }], '新评论', null),
+    ).toBeNull();
+  });
+
+  it('归属判定：sec_uid 优先；否则昵称 + 归一化头像双要素', () => {
+    const self = { secUid: '', nickname: '小鲸', avatarUrl: 'https://p3.test/aweme/100x100/self.jpeg?sig=abc' };
+    expect(isOwnDouyinComment({ authorAlias: '小鲸', authorAvatarUrl: 'https://p3.test/aweme/200x200/self.jpeg?sig=zzz' }, self)).toBe(true);
+    // 只有昵称相同、头像不同 → 不是自己（同名不同人）
+    expect(isOwnDouyinComment({ authorAlias: '小鲸', authorAvatarUrl: 'https://p3.test/aweme/100x100/other.jpeg' }, self)).toBe(false);
+    // 只有头像相同、昵称不同 → 不是自己
+    expect(isOwnDouyinComment({ authorAlias: '路人', authorAvatarUrl: 'https://p3.test/aweme/100x100/self.jpeg' }, self)).toBe(false);
+    // sec_uid 双方都有时以 sec_uid 为准
+    const withId = { ...self, secUid: 'MS4wLjSELF' };
+    expect(isOwnDouyinComment({ authorAlias: '小鲸', authorSecUid: 'MS4wLjOTHER' }, withId)).toBe(false);
+    expect(isOwnDouyinComment({ authorAlias: '随便', authorSecUid: 'MS4wLjSELF' }, withId)).toBe(true);
+    expect(hasDouyinSelfIdentity(null)).toBe(false);
+    expect(hasDouyinSelfIdentity({ secUid: '', nickname: '小鲸', avatarUrl: '' })).toBe(false);
+    expect(normalizeDouyinAvatarUrl('https://p3.test/aweme/100x100/self.jpeg?sig=abc#x')).toBe('https://p3.test/aweme/self.jpeg');
   });
 });
 

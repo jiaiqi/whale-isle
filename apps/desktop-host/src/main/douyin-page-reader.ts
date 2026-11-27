@@ -130,22 +130,51 @@ export const DOUYIN_COMMENT_SEND_SELECTOR =
 /**
  * 评论区只读快照：返回 `DouyinCommentThread` 形状（在页面主世界执行）。
  * 页面文本按不可信数据处理，只读取公开字段。
+ *
+ * 归属（ADR-006 返工）：回执不能只凭「新 ID + 文本一致」——窗口期内别人发了同样文字
+ * 会被误判成自己发送成功。这里额外读取「当前登录账号」的 sec_uid / 昵称 / 头像，
+ * 以及每条评论作者的主页 sec_uid / 头像，供上层做作者归属校验；取不到就返回 null，
+ * 上层据此拒绝发送或判 uncertain。
  */
 export function buildDouyinCommentThreadScript(): string {
   return String.raw`
 (() => {
   const editorSelector = ${JSON.stringify(DOUYIN_COMMENT_EDITOR_SELECTOR)};
+  const userPath = (href) => {
+    const match = /\/user\/([^/?#]+)/.exec(href || '');
+    return match && match[1] !== 'self' ? decodeURIComponent(match[1]) : '';
+  };
   const comments = [...document.querySelectorAll('[data-e2e="comment-item"]')].slice(0, 50).map(el => {
     const content = el.querySelector('[data-e2e="comment-content"]');
     const author = el.querySelector('[data-e2e="comment-author"], a[href*="/user/"]');
+    const authorLink = el.querySelector('[data-e2e="comment-author"] a[href*="/user/"], a[href*="/user/"]');
+    const avatar = el.querySelector('[data-e2e="comment-avatar"] img, [data-e2e="comment-author"] img, a[href*="/user/"] img');
     return {
       commentId: el.getAttribute('data-e2e-comment-id') || el.getAttribute('data-comment-id') || '',
       authorAlias: (author?.innerText || '').trim().slice(0, 100),
       text: (content?.innerText || '').trim().slice(0, 500),
+      authorSecUid: userPath(authorLink?.getAttribute('href')),
+      authorAvatarUrl: (avatar?.getAttribute('src') || '').trim(),
     };
   }).filter(item => item.text !== '');
+  // 登录态自我标识：只认页头自己的头像/主页入口，绝不猜测，也不从 cookie/接口取。
+  const selfAnchor = document.querySelector([
+    '[data-e2e="user-avatar"] a[href*="/user/"]',
+    'a[data-e2e="user-avatar"][href*="/user/"]',
+    '[data-e2e="header-avatar"] a[href*="/user/"]',
+    'a[href*="/user/self"]',
+  ].join(','));
+  const selfImg = selfAnchor?.querySelector('img') ||
+    document.querySelector('[data-e2e="user-avatar"] img, [data-e2e="header-avatar"] img');
+  const selfSecUid = userPath(selfAnchor?.getAttribute('href'));
+  const selfNickname = String(selfAnchor?.getAttribute('title') || selfAnchor?.getAttribute('aria-label') ||
+    selfImg?.getAttribute('alt') || '').trim().slice(0, 100);
+  const selfAvatarUrl = String(selfImg?.getAttribute('src') || '').trim();
+  const self = (selfSecUid || (selfNickname && selfAvatarUrl))
+    ? { secUid: selfSecUid, nickname: selfNickname, avatarUrl: selfAvatarUrl }
+    : null;
   const editor = document.querySelector(editorSelector);
-  return { url: location.href, title: document.title || '', comments,
+  return { url: location.href, title: document.title || '', comments, self,
     text: (document.body?.innerText || '').slice(0, 20000),
     inputAvailable: Boolean(editor && editor.getClientRects().length && !editor.disabled && editor.getAttribute('aria-disabled') !== 'true'),
   };

@@ -21,6 +21,9 @@ const TEXT = '这个解释让我理解了光的折射原理';
 const THREAD_SCRIPT = buildDouyinCommentThreadScript();
 const FILL_SCRIPT = buildDouyinCommentFillScript(TEXT);
 const CLICK_SCRIPT = buildDouyinCommentClickScript(VIDEO_URL, TEXT);
+/** 当前登录账号：回执归属必须以它为准，不能只看「新 ID + 文本一致」 */
+const SELF = { secUid: 'MS4wLjSELF', nickname: '小鲸', avatarUrl: 'https://p3.test/aweme/100x100/self.jpeg' };
+const POSTED = { commentId: '700002', authorAlias: '小鲸', text: TEXT, authorSecUid: 'MS4wLjSELF' };
 
 function thread(overrides: Partial<DouyinCommentThread> = {}): DouyinCommentThread {
   return {
@@ -29,6 +32,7 @@ function thread(overrides: Partial<DouyinCommentThread> = {}): DouyinCommentThre
     text: '正文',
     comments: [{ commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' }],
     inputAvailable: true,
+    self: SELF,
     ...overrides,
   };
 }
@@ -150,6 +154,13 @@ describe('受限评论端口：postComment 护栏', () => {
     expect(ops.evaluated).not.toContain(FILL_SCRIPT);
   });
 
+  it('页面取不到当前登录账号标识 → 不填不点（无法证明回执归属）', async () => {
+    const ops = new FakeOps({ threadQueue: [thread({ self: null })] });
+    const receipt = await createDouyinCommentPort(ops).postComment({ url: VIDEO_URL, text: TEXT }, () => true);
+    expect(receipt).toMatchObject({ ok: false, detail: '无法从页面确认当前登录账号标识，未发送' });
+    expect(ops.evaluated).not.toContain(FILL_SCRIPT);
+  });
+
   it('canSend=false → 点击前取消', async () => {
     const ops = new FakeOps();
     const receipt = await createDouyinCommentPort(ops).postComment({ url: VIDEO_URL, text: TEXT }, () => false);
@@ -200,7 +211,7 @@ describe('受限评论端口：回执三态', () => {
     const posted = thread({
       comments: [
         { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' },
-        { commentId: '700002', authorAlias: '', text: TEXT },
+        POSTED,
       ],
     });
     const ops = new FakeOps({ afterClick: posted, threadQueue: [thread(), posted] });
@@ -210,11 +221,10 @@ describe('受限评论端口：回执三态', () => {
     expect(ops.navigations.filter((url) => url === VIDEO_URL)).toHaveLength(1);
   });
 
-  it('新增评论 ID 不是稳定数字 ID → 判 uncertain，不自动重发', async () => {
-    const optimistic = thread({
+  it('新增评论 ID 不是稳定数字 ID → 判 uncertain，不自动重发', async () => {    const optimistic = thread({
       comments: [
         { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' },
-        { commentId: 'temp-1', authorAlias: '', text: TEXT },
+        { commentId: 'temp-1', authorAlias: '小鲸', text: TEXT, authorSecUid: 'MS4wLjSELF' },
       ],
     });
     const ops = new FakeOps({ afterClick: optimistic });
@@ -245,7 +255,7 @@ describe('受限评论端口：回执三态', () => {
     const posted = thread({
       comments: [
         { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' },
-        { commentId: '700002', authorAlias: '', text: TEXT },
+        POSTED,
       ],
     });
     const ops = new FakeOps({
@@ -253,6 +263,45 @@ describe('受限评论端口：回执三态', () => {
       // 队列：before → 点击后（posted）→ 重载后（旧评论）
       threadQueue: [thread(), posted, thread()],
     });
+    const receipt = await createDouyinCommentPort(ops).postComment({ url: VIDEO_URL, text: TEXT }, () => true);
+    expect(receipt).toMatchObject({ ok: false, uncertain: true, detail: '页面曾显示评论，但重新加载后无法确认；不自动重发' });
+  });
+
+  it('窗口期内别人发了同文评论 → 不判 sent，判 uncertain 且不重发', async () => {
+    const foreign = thread({
+      comments: [
+        { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' },
+        { commentId: '700009', authorAlias: '路人', text: TEXT, authorSecUid: 'MS4wLjOTHER' },
+      ],
+    });
+    const ops = new FakeOps({ afterClick: foreign });
+    const receipt = await createDouyinCommentPort(ops).postComment({ url: VIDEO_URL, text: TEXT }, () => true);
+    expect(receipt).toMatchObject({ ok: false, uncertain: true });
+    expect(receipt.detail).toContain('作者不是当前账号');
+  });
+
+  it('新评论作者信息缺失 → 不猜归属，判 uncertain', async () => {
+    const anonymous = thread({
+      comments: [
+        { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' },
+        { commentId: '700010', authorAlias: '', text: TEXT },
+      ],
+    });
+    const ops = new FakeOps({ afterClick: anonymous });
+    const receipt = await createDouyinCommentPort(ops).postComment({ url: VIDEO_URL, text: TEXT }, () => true);
+    expect(receipt).toMatchObject({ ok: false, uncertain: true });
+    expect(receipt.detail).toContain('作者不是当前账号');
+  });
+
+  it('重载后同 ID 同文但作者变成别人 → 不确认，判 uncertain', async () => {
+    const posted = thread({ comments: [{ commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' }, POSTED] });
+    const hijacked = thread({
+      comments: [
+        { commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' },
+        { commentId: '700002', authorAlias: '路人', text: TEXT, authorSecUid: 'MS4wLjOTHER' },
+      ],
+    });
+    const ops = new FakeOps({ afterClick: posted, threadQueue: [thread(), posted, hijacked] });
     const receipt = await createDouyinCommentPort(ops).postComment({ url: VIDEO_URL, text: TEXT }, () => true);
     expect(receipt).toMatchObject({ ok: false, uncertain: true, detail: '页面曾显示评论，但重新加载后无法确认；不自动重发' });
   });

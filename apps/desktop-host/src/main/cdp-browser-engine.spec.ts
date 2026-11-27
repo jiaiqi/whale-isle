@@ -987,6 +987,7 @@ class CommentDriver extends FakeDriver {
     text: '正文',
     comments: [{ commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' }],
     inputAvailable: true,
+    self: { secUid: 'MS4wLjSELF', nickname: '小鲸', avatarUrl: 'https://p3.test/aweme/100x100/self.jpeg' },
   };
   afterClick: DouyinCommentThread | null = null;
   fillResult = true;
@@ -1030,7 +1031,7 @@ describe('cdp-real 驱动下的受限评论端口（ADR-006）', () => {
       ...driver.comments,
       comments: [
         ...driver.comments.comments,
-        { commentId: '700002', authorAlias: '', text: COMMENT_TEXT },
+        { commentId: '700002', authorAlias: '小鲸', text: COMMENT_TEXT, authorSecUid: 'MS4wLjSELF' },
       ],
     };
     const { session } = makeSession(driver);

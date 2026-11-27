@@ -7,9 +7,9 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, ipcMain, powerMonitor, shell, systemPreferences } from 'electron';
+import { app, ipcMain, powerMonitor, shell, systemPreferences, type IpcMainInvokeEvent } from 'electron';
 import { z } from 'zod';
 import {
   AccountVault,
@@ -96,6 +96,7 @@ import {
   type DouyinBrowserDriverKind,
 } from './cdp-browser-engine';
 import { SocialCommentLedger } from './social-comment-ledger';
+import { applyCommentPausePolicy } from './social-comment-pause';
 import { createNativeInjector, ensureNativeInputHelper } from './native-input-helper';
 import { createNativeAudioPlayer, ensureNativeAudioHelper } from './native-audio-player';
 import { MediaGenerationGateway } from './media-gateway';
@@ -1044,9 +1045,27 @@ export async function createV2KernelHost(options: {
     commentState.update({ settings: { ...commentState.get().settings, enabled: false }, blockedReason: `评论账本不可用：${String(error)}`.slice(0, 300) });
   }
   const commentCapability = () => socialCapabilitiesStore.get().entries.find(entry => entry.platform === 'douyin' && entry.capability === 'comment_reply');
+  /** 只有风控/登录墙/账号异常才允许暂停评论；结构性错误用普通 Error 上报，开关保持原样 */
+  class CommentRiskControlError extends Error {}
   const pauseComments = (reason: string): void => {
     commentGeneration += 1;
     commentState.update({ settings: { ...commentState.get().settings, enabled: false }, blockedReason: reason.slice(0, 300) });
+  };
+  /**
+   * 评论是 owner 授权的写能力，三个 IPC 只接受本应用中控台/桌宠渲染进程的**主框架**：
+   * 子框架（iframe/webview）与非本地页面一律拒绝。项目暂无统一 IPC sender 守卫，
+   * 这里先按「主框架 + 本应用 renderer 目录」做最小实现；若后续全量铺开再抽公共模块。
+   */
+  const rendererRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../renderer');
+  const commentIpcRejection = (event: IpcMainInvokeEvent): { ok: false; error: string } | null => {
+    const frame = event.senderFrame;
+    if (!frame || frame.parent !== null) return { ok: false, error: '拒绝来自子框架的评论 IPC' };
+    if (!frame.url.startsWith('file://')) return { ok: false, error: '拒绝来自非本地页面的评论 IPC' };
+    const target = relative(rendererRoot, fileURLToPath(frame.url));
+    if (target === '' || target.startsWith('..') || isAbsolute(target)) {
+      return { ok: false, error: '拒绝来自非本应用页面的评论 IPC' };
+    }
+    return null;
   };
   const commentSnapshot = () => {
     const now = Date.now();
@@ -1094,9 +1113,14 @@ export async function createV2KernelHost(options: {
     activeCommentGeneration = commentGeneration;
     try {
       const action = await commentExecutor.execute({ sessionId, candidate, itemText, settings: commentState.get().settings });
-      if (action.status === 'failed' || action.status === 'uncertain') pauseComments(action.reason);
+      // 页面变化、控件缺失、驱动缺端口等结构性错误只回报，不关 owner 的开关。
+      applyCommentPausePolicy(action, pauseComments);
       return action;
-    } catch (error) { pauseComments(`评论执行或账本失败：${String(error)}`); throw error; }
+    } catch (error) {
+      // 执行器内部只会在账本写入失败等无法审计的情况下抛错：此时必须停，不能继续无账本发送。
+      pauseComments(`评论执行或账本失败：${String(error)}`);
+      throw error;
+    }
   };
 
   /** 候选来源与逐条读取共用同一个抖音源实例；未注册时调度层如实拦截 */
@@ -2619,7 +2643,9 @@ export async function createV2KernelHost(options: {
     ok: false,
     error: error instanceof Error ? error.message : String(error),
   });
-  ipcMain.handle('v2:social-comment-settings', (_e, raw: unknown) => {
+  ipcMain.handle('v2:social-comment-settings', (event, raw: unknown) => {
+    const denied = commentIpcRejection(event);
+    if (denied) return denied;
     try {
       const patch = SocialCommentSettingsSchema.partial().parse(raw);
       const settings = SocialCommentSettingsSchema.parse({ ...commentState.get().settings, ...patch });
@@ -2640,7 +2666,9 @@ export async function createV2KernelHost(options: {
       return { ok: true };
     } catch (error) { return socialError(error); }
   });
-  ipcMain.handle('v2:social-comment-history', (_e, raw: unknown) => {
+  ipcMain.handle('v2:social-comment-history', (event, raw: unknown) => {
+    const denied = commentIpcRejection(event);
+    if (denied) return denied;
     const input = SocialCommentQuerySchema.parse(raw ?? {});
     const dayKey = input.dayKey ?? douyinLocalDayKey(Date.now());
     const start = new Date(`${dayKey}T00:00:00`);
@@ -2651,18 +2679,26 @@ export async function createV2KernelHost(options: {
     return SocialCommentHistorySchema.parse({ dayKey, total: actions.length, actions: actions.slice(input.offset, input.offset + input.limit) });
   });
   // 首次验证需要可见、明确的一次性入口；正常自动循环不借用只读实测结论。
-  ipcMain.handle('v2:social-comment-verify', async (_e, raw: unknown) => {
+  ipcMain.handle('v2:social-comment-verify', async (event, raw: unknown) => {
+    const denied = commentIpcRejection(event);
+    if (denied) return denied;
     if (douyinOperation) return { ok: false, error: '抖音任务正在运行，请等待收官' };
     if (!douyinSession || !commentState.get().settings.enabled) return { ok: false, error: '请先开启受限评论' };
     let parsed;
     try { parsed = SocialCommentVerifyInputSchema.parse(raw); } catch (error) { return socialError(error); }
+    // 入口先抓代际：后续每个 await 后比对；中途暂停/改设置（代际自增）立即中止，不再继续发。
+    const generation = commentGeneration;
+    const stale = (): boolean => generation !== commentGeneration;
     douyinOperation = true;
     commentVerification = true;
     try {
-      if (!(await douyinSession.loginState()).loggedIn) throw new Error('隔离 Profile 未登录，请在本软件登录窗扫码');
+      const login = await douyinSession.loginState();
+      if (stale()) return { ok: false, error: '评论设置已变化，本次核验已取消' };
+      if (!login.loggedIn) throw new CommentRiskControlError('隔离 Profile 未登录，请在本软件登录窗扫码');
       const page = await douyinSession.load(parsed.url);
+      if (stale()) return { ok: false, error: '评论设置已变化，本次核验已取消' };
       const block = detectDouyinBlock(page);
-      if (block?.kind === 'captcha') throw new Error(block.detail);
+      if (block?.kind === 'captcha') throw new CommentRiskControlError(block.detail);
       if (!page.heading && !page.detailText) throw new Error('没有读到视频详情，未尝试发送');
       const action = await executeComment(`comment-verify-${randomUUID()}`, BrowseCandidateSchema.parse({
         candidateId: parsed.url, platform: 'douyin', url: parsed.url, title: (page.heading || page.title).slice(0, 200),
@@ -2674,7 +2710,11 @@ export async function createV2KernelHost(options: {
         socialCapabilitiesStore.update({ entries }); socialRuntime.updateCapabilities(entries);
       }
       return { ok: action.status === 'sent', action };
-    } catch (error) { pauseComments(String(error)); return socialError(error); }
+    } catch (error) {
+      // 验证码 / 登录墙 / 账号异常才暂停；页面结构未知等结构性错误只回报原因，开关保持原样。
+      if (error instanceof CommentRiskControlError) pauseComments(error.message);
+      return socialError(error);
+    }
     finally { douyinOperation = false; commentVerification = false; }
   });
   ipcMain.handle('v2:social-snapshot', async () => {

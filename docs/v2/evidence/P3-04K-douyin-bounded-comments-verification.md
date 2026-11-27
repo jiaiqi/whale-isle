@@ -114,6 +114,25 @@ macOS 默认驱动是 `cdp-real`，原先评论只实现在 `ElectronBrowserEngi
 - `apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts` **1/1**：用本机回环仿真 CDP 端点（node:http + ws，不启动真 Chrome）走通 `RealBrowserDouyinSession → CdpConnection → CdpPageDriver → 共用端口`，证明 `cdp-real` 下评论端口确实被注入、能走通 `sent` 回执与验证码停止。
 - **仍未向抖音发起任何真实评论**；仿真 CDP 端点不是真机证据，真实发送保持 `[REAL-DEVICE]` 待验。
 
+### 4.6 复核返工：回执归属、验证代际、暂停口径与护栏归一化（`[SIMULATION]`，2026-11-27）
+
+独立评审指出的四个安全细节已补完（同一条红线下的返工，不是新需求）：
+
+| 项 | 改动 | 验证 |
+| --- | --- | --- |
+| 回执归属 | 发送前从 DOM 读当前登录账号 `sec_uid`（否则昵称 + 头像）；新评论作者必须是本人才继续「重载仍在」，否则 `uncertain` | 端口单测新增 4 例（无自我标识不发、别人的同文、作者缺失、重载后作者变化）；character-core 归属判定 1 例 |
+| 验证 IPC | 入口先抓 `commentGeneration`，每个 `await` 后比对，中途变更即中止 | 代码审阅 + 既有验证 E2E 路径不回归 |
+| 暂停口径 | 只有 `captcha` / `login_required` 才 `pauseComments`；结构性错误与 `uncertain` 保持开关 | `social-comment-pause.spec.ts` 3 例 + Electron E2E 新增结构性/验证码双断言 |
+| IPC 守卫 | 三个评论 IPC 只接受本应用 renderer 主框架（子框架/非本地页面拒绝） | 真实构建的主应用评论面板 E2E 仍通过 |
+| 护栏归一化 | 去空白/去标点/全角转半角后匹配；补 `威信`、`vx`、`v信`、`v薇`；手机号允许分隔符；@ 无需前置空白 | `social-douyin.spec.ts` 新增 3 例（5 个实测绕过样本、正常文本不误伤、@ 剥离） |
+
+E2E 新增断言（`apps/desktop-host/e2e/douyin-comments.e2e.spec.ts`，仍为真 Electron + 真 DOM + 真 SQLite，页面为本地仿真）：
+
+- 驱动缺端口：`failed` / `page_error` / 账本无 `sent` / 页面提交数不增加（0 次点击）。
+- 结构性错误（页面变化）：`uncertain` / `receipt_failed` 且**不**调用暂停、开关保持开启；验证码对照组 `failed` / `captcha` 触发暂停。
+
+文档口径：**护栏是兜底，不是安全边界**（见 ADR-006 补记二与 `guardDouyinCommentText` 注释）。
+
 ---
 
 ## 5. 诚实缺口（不得写成已跑通）
@@ -122,7 +141,7 @@ macOS 默认驱动是 `cdp-real`，原先评论只实现在 `ElectronBrowserEngi
 2. **未在真实已登录抖音页面核验写控件选择器**（`data-e2e="comment-input"` / `comment-publish` 等）。实现采取保守策略：只认评论专属 `data-e2e` 控件，未知结构直接失败，不退回全页面通用按钮；真实站点若结构不同，会安全失败而不是误点。
 3. **真实登录态仍受阻**：P3-04I 生产冒烟仍停在抖音「验证码中间页」，本轮未重试、未绕过。真实发送能力因此保持 `lastVerifiedAt=0`，自动评论不会执行。
 4. **模型决策链路**只做了类型与执行器单测，未在真实供应商上跑「浏览 → 评论」长循环。
-5. 页面结构变化、验证码、登录墙与平台限速均由运行时护栏拦截；任何 `failed` / `uncertain` 都会自动暂停评论开关并要求人工核对。
+5. 页面结构变化、验证码、登录墙与平台限速均由运行时护栏拦截；验证码/登录墙/账号异常会自动暂停评论开关并要求人工核对，页面变化等结构性错误只回报失败原因、不替 owner 关开关（见 §4.6）。
 
 ## 6. 待人类真机验收项（`[REAL-DEVICE]`）
 
@@ -135,8 +154,9 @@ macOS 默认驱动是 `cdp-real`，原先评论只实现在 `ElectronBrowserEngi
 
 ```bash
 pnpm exec tsc -b packages/shared-protocol packages/character-core
-pnpm exec vitest run packages/character-core/src/social-douyin.spec.ts apps/desktop-host/src/main/social-comment-ledger.spec.ts apps/desktop-host/src/main/douyin-comment-port.spec.ts apps/desktop-host/src/main/cdp-browser-engine.spec.ts --coverage.enabled=false
+pnpm exec vitest run packages/character-core/src/social-douyin.spec.ts apps/desktop-host/src/main/social-comment-ledger.spec.ts apps/desktop-host/src/main/douyin-comment-port.spec.ts apps/desktop-host/src/main/social-comment-pause.spec.ts apps/desktop-host/src/main/cdp-browser-engine.spec.ts apps/desktop-host/src/main/electron-browser-engine.spec.ts --coverage.enabled=false
 pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin-comments.e2e.spec.ts
 pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts
+pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts
 pnpm verify:gate
 ```
