@@ -1,0 +1,54 @@
+{
+  "latest": {
+    "schemaVersion": 1,
+    "sourceId": "douyin-public-jingxuan",
+    "feedUrl": "https://www.douyin.com/jingxuan",
+    "verifiedAt": 1795741855233,
+    "durationMs": 26308,
+    "candidates": 5,
+    "itemsRead": 3,
+    "readFailures": 0,
+    "ok": true,
+    "failureReason": "",
+    "samples": [
+      {
+        "url": "https://www.douyin.com/video/7710465350680202505",
+        "title": "一辈子不结婚会怎么样？ #结婚 #不结婚 #养老 #知识 #科普",
+        "authorAlias": "渡知局",
+        "topics": [
+          "结婚",
+          "不结婚",
+          "养老",
+          "知识",
+          "科普"
+        ],
+        "textChars": 195
+      },
+      {
+        "url": "https://www.douyin.com/video/7711743489997851913",
+        "title": "老头发现村子周围的一块土寸草不生，他在盖猪圈时挖开一间密室 #抖音精选#原创剧情#AI创作者浪潮计划#幺九零三#未来导演计划",
+        "authorAlias": "幺九零三",
+        "topics": [
+          "抖音精选",
+          "原创剧情",
+          "AI创作者浪潮计划",
+          "幺九零三",
+          "未来导演计划"
+        ],
+        "textChars": 296
+      },
+      {
+        "url": "https://www.douyin.com/video/7712050236268596495",
+        "title": "世人只知她玉女掌门之名，却不知她专辑销量断层碾压同期玉女歌手 #孟庭苇 #华语金曲 #音乐 #怀旧金曲",
+        "authorAlias": "40Hz - Bassline",
+        "topics": [
+          "孟庭苇",
+          "华语金曲",
+          "音乐",
+          "怀旧金曲"
+        ],
+        "textChars": 248
+      }
+    ]
+  }
+}

@@ -147,7 +147,13 @@ export class SocialBrowseExecutor {
         } catch (error) {
           readFailures += 1;
           detail = `逐条读取失败：${error instanceof Error ? error.message : String(error)}`.slice(0, 300);
-          continue; // 读取失败不计入已浏览条目，继续下一条
+          // 不可恢复门槛（验证码/风控/登录墙）：立即结束本次会话，绝不在同一轮换条硬刷
+          if (error instanceof WhaleError && !error.recoverable) {
+            runtime.abort(input.sessionId, 'error');
+            detail = `逐条读取触发不可恢复门槛，立即停止：${error.message}`.slice(0, 300);
+            break;
+          }
+          continue; // 可恢复的读取失败不计入已浏览条目，继续下一条
         }
       }
 

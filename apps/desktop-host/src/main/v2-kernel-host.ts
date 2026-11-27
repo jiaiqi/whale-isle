@@ -27,7 +27,7 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
-import { CharacterCore, ContentUnderstandingPipeline, InterestSink, SocialAutostartScheduler, SocialBrowseExecutor, SocialRuntime, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts } from '@workbench/character-core';
+import { CharacterCore, ContentUnderstandingPipeline, DouyinBrowseCandidateSource, DouyinBrowseEvidenceSchema, InterestSink, SocialAutostartScheduler, SocialBrowseExecutor, SocialRuntime, isDouyinEvidenceUsable, runDouyinSmoke, type DouyinBrowseEvidence, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts, type SocialBrowseItemReader, type SocialBrowseUnderstander } from '@workbench/character-core';
 import {
   AudioTrackKindSchema,
   BrowseCandidateSchema,
@@ -42,6 +42,7 @@ import {
   SocialAutostartSettingsSchema,
   SocialPlatformCapabilityEntrySchema,
   SocialPlatformIdSchema,
+  type SocialPlatformId,
   StageBackendKindSchema,
   StageCharacterBindingSchema,
   StageSceneSpecSchema,
@@ -67,7 +68,7 @@ import {
   type StardewScreenBinding,
 } from '@workbench/shared-protocol';
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
-import { ElectronBrowserEngine } from './electron-browser-engine';
+import { ElectronBrowserEngine, ElectronDouyinSession } from './electron-browser-engine';
 import { createNativeInjector, ensureNativeInputHelper } from './native-input-helper';
 import { createNativeAudioPlayer, ensureNativeAudioHelper } from './native-audio-player';
 import { MediaGenerationGateway } from './media-gateway';
@@ -821,17 +822,153 @@ export async function createV2KernelHost(options: {
     },
   });
 
-  // ---- V2-P3-04G 续：L1 浏览执行器（骨架已接线，候选来源为空）----
-  // 三段端口（候选来源 / 逐条读取 / 内容理解）已实现并有单测覆盖，但**不接任何真实平台**：
-  // owner 逐项声明并实测能力矩阵之前，来源表恒为空 → 执行器 runnable=false → 调度层以
-  // platform_unverified / executor_not_ready 如实拦截，一次也不会真发起。
+  // ---- V2-P3-04G/H：L1 浏览执行器 + 抖音公开内容源（owner 2026-11-27 拍板首个真实平台）----
+  // 四段端口（候选来源 / 逐条读取 / 内容理解 / 中途打断）已接线；抖音源只读公开精选页，
+  // 用独立自动化 Profile（不碰 owner 日常浏览器），不点赞/不关注/不评论/不发私信。
+  // `verified` 只在真实冒烟通过且证据未过期时为 true；否则执行器在动手前 PERMISSION_DENIED。
   // allowLocalFixture 固定 false：产品运行期永不跑本地夹具源（夹具只在单测里用）。
   const socialExecutor = new SocialBrowseExecutor({
     runtime: socialRuntime,
     allowLocalFixture: false,
     isInterrupted: () =>
       characterCore.life.activityState().halted || Boolean(autodriveRef?.runner.isRunning()),
+    onSummary: (summary) => {
+      console.log(
+        `[social] 浏览收官 ${summary.sourceId} · ${summary.itemsViewed} 条 · 理解 ${summary.understandingCalls} 次 · ${summary.stopReason}`,
+      );
+    },
   });
+
+  // 真实冒烟证据（落 userData，原子写；不进 Git）。只有 ok 且在 7 天有效期内才允许置真。
+  const DouyinEvidenceFileSchema = z.object({
+    latest: DouyinBrowseEvidenceSchema.nullable().default(null),
+  });
+  const douyinEvidenceStore = new JsonFileConfigStore(
+    join(options.userDataDir, 'v2-douyin-browse-evidence.json'),
+    DouyinEvidenceFileSchema,
+    { latest: null },
+  );
+
+  // 独立自动化 Profile：与 owner 日常浏览窗口隔离；登录态只落本地 cookies.json（不进 Git/导出）
+  const douyinProfile = browserProfiles.createOrGetProfile({
+    profileId: 'bp-char_xiaojing-douyin-public',
+    characterId: 'char_xiaojing',
+    accountId: 'douyin-owner',
+    accountVault,
+  });
+  const douyinSession =
+    douyinProfile.ok && douyinProfile.profile ? new ElectronDouyinSession(douyinProfile.profile) : null;
+  if (!douyinSession) {
+    console.warn('[social] 抖音自动化 Profile 创建失败，真实平台源不注册：', douyinProfile.error);
+  } else {
+    // 退出前把登录态 Cookie 回写隔离 Profile（只落本机 userData，不进 Git、不导出）。
+    // before-quit 必须等异步回写完成再放行，否则退出瞬间会丢掉刚扫码的登录态；最多等 2s 防卡死。
+    let douyinFlushed = false;
+    app.on('before-quit', (event) => {
+      if (douyinFlushed) return;
+      event.preventDefault();
+      void Promise.race([
+        douyinSession.dispose(),
+        new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+      ]).finally(() => {
+        douyinFlushed = true;
+        app.quit();
+      });
+    });
+  }
+
+  /** 候选来源与逐条读取共用同一个抖音源实例；未注册时调度层如实拦截 */
+  const socialReaders = new Map<SocialPlatformId, SocialBrowseItemReader>();
+  let douyinSource: DouyinBrowseCandidateSource | null = null;
+  const registerDouyinSource = (verified: boolean): void => {
+    if (!douyinSession) return;
+    douyinSource = new DouyinBrowseCandidateSource(douyinSession, { verified });
+    socialExecutor.registerSource(douyinSource);
+    socialReaders.set('douyin', douyinSource);
+  };
+  registerDouyinSource(isDouyinEvidenceUsable(douyinEvidenceStore.get().latest));
+
+  /** 冒烟通过后把抖音只读能力如实登记进能力矩阵（owner 显式拒绝的条目不会被覆盖） */
+  const seedDouyinCapabilityFromEvidence = (): void => {
+    const evidence = douyinEvidenceStore.get().latest;
+    if (!evidence || !isDouyinEvidenceUsable(evidence)) return;
+    const entries = [...socialCapabilitiesStore.get().entries];
+    const idx = entries.findIndex((entry) => entry.platform === 'douyin' && entry.capability === 'read_public');
+    if (idx >= 0 && entries[idx]!.allowed !== true) return;
+    if (idx >= 0 && entries[idx]!.lastVerifiedAt >= evidence.verifiedAt) return;
+    const entry = SocialPlatformCapabilityEntrySchema.parse({
+      platform: 'douyin',
+      capability: 'read_public',
+      channel: 'browser_ui',
+      allowed: true,
+      riskLevel: 'P1',
+      accountType: 'owner',
+      rateLimitNote: '只读公开精选页；单会话 ≤20 条 / 10 分钟，逐条间隔 ≥2.5s',
+      region: 'CN',
+      lastVerifiedAt: evidence.verifiedAt,
+      notes: 'P3-04H 真实公开页只读冒烟（候选→逐条读取）通过后登记；不点赞/不关注/不评论/不发私信',
+    });
+    if (idx >= 0) entries[idx] = entry;
+    else entries.push(entry);
+    socialCapabilitiesStore.update({ entries });
+    socialRuntime.updateCapabilities(entries);
+  };
+  seedDouyinCapabilityFromEvidence();
+
+  /** 内容理解：复用 autodrive Gateway 与饭碗计量；模型不可用则如实抛错（不静默降级） */
+  const socialUnderstander: SocialBrowseUnderstander = {
+    integrate: async ({ session, candidate, textContent }) => {
+      const understanding = await understandingPipeline.understand({
+        sessionId: session.sessionId,
+        item: {
+          platform: candidate.platform,
+          url: candidate.url,
+          title: candidate.title,
+          contentKind: candidate.contentKind,
+          authorAlias: '',
+          ...(candidate.publishedAt === undefined ? {} : { publishedAt: candidate.publishedAt }),
+        },
+        textContent,
+      });
+      const memoryPort: InterestMemoryPort | undefined = memoryHostRef
+        ? { addNode: (input) => memoryHostRef!.store.addNode(input) }
+        : undefined;
+      const sink = new InterestSink({
+        characterId: 'char_xiaojing',
+        preferences: characterCore.preferences,
+        ...(memoryPort ? { memory: memoryPort } : {}),
+      });
+      sink.ingest(understanding);
+    },
+  };
+
+  /** 真正跑一次会话：只有已注册且可运行的来源才会动手；异常一律按 error 收官并如实记录 */
+  const socialRunLocks = new Set<string>();
+  const runSocialSession = async (sessionId: string): Promise<void> => {
+    const session = socialRuntime.getSession(sessionId);
+    if (!session || socialRunLocks.has(sessionId)) return;
+    const reader = socialReaders.get(session.platform);
+    if (!reader || !socialExecutor.status().runnable) return;
+    socialRunLocks.add(sessionId);
+    try {
+      const settings = socialAutostart.settings();
+      await socialExecutor.run({
+        sessionId,
+        reader,
+        understander: socialUnderstander,
+        maxUnderstandingCalls: settings.maxUnderstandingCalls,
+      });
+    } catch (error) {
+      console.warn('[social] 浏览执行失败：', error instanceof Error ? error.message : error);
+      try {
+        if (socialRuntime.getSession(sessionId)?.status === 'active') socialRuntime.abort(sessionId, 'error');
+      } catch {
+        // 会话可能已收官；错误路径不再二次抛错
+      }
+    } finally {
+      socialRunLocks.delete(sessionId);
+    }
+  };
 
   // ---- V2-P3-04E 补：自主发起社交会话（owner 口径 2026-11-26，默认关闭）----
   // 策略层只决定「何时可以开始」；看什么、怎么互动仍归模型（ADR-002）。
@@ -855,10 +992,9 @@ export async function createV2KernelHost(options: {
       platformReady: socialCapabilitiesStore
         .get()
         .entries.some((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public'),
-      // 注意：这里恒 false 是**有意**的，不是漏接线——执行器已接线（socialExecutor 就在上面构造），
-      // 但候选来源表为空，「没有可跑的来源」比「执行器不存在」更准确。
-      // 等 owner 授权首个真实平台并实测后，改成 socialExecutor.status().runnable 一行即可打通。
-      executorReady: false,
+      // 只有「真实平台来源 + 冒烟证据有效」才为 true；否则 executor_not_ready 如实拦截，
+      // 绝不发起一个只会得到空会话、白吃当日预算的假任务。
+      executorReady: socialExecutor.status().runnable,
       modelReady: autodriveRef?.getBrainMode().llmReady ?? false,
       activeSessionId: active?.sessionId ?? null,
       executor: socialExecutor.status(),
@@ -887,7 +1023,13 @@ export async function createV2KernelHost(options: {
     if (!decision.canStart) return;
     const platform = socialCapabilitiesStore
       .get()
-      .entries.find((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public')?.platform;
+      .entries.filter((entry) => entry.allowed && entry.lastVerifiedAt > 0 && entry.capability === 'read_public')
+      // 只挑「有已实测候选来源」的平台；没有来源的平台发起只会得到空会话
+      .find((entry) =>
+        socialExecutor
+          .status()
+          .sources.some((source) => source.platform === entry.platform && source.kind === 'platform' && source.verified),
+      )?.platform;
     if (platform === undefined) return;
     const session = socialRuntime.planSession({
       platform,
@@ -898,6 +1040,7 @@ export async function createV2KernelHost(options: {
     socialRuntime.startSession(session.sessionId);
     autoStartedSessions.add(session.sessionId);
     socialAutostart.noteStarted();
+    void runSocialSession(session.sessionId);
   };
   const socialAutostartTimer = setInterval(tickSocialAutostart, 60_000);
   socialAutostartTimer.unref?.();
@@ -1970,12 +2113,57 @@ export async function createV2KernelHost(options: {
     ok: false,
     error: error instanceof Error ? error.message : String(error),
   });
-  ipcMain.handle('v2:social-snapshot', () => ({
-    sessions: socialRuntime.listSessions(),
-    capabilities: socialCapabilitiesStore.get().entries,
-    autonomyLevel: 'l1_readonly' as const,
-    autostart: socialAutostartSnapshot(),
-  }));
+  ipcMain.handle('v2:social-snapshot', async () => {
+    let douyinLoggedIn = false;
+    try {
+      douyinLoggedIn = douyinSession ? (await douyinSession.loginState()).loggedIn : false;
+    } catch {
+      douyinLoggedIn = false;
+    }
+    return {
+      sessions: socialRuntime.listSessions(),
+      capabilities: socialCapabilitiesStore.get().entries,
+      autonomyLevel: 'l1_readonly' as const,
+      autostart: socialAutostartSnapshot(),
+      douyin: {
+        available: douyinSession !== null,
+        loggedIn: douyinLoggedIn,
+        loginWindowOpen: douyinSession?.isLoginWindowOpen() ?? false,
+        sourceVerified: socialExecutor
+          .status()
+          .sources.some((source) => source.platform === 'douyin' && source.verified),
+        evidence: douyinEvidenceStore.get().latest,
+      },
+    };
+  });
+  // 抖音真实冒烟：候选来源 → 逐条读取 ≥3 条公开内容 → 落证据；只有通过才把来源与能力矩阵置真
+  ipcMain.handle('v2:social-douyin-smoke', async (_e, rawInput: unknown) => {
+    if (!douyinSource) {
+      return { ok: false as const, error: '抖音自动化会话不可用（独立 Profile 创建失败）', evidence: null };
+    }
+    const parsed = z.object({ limit: z.number().int().min(1).max(20).default(5) }).parse(rawInput ?? {});
+    try {
+      const evidence = await runDouyinSmoke(douyinSource, { limit: parsed.limit });
+      douyinEvidenceStore.update({ latest: evidence });
+      registerDouyinSource(isDouyinEvidenceUsable(evidence));
+      if (evidence.ok) seedDouyinCapabilityFromEvidence();
+      return { ok: evidence.ok, evidence, snapshot: socialAutostartSnapshot() };
+    } catch (error) {
+      return { ...socialError(error), evidence: douyinEvidenceStore.get().latest };
+    }
+  });
+  // 需要登录时才开可见窗：由 owner 亲手扫码；本 handler 不接触任何凭据
+  ipcMain.handle('v2:social-douyin-login', async () => {
+    if (!douyinSession) {
+      return { ok: false as const, error: '抖音自动化会话不可用（独立 Profile 创建失败）' };
+    }
+    try {
+      await douyinSession.openLoginWindow();
+      return { ok: true as const, loginWindowOpen: true };
+    } catch (error) {
+      return { ...socialError(error), loginWindowOpen: false };
+    }
+  });
   // owner 口径的可调项（默认关闭；改完立即生效，不重启宿主）
   ipcMain.handle('v2:social-autostart-settings', (_e, rawInput: unknown) => {
     const patch = SocialAutostartSettingsSchema.partial().parse(rawInput);
@@ -2007,7 +2195,10 @@ export async function createV2KernelHost(options: {
   });
   ipcMain.handle('v2:social-start', (_e, sessionId: unknown) => {
     try {
-      return { ok: true as const, session: socialRuntime.startSession(String(sessionId ?? '')) };
+      const session = socialRuntime.startSession(String(sessionId ?? ''));
+      // 手动发起的会话也真正跑：只有已注册且可运行的来源才会动手，否则 runSocialSession 直接返回
+      void runSocialSession(session.sessionId);
+      return { ok: true as const, session };
     } catch (error) {
       return socialError(error);
     }

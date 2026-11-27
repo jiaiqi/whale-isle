@@ -115,6 +115,7 @@ import type {
   VoiceWorkshopDial,
   VoiceWorkshopState,
 } from '@workbench/shared-protocol';
+import type { DouyinBrowseEvidence } from '@workbench/character-core';
 
 export const GAME_OPTIONS = [
   { id: 'stardew', label: '星露谷物语', shortLabel: '星露谷' },
@@ -1258,7 +1259,24 @@ export interface DirectorBridge {
     capabilities: SocialPlatformCapabilityEntry[];
     autonomyLevel: 'l1_readonly';
     autostart: SocialAutostartSnapshot;
+    /** V2-P3-04H：抖音 L1 只读真实平台状态（登录态 / 冒烟证据 / 来源是否已实测） */
+    douyin: {
+      available: boolean;
+      loggedIn: boolean;
+      loginWindowOpen: boolean;
+      sourceVerified: boolean;
+      evidence: DouyinBrowseEvidence | null;
+    };
   }>;
+  /** V2-P3-04H：真实冒烟（候选来源 → 逐条读取 ≥3 条公开内容 → 落证据） */
+  v2SocialDouyinSmoke(input?: { limit?: number }): Promise<{
+    ok: boolean;
+    evidence?: DouyinBrowseEvidence | null;
+    snapshot?: SocialAutostartSnapshot;
+    error?: string;
+  }>;
+  /** V2-P3-04H：打开独立 Profile 的可见登录窗，由 owner 亲手扫码 */
+  v2SocialDouyinLogin(): Promise<{ ok: boolean; loginWindowOpen?: boolean; error?: string }>;
   /** V2-P3-04E 补：自主发起设置（默认关闭；改完立即生效） */
   v2SocialAutostartSettings(input: Partial<SocialAutostartSettings>): Promise<{
     ok: boolean;

@@ -32,6 +32,7 @@ import {
   Trash2,
   Wand2,
 } from 'lucide-react';
+import type { DouyinBrowseEvidence } from '@workbench/character-core';
 import type {
   AudioMixerSnapshot,
   BlenderToolchainStatus,
@@ -150,6 +151,13 @@ export function LifeConsoleView({
     capabilities: SocialPlatformCapabilityEntry[];
     autonomyLevel: 'l1_readonly';
     autostart: SocialAutostartSnapshot;
+    douyin: {
+      available: boolean;
+      loggedIn: boolean;
+      loginWindowOpen: boolean;
+      sourceVerified: boolean;
+      evidence: DouyinBrowseEvidence | null;
+    };
   } | null>(null);
   const [socialDraft, setSocialDraft] = useState({ platform: 'bilibili' as SocialPlatformId, objective: '' });
 
@@ -539,6 +547,10 @@ export function LifeConsoleView({
   };
 
   const activeEmbodiment = snapshot?.embodiments.find((e) => e.active) ?? snapshot?.embodiments[0];
+  const lastAutoRecord =
+    socialSnap !== null && socialSnap.autostart.recent.length > 0
+      ? socialSnap.autostart.recent[socialSnap.autostart.recent.length - 1]!
+      : null;
 
   // ---- V2-P3-04E：Digital Life L1 社区只读浏览操作 ----
   const refreshSocial = async (): Promise<void> => {
@@ -592,6 +604,21 @@ export function LifeConsoleView({
       notes: '中控台人工声明已实测',
     });
     if (res.ok) toast.success(`${platform} read_public 已标记实测`);
+    await refreshSocial();
+  };
+  /** V2-P3-04H：抖音真实冒烟（真联网、只读公开页；通过后来源才会置真） */
+  const handleDouyinSmoke = async (): Promise<void> => {
+    toast.info('正在真实读取抖音公开精选内容（≥3 条，约 15–30 秒）…');
+    const res = await window.directorBridge.v2SocialDouyinSmoke({ limit: 5 });
+    if (res.ok) toast.success(`抖音冒烟通过：读到 ${res.evidence?.itemsRead ?? 0} 条公开内容，来源已置为已实测`);
+    else toast.error(`抖音冒烟未通过：${res.error ?? res.evidence?.failureReason ?? '未知原因'}`);
+    await refreshSocial();
+  };
+  /** V2-P3-04H：需要登录时才开可见窗，由 owner 亲手扫码；不代填密码、不导出凭据 */
+  const handleDouyinLogin = async (): Promise<void> => {
+    const res = await window.directorBridge.v2SocialDouyinLogin();
+    if (res.ok) toast.success('已打开独立 Profile 登录窗，请用抖音 App 扫码（登录态只留本机）');
+    else toast.error(res.error ?? '打开登录窗失败');
     await refreshSocial();
   };
 
@@ -1269,6 +1296,61 @@ export function LifeConsoleView({
               因此即使开关打开也不会发起，避免空会话白吃当日预算。
             </div>
           ) : null}
+        </div>
+
+        {/* V2-P3-04H：抖音 L1 只读真实平台（真实冒烟 + owner 扫码登录） */}
+        <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-social-douyin>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="font-semibold" style={{ color: 'var(--text-1)' }}>抖音 L1 只读（首个真实平台）</div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                data-v2-social-douyin-smoke
+                onClick={() => void handleDouyinSmoke()}
+                disabled={socialSnap !== null && !socialSnap.douyin.available}
+                className="btn-pill green"
+                style={{ padding: '3px 10px', fontSize: 10.5 }}
+              >
+                真实冒烟（读 3 条）
+              </button>
+              <button
+                type="button"
+                data-v2-social-douyin-login
+                onClick={() => void handleDouyinLogin()}
+                disabled={socialSnap !== null && !socialSnap.douyin.available}
+                className="btn-pill ghost"
+                style={{ padding: '3px 10px', fontSize: 10.5 }}
+              >
+                打开登录窗（扫码）
+              </button>
+            </div>
+          </div>
+          {socialSnap === null ? (
+            <div style={{ color: 'var(--text-3)' }}>尚未读取到抖音源状态。</div>
+          ) : (
+            <>
+              <div className="mono text-[10px]" data-v2-social-douyin-status style={{ color: 'var(--text-3)' }}>
+                来源 douyin-public-jingxuan ·{' '}
+                {socialSnap.douyin.sourceVerified ? '已实测（可运行）' : '未实测（绝不发起）'} ·{' '}
+                {socialSnap.douyin.loggedIn ? '已登录' : '未登录'} ·{' '}
+                {socialSnap.douyin.loginWindowOpen ? '登录窗已开' : '登录窗未开'}
+              </div>
+              <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                公开精选页匿名可读，不需要登录；推荐/关注等个性化流才需要扫码。只读硬边界：不点赞、不关注、不评论、不发私信，
+                触发验证码/风控立即停下，不绕过。
+              </div>
+              <div className="mono text-[10px]" data-v2-social-douyin-evidence style={{ color: 'var(--text-3)' }}>
+                {socialSnap.douyin.evidence === null
+                  ? '还没跑过真实冒烟；来源保持未实测。'
+                  : `上次冒烟 ${new Date(socialSnap.douyin.evidence.verifiedAt).toLocaleString('zh-CN')} · 读到 ${socialSnap.douyin.evidence.itemsRead}/${socialSnap.douyin.evidence.candidates} 条 · 耗时 ${Math.round(socialSnap.douyin.evidence.durationMs / 1000)}s · 读取失败 ${socialSnap.douyin.evidence.readFailures} 次 · ${socialSnap.douyin.evidence.ok ? '通过' : `未通过：${socialSnap.douyin.evidence.failureReason}`}`}
+              </div>
+              <div className="mono text-[10px]" data-v2-social-douyin-last-tick style={{ color: 'var(--text-3)' }}>
+                上次自主 tick：{lastAutoRecord === null
+                  ? '本进程还没有自主发起的记录。'
+                  : `${new Date(lastAutoRecord.startedAt).toLocaleString('zh-CN')} · ${lastAutoRecord.outcome} · ${lastAutoRecord.stopReason} · ${lastAutoRecord.itemsViewed} 条 · 耗时 ${Math.round(lastAutoRecord.durationMs / 1000)}s`}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="grid gap-2 md:grid-cols-2">

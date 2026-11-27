@@ -22,6 +22,16 @@
 - **CosyVoice2 ONNX/CoreML 移植**：权重与上游同为 Apache-2.0、C++ 运行时 MIT，但预转换 GGUF 只到 CosyVoice3、macOS 需另配 llama.cpp GGML 1.x，转换仓库 license 字段 `NOASSERTION` → 未成熟，未实测。
 - **结论**：情绪 + 克隆路线继续走商业 API（MiMo）；仅当接受固定音色时才考虑 Kokoro。听感（儿童感 / 情绪可听差别）未做，待 owner 试听 `artifacts/tts-ab/engine-eval/`。证据 [tts-alternative-engine-eval.md](./docs/v2/evidence/tts-alternative-engine-eval.md)。
 
+### Added / Verified（`V2-P3-04H`：抖音 L1 只读真实平台接入，`IMPLEMENTED_UNVERIFIED`）
+
+- **真实平台源**：新增 `packages/character-core/src/social-douyin.ts`——从「抖音精选」公开页供给候选，逐条打开视频页读取标题/作者/发布时间/话题等公开字段，接入既有候选来源/逐条读取端口；逐条间隔默认 2.5s；证据 7 天 TTL；**只读，不点赞/不关注/不评论/不发私信**。
+- **风控与登录墙**：识别真正的人机校验/风控文案 → `recoverable:false` → 执行器立即 `abort('error')`，同轮不换条硬刷；登录墙 → `PERMISSION_DENIED / LOGIN_REQUIRED` 停下等 owner 扫码。修正首轮把登录弹窗「验证码登录」误判为风控的假阳性。
+- **宿主接线**：独立 `persist:whale-char_xiaojing-douyin-owner` Profile（隐藏读窗 + 可见扫码登录窗 + Cookie 只落本机 profile，不代填密码、不存凭据）；`v2:social-douyin-smoke` / `v2:social-douyin-login` / snapshot `douyin` 状态；`executorReady`/`runnable` 只在冒烟通过且证据 ≤7 天时置真，能力矩阵登记 `douyin/read_public`（P1 / owner / CN / 单会话 ≤20 条 / 10 分钟）。
+- **生活页**：「真实冒烟（读 3 条）」「打开登录窗（扫码）」、证据时间/条数/耗时/失败原因与上一次 tick 结果；开关默认关，未实测/未登录继续 `platform_unverified` 拦截。
+- **真实读数（2026-11-27）**：冒烟候选 **5** → 读到 **3**、读取失败 **0**、耗时 **26.3s**（`09:10:55 CST`）；真实会话 `bs-65e7a249` **3 条 / `completed` / 27.6s**；公开精选页 **`loggedIn=false` 即可读，本次无需 owner 扫码**。
+- **测试与门禁**：`social-douyin.spec.ts` **18 例**（解析/话题/登录墙/验证码即停/限速/未实测零调用/配额/打断/证据 TTL），与执行器合计 **30/30**；`pnpm verify:gate` **8 过 / 0 跳过**。
+- **未验**：个性化推荐/关注流（需 owner 扫码）、真实验证码页面样本、真实模型内容理解、多日自动 tick 浸泡。证据 [P3-04H-douyin-l1-verification.md](./docs/v2/evidence/P3-04H-douyin-l1-verification.md)。
+
 ### Added / Changed（音色工坊 M1+M2 + 表演 B 级接线收档，owner 拍板「m2+m1」）
 
 - **B 级接线**：`MIMO_EMOTION_STYLE_HINTS` 的 `daily` / `bright` / `tsundere` 三档改为强度阶梯 B 级指令原文；新增 `MIMO_PERFORMANCE_INTENSITY_LEVELS` / `MIMO_DEFAULT_PERFORMANCE_INTENSITY = 'B'` / `MIMO_PERFORMANCE_A_SUFFIX` / `MIMO_PERFORMANCE_C_SUFFIX` / `MIMO_PERFORMANCE_B_HINTS` 与 `resolveMimoEmotionHint()`。A/C 只作为工坊试戴强度，`sleepy` / `surprised` 没有阶梯数据、不编造模板；C 级内联标签仍标注「间接推断、未经听感」。
