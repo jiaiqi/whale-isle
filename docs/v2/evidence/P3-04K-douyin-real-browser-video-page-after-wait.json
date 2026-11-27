@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "stage": "read",
+  "recordedAt": "2026-11-27T03:20:44.788Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "running": true,
+  "browser": "Google Chrome",
+  "browserVersion": "Chrome/158.0.8127.88",
+  "cookies": {
+    "names": [
+      "sessionid",
+      "sessionid_ss",
+      "sid_guard"
+    ],
+    "cookieCount": 67,
+    "loggedIn": true
+  },
+  "page": {
+    "url": "https://www.douyin.com/video/7682712994194722091",
+    "title": "一口气蹲到腿麻的暴雨末日！每十天海平面升高十米！ #我的世界 #小凡 #暴雨末日 - 抖音",
+    "textChars": 2537,
+    "textHead": "开启读屏标签\n读屏标签已关闭\n精选\n推荐\nAI抖音\n关注\n朋友\n我的\n直播\n放映厅\n短剧\n疯狂水世界\n搜索\n\n充钻石\n\n客户端\n\n壁纸\n\n通知\n\n消息\n\n投稿\n\n00:23 / 39:23\n倍速\n智能\n清屏\n连播\n等我捞到海水净化器\n932",
+    "cards": 22,
+    "cardSample": [
+      {
+        "videoId": "7678682745379278080",
+        "text": "06:36播放中"
+      },
+      {
+        "videoId": "7679429393697049908",
+        "text": "05:05播放中"
+      },
+      {
+        "videoId": "7680506904472243497",
+        "text": "05:07播放中"
+      }
+    ],
+    "heading": "第8集 | 一口气蹲到腿麻的暴雨末日！每十天海平面升高十米！ #我的世界 #小凡 #暴雨末日",
+    "author": "小凡",
+    "blockKind": null,
+    "blockDetail": ""
+  }
+}

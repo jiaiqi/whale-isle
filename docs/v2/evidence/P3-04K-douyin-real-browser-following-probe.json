@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "stage": "probe-following",
+  "recordedAt": "2026-11-27T03:14:54.778Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "feed": "following",
+  "loginState": {
+    "loggedIn": true
+  },
+  "page": {
+    "url": "https://www.douyin.com/follow",
+    "title": "抖音-记录美好生活",
+    "textChars": 101,
+    "textHead": "开启读屏标签\n读屏标签已关闭\n精选\n推荐\nAI抖音\n关注\n朋友\n我的\n直播\n放映厅\n短剧\n搜索\n\n充钻石\n\n客户端\n\n壁纸\n\n通知\n\n消息\n\n投稿\n\n暂时没有更多作品\n可以在搜索或在推荐关注你感兴趣的人",
+    "cards": 0,
+    "cardSample": [],
+    "heading": "",
+    "author": "",
+    "blockKind": null,
+    "blockDetail": ""
+  },
+  "verifiedByThreshold": false
+}

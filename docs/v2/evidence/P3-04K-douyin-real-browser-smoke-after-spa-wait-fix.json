@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "stage": "smoke",
+  "recordedAt": "2026-11-27T03:29:00.720Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "loggedIn": true,
+  "evidence": {
+    "schemaVersion": 1,
+    "sourceId": "douyin-public-jingxuan",
+    "feedUrl": "https://www.douyin.com/?recommend=1",
+    "requestedFeed": "recommended",
+    "usedFeed": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "verifiedAt": 1795750147670,
+    "durationMs": 6928,
+    "candidates": 5,
+    "itemsRead": 3,
+    "readFailures": 0,
+    "ok": true,
+    "failureReason": "",
+    "samples": [
+      {
+        "url": "https://www.douyin.com/video/7686072465843440931",
+        "title": "07:1715.7万血污哥斯拉大哥来了！ #游戏花样建造大赛 #我的世界 #我的世界中国版 #我的世界开学季#北冥的鱼@北冥的鱼 · 9月16日",
+        "authorAlias": "北冥的鱼",
+        "topics": [
+          "游戏花样建造大赛",
+          "我的世界",
+          "我的世界中国版",
+          "我的世界开学季",
+          "北冥的鱼"
+        ],
+        "textChars": 289
+      },
+      {
+        "url": "https://www.douyin.com/video/7686910901743668506",
+        "title": "04:347.6万MC海上塔吊：每过十天从海中吊上一座集装箱！我们该如何生存！ #我的世界 #极限生存 #集装箱 #mc@很会说话的草木 · 9月19日",
+        "authorAlias": "很会说话的草木",
+        "topics": [
+          "我的世界",
+          "极限生存",
+          "集装箱",
+          "mc"
+        ],
+        "textChars": 280
+      },
+      {
+        "url": "https://www.douyin.com/video/7699483918206078234",
+        "title": "06:297.6万人生真正的任务：学哲学+精神分析为什么才能真正“开悟” 自我的深处是一个粪坑。",
+        "authorAlias": "槛外人philosophy",
+        "topics": [
+          "哲学",
+          "精神分析",
+          "齐泽克",
+          "拉康",
+          "成长"
+        ],
+        "textChars": 291
+      }
+    ]
+  },
+  "wallClockMs": 6930,
+  "selection": {
+    "requested": "recommended",
+    "used": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "detail": ""
+  }
+}

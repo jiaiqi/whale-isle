@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "stage": "launch",
+  "recordedAt": "2026-11-27T03:04:25.059Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "browser": "Google Chrome",
+  "browserVersion": "",
+  "loginCookies": [
+    "enter_pc_once",
+    "__ac_signature",
+    "__ac_referer",
+    "ttwid",
+    "__ac_nonce",
+    "UIFID_TEMP",
+    "web_sign_token"
+  ],
+  "page": {
+    "url": "https://www.douyin.com/",
+    "title": "抖音-记录美好生活",
+    "textChars": 0,
+    "textHead": "",
+    "cards": 0,
+    "cardSample": [],
+    "heading": "",
+    "author": "",
+    "blockKind": null,
+    "blockDetail": ""
+  },
+  "loggedIn": false,
+  "browserLeftOpen": true
+}

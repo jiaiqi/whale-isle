@@ -80,6 +80,12 @@ import {
 } from '@workbench/shared-protocol';
 import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { ElectronBrowserEngine, ElectronDouyinSession } from './electron-browser-engine';
+import {
+  DouyinBrowserConfigSchema,
+  RealBrowserDouyinSession,
+  type DouyinBrowserConfig,
+  type DouyinBrowserDriverKind,
+} from './cdp-browser-engine';
 import { createNativeInjector, ensureNativeInputHelper } from './native-input-helper';
 import { createNativeAudioPlayer, ensureNativeAudioHelper } from './native-audio-player';
 import { MediaGenerationGateway } from './media-gateway';
@@ -943,20 +949,44 @@ export async function createV2KernelHost(options: {
     douyinEvidenceStore.get().byFeed[feed] ?? null;
   const douyinPreferredFeed = (): DouyinFeedKind => douyinEvidenceStore.get().preferredFeed;
 
-  // 独立自动化 Profile：与 owner 日常浏览窗口隔离；登录态只落本地 cookies.json（不进 Git/导出）
+  // 抖音读取驱动开关（V2-P3-04K）：默认在 macOS 用「真浏览器 + 专用持久 profile + CDP」，
+  // 保留 Electron 隔离 partition 引擎作为可切换回落。配置改动下次启动生效。
+  const douyinBrowserDefaults: DouyinBrowserConfig = {
+    driver: process.platform === 'darwin' ? 'cdp-real' : 'electron',
+    remoteDebuggingPort: 9333,
+  };
+  const douyinBrowserConfigStore = new JsonFileConfigStore(
+    join(options.userDataDir, 'v2-douyin-browser.json'),
+    DouyinBrowserConfigSchema,
+    douyinBrowserDefaults,
+  );
+  const douyinBrowserConfig: DouyinBrowserConfig = douyinBrowserConfigStore.get();
+  const douyinDriver: DouyinBrowserDriverKind = douyinBrowserConfig.driver;
+
+  // 独立自动化 Profile：与 owner 日常浏览窗口隔离；登录态只落本机（不进 Git/导出）。
+  // cdp-real 用鲸屿自己的专用 Chrome/Edge profile 目录；electron 继续用隔离 partition 的 Profile。
   const douyinProfile = browserProfiles.createOrGetProfile({
     profileId: 'bp-char_xiaojing-douyin-public',
     characterId: 'char_xiaojing',
     accountId: 'douyin-owner',
     accountVault,
   });
-  const douyinSession =
-    douyinProfile.ok && douyinProfile.profile ? new ElectronDouyinSession(douyinProfile.profile) : null;
+  const douyinSession: ElectronDouyinSession | RealBrowserDouyinSession | null =
+    douyinDriver === 'electron'
+      ? douyinProfile.ok && douyinProfile.profile
+        ? new ElectronDouyinSession(douyinProfile.profile)
+        : null
+      : new RealBrowserDouyinSession({
+          // 绝不是 owner 日常 Chrome 的默认 user-data-dir，也不是 Electron partition
+          profileDir: join(options.userDataDir, 'douyin-browser-profile'),
+          port: douyinBrowserConfig.remoteDebuggingPort,
+        });
   if (!douyinSession) {
     console.warn('[social] 抖音自动化 Profile 创建失败，真实平台源不注册：', douyinProfile.error);
   } else {
-    // 退出前把登录态 Cookie 回写隔离 Profile（只落本机 userData，不进 Git、不导出）。
-    // before-quit 必须等异步回写完成再放行，否则退出瞬间会丢掉刚扫码的登录态；最多等 2s 防卡死。
+    console.info(`[social] 抖音只读驱动：${douyinDriver}`);
+    // 退出前释放浏览器：cdp-real 关闭真浏览器（登录态已在专用 profile 目录里），electron 回写隔离 Profile。
+    // before-quit 必须等异步释放完成再放行；最多等 2s 防卡死。
     let douyinFlushed = false;
     app.on('before-quit', (event) => {
       if (douyinFlushed) return;
@@ -2494,6 +2524,7 @@ export async function createV2KernelHost(options: {
       autostart: socialAutostartSnapshot(),
       douyin: {
         available: douyinSession !== null,
+        driver: douyinDriver,
         loggedIn: douyinLoggedIn,
         loginWindowOpen: douyinSession?.isLoginWindowOpen() ?? false,
         feed,

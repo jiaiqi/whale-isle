@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "stage": "smoke",
+  "recordedAt": "2026-11-27T03:16:40.870Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "loggedIn": true,
+  "evidence": {
+    "schemaVersion": 1,
+    "sourceId": "douyin-public-jingxuan",
+    "feedUrl": "https://www.douyin.com/?recommend=1",
+    "requestedFeed": "recommended",
+    "usedFeed": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "verifiedAt": 1795749411071,
+    "durationMs": 10179,
+    "candidates": 5,
+    "itemsRead": 1,
+    "readFailures": 4,
+    "ok": false,
+    "failureReason": "视频页没有可读公开字段：https://www.douyin.com/video/7682712994194722091",
+    "samples": [
+      {
+        "url": "https://www.douyin.com/video/7703494674878565666",
+        "title": "01:2019.9万没记错的话，家应该是充电站来着 #sekoai #seko有点儿东西创作者计划 #穷婚可耻但有用 #芋圆@_别浮躁 · 11月2日",
+        "authorAlias": "_别浮躁",
+        "topics": [
+          "sekoai",
+          "seko有点儿东西创作者计划",
+          "穷婚可耻但有用",
+          "芋圆"
+        ],
+        "textChars": 299
+      }
+    ]
+  },
+  "wallClockMs": 10180,
+  "selection": {
+    "requested": "recommended",
+    "used": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "detail": ""
+  }
+}

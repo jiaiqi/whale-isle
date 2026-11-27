@@ -15,6 +15,23 @@
 - **E2E 与 CI**：新增 `voice-studio.e2e.spec.ts`（`[E2E-HOST]`，零云端计费）并接进 CI macOS job；`studio.e2e.spec.ts` 补 2.0 断言，同时把 `[data-preview-canvas]` 断言移进 `catalog.actions.length > 0` 分支——该断言在干净 checkout（无 `assets/pet-packs`）下本就必挂，已在基线 `ecc82a1` 复现，非本分支引入；该文件依赖本地 2GB 随包素材，故仍不接 CI。
 - **验证**：`pnpm verify:gate` **8/8**；单测 **2081 passed / 1 skipped**（189 文件，分支覆盖率 90.19%）；`[E2E-HOST]` `studio` + `voice-studio` **2/2**（详见 `docs/VERIFY.md`）。
 
+### Added（抖音只读读取路径换成真浏览器 + 独立持久 Profile + CDP，`V2-P3-04K`）
+
+- 新增 `apps/desktop-host/src/main/cdp-browser-engine.ts`：macOS 按 Google Chrome → Microsoft Edge 探测（都没有则 BLOCKED，不下载/不安装）；专用持久 Profile 落在 `userData/douyin-browser-profile`，**绝不使用 owner 日常 Chrome 的默认 user-data-dir**；`--remote-debugging-port` + `--remote-debugging-address=127.0.0.1` 仅回环，无 headless / 无 UA 覆盖 / 无 `AutomationControlled`；自有 marker + `/json/version` 探活保证单实例（已运行则复用，绝不强拉第二个）；退出只清 `Singleton*` 与 marker，**不删 Profile**；Cookie 只检查名称（`sessionid` / `sessionid_ss` / `sid_guard`），值永不读取/打印/落盘；CDP 请求增加 20s 兜底超时，避免页面跳走时整轮冒烟挂死。
+- 新增 `apps/desktop-host/src/main/douyin-page-reader.ts`：页面读取/「推荐」标签点击脚本单点，Electron 与 CDP 两个驱动共用，避免选择器漂移。
+- `apps/desktop-host/src/main/electron-browser-engine.ts` 保留为回退驱动；`v2-kernel-host.ts` 按 `v2-douyin-browser.json` 选择 `driver: 'cdp-real' | 'electron'`（macOS 默认 `cdp-real`），生活页快照增加 `driver` 字段。默认仍关，owner 打开才跑。
+- `packages/character-core/src/social-douyin.ts`：验证码文案改为可操作指引「窗口已保留，请在该窗口手动完成后重新发起」；新增单测锁定该指引。
+- 驱动/契约单测 **25 例**（fake CDP/fake browser，CI 不需要真 Chrome）。
+
+### Verified（`V2-P3-04K` 真机只读复验，`[REAL-DEVICE]`）
+
+- Chrome **158.0.8127.88** + 专用 Profile + 回环 CDP；owner 11:12:54 扫码后只检查 Cookie 名称确认登录。
+- 未登录公开精选 **60 卡**、推荐探测 **9 卡**、关注探测 **0 卡**（「暂时没有更多作品」）。
+- 生产冒烟连续两轮 `candidates=5 / itemsRead=3 / readFailures=0 / ok=true`（6.9s、6.3s），**登录后全程未出现「验证码中间页」**。
+- 中间两轮未达标读数如实保留（`itemsRead=1`、`2`），归因为视频详情页渲染时序，并修正「就绪判据」：详情页必须等 h1/detail 字段，不拿侧栏推荐卡片当已读完；验证码早退只认 `detectDouyinBlock(...)==='captcha'`。
+- 结论边界：推荐流本轮置真、关注流因账号无可读作品仍不可运行；**本轮没撞到验证码 ≠ 已解决风控**，不构成规避保证。
+- 证据：[P3-04K-douyin-real-browser-verification.md](./docs/v2/evidence/P3-04K-douyin-real-browser-verification.md) 与同目录原始 JSON。
+
 ### Added（外部 dsh 系抖音生态仓库调研，`[DOC-ONLY]`，不改产品代码）
 
 - 新增 [P3-04J-dsh-ecosystem-review.md](./docs/v2/evidence/P3-04J-dsh-ecosystem-review.md)：对 7 个外部仓库（`LockyBee/dsh-douyin-agent` 及其 2 个 fork、`regrevia/Envoy` 的 DSH 集成、`Britneycode/dsh-fish-soul`、`dbbdbdhdbxb-design/dsh-douyin-studio`、`kdcadmin/dsh_douyin_tools`）的只读调研与借鉴评估。克隆在仓库外 `/tmp/dsh-research/`，未执行其安装脚本，未发起任何抖音真实请求。

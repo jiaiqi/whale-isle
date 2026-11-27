@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "stage": "read",
+  "recordedAt": "2026-11-27T03:05:06.330Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "running": true,
+  "browser": "Google Chrome",
+  "browserVersion": "Chrome/158.0.8127.88",
+  "cookies": {
+    "names": [],
+    "cookieCount": 32,
+    "loggedIn": false
+  },
+  "page": {
+    "url": "https://www.douyin.com/jingxuan",
+    "title": "抖音精选电脑版 - 抖音旗下优质视频平台",
+    "textChars": 6582,
+    "textHead": "开启读屏标签\n读屏标签已关闭\n精选\n推荐\nAI抖音\n关注\n朋友\n我的\n直播\n放映厅\n短剧\n搜索\n\n充钻石\n\n客户端\n\n壁纸\n\n通知\n\n消息\n\n投稿\n\n登录\n\n全部公开课游戏二次元音乐影视美食知识小剧场生活vlog体育旅行亲子动物三农汽车美妆",
+    "cards": 60,
+    "cardSample": [
+      {
+        "videoId": "7694206162778017058",
+        "text": "37:02\n53.5万\n《林满不满》1-6合集超级加长新粉纯享版。部分细节优化。 时间紧任务重，后续剧情已在加速制作中。准备解锁新篇章。#AI创作浪潮计划 #AI全能艺术家计划 #林满不满 #合集 #AI短剧\n@全员不在状态\n · 10月8日"
+      },
+      {
+        "videoId": "7692713523419286811",
+        "text": "34:56\n23.4万\n戴尔卡耐基《人性的弱点》精读 看完视频，你比90%的人更懂“如何搞定人和事”#人性的弱点 #认知思维 #精读好书 #干货知识分享 #启发 内容摘要： 核心定位：非厚黑学、非讨好话术，是基于人性规律的人际沟通实操指南，核心是看见人的自尊、情绪与需求，而非只讲道理。 基础底线：停止批评指责抱怨，避免"
+      },
+      {
+        "videoId": "7691955644647165203",
+        "text": "35:56\n10.5万\n《老父别样》1-10集。至尊版，穿越成恶毒继父，成为6个大佬的爸爸。现在孩子们的态度正在对他逐渐变好。#漫剧推荐 #ai #奶爸 #老父别样\n@阿虎漫剧\n · 10月2日"
+      }
+    ],
+    "heading": "",
+    "author": "",
+    "blockKind": "login",
+    "blockDetail": "抖音要求登录后才能继续，已停下；请在独立自动化 Profile 里由 owner 亲手扫码"
+  }
+}

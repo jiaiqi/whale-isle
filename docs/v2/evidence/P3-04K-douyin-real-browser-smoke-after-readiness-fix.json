@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "stage": "smoke",
+  "recordedAt": "2026-11-27T03:36:32.194Z",
+  "driver": "cdp-real",
+  "profileDir": "/Users/jiaqi/Library/Application Support/Whale Isle/douyin-browser-profile",
+  "port": 9333,
+  "readonly": true,
+  "loggedIn": true,
+  "evidence": {
+    "schemaVersion": 1,
+    "sourceId": "douyin-public-jingxuan",
+    "feedUrl": "https://www.douyin.com/?recommend=1",
+    "requestedFeed": "recommended",
+    "usedFeed": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "verifiedAt": 1795750598565,
+    "durationMs": 6341,
+    "candidates": 5,
+    "itemsRead": 3,
+    "readFailures": 0,
+    "ok": true,
+    "failureReason": "",
+    "samples": [
+      {
+        "url": "https://www.douyin.com/video/7696367808812289343",
+        "title": "08:386.5万鹅城县诞生！开始从零建设一座城市！！ #都市天际线#大椿的日常#游戏内容风向标@大椿哥哥吖 · 10月14日",
+        "authorAlias": "大椿哥哥吖",
+        "topics": [
+          "都市天际线",
+          "大椿的日常",
+          "游戏内容风向标"
+        ],
+        "textChars": 261
+      },
+      {
+        "url": "https://www.douyin.com/video/7706779006833659172",
+        "title": "08:5827.8万我的狗好像有点不对劲... 声明：本作品含恐怖元素，请谨慎观看，本作品剧情均为虚构，无不良引导。#模组 #狗灾@阿兰Carrot · 11月11日",
+        "authorAlias": "阿兰Carrot",
+        "topics": [
+          "模组",
+          "狗灾"
+        ],
+        "textChars": 288
+      },
+      {
+        "url": "https://www.douyin.com/video/7702067753909243176",
+        "title": "22:341.8万美国小伙卡姆中国行！在乡下彻底蒙圈的一天！ #老外真会玩#外国人在中国#旅行vlog#英语口语@阿古会说话 · 10月29日",
+        "authorAlias": "阿古会说话",
+        "topics": [
+          "老外真会玩",
+          "外国人在中国",
+          "旅行vlog",
+          "英语口语"
+        ],
+        "textChars": 279
+      }
+    ]
+  },
+  "wallClockMs": 6342,
+  "selection": {
+    "requested": "recommended",
+    "used": "recommended",
+    "loggedIn": true,
+    "fallbackReason": "",
+    "detail": ""
+  }
+}
