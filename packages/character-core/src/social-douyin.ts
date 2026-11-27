@@ -16,8 +16,72 @@ import {
 import { WhaleError } from '@workbench/runtime-core';
 import type { SocialBrowseCandidateSource, SocialBrowseItemReader } from './social-executor';
 
-/** 抖音精选公开页：匿名可读，不需要登录（推荐/关注等个性化流才需要登录） */
+/** 抖音精选公开页：匿名可读，不需要登录；未登录或个性化流不可用时永远回落到这里 */
 export const DOUYIN_PUBLIC_FEED_URL = 'https://www.douyin.com/jingxuan';
+
+/** 抖音 L1 可读的三种信息流：公开精选 / 个性化推荐 / 关注 */
+export const DOUYIN_FEED_KINDS = ['public', 'recommended', 'following'] as const;
+export type DouyinFeedKind = (typeof DOUYIN_FEED_KINDS)[number];
+export const DouyinFeedKindSchema = z.enum(DOUYIN_FEED_KINDS);
+
+export const DOUYIN_FEED_URLS: Record<DouyinFeedKind, string> = {
+  public: DOUYIN_PUBLIC_FEED_URL,
+  // 未登录时抖音会把这个地址重定向到 /jingxuan；登录后才留在推荐流
+  recommended: 'https://www.douyin.com/?recommend=1',
+  following: 'https://www.douyin.com/follow',
+};
+
+export const DOUYIN_FEED_LABELS: Record<DouyinFeedKind, string> = {
+  public: '公开精选',
+  recommended: '推荐',
+  following: '关注',
+};
+
+export type DouyinFallbackReason =
+  | ''
+  | 'not_logged_in'
+  | 'platform_redirected'
+  | 'empty_preferred'
+  | 'login_wall';
+
+/** 一次候选抓取实际用了哪条流、为什么没用请求的那条（全部如实上报，不假装已登录） */
+export interface DouyinFeedSelection {
+  requested: DouyinFeedKind;
+  used: DouyinFeedKind;
+  loggedIn: boolean;
+  fallbackReason: DouyinFallbackReason;
+  detail: string;
+}
+
+export function douyinFallbackText(reason: DouyinFallbackReason): string {
+  switch (reason) {
+    case 'not_logged_in':
+      return '未登录，已回落公开精选';
+    case 'platform_redirected':
+      return '抖音把个性化流重定向到公开精选（通常是登录态缺失）';
+    case 'empty_preferred':
+      return '所选流没有可读候选，已回落公开精选';
+    case 'login_wall':
+      return '所选流要求登录，已回落公开精选';
+    default:
+      return '';
+  }
+}
+
+/** 从最终 URL 判实际落到了哪条流；判不出时返回 null（调用方保留请求值） */
+export function douyinFeedKindFromUrl(raw: string): DouyinFeedKind | null {
+  try {
+    const url = new URL(raw);
+    if (url.hostname !== 'douyin.com' && !url.hostname.endsWith('.douyin.com')) return null;
+    if (url.pathname.startsWith('/follow')) return 'following';
+    if (url.pathname.startsWith('/jingxuan')) return 'public';
+    if (url.pathname === '/' || url.pathname === '') return 'recommended';
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 /** 真实冒烟最低条数：低于此数不算通过，`runnable` 不置真 */
 export const DOUYIN_SMOKE_MIN_ITEMS = 3;
 /** 冒烟证据有效期：过期后来源回到「未实测」，必须重跑冒烟 */
@@ -52,6 +116,12 @@ export interface DouyinLoginState {
 /** 抖音浏览器会话端口：宿主用独立 Electron Profile 实现，单测注入假会话 */
 export interface DouyinWebSession {
   load(url: string): Promise<DouyinPageSnapshot>;
+  /**
+   * 打开指定信息流；推荐流在桌面 Web 上直接访问 `/?recommend=1` 会被重定向到精选，
+   * 必须由宿主在精选页内点击「推荐」标签（只读导航）才能落到真实推荐流。
+   * 未实现时调用方回落到 `load(DOUYIN_FEED_URLS[feed])`。
+   */
+  openFeed?(feed: DouyinFeedKind): Promise<DouyinPageSnapshot>;
   loginState(): Promise<DouyinLoginState>;
   /** 打开可见登录窗，由 owner 亲手扫码；本类绝不代填密码 */
   openLoginWindow?(): Promise<void>;
@@ -61,6 +131,9 @@ export interface DouyinWebSession {
 export interface DouyinBrowseSourceOptions {
   /** 只有真实冒烟通过（证据未过期）才为 true；false 时执行器动手前直接拒绝 */
   verified: boolean;
+  /** 首选信息流；默认公开精选。个性化流未登录/不可用时总是回落公开精选 */
+  feed?: DouyinFeedKind;
+  /** 兼容旧调用：显式 feedUrl 等价于选择 public（除非 URL 能判出流） */
   feedUrl?: string;
   /** 逐条读取之间的最小间隔，默认 2500ms（低频率、不硬刷） */
   readIntervalMs?: number;
@@ -71,7 +144,13 @@ export interface DouyinBrowseSourceOptions {
 export const DouyinBrowseEvidenceSchema = z.object({
   schemaVersion: z.literal(1),
   sourceId: z.string().min(1).max(100),
+  /** 实际用于读取的 feed URL */
   feedUrl: z.string().url().max(2048),
+  /** 请求的流；旧证据没有这些字段时按公开精选处理 */
+  requestedFeed: DouyinFeedKindSchema.default('public'),
+  usedFeed: DouyinFeedKindSchema.default('public'),
+  loggedIn: z.boolean().default(false),
+  fallbackReason: z.string().max(100).default(''),
   /** 冒烟完成时间（证据时间） */
   verifiedAt: z.number().int().nonnegative(),
   durationMs: z.number().int().nonnegative(),
@@ -109,6 +188,18 @@ export function isDouyinEvidenceUsable(
   );
 }
 
+/** 请求的那条流本身是否被真实读到（个性化流回落公开精选时不算通过） */
+export function isDouyinRequestedFeedVerified(
+  evidence: DouyinBrowseEvidence | null | undefined,
+  now = Date.now(),
+): boolean {
+  return Boolean(
+    isDouyinEvidenceUsable(evidence, now) &&
+      evidence &&
+      evidence.usedFeed === evidence.requestedFeed,
+  );
+}
+
 const DURATION_RE = /^\d{1,2}:\d{2}(?::\d{2})?$/u;
 const COUNT_RE = /^\d+(?:\.\d+)?(?:万|亿|w|k)?$/iu;
 const DATE_RE =
@@ -117,7 +208,7 @@ const AUTHOR_RE = /^@/u;
 // 注意：不能把裸「验证码」当风控——抖音登录弹窗自带「验证码登录 / 获取验证码」。
 // 只认真正的人机校验/风控页文案，避免把可读页面误判成验证码页。
 const CAPTCHA_RE =
-  /(人机验证|安全验证|访问过于频繁|操作过于频繁|请完成验证|完成下方验证|拖动滑块|请输入验证码|captcha|turnstile|recaptcha|verify\s+you\s+are\s+human)/iu;
+  /(人机验证|安全验证|验证码中间页|访问过于频繁|操作过于频繁|请完成验证|完成下方验证|拖动滑块|请输入验证码|captcha|turnstile|recaptcha|verify\s+you\s+are\s+human)/iu;
 const LOGIN_RE = /(扫码登录|登录后|请先登录|密码登录|验证码登录|登录即代表同意)/u;
 
 export type DouyinBlockKind = 'captcha' | 'login';
@@ -218,7 +309,9 @@ function douyinPermissionError(message: string, reason: string): WhaleError {
  */
 export class DouyinBrowseCandidateSource implements SocialBrowseCandidateSource, SocialBrowseItemReader {
   readonly descriptor: SocialBrowseSourceDescriptor;
-  readonly feedUrl: string;
+  private currentFeed: DouyinFeedKind;
+  private readonly customFeedUrl: string | null;
+  private selection: DouyinFeedSelection | null = null;
   private readonly readIntervalMs: number;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -228,7 +321,9 @@ export class DouyinBrowseCandidateSource implements SocialBrowseCandidateSource,
     private readonly web: DouyinWebSession,
     options: DouyinBrowseSourceOptions,
   ) {
-    this.feedUrl = options.feedUrl ?? DOUYIN_PUBLIC_FEED_URL;
+    const urlFeed = options.feedUrl ? douyinFeedKindFromUrl(options.feedUrl) : null;
+    this.currentFeed = options.feed ?? urlFeed ?? 'public';
+    this.customFeedUrl = options.feedUrl && urlFeed === null ? options.feedUrl : null;
     this.readIntervalMs = options.readIntervalMs ?? 2_500;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? defaultSleep;
@@ -237,16 +332,82 @@ export class DouyinBrowseCandidateSource implements SocialBrowseCandidateSource,
       platform: 'douyin',
       kind: 'platform',
       verified: options.verified,
-      note: '抖音精选公开页（只读）；公开内容无需登录，不点赞/不关注/不评论/不发私信',
+      note: '抖音只读信息流（公开精选 / 推荐 / 关注，未登录时回落公开精选）；不点赞/不关注/不评论/不发私信',
     });
+  }
+
+  /** 当前首选流；个性化流不可用时会现实回落到公开精选，不会假装已登录 */
+  get feed(): DouyinFeedKind {
+    return this.currentFeed;
+  }
+
+  get requestedFeed(): DouyinFeedKind {
+    return this.currentFeed;
+  }
+
+  /** 最近一次抓取实际使用的 feed URL（未抓取过则用首选流） */
+  get feedUrl(): string {
+    return this.urlFor(this.selection?.used ?? this.currentFeed);
+  }
+
+  get lastSelection(): DouyinFeedSelection | null {
+    return this.selection;
+  }
+
+  /** 切换首选流；下一次抓取会重新判断登录态与回落 */
+  selectFeed(feed: DouyinFeedKind): void {
+    this.currentFeed = feed;
+    this.selection = null;
   }
 
   async listCandidates(input: { objective: string; limit: number }): Promise<BrowseCandidate[]> {
     const limit = Math.max(0, Math.floor(input.limit));
     if (limit === 0) return [];
-    const page = await this.web.load(this.feedUrl);
+
+    const requested = this.currentFeed;
+    let loggedIn = false;
+    try {
+      loggedIn = (await this.web.loginState()).loggedIn;
+    } catch {
+      // 登录态读不到一律按未登录处理：宁可回落公开精选，也不假装个性化流可用
+      loggedIn = false;
+    }
+
+    let feed: DouyinFeedKind = requested;
+    let reason: DouyinFallbackReason = '';
+    if (requested !== 'public' && !loggedIn) {
+      feed = 'public';
+      reason = 'not_logged_in';
+    }
+
+    let page = await this.openPage(feed);
     this.assertNoCaptcha(page);
-    const cards = dedupeCards(page.cards);
+
+    // 抖音自己可能把推荐流重定向到精选（未登录时常见）；以最终 URL 为准
+    const landed = douyinFeedKindFromUrl(page.url);
+    if (landed && landed !== feed) {
+      feed = landed;
+      if (feed !== requested && reason === '') reason = 'platform_redirected';
+    }
+
+    let cards = dedupeCards(page.cards);
+    if (cards.length === 0 && feed !== 'public') {
+      const block = detectDouyinBlock(page);
+      reason = block?.kind === 'login' ? 'login_wall' : 'empty_preferred';
+      feed = 'public';
+      page = await this.openPage('public');
+      this.assertNoCaptcha(page);
+      cards = dedupeCards(page.cards);
+    }
+
+    this.selection = {
+      requested,
+      used: feed,
+      loggedIn,
+      fallbackReason: reason,
+      detail: douyinFallbackText(reason),
+    };
+
     if (cards.length === 0) {
       const block = detectDouyinBlock(page);
       if (block?.kind === 'login') {
@@ -312,6 +473,18 @@ export class DouyinBrowseCandidateSource implements SocialBrowseCandidateSource,
     }
   }
 
+  private urlFor(feed: DouyinFeedKind): string {
+    if (feed === 'public' && this.customFeedUrl !== null) return this.customFeedUrl;
+    return DOUYIN_FEED_URLS[feed];
+  }
+
+  /** 优先让宿主按信息流打开（推荐流需要页内点标签）；没有实现时退回直接 load */
+  private async openPage(feed: DouyinFeedKind): Promise<DouyinPageSnapshot> {
+    if (feed === 'public' && this.customFeedUrl !== null) return this.web.load(this.customFeedUrl);
+    if (this.web.openFeed) return this.web.openFeed(feed);
+    return this.web.load(this.urlFor(feed));
+  }
+
   private async pace(): Promise<void> {
     const interval = this.readIntervalMs;
     if (interval <= 0) {
@@ -345,11 +518,14 @@ function dedupeCards(cards: DouyinFeedCard[]): DouyinFeedCard[] {
  */
 export async function runDouyinSmoke(
   source: DouyinBrowseCandidateSource,
-  options: { limit?: number; now?: () => number; minItems?: number } = {},
+  options: { limit?: number; now?: () => number; minItems?: number; feed?: DouyinFeedKind } = {},
 ): Promise<DouyinBrowseEvidence> {
   const now = options.now ?? Date.now;
   const minItems = options.minItems ?? DOUYIN_SMOKE_MIN_ITEMS;
   const limit = Math.max(minItems, Math.min(options.limit ?? 5, 20));
+  if (options.feed !== undefined) source.selectFeed(options.feed);
+  else source.selectFeed(source.requestedFeed);
+  const requestedFeed = source.requestedFeed;
   const startedAt = now();
   let candidates = 0;
   let itemsRead = 0;
@@ -387,10 +563,15 @@ export async function runDouyinSmoke(
   }
 
   const endedAt = now();
+  const selection = source.lastSelection;
   return DouyinBrowseEvidenceSchema.parse({
     schemaVersion: 1,
     sourceId: source.descriptor.sourceId,
     feedUrl: source.feedUrl,
+    requestedFeed,
+    usedFeed: selection?.used ?? requestedFeed,
+    loggedIn: selection?.loggedIn ?? false,
+    fallbackReason: selection?.fallbackReason ?? '',
     verifiedAt: endedAt,
     durationMs: Math.max(0, endedAt - startedAt),
     candidates,

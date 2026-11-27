@@ -32,7 +32,15 @@ import {
   Trash2,
   Wand2,
 } from 'lucide-react';
-import type { DouyinBrowseEvidence } from '@workbench/character-core';
+import type { DouyinBrowseEvidence, DouyinFeedKind, DouyinFeedSelection } from '@workbench/character-core';
+
+/** 仅展示用的流标签；不从 character-core 值导入，避免把主进程 Node 依赖打进渲染包 */
+const DOUYIN_FEED_KINDS = ['public', 'recommended', 'following'] as const satisfies readonly DouyinFeedKind[];
+const DOUYIN_FEED_LABELS: Record<DouyinFeedKind, string> = {
+  public: '公开精选',
+  recommended: '推荐',
+  following: '关注',
+};
 import type {
   AudioMixerSnapshot,
   BlenderToolchainStatus,
@@ -155,8 +163,13 @@ export function LifeConsoleView({
       available: boolean;
       loggedIn: boolean;
       loginWindowOpen: boolean;
+      feed: DouyinFeedKind;
+      feedVerified: boolean;
+      requestedFeedVerified: boolean;
+      selection: DouyinFeedSelection | null;
       sourceVerified: boolean;
       evidence: DouyinBrowseEvidence | null;
+      byFeed: Record<DouyinFeedKind, DouyinBrowseEvidence | null>;
     };
   } | null>(null);
   const [socialDraft, setSocialDraft] = useState({ platform: 'bilibili' as SocialPlatformId, objective: '' });
@@ -608,10 +621,29 @@ export function LifeConsoleView({
   };
   /** V2-P3-04H：抖音真实冒烟（真联网、只读公开页；通过后来源才会置真） */
   const handleDouyinSmoke = async (): Promise<void> => {
-    toast.info('正在真实读取抖音公开精选内容（≥3 条，约 15–30 秒）…');
-    const res = await window.directorBridge.v2SocialDouyinSmoke({ limit: 5 });
-    if (res.ok) toast.success(`抖音冒烟通过：读到 ${res.evidence?.itemsRead ?? 0} 条公开内容，来源已置为已实测`);
-    else toast.error(`抖音冒烟未通过：${res.error ?? res.evidence?.failureReason ?? '未知原因'}`);
+    const feed = socialSnap?.douyin.feed ?? 'public';
+    toast.info(`正在真实读取抖音「${DOUYIN_FEED_LABELS[feed]}」公开内容（≥3 条，约 15–30 秒）…`);
+    const res = await window.directorBridge.v2SocialDouyinSmoke({ limit: 5, feed });
+    const evidence = res.evidence;
+    if (res.ok) {
+      const used = evidence?.usedFeed ?? feed;
+      toast.success(
+        used === feed
+          ? `抖音「${DOUYIN_FEED_LABELS[feed]}」冒烟通过：读到 ${evidence?.itemsRead ?? 0} 条，来源已置为已实测`
+          : `抖音冒烟只读到公开精选 ${evidence?.itemsRead ?? 0} 条；「${DOUYIN_FEED_LABELS[feed]}」未验证，来源保持未实测`,
+      );
+    } else {
+      toast.error(`抖音冒烟未通过：${res.error ?? evidence?.failureReason ?? '未知原因'}`);
+    }
+    await refreshSocial();
+  };
+  /** 只切换首选流；未验证就如实显示，不拿公开精选兜底结果冒充个性化已验证 */
+  const handleDouyinFeedChange = async (feed: DouyinFeedKind): Promise<void> => {
+    const res = await window.directorBridge.v2SocialDouyinFeed({ feed });
+    if (!res.ok) toast.error(res.error ?? '切换抖音信息流失败');
+    else if (!res.feedVerified) {
+      toast.info(`已切到「${DOUYIN_FEED_LABELS[feed]}」；该流尚未通过真实冒烟，来源保持未实测`);
+    }
     await refreshSocial();
   };
   /** V2-P3-04H：需要登录时才开可见窗，由 owner 亲手扫码；不代填密码、不导出凭据 */
@@ -1302,7 +1334,19 @@ export function LifeConsoleView({
         <div className="inset space-y-1.5 p-3 text-[11.5px]" data-v2-social-douyin>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="font-semibold" style={{ color: 'var(--text-1)' }}>抖音 L1 只读（首个真实平台）</div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <select
+                data-v2-social-douyin-feed-select
+                value={socialSnap?.douyin.feed ?? 'public'}
+                onChange={(event) => void handleDouyinFeedChange(event.target.value as DouyinFeedKind)}
+                disabled={socialSnap !== null && !socialSnap.douyin.available}
+                className="mono"
+                style={{ fontSize: 10.5, padding: '3px 6px' }}
+              >
+                {DOUYIN_FEED_KINDS.map((feed) => (
+                  <option key={feed} value={feed}>{DOUYIN_FEED_LABELS[feed]}</option>
+                ))}
+              </select>
               <button
                 type="button"
                 data-v2-social-douyin-smoke
@@ -1330,19 +1374,25 @@ export function LifeConsoleView({
           ) : (
             <>
               <div className="mono text-[10px]" data-v2-social-douyin-status style={{ color: 'var(--text-3)' }}>
-                来源 douyin-public-jingxuan ·{' '}
-                {socialSnap.douyin.sourceVerified ? '已实测（可运行）' : '未实测（绝不发起）'} ·{' '}
+                首选「{DOUYIN_FEED_LABELS[socialSnap.douyin.feed]}」·{' '}
+                {socialSnap.douyin.feedVerified ? '该流已实测（可运行）' : '该流未实测（绝不发起）'} ·{' '}
                 {socialSnap.douyin.loggedIn ? '已登录' : '未登录'} ·{' '}
                 {socialSnap.douyin.loginWindowOpen ? '登录窗已开' : '登录窗未开'}
               </div>
               <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                公开精选页匿名可读，不需要登录；当前版本即使扫码登录也只读精选公开页，推荐/关注等个性化流尚未接入。只读硬边界：不点赞、不关注、不评论、不发私信，
-                触发验证码/风控立即停下，不绕过。
+                公开精选匿名可读；推荐/关注需 owner 亲手扫码登录，且登录后仍要跑一次真实冒烟才算该流已验证。
+                未登录、被平台重定向或所选流无候选时，会如实回落公开精选，并把「请求流/实际流/回落原因」写进证据，不假装已登录。
+                只读硬边界：不点赞、不关注、不评论、不发私信，触发验证码/风控立即停下，不绕过。
+              </div>
+              <div className="mono text-[10px]" data-v2-social-douyin-selection style={{ color: 'var(--text-3)' }}>
+                {socialSnap.douyin.selection === null
+                  ? '本进程还没有抓取过候选流。'
+                  : `上次抓取：请求「${DOUYIN_FEED_LABELS[socialSnap.douyin.selection.requested]}」→ 实际「${DOUYIN_FEED_LABELS[socialSnap.douyin.selection.used]}」· ${socialSnap.douyin.selection.loggedIn ? '已登录' : '未登录'}${socialSnap.douyin.selection.detail === '' ? ' · 无回落' : ` · ${socialSnap.douyin.selection.detail}`}`}
               </div>
               <div className="mono text-[10px]" data-v2-social-douyin-evidence style={{ color: 'var(--text-3)' }}>
                 {socialSnap.douyin.evidence === null
-                  ? '还没跑过真实冒烟；来源保持未实测。'
-                  : `上次冒烟 ${new Date(socialSnap.douyin.evidence.verifiedAt).toLocaleString('zh-CN')} · 读到 ${socialSnap.douyin.evidence.itemsRead}/${socialSnap.douyin.evidence.candidates} 条 · 耗时 ${Math.round(socialSnap.douyin.evidence.durationMs / 1000)}s · 读取失败 ${socialSnap.douyin.evidence.readFailures} 次 · ${socialSnap.douyin.evidence.ok ? '通过' : `未通过：${socialSnap.douyin.evidence.failureReason}`}`}
+                  ? `「${DOUYIN_FEED_LABELS[socialSnap.douyin.feed]}」还没跑过真实冒烟；来源保持未实测。`
+                  : `「${DOUYIN_FEED_LABELS[socialSnap.douyin.feed]}」上次冒烟 ${new Date(socialSnap.douyin.evidence.verifiedAt).toLocaleString('zh-CN')} · 请求 ${DOUYIN_FEED_LABELS[socialSnap.douyin.evidence.requestedFeed]} / 实际 ${DOUYIN_FEED_LABELS[socialSnap.douyin.evidence.usedFeed]} · 读到 ${socialSnap.douyin.evidence.itemsRead}/${socialSnap.douyin.evidence.candidates} 条 · 耗时 ${Math.round(socialSnap.douyin.evidence.durationMs / 1000)}s · 读取失败 ${socialSnap.douyin.evidence.readFailures} 次 · ${socialSnap.douyin.evidence.ok ? '通过' : `未通过：${socialSnap.douyin.evidence.failureReason}`}${socialSnap.douyin.evidence.fallbackReason === '' ? '' : ` · 回落：${socialSnap.douyin.evidence.fallbackReason}`}`}
               </div>
               <div className="mono text-[10px]" data-v2-social-douyin-last-tick style={{ color: 'var(--text-3)' }}>
                 上次自主 tick：{lastAutoRecord === null

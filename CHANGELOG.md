@@ -49,6 +49,16 @@
 - **CosyVoice2 ONNX/CoreML 移植**：权重与上游同为 Apache-2.0、C++ 运行时 MIT，但预转换 GGUF 只到 CosyVoice3、macOS 需另配 llama.cpp GGML 1.x，转换仓库 license 字段 `NOASSERTION` → 未成熟，未实测。
 - **结论**：情绪 + 克隆路线继续走商业 API（MiMo）；仅当接受固定音色时才考虑 Kokoro。听感（儿童感 / 情绪可听差别）未做，待 owner 试听 `artifacts/tts-ab/engine-eval/`。证据 [tts-alternative-engine-eval.md](./docs/v2/evidence/tts-alternative-engine-eval.md)。
 
+### Added / Blocked（`V2-P3-04I`：抖音个性化流「推荐 / 关注」L1 只读，`IMPLEMENTED_UNVERIFIED`）
+
+- **三种信息流**：`public`（公开精选）/ `recommended`（推荐）/ `following`（关注）。未登录、登录态读取失败、平台重定向、登录墙、空流一律**如实回落公开精选**，并把 `requestedFeed / usedFeed / loggedIn / fallbackReason` 写进证据；不假装已登录。
+- **置真口径**：新增 `isDouyinRequestedFeedVerified()`——只有请求的那条流自己真实读到 ≥3 条且证据 ≤7 天才置真；公开精选的回落证据**不冒充**个性化已验证。宿主按 `byFeed` 分流存证（旧证据自动回填），新增 `v2:social-douyin-feed` 与带 `feed` 参数的真实冒烟；生活页增加信息流下拉与请求/实际/回落展示。
+- **推荐流进入方式**：桌面 Web 直接访问 `/?recommend=1` 会被 302 到 `/jingxuan`（登录后也一样）；宿主改为在精选页内点击「推荐」导航标签（只读导航，不点赞/不关注/不评论/不发私信）。关注流补 `video-info[data-e2e-aweme-id]` 公开卡片抽取。
+- **真实读数**：owner 2026-11-27 09:56:49 CST 亲手扫码登录成功（只检查 Cookie 名称）；09:59 只读探测推荐流 **8 张卡片**、关注流 **2 张卡片**（低于冒烟门槛 3，非生产冒烟）。
+- **真实冒烟失败并停止**：10:04 生产链路冒烟遇到抖音 **「验证码中间页」**，按红线立即停止，未识别/绕过验证码、未再发起请求；`ok=false`、`runnable=false`。已补「验证码中间页」识别与单测，但按要求未重跑真实平台。
+- **测试与门禁**：`social-douyin.spec.ts` **29 例**；`pnpm verify:gate` **8/8**（首次 Gate 1 打包护栏因渲染层值导入 character-core 失败，修正后通过，失败日志保留在 `.verify-gate/`）。
+- **未验 / 阻塞**：真实个性化冒烟（待 owner 处理验证码并冷却后重约）、关注流 ≥3 条门槛、真实验证码恢复流程、真实模型内容理解、多日浸泡。证据 [P3-04I-douyin-personalized-verification.md](./docs/v2/evidence/P3-04I-douyin-personalized-verification.md)。
+
 ### Added / Verified（`V2-P3-04H`：抖音 L1 只读真实平台接入，`IMPLEMENTED_UNVERIFIED`）
 
 - **真实平台源**：新增 `packages/character-core/src/social-douyin.ts`——从「抖音精选」公开页供给候选，逐条打开视频页读取标题/作者/发布时间/话题等公开字段，接入既有候选来源/逐条读取端口；逐条间隔默认 2.5s；证据 7 天 TTL；**只读，不点赞/不关注/不评论/不发私信**。

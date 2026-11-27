@@ -27,7 +27,7 @@ import {
   type SecretVaultPort,
   type SecretVaultStatus,
 } from '@workbench/runtime-core';
-import { CharacterCore, ContentUnderstandingPipeline, DouyinBrowseCandidateSource, DouyinBrowseEvidenceSchema, InterestSink, SocialAutostartScheduler, SocialBrowseExecutor, SocialRuntime, isDouyinEvidenceUsable, runDouyinSmoke, type DouyinBrowseEvidence, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts, type SocialBrowseItemReader, type SocialBrowseUnderstander } from '@workbench/character-core';
+import { CharacterCore, ContentUnderstandingPipeline, DOUYIN_FEED_KINDS, DouyinBrowseCandidateSource, DouyinBrowseEvidenceSchema, DouyinFeedKindSchema, InterestSink, SocialAutostartScheduler, SocialBrowseExecutor, SocialRuntime, isDouyinEvidenceUsable, isDouyinRequestedFeedVerified, runDouyinSmoke, type DouyinBrowseEvidence, type DouyinFeedKind, type InterestMemoryPort, type SelectActivityInput, type SocialAutostartFacts, type SocialBrowseItemReader, type SocialBrowseUnderstander } from '@workbench/character-core';
 import {
   AudioTrackKindSchema,
   BrowseCandidateSchema,
@@ -872,14 +872,40 @@ export async function createV2KernelHost(options: {
   });
 
   // 真实冒烟证据（落 userData，原子写；不进 Git）。只有 ok 且在 7 天有效期内才允许置真。
+  // byFeed 按「请求的流」分别存证：公开精选通过不等于个性化流已验证，绝不互相冒充。
+  const emptyDouyinFeedEvidence = (): Record<DouyinFeedKind, DouyinBrowseEvidence | null> => ({
+    public: null,
+    recommended: null,
+    following: null,
+  });
   const DouyinEvidenceFileSchema = z.object({
     latest: DouyinBrowseEvidenceSchema.nullable().default(null),
+    preferredFeed: DouyinFeedKindSchema.default('public'),
+    byFeed: z
+      .object({
+        public: DouyinBrowseEvidenceSchema.nullable().default(null),
+        recommended: DouyinBrowseEvidenceSchema.nullable().default(null),
+        following: DouyinBrowseEvidenceSchema.nullable().default(null),
+      })
+      .default(emptyDouyinFeedEvidence),
   });
   const douyinEvidenceStore = new JsonFileConfigStore(
     join(options.userDataDir, 'v2-douyin-browse-evidence.json'),
     DouyinEvidenceFileSchema,
-    { latest: null },
+    { latest: null, preferredFeed: 'public', byFeed: emptyDouyinFeedEvidence() },
   );
+  // 旧证据文件只有 latest：按它请求的那条流补进 byFeed，避免升级后证据「凭空消失」
+  {
+    const current = douyinEvidenceStore.get();
+    if (current.latest && current.byFeed[current.latest.requestedFeed] === null) {
+      douyinEvidenceStore.update({
+        byFeed: { ...current.byFeed, [current.latest.requestedFeed]: current.latest },
+      });
+    }
+  }
+  const douyinEvidenceFor = (feed: DouyinFeedKind): DouyinBrowseEvidence | null =>
+    douyinEvidenceStore.get().byFeed[feed] ?? null;
+  const douyinPreferredFeed = (): DouyinFeedKind => douyinEvidenceStore.get().preferredFeed;
 
   // 独立自动化 Profile：与 owner 日常浏览窗口隔离；登录态只落本地 cookies.json（不进 Git/导出）
   const douyinProfile = browserProfiles.createOrGetProfile({
@@ -912,25 +938,35 @@ export async function createV2KernelHost(options: {
   /** 候选来源与逐条读取共用同一个抖音源实例；未注册时调度层如实拦截 */
   const socialReaders = new Map<SocialPlatformId, SocialBrowseItemReader>();
   let douyinSource: DouyinBrowseCandidateSource | null = null;
-  const registerDouyinSource = (verified: boolean): void => {
+  /** 只有「请求的那条流」本身被真实读到，才允许把来源置真；回落公开精选不算个性化已验证 */
+  const douyinFeedVerified = (feed: DouyinFeedKind): boolean =>
+    isDouyinRequestedFeedVerified(douyinEvidenceFor(feed));
+  const registerDouyinSource = (feed: DouyinFeedKind, verified: boolean): void => {
     if (!douyinSession) return;
-    douyinSource = new DouyinBrowseCandidateSource(douyinSession, { verified });
+    douyinSource = new DouyinBrowseCandidateSource(douyinSession, { verified, feed });
     socialExecutor.registerSource(douyinSource);
     socialReaders.set('douyin', douyinSource);
   };
-  registerDouyinSource(isDouyinEvidenceUsable(douyinEvidenceStore.get().latest));
+  registerDouyinSource(douyinPreferredFeed(), douyinFeedVerified(douyinPreferredFeed()));
 
   /** 证据过期后必须回到未实测：长驻进程每次 tick / 快照 / 发起前都复核，不能只在启动时看一次 */
   const refreshDouyinSourceVerification = (): void => {
     if (!douyinSource) return;
-    const fresh = isDouyinEvidenceUsable(douyinEvidenceStore.get().latest);
-    if (douyinSource.descriptor.verified !== fresh) registerDouyinSource(fresh);
+    const feed = douyinPreferredFeed();
+    const fresh = douyinFeedVerified(feed);
+    if (douyinSource.descriptor.verified !== fresh || douyinSource.requestedFeed !== feed) {
+      registerDouyinSource(feed, fresh);
+    }
   };
 
   /** 冒烟通过后把抖音只读能力如实登记进能力矩阵（owner 显式拒绝的条目不会被覆盖） */
   const seedDouyinCapabilityFromEvidence = (): void => {
-    const evidence = douyinEvidenceStore.get().latest;
-    if (!evidence || !isDouyinEvidenceUsable(evidence)) return;
+    // 公开精选证据同样证明「只读公开页」能力可用；个性化证据优先，按时间取最新可用
+    const usable = DOUYIN_FEED_KINDS.map((feed) => douyinEvidenceFor(feed))
+      .filter((evidence): evidence is DouyinBrowseEvidence => evidence !== null && isDouyinEvidenceUsable(evidence))
+      .sort((a, b) => b.verifiedAt - a.verifiedAt);
+    const evidence = usable[0];
+    if (!evidence) return;
     const entries = [...socialCapabilitiesStore.get().entries];
     const idx = entries.findIndex((entry) => entry.platform === 'douyin' && entry.capability === 'read_public');
     if (idx >= 0 && entries[idx]!.allowed !== true) return;
@@ -942,10 +978,10 @@ export async function createV2KernelHost(options: {
       allowed: true,
       riskLevel: 'P1',
       accountType: 'owner',
-      rateLimitNote: '只读公开精选页；单会话 ≤20 条 / 10 分钟，逐条间隔 ≥2.5s',
+      rateLimitNote: '只读公开信息流（公开精选 / 推荐 / 关注）；单会话 ≤20 条 / 10 分钟，逐条间隔 ≥2.5s',
       region: 'CN',
       lastVerifiedAt: evidence.verifiedAt,
-      notes: 'P3-04H 真实公开页只读冒烟（候选→逐条读取）通过后登记；不点赞/不关注/不评论/不发私信',
+      notes: `P3-04H 真实只读冒烟（候选→逐条读取）通过后登记；本次证据请求 ${evidence.requestedFeed}、实际 ${evidence.usedFeed}；不点赞/不关注/不评论/不发私信`,
     });
     if (idx >= 0) entries[idx] = entry;
     else entries.push(entry);
@@ -2183,6 +2219,9 @@ export async function createV2KernelHost(options: {
     } catch {
       douyinLoggedIn = false;
     }
+    refreshDouyinSourceVerification();
+    const feed = douyinPreferredFeed();
+    const feedEvidence = douyinEvidenceFor(feed);
     return {
       sessions: socialRuntime.listSessions(),
       capabilities: socialCapabilitiesStore.get().entries,
@@ -2192,10 +2231,15 @@ export async function createV2KernelHost(options: {
         available: douyinSession !== null,
         loggedIn: douyinLoggedIn,
         loginWindowOpen: douyinSession?.isLoginWindowOpen() ?? false,
+        feed,
+        feedVerified: douyinFeedVerified(feed),
+        requestedFeedVerified: isDouyinRequestedFeedVerified(feedEvidence),
+        selection: douyinSource?.lastSelection ?? null,
         sourceVerified: socialExecutor
           .status()
           .sources.some((source) => source.platform === 'douyin' && source.verified),
-        evidence: douyinEvidenceStore.get().latest,
+        evidence: feedEvidence ?? douyinEvidenceStore.get().latest,
+        byFeed: douyinEvidenceStore.get().byFeed,
       },
     };
   });
@@ -2204,16 +2248,34 @@ export async function createV2KernelHost(options: {
     if (!douyinSource) {
       return { ok: false as const, error: '抖音自动化会话不可用（独立 Profile 创建失败）', evidence: null };
     }
-    const parsed = z.object({ limit: z.number().int().min(1).max(20).default(5) }).parse(rawInput ?? {});
+    const parsed = z
+      .object({
+        limit: z.number().int().min(1).max(20).default(5),
+        feed: DouyinFeedKindSchema.default(douyinPreferredFeed()),
+      })
+      .parse(rawInput ?? {});
     try {
-      const evidence = await runDouyinSmoke(douyinSource, { limit: parsed.limit });
-      douyinEvidenceStore.update({ latest: evidence });
-      registerDouyinSource(isDouyinEvidenceUsable(evidence));
+      const evidence = await runDouyinSmoke(douyinSource, { limit: parsed.limit, feed: parsed.feed });
+      const byFeed = { ...douyinEvidenceStore.get().byFeed, [parsed.feed]: evidence };
+      douyinEvidenceStore.update({ latest: evidence, preferredFeed: parsed.feed, byFeed });
+      registerDouyinSource(parsed.feed, isDouyinRequestedFeedVerified(evidence));
       if (evidence.ok) seedDouyinCapabilityFromEvidence();
       return { ok: evidence.ok, evidence, snapshot: socialAutostartSnapshot() };
     } catch (error) {
       return { ...socialError(error), evidence: douyinEvidenceStore.get().latest };
     }
+  });
+  // 只切换首选信息流，不假装已验证：证据仍按请求的那条流单独判定
+  ipcMain.handle('v2:social-douyin-feed', async (_e, rawInput: unknown) => {
+    const parsed = z.object({ feed: DouyinFeedKindSchema }).parse(rawInput ?? {});
+    douyinEvidenceStore.update({ preferredFeed: parsed.feed });
+    registerDouyinSource(parsed.feed, douyinFeedVerified(parsed.feed));
+    return {
+      ok: true as const,
+      feed: parsed.feed,
+      feedVerified: douyinFeedVerified(parsed.feed),
+      evidence: douyinEvidenceFor(parsed.feed),
+    };
   });
   // 需要登录时才开可见窗：由 owner 亲手扫码；本 handler 不接触任何凭据
   ipcMain.handle('v2:social-douyin-login', async () => {
