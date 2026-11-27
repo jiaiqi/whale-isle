@@ -178,6 +178,8 @@
   > 路线决策见 [ADR-005](./adr/ADR-005-singing-and-stage-technology-route.md)（owner 原文逐字收录）；素材与选型明细见 [P3-01-MATERIALS-NEEDED.md](./P3-01-MATERIALS-NEEDED.md)。
   > **验收铁律（owner 原文）**：核心评价标准是「角色声音自然、生动、有自己的风格，形象与动作灵活，整套系统能够自动化运行并持续扩展，而不是单纯完成技术接口接入」。**PoC 通过 ≠ 需求达成**；本单系歌声/形象类，最高只能标 `IMPLEMENTED_UNVERIFIED`，直到有真实素材 + 真实听感/真机画面证据。
 
+  - **2026-11-27 阶段一前置结论（`[DOC-ONLY]`，不接入）**：选型定稿 + 素材清单已交，见 [V2-P3-07-svc-svs-selection.md](./evidence/V2-P3-07-svc-svs-selection.md)。SVC 代码只剩 RVC（MIT）可进，Seed-VC（GPL-3.0）/ so-vits-svc（AGPL-3.0）排除；SVS 主线 DiffSinger（Apache-2.0）+ OpenUtau（MIT）；RVC 底模「仅供研究」、RMVPE 无 LICENSE、OpenCpop/OpenVPI 声码器权重非商用 → 商用须自训。五组情绪参考音实缺四组（`sweet_normal` 只有合成 stub），录制规格与授权声明模板已写死。**本轮未下载权重、未跑推理、未改代码**；阶段二（真唱最小闭环）阻塞于 owner 授权素材与可追溯 `.pth`。
+
   **阶段划分（三阶段，顺序不可颠倒）**：
 
   - **阶段一（`V2-P3-07A`~`V2-P3-07D`，`PENDING`）：SVC 翻唱 + VRM 1.0 一个完整角色跑通**

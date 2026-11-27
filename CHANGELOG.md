@@ -5,6 +5,14 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（唱歌链路阶段一：SVC/SVS 选型结论 + 素材清单，`[DOC-ONLY]`，不接入）
+
+- **选型定稿**：SVC 代码许可只剩 **RVC（MIT）** 可进产品路径；Seed-VC（GPL-3.0）、so-vits-svc（AGPL-3.0，已归档）按 AGENTS §2.2 直接排除；DDSP-SVC 备选但默认声码器 CC BY-NC-SA。SVS 主线为 **DiffSinger（Apache-2.0）+ OpenUtau（MIT）**。
+- **权重比代码更容易踩雷**：RVC 官方底模带「仅供研究使用」条款、RMVPE 上游无 LICENSE、DiffSinger 官方 OpenCpop 检查点与 OpenVPI 声码器权重非商用 → 商用路径必须自训底模/声库并换 FCPE/CREPE（逐文件结论沿用 [O5-svs-svc-weight-license-per-file.md](./docs/v2/evidence/O5-svs-svc-weight-license-per-file.md)）。
+- **素材缺口写清**：五组情绪参考音只有 `sweet_normal` 的合成 stub，实缺四组（`tsundere_refuse` / `rage_spray` / `lazy_yawn` / `clumsy_panic`）+ `sweet_normal` 需重录；录制规格（24 kHz/mono/16-bit、5.0 s ± 0.3 s、峰值 −3 dBFS、前后 0.2 s 静音、一次录完）与中文**授权声明模板**已随文交付。
+- **红线**：RVC `.pth` 必须来源可追溯；禁止用歌手/他人录音；儿童声线必须有监护人授权，否则只能「成年授权声源 + 儿童化处理」并如实标注；SVC 只交付音色，演唱风格归 `SingingProfile`，不接受「别人唱完换个音色」。
+- **边界**：本轮未下载任何权重、未跑推理、不写生产接入代码、不动桌面端；阶段二（真唱最小闭环）阻塞于 owner 授权素材与 `.pth`。证据 [V2-P3-07-svc-svs-selection.md](./docs/v2/evidence/V2-P3-07-svc-svs-selection.md)。
+
 ### Validated（替代引擎速评 `[REAL-DEVICE]`：本机没有「可商用 + 有情绪 + 实时」的自托管 TTS）
 
 - **判据先写死**：许可（代码+权重）可商用/再分发 + RTF P50 ≤ 0.35 才进听感对比；跑完未改。

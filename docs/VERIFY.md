@@ -315,3 +315,19 @@
 | 儿童感 / 情绪可听差别 | 听 Kokoro sid 41 与 Melo 的中性/调皮/撒娇样本，判断「像不像八九岁」「三档分不分得开」——本报告只给客观量，替不了耳朵 | ⏳ 待 owner 试听 |
 | 是否接受固定音色 | 若接受「固定音色、无情绪」，Kokoro 是唯一「许可干净 + 实时达标」项；否则维持商业 API 主线 | ⏳ 待 owner 决策 |
 | CosyVoice3 GGUF 是否值得另立一单 | Apache-2.0 + C++/Metal 预编译，可能解决实时；但属新模型，需重做音色与情绪验证 | ⏳ 待 owner 决定 |
+
+## 2026-11-27 批次（唱歌链路阶段一：SVC/SVS 选型结论 + 素材清单，只出文档）
+
+### 已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| 唱歌链路选型（`V2-P3-07` 阶段一，`PENDING` 工单的前置结论） | `[DOC-ONLY]`（GitHub license API + 仓库 LICENSE 实读；**未下载权重、未跑推理**） | ① SVC：RVC 代码 MIT（唯一可进），Seed-VC GPL-3.0、so-vits-svc AGPL-3.0 按 AGENTS §2.2 直接排除；DDSP-SVC 备选但默认声码器 NC。② SVS：DiffSinger Apache-2.0 + OpenUtau MIT 可作主线；官方 OpenCpop 检查点与 OpenVPI 声码器权重非商用，商用须自训。③ RVC 底模权重「仅供研究使用」、RMVPE 上游无 LICENSE → 商用须自训底模并换 FCPE/CREPE（逐文件见 O5 两篇）。④ 素材清单：五组情绪参考音实缺四组 + `sweet_normal` 需重录，录制规格（24 kHz/mono/16-bit、5.0 s±0.3 s、−3 dBFS）与授权声明模板已写死。证据 [V2-P3-07-svc-svs-selection.md](./v2/evidence/V2-P3-07-svc-svs-selection.md) | 2026-11-27 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| 授权声源素材 | owner 提供/授权五组情绪参考音（含 `clumsy_panic` 是否保留 `happy_rice` 第六组）与 RVC 训练干声，并签授权声明；儿童声线需监护人签字 | ⏳ 等 owner 素材 |
+| `.pth` 与音色来源 | owner 确认目标音色的来源可追溯（谁的声音、授权范围、训练日期），不接受来源不明模型 | ⏳ 等 owner 确认 |
+| 真唱听感 | RVC 转换出的歌声是否「像角色本人在唱」——本阶段无音频可听，PoC 出来后另行验收 | ⏳ 未开始（阻塞：素材与权重） |
