@@ -497,21 +497,21 @@ export function VoiceCenterPanel(props: {
           </div>
           <section className="rounded-xl p-2.5" style={{ border: '1px solid var(--stroke)', background: 'var(--inset)' }} data-voice-timbre-library>
             <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold">
-              <span>声线库<span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · owner 定稿四条 · 默认 07 黏糊·调皮</span></span>
+              <span>声线库<span style={{ color: 'var(--text-3)', fontWeight: 500 }}> · owner 定稿一条 · 07 甜脆·元气</span></span>
               <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
                 「锁定」会用这条描述现场生成一条参考音频，再走 VoiceClone 锁声线（每次一次 API 调用）
               </span>
             </div>
             <p className="mt-1 text-[10px]" style={{ color: 'var(--amber)' }} data-voice-timbre-notice>
-              07 是当前默认声线，但 owner 听过锁定版后判定「音色不对味」；02 / 08 / 12 为待选候选。
-              等 owner 听定一条再做一次性切换，现在不要当最终版。
+              owner 2026-11-27 定稿：只保留「07 甜脆·元气」一条，随包参考音频已换成同一条描述的锁定版；
+              此前的成人向四条与候选全部作废（仅留作方法证据）。MiMo 限时免费、无商用条款，商用前须换授权 TTS 并重做参考音频。
             </p>
             <div className="mt-1.5 grid gap-1">
               {MIMO_TIMBRE_PRESETS.map((timbre) => (
                 <div key={timbre.id} className="flex flex-wrap items-center gap-1.5" data-voice-timbre={timbre.id}>
                   <span className="text-[10.5px] font-semibold" style={{ color: 'var(--text-2)' }}>{timbre.label}</span>
                   {timbre.isDefault
-                    ? <span className="pill pill-blue" style={{ fontSize: 10 }}>默认 · 待复核</span>
+                    ? <span className="pill pill-blue" style={{ fontSize: 10 }}>默认 · 定稿</span>
                     : <span className="pill" style={{ fontSize: 10 }}>候选</span>}
                   <span className="truncate text-[10px]" style={{ color: 'var(--text-3)' }} title={timbre.description}>{timbre.description}</span>
                   <button
@@ -682,9 +682,9 @@ export function VoiceCenterPanel(props: {
                 )}
               </div>
               <p className="mt-1 text-[10px] leading-relaxed" style={{ color: 'var(--text-3)' }}>
-                实测（自产参考音频 ×10）：余弦均值 0.8342、最低 0.7500。样本小、只听余弦、未做听感盲测；限免服务无商用条款。
+                实测（随包参考音频 ×10）：余弦均值 0.9059、最低 0.8814。样本小、只听余弦、未做听感盲测；限免服务无商用条款。
                 <br />
-                随包基准 = 声线库默认声线 07 黏糊·调皮（自产文本 + MiMo 生成，仅开发/内部用）。
+                随包基准 = 声线库默认声线 07 甜脆·元气（自产文本 + MiMo 生成，仅开发/内部用）。
               </p>
             </section>
 

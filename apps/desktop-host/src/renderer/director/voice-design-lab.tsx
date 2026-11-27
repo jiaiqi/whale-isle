@@ -14,7 +14,7 @@ import { MIMO_DEFAULT_TIMBRE_ID, MIMO_TIMBRE_PRESETS } from '@workbench/shared-p
 
 /**
  * 音色描述预设 = 契约层的声线库（`MIMO_TIMBRE_PRESETS`）。
- * owner 2026-11-27 决赛圈勾选的四条（两轮一致），默认是 07 黏糊·调皮；
+ * owner 2026-11-27 定稿只剩一条：07 甜脆·元气（其余候选作废，仅留作方法证据）；
  * 这些是 MiMo VoiceDesign 的自然语言音色描述（不是关键词列表），描述原文见契约层与
  * `docs/v2/VOICE-PERSONA-xiaojing.md`。
  */

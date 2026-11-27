@@ -366,14 +366,18 @@ export async function createV2KernelHost(options: {
   });
 
   /**
-   * 声线定稿迁移（owner 2026-11-27）：默认人设描述还是老的「俏皮元气略带傲娇尾音」，
-   * 现在定稿是声线库里的 07 黏糊·调皮。只有「从没被改过」的档案才迁移，
-   * 用户自己在音色设计台改过的描述一律保留（不覆盖用户选择）。
+   * 声线定稿迁移（owner 2026-11-27 二次定稿）：默认声线从「07 黏糊·调皮」换成「07 甜脆·元气」，
+   * 更早的默认描述是「俏皮元气略带傲娇尾音的少女蓝鲸声线」。这两个旧默认值都是我们自己写进档案的，
+   * 见到就迁到当前默认；用户自己在音色设计台改过的其它描述一律保留（不覆盖用户选择）。
    */
+  const LEGACY_DEFAULT_VOICE_DESCRIPTIONS = new Set([
+    '俏皮元气略带傲娇尾音的少女蓝鲸声线',
+    '软糯黏糊但带笑意的女声，撒娇里藏着坏主意，尾音轻轻上翘',
+  ]);
   try {
     const identity = characterCore.profile.voiceIdentity();
     const timbre = MIMO_TIMBRE_PRESETS.find((item) => item.id === MIMO_DEFAULT_TIMBRE_ID);
-    if (timbre !== undefined && identity.voiceDescription === '俏皮元气略带傲娇尾音的少女蓝鲸声线') {
+    if (timbre !== undefined && LEGACY_DEFAULT_VOICE_DESCRIPTIONS.has(identity.voiceDescription)) {
       characterCore.profile.updateVoiceIdentity({
         voiceDescription: timbre.description,
         preferredProviderId: 'mimo-tts-voiceclone',
@@ -426,7 +430,7 @@ export async function createV2KernelHost(options: {
    */
   const cloneSamplePath = join(options.userDataDir, 'voice-clone-sample.wav');
   /**
-   * 随包基准参考音频（owner 2026-11-27 定稿的 07 黏糊·调皮）。
+   * 随包基准参考音频（owner 2026-11-27 定稿的 07 甜脆·元气）。
    * 打包态在 `resources/voice/`，开发态在仓库 `assets/voice/`（与 guide-forager 同款解析方式）。
    * 这条音频是「自产文本 + MiMo VoiceDesign 生成」：MiMo 限时免费且页面无商用条款 → 仅开发/内部用。
    */

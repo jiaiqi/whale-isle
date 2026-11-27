@@ -33,6 +33,8 @@ import {
   CloudOpenAiTtsProvider,
   MiniMaxTtsProvider,
   MimoTtsProvider,
+  MIMO_EMOTION_STYLE_HINTS,
+  MIMO_EMOTION_STYLE_TAGS,
   type MimoTtsMode,
   OpenRouterTtsProvider,
   type VoiceProvider,
@@ -68,13 +70,17 @@ const SENTENCES: Array<{ emotion: string; text: string }> = [
   { emotion: 'happy_rice', text: '吃饱了才有力气陪你玩呀。' },
 ];
 
-const EMOTION_HINTS: Record<string, string> = {
-  sweet_normal: '温柔甜软，带笑意',
-  tsundere_refuse: '傲娇嘴硬，稍微不服气',
-  rage_spray: '生气反驳，音量偏大',
-  lazy_yawn: '慵懒困倦，语速偏慢',
-  happy_rice: '开心雀跃，语气上扬',
-};
+/**
+ * 情绪风格指令与标签的**唯一权威副本在契约层**（`packages/voice-runtime/src/providers.ts`
+ * 的 `MIMO_EMOTION_STYLE_HINTS` / `MIMO_EMOTION_STYLE_TAGS`），主进程也读那份。
+ * 这里直接转引，不再抄一份 —— 2026-11-27 实测发现：本地这份旧表只有 sweet_normal 等五个
+ * 声音工坊键，**没有 daily/bright/tsundere/sleepy/surprised**，
+ * 于是上一轮「五档情绪」实验里这五档的语气指令与 `(Tag)` 前缀**一条都没发出去**
+ * （请求体 user 是空串、assistant 无标签），五档其实是同一条请求。
+ * 抄一份 = 必然漂移，且漂移不报错，只会静默把实验做成空跑。
+ */
+const EMOTION_HINTS = MIMO_EMOTION_STYLE_HINTS;
+const EMOTION_TAGS = MIMO_EMOTION_STYLE_TAGS;
 
 function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -214,6 +220,7 @@ async function buildProvider(key: ProviderKey, fake: boolean): Promise<BuildResu
       mode,
       voiceDescription: description,
       emotionStyleHints: EMOTION_HINTS,
+      emotionStyleTags: EMOTION_TAGS,
       resolveReferenceAudio: () => {
         const path = process.env.WHALE_MIMO_VOICE_SAMPLE;
         if (path === undefined || path === '') return null;

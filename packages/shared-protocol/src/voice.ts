@@ -511,45 +511,29 @@ export const StageRuntimeSnapshotSchema = z.object({
 export type StageRuntimeSnapshot = z.output<typeof StageRuntimeSnapshotSchema>;
 
 /**
- * 声线库（owner 2026-11-27 决赛圈勾选的四条，两轮一致）。
+ * 声线库（owner 2026-11-27 定稿：只用一条）。
  *
- * - 默认声线 = `07-nianhu-piqi`（黏糊·调皮）：对应鲸鱼娘「贱兮兮可爱 + 傲娇嘴硬 + 外冷内软 + 黏人」；
- * - 其余三条是可切换的备选声线，描述即 MiMo VoiceDesign 的自然语言音色描述（不是关键词列表）；
- * - **这四条是「描述」，不是锁死的声线**：VoiceDesign 同描述 ×10 的说话人余弦最小 0.4145，漂移是实的，
+ * - 定稿声线 = `07-tiancui-yuanqi`（甜脆·元气，八九岁小女孩）：owner 原话「声音甜而脆，元气满满，语速快，
+ *   句尾翘起来，像随时要跳起来」；此前四条成人向描述与锁定产物全部作废，只保留在
+ *   `docs/v2/evidence/mimo-tts-candidate-integration.md` 作为方法证据；
+ * - 描述即 MiMo VoiceDesign 的自然语言音色描述（不是关键词列表）；
+ * - **这是「描述」，不是锁死的声线**：VoiceDesign 同描述 ×10 的说话人余弦最小 0.4145，漂移是实的，
  *   所以产品路径是「用描述生成一条参考音频 → 走 VoiceClone 锁死」（见 `docs/v2/VOICE-PERSONA-xiaojing.md`）。
  */
 export const MIMO_TIMBRE_PRESETS = [
   {
-    id: '07-nianhu-piqi',
-    label: '07 黏糊·调皮',
-    description: '软糯黏糊但带笑意的女声，撒娇里藏着坏主意，尾音轻轻上翘',
+    id: '07-tiancui-yuanqi',
+    label: '07 甜脆·元气',
+    description: '八九岁小女孩，声音甜而脆，元气满满，语速快，句尾翘起来，像随时要跳起来',
     isDefault: true,
-  },
-  {
-    id: '02-yujie-leng',
-    label: '02 御姐冷·年轻',
-    description: '二十岁左右的年轻女声，音调中低，语气平静克制，尾音干脆，像不太爱解释的人',
-    isDefault: false,
-  },
-  {
-    id: '08-nianhu-banshui',
-    label: '08 黏糊·半睡',
-    description: '黏糊的迷糊女声，气声多，像半睡半醒时撒娇，字尾含混',
-    isDefault: false,
-  },
-  {
-    id: '12-hanhan-difa',
-    label: '12 憨憨·偏低发呆',
-    description: '偏低的中性软声，呆呆的，语气没什么起伏，像在发呆',
-    isDefault: false,
   },
 ] as const;
 
 /** 默认声线 id（声线库里 owner 勾中的那一条） */
-export const MIMO_DEFAULT_TIMBRE_ID = '07-nianhu-piqi';
+export const MIMO_DEFAULT_TIMBRE_ID = '07-tiancui-yuanqi';
 
 /**
  * 随包分发的克隆参考音频（自产文本 + MiMo VoiceDesign 生成，MiMo 限时免费且无商用条款 → 仅开发/内部用）。
  * 路径相对 `assets/voice/`；打包后落在 `resources/voice/`。
  */
-export const MIMO_BUNDLED_REFERENCE_ASSET = 'xiaojing-07-nianhu-piqi.wav';
+export const MIMO_BUNDLED_REFERENCE_ASSET = 'xiaojing-07-tiancui-yuanqi.wav';
