@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import personaFixture from '../fixtures/blue-whale-maid.json';
 import {
   AudioPlaybackLeaseSchema,
+  BrainRuntimeConfigSchema,
   DiningProfilePresetSchema,
   NormalizedLiveEventSchema,
   PetAvatarManifestSchema,
@@ -31,6 +32,17 @@ import { CONTRACT_SCHEMAS, CONTRACT_VERSION } from './registry';
 /** T-M0-02：契约单测——"夹具双侧 probe"纪律的 TS 侧（Python 侧见 test_protocol_models.py） */
 
 const PERSONA = PetPersonaConfigSchema.parse(personaFixture);
+
+it('V2-P4-01 大脑代驾必须显式开启，规划超时有界且拒绝非法配置', () => {
+  const base = { profile: { profileId: 'OFFLINE_SURVIVAL', displayName: '测试', roleBindings: {} } };
+  expect(BrainRuntimeConfigSchema.parse(base).allowRuleStandin).toBeUndefined();
+  expect(BrainRuntimeConfigSchema.parse({ ...base, allowRuleStandin: true, plannerTimeoutMs: 500 }))
+    .toMatchObject({ allowRuleStandin: true, plannerTimeoutMs: 500 });
+  for (const plannerTimeoutMs of [0, 99, 120_001, 500.5, '500']) {
+    expect(BrainRuntimeConfigSchema.safeParse({ ...base, plannerTimeoutMs }).success).toBe(false);
+  }
+  expect(BrainRuntimeConfigSchema.safeParse({ ...base, allowRuleStandin: 'true' }).success).toBe(false);
+});
 
 describe('PetPersonaConfig（大肥鱼人设）', () => {
   it('蓝鲸女仆夹具可通过校验且默认值落位', () => {

@@ -4,6 +4,8 @@
 
 ## 1. 当前进度锚点
 
+- **V2-P4-01 LLM 软件链路（2026-11-27）**：`single-pet-llm-chain.e2e.spec.ts` 已通过 6/6（54.72s），经真实 `brain:apply-config → ModelGateway HTTP → LlmPlanner → 控制租约 → BWF 三态回执 → 记忆检索`；模型服务与游戏服务均为本地仿真，证据等级 `[E2E-HOST]` + `[SIMULATION]`。增加显式 `allowRuleStandin` 与有界 `plannerTimeoutMs` 配置，503/超时/非法工具/缺 Key 分别验证规则代驾，省略开关仍默认安全暂停；未使用真实模型 Key。能力域「复用 / 重写 / 拒绝」与边界见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)，总工单继续 `NEXT`，真实模型与游戏长时验收仍待。
+
 - **当前分支**：`feat-douyin-browser-cdp`（已 rebase 到最新 `feat/whale-isle-v2` `7fcb3e3`；抖音只读读取路径换成「真浏览器 + 独立持久 Profile + CDP」`V2-P3-04K`，代码 + 真机只读复验完成，PR #9 待 owner 决定是否合并；`P3-04I` 的「验证码中间页」本轮未再出现，但不据此宣称已解决风控）
 - **上一已完成/交接工单**：抖音个性化流 `V2-P3-04I`（`IMPLEMENTED_UNVERIFIED`：代码与门禁完成，10:04 生产冒烟撞「验证码中间页」按红线停止；由 `V2-P3-04K` 换真浏览器驱动后复验，推荐流本轮置真、关注流因账号无可读作品仍不可运行）
 - **当前唯一激活工单**：`V2-P4-01`（`NEXT`：单角色“小鲸”全产品链路端到端整合与长时真机验收；2026-11-27 已完成星露谷从 0 自动建档 `V2-P3-07A`–`E` 与真机 R1–R5 全闭环验收，证据 [P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)；`V2-P3-06` 缺陷①就绪重探亦已通过 R1/R2 真机冷启动竞态复验；剩余待人类验收或后续工单项为 P3-02 真实开播、P3-01 缺声/模资产，以及 `V2-P2-08`/`V2-P3-05`；另按 owner 2026-11-27 指令交付 `V2-P3-04H` 抖音 L1 只读真实平台、`V2-P3-04I` 个性化流代码与 `V2-P3-04K` 真浏览器 CDP 驱动，见本文件第 3 节第 3 行）

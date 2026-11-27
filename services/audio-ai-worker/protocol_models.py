@@ -2506,6 +2506,8 @@ class BrainRuntimeConfig(BaseModel):
     profile: Profile1
     providerModels: dict[str, str] | None = {}
     providers: Annotated[list[Provider] | None, Field(validate_default=True)] = []
+    allowRuleStandin: bool | None = None
+    plannerTimeoutMs: Annotated[int | None, Field(ge=100, le=120000)] = None
 
 
 class Level(StrEnum):

@@ -234,10 +234,11 @@ export function createAutodriveHost(
     },
     secretMaskingEnabled: true,
   });
-  let brainMode: 'rule' | 'llm' = 'llm'; // 默认 LLM 大脑（llmPlanner 未就绪时自动回落规则）
+  let brainMode: 'rule' | 'llm' = 'llm'; // 默认 LLM 大脑；未就绪时安全暂停，规则代驾须显式开启
   let gateway: InstanceType<typeof ModelGateway> | null = null;
   let llmPlanner: LlmPlanner | null = null;
   let activeProfile: DiningProfilePreset = FALLBACK_PROFILE;
+  let activeBrainConfig: BrainRuntimeConfig | undefined;
   let brainProviders: string[] = [];
   let brainMissingKeys: string[] = [];
   let recentReceipts: string[] = [];
@@ -271,7 +272,7 @@ export function createAutodriveHost(
   }
 
   /** 用给定套餐重建 gateway/planner（key 只从主进程 vault 解密，绝不来自渲染层） */
-  const buildBrain = (config?: BrainRuntimeConfig): BrainApplyResult => {
+  const buildBrain = (config: BrainRuntimeConfig | undefined = activeBrainConfig): BrainApplyResult => {
     const candidate = config?.profile ?? activeProfile ?? FALLBACK_PROFILE;
     const parsed = DiningProfilePresetSchema.safeParse(candidate);
     if (!parsed.success) {
@@ -300,11 +301,12 @@ export function createAutodriveHost(
       else keys[providerId] = key;
     }
     activeProfile = nextProfile;
+    activeBrainConfig = config;
     brainProviders = Object.keys(keys);
     brainMissingKeys = missingKeys;
     // Key 可用性只看实际解析结果：开发态环境变量兜底在 safeStorage 不可用时仍可支撑 LLM；
     // 解密失败会由 provider-vault 启动日志与服务商页状态如实上报，这里不再用 safeStorage 二次拦截。
-    if (Object.keys(keys).length === 0) {
+    if (Object.keys(keys).length === 0 && config?.allowRuleStandin !== true) {
       gateway = null;
       llmPlanner = null;
       return { ok: false, mode: 'paused', llmReady: false, providers: [], missingKeys, error: '没有可用的供应商 Key（已安全暂停高级自主决策，未启用规则代驾）' };
@@ -336,9 +338,15 @@ export function createAutodriveHost(
         initialGuides = loadGuidesFromDirectory(dir, [...(adapter.guideTopics ?? []), ...DEFAULT_GUIDE_TOPICS]);
       } catch { initialGuides = {}; }
     }
+    const plannerGateway = gateway;
+    const plannerTimeoutMs = config?.plannerTimeoutMs ?? 30_000;
     llmPlanner = new LlmPlanner({
+      allowRuleStandin: config?.allowRuleStandin === true,
       chat: (slot, messages, opts) =>
-        gateway!.chat(slot as never, messages, { maxTokens: opts?.maxTokens }).catch((error: unknown) => {
+        plannerGateway.chat(slot as never, messages, {
+          maxTokens: opts?.maxTokens,
+          signal: AbortSignal.timeout(plannerTimeoutMs),
+        }).catch((error: unknown) => {
           console.error('[llm-planner] gateway.chat 失败:', error instanceof Error ? error.message : String(error));
           throw error;
         }),
@@ -364,7 +372,8 @@ export function createAutodriveHost(
       }),
     });
     brainMode = 'llm';
-    return { ok: true, mode: brainMode, llmReady: true, providers: brainProviders, missingKeys };
+    llmPlanner.brainSwitch.setUserMode('llm');
+    return { ok: true, mode: llmPlanner.brainSwitch.mode, llmReady: brainProviders.length > 0, providers: brainProviders, missingKeys };
   };
   const effectiveBrainMode = (): BrainMode => {
     if (brainMode === 'rule') return 'rule';
@@ -393,7 +402,7 @@ export function createAutodriveHost(
   } => ({
     mode: effectiveBrainMode(),
     userMode: brainMode,
-    llmReady: llmPlanner !== null,
+    llmReady: llmPlanner !== null && brainProviders.length > 0,
     providers: brainProviders,
     missingKeys: brainMissingKeys,
     dayPlan: llmPlanner?.dayPlanStore.snapshot() ?? null,
@@ -917,7 +926,7 @@ export function createAutodriveHost(
   // 渲染层同步真实套餐/槽位（Dexie → 主进程）；key 只在主进程 vault 解密
   ipcMain.handle('brain:apply-config', (_e, payload: unknown) => {
     const parsed = BrainRuntimeConfigSchema.safeParse(payload);
-    if (!parsed.success) return { ok: false, error: '配置不合法（Schema 校验失败）', mode: effectiveBrainMode(), llmReady: llmPlanner !== null, providers: brainProviders, missingKeys: brainMissingKeys };
+    if (!parsed.success) return { ok: false, error: '配置不合法（Schema 校验失败）', mode: effectiveBrainMode(), llmReady: llmPlanner !== null && brainProviders.length > 0, providers: brainProviders, missingKeys: brainMissingKeys };
     const result = buildBrain(parsed.data);
     applyPlanner();
     return result;
@@ -941,7 +950,7 @@ export function createAutodriveHost(
       };
     },
     getBrainMode() {
-      return { mode: effectiveBrainMode(), llmReady: llmPlanner !== null };
+      return { mode: effectiveBrainMode(), llmReady: llmPlanner !== null && brainProviders.length > 0 };
     },
     getGameId() {
       return gameId;
