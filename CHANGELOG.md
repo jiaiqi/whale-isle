@@ -5,6 +5,16 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（外部 dsh 系抖音生态仓库调研，`[DOC-ONLY]`，不改产品代码）
+
+- 新增 [P3-04J-dsh-ecosystem-review.md](./docs/v2/evidence/P3-04J-dsh-ecosystem-review.md)：对 7 个外部仓库（`LockyBee/dsh-douyin-agent` 及其 2 个 fork、`regrevia/Envoy` 的 DSH 集成、`Britneycode/dsh-fish-soul`、`dbbdbdhdbxb-design/dsh-douyin-studio`、`kdcadmin/dsh_douyin_tools`）的只读调研与借鉴评估。克隆在仓库外 `/tmp/dsh-research/`，未执行其安装脚本，未发起任何抖音真实请求。
+- **最值得借鉴的三条**：①「真浏览器 + 真 profile + CDP」而非嵌入式 Chromium 驱动抖音（4 个对照组全部如此，我们目前是 Electron 隔离 partition）；②风控码分级冷却（`lib/risk.mjs` 的 `[352,412,2154,3002]` + 指数升级冷却 + 只挡写读不受影响）；③兴趣只由真实行为证据推导（`persona-memory.mjs` 的 `sustainedSeconds:8` / `completionRatio:0.6` / `quickSkipSeconds:3`）。
+- **最该警惕的两条**：①`Britneycode/dsh-fish-soul` 的纯 HTTP 逆向签名路线（自算 `x-secsdk-web-signature` / `a_bogus`、照抄网页端公共参数）明确越过我们「不逆向签名接口、不伪造请求」的红线；②`kdcadmin/dsh_douyin_tools` 的硬编码 UA + `--disable-blink-features=AutomationControlled` 属反检测口味，我们不做。
+- **DSH 生态位结论：不接**（规范正交、我们已有 Zod 契约单点事实源、DSH 宿主 Windows 优先而我们是 macOS Electron、第三方插件在我们的宿主里没有对应物）。
+- **许可核实纠正**：7 仓中 **6 个有真实 LICENSE 文件**（5 × MIT + Envoy 集成 Apache-2.0），GitHub API 报 `spdxId=none` 是误判；`dsh-fish-soul` **无 LICENSE 文件**，仅 `package.json` + README 标 MIT，归「引用代码前需再确认」档。
+- 红线口径不变（owner 拍板）：严格 L1 只读、不绕验证码、不逆向签名、不改 UA/stealth、默认关、凭据不出本机。
+- **基线口径纠正（本单内修正）**：报告初稿把「我们的现状」标成 `feat/whale-isle-v2` @ `a1d9e5c`，实为 `a1d9e5c` 的父提交；已改为**主干 HEAD `a8bcc06`**（= PR #4 合并后）。§3 差距表每行现标注 **[主干 a8bcc06]** 还是 **[仅未合并分支 `feat-social-douyin-personalized` @ `2de7e86`]**，引用清单也按两组分别标行号。**关键事实**：主干 `a8bcc06` 的 `CAPTCHA_RE` **不含「验证码中间页」**（`social-douyin.ts:119-120`），且**没有 feed 选择**——这两层加强只在未合并分支上（`:210-211` / `:23-25,192`）。即「我们的识别层更强」是**合并 PR #5 之后**才成立，报告 §4.3 已把「先合 PR #5 再重验」写成前置条件（是否合并由 owner 拍板，本单不代拍）。
+
 ### Changed（verify:gate 失败必留档：哪道 gate 败 + 未截断原始输出）
 
 - `tools/scripts/verify-gate.mjs`：所有外部命令统一走 `run()` 录制原始 stdout/stderr；失败时写 `.verify-gate/failure-<stamp>.log`（含各 gate 结论与该次全部命令输出），终端打印失败 gate 名与日志路径；`.verify-gate/` 已 gitignore。
