@@ -152,7 +152,54 @@ export interface DouyinCommentReceipt {
   uncertain?: boolean;
 }
 
-/** 抖音浏览器会话端口：宿主用独立 Electron Profile 实现，单测注入假会话 */
+/**
+ * 受限评论端口（ADR-006）：Electron 隔离 partition 与真浏览器 CDP 两个驱动
+ * **实现同一契约**，宿主按当前 `driver` 注入。只允许「他人公开视频的顶层评论」，
+ * 默认关闭；两驱动的护栏、回执三态判定必须完全一致。
+ */
+export interface DouyinCommentPort {
+  /** 读取评论区（含输入框可用性）；页面不是视频详情页直接抛错 */
+  readComments(url: string): Promise<DouyinCommentThread>;
+  /** 真实发送一条评论；只有「新增稳定 ID + 全文回读 + 重载仍在」才允许 ok=true */
+  postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt>;
+}
+
+/** 受限评论只允许抖音站内视频详情页（`/video/<数字>`），不做外站/列表页发送 */
+export const DOUYIN_VIDEO_URL_RE = /^https:\/\/www\.douyin\.com\/video\/\d{6,}\/?$/u;
+
+export function isDouyinVideoUrl(raw: string): boolean {
+  return DOUYIN_VIDEO_URL_RE.test(raw);
+}
+
+/** 比较页面地址时忽略末尾斜杠（`/video/123/` 与 `/video/123` 视为同一页） */
+export function normalizeDouyinUrl(raw: string): string {
+  return raw.replace(/\/$/u, '');
+}
+
+/** 稳定评论 ID：抖音真实评论 ID 是纯数字；前端乐观插入的临时 ID 不算 */
+export function isStableDouyinCommentId(commentId: string): boolean {
+  return /^\d{6,}$/u.test(commentId);
+}
+
+/**
+ * 回执判定（两驱动共用）：在「点击后」快照里找一条
+ * 「发送前不存在 + 稳定数字 ID + 全文完全一致」的新评论。
+ * 找不到返回 null（上层判 uncertain，绝不自动重发）。
+ */
+export function findNewDouyinComment(
+  before: readonly DouyinCommentItem[],
+  after: readonly DouyinCommentItem[],
+  text: string,
+): DouyinCommentItem | null {
+  const knownIds = new Set(before.map((item) => item.commentId));
+  return (
+    after.find(
+      (item) => !knownIds.has(item.commentId) && isStableDouyinCommentId(item.commentId) && item.text === text,
+    ) ?? null
+  );
+}
+
+/** 抖音浏览器会话端口：宿主用独立 Electron Profile 或真浏览器 CDP 实现，单测注入假会话 */
 export interface DouyinWebSession {
   load(url: string): Promise<DouyinPageSnapshot>;
   /**
@@ -164,10 +211,10 @@ export interface DouyinWebSession {
   loginState(): Promise<DouyinLoginState>;
   /** 打开可见登录窗，由 owner 亲手扫码；本类绝不代填密码 */
   openLoginWindow?(): Promise<void>;
-  /** 读取评论区（含输入框可用性）；未实现时评论执行器拒绝发送 */
-  readComments?(url: string): Promise<DouyinCommentThread>;
+  /** 受限评论端口（ADR-006）；两个驱动都必须实现，未实现时执行器拒绝发送 */
+  readComments?: DouyinCommentPort['readComments'];
   /** 真实发送一条评论；只有页面出现成功信号才允许 ok=true */
-  postComment?(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt>;
+  postComment?: DouyinCommentPort['postComment'];
   dispose?(): Promise<void>;
 }
 

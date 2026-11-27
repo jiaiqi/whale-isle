@@ -1,9 +1,11 @@
 /**
- * 抖音页面只读抽取脚本（V2-P3-04K）：
- * Electron 隐藏窗与真浏览器 CDP 两种驱动共用同一份抽取逻辑，避免两套选择器漂移。
+ * 抖音页面脚本（V2-P3-04K）：
+ * Electron 隐藏窗与真浏览器 CDP 两种驱动共用同一份脚本，避免两套选择器漂移。
  *
  * 安全口径（不可放宽）：
- * - 脚本只读 DOM 公开文本 / 公开 data-* 属性，不点赞、不关注、不评论、不发私信、不发布。
+ * - 读取脚本只读 DOM 公开文本 / 公开 data-* 属性，不点赞、不关注、不发私信、不发布。
+ * - 评论区脚本只包含 owner 授权的**唯一**写能力「受限顶层评论」（ADR-006），
+ *   且只认评论专属 `data-e2e` 控件，页面结构未知即失败，绝不退回通用按钮/输入框。
  * - 页面文本一律按不可信数据处理：脚本返回的是数据，绝不把页面内容当指令执行。
  * - 不注入任何反检测 / stealth 代码，不改 `navigator.webdriver`，不覆盖 UA。
  */
@@ -108,3 +110,87 @@ export const DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT = String.raw`
   return true;
 })()
 `;
+
+// ---------------------------------------------------------------------------
+// 评论区脚本（V2-P3-04K，Electron 与 CDP 两驱动共用）
+//
+// owner 授权的**唯一**写能力：在他人公开视频下发一条顶层评论。
+// 脚本只认评论专属 `data-e2e` 控件，页面结构未知就返回 false 由上层判失败；
+// 绝不退回全页面通用「按钮/输入框」查找，也不注入 stealth/UA 覆盖。
+// ---------------------------------------------------------------------------
+
+/** 评论专属编辑器选择器（输入框与重载回读共用，避免两处漂移） */
+export const DOUYIN_COMMENT_EDITOR_SELECTOR =
+  '[data-e2e="comment-input"] textarea, [data-e2e="comment-input"] [contenteditable="true"], textarea[data-e2e="comment-input"], [data-e2e="comment-input"][contenteditable="true"]';
+
+/** 评论专属发送按钮选择器：只认抖音评论控件的 data-e2e（不含通用「发布」按钮） */
+export const DOUYIN_COMMENT_SEND_SELECTOR =
+  '[data-e2e="comment-publish"], [data-e2e="comment-send"], [data-e2e="comment-submit"]';
+
+/**
+ * 评论区只读快照：返回 `DouyinCommentThread` 形状（在页面主世界执行）。
+ * 页面文本按不可信数据处理，只读取公开字段。
+ */
+export function buildDouyinCommentThreadScript(): string {
+  return String.raw`
+(() => {
+  const editorSelector = ${JSON.stringify(DOUYIN_COMMENT_EDITOR_SELECTOR)};
+  const comments = [...document.querySelectorAll('[data-e2e="comment-item"]')].slice(0, 50).map(el => {
+    const content = el.querySelector('[data-e2e="comment-content"]');
+    const author = el.querySelector('[data-e2e="comment-author"], a[href*="/user/"]');
+    return {
+      commentId: el.getAttribute('data-e2e-comment-id') || el.getAttribute('data-comment-id') || '',
+      authorAlias: (author?.innerText || '').trim().slice(0, 100),
+      text: (content?.innerText || '').trim().slice(0, 500),
+    };
+  }).filter(item => item.text !== '');
+  const editor = document.querySelector(editorSelector);
+  return { url: location.href, title: document.title || '', comments,
+    text: (document.body?.innerText || '').slice(0, 20000),
+    inputAvailable: Boolean(editor && editor.getClientRects().length && !editor.disabled && editor.getAttribute('aria-disabled') !== 'true'),
+  };
+})()
+`;
+}
+
+/**
+ * 往评论专属编辑器里填入文本并回读校验。
+ * 只有「填完后编辑器值 === 目标文本」才返回 true；找不到专属编辑器直接 false（不退回通用输入框）。
+ */
+export function buildDouyinCommentFillScript(text: string): string {
+  return String.raw`
+(() => {
+  const el = document.querySelector(${JSON.stringify(DOUYIN_COMMENT_EDITOR_SELECTOR)});
+  if (!el || !el.getClientRects().length || el.disabled) return false;
+  const text = ${JSON.stringify(text)};
+  el.focus();
+  if (el instanceof HTMLTextAreaElement) {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, text);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  } else if (el.isContentEditable) {
+    const range = document.createRange(); range.selectNodeContents(el);
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    if (!document.execCommand('insertText', false, text)) return false;
+  } else return false;
+  return (el.value ?? el.innerText ?? '').trim() === text;
+})()
+`;
+}
+
+/**
+ * 点击评论专属发送按钮：要求「仍在同一视频页 + 编辑器内容仍等于目标文本 +
+ * 恰好一个可用发送按钮」。任一不满足返回 false，上层判「未发送」。
+ */
+export function buildDouyinCommentClickScript(url: string, text: string): string {
+  return String.raw`
+(() => {
+  if (location.href.replace(/\/$/, '') !== ${JSON.stringify(url.replace(/\/$/u, ''))}) return false;
+  const editor = document.querySelector(${JSON.stringify(DOUYIN_COMMENT_EDITOR_SELECTOR)});
+  if (!editor || (editor.value ?? editor.innerText ?? '').trim() !== ${JSON.stringify(text)}) return false;
+  const buttons = [...document.querySelectorAll(${JSON.stringify(DOUYIN_COMMENT_SEND_SELECTOR)})]
+    .filter(el => el.getClientRects().length && !el.disabled && el.getAttribute('aria-disabled') !== 'true');
+  if (buttons.length !== 1) return false;
+  buttons[0].click(); return true;
+})()
+`;
+}

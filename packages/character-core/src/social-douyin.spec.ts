@@ -13,9 +13,13 @@ import {
   detectDouyinBlock,
   douyinFeedKindFromUrl,
   extractDouyinTopics,
+  findNewDouyinComment,
   guardDouyinCommentText,
   isDouyinEvidenceUsable,
   isDouyinRequestedFeedVerified,
+  isDouyinVideoUrl,
+  isStableDouyinCommentId,
+  normalizeDouyinUrl,
   parseDouyinCardText,
   runDouyinSmoke,
   type DouyinCommentComposer,
@@ -1009,8 +1013,47 @@ describe('评论撤销与回执持久化边界', () => {
   });
 });
 
-function makeSentAction(createdAt: number): SocialCommentAction {
-  return {
+describe('受限评论端口共用判定（ADR-006）', () => {
+  it('只接受抖音视频详情页；列表页、外站、非 https 都拒绝', () => {
+    expect(isDouyinVideoUrl(`https://www.douyin.com/video/${VIDEO_BASE}0`)).toBe(true);
+    expect(isDouyinVideoUrl(`https://www.douyin.com/video/${VIDEO_BASE}0/`)).toBe(true);
+    expect(isDouyinVideoUrl('https://www.douyin.com/jingxuan')).toBe(false);
+    expect(isDouyinVideoUrl('https://www.douyin.com/video/123')).toBe(false);
+    expect(isDouyinVideoUrl(`https://example.com/video/${VIDEO_BASE}0`)).toBe(false);
+    expect(isDouyinVideoUrl(`http://www.douyin.com/video/${VIDEO_BASE}0`)).toBe(false);
+  });
+
+  it('比较页面地址忽略末尾斜杠', () => {
+    expect(normalizeDouyinUrl('https://www.douyin.com/video/1234567/')).toBe('https://www.douyin.com/video/1234567');
+    expect(normalizeDouyinUrl('https://www.douyin.com/video/1234567')).toBe('https://www.douyin.com/video/1234567');
+  });
+
+  it('只有纯数字长 ID 才算稳定评论 ID', () => {
+    expect(isStableDouyinCommentId('700001')).toBe(true);
+    expect(isStableDouyinCommentId('temp-1')).toBe(false);
+    expect(isStableDouyinCommentId('')).toBe(false);
+    expect(isStableDouyinCommentId('12345')).toBe(false);
+  });
+
+  it('回执判定：新出现 + 稳定 ID + 全文一致；乐观插入与非数字 ID 都不算', () => {
+    const before = [{ commentId: '700001', authorAlias: '甲', text: '旧评论' }];
+    expect(
+      findNewDouyinComment(before, [...before, { commentId: '700002', authorAlias: '', text: '新评论' }], '新评论'),
+    ).toMatchObject({ commentId: '700002' });
+    // 全文不一致
+    expect(
+      findNewDouyinComment(before, [...before, { commentId: '700002', authorAlias: '', text: '新评论' }], '别的文本'),
+    ).toBeNull();
+    // 非数字临时 ID（前端乐观插入）
+    expect(
+      findNewDouyinComment(before, [...before, { commentId: 'tmp-9', authorAlias: '', text: '新评论' }], '新评论'),
+    ).toBeNull();
+    // 发送前就存在的同文评论不是本次回执
+    expect(findNewDouyinComment(before, before, '旧评论')).toBeNull();
+  });
+});
+
+function makeSentAction(createdAt: number): SocialCommentAction {  return {
     actionId: `sent-${createdAt}`,
     platform: 'douyin',
     sessionId: 's',

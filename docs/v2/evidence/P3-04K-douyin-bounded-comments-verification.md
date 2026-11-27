@@ -95,6 +95,25 @@ pnpm verify:gate
 
 本轮门禁**一次通过，无失败留档**。
 
+### 4.5 评论端口下沉到 CDP 驱动（`[SIMULATION]`，2026-11-27 补记）
+
+macOS 默认驱动是 `cdp-real`，原先评论只实现在 `ElectronBrowserEngine` 会导致生产环境功能不可用。本轮把端口提取成两驱动共用：
+
+| 文件 | 作用 |
+| --- | --- |
+| `apps/desktop-host/src/main/douyin-comment-port.ts` | 与驱动无关的评论时序与回执判定（`createDouyinCommentPort`）；Electron 与 CDP 共用 |
+| `apps/desktop-host/src/main/douyin-page-reader.ts` | 新增评论区读取/填入/点击三个共享脚本，只认评论专属 `data-e2e` 控件 |
+| `packages/character-core/src/social-douyin.ts` | `DouyinCommentPort` 契约 + `isDouyinVideoUrl` / `normalizeDouyinUrl` / `isStableDouyinCommentId` / `findNewDouyinComment` 纯判定 |
+| `apps/desktop-host/src/main/cdp-browser-engine.ts` | `RealBrowserDouyinSession` 实现 `readComments` / `postComment`；R1 改为「只读 + 受限评论（ADR-006）」 |
+| `apps/desktop-host/src/main/electron-browser-engine.ts` | 改为委托同一端口实现，删除重复内联脚本 |
+
+验证：
+
+- `douyin-comment-port.spec.ts` **18 例**：护栏拒绝分支（非视频页 / 输入框缺失 / 页面变化 / canSend=false / 验证码 / 编辑器与发送按钮缺失）与回执三态（sent / uncertain / failed）。
+- `social-douyin.spec.ts` 新增共用判定 4 例；`cdp-browser-engine.spec.ts` 新增「cdp-real 驱动下的受限评论端口」4 例；`electron-browser-engine.spec.ts` 新增端口存在性 1 例。
+- `apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts` **1/1**：用本机回环仿真 CDP 端点（node:http + ws，不启动真 Chrome）走通 `RealBrowserDouyinSession → CdpConnection → CdpPageDriver → 共用端口`，证明 `cdp-real` 下评论端口确实被注入、能走通 `sent` 回执与验证码停止。
+- **仍未向抖音发起任何真实评论**；仿真 CDP 端点不是真机证据，真实发送保持 `[REAL-DEVICE]` 待验。
+
 ---
 
 ## 5. 诚实缺口（不得写成已跑通）
@@ -116,7 +135,8 @@ pnpm verify:gate
 
 ```bash
 pnpm exec tsc -b packages/shared-protocol packages/character-core
-pnpm exec vitest run packages/character-core/src/social-douyin.spec.ts apps/desktop-host/src/main/social-comment-ledger.spec.ts --coverage.enabled=false
+pnpm exec vitest run packages/character-core/src/social-douyin.spec.ts apps/desktop-host/src/main/social-comment-ledger.spec.ts apps/desktop-host/src/main/douyin-comment-port.spec.ts apps/desktop-host/src/main/cdp-browser-engine.spec.ts --coverage.enabled=false
 pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin-comments.e2e.spec.ts
+pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts
 pnpm verify:gate
 ```

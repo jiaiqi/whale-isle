@@ -30,3 +30,21 @@
 - 已验证：46 例单测、真实 Electron 本地仿真 E2E 1/1、真实构建主应用 UI/IPC 实测（默认关闭、开关不伪造实测时间、种入仿真记录可查）、`pnpm verify:gate` 8/8。
 - 未验证：真实已登录抖音评论 DOM、真实平台发送与回读、真实模型「浏览 → 评论」长循环。P3-04I 生产冒烟仍阻塞于「验证码中间页」，本批未重试、未绕过；能力矩阵 `douyin/comment_reply` 的 `lastVerifiedAt` 保持 0，自动评论不会执行。
 - 证据：[P3-04K-douyin-bounded-comments-verification.md](../evidence/P3-04K-douyin-bounded-comments-verification.md)。
+
+## 补记：评论端口下沉到 CDP 驱动（2026-11-27，PR #10）
+
+**背景**：P3-04K 首次落地时，评论端口只实现在 `ElectronBrowserEngine`。而 `V2-P3-04K` 的 CDP 驱动上线后，macOS 默认 `driver` 已是 `cdp-real`——只实现 Electron 侧等于**生产环境评论功能不可用**（`DouyinCommentExecutor` 会因缺少 `readComments/postComment` 直接判 `page_error`）。
+
+**决定**：
+
+1. 评论是**两个驱动共用的端口**，不是某一个驱动的私有能力。接口为 `@workbench/character-core` 的 `DouyinCommentPort`，`DouyinWebSession.readComments/postComment` 即该端口。
+2. 时序与判定只写一份：`apps/desktop-host/src/main/douyin-comment-port.ts` 的 `createDouyinCommentPort(ops)`；Electron 与 CDP 各自只注入 `navigate` / `evaluate` / `sleep` / `now` 四个原语。DOM 脚本抽到 `douyin-page-reader.ts` 共用。
+3. 护栏与回执语义完全不变：只允许 `https://www.douyin.com/video/<数字>`；输入框/发送按钮必须是评论专属 `data-e2e` 控件，页面结构未知即失败、绝不退回全页面通用按钮；只有「新增稳定数字 ID + 全文回读 + 重载仍在」判 `sent`，否则 `uncertain` 且不重发；验证码/登录墙立即停手。
+4. CDP 侧的导航与等待沿用既有只读读取路径：`CdpPageDriver.navigate` 的 `location.href` 回读、静默失败重试与 20s 兜底超时对评论路径同样生效。
+
+**红线边界（仍是一次例外，不是通用写能力）**：
+
+- `cdp-browser-engine.ts` 的 R1 由「严格只读」改为「只读 + **受限评论**」；逐条保留：不点赞、不关注、不发私信、不发布、不逆向签名接口、不改 UA、不做 stealth、不绕过验证码。
+- 评论仍是唯一被授权的写能力，且**默认关闭**；`lastVerifiedAt` 保持 0，宿主不会自动发送。
+- 审计口径不变：SQLite `social_comment_actions` 发送前预留、逐日可查、失败/跳过/不确定同样记录；模型不能篡改账本或执行 Shell。
+- 本次仍**未向抖音发起任何真实评论**（不登录、不扫码、不碰验证码）；新增证据仅为仿真 CDP 端点与单测，真实发送仍待 `[REAL-DEVICE]` owner 验收。

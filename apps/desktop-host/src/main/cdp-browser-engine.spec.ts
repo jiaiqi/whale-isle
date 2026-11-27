@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { DouyinPageSnapshot } from '@workbench/character-core';
+import type { DouyinCommentThread, DouyinPageSnapshot } from '@workbench/character-core';
 import {
   CdpBrowserHost,
   CdpConnection,
@@ -28,7 +28,14 @@ import {
   type DouyinCdpDriver,
   type WebSocketLike,
 } from './cdp-browser-engine';
-import { DOUYIN_CAPTCHA_VISIBILITY_SCRIPT, DOUYIN_PAGE_READER_SCRIPT, DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT } from './douyin-page-reader';
+import {
+  DOUYIN_CAPTCHA_VISIBILITY_SCRIPT,
+  DOUYIN_PAGE_READER_SCRIPT,
+  DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT,
+  buildDouyinCommentClickScript,
+  buildDouyinCommentFillScript,
+  buildDouyinCommentThreadScript,
+} from './douyin-page-reader';
 
 const CHROME: DiscoveredBrowser = {
   name: 'Google Chrome',
@@ -959,5 +966,85 @@ describe('RealBrowserDouyinSession 契约', () => {
     host.instance = null;
     const { session } = makeSession(new FakeDriver(), host);
     await expect(session.load('https://www.douyin.com/jingxuan')).rejects.toThrow('扫码登录');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADR-006：受限评论端口必须在 CDP 驱动上真实可用（macOS 默认驱动就是 cdp-real）
+// ---------------------------------------------------------------------------
+
+const COMMENT_VIDEO_URL = 'https://www.douyin.com/video/7703599797286223291';
+const COMMENT_TEXT = '这个解释让我理解了光的折射原理';
+const COMMENT_THREAD_SCRIPT = buildDouyinCommentThreadScript();
+const COMMENT_FILL_SCRIPT = buildDouyinCommentFillScript(COMMENT_TEXT);
+const COMMENT_CLICK_SCRIPT = buildDouyinCommentClickScript(COMMENT_VIDEO_URL, COMMENT_TEXT);
+
+/** 在 FakeDriver 上补三种评论脚本的应答，证明 session 确实把端口接到了 CDP 页面驱动 */
+class CommentDriver extends FakeDriver {
+  comments: DouyinCommentThread = {
+    url: COMMENT_VIDEO_URL,
+    title: '光的折射 - 抖音',
+    text: '正文',
+    comments: [{ commentId: '700001', authorAlias: '观众甲', text: '讲得真清楚' }],
+    inputAvailable: true,
+  };
+  afterClick: DouyinCommentThread | null = null;
+  fillResult = true;
+  sendResult = true;
+  private clicked = false;
+
+  override async evaluate<T>(expression: string): Promise<T> {
+    this.evaluateCalls.push(expression);
+    if (expression === COMMENT_THREAD_SCRIPT) {
+      return (this.clicked && this.afterClick !== null ? this.afterClick : this.comments) as T;
+    }
+    if (expression === COMMENT_FILL_SCRIPT) return this.fillResult as T;
+    if (expression === COMMENT_CLICK_SCRIPT) {
+      if (this.sendResult) this.clicked = true;
+      return this.sendResult as T;
+    }
+    return super.evaluate<T>(expression);
+  }
+}
+
+describe('cdp-real 驱动下的受限评论端口（ADR-006）', () => {
+  it('端口已注入：readComments 与 postComment 都可用（同一契约）', () => {
+    const { session } = makeSession(new CommentDriver());
+    expect(typeof session.readComments).toBe('function');
+    expect(typeof session.postComment).toBe('function');
+  });
+
+  it('readComments 经 CDP 页面驱动读评论区；非视频页拒绝且不导航', async () => {
+    const driver = new CommentDriver();
+    const { session } = makeSession(driver);
+    const thread = await session.readComments(COMMENT_VIDEO_URL);
+    expect(thread.inputAvailable).toBe(true);
+    expect(driver.navigations).toEqual([COMMENT_VIDEO_URL]);
+    await expect(session.readComments('https://www.douyin.com/jingxuan')).rejects.toThrow('只允许抖音视频详情页');
+    expect(driver.navigations).toEqual([COMMENT_VIDEO_URL]);
+  });
+
+  it('postComment 经 CDP 页面驱动完成一次完整回执（新增稳定 ID + 重载仍在）', async () => {
+    const driver = new CommentDriver();
+    driver.afterClick = {
+      ...driver.comments,
+      comments: [
+        ...driver.comments.comments,
+        { commentId: '700002', authorAlias: '', text: COMMENT_TEXT },
+      ],
+    };
+    const { session } = makeSession(driver);
+    const receipt = await session.postComment({ url: COMMENT_VIDEO_URL, text: COMMENT_TEXT }, () => true);
+    expect(receipt).toMatchObject({ ok: true, commentId: '700002' });
+    // 点击前读一次、点击后至少读一次、重载后再读一次
+    expect(driver.evaluateCalls.filter((call) => call === COMMENT_THREAD_SCRIPT).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('canSend=false 时 CDP 驱动同样不点击发送', async () => {
+    const driver = new CommentDriver();
+    const { session } = makeSession(driver);
+    const receipt = await session.postComment({ url: COMMENT_VIDEO_URL, text: COMMENT_TEXT }, () => false);
+    expect(receipt).toMatchObject({ ok: false, detail: '发送已取消' });
+    expect(driver.evaluateCalls).not.toContain(COMMENT_FILL_SCRIPT);
   });
 });

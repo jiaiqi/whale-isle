@@ -1,15 +1,19 @@
 /**
- * V2-P3-04K 抖音只读「真浏览器 + 专用持久 profile + CDP」驱动。
+ * V2-P3-04K 抖音「真浏览器 + 专用持久 profile + CDP」驱动。
  *
  * 背景（P3-04J §4.3 方案 A）：此前用 Electron 隔离 partition 的嵌入式 Chromium 读取抖音，
  * 2026-11-27 真实冒烟撞上「验证码中间页」。本驱动把「用什么浏览器看」换成本机真实
- * Google Chrome / Microsoft Edge，以专用持久 profile 启动，通过 127.0.0.1 的 CDP 只读驱动。
+ * Google Chrome / Microsoft Edge，以专用持久 profile 启动，通过 127.0.0.1 的 CDP 驱动。
  *
  * 这不是「保证不撞验证码」——只把浏览上下文从「全新隔离 partition」换成「像正常浏览」。
  * 撞到验证码仍然立即停止、保留窗口、交给 owner 亲手处理，绝不识别/绕过/重试/改 UA/stealth。
+ * 评论端口也必须落在这里：macOS 默认驱动就是 `cdp-real`，只实现 Electron 侧等于功能不可用。
  *
  * 硬约束（owner 拍板，逐条写死）：
- * - R1 严格只读：本文件不暴露任何点赞/关注/评论/私信/发布入口，只做导航与 DOM 文本读取。
+ * - R1 只读 + **受限评论**（owner 授权，见 ADR-006）：本文件只做导航、DOM 文本读取，
+ *   以及**唯一**被授权的写能力——对他人公开视频发一条顶层评论（`readComments` / `postComment`）。
+ *   **评论默认关闭**，由 `DouyinCommentExecutor` 在开关打开且能力已实测时才可能触发。
+ *   明确禁止且不暴露入口：点赞、关注、发私信、发布、逆向签名接口、改 UA、stealth、绕过验证码。
  * - R2 不绕过验证码/风控/登录墙：只把页面真相返回给上层，由 `social-douyin.ts` 立即停下。
  * - R3 不逆向签名接口、不伪造请求：只通过浏览器页面本身加载公开页面。
  * - R4 不改 UA / 不做 stealth / 不加 `--disable-blink-features=AutomationControlled`。
@@ -32,6 +36,9 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type {
+  DouyinCommentPort,
+  DouyinCommentReceipt,
+  DouyinCommentThread,
   DouyinFeedKind,
   DouyinLoginState,
   DouyinPageSnapshot,
@@ -39,6 +46,7 @@ import type {
 } from '@workbench/character-core';
 import { DOUYIN_FEED_URLS, detectDouyinBlock } from '@workbench/character-core';
 import { DOUYIN_PAGE_READER_SCRIPT, DOUYIN_RECOMMEND_TAB_CLICK_SCRIPT } from './douyin-page-reader';
+import { createDouyinCommentPort } from './douyin-comment-port';
 
 /** 驱动选择：真浏览器 CDP（默认）或保留的 Electron 隔离 partition 引擎 */
 export const DOUYIN_BROWSER_DRIVER_KINDS = ['cdp-real', 'electron'] as const;
@@ -946,8 +954,9 @@ function isDouyinUrl(raw: string): boolean {
 }
 
 /**
- * 真浏览器抖音只读会话：与 `ElectronDouyinSession` 同一组只读方法。
- * 不提供任何写操作入口；验证码识别在上层 `social-douyin.ts`，本类只如实返回页面快照。
+ * 真浏览器抖音会话：与 `ElectronDouyinSession` 同一组能力（含 ADR-006 受限评论端口）。
+ * 页面读取与验证码识别沿用 `social-douyin.ts` 的统一口径；本类只如实返回页面快照。
+ * 除受限顶层评论外不提供任何写操作入口：不点赞、不关注、不发私信、不发布。
  */
 export class RealBrowserDouyinSession implements DouyinWebSession {
   readonly driverKind = 'cdp-real' as const;
@@ -958,6 +967,7 @@ export class RealBrowserDouyinSession implements DouyinWebSession {
   private readonly renderTimeoutMs: number;
   private readonly itemRenderTimeoutMs: number;
   private readonly navigateTimeoutMs: number;
+  private readonly commentPort: DouyinCommentPort;
   private attachment: CdpBrowserAttachment | null = null;
 
   constructor(options: RealBrowserDouyinOptions) {
@@ -971,6 +981,20 @@ export class RealBrowserDouyinSession implements DouyinWebSession {
     this.renderTimeoutMs = options.renderTimeoutMs ?? RENDER_TIMEOUT_MS;
     this.itemRenderTimeoutMs = options.itemRenderTimeoutMs ?? ITEM_RENDER_TIMEOUT_MS;
     this.navigateTimeoutMs = options.navigateTimeoutMs ?? NAVIGATE_TIMEOUT_MS;
+    // 评论端口与 Electron 驱动共用同一实现（ADR-006）：CDP 只注入 navigate/evaluate 两个原语，
+    // 四项补强（导航后 href 回读、超时兜底）由下方 `CdpPageDriver.navigate` 统一提供。
+    this.commentPort = createDouyinCommentPort({
+      navigate: async (url) => {
+        const driver = await this.requireDriver(true);
+        await driver.navigate(url, this.navigateTimeoutMs);
+      },
+      evaluate: async <T>(expression: string) => {
+        const driver = await this.requireDriver(true);
+        return driver.evaluate<T>(expression);
+      },
+      sleep: this.sleep,
+      now: this.now,
+    });
   }
 
   async load(rawUrl: string): Promise<DouyinPageSnapshot> {
@@ -1021,9 +1045,22 @@ export class RealBrowserDouyinSession implements DouyinWebSession {
     return snapshot;
   }
 
+  // -------------------------------------------------------------------------
+  // ADR-006 受限评论端口：owner 授权的唯一写能力，默认关闭。
+  // 与 Electron 驱动共用 `createDouyinCommentPort`（同一套护栏/回执判定）；
+  // 本类仍不提供点赞、关注、私信、发布等任何其他写入口。
+  // -------------------------------------------------------------------------
+
+  readComments(url: string): Promise<DouyinCommentThread> {
+    return this.commentPort.readComments(url);
+  }
+
+  postComment(input: { url: string; text: string }, canSend: () => boolean): Promise<DouyinCommentReceipt> {
+    return this.commentPort.postComment(input, canSend);
+  }
+
   /** 登录态只检查 Cookie 名称；不启动浏览器，也不读取/导出值 */
-  async loginState(): Promise<DouyinLoginState> {
-    const driver = await this.ensureDriver(false);
+  async loginState(): Promise<DouyinLoginState> {    const driver = await this.ensureDriver(false);
     if (driver === null) return { loggedIn: false };
     const names = await driver.cookieNames(['https://www.douyin.com/', 'https://www.douyin.com']);
     return {

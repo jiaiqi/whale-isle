@@ -26,6 +26,14 @@
 - `BrainRuntimeConfig` 新增显式 `allowRuleStandin` 与有界 `plannerTimeoutMs`（100–120000ms，宿主默认 30s）；主进程在规划 HTTP 上实际传入超时信号，服务不可用/超时/非法工具/缺 Key 可进入标明「规则代驾」的确定性动作，旧配置默认安全暂停。重建大脑时保留自定义供应商与故障策略，跨语言生成产物同步。
 - 能力域对照复用既有 Magpie 思想网关与 BWF 执行链，重写本地协议 stub 和故障剧本，拒绝 Mod 内直连及无许可证源码；完整逐项结论与真机待验项见 `docs/v2/evidence/P4-01-llm-chain-verification.md`，总工单保持 `NEXT`。
 
+### Changed（`V2-P3-04K` 评论端口下沉到 CDP 驱动，PR #10）
+
+- **两驱动共用端口**：评论能力从 `ElectronBrowserEngine` 私有实现提取为 `DouyinCommentPort`（`packages/character-core/src/social-douyin.ts`），时序与回执判定收敛到 `apps/desktop-host/src/main/douyin-comment-port.ts` 的 `createDouyinCommentPort`；Electron 与 CDP 各自只注入 `navigate / evaluate / sleep / now`。此前 macOS 默认驱动 `cdp-real` 缺少评论入口，等于生产环境功能不可用。
+- **共享 DOM 脚本**：评论区读取、填入、点击三个脚本移入 `douyin-page-reader.ts`，两驱动共用同一套评论专属 `data-e2e` 选择器；页面结构未知即失败，绝不退回全页面通用按钮。
+- **红线更新**：`cdp-browser-engine.ts` 的 R1 由「严格只读」改为「只读 + **受限评论**（owner 授权，见 ADR-006）」，逐条保留不点赞、不关注、不发私信、不发布、不逆向签名接口、不改 UA、不做 stealth、不绕过验证码；评论仍是唯一被授权的写能力且**默认关闭**。
+- **ADR-006 补记**：记录路线变更原因、端口边界与审计要求，明确这仍是 owner 授权的一次例外而非通用写能力。
+- **验证**：新增 `douyin-comment-port.spec.ts` 18 例（护栏拒绝分支 + 回执三态）、character-core 共用判定 4 例、CDP 会话端口 4 例、Electron 会话端口 1 例；新增 `douyin-cdp-comment-port.e2e.spec.ts` 1/1（本机回环仿真 CDP 端点，证明 `cdp-real` 下端口已注入）。**未向抖音发起任何真实评论**，不登录、不扫码、不碰验证码；`lastVerifiedAt` 保持 0。
+
 ### Added（`V2-P3-04K` 抖音受限自动顶层评论，`IMPLEMENTED_UNVERIFIED`）
 
 - **授权边界**：owner 2026-11-27 明确要求沿用当前非日常账号对**他人公开视频**做有限自动顶层评论、无逐条审核，但所有发送内容与结果必须在本软件按日可查；[ADR-006](./docs/v2/adr/ADR-006-douyin-bounded-comments.md) 记录这次对 L1 只读红线的局部例外。仍不绕验证码/风控/登录墙、不新建账号、不写凭据、不自动合并分支。

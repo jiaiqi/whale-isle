@@ -147,3 +147,4 @@ jobs:
           apps/desktop-host/e2e/voice-studio.e2e.spec.ts
           apps/desktop-host/e2e/douyin-comments.e2e.spec.ts
           apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts
+          apps/desktop-host/e2e/douyin-cdp-comment-port.e2e.spec.ts
