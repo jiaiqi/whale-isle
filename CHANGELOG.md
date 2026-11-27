@@ -5,6 +5,15 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Validated（替代引擎速评 `[REAL-DEVICE]`：本机没有「可商用 + 有情绪 + 实时」的自托管 TTS）
+
+- **判据先写死**：许可（代码+权重）可商用/再分发 + RTF P50 ≤ 0.35 才进听感对比；跑完未改。
+- **实测通过许可与实时的只有两家，但都没有情绪控制**：Kokoro-82M-v1.1-zh（Apache-2.0）RTF **0.316–0.338**、固定 sid ×5 余弦最低 **0.9920**、后端直接丢弃 `——`/`～`；MeloTTS-zh（MIT）RTF **0.221–0.267**、余弦最低 **0.9010**、单一成年女声（F0 ~230Hz）无情绪。
+- **能力对味但速度出局**：Chatterbox Multilingual（MIT，`exaggeration` 情绪旋钮 + 零样本克隆 + 中文）实测稳态 **RTF 2.98–3.23**（首条预热 12.4，M4/MPS），比门槛慢约 9 倍；CosyVoice2 上游沿用前序 RTF 2.42。
+- **许可出局**：Spark-TTS（权重 CC-BY-NC-SA-4.0）、F5-TTS（CC-BY-NC-4.0）、ZipVoice（CC-BY-NC）、IndexTTS2（bilibili 自定义许可）、Fish Speech（Fish Audio 社区许可）、Piper zh_CN（训练数据 License: Unknown）；GPT-SoVITS 维持开发期基线。均未下载，不进包、不进产品路径。
+- **CosyVoice2 ONNX/CoreML 移植**：权重与上游同为 Apache-2.0、C++ 运行时 MIT，但预转换 GGUF 只到 CosyVoice3、macOS 需另配 llama.cpp GGML 1.x，转换仓库 license 字段 `NOASSERTION` → 未成熟，未实测。
+- **结论**：情绪 + 克隆路线继续走商业 API（MiMo）；仅当接受固定音色时才考虑 Kokoro。听感（儿童感 / 情绪可听差别）未做，待 owner 试听 `artifacts/tts-ab/engine-eval/`。证据 [tts-alternative-engine-eval.md](./docs/v2/evidence/tts-alternative-engine-eval.md)。
+
 ### Added / Changed（音色工坊 M1+M2 + 表演 B 级接线收档，owner 拍板「m2+m1」）
 
 - **B 级接线**：`MIMO_EMOTION_STYLE_HINTS` 的 `daily` / `bright` / `tsundere` 三档改为强度阶梯 B 级指令原文；新增 `MIMO_PERFORMANCE_INTENSITY_LEVELS` / `MIMO_DEFAULT_PERFORMANCE_INTENSITY = 'B'` / `MIMO_PERFORMANCE_A_SUFFIX` / `MIMO_PERFORMANCE_C_SUFFIX` / `MIMO_PERFORMANCE_B_HINTS` 与 `resolveMimoEmotionHint()`。A/C 只作为工坊试戴强度，`sleepy` / `surprised` 没有阶梯数据、不编造模板；C 级内联标签仍标注「间接推断、未经听感」。

@@ -299,3 +299,19 @@
 | B 级表演听感 | 调皮 / 傲娇 / 撒娇三档按 B 级指令接线后是否「够外放」；owner **未逐条试听**，将在音色工坊里自调（A/C 强度可切） | ⏳ 待 owner 听感 |
 | 工坊真实交互 | 在 owner 正在用的桌面端里点一次「生成候选 / 多句试戴 / 定格 / 体检」，确认 UI 与耗时体感（本轮代码只经单测与 E2E，桌面端未重起，改动随下次自然重启生效） | ⏳ 待 owner 试用 |
 | 工坊体检的稳定性口径 | 单次 10 条会在「锁得稳 / 偶尔飘」之间翻面（三次实测），是否要改成「连跑两次取较差」由 owner 定 | ⏳ 待 owner 决策 |
+
+## 2026-11-27 批次（语音十一轮：替代引擎速评）
+
+### Mock / 沙盒 / 真机 API 已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| 替代引擎速评（`V2-P1-02` 备注，只出报告不接入） | `[REAL-DEVICE]`（本机真实推理）+ `[DOC-ONLY]`（许可与移植成熟度） | ① **判据先写死**：许可可商用/再分发 + RTF P50 ≤ 0.35 才进听感；跑完未改。② **实测**：Kokoro-82M-v1.1-zh（Apache-2.0，sherpa-onnx）RTF 0.316–0.338、加载 1.31s、RSS 944MB、固定 sid ×5 余弦均值 0.9945/最低 0.9920、ASR 回环可懂、无情绪控制（`——`/`～` 被前端丢弃）；MeloTTS-zh（MIT）RTF 0.221–0.267、加载 0.95s、RSS 465MB、余弦最低 0.9010、单一成年女声无情绪、ASR 逐字正确；Chatterbox Multilingual（MIT，中文 `zh` + `exaggeration` + 克隆）MPS 稳态 **RTF 2.98–3.23**（首条 12.4）→ 实时出局，未进听感。③ **许可出局（未下载）**：Spark-TTS CC-BY-NC-SA-4.0、F5-TTS CC-BY-NC-4.0、ZipVoice CC-BY-NC、IndexTTS2 bilibili 自定义许可、Fish Speech 社区许可、Piper zh_CN 数据集许可 Unknown。④ **移植**：CosyVoice2 ONNX 权重 Apache-2.0 + cosyvoice.cpp MIT，但预转换 GGUF 只到 CosyVoice3，未实测。证据 [tts-alternative-engine-eval.md](./v2/evidence/tts-alternative-engine-eval.md)；素材 `artifacts/tts-ab/engine-eval/` | 2026-11-27 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| 儿童感 / 情绪可听差别 | 听 Kokoro sid 41 与 Melo 的中性/调皮/撒娇样本，判断「像不像八九岁」「三档分不分得开」——本报告只给客观量，替不了耳朵 | ⏳ 待 owner 试听 |
+| 是否接受固定音色 | 若接受「固定音色、无情绪」，Kokoro 是唯一「许可干净 + 实时达标」项；否则维持商业 API 主线 | ⏳ 待 owner 决策 |
+| CosyVoice3 GGUF 是否值得另立一单 | Apache-2.0 + C++/Metal 预编译，可能解决实时；但属新模型，需重做音色与情绪验证 | ⏳ 待 owner 决定 |
