@@ -364,11 +364,16 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2VoiceCloneSampleClear: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-clone-sample-clear'),
   v2VoiceReferenceInfo: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-reference-info'),
   v2VoiceReferenceGenerate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-reference-generate', input),
-  // 音色工坊（M1 + M2）：版本管理 / 一致性体检 / 候选生成 / 多句试戴 / 定格
+  // 音色工坊 2.0：版本管理 / 一致性体检 / 候选生成 / 克隆入库 / 多句试戴 / 定格 / 音频安全读取
   v2VoiceWorkshopState: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-state'),
   v2VoiceWorkshopGenerate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-generate', input),
   v2VoiceWorkshopAudition: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-audition', input),
+  v2VoiceWorkshopVersionAudition: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-version-audition', input),
   v2VoiceWorkshopFreeze: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-freeze', input),
+  v2VoiceWorkshopCloneCreate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-clone-create', input),
+  v2VoiceWorkshopRename: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-rename', input),
+  v2VoiceWorkshopDelete: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-delete', input),
+  v2VoiceWorkshopReadAudio: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-read-audio', input),
   v2VoiceWorkshopRollback: (versionId: string): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-rollback', versionId),
   v2VoiceWorkshopConsistency: (versionId?: string): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-consistency', versionId),
   v2ProviderQuota: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota', input),

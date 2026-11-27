@@ -52,8 +52,12 @@ import {
   MIMO_DEFAULT_TIMBRE_ID,
   MIMO_TIMBRE_PRESETS,
   VoiceWorkshopAuditionInputSchema,
+  VoiceWorkshopCloneCreateInputSchema,
+  VoiceWorkshopDeleteInputSchema,
   VoiceWorkshopFreezeInputSchema,
   VoiceWorkshopGenerateInputSchema,
+  VoiceWorkshopRenameInputSchema,
+  VoiceWorkshopVersionAuditionInputSchema,
   PetDesktopPrefsSchema,
   type CharacterCoreSnapshot,
   type DanceRoutineInput,
@@ -1309,17 +1313,38 @@ export async function createV2KernelHost(options: {
     runSpeakerCosine: createSpeakerCosineRunner(),
   });
   ipcMain.handle('v2:voice-workshop-state', () => voiceWorkshop.snapshot());
-  ipcMain.handle('v2:voice-workshop-generate', (_e, rawInput: unknown) =>
-    voiceWorkshop.generateCandidates(VoiceWorkshopGenerateInputSchema.parse(rawInput)));
+  ipcMain.handle('v2:voice-workshop-generate', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopGenerateInputSchema.parse(rawInput);
+    return voiceWorkshop.generateCandidates({
+      description: parsed.description,
+      count: parsed.count,
+      ...(parsed.dial === undefined ? {} : { dial: parsed.dial }),
+      ...(parsed.previewText === undefined ? {} : { previewText: parsed.previewText }),
+    });
+  });
   ipcMain.handle('v2:voice-workshop-audition', (_e, rawInput: unknown) => {
     const parsed = VoiceWorkshopAuditionInputSchema.parse(rawInput);
-    return voiceWorkshop.audition({ candidateId: parsed.candidateId, intensity: parsed.intensity });
+    return voiceWorkshop.audition({
+      candidateId: parsed.candidateId,
+      intensity: parsed.intensity,
+      ...(parsed.customText === undefined ? {} : { customText: parsed.customText }),
+    });
+  });
+  ipcMain.handle('v2:voice-workshop-version-audition', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopVersionAuditionInputSchema.parse(rawInput);
+    return voiceWorkshop.auditionVersion({
+      versionId: parsed.versionId,
+      intensity: parsed.intensity,
+      ...(parsed.customText === undefined ? {} : { customText: parsed.customText }),
+    });
   });
   ipcMain.handle('v2:voice-workshop-freeze', (_e, rawInput: unknown) => {
     const parsed = VoiceWorkshopFreezeInputSchema.parse(rawInput);
     const version = voiceWorkshop.freeze({
       candidateId: parsed.candidateId,
       ...(parsed.label === undefined ? {} : { label: parsed.label }),
+      ...(parsed.intensity === undefined ? {} : { intensity: parsed.intensity }),
+      ...(parsed.tags === undefined ? {} : { tags: parsed.tags }),
     });
     // 定格即切档：角色描述 + 克隆档，音色工坊的版本才会真正生效
     characterCore.profile.updateVoiceIdentity({
@@ -1327,6 +1352,43 @@ export async function createV2KernelHost(options: {
       preferredProviderId: 'mimo-tts-voiceclone',
     });
     return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-clone-create', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopCloneCreateInputSchema.parse(rawInput);
+    const version = voiceWorkshop.createClonedVersion({
+      label: parsed.label,
+      description: parsed.description,
+      consent: parsed.consent,
+      activate: parsed.activate,
+      ...(parsed.wavBase64 === undefined ? {} : { wavBase64: parsed.wavBase64 }),
+      ...(parsed.filePath === undefined ? {} : { filePath: parsed.filePath }),
+      ...(parsed.tags === undefined ? {} : { tags: parsed.tags }),
+    });
+    if (parsed.activate) {
+      characterCore.profile.updateVoiceIdentity({
+        voiceDescription: version.description,
+        preferredProviderId: 'mimo-tts-voiceclone',
+      });
+    }
+    return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-rename', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopRenameInputSchema.parse(rawInput);
+    const version = voiceWorkshop.renameVersion(parsed.versionId, parsed.label);
+    return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-delete', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopDeleteInputSchema.parse(rawInput);
+    const res = voiceWorkshop.deleteVersion(parsed.versionId);
+    characterCore.profile.updateVoiceIdentity({
+      voiceDescription: res.currentVersion.description,
+      preferredProviderId: 'mimo-tts-voiceclone',
+    });
+    return { deletedId: res.deletedId, currentVersion: res.currentVersion, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-read-audio', (_e, rawInput: unknown) => {
+    const parsed = z.object({ kind: z.enum(['version', 'candidate']), id: z.string().min(1) }).parse(rawInput);
+    return voiceWorkshop.readAudio(parsed);
   });
   ipcMain.handle('v2:voice-workshop-rollback', (_e, versionId: string) => {
     const version = voiceWorkshop.rollback(String(versionId ?? ''));

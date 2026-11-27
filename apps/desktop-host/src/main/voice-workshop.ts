@@ -1,24 +1,28 @@
 /**
- * 音色工坊（M1 + M2）：声线版本管理、一致性体检、候选生成与多句试戴。
+ * 声音工坊 2.0（主进程引擎）：声线版本管理、真实声学质检、一致性体检、
+ * AI 音色设计候选流、本地录音/上传音色克隆、多句试戴与音频安全读取。
  *
- * 设计边界（owner 2026-11-27 拍板）：
- * - **出厂默认不动**：随包 `assets/voice/xiaojing-07-tiancui-yuanqi.wav` 永远是出厂版本；
- *   用户「定格」只写 `userData/`（状态 json + 参考音频副本），不进 git。
- * - **定格 = 写本地克隆参考**：定格把候选音频复制成 `voice-clone-sample.wav`（主进程既有的 clone 源），
- *   所以运行期不需要新链路；回退到出厂就是把这份副本删掉，让主进程回落到随包基准。
- * - **一致性体检沿用既有工具**：`tools/scripts/speaker-cosine.py`（sherpa-onnx CAM++）+ 同一句 ×10 真实克隆。
- *   开发态可直接跑；打包态没有 tools 目录就不给假数字，返回 `unavailable` 并写清原因。
- * - **不做 M3**：上传录音通道、音色包导入导出、换引擎一键重做都不在这里留入口；元数据先存全。
+ * 设计边界与诚实红线：
+ * - **出厂默认不动**：随包 `assets/voice/xiaojing-07-tiancui-yuanqi.wav` 永远是出厂版本且不可删除；
+ *   用户所有「定格」与「克隆」只写本地 `userData/voice-workshop/`，不进 git。
+ * - **定格 / 克隆激活 = 写本地克隆参考**：将所选版本的参考音频复制成 `voice-clone-sample.wav`
+ *   （主进程既有的 VoiceClone 参考源），运行期无缝生效；回退到出厂即删除该副本。
+ * - **声学质检 100% 确定性计算**：从真实 WAV RIFF/PCM 字节解析采样率/声道/位深/时长/RMS/Peak/SNR，绝不伪造指标。
+ * - **克隆强制声音权属声明**：契约层要求 `consent.attested === true` 与来源说明，未声明直接拒绝。
+ * - **一致性体检沿用既有工具**：`tools/scripts/speaker-cosine.py`（sherpa-onnx CAM++）+ 同一句 ×10 真实克隆；
+ *   工具缺失返回 `unavailable`，绝不编造数字。
  */
 import { spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
 import {
   composeVoiceWorkshopDescription,
   MIMO_WORKSHOP_AUDITION_LINES,
   VOICE_WORKSHOP_DIAL_OPTIONS,
+  type VoiceAudioQuality,
+  type VoiceCloneConsent,
   type VoiceConsistencyResult,
   type VoicePerformanceIntensity,
   type VoiceTimbreVersion,
@@ -64,10 +68,23 @@ export interface VoiceWorkshopDeps {
   now?: () => Date;
 }
 
+export interface WorkshopAuditionRow {
+  key: string;
+  label: string;
+  emotion: string | null;
+  intensity: VoicePerformanceIntensity;
+  text: string;
+  audioBase64: string;
+  providerKind: string;
+  durationMs: number | null;
+}
+
 /** 体检用的固定句（与 bench 同句，便于和历史数字横比） */
 export const CONSISTENCY_SENTENCE = '主人，今天也辛苦啦，我给你倒杯热茶好不好呀。';
 /** 体检样本数：固定 10 条（UI 跑前要提示消耗 10 次合成） */
 export const CONSISTENCY_SAMPLES = 10;
+/** 单个参考音频字节上限（20 MB，与既有 v2:voice-clone-sample-save 口径一致） */
+export const MAX_REFERENCE_WAV_BYTES = 20 * 1024 * 1024;
 
 /**
  * 判据（写死，不随 UI 调）：
@@ -85,12 +102,194 @@ export function verdictFor(mean: number, min: number): { verdict: 'stable' | 'dr
   return { verdict: 'swapped', detail: '会换人：部分条目已经不是同一个声音，不建议当固定声线' };
 }
 
+/** 计算 WAV 字节的 SHA-256 指纹（用于资产留痕与缓存版本锚定） */
+export function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+/** 严格校验 RIFF/WAVE 文件头与大小上限 */
+export function assertValidWavBytes(bytes: Uint8Array): void {
+  if (bytes.byteLength > MAX_REFERENCE_WAV_BYTES) {
+    throw new Error('参考音频超过 20MB 上限，请裁剪到更短的片段');
+  }
+  if (bytes.byteLength < 44) {
+    throw new Error('WAV 文件过小或损坏（不足 44 字节）');
+  }
+  const riff = String.fromCharCode(bytes[0] ?? 0, bytes[1] ?? 0, bytes[2] ?? 0, bytes[3] ?? 0);
+  const wave = String.fromCharCode(bytes[8] ?? 0, bytes[9] ?? 0, bytes[10] ?? 0, bytes[11] ?? 0);
+  if (riff !== 'RIFF' || wave !== 'WAVE') {
+    throw new Error('只接受标准 RIFF/WAVE 格式的 .wav 音频');
+  }
+}
+
+/**
+ * 确定性 WAV 声学质检：纯 PCM 解析，不依赖外部二进制，100% 源自真实采样值。
+ * 若文件不是标准 PCM/Float WAV（如压缩编码或测试 stub 极短字节），返回 null（绝不编造指标）。
+ */
+export function analyzeWavBuffer(bytes: Uint8Array): VoiceAudioQuality | null {
+  if (bytes.byteLength < 44) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (off: number): string =>
+    String.fromCharCode(bytes[off] ?? 0, bytes[off + 1] ?? 0, bytes[off + 2] ?? 0, bytes[off + 3] ?? 0);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null;
+
+  let audioFormat = 0;
+  let channels = 0;
+  let sampleRate = 0;
+  let bitDepth = 0;
+  let dataOffset = -1;
+  let dataLength = 0;
+
+  let offset = 12;
+  while (offset + 8 <= bytes.byteLength) {
+    const chunkId = tag(offset);
+    const chunkSize = view.getUint32(offset + 4, true);
+    const bodyStart = offset + 8;
+    if (bodyStart + chunkSize > bytes.byteLength) break;
+    if (chunkId === 'fmt ' && chunkSize >= 16) {
+      audioFormat = view.getUint16(bodyStart, true);
+      channels = view.getUint16(bodyStart + 2, true);
+      sampleRate = view.getUint32(bodyStart + 4, true);
+      bitDepth = view.getUint16(bodyStart + 14, true);
+    } else if (chunkId === 'data') {
+      dataOffset = bodyStart;
+      dataLength = chunkSize;
+      break;
+    }
+    offset = bodyStart + chunkSize + (chunkSize % 2);
+  }
+
+  if (
+    dataOffset < 0 ||
+    dataLength <= 0 ||
+    channels <= 0 ||
+    sampleRate <= 0 ||
+    (audioFormat !== 1 && audioFormat !== 3) ||
+    ![8, 16, 24, 32].includes(bitDepth)
+  ) {
+    return null;
+  }
+
+  const bytesPerSample = bitDepth / 8;
+  const frameSize = bytesPerSample * channels;
+  const totalFrames = Math.floor(dataLength / frameSize);
+  if (totalFrames <= 0) return null;
+
+  const durationMs = Math.round((totalFrames / sampleRate) * 1000);
+  const windowFrames = Math.max(1, Math.floor(sampleRate * 0.05)); // 50ms 窗估算底噪与语音电平
+  const windowRms: number[] = [];
+
+  let sumSq = 0;
+  let peak = 0;
+  let winSumSq = 0;
+  let winCount = 0;
+
+  for (let frame = 0; frame < totalFrames; frame++) {
+    let mono = 0;
+    const base = dataOffset + frame * frameSize;
+    for (let ch = 0; ch < channels; ch++) {
+      const pos = base + ch * bytesPerSample;
+      let sample = 0;
+      if (audioFormat === 3 && bitDepth === 32) {
+        sample = view.getFloat32(pos, true);
+      } else if (bitDepth === 16) {
+        sample = view.getInt16(pos, true) / 32768;
+      } else if (bitDepth === 8) {
+        sample = ((bytes[pos] ?? 128) - 128) / 128;
+      } else if (bitDepth === 24) {
+        const b0 = bytes[pos] ?? 0;
+        const b1 = bytes[pos + 1] ?? 0;
+        const b2 = bytes[pos + 2] ?? 0;
+        const raw = b0 | (b1 << 8) | (b2 << 16);
+        const signed = (raw & 0x800000) !== 0 ? raw | ~0xffffff : raw;
+        sample = signed / 8388608;
+      } else if (bitDepth === 32) {
+        sample = view.getInt32(pos, true) / 2147483648;
+      }
+      mono += sample;
+    }
+    mono /= channels;
+    const abs = Math.abs(mono);
+    if (abs > peak) peak = abs;
+    const sq = mono * mono;
+    sumSq += sq;
+    winSumSq += sq;
+    winCount += 1;
+    if (winCount >= windowFrames) {
+      windowRms.push(Math.sqrt(winSumSq / winCount));
+      winSumSq = 0;
+      winCount = 0;
+    }
+  }
+
+  const rms = Math.sqrt(sumSq / totalFrames);
+  const toDb = (val: number): number => (val <= 1e-5 ? -96 : Math.max(-96, Math.round(20 * Math.log10(val) * 10) / 10));
+  const rmsDb = toDb(rms);
+  const peakDb = toDb(peak);
+  const clipping = peakDb >= -0.5;
+
+  let estimatedSnrDb: number | null = null;
+  if (windowRms.length >= 6) {
+    const sorted = [...windowRms].sort((a, b) => a - b);
+    const floor = sorted[Math.floor(sorted.length * 0.15)] ?? 0;
+    const speech = sorted[Math.floor(sorted.length * 0.85)] ?? 0;
+    if (speech > 1e-4) {
+      estimatedSnrDb = Math.round((toDb(speech) - Math.max(-80, toDb(floor))) * 10) / 10;
+    }
+  }
+
+  const hints: string[] = [];
+  let severity = 0;
+  const raise = (level: 1 | 2, msg: string): void => {
+    if (level > severity) severity = level;
+    hints.push(msg);
+  };
+
+  if (durationMs < 3000) {
+    raise(2, '时长不足 3 秒：零样本克隆特征偏少，建议提供 5–12 秒清晰干声');
+  } else if (durationMs > 30000) {
+    raise(2, '时长超过 30 秒：建议裁剪出最清晰稳定的 5–12 秒单人片段');
+  } else if (durationMs < 5000 || durationMs > 15000) {
+    raise(1, '时长可用，但 5–12 秒区间通常最稳（可在波形上裁剪微调）');
+  }
+
+  if (clipping) {
+    raise(2, '峰值接近 0 dBFS（存在削波爆音风险），建议开启 -3 dBFS 归一化或调低麦距重录');
+  } else if (rmsDb < -30) {
+    raise(1, '整体响度偏低（<-30 dBFS），建议开启 -3 dBFS 归一化提升人声清晰度');
+  }
+
+  if (estimatedSnrDb !== null && estimatedSnrDb < 14) {
+    raise(2, `估算信噪比偏低（约 ${estimatedSnrDb} dB），背景底噪可能被带入克隆声线`);
+  }
+
+  if (sampleRate < 16000) {
+    raise(1, `采样率 ${sampleRate} Hz 偏低，建议 ≥24 kHz`);
+  }
+
+  if (hints.length === 0) {
+    hints.push('时长、响度与底噪均处于推荐克隆区间，可以直接定格入库');
+  }
+
+  return {
+    durationMs,
+    sampleRate,
+    channels,
+    bitDepth,
+    rmsDb,
+    peakDb,
+    clipping,
+    estimatedSnrDb,
+    grade: severity === 2 ? 'warn' : severity === 1 ? 'fair' : 'good',
+    hints,
+  };
+}
+
 interface StoredState {
   schemaVersion: 1;
   currentVersionId: string;
   versions: VoiceTimbreVersion[];
 }
-
 
 export class VoiceWorkshop {
   private readonly deps: VoiceWorkshopDeps;
@@ -109,11 +308,12 @@ export class VoiceWorkshop {
     this.candidates = this.loadCandidates();
   }
 
-  /** 工坊状态（声线卡 + 版本时间线 + 会话调用计数） */
+  /** 工坊状态（声线卡 + 版本时间线 + 已持久化候选 + 会话调用计数） */
   snapshot(): VoiceWorkshopState {
     return {
       currentVersionId: this.state.currentVersionId,
       versions: this.state.versions,
+      candidates: [...this.candidates.values()].reverse(),
       sessionCalls: this.sessionCalls,
     };
   }
@@ -126,10 +326,11 @@ export class VoiceWorkshop {
     description: string;
     dial?: VoiceWorkshopDial;
     count: number;
+    previewText?: string;
   }): Promise<VoiceWorkshopCandidate[]> {
     const description = composeVoiceWorkshopDescription(input.description, input.dial);
     const candidates: VoiceWorkshopCandidate[] = [];
-    const text = MIMO_WORKSHOP_AUDITION_LINES[0].text;
+    const text = input.previewText?.trim() || MIMO_WORKSHOP_AUDITION_LINES[0].text;
     try {
       for (let i = 0; i < input.count; i++) {
         const result = await this.synth({
@@ -141,13 +342,14 @@ export class VoiceWorkshop {
         const id = randomUUID();
         const file = join(this.candidatesDir(), `${id}.wav`);
         writeFileSync(file, result.bytes);
+        const quality = analyzeWavBuffer(result.bytes);
         const candidate: VoiceWorkshopCandidate = {
           id,
           description,
           text,
           file,
           bytes: result.bytes.byteLength,
-          durationMs: result.durationMs ?? null,
+          durationMs: result.durationMs ?? quality?.durationMs ?? null,
           createdAt: this.iso(),
         };
         this.candidates.set(id, candidate);
@@ -162,47 +364,58 @@ export class VoiceWorkshop {
 
   /**
    * 多句试戴：把候选当参考音频走 VoiceClone，套 4 句（中性/调皮/傲娇/撒娇）与所选强度。
-   * 音色是在情绪里显形的——只试一句很容易选错，所以固定四句一起出。
+   * 若提供 customText，则仅消耗 1 次合成试听该自定义台词，避免浪费配额。
    */
   async audition(input: {
     candidateId: string;
     intensity: VoicePerformanceIntensity;
-  }): Promise<Array<{ key: string; label: string; emotion: string | null; intensity: VoicePerformanceIntensity; text: string; audioBase64: string; providerKind: string; durationMs: number | null }>> {
+    customText?: string;
+  }): Promise<WorkshopAuditionRow[]> {
     const candidate = this.findCandidate(input.candidateId);
-    const out: Array<{ key: string; label: string; emotion: string | null; intensity: VoicePerformanceIntensity; text: string; audioBase64: string; providerKind: string; durationMs: number | null }> = [];
-    for (const line of MIMO_WORKSHOP_AUDITION_LINES) {
-      const result = await this.synth({
-        mode: 'voiceclone',
-        text: line.text,
-        description: candidate.description,
-        ...(line.emotion === null ? {} : { emotion: line.emotion }),
-        intensity: input.intensity,
-        referencePath: candidate.file,
-      });
-      out.push({
-        key: line.key,
-        label: line.label,
-        emotion: line.emotion,
-        intensity: input.intensity,
-        text: line.text,
-        audioBase64: Buffer.from(result.bytes).toString('base64'),
-        providerKind: result.providerKind,
-        durationMs: result.durationMs ?? null,
-      });
+    return this.runAuditionWithReference({
+      referencePath: candidate.file,
+      description: candidate.description,
+      intensity: input.intensity,
+      ...(input.customText === undefined ? {} : { customText: input.customText }),
+    });
+  }
+
+  /** 对已入库/已定格的任意版本（含出厂版与克隆版）进行多句或自定义试戴 */
+  async auditionVersion(input: {
+    versionId: string;
+    intensity: VoicePerformanceIntensity;
+    customText?: string;
+  }): Promise<WorkshopAuditionRow[]> {
+    const version = this.currentVersion(input.versionId);
+    const referencePath = this.effectiveReferencePath(version);
+    if (!existsSync(referencePath)) {
+      throw new Error(`找不到这条声线版本的参考音频：${referencePath}`);
     }
-    return out;
+    return this.runAuditionWithReference({
+      referencePath,
+      description: version.description,
+      intensity: input.intensity,
+      ...(input.customText === undefined ? {} : { customText: input.customText }),
+    });
   }
 
   /**
-   * 定格：把候选音频存成本地版本、复制成主进程的克隆参考，并把当前版本指向它。
+   * 定格：把 AI 设计候选音频存成本地版本、复制成主进程的克隆参考，并把当前版本指向它。
    * 只写本地；出厂版本永远在时间线里，可随时回退。
    */
-  freeze(input: { candidateId: string; label?: string; intensity?: VoicePerformanceIntensity }): VoiceTimbreVersion {
+  freeze(input: {
+    candidateId: string;
+    label?: string;
+    intensity?: VoicePerformanceIntensity;
+    tags?: string[];
+  }): VoiceTimbreVersion {
     const candidate = this.findCandidate(input.candidateId);
     const id = randomUUID();
     const versionFile = join(this.versionsDir(), `${id}.wav`);
     copyFileSync(candidate.file, versionFile);
     copyFileSync(candidate.file, this.deps.cloneSamplePath);
+    const rawBytes = new Uint8Array(readFileSync(versionFile));
+    const quality = analyzeWavBuffer(rawBytes);
     const version: VoiceTimbreVersion = {
       id,
       label: input.label?.trim() !== undefined && input.label.trim() !== '' ? input.label.trim() : `AI 设计 ${this.iso().slice(0, 16).replace('T', ' ')}`,
@@ -210,6 +423,11 @@ export class VoiceWorkshop {
       source: 'ai-design',
       referencePath: versionFile,
       referenceBytes: candidate.bytes,
+      referenceSha256: sha256Hex(rawBytes),
+      durationMs: candidate.durationMs ?? quality?.durationMs ?? null,
+      licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+      ...(quality === null ? {} : { audioQuality: quality }),
+      ...(input.tags === undefined || input.tags.length === 0 ? {} : { tags: input.tags }),
       frozenAt: this.iso(),
       freeze: {
         text: candidate.text,
@@ -223,6 +441,146 @@ export class VoiceWorkshop {
     this.state.currentVersionId = version.id;
     this.persist();
     return version;
+  }
+
+  /**
+   * 创建真人录音 / 本地音频克隆声线版本（带 RIFF 校验、声学质检、SHA-256 与权属声明留痕）。
+   * 写入 `versions/<id>.wav`；若 activate=true 则同步写 `cloneSamplePath` 并切为当前版本。
+   */
+  createClonedVersion(input: {
+    wavBase64?: string;
+    filePath?: string;
+    label: string;
+    description?: string;
+    consent: VoiceCloneConsent;
+    activate?: boolean;
+    tags?: string[];
+  }): VoiceTimbreVersion {
+    if (input.consent.attested !== true || input.consent.source.trim() === '') {
+      throw new Error('保存克隆声线前必须确认声音权属并填写授权来源说明');
+    }
+    const label = input.label.trim();
+    if (label === '') throw new Error('请为克隆声线填写名称');
+
+    let bytes: Uint8Array;
+    if (input.wavBase64 !== undefined && input.wavBase64.trim() !== '') {
+      bytes = new Uint8Array(Buffer.from(input.wavBase64, 'base64'));
+    } else if (input.filePath !== undefined && input.filePath.trim() !== '') {
+      if (!existsSync(input.filePath)) {
+        throw new Error(`找不到指定的参考音频文件：${input.filePath}`);
+      }
+      bytes = new Uint8Array(readFileSync(input.filePath));
+    } else {
+      throw new Error('缺少参考音频数据（需要 wavBase64 或 filePath）');
+    }
+
+    assertValidWavBytes(bytes);
+    const quality = analyzeWavBuffer(bytes);
+    const id = randomUUID();
+    const versionFile = join(this.versionsDir(), `${id}.wav`);
+    writeFileSync(versionFile, bytes);
+
+    const activate = input.activate !== false;
+    if (activate) {
+      copyFileSync(versionFile, this.deps.cloneSamplePath);
+    }
+
+    const description = input.description?.trim() || `本地参考音频克隆（${input.consent.source.trim()}）`;
+    const version: VoiceTimbreVersion = {
+      id,
+      label,
+      description,
+      source: 'uploaded',
+      referencePath: versionFile,
+      referenceBytes: bytes.byteLength,
+      referenceSha256: sha256Hex(bytes),
+      durationMs: quality?.durationMs ?? null,
+      licenseScope: input.consent.kind === 'ai_synthetic' ? 'DEV_ONLY_NON_COMMERCIAL' : 'COMMERCIAL_READY',
+      consent: input.consent,
+      ...(quality === null ? {} : { audioQuality: quality }),
+      ...(input.tags === undefined || input.tags.length === 0 ? {} : { tags: input.tags }),
+      frozenAt: this.iso(),
+      freeze: {
+        text: `（本地音频克隆 · ${input.consent.kind} · ${input.consent.source.trim()}）`,
+        intensity: 'B',
+        provider: 'mimo-tts-voiceclone',
+        mode: 'uploaded → voiceclone',
+      },
+      consistency: null,
+    };
+
+    this.state.versions.push(version);
+    if (activate) {
+      this.state.currentVersionId = version.id;
+    }
+    this.persist();
+    return version;
+  }
+
+  /** 重命名任意非出厂声线版本 */
+  renameVersion(versionId: string, label: string): VoiceTimbreVersion {
+    const trimmed = label.trim();
+    if (trimmed === '') throw new Error('声线名称不能为空');
+    const index = this.state.versions.findIndex((item) => item.id === versionId);
+    if (index < 0) throw new Error('没有这个声线版本');
+    const target = this.state.versions[index]!;
+    if (target.source === 'factory') {
+      throw new Error('出厂默认声线不可改名');
+    }
+    const updated: VoiceTimbreVersion = { ...target, label: trimmed };
+    this.state.versions[index] = updated;
+    this.persist();
+    return updated;
+  }
+
+  /** 删除任意非出厂声线版本；若删的是当前激活版，自动安全回退到出厂版本 */
+  deleteVersion(versionId: string): { deletedId: string; currentVersion: VoiceTimbreVersion } {
+    const index = this.state.versions.findIndex((item) => item.id === versionId);
+    if (index < 0) throw new Error('没有这个声线版本');
+    const target = this.state.versions[index]!;
+    if (target.source === 'factory') {
+      throw new Error('出厂默认声线受保护，不可删除');
+    }
+    this.state.versions.splice(index, 1);
+    try {
+      if (existsSync(target.referencePath)) rmSync(target.referencePath);
+    } catch {
+      /* 忽略已被外部清理的文件 */
+    }
+    if (this.state.currentVersionId === versionId) {
+      const factory = this.rollback('factory');
+      return { deletedId: versionId, currentVersion: factory };
+    }
+    this.persist();
+    return { deletedId: versionId, currentVersion: this.currentVersion() };
+  }
+
+  /**
+   * 安全读取已登记版本或候选的 WAV 音频（仅白名单 ID 查找，彻底杜绝路径穿越），
+   * 供前端绘制真实波形与试听。
+   */
+  readAudio(target: { kind: 'version' | 'candidate'; id: string }): {
+    audioBase64: string;
+    bytes: number;
+    durationMs: number | null;
+    quality: VoiceAudioQuality | null;
+    sha256: string;
+  } {
+    const filePath = target.kind === 'version'
+      ? this.effectiveReferencePath(this.currentVersion(target.id))
+      : this.findCandidate(target.id).file;
+    if (!existsSync(filePath)) {
+      throw new Error(`音频文件不存在：${filePath}`);
+    }
+    const raw = new Uint8Array(readFileSync(filePath));
+    const quality = analyzeWavBuffer(raw);
+    return {
+      audioBase64: Buffer.from(raw).toString('base64'),
+      bytes: raw.byteLength,
+      durationMs: quality?.durationMs ?? null,
+      quality,
+      sha256: sha256Hex(raw),
+    };
   }
 
   /** 回退到某个历史版本（含出厂）：出厂 = 删掉本地克隆参考，让主进程回落到随包基准 */
@@ -302,11 +660,52 @@ export class VoiceWorkshop {
 
   /** 每个候选都可以再生成一次描述（UI 里展示「这条候选实际发出去的描述」） */
   describe(dial?: VoiceWorkshopDial): Array<{ key: string; label: string; options: ReadonlyArray<{ value: string; label: string; phrase: string }> }> {
+    void dial;
     return VOICE_WORKSHOP_DIAL_OPTIONS.map((group) => ({
       key: group.key,
       label: group.label,
       options: group.options,
     }));
+  }
+
+  private async runAuditionWithReference(input: {
+    referencePath: string;
+    description: string;
+    intensity: VoicePerformanceIntensity;
+    customText?: string;
+  }): Promise<WorkshopAuditionRow[]> {
+    const custom = input.customText?.trim();
+    const lines = custom !== undefined && custom !== ''
+      ? [{ key: 'custom', label: '自定义', emotion: null as string | null, text: custom }]
+      : MIMO_WORKSHOP_AUDITION_LINES.map((line) => ({
+          key: line.key as string,
+          label: line.label as string,
+          emotion: line.emotion as string | null,
+          text: line.text as string,
+        }));
+    const out: WorkshopAuditionRow[] = [];
+    for (const line of lines) {
+      const result = await this.synth({
+        mode: 'voiceclone',
+        text: line.text,
+        description: input.description,
+        ...(line.emotion === null ? {} : { emotion: line.emotion }),
+        intensity: input.intensity,
+        referencePath: input.referencePath,
+      });
+      const quality = analyzeWavBuffer(result.bytes);
+      out.push({
+        key: line.key,
+        label: line.label,
+        emotion: line.emotion,
+        intensity: input.intensity,
+        text: line.text,
+        audioBase64: Buffer.from(result.bytes).toString('base64'),
+        providerKind: result.providerKind,
+        durationMs: result.durationMs ?? quality?.durationMs ?? null,
+      });
+    }
+    return out;
   }
 
   private currentVersion(versionId?: string): VoiceTimbreVersion {
@@ -381,7 +780,19 @@ export class VoiceWorkshop {
   }
 
   private factoryVersion(): VoiceTimbreVersion {
-    const bytes = existsSync(this.deps.bundledReferencePath) ? statSync(this.deps.bundledReferencePath).size : 0;
+    let bytes = 0;
+    let sha: string | undefined;
+    let quality: VoiceAudioQuality | null = null;
+    if (existsSync(this.deps.bundledReferencePath)) {
+      bytes = statSync(this.deps.bundledReferencePath).size;
+      try {
+        const raw = new Uint8Array(readFileSync(this.deps.bundledReferencePath));
+        sha = sha256Hex(raw);
+        quality = analyzeWavBuffer(raw);
+      } catch {
+        /* 读失败时保持字节数 */
+      }
+    }
     return {
       id: 'factory',
       label: this.deps.bundledLabel,
@@ -389,6 +800,11 @@ export class VoiceWorkshop {
       source: 'factory',
       referencePath: this.deps.bundledReferencePath,
       referenceBytes: bytes,
+      ...(sha === undefined ? {} : { referenceSha256: sha }),
+      durationMs: quality?.durationMs ?? null,
+      licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+      ...(quality === null ? {} : { audioQuality: quality }),
+      tags: ['出厂定稿', '甜脆', '元气'],
       frozenAt: this.iso(),
       freeze: {
         text: '（随包出厂参考音频，自产台词与生成命令见 assets/voice/README.md）',
@@ -408,7 +824,7 @@ export class VoiceWorkshop {
         // 出厂版本始终排在时间线最前，且不允许被删掉；
         // 但体检结论 / 定格时间这些「跑出来的事实」要沿用磁盘上的，否则重启就丢。
         const storedFactory = raw.versions.find((item) => item?.id === 'factory');
-        const factory: VoiceTimbreVersion = storedFactory === undefined
+        const nextFactory: VoiceTimbreVersion = storedFactory === undefined
           ? this.factoryVersion()
           : {
               ...this.factoryVersion(),
@@ -419,7 +835,7 @@ export class VoiceWorkshop {
         const current = raw.currentVersionId === 'factory' || others.some((item) => item.id === raw.currentVersionId)
           ? raw.currentVersionId
           : 'factory';
-        return { schemaVersion: 1, currentVersionId: current, versions: [factory, ...others] };
+        return { schemaVersion: 1, currentVersionId: current, versions: [nextFactory, ...others] };
       }
     } catch {
       /* 首次运行或状态文件损坏：回到出厂版本，用户可在 UI 里重新定格 */

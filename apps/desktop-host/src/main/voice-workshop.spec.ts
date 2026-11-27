@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { composeVoiceWorkshopDescription, MIMO_WORKSHOP_AUDITION_LINES } from '@workbench/shared-protocol';
 import {
+  analyzeWavBuffer,
   CONSISTENCY_SAMPLES,
   CONSISTENCY_SENTENCE,
   VoiceWorkshop,
@@ -306,5 +307,132 @@ describe('VoiceWorkshop · 一致性体检', () => {
       synth: async () => ({ bytes: FAKE_WAV, providerKind: 'mimo-tts-voiceclone' }),
     });
     expect(reopened.snapshot().versions[0]?.consistency).toMatchObject({ verdict: 'drifty', mean: 0.86, min: 0.72 });
+  });
+});
+
+function buildPcmWav(durationSec: number, sampleRate = 24_000, amp = 0.4): Uint8Array {
+  const count = Math.round(durationSec * sampleRate);
+  const dataBytes = count * 2;
+  const buf = Buffer.alloc(44 + dataBytes);
+  buf.write('RIFF', 0, 'ascii');
+  buf.writeUInt32LE(36 + dataBytes, 4);
+  buf.write('WAVE', 8, 'ascii');
+  buf.write('fmt ', 12, 'ascii');
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36, 'ascii');
+  buf.writeUInt32LE(dataBytes, 40);
+  // 交替有声段与短静音，确保 SNR 与时长都被真实统计
+  for (let i = 0; i < count; i++) {
+    const inPause = i % Math.floor(sampleRate * 1.2) < Math.floor(sampleRate * 0.25);
+    const val = inPause ? 0.001 : amp * Math.sin((2 * Math.PI * 300 * i) / sampleRate);
+    buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(val * 32767))), 44 + i * 2);
+  }
+  return new Uint8Array(buf);
+}
+
+describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音频安全读取', () => {
+  let h: Harness | undefined;
+  afterEach(() => {
+    if (h !== undefined) {
+      rmSync(h.root, { recursive: true, force: true });
+      h = undefined;
+    }
+  });
+
+  it('analyzeWavBuffer 精确解析真实 PCM WAV 并识别正常样本与削波/过短告警', () => {
+    const clean = buildPcmWav(6.0, 24_000, 0.35);
+    const qaClean = analyzeWavBuffer(clean);
+    expect(qaClean).not.toBeNull();
+    expect(qaClean!.durationMs).toBe(6000);
+    expect(qaClean!.sampleRate).toBe(24_000);
+    expect(qaClean!.clipping).toBe(false);
+    expect(qaClean!.grade).toBe('good');
+    expect(qaClean!.estimatedSnrDb).toBeGreaterThan(20);
+
+    const bad = buildPcmWav(1.5, 16_000, 0.99);
+    const qaBad = analyzeWavBuffer(bad);
+    expect(qaBad!.clipping).toBe(true);
+    expect(qaBad!.grade).toBe('warn');
+
+    expect(analyzeWavBuffer(new Uint8Array([1, 2, 3]))).toBeNull();
+  });
+
+  it('createClonedVersion：校验 RIFF + 权属声明 + 写版本与 SHA-256 + 激活 cloneSamplePath', () => {
+    const harness = makeHarness();
+    h = harness;
+    const wav = buildPcmWav(7.0, 24_000, 0.4);
+    const version = harness.workshop.createClonedVersion({
+      wavBase64: Buffer.from(wav).toString('base64'),
+      label: '小鲸亲录 v1',
+      description: '安静书房录制',
+      consent: {
+        kind: 'self_recorded',
+        source: '本人亲录干声',
+        attested: true,
+        attestedAt: '2026-11-27T10:00:00.000Z',
+      },
+      activate: true,
+    });
+    expect(version.source).toBe('uploaded');
+    expect(version.label).toBe('小鲸亲录 v1');
+    expect(version.licenseScope).toBe('COMMERCIAL_READY');
+    expect(version.referenceSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(version.audioQuality?.durationMs).toBe(7000);
+    expect(existsSync(version.referencePath)).toBe(true);
+    expect(readFileSync(harness.cloneSamplePath).byteLength).toBe(wav.byteLength);
+    expect(harness.workshop.snapshot().currentVersionId).toBe(version.id);
+
+    // 非 WAV 头被拒绝
+    expect(() => harness.workshop.createClonedVersion({
+      wavBase64: Buffer.from('not-a-wav-file-at-all-00000000000000000000000000000000').toString('base64'),
+      label: '坏文件',
+      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+    })).toThrow('RIFF/WAVE');
+  });
+
+  it('renameVersion & deleteVersion：保护出厂版本，删除当前激活版本自动安全回退出厂', () => {
+    const harness = makeHarness();
+    h = harness;
+    const wav = buildPcmWav(6.0, 24_000, 0.35);
+    const v = harness.workshop.createClonedVersion({
+      wavBase64: Buffer.from(wav).toString('base64'),
+      label: '临时克隆',
+      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+      activate: true,
+    });
+    const renamed = harness.workshop.renameVersion(v.id, '正式克隆 v2');
+    expect(renamed.label).toBe('正式克隆 v2');
+    expect(() => harness.workshop.renameVersion('factory', '篡改出厂')).toThrow('不可改名');
+    expect(() => harness.workshop.deleteVersion('factory')).toThrow('不可删除');
+
+    const deleted = harness.workshop.deleteVersion(v.id);
+    expect(deleted.deletedId).toBe(v.id);
+    expect(deleted.currentVersion.id).toBe('factory');
+    expect(existsSync(v.referencePath)).toBe(false);
+    expect(existsSync(harness.cloneSamplePath)).toBe(false);
+  });
+
+  it('auditionVersion 与 readAudio：支持自定义单句试戴（1 次）与白名单 WAV 安全读取', async () => {
+    const harness = makeHarness();
+    h = harness;
+    const customRows = await harness.workshop.auditionVersion({
+      versionId: 'factory',
+      intensity: 'B',
+      customText: '主人今天想吃什么呀？',
+    });
+    expect(customRows).toHaveLength(1);
+    expect(customRows[0]?.key).toBe('custom');
+    expect(harness.calls).toHaveLength(1);
+
+    const audio = harness.workshop.readAudio({ kind: 'version', id: 'factory' });
+    expect(audio.bytes).toBe(FAKE_WAV.byteLength);
+    expect(audio.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(() => harness.workshop.readAudio({ kind: 'candidate', id: '../../etc/passwd' })).toThrow('找不到');
   });
 });

@@ -618,8 +618,10 @@ export function composeVoiceWorkshopDescription(base: string, dial: VoiceWorksho
 export const VoiceWorkshopGenerateInputSchema = z.object({
   description: z.string().trim().min(2).max(300),
   dial: VoiceWorkshopDialSchema.optional(),
-  /** 一次出 4–8 条候选（每条一次 VoiceDesign 调用） */
-  count: z.number().int().min(4).max(8).default(4),
+  /** 一次出 2–8 条候选（默认 4，每条一次 VoiceDesign 调用） */
+  count: z.number().int().min(2).max(8).default(4),
+  /** 可选：自定义预览台词（缺省用默认中性台词） */
+  previewText: z.string().trim().min(1).max(200).optional(),
 });
 export type VoiceWorkshopGenerateInput = z.infer<typeof VoiceWorkshopGenerateInputSchema>;
 
@@ -643,17 +645,147 @@ export const MIMO_WORKSHOP_AUDITION_LINES = [
   { key: 'chajiao', label: '撒娇', emotion: 'daily', text: '主人～再陪我一会儿嘛，就一小会儿。' },
 ] as const;
 
+/** 正文内联音频标签（与 VOICE-PERSONA-xiaojing.md §3.1 对齐；每句最多一个，在情绪转折处用） */
+export const VOICE_INLINE_SOUND_TAGS = [
+  { tag: '(sighs deeply)', label: '深叹气', hint: '适合委屈、无奈或深夜转折' },
+  { tag: '(pauses for a moment)', label: '短停顿', hint: '在反转或傲娇强撑前留气口' },
+  { tag: '(cough)', label: '轻咳', hint: '适合心虚、转移话题前清嗓' },
+] as const;
+
+/** 音色克隆录制提词卡（6–10s 中文干声，覆盖平仄、咬字与自然语调） */
+export const VOICE_CLONE_READING_SCRIPTS = [
+  {
+    id: 'warm-daily',
+    label: '日常陪伴（约 8 秒）',
+    text: '早安呀，今天窗外的阳光看起来真不错。先把热茶放桌上吧，忙完这一小段，我们再去海边散散步。',
+  },
+  {
+    id: 'lively-playful',
+    label: '元气互动（约 7 秒）',
+    text: '诶？你居然这么快就回来了！我刚刚还在整理今天的收获呢，快来看看，是不是比昨天厉害多啦？',
+  },
+  {
+    id: 'clear-articulation',
+    label: '清晰播报（约 9 秒）',
+    text: '欢迎回到鲸屿工作台。现在温度适宜、网络顺畅，接下来无论是一起种田、聊天还是听歌，我都会安安静静陪在你旁边。',
+  },
+] as const;
+
+/** 音色设计快捷配方起点（探索新方向用；出厂默认锚点仍为 MIMO_TIMBRE_PRESETS 的 07 甜脆·元气） */
+export const VOICE_DESIGN_STARTER_RECIPES = [
+  {
+    id: 'xiaojing-factory',
+    label: '小鲸定稿 · 甜脆元气',
+    badge: '出厂默认',
+    description: '八九岁小女孩，声音甜而脆，元气满满，语速快，句尾翘起来，像随时要跳起来',
+    dial: { age: 'child', texture: 'sweet_crisp', pace: 'fast', ending: 'rising' } as const,
+  },
+  {
+    id: 'soft-companion',
+    label: '暖茶陪伴 · 柔和少女',
+    badge: '探索配方',
+    description: '十四五岁少女，声线柔和干净，略带轻盈气声，说话温柔有耐心，句尾轻轻落下',
+    dial: { age: 'teen', texture: 'clear_bright', pace: 'medium', ending: 'flat' } as const,
+  },
+  {
+    id: 'tsundere-spark',
+    label: '嘴硬心软 · 灵动傲娇',
+    badge: '探索配方',
+    description: '十四五岁少女，声音清亮带一点点鼻音，咬字利落，平时娇俏，被戳到会突然加快语速',
+    dial: { age: 'teen', texture: 'soft_nasal', pace: 'fast', ending: 'rising' } as const,
+  },
+  {
+    id: 'night-radio',
+    label: '夜潮电台 · 慵懒低暖',
+    badge: '探索配方',
+    description: '二十岁左右的年轻女性，声线微沙偏暖，语速舒缓放松，像深夜电台轻声聊天',
+    dial: { age: 'young_adult', texture: 'husky_low', pace: 'slow', ending: 'dragging' } as const,
+  },
+] as const;
+
+/** 音色克隆权属与合规声明（《民法典》1023 条 + Blueprint 05 声音权保护红线） */
+export const VoiceCloneConsentKindSchema = z.enum([
+  'self_recorded',
+  'authorized_third_party',
+  'ai_synthetic',
+]);
+export type VoiceCloneConsentKind = z.infer<typeof VoiceCloneConsentKindSchema>;
+
+export const VoiceCloneConsentSchema = z.object({
+  kind: VoiceCloneConsentKindSchema,
+  /** 授权来源说明（如「本人麦克风亲录」或「配音演员 XX 书面授权，仅限桌面与直播」） */
+  source: z.string().trim().min(1).max(200),
+  /** 必须由用户显式勾选确认（false/缺失在契约层直接拒绝） */
+  attested: z.literal(true),
+  attestedAt: z.string().min(1),
+});
+export type VoiceCloneConsent = z.infer<typeof VoiceCloneConsentSchema>;
+
+/** 参考音频确定性声学质检（全部由真实 PCM WAV 样本计算，严禁伪造指标） */
+export const VoiceAudioQualityGradeSchema = z.enum(['good', 'fair', 'warn']);
+export type VoiceAudioQualityGrade = z.infer<typeof VoiceAudioQualityGradeSchema>;
+
+export const VoiceAudioQualitySchema = z.object({
+  durationMs: z.number().nonnegative(),
+  sampleRate: z.number().int().positive(),
+  channels: z.number().int().positive(),
+  bitDepth: z.number().int().positive(),
+  rmsDb: z.number(),
+  peakDb: z.number(),
+  clipping: z.boolean(),
+  estimatedSnrDb: z.number().nullable(),
+  grade: VoiceAudioQualityGradeSchema,
+  hints: z.array(z.string()),
+});
+export type VoiceAudioQuality = z.infer<typeof VoiceAudioQualitySchema>;
+
 export const VoiceWorkshopAuditionInputSchema = z.object({
   candidateId: z.string().min(1),
   intensity: VoicePerformanceIntensitySchema.default('B'),
+  customText: z.string().trim().min(1).max(200).optional(),
 });
 export type VoiceWorkshopAuditionInput = z.infer<typeof VoiceWorkshopAuditionInputSchema>;
+
+export const VoiceWorkshopVersionAuditionInputSchema = z.object({
+  versionId: z.string().min(1),
+  intensity: VoicePerformanceIntensitySchema.default('B'),
+  customText: z.string().trim().min(1).max(200).optional(),
+});
+export type VoiceWorkshopVersionAuditionInput = z.infer<typeof VoiceWorkshopVersionAuditionInputSchema>;
 
 export const VoiceWorkshopFreezeInputSchema = z.object({
   candidateId: z.string().min(1),
   label: z.string().trim().min(1).max(40).optional(),
+  intensity: VoicePerformanceIntensitySchema.optional(),
+  tags: z.array(z.string().trim().min(1).max(24)).max(8).optional(),
 });
 export type VoiceWorkshopFreezeInput = z.infer<typeof VoiceWorkshopFreezeInputSchema>;
+
+export const VoiceWorkshopCloneCreateInputSchema = z.object({
+  /** 前端裁剪/归一化/录制后的 WAV Base64（与 filePath 二选一） */
+  wavBase64: z.string().min(1).optional(),
+  /** 本地 WAV 文件绝对路径（与 wavBase64 二选一） */
+  filePath: z.string().min(1).max(2000).optional(),
+  label: z.string().trim().min(1).max(40),
+  description: z.string().trim().max(300).default(''),
+  consent: VoiceCloneConsentSchema,
+  activate: z.boolean().default(true),
+  tags: z.array(z.string().trim().min(1).max(24)).max(8).optional(),
+}).refine((val) => Boolean(val.wavBase64) !== Boolean(val.filePath), {
+  message: '必须且只能提供 wavBase64 或 filePath 之一',
+});
+export type VoiceWorkshopCloneCreateInput = z.infer<typeof VoiceWorkshopCloneCreateInputSchema>;
+
+export const VoiceWorkshopRenameInputSchema = z.object({
+  versionId: z.string().min(1),
+  label: z.string().trim().min(1).max(40),
+});
+export type VoiceWorkshopRenameInput = z.infer<typeof VoiceWorkshopRenameInputSchema>;
+
+export const VoiceWorkshopDeleteInputSchema = z.object({
+  versionId: z.string().min(1),
+});
+export type VoiceWorkshopDeleteInput = z.infer<typeof VoiceWorkshopDeleteInputSchema>;
 
 /** 一致性体检结论：人话判定 + 数字；`unavailable` 表示本机没有可用的说话人嵌入工具，**不给假数字** */
 export const VoiceConsistencyVerdictSchema = z.enum(['stable', 'drifty', 'swapped', 'unavailable']);
@@ -678,6 +810,12 @@ export const VoiceTimbreVersionSchema = z.object({
   source: z.enum(['factory', 'ai-design', 'uploaded']),
   referencePath: z.string().min(1),
   referenceBytes: z.number().int().nonnegative(),
+  referenceSha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  durationMs: z.number().nonnegative().nullable().optional(),
+  licenseScope: z.enum(['DEV_ONLY_NON_COMMERCIAL', 'COMMERCIAL_READY']).optional(),
+  consent: VoiceCloneConsentSchema.optional(),
+  audioQuality: VoiceAudioQualitySchema.optional(),
+  tags: z.array(z.string()).optional(),
   frozenAt: z.string(),
   /** 定格元数据：换引擎重做时要靠它（描述原文 + 指令 + 采样参数 + 参考音频） */
   freeze: z.object({
@@ -693,6 +831,8 @@ export type VoiceTimbreVersion = z.infer<typeof VoiceTimbreVersionSchema>;
 export const VoiceWorkshopStateSchema = z.object({
   currentVersionId: z.string().min(1),
   versions: z.array(VoiceTimbreVersionSchema),
+  /** 已持久化的最近候选列表（重启/切页不丢已付费音频） */
+  candidates: z.array(VoiceWorkshopCandidateSchema).optional(),
   /** 本次会话（进程生命周期）已经花掉的合成次数，UI 如实显示；MiMo 限免，耗尽要明说 */
   sessionCalls: z.number().int().nonnegative(),
 });

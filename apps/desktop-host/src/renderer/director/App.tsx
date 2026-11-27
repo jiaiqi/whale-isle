@@ -990,6 +990,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               characters={characters}
               characterId={characterId}
               onSelectCharacter={(id) => void selectCharacter(id)}
+              onOpenSongConsole={() => setTab('song')}
             />
           </div>
         )}

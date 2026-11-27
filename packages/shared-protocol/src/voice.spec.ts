@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   AudioMixerSnapshotSchema,
   LipSyncFrameSchema,
+  VoiceAudioQualitySchema,
+  VoiceCloneConsentSchema,
   VoiceProviderStatusSchema,
   VoiceSynthesisOutputSchema,
   VoiceSynthesisRequestSchema,
+  VoiceWorkshopCloneCreateInputSchema,
+  VoiceWorkshopDeleteInputSchema,
+  VoiceWorkshopRenameInputSchema,
 } from './voice';
 
 describe('VoiceProvider, LipSync & AudioMixer schemas (V2-P1-02)', () => {
@@ -106,5 +111,60 @@ describe('VoiceProvider, LipSync & AudioMixer schemas (V2-P1-02)', () => {
       tracks: [],
       outputRoutes: {},
     }).success).toBe(false);
+  });
+
+  it('enforces voice cloning consent attestation, xor audio source, and audio quality contracts', () => {
+    // 未勾选声音权属声明在契约层直接拒绝
+    expect(VoiceCloneConsentSchema.safeParse({
+      kind: 'self_recorded',
+      source: '本人亲录',
+      attested: false,
+      attestedAt: '2026-11-27T10:00:00.000Z',
+    }).success).toBe(false);
+
+    const validConsent = VoiceCloneConsentSchema.parse({
+      kind: 'authorized_third_party',
+      source: '原创配音演员书面授权（桌面+直播）',
+      attested: true,
+      attestedAt: '2026-11-27T10:00:00.000Z',
+    });
+    expect(validConsent.attested).toBe(true);
+
+    // wavBase64 与 filePath 必须且只能提供其一
+    expect(VoiceWorkshopCloneCreateInputSchema.safeParse({
+      label: '测试克隆',
+      consent: validConsent,
+    }).success).toBe(false);
+
+    expect(VoiceWorkshopCloneCreateInputSchema.safeParse({
+      wavBase64: 'UklGRg==',
+      filePath: '/tmp/a.wav',
+      label: '测试克隆',
+      consent: validConsent,
+    }).success).toBe(false);
+
+    const parsedClone = VoiceWorkshopCloneCreateInputSchema.parse({
+      wavBase64: 'UklGRg==',
+      label: '小鲸亲录 v1',
+      consent: validConsent,
+    });
+    expect(parsedClone.activate).toBe(true);
+
+    expect(VoiceWorkshopRenameInputSchema.safeParse({ versionId: 'v1', label: '   ' }).success).toBe(false);
+    expect(VoiceWorkshopDeleteInputSchema.parse({ versionId: 'v1' }).versionId).toBe('v1');
+
+    const qa = VoiceAudioQualitySchema.parse({
+      durationMs: 7500,
+      sampleRate: 24_000,
+      channels: 1,
+      bitDepth: 16,
+      rmsDb: -16.4,
+      peakDb: -3.0,
+      clipping: false,
+      estimatedSnrDb: 28.5,
+      grade: 'good',
+      hints: ['处于推荐区间'],
+    });
+    expect(qa.grade).toBe('good');
   });
 });
