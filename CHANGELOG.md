@@ -33,7 +33,7 @@
 - **执行器**：`packages/character-core/src/social-douyin.ts` 新增 `DouyinCommentExecutor`——浏览会话保持 `readonly`，浏览正常收官后独立执行；模型决定是否评论，确定性护栏拒绝导流/联系方式/最近重复；发送前先写 SQLite `pending` 并原子预留额度，落盘失败禁止点击；只有「评论区新增稳定数字 ID + 全文回读 + 重载仍在」才判 `sent`，点击后无可靠回执判 `uncertain` 且不自动重发；验证码/登录墙即停。
 - **持久化**：`apps/desktop-host/src/main/social-comment-ledger.ts` 用 `node:sqlite` 建 `social_comment_actions`，按账号隔离；启动时把残留 `pending` 转 `uncertain` 并保留额度。
 - **宿主与 UI**：`v2-kernel-host.ts` 接模型网关（复用 `MAIN_PERSONA_BRAIN` 与现有饭碗计量）、换设置/急停时按世代撤销在途模型与发送、3 路 IPC；生活页新增「抖音 · 有限自动评论」面板（总开关、未验证提示、暂停原因、首次真实单条核验、按日期 25 条分页查看原文/状态/原因/模型）。
-- **验证**：46 例单测、真实 Electron 本地仿真 E2E 1/1（16.99s）、真实构建主应用 UI/IPC 实测（默认关闭、开关不伪造实测、种入 `simulation-only` 记录可见）、`pnpm verify:gate` **8/8**。**未向抖音发起任何真实评论请求**，真实登录态 DOM 与平台发送仍待 `[REAL-DEVICE]`；证据 [P3-04K-douyin-bounded-comments-verification.md](./docs/v2/evidence/P3-04K-douyin-bounded-comments-verification.md)。
+- **验证**：46 例单测、真实 Electron 本地仿真 E2E 1/1（16.99s）、主应用评论面板 E2E 1/1（12.85s，已进 CI）、真实构建主应用 UI/IPC 实测（默认关闭、开关不伪造实测、种入 `simulation-only` 记录可见）、`pnpm verify:gate` **8/8**。**未向抖音发起任何真实评论请求**，真实登录态 DOM 与平台发送仍待 `[REAL-DEVICE]`；证据 [P3-04K-douyin-bounded-comments-verification.md](./docs/v2/evidence/P3-04K-douyin-bounded-comments-verification.md)。
 - **参考复评留痕**：`REFERENCE-dsh-douyin-agent.md` 记录「公开评论超出第一阶段」被本次 owner 授权局部推翻，仅放开顶层评论；浏览器自动化链路与私信/好友互动仍不采用，弹幕主线仍为 dyhub。
 
 ### Changed / Fixed（抖音 CDP 四项补强，item 20 / P0-1，源自 31 仓审计）

@@ -64,13 +64,20 @@ pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin
 
 ### 4.3 主应用中控台 UI/IPC（`[E2E-HOST]`，记录为种入的 `[SIMULATION]` 数据）
 
-以测试专用 bootstrap 先把 `appData` 指向临时目录，再加载**真实构建产物** `apps/desktop-host/dist/main/index.js`（`PET_STAGE_E2E=1`，不修改 production 入口、不触碰真实 `e2e-profile`），用 Playwright 驱动真实 Electron 中控台：
+已固化为仓库内可复跑 E2E：`apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts`，并加入 macOS CI 的 Electron E2E 列表。
 
-- 默认状态：`enabled=false`、`verified=false`、`lastVerifiedAt=0`、`ledgerReady=true`、无 `blockedReason`，面板显示「开启有限自动评论」与「真实发送尚未验证，自动评论不会执行」。
+```bash
+pnpm exec vitest run --config vitest.e2e.config.mts apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts
+```
+
+结果：**1/1 通过，12.85s**。以测试专用 bootstrap 先把 `appData` 指向临时目录，再加载**真实构建产物** `apps/desktop-host/dist/main/index.js`（`PET_STAGE_E2E=1`，不修改 production 入口、不触碰真实 `e2e-profile`），用 Playwright 驱动真实 Electron 中控台：
+
+- 默认状态：`enabled=false`、`verified=false`、`lastVerifiedAt=0`、`ledgerReady=true`，面板显示「开启有限自动评论」与「真实发送尚未验证，自动评论不会执行」。
 - 点击开关后：`enabled=true`，但 `verified` 仍为 `false`、`lastVerifiedAt` 仍为 `0` —— **开关不会伪造实测时间**；再点一次可恢复关闭。
 - 向临时工作库种入两条明确标注 `simulation-only` 的记录（`sent` / `skipped`）后，UI 显示「已确认发送」「已跳过」、原文全文、目标 URL、原因与生成模型；计数变为「今日已确认 1 条 · 跳过 1 条 · 剩余尝试 9 次」。
 - 切换到前一天：0 条记录并显示空态。
-- 截图（本机临时目录，未入库）：默认关闭、开启后、记录列表、前一日空态四张。
+
+此前手工驱动的四张截图（默认关闭、开启后、记录列表、前一日空态）属一次性初验，结论已由上述 E2E 固化为可回归断言。
 
 ### 4.4 自动化门禁
 

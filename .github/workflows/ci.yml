@@ -145,3 +145,5 @@ jobs:
           apps/desktop-host/e2e/single-pet-chain.e2e.spec.ts
           apps/desktop-host/e2e/single-pet-llm-chain.e2e.spec.ts
           apps/desktop-host/e2e/voice-studio.e2e.spec.ts
+          apps/desktop-host/e2e/douyin-comments.e2e.spec.ts
+          apps/desktop-host/e2e/douyin-comments-console.e2e.spec.ts
