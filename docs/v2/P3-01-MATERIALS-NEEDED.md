@@ -230,6 +230,6 @@ owner 2026-11-27 定调：
 
 VRM 之外，唱歌/说话链路还需要 owner 提供**授权声源素材**；型号、句数、采样率、录制环境与授权声明模板已写死在 [evidence/V2-P3-07-svc-svs-selection.md](./evidence/V2-P3-07-svc-svs-selection.md) 第 2 节：
 
-- 五组情绪参考音：`sweet_normal` 需重录，`tsundere_refuse` / `rage_spray` / `lazy_yawn` / `clumsy_panic` 四组全缺（每条 5.0 s ± 0.3 s / 24 kHz mono 16-bit / −3 dBFS）。
+- 六组情绪参考音（owner 2026-11-27 拍板六组验收）：`sweet_normal` 需重录，`tsundere_refuse` / `rage_spray` / `lazy_yawn` / `clumsy_panic` / `happy_rice` 五组全缺（每条 5.0 s ± 0.3 s / 24 kHz mono 16-bit / −3 dBFS）。逐句台词与录制步骤见 [SINGING-RECORDING-CHECKLIST.md](./SINGING-RECORDING-CHECKLIST.md)。
 - SVC（RVC）训练干声：≥10 分钟可试、30 分钟以上更稳，纯人声无伴奏，逐文件授权留档。
 - 儿童声线必须附监护人授权；没有授权就只能走「成年授权声源 + 儿童化处理」并如实标注，不得宣称是真实儿童音色。

@@ -34,6 +34,7 @@ import { VoiceCenterPanel } from './voice-center-panel';
 import { MemoryPanel } from './memory-panel';
 import { ObsPanel } from './obs-panel';
 import { SongConsolePanel } from './song-console-panel';
+import { SingingMaterialsPanel } from './singing-materials-panel';
 import { PluginsPanel } from './plugins-panel';
 import { PetStudioPanel } from './pet-studio';
 import { CoopPanel } from './coop-panel';
@@ -1052,7 +1053,14 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
           />
         )}
         {tab === 'obs' && <div className="h-full overflow-y-auto"><ObsPanel rice={rice} riceCap={riceCap} events={events} /></div>}
-        {tab === 'song' && <div className="h-full overflow-y-auto"><SongConsolePanel /></div>}
+        {tab === 'song' && (
+          <div className="h-full overflow-y-auto">
+            <div className="mx-auto w-full max-w-[980px] p-3">
+              <SingingMaterialsPanel />
+            </div>
+            <SongConsolePanel />
+          </div>
+        )}
         {tab === 'harness' && <div className="h-full overflow-y-auto"><HarnessPanel /></div>}
         {tab === 'providers' && (
           <div className="h-full overflow-y-auto">

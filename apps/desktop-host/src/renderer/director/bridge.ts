@@ -85,6 +85,7 @@ import type {
   SpeechPerformancePlan,
   SpeechPerformancePlanInput,
   SongConsoleCapability,
+  SingingMaterialScanResult,
   SongConsoleRequestInput,
   SongConsoleStatus,
   StageBackendKind,
@@ -1142,6 +1143,14 @@ export interface DirectorBridge {
   }>;
   v2SongCancel(requestId: string): Promise<{ ok: boolean; cancelled: boolean; reason?: string }>;
   v2SongShutdown(reason?: string): Promise<{ cancelledRequestId: string | null }>;
+  /** 演唱素材目录（绝对路径，只在本机显示） */
+  v2SingingMaterialsDir(): Promise<string>;
+  /** 最近一次扫描结果（未扫过为 null） */
+  v2SingingMaterialsState(): Promise<SingingMaterialScanResult | null>;
+  /** 重新扫描素材目录：读真实 WAV 头与样本，缺授权/坏文件如实报 */
+  v2SingingMaterialsScan(): Promise<
+    { ok: true; result: SingingMaterialScanResult } | { ok: false; error: string }
+  >;
   v2PerfSnapshot(): Promise<{
     performance: PerformanceSnapshot;
     stage: StageRuntimeSnapshot;

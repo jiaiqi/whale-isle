@@ -36,11 +36,11 @@
 
 ## 2. 需要 owner 提供的素材（清单，先等，不自己找）
 
-### 2.1 五组情绪参考音（说话，不是唱歌）
+### 2.1 六组情绪参考音（说话，不是唱歌）
 
-**记录在前的两条事实**：五组里只有 `sweet_normal` 有一个合成 stub（`design_sweet_normal.wav`，不是真人素材，不能当交付物）；因此实际缺口是**四组全缺**（`tsundere_refuse` / `rage_spray` / `lazy_yawn` / `clumsy_panic`），加 `sweet_normal` 需用授权声源重录。
+**记录在前的两条事实**：六组里只有 `sweet_normal` 有一个合成 stub（`design_sweet_normal.wav`，不是真人素材，不能当交付物）；因此实际缺口是**五组全缺**（`tsundere_refuse` / `rage_spray` / `lazy_yawn` / `clumsy_panic` / `happy_rice`），加 `sweet_normal` 需用授权声源重录。
 
-> 命名口径：item 5 的旧清单第五组写作 `happy_rice`（干饭开心）；owner 本轮工单写的是 `clumsy_panic`（心虚慌乱）。本文件按**工单口径**列 `clumsy_panic`；若 owner 两个都想要，就当第六组，验收时按六组算。**「按情绪切参考克隆」已判死不产品化**，这五条只作情绪对照与听感验收，不是切换克隆参考。
+> 2026-11-27 owner 拍板：`clumsy_panic` 与 `happy_rice` **两个都要**，按**六组**验收（契约常量 `SINGING_REQUIRED_EMOTION_KEYS` 与扫描器已按六组实现）。**「按情绪切参考克隆」已判死不产品化**，这六条只作情绪对照与听感验收，不是切换克隆参考。逐句台词与录制步骤见 [SINGING-RECORDING-CHECKLIST.md](../SINGING-RECORDING-CHECKLIST.md)。
 
 用途：补齐声线人格的五档情绪参考；**不用于按情绪切参考克隆**（该方法已在证据 §2.16.2 判死）。
 

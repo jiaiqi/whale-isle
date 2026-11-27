@@ -19,9 +19,8 @@ export const SingingRouteSchema = z.enum(['svc', 'svs', 'svs_svc']);
 export type SingingRoute = z.infer<typeof SingingRouteSchema>;
 
 /**
- * 情绪分组键（与语音侧五档对齐）。
- * `clumsy_panic` 与 `happy_rice` 并存：工单口径是前者，item 5 旧清单是后者；
- * 必录清单见 `SINGING_REQUIRED_EMOTION_KEYS`，owner 拍板后只改那一个常量。
+ * 情绪分组键（与语音侧五档对齐，另加 `happy_rice`）。
+ * 2026-11-27 owner 拍板：`clumsy_panic` 与 `happy_rice` **两个都要**，按六组验收。
  */
 export const SingingEmotionKeySchema = z.enum([
   'sweet_normal',
@@ -33,13 +32,14 @@ export const SingingEmotionKeySchema = z.enum([
 ]);
 export type SingingEmotionKey = z.infer<typeof SingingEmotionKeySchema>;
 
-/** 当前必须齐的五组（工单口径）。owner 若改选 `happy_rice`，只改这里。 */
+/** 当前必须齐的六组（owner 2026-11-27 拍板）。 */
 export const SINGING_REQUIRED_EMOTION_KEYS = [
   'sweet_normal',
   'tsundere_refuse',
   'rage_spray',
   'lazy_yawn',
   'clumsy_panic',
+  'happy_rice',
 ] as const satisfies readonly SingingEmotionKey[];
 
 /** 声音来源（决定能不能商用） */
@@ -200,6 +200,9 @@ export const SingingMaterialIssueCodeSchema = z.enum([
   'source_not_commercial',
   'total_duration_short',
   'slice_duration_out_of_range',
+  'unreadable_file',
+  'unsupported_format',
+  'unclassified_material',
 ]);
 export type SingingMaterialIssueCode = z.infer<typeof SingingMaterialIssueCodeSchema>;
 
@@ -264,3 +267,48 @@ export const SingingReadinessSchema = z.object({
   missingEmotionKeys: z.array(SingingEmotionKeySchema).default([]),
 });
 export type SingingReadiness = z.output<typeof SingingReadinessSchema>;
+
+/** 素材清单汇总（扫描器算完事实后的派生结论，落盘只存事实，不存它） */
+export const SingingMaterialSummarySchema = z.object({
+  verdict: z.enum(['pass', 'warn', 'fail']),
+  issues: z.array(SingingMaterialIssueSchema).default([]),
+  missingEmotionKeys: z.array(SingingEmotionKeySchema).default([]),
+  duplicateEmotionKeys: z.array(SingingEmotionKeySchema).default([]),
+  emotionReferenceCount: z.number().int().nonnegative().default(0),
+  trainingTotalMs: z.number().int().nonnegative().default(0),
+  trainingSliceCount: z.number().int().nonnegative().default(0),
+});
+export type SingingMaterialSummary = z.output<typeof SingingMaterialSummarySchema>;
+
+/**
+ * 素材目录里的 `consent.json`（owner 填写；**不存正文、不存个人信息**，只存声明编号）。
+ * 没有它就等于没有授权，扫描结果会把每个文件标成「缺授权声明」。
+ */
+export const SingingConsentFileSchema = z.object({
+  identityId: z.string().regex(/^[a-zA-Z0-9_-]+$/).default('xiaojing-singing'),
+  displayName: z.string().min(1).default('小鲸'),
+  source: VoiceIdentitySourceSchema.default('owner_authorized_recording'),
+  consentScopes: z.array(VoiceConsentScopeSchema).default(['training', 'synthesis']),
+  consentEvidenceRef: z.string().default(''),
+  minorVoice: z.boolean().default(false),
+  guardianConsent: z.boolean().default(false),
+  weightLicense: SingingWeightLicenseSchema.default('unknown'),
+  svcModelPath: z.string().default(''),
+  svcIndexPath: z.string().default(''),
+  svsVoicebankPath: z.string().default(''),
+});
+export type SingingConsentFile = z.output<typeof SingingConsentFileSchema>;
+export type SingingConsentFileInput = z.input<typeof SingingConsentFileSchema>;
+
+/** 扫描结果（宿主 → 中控台；文件事实 + 汇总 + 就绪，三块都不含音频本体） */
+export const SingingMaterialScanResultSchema = z.object({
+  scannedAt: z.number().int().nonnegative(),
+  /** 素材目录绝对路径（只给用户看自己机器上的路径） */
+  directory: z.string().min(1),
+  /** `file` = 读到了 singing/profile.json；`unconfigured` = 用 consent.json/默认值兜底 */
+  profileSource: z.enum(['file', 'unconfigured']),
+  files: z.array(SingingMaterialFileSchema).default([]),
+  summary: SingingMaterialSummarySchema,
+  readiness: SingingReadinessSchema,
+});
+export type SingingMaterialScanResult = z.output<typeof SingingMaterialScanResultSchema>;

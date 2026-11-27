@@ -12,7 +12,12 @@
 - **判定逻辑**：`packages/voice-runtime/src/singing-profile.ts` 的 `checkSingingMaterial()` / `summarizeSingingMaterials()` / `resolveSingingReadiness()`——削波、缺授权声明、缺情绪组、训练干声过短、引擎未装、`.pth` 未配、儿童无监护人授权、商用渠道非商用权重全部进 blockers；`ready` 与 `commercialReady` 分开，避免「能唱但不能开播」被说成可商用。
 - **许可口径写死**：RVC 代码 MIT ≠ 权重可商用，**商用必须自训底模/声库**；该句同时写进点歌台验收文档 `P3-song-console-host-verification.md` §8，防止后续被误读成「开源=可商用」。
 - **测试**：`singing.spec.ts` + `singing-profile.spec.ts` 共 **39/39**；`pnpm verify:gate` **8/8**。
-- **未做**：`Embodiment` 多形态模型（故 07A 不标 `DONE`）、宿主 IPC 与素材面板；阶段二真唱最小闭环仍 `BLOCKED` 于 owner 授权素材与可追溯 `.pth`。
+- **素材扫描器**：`apps/desktop-host/src/main/singing-materials.ts` 流式读真实 WAV（采样率/位深/声道/时长/峰值/头尾静音/SHA-256），支持 8/16/24/32-bit PCM 与 32/64-bit float；`consent.json` 只读声明编号（不存个人信息）；manifest 落 `<userData>/singing/materials.json` 且只存事实；坏文件报 `unreadable_file`/`unsupported_format` 进 blockers，不静默跳过。
+- **IPC + 面板**：`v2:singing-materials-dir/state/scan` 三路；中控台点歌台页签新增「演唱素材」面板——目录可复制、六组覆盖（缺组标红）、逐文件问题表、`ready`/`commercialReady` 两行结论。
+- **口径变更（owner 2026-11-27）**：情绪参考音按**六组**验收，`clumsy_panic` 与 `happy_rice` 并存；`SINGING_REQUIRED_EMOTION_KEYS`、扫描器与单测已改。
+- **录音清单**：新增 [SINGING-RECORDING-CHECKLIST.md](./docs/v2/SINGING-RECORDING-CHECKLIST.md)（六组固定台词、3–5 遍挑 2 条、24kHz/mono/16-bit、−3dBFS、目录命名、consent.json 与授权模板、SVC 训练干声规格）。
+- **测试**：扫描器 10/10、契约与判定 39/39；`pnpm verify:gate` 8/8。
+- **未做**：`Embodiment` 多形态模型（故 07A 不标 `DONE`）；阶段二真唱最小闭环仍 `BLOCKED` 于 owner 授权素材与可追溯 `.pth`。
 
 ### Added（唱歌链路阶段一：SVC/SVS 选型结论 + 素材清单，`[DOC-ONLY]`，不接入）
 

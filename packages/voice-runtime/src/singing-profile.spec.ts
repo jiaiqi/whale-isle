@@ -76,6 +76,7 @@ function allEmotionMaterials(): SingingMaterialFile[] {
     material({ materialId: 'm3', emotion: 'rage_spray' }),
     material({ materialId: 'm4', emotion: 'lazy_yawn' }),
     material({ materialId: 'm5', emotion: 'clumsy_panic' }),
+    material({ materialId: 'm6', emotion: 'happy_rice' }),
   ];
 }
 
@@ -147,7 +148,7 @@ describe('checkSingingMaterial', () => {
 });
 
 describe('summarizeSingingMaterials', () => {
-  it('五组齐全 + 训练干声 ≥10 分钟 + 全部合规 → pass', () => {
+  it('六组齐全 + 训练干声 ≥10 分钟 + 全部合规 → pass', () => {
     // 训练干声按 10s/切片（规格上限），90 条 = 15 分钟
     const training = Array.from({ length: 90 }, (_, index) => material({
       materialId: `train-${index}`,
@@ -169,7 +170,7 @@ describe('summarizeSingingMaterials', () => {
       material({ materialId: 'm1b', emotion: 'sweet_normal' }),
       material({ materialId: 'm2', emotion: 'rage_spray' }),
     ]);
-    expect(summary.missingEmotionKeys).toEqual(['tsundere_refuse', 'lazy_yawn', 'clumsy_panic']);
+    expect(summary.missingEmotionKeys).toEqual(['tsundere_refuse', 'lazy_yawn', 'clumsy_panic', 'happy_rice']);
     expect(summary.duplicateEmotionKeys).toEqual(['sweet_normal']);
     expect(summary.emotionReferenceCount).toBe(3);
     expect(summary.issues).toContainEqual(expect.objectContaining({ code: 'emotion_duplicate' }));
@@ -191,7 +192,7 @@ describe('summarizeSingingMaterials', () => {
 describe('resolveSingingReadiness', () => {
   const channel: PerformanceChannel = 'private_desktop';
 
-  it('桌面私用：授权齐、引擎在、.pth 配好、五组情绪齐 → ready 且 commercialReady', () => {
+  it('桌面私用：授权齐、引擎在、.pth 配好、六组情绪齐 → ready 且 commercialReady', () => {
     const readiness = resolveSingingReadiness({
       profile: profile(),
       materials: allEmotionMaterials(),
@@ -212,8 +213,8 @@ describe('resolveSingingReadiness', () => {
       channel,
     });
     expect(readiness.ready).toBe(true);
-    expect(readiness.missingEmotionKeys).toHaveLength(5);
-    expect(readiness.warnings.join(' ')).toContain('情绪参考音缺 5 组');
+    expect(readiness.missingEmotionKeys).toHaveLength(6);
+    expect(readiness.warnings.join(' ')).toContain('情绪参考音缺 6 组');
   });
 
   it('引擎未安装 → blocker 带补救建议', () => {

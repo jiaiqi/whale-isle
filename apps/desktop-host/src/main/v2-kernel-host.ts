@@ -117,6 +117,7 @@ import {
 import { openSqliteStoreWithRecovery } from '@workbench/local-store';
 import type { AutodriveHost } from './autodrive-host';
 import { createSongConsoleHost, loadSongBlacklist, resolveSongBlacklistPath, type SongPlaybackPort } from './song-console-host';
+import { createSingingMaterialsHost } from './singing-materials';
 import type { MemoryHost } from './memory-host';
 import type { VoiceHost } from './voice-host';
 import {
@@ -658,6 +659,37 @@ export async function createV2KernelHost(options: {
     // 开发态仓库根 assets/，打包态 resources/assets（与 pet-packs 同一套路径约定）
     blacklist: loadSongBlacklistPath(),
     playback: songPlayback,
+  });
+  // 演唱素材扫描（V2-P3-07A）：只读 owner 放进去的 WAV，事实来自真实文件头与样本
+  const singingMaterialsHost = createSingingMaterialsHost({
+    userDataDir: options.userDataDir,
+    probeEngines: async () => {
+      const caps = await songConsoleHost.capabilities().catch(() => null);
+      const rvc = caps?.capabilities.find((item) => item.name === 'rvc');
+      return [
+        {
+          engine: 'rvc' as const,
+          installed: rvc?.ready ?? false,
+          weightLicense: 'unknown' as const,
+          detail: rvc?.detail ?? '未探测（audio-ai-worker 未返回 RVC 能力）',
+          hint: rvc?.hint ?? '启动 audio-ai-worker 并放入可追溯的 .pth',
+        },
+        {
+          engine: 'diffsinger' as const,
+          installed: false,
+          weightLicense: 'unknown' as const,
+          detail: '未配置 SVS 后端（WHALE_SING_SVS_ENDPOINT）',
+          hint: '配置 SVS 端点后再启用',
+        },
+        {
+          engine: 'openutau' as const,
+          installed: false,
+          weightLicense: 'unknown' as const,
+          detail: '未安装 OpenUtau（可选前端）',
+          hint: '',
+        },
+      ];
+    },
   });
   const performanceDirector = new PerformanceDirector({
     characterId: 'char_xiaojing',
@@ -1838,6 +1870,16 @@ export async function createV2KernelHost(options: {
   ipcMain.handle('v2:song-cancel', (_e, requestId: unknown) =>
     songConsoleHost.cancel(typeof requestId === 'string' ? requestId : ''),
   );
+  // ---- V2-P3-07A 演唱素材（扫描真实 WAV → 事实 + 校验 + ready/commercialReady） ----
+  ipcMain.handle('v2:singing-materials-dir', () => singingMaterialsHost.directory());
+  ipcMain.handle('v2:singing-materials-state', () => singingMaterialsHost.last());
+  ipcMain.handle('v2:singing-materials-scan', async () => {
+    try {
+      return { ok: true as const, result: await singingMaterialsHost.scan() };
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
   ipcMain.handle('v2:stage-switch-backend', (_e, rawInput: { backend: StageBackendKind; binding?: unknown }) => {
     try {
       const backend = StageBackendKindSchema.parse(rawInput.backend);

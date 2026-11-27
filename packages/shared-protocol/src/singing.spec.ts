@@ -143,9 +143,9 @@ describe('SingingMaterial 契约', () => {
     expect(() => SingingMaterialFileSchema.parse({ ...file, peakDbfs: 1.5 })).toThrow();
   });
 
-  it('必录五组情绪键写死为工单口径', () => {
+  it('必录六组情绪键写死为 owner 2026-11-27 口径', () => {
     expect([...SINGING_REQUIRED_EMOTION_KEYS]).toEqual([
-      'sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'clumsy_panic',
+      'sweet_normal', 'tsundere_refuse', 'rage_spray', 'lazy_yawn', 'clumsy_panic', 'happy_rice',
     ]);
   });
 });
