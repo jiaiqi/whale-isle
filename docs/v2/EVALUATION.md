@@ -13,6 +13,10 @@
 
 `single-pet-llm-chain.e2e.spec.ts` 6/6（54.72s）验证真实 Electron / IPC / 模型网关 HTTP / LLM 规划器 / 租约阻断与交还 / 三态回执 / 磁盘记忆检索；本地模型 stub 与 BWF 仿真均属 `[SIMULATION]`，总体证据为 `[E2E-HOST]` + `[SIMULATION]`。503、超时、非法工具与缺 Key 在显式配置下进入可见规则代驾，省略配置时安全暂停；真实模型推理、真实游戏与长时验收未做，状态不升级为 `DONE`。能力域对照、回退和原始验证命令见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)。
 
+## V2-P4-04A–D 外部知识切片增量（2026-11-27）
+
+四段链路（Envoy 只读材料 → Evidence Pack → 候选知识 → 真实 `get_state` 实玩回执）代码完成：`verify:gate` 8/8，本单 5 文件 38 用例，Electron E2E 1/1（2968ms），新增核心文件分支覆盖率 99.17% / 95.45% / 91.2%。证据主体为 `[SIMULATION]` + `[E2E-HOST]`；**真实环境 probe 如实 `unavailable`**（本机无 envoy、无 owner 授权材料），未生成外部证据、未发游戏动作。四个反例均有自动化：材料缺失、Envoy 不可用、BWF 不可达、执行前后状态无变化。真实 Envoy/owner 材料读取、两次 digest 复现、真实游戏同链路与 Windows 子进程回收未验，状态为 `IMPLEMENTED_UNVERIFIED`；`P4-01` 仍为唯一 `NEXT`。详见 [EXTERNAL-FUSION-D1-slice-verification.md](./evidence/EXTERNAL-FUSION-D1-slice-verification.md)。
+
 ## 一、四级证据口径（强制前缀标注）
 
 | 证据标识 | 定义与边界 | 允许宣称范围 |

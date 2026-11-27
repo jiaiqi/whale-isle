@@ -1628,6 +1628,7 @@ export * from './voice';
 export * from './quota';
 export * from './memory';
 export * from './knowledge';
+export * from './knowledge-evidence';
 export * from './ecosystem';
 export * from './media';
 export * from './coop';

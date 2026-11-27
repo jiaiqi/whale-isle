@@ -14,6 +14,1223 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field, RootModel
 from typing_extensions import TypeAliasType
 
 
+class EvidenceLocator1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class EvidenceLocator2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class EvidenceLocator3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class EvidenceLocator4(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class EvidenceLocator5(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class EvidenceLocator(
+    RootModel[
+        EvidenceLocator1
+        | EvidenceLocator2
+        | EvidenceLocator3
+        | EvidenceLocator4
+        | EvidenceLocator5
+    ]
+):
+    root: (
+        EvidenceLocator1
+        | EvidenceLocator2
+        | EvidenceLocator3
+        | EvidenceLocator4
+        | EvidenceLocator5
+    )
+
+
+class Locator(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator4(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class Extraction(StrEnum):
+    complete = 'complete'
+    partial = 'partial'
+    failed = 'failed'
+    unknown = 'unknown'
+
+
+class EvidenceRef(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    evidenceId: Annotated[str, Field(min_length=1)]
+    materialId: Annotated[str, Field(min_length=1)]
+    locator: Locator | Locator1 | Locator2 | Locator3 | Locator4
+    sourceRevision: Annotated[str | None, Field(min_length=1)] = None
+    materialSha256: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    extraction: Extraction | None = 'unknown'
+    capturedAt: Annotated[str, Field(min_length=1)]
+
+
+class ModContextItem(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class SourceType(StrEnum):
+    official = 'official'
+    wiki = 'wiki'
+    community = 'community'
+    video = 'video'
+    user = 'user'
+    experience = 'experience'
+
+
+class ApplicabilityItem(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class KnownLimitation(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class ContradictoryEvidenceItem(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class Status(StrEnum):
+    unverified = 'unverified'
+    partially_verified = 'partially-verified'
+    verified = 'verified'
+    outdated = 'outdated'
+    rejected = 'rejected'
+
+
+class Locator5(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator6(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator7(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator8(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator9(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class EvidenceRef1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    evidenceId: Annotated[str, Field(min_length=1)]
+    materialId: Annotated[str, Field(min_length=1)]
+    locator: Locator5 | Locator6 | Locator7 | Locator8 | Locator9
+    sourceRevision: Annotated[str | None, Field(min_length=1)] = None
+    materialSha256: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    extraction: Extraction | None = 'unknown'
+    capturedAt: Annotated[str, Field(min_length=1)]
+
+
+class UnitState(StrEnum):
+    candidate = 'candidate'
+    verified = 'verified'
+    promoted = 'promoted'
+    archived = 'archived'
+
+
+class EvidenceLevel(StrEnum):
+    real_device = 'real-device'
+    real_platform = 'real-platform'
+    e2e_host = 'e2e-host'
+    simulation = 'simulation'
+    unverified = 'unverified'
+
+
+class Supersede(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class GameKnowledgeItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    gameId: Annotated[str | None, Field(min_length=1)] = 'stardew'
+    gameVersion: Annotated[str | None, Field(min_length=1)] = None
+    modContext: Annotated[list[ModContextItem] | None, Field(validate_default=True)] = (
+        []
+    )
+    topic: Annotated[str, Field(min_length=1)]
+    claim: Annotated[str, Field(min_length=1)]
+    sourceType: SourceType
+    sourceUri: Annotated[str | None, Field(min_length=1)] = None
+    sourceTitle: Annotated[str | None, Field(min_length=1)] = None
+    retrievedAt: Annotated[str, Field(min_length=1)]
+    evidenceSummary: Annotated[str | None, Field(min_length=1)] = None
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+    applicability: Annotated[
+        list[ApplicabilityItem] | None, Field(validate_default=True)
+    ] = []
+    knownLimitations: Annotated[
+        list[KnownLimitation] | None, Field(validate_default=True)
+    ] = []
+    contradictoryEvidence: Annotated[
+        list[ContradictoryEvidenceItem] | None, Field(validate_default=True)
+    ] = []
+    status: Status
+    evidenceRefs: Annotated[list[EvidenceRef1] | None, Field(validate_default=True)] = (
+        []
+    )
+    unitState: UnitState | None = 'candidate'
+    evidenceLevel: EvidenceLevel | None = 'unverified'
+    supersedes: Annotated[list[Supersede] | None, Field(validate_default=True)] = []
+    supersededBy: Annotated[str | None, Field(min_length=1)] = None
+    expiresAt: Annotated[str | None, Field(min_length=1)] = None
+
+
+class LicenseScope(StrEnum):
+    owner_authorized = 'owner-authorized'
+    cc_by_nc_sa = 'cc-by-nc-sa'
+    cc_by_4_0 = 'cc-by-4.0'
+    apache_2_0 = 'apache-2.0'
+    mit = 'mit'
+    unknown = 'unknown'
+
+
+class KnowledgeMaterial(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    materialId: Annotated[str, Field(max_length=128, min_length=1)]
+    originUri: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(max_length=200, min_length=1)]
+    sha256: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    sourceRevision: Annotated[str, Field(max_length=200, min_length=1)]
+    bytes: Annotated[int | None, Field(ge=0)] = None
+    licenseScope: LicenseScope | None = 'unknown'
+    licenseNote: Annotated[str | None, Field(max_length=300, min_length=1)] = None
+    readAt: Annotated[str, Field(min_length=1)]
+
+
+class Locator10(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator11(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator12(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator13(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator14(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class Origin(StrEnum):
+    source = 'source'
+    asr = 'asr'
+    ocr = 'ocr'
+    vision = 'vision'
+    derived = 'derived'
+
+
+class MaterialChunk(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    chunkId: Annotated[str, Field(max_length=160, min_length=1)]
+    locator: Locator10 | Locator11 | Locator12 | Locator13 | Locator14
+    text: Annotated[str, Field(min_length=1)]
+    origin: Origin | None = 'source'
+
+
+class Locator15(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator16(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator17(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator18(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator19(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class Chunk(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    chunkId: Annotated[str, Field(max_length=160, min_length=1)]
+    locator: Locator15 | Locator16 | Locator17 | Locator18 | Locator19
+    text: Annotated[str, Field(min_length=1)]
+    origin: Origin | None = 'source'
+
+
+class Source(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    title: Annotated[str, Field(min_length=1)]
+    originUri: Annotated[str, Field(min_length=1)]
+    licenseScope: LicenseScope
+    licenseNote: str | None = None
+    readerVersion: Annotated[str, Field(min_length=1)]
+
+
+class Parameters(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    topic: Annotated[str, Field(min_length=1)]
+    sourceType: SourceType
+    gameVersion: Annotated[str | None, Field(min_length=1)] = None
+    modContext: list[ModContextItem] | None = None
+    applicability: list[ApplicabilityItem] | None = None
+
+
+class EvidencePack(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    packId: Annotated[str, Field(max_length=128, min_length=1)]
+    materialId: Annotated[str, Field(max_length=128, min_length=1)]
+    materialSha256: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    sourceRevision: Annotated[str, Field(max_length=200, min_length=1)]
+    extraction: Extraction
+    digest: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    chunks: Annotated[list[Chunk], Field(max_length=500)]
+    capturedAt: Annotated[str, Field(min_length=1)]
+    source: Source
+    parameters: Parameters
+
+
+class State(StrEnum):
+    available = 'available'
+    unavailable = 'unavailable'
+    starting = 'starting'
+    error = 'error'
+
+
+class KnowledgeSourceStatus(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    sourceId: Annotated[str | None, Field(min_length=1)] = 'envoy'
+    state: State
+    reason: Annotated[str | None, Field(max_length=400, min_length=1)] = None
+    command: Annotated[str | None, Field(max_length=300, min_length=1)] = None
+    version: Annotated[str | None, Field(max_length=100, min_length=1)] = None
+    materialsRoot: Annotated[str | None, Field(max_length=500, min_length=1)] = None
+    materialCount: Annotated[int | None, Field(ge=0)] = 0
+    readOnly: Literal[True] = True
+    checkedAt: Annotated[str, Field(min_length=1)]
+
+
+class Status1(StrEnum):
+    compatible = 'compatible'
+    uncertain = 'uncertain'
+    outdated = 'outdated'
+    mod_mismatch = 'mod-mismatch'
+    not_applicable = 'not-applicable'
+
+
+class VersionMatch(StrEnum):
+    match = 'match'
+    mismatch = 'mismatch'
+    not_declared = 'not-declared'
+    unreadable = 'unreadable'
+
+
+class ModMatch(StrEnum):
+    match = 'match'
+    missing_mods = 'missing-mods'
+    not_declared = 'not-declared'
+    unreadable = 'unreadable'
+
+
+class MatchedCondition(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class UnsatisfiedCondition(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class UnverifiableCondition(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class Reason(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class MissingMod(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class KnowledgeApplicability(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    status: Status1
+    executable: bool
+    versionMatch: VersionMatch
+    modMatch: ModMatch
+    matchedConditions: Annotated[
+        list[MatchedCondition] | None, Field(validate_default=True)
+    ] = []
+    unsatisfiedConditions: Annotated[
+        list[UnsatisfiedCondition] | None, Field(validate_default=True)
+    ] = []
+    unverifiableConditions: Annotated[
+        list[UnverifiableCondition] | None, Field(validate_default=True)
+    ] = []
+    reasons: Annotated[list[Reason] | None, Field(validate_default=True)] = []
+    missingMods: Annotated[list[MissingMod] | None, Field(validate_default=True)] = []
+    runtimeGameVersion: Annotated[str | None, Field(min_length=1)] = None
+    runtimeSeason: Annotated[str | None, Field(min_length=1)] = None
+    runtimeDay: Annotated[int | None, Field(gt=0)] = None
+    runtimeLocation: Annotated[str | None, Field(min_length=1)] = None
+    stateDigest: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    assessedAt: Annotated[str, Field(min_length=1)]
+
+
+class ReceiptStatus(StrEnum):
+    COMPLETED = 'COMPLETED'
+    FAILED = 'FAILED'
+    UNCERTAIN = 'UNCERTAIN'
+
+
+class PlayReceipt(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    receiptId: Annotated[str, Field(max_length=128, min_length=1)]
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    actionId: Annotated[str, Field(max_length=128, min_length=1)]
+    tool: Annotated[str, Field(max_length=120, min_length=1)]
+    receiptStatus: ReceiptStatus
+    summary: Annotated[str, Field(max_length=300, min_length=1)]
+    observedStateDelta: dict[str, str] | None = {}
+    stateChanged: bool
+    suspicious: bool | None = False
+    evidenceLevel: EvidenceLevel
+    beforeState: str
+    afterState: str | None = None
+    rawReceipt: str
+    simulation: bool
+    beforeStateDigest: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    afterStateDigest: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    capturedAt: Annotated[str, Field(min_length=1)]
+
+
+class KnowledgeImportMaterialInput(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    filePath: Annotated[str, Field(max_length=1000, min_length=1)]
+    topic: Annotated[str, Field(max_length=120, min_length=1)]
+    licenseScope: LicenseScope | None = 'unknown'
+    licenseNote: Annotated[str | None, Field(max_length=300, min_length=1)] = None
+    sourceType: SourceType | None = 'wiki'
+    maxChunks: Annotated[int | None, Field(ge=1, le=200)] = None
+    gameVersion: Annotated[str | None, Field(min_length=1)] = None
+    modContext: list[ModContextItem] | None = None
+    applicability: Annotated[
+        list[ApplicabilityItem] | None, Field(validate_default=True)
+    ] = []
+
+
+class KnowledgeExecuteInput(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    tool: Annotated[str, Field(max_length=120, min_length=1)]
+    args: dict[str, Any] | None = {}
+    timeoutMs: Annotated[int | None, Field(ge=1000, le=600000)] = None
+
+
+class Material(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    materialId: Annotated[str, Field(max_length=128, min_length=1)]
+    originUri: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(max_length=200, min_length=1)]
+    sha256: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    sourceRevision: Annotated[str, Field(max_length=200, min_length=1)]
+    bytes: Annotated[int | None, Field(ge=0)] = None
+    licenseScope: LicenseScope | None = 'unknown'
+    licenseNote: Annotated[str | None, Field(max_length=300, min_length=1)] = None
+    readAt: Annotated[str, Field(min_length=1)]
+
+
+class Locator20(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator21(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator22(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator23(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator24(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class Chunk1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    chunkId: Annotated[str, Field(max_length=160, min_length=1)]
+    locator: Locator20 | Locator21 | Locator22 | Locator23 | Locator24
+    text: Annotated[str, Field(min_length=1)]
+    origin: Origin | None = 'source'
+
+
+class Source1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    title: Annotated[str, Field(min_length=1)]
+    originUri: Annotated[str, Field(min_length=1)]
+    licenseScope: LicenseScope
+    licenseNote: str | None = None
+    readerVersion: Annotated[str, Field(min_length=1)]
+
+
+class Parameters1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    topic: Annotated[str, Field(min_length=1)]
+    sourceType: SourceType
+    gameVersion: Annotated[str | None, Field(min_length=1)] = None
+    modContext: list[ModContextItem] | None = None
+    applicability: list[ApplicabilityItem] | None = None
+
+
+class Pack(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    packId: Annotated[str, Field(max_length=128, min_length=1)]
+    materialId: Annotated[str, Field(max_length=128, min_length=1)]
+    materialSha256: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    sourceRevision: Annotated[str, Field(max_length=200, min_length=1)]
+    extraction: Extraction
+    digest: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    chunks: Annotated[list[Chunk1], Field(max_length=500)]
+    capturedAt: Annotated[str, Field(min_length=1)]
+    source: Source1
+    parameters: Parameters1
+
+
+class Status2(StrEnum):
+    unverified = 'unverified'
+    partially_verified = 'partially-verified'
+    verified = 'verified'
+    outdated = 'outdated'
+    rejected = 'rejected'
+
+
+class Locator25(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator26(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator27(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator28(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator29(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class EvidenceRef2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    evidenceId: Annotated[str, Field(min_length=1)]
+    materialId: Annotated[str, Field(min_length=1)]
+    locator: Locator25 | Locator26 | Locator27 | Locator28 | Locator29
+    sourceRevision: Annotated[str | None, Field(min_length=1)] = None
+    materialSha256: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    extraction: Extraction | None = 'unknown'
+    capturedAt: Annotated[str, Field(min_length=1)]
+
+
+class Unit(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    gameId: Annotated[str | None, Field(min_length=1)] = 'stardew'
+    gameVersion: Annotated[str | None, Field(min_length=1)] = None
+    modContext: Annotated[list[ModContextItem] | None, Field(validate_default=True)] = (
+        []
+    )
+    topic: Annotated[str, Field(min_length=1)]
+    claim: Annotated[str, Field(min_length=1)]
+    sourceType: SourceType
+    sourceUri: Annotated[str | None, Field(min_length=1)] = None
+    sourceTitle: Annotated[str | None, Field(min_length=1)] = None
+    retrievedAt: Annotated[str, Field(min_length=1)]
+    evidenceSummary: Annotated[str | None, Field(min_length=1)] = None
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+    applicability: Annotated[
+        list[ApplicabilityItem] | None, Field(validate_default=True)
+    ] = []
+    knownLimitations: Annotated[
+        list[KnownLimitation] | None, Field(validate_default=True)
+    ] = []
+    contradictoryEvidence: Annotated[
+        list[ContradictoryEvidenceItem] | None, Field(validate_default=True)
+    ] = []
+    status: Status2
+    evidenceRefs: Annotated[list[EvidenceRef2] | None, Field(validate_default=True)] = (
+        []
+    )
+    unitState: UnitState | None = 'candidate'
+    evidenceLevel: EvidenceLevel | None = 'unverified'
+    supersedes: Annotated[list[Supersede] | None, Field(validate_default=True)] = []
+    supersededBy: Annotated[str | None, Field(min_length=1)] = None
+    expiresAt: Annotated[str | None, Field(min_length=1)] = None
+
+
+class KnowledgeImportResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ok: bool
+    material: Material | None = None
+    pack: Pack | None = None
+    units: Annotated[list[Unit] | None, Field(validate_default=True)] = []
+    error: Annotated[str | None, Field(min_length=1)] = None
+    degradedReason: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Availability(StrEnum):
+    available = 'available'
+    unavailable = 'unavailable'
+    blocked = 'blocked'
+
+
+class Status3(StrEnum):
+    compatible = 'compatible'
+    uncertain = 'uncertain'
+    outdated = 'outdated'
+    mod_mismatch = 'mod-mismatch'
+    not_applicable = 'not-applicable'
+
+
+class Applicability(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    status: Status3
+    executable: bool
+    versionMatch: VersionMatch
+    modMatch: ModMatch
+    matchedConditions: Annotated[
+        list[MatchedCondition] | None, Field(validate_default=True)
+    ] = []
+    unsatisfiedConditions: Annotated[
+        list[UnsatisfiedCondition] | None, Field(validate_default=True)
+    ] = []
+    unverifiableConditions: Annotated[
+        list[UnverifiableCondition] | None, Field(validate_default=True)
+    ] = []
+    reasons: Annotated[list[Reason] | None, Field(validate_default=True)] = []
+    missingMods: Annotated[list[MissingMod] | None, Field(validate_default=True)] = []
+    runtimeGameVersion: Annotated[str | None, Field(min_length=1)] = None
+    runtimeSeason: Annotated[str | None, Field(min_length=1)] = None
+    runtimeDay: Annotated[int | None, Field(gt=0)] = None
+    runtimeLocation: Annotated[str | None, Field(min_length=1)] = None
+    stateDigest: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    assessedAt: Annotated[str, Field(min_length=1)]
+
+
+class Receipt(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    receiptId: Annotated[str, Field(max_length=128, min_length=1)]
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    actionId: Annotated[str, Field(max_length=128, min_length=1)]
+    tool: Annotated[str, Field(max_length=120, min_length=1)]
+    receiptStatus: ReceiptStatus
+    summary: Annotated[str, Field(max_length=300, min_length=1)]
+    observedStateDelta: dict[str, str] | None = {}
+    stateChanged: bool
+    suspicious: bool | None = False
+    evidenceLevel: EvidenceLevel
+    beforeState: str
+    afterState: str | None = None
+    rawReceipt: str
+    simulation: bool
+    beforeStateDigest: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    afterStateDigest: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    capturedAt: Annotated[str, Field(min_length=1)]
+
+
+class KnowledgeExecutionResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    ok: bool
+    availability: Availability
+    reason: str | None = None
+    applicability: Applicability | None = None
+    receipt: Receipt | None = None
+
+
+class Status4(StrEnum):
+    unverified = 'unverified'
+    partially_verified = 'partially-verified'
+    verified = 'verified'
+    outdated = 'outdated'
+    rejected = 'rejected'
+
+
+class Locator30(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['text']
+    startLine: Annotated[int, Field(gt=0)]
+    endLine: Annotated[int, Field(gt=0)]
+
+
+class Locator31(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['web']
+    url: Annotated[str, Field(min_length=1)]
+    selector: Annotated[str | None, Field(min_length=1)] = None
+    quote: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Locator32(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['video']
+    startMs: Annotated[int, Field(ge=0)]
+    endMs: Annotated[int, Field(gt=0)]
+
+
+class Locator33(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['pdf']
+    page: Annotated[int, Field(gt=0)]
+
+
+class Locator34(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Literal['image-region']
+    x: Annotated[float, Field(ge=0.0)]
+    y: Annotated[float, Field(ge=0.0)]
+    w: Annotated[float, Field(gt=0.0)]
+    h: Annotated[float, Field(gt=0.0)]
+
+
+class EvidenceRef3(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    evidenceId: Annotated[str, Field(min_length=1)]
+    materialId: Annotated[str, Field(min_length=1)]
+    locator: Locator30 | Locator31 | Locator32 | Locator33 | Locator34
+    sourceRevision: Annotated[str | None, Field(min_length=1)] = None
+    materialSha256: Annotated[str | None, Field(pattern='^[a-f0-9]{64}$')] = None
+    extraction: Extraction | None = 'unknown'
+    capturedAt: Annotated[str, Field(min_length=1)]
+
+
+class Unit1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    knowledgeId: Annotated[str, Field(min_length=1)]
+    gameId: Annotated[str | None, Field(min_length=1)] = 'stardew'
+    gameVersion: Annotated[str | None, Field(min_length=1)] = None
+    modContext: Annotated[list[ModContextItem] | None, Field(validate_default=True)] = (
+        []
+    )
+    topic: Annotated[str, Field(min_length=1)]
+    claim: Annotated[str, Field(min_length=1)]
+    sourceType: SourceType
+    sourceUri: Annotated[str | None, Field(min_length=1)] = None
+    sourceTitle: Annotated[str | None, Field(min_length=1)] = None
+    retrievedAt: Annotated[str, Field(min_length=1)]
+    evidenceSummary: Annotated[str | None, Field(min_length=1)] = None
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+    applicability: Annotated[
+        list[ApplicabilityItem] | None, Field(validate_default=True)
+    ] = []
+    knownLimitations: Annotated[
+        list[KnownLimitation] | None, Field(validate_default=True)
+    ] = []
+    contradictoryEvidence: Annotated[
+        list[ContradictoryEvidenceItem] | None, Field(validate_default=True)
+    ] = []
+    status: Status4
+    evidenceRefs: Annotated[list[EvidenceRef3] | None, Field(validate_default=True)] = (
+        []
+    )
+    unitState: UnitState | None = 'candidate'
+    evidenceLevel: EvidenceLevel | None = 'unverified'
+    supersedes: Annotated[list[Supersede] | None, Field(validate_default=True)] = []
+    supersededBy: Annotated[str | None, Field(min_length=1)] = None
+    expiresAt: Annotated[str | None, Field(min_length=1)] = None
+
+
+class Material1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    materialId: Annotated[str, Field(max_length=128, min_length=1)]
+    originUri: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(max_length=200, min_length=1)]
+    sha256: Annotated[str, Field(pattern='^[a-f0-9]{64}$')]
+    sourceRevision: Annotated[str, Field(max_length=200, min_length=1)]
+    bytes: Annotated[int | None, Field(ge=0)] = None
+    licenseScope: LicenseScope | None = 'unknown'
+    licenseNote: Annotated[str | None, Field(max_length=300, min_length=1)] = None
+    readAt: Annotated[str, Field(min_length=1)]
+
+
+class KnowledgeSnapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    units: list[Unit1]
+    materials: list[Material1]
+    localTopics: list[str]
+
+
+class Envoy(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    enabled: bool | None = True
+
+
+class KnowledgeSourceConfig(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    envoy: Annotated[Envoy | None, Field(validate_default=True)] = cast(
+        'Envoy | None', {'enabled': True}
+    )
+
+
+class MaterialId(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class SourceRevision(RootModel[str]):
+    root: Annotated[str, Field(min_length=1)]
+
+
+class Result(StrEnum):
+    ready = 'ready'
+    partial = 'partial'
+    needs_host = 'needs_host'
+    blocked = 'blocked'
+    empty = 'empty'
+
+
+class Content(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: str
+    text: str | None = None
+
+
+class PageNumber(RootModel[int]):
+    root: Annotated[int, Field(gt=0)]
+
+
+class Locator35(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: str
+    page_number: PageNumber | None = None
+    locator_valid: bool | None = None
+
+
+class Block(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    origin: str
+    content: Content
+    locator: Locator35 | None = None
+
+
+class Modalities(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    extraction: Extraction | None = 'unknown'
+
+
+class Coverage(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    modalities: Annotated[
+        dict[str, Modalities] | None, Field(validate_default=True)
+    ] = {}
+    unresolved: list[str] | None = []
+
+
+class Error(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    code: str
+    message: str
+
+
+class EnvoyReadResponse(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    material_id: MaterialId | None = None
+    source_revision: SourceRevision | None = None
+    result: Result
+    blocks: Annotated[list[Block] | None, Field(validate_default=True)] = []
+    coverage: Annotated[Coverage | None, Field(validate_default=True)] = cast(
+        'Coverage | None', {'modalities': {}, 'unresolved': []}
+    )
+    errors: Annotated[list[Error] | None, Field(validate_default=True)] = []
+
+
+class Locator36(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: str
+    page_number: PageNumber | None = None
+    locator_valid: bool | None = None
+
+
+class Block1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(min_length=1)]
+    origin: str
+    content: Content
+    locator: Locator36 | None = None
+
+
+class Modalities1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    extraction: Extraction | None = 'unknown'
+
+
+class Coverage1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    modalities: Annotated[
+        dict[str, Modalities1] | None, Field(validate_default=True)
+    ] = {}
+    unresolved: list[str] | None = []
+
+
+class StructuredContent(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    material_id: MaterialId | None = None
+    source_revision: SourceRevision | None = None
+    result: Result
+    blocks: Annotated[list[Block1] | None, Field(validate_default=True)] = []
+    coverage: Annotated[Coverage1 | None, Field(validate_default=True)] = cast(
+        'Coverage1 | None', {'modalities': {}, 'unresolved': []}
+    )
+    errors: Annotated[list[Error] | None, Field(validate_default=True)] = []
+
+
+class ContentItem(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: str
+    text: str | None = None
+
+
+class EnvoyToolResult(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    isError: bool | None = None
+    structuredContent: StructuredContent | None = None
+    content: list[ContentItem] | None = None
+
+
 class Channel(StrEnum):
     private_desktop = 'private_desktop'
     livestream_public = 'livestream_public'
@@ -107,7 +1324,7 @@ class SongConsoleRequest(BaseModel):
     accompanimentGain: Annotated[float | None, Field(ge=0.0, le=2.0)] = 0.75
 
 
-class State(StrEnum):
+class State1(StrEnum):
     idle = 'idle'
     preparing = 'preparing'
     streaming = 'streaming'
@@ -152,7 +1369,7 @@ class SongConsoleStatus(BaseModel):
     )
     requestId: Annotated[str, Field(min_length=1)]
     characterId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
-    state: State
+    state: State1
     stage: Stage
     songId: Annotated[str, Field(min_length=1)]
     songTitle: Annotated[str, Field(min_length=1)]
@@ -264,7 +1481,7 @@ class SongCapabilitiesResult(BaseModel):
     missing: list[str]
 
 
-class Source(StrEnum):
+class Source2(StrEnum):
     builtin_reference = 'builtin_reference'
     owner_authorized_recording = 'owner_authorized_recording'
     licensed_model = 'licensed_model'
@@ -292,7 +1509,7 @@ class VoiceIdentity(BaseModel):
     )
     identityId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
     displayName: Annotated[str, Field(min_length=1)]
-    source: Source
+    source: Source2
     consentScopes: list[ConsentScope] | None = []
     consentEvidenceRef: str | None = ''
     minorVoice: bool | None = False
@@ -316,7 +1533,7 @@ class Voice(BaseModel):
     )
     identityId: Annotated[str, Field(pattern='^[a-zA-Z0-9_-]+$')]
     displayName: Annotated[str, Field(min_length=1)]
-    source: Source
+    source: Source2
     consentScopes: list[ConsentScope] | None = []
     consentEvidenceRef: str | None = ''
     minorVoice: bool | None = False
@@ -423,7 +1640,7 @@ class File(BaseModel):
     peakDbfs: Annotated[float, Field(le=0.0)]
     headSilenceMs: Annotated[float | None, Field(ge=0.0)] = 0
     tailSilenceMs: Annotated[float | None, Field(ge=0.0)] = 0
-    source: Source
+    source: Source2
     consentEvidenceRef: str | None = ''
     recordedAt: str | None = None
 
@@ -535,7 +1752,7 @@ class Renderer(StrEnum):
     pose_skin = 'pose-skin'
 
 
-class LicenseScope(StrEnum):
+class LicenseScope6(StrEnum):
     DEV_ONLY_NON_COMMERCIAL = 'DEV_ONLY_NON_COMMERCIAL'
     COMMERCIAL_READY = 'COMMERCIAL_READY'
 
@@ -645,7 +1862,7 @@ class PetAvatarManifest(BaseModel):
     )
     petId: str
     renderer: Renderer
-    licenseScope: LicenseScope
+    licenseScope: LicenseScope6
     attribution: str | None = ''
     width: Annotated[int | None, Field(ge=16, le=4096)] = 640
     height: Annotated[int | None, Field(ge=16, le=4096)] = 360
@@ -693,7 +1910,7 @@ class AudioPlaybackLease(BaseModel):
     actionState: ActionState
 
 
-class Status(StrEnum):
+class Status5(StrEnum):
     COMPLETED = 'COMPLETED'
     INTERRUPTED_BY_P0 = 'INTERRUPTED_BY_P0'
     TTL_EXPIRED = 'TTL_EXPIRED'
@@ -706,7 +1923,7 @@ class AudioPlaybackReceipt(BaseModel):
         extra='forbid',
     )
     leaseId: UUID
-    status: Status
+    status: Status5
     actualPlayedMs: Annotated[float, Field(ge=0.0)]
     timestamp: float
 
@@ -774,7 +1991,7 @@ class TtsVoicePack(BaseModel):
     voicePackId: Annotated[str, Field(min_length=1)]
     defaultEmotionTag: DefaultEmotionTag
     profiles: Annotated[list[Profile], Field(min_length=1)]
-    licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
+    licenseScope: LicenseScope6 | None = 'DEV_ONLY_NON_COMMERCIAL'
 
 
 class Format(StrEnum):
@@ -959,7 +2176,7 @@ class PetPersonaConfig(BaseModel):
     name: str
     title: str
     ownerTitles: list[str] | None = ['鱼片', '主人']
-    licenseScope: LicenseScope
+    licenseScope: LicenseScope6
     avatarManifestPath: str
     tailMoodIndicatorEnabled: bool | None = True
     systemPromptTemplate: str
@@ -1139,7 +2356,7 @@ class ToolName(StrEnum):
     go_to_sleep = 'go_to_sleep'
 
 
-class Status1(StrEnum):
+class Status6(StrEnum):
     COMPLETED = 'COMPLETED'
     FAILED = 'FAILED'
     UNCERTAIN = 'UNCERTAIN'
@@ -1174,7 +2391,7 @@ class StardewMcpActionReceipt(BaseModel):
     )
     actionId: UUID
     toolName: ToolName
-    status: Status1
+    status: Status6
     failureOrUncertainReason: str | None = None
     gameStateSnapshot: GameStateSnapshot
 
@@ -1211,19 +2428,19 @@ class GameBridgeReceipt(BaseModel):
     )
     actionId: UUID
     tool: Annotated[str, Field(min_length=1)]
-    status: Status1
+    status: Status6
     reason: str | None = None
     startedAt: float
     completedAt: float
 
 
-class Receipt(BaseModel):
+class Receipt1(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
     actionId: UUID
     tool: Annotated[str, Field(min_length=1)]
-    status: Status1
+    status: Status6
     reason: str | None = None
     startedAt: float
     completedAt: float
@@ -1235,7 +2452,7 @@ class GameBridgeActionStatus(BaseModel):
     )
     actionId: UUID
     running: bool
-    receipt: Receipt | None = None
+    receipt: Receipt1 | None = None
 
 
 class Control(StrEnum):
@@ -1500,7 +2717,7 @@ class TerrariaActionReceipt(BaseModel):
     )
     actionId: UUID
     tool: Annotated[str, Field(min_length=1)]
-    status: Status1
+    status: Status6
     reason: str | None = None
     startedAt: float
     completedAt: float
@@ -1735,7 +2952,7 @@ class DstActionReceipt(BaseModel):
     )
     actionId: UUID
     tool: Annotated[str, Field(min_length=1)]
-    status: Status1
+    status: Status6
     reason: str | None = None
     startedAt: float
     completedAt: float
@@ -1890,7 +3107,7 @@ class VoiceDesignRequest(BaseModel):
     previewText: str | None = '哼，本鱼才没有偷懒呢！主人快夸夸我嘛～'
     emotionTag: str | None = 'sweet_normal'
     weightPath: str | None = ''
-    licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
+    licenseScope: LicenseScope6 | None = 'DEV_ONLY_NON_COMMERCIAL'
 
 
 class StardewModInfo(BaseModel):
@@ -2190,7 +3407,7 @@ class PetCharacter(BaseModel):
     actionCount: Annotated[int | None, Field(ge=0)] = 0
     audioClipCount: Annotated[int | None, Field(ge=0)] = 0
     anchorRatio: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.5
-    licenseScope: LicenseScope | None = 'DEV_ONLY_NON_COMMERCIAL'
+    licenseScope: LicenseScope6 | None = 'DEV_ONLY_NON_COMMERCIAL'
     builtin: bool | None = False
     skins: Annotated[list[Skin] | None, Field(validate_default=True)] = []
 
@@ -2267,7 +3484,7 @@ class PetWindowView(BaseModel):
     bounds: Bounds
 
 
-class State1(StrEnum):
+class State2(StrEnum):
     speaking = 'speaking'
     idle = 'idle'
 
@@ -2278,11 +3495,11 @@ class CoopSpeakerEvent(BaseModel):
     )
     activeAgentId: str | None
     speakerName: str
-    state: State1
+    state: State2
     voiceId: str | None = None
 
 
-class Source3(StrEnum):
+class Source5(StrEnum):
     manual = 'manual'
     team_money = 'team_money'
     shared_wood = 'shared_wood'
@@ -2296,10 +3513,10 @@ class Metric(BaseModel):
     current: float
     target: float
     unit: str | None = ''
-    source: Source3 | None = 'manual'
+    source: Source5 | None = 'manual'
 
 
-class Status6(StrEnum):
+class Status11(StrEnum):
     active = 'active'
     completed = 'completed'
     paused = 'paused'
@@ -2314,7 +3531,7 @@ class TeamGoal(BaseModel):
     gameId: GameId
     metrics: Annotated[list[Metric] | None, Field(validate_default=True)] = []
     deadline: str | None = ''
-    status: Status6 | None = 'active'
+    status: Status11 | None = 'active'
 
 
 class Role(StrEnum):
@@ -2322,7 +3539,7 @@ class Role(StrEnum):
     ai = 'ai'
 
 
-class Status7(StrEnum):
+class Status12(StrEnum):
     working = 'working'
     idle = 'idle'
     need_help = 'need_help'
@@ -2338,7 +3555,7 @@ class TeamAssignment(BaseModel):
     role: Role
     task: str
     zone: str
-    status: Status7 | None = 'idle'
+    status: Status12 | None = 'idle'
     progressNote: str | None = ''
     updatedAt: Annotated[int, Field(ge=0)]
 
@@ -2351,10 +3568,10 @@ class Metric1(BaseModel):
     current: float
     target: float
     unit: str | None = ''
-    source: Source3 | None = 'manual'
+    source: Source5 | None = 'manual'
 
 
-class Status8(StrEnum):
+class Status13(StrEnum):
     active = 'active'
     completed = 'completed'
     paused = 'paused'
@@ -2369,10 +3586,10 @@ class Goal(BaseModel):
     gameId: GameId
     metrics: Annotated[list[Metric1] | None, Field(validate_default=True)] = []
     deadline: str | None = ''
-    status: Status8 | None = 'active'
+    status: Status13 | None = 'active'
 
 
-class Status9(StrEnum):
+class Status14(StrEnum):
     working = 'working'
     idle = 'idle'
     need_help = 'need_help'
@@ -2388,7 +3605,7 @@ class Assignment(BaseModel):
     role: Role
     task: str
     zone: str
-    status: Status9 | None = 'idle'
+    status: Status14 | None = 'idle'
     progressNote: str | None = ''
     updatedAt: Annotated[int, Field(ge=0)]
 
@@ -2634,7 +3851,7 @@ class RiceBowlStatus(BaseModel):
     level: Level
 
 
-class Pack(BaseModel):
+class Pack1(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2724,7 +3941,7 @@ class PetStudioCatalog(BaseModel):
         extra='forbid',
     )
     generatedAt: str | None = ''
-    packs: Annotated[list[Pack] | None, Field(validate_default=True)] = []
+    packs: Annotated[list[Pack1] | None, Field(validate_default=True)] = []
     actions: Annotated[list[Action3] | None, Field(validate_default=True)] = []
     slots: Annotated[list[Slot] | None, Field(validate_default=True)] = []
     skins: Annotated[list[Skin1] | None, Field(validate_default=True)] = []
@@ -2876,7 +4093,7 @@ class PetApiState(BaseModel):
     bounds: Bounds
 
 
-class Source5(StrEnum):
+class Source7(StrEnum):
     acp = 'acp'
     claude = 'claude'
     codex = 'codex'
@@ -2897,7 +4114,7 @@ class Kind6(StrEnum):
     error = 'error'
 
 
-class Origin(StrEnum):
+class Origin3(StrEnum):
     hook = 'hook'
     log_watch = 'log-watch'
     acp = 'acp'
@@ -2908,14 +4125,14 @@ class WorkFollowEvent(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    source: Source5
+    source: Source7
     sessionId: Annotated[str, Field(max_length=128, min_length=1)]
     kind: Kind6
     toolName: Annotated[str | None, Field(max_length=120)] = ''
     modelName: Annotated[str | None, Field(max_length=120)] = ''
     taskTitle: Annotated[str | None, Field(max_length=120)] = ''
     ts: Annotated[int | None, Field(ge=0)] = 0
-    origin: Origin | None = 'hook'
+    origin: Origin3 | None = 'hook'
 
 
 class Mode1(StrEnum):
@@ -3177,7 +4394,7 @@ class StardewLaunchOptions(BaseModel):
     ] = None
 
 
-class State2(StrEnum):
+class State3(StrEnum):
     not_installed = 'not_installed'
     launching = 'launching'
     waiting_mcp = 'waiting_mcp'
@@ -3268,7 +4485,7 @@ class StardewLaunchStatus(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    state: State2
+    state: State3
     install: Install
     strategy: Strategy2 | None = None
     fallbackStrategy: FallbackStrategy | None = None
@@ -3336,6 +4553,37 @@ class AIWorkbenchContracts(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    EvidenceLocator_1: Annotated[EvidenceLocator, Field(alias='EvidenceLocator')]
+    EvidenceRef_1: Annotated[EvidenceRef, Field(alias='EvidenceRef')]
+    GameKnowledgeItem_1: Annotated[GameKnowledgeItem, Field(alias='GameKnowledgeItem')]
+    KnowledgeMaterial_1: Annotated[KnowledgeMaterial, Field(alias='KnowledgeMaterial')]
+    MaterialChunk_1: Annotated[MaterialChunk, Field(alias='MaterialChunk')]
+    EvidencePack_1: Annotated[EvidencePack, Field(alias='EvidencePack')]
+    KnowledgeSourceStatus_1: Annotated[
+        KnowledgeSourceStatus, Field(alias='KnowledgeSourceStatus')
+    ]
+    KnowledgeApplicability_1: Annotated[
+        KnowledgeApplicability, Field(alias='KnowledgeApplicability')
+    ]
+    PlayReceipt_1: Annotated[PlayReceipt, Field(alias='PlayReceipt')]
+    KnowledgeImportMaterialInput_1: Annotated[
+        KnowledgeImportMaterialInput, Field(alias='KnowledgeImportMaterialInput')
+    ]
+    KnowledgeExecuteInput_1: Annotated[
+        KnowledgeExecuteInput, Field(alias='KnowledgeExecuteInput')
+    ]
+    KnowledgeImportResult_1: Annotated[
+        KnowledgeImportResult, Field(alias='KnowledgeImportResult')
+    ]
+    KnowledgeExecutionResult_1: Annotated[
+        KnowledgeExecutionResult, Field(alias='KnowledgeExecutionResult')
+    ]
+    KnowledgeSnapshot_1: Annotated[KnowledgeSnapshot, Field(alias='KnowledgeSnapshot')]
+    KnowledgeSourceConfig_1: Annotated[
+        KnowledgeSourceConfig, Field(alias='KnowledgeSourceConfig')
+    ]
+    EnvoyReadResponse_1: Annotated[EnvoyReadResponse, Field(alias='EnvoyReadResponse')]
+    EnvoyToolResult_1: Annotated[EnvoyToolResult, Field(alias='EnvoyToolResult')]
     SongConsoleRequest_1: Annotated[
         SongConsoleRequest, Field(alias='SongConsoleRequest')
     ]

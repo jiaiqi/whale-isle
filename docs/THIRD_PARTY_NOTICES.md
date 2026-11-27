@@ -57,6 +57,7 @@
 | `Pryaxis/TShock`、`Pryaxis/TSAPI`、`JavidPack/HEROsMod`、`newcovid/TerraNoneBridge`、`carrot-hu23/dst-admin-go` | ⛔ **GPL-3.0**（传染性） | — | — | **⛔ 禁止复制任何源码/整体引入**（M7 调研核实）；仅机制思想可参考 | ⛔ 禁止引入 |
 | `Im-Chuyu/Journey-Together`、`Insight`、`Combined-Status`、`ActionQueue`、`DontStarveAI`、`xNarnia/TCR` | ⛔ **无 LICENSE / RecEx 受限**（核实） | — | — | 仅参考架构设计（如 Journey-Together 38 动作权限校验），**一行代码不能抄** | ⛔ 禁止引入 |
 | **TTS / 歌声引擎评估清单**（Kokoro-82M-v1.1-zh、MeloTTS-zh、Chatterbox Multilingual、CosyVoice2、Spark-TTS、F5-TTS、IndexTTS2、Fish Speech、Piper zh_CN、RVC、DiffSinger、OpenUtau） | 逐项许可与实时结论见 [tts-alternative-engine-eval.md](./v2/evidence/tts-alternative-engine-eval.md) 与 [V2-P3-07-svc-svs-selection.md](./v2/evidence/V2-P3-07-svc-svs-selection.md) | **未引入任何代码或权重**（仅本机评估目录 `artifacts/`，不入库、不进包） | — | 说话自托管已由 owner 2026-11-27 放弃（速评本机全部不过）；RVC 代码 MIT 但官方底模「仅供研究使用」、OpenCpop/OpenVPI 声码器非商用 → 唱歌商用须自训 | ✅ 仅评估，未随包 |
+| `Envoy`（外部知识源参考实现，本机 clone HEAD `332638b`，版本 `0.1.63`） | ✅ **Apache-2.0**（2026-11-27 只读核实 `LICENSE` 与 `pyproject.toml`；`license-files = ["LICENSE", "NOTICE"]`） | **不复制源码、不 vendor、不随包**：仅参考 `envoy_read` 工具形态、`ReadResponse` 字段与 Evidence Pack 规范化思想；MCP 适配器与证据内核为原创 TypeScript | `packages/agent-harness/src/mcp-envoy.ts`、`packages/game-bridge-mcp/src/knowledge-evidence.ts` | 仅作为 owner 自行安装的独立外部 MCP 进程调用；若日后 vendor 必须附带 LICENSE/NOTICE 并重审 Python 传递依赖 | ✅ 已登记（外部进程/思想参考） |
 
 ## 3. 素材资产台账
 

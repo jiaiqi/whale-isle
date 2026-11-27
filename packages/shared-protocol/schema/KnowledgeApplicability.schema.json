@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeApplicability",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/KnowledgeApplicability",
+  "$defs": {
+    "KnowledgeApplicability": {
+      "type": "object",
+      "properties": {
+        "knowledgeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "compatible",
+            "uncertain",
+            "outdated",
+            "mod-mismatch",
+            "not-applicable"
+          ]
+        },
+        "executable": {
+          "type": "boolean"
+        },
+        "versionMatch": {
+          "type": "string",
+          "enum": [
+            "match",
+            "mismatch",
+            "not-declared",
+            "unreadable"
+          ]
+        },
+        "modMatch": {
+          "type": "string",
+          "enum": [
+            "match",
+            "missing-mods",
+            "not-declared",
+            "unreadable"
+          ]
+        },
+        "matchedConditions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unsatisfiedConditions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unverifiableConditions": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reasons": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "missingMods": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "runtimeGameVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeSeason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtimeDay": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "runtimeLocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stateDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "assessedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "knowledgeId",
+        "status",
+        "executable",
+        "versionMatch",
+        "modMatch",
+        "assessedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

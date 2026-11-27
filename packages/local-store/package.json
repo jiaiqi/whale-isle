@@ -24,6 +24,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@workbench/shared-protocol": "workspace:*",
     "dexie": "^4.2.0"
   },
   "devDependencies": {

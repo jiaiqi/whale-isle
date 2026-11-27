@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KnowledgeMaterial",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/KnowledgeMaterial",
+  "$defs": {
+    "KnowledgeMaterial": {
+      "type": "object",
+      "properties": {
+        "materialId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "originUri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "licenseScope": {
+          "default": "unknown",
+          "type": "string",
+          "enum": [
+            "owner-authorized",
+            "cc-by-nc-sa",
+            "cc-by-4.0",
+            "apache-2.0",
+            "mit",
+            "unknown"
+          ]
+        },
+        "licenseNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "readAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "materialId",
+        "originUri",
+        "title",
+        "sha256",
+        "sourceRevision",
+        "readAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

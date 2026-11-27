@@ -3,3 +3,4 @@ export * from './providers';
 export * from './harness';
 export * from './acp-simulator';
 export * from './mcp-bridge';
+export * from './mcp-envoy';

@@ -47,6 +47,8 @@ import { createMemoryHost, dayKeyOf } from './memory-host';
 import { createWebUIServer } from './webui-server';
 import { createPluginHost } from './plugin-host';
 import { createV2KernelHost, type V2KernelHost } from './v2-kernel-host';
+import { KnowledgeHost, registerKnowledgeIpc } from './knowledge-host';
+import { EnvoyKnowledgeSource } from '@workbench/agent-harness';
 import { LipSyncTimelinePlayer, resolveCommercialTtsProvider, synthesizeTextLipSyncFrames } from '@workbench/voice-runtime';
 import { createLiveHost } from './live-host';
 import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game-health';
@@ -1124,6 +1126,43 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     characters,
   );
   v2KernelHost.attachV1Bridges({ autodrive, voice, memory });
+  // 04C/D：新切片只复用现有 Runner 的 transport/锁；不修改其规划、语音或运行行为。
+  // E2E 注入严格受 TEST_MODE 门控，生产永远不接受环境变量里的命令/材料路径。
+  try {
+    const materialsRoot = TEST_MODE && process.env.WHALE_E2E_KNOWLEDGE_ROOT
+      ? process.env.WHALE_E2E_KNOWLEDGE_ROOT : join(homedir(), 'WhaleIsle', 'knowledge-materials', 'owner-authorized');
+    const knowledge = new KnowledgeHost({
+      userDataDir: app.getPath('userData'), materialsRoot,
+      guidesDir: join(here, '../../../../guide-forager'), simulation: TEST_MODE,
+      ...(TEST_MODE && process.env.WHALE_E2E_ENVOY_FIXTURE ? {
+        source: new EnvoyKnowledgeSource({
+          materialsRoot, stateDir: join(app.getPath('userData'), 'envoy-knowledge'),
+          command: process.execPath, uvCommand: process.execPath, args: [process.env.WHALE_E2E_ENVOY_FIXTURE],
+        }),
+      } : {}),
+      game: () => {
+        const runner = autodrive.runner;
+        return {
+          adapter: runner.adapter, lock: runner.lock,
+          blockedReason: () => {
+            if (runner !== autodrive.runner || runner.adapter.gameId !== 'stardew') return '游戏会话已切换';
+            if (runner.isRunning()) return '请先停止自主游玩，再进行单条知识实玩验证';
+            if (runner.isHumanControl() || !runner.controlLease.canAiAct()) return '人类接管、暂停或急停中，不执行';
+            if (coopHost?.list().some((agent) => agent.running && agent.endpoint === mainGameEndpoint())) return '联机队友正在使用此游戏端点';
+            return null;
+          },
+        };
+      },
+    });
+    registerKnowledgeIpc(ipcMain, knowledge);
+    app.on('will-quit', () => knowledge.close());
+  } catch (error) {
+    // 新表迁移/本地导入失败不阻塞桌宠启动，也不以空库掩盖错误。
+    ipcMain.handle('v2:knowledge-source-status', () => ({
+      sourceId: 'envoy', state: 'unavailable', readOnly: true, materialCount: 0,
+      checkedAt: new Date().toISOString(), reason: `知识存储不可用：${error instanceof Error ? error.message : String(error)}`,
+    }));
+  }
   // V2-P3-04F：Digital Life L1 浏览状态投影到桌宠气泡（复用既有 pet:bubble 通道，不新增协议）
   // owner 口径（2026-11-26）：只报「开始一句 + 收官一句」，不逐条刷屏，所以不订阅 social.session.viewed。
   const petBubbleToDefault = (text: string): void => {

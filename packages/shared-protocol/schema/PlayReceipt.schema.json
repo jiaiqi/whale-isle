@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PlayReceipt",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/PlayReceipt",
+  "$defs": {
+    "PlayReceipt": {
+      "type": "object",
+      "properties": {
+        "receiptId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "knowledgeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "receiptStatus": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED",
+            "UNCERTAIN"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "observedStateDelta": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "stateChanged": {
+          "type": "boolean"
+        },
+        "suspicious": {
+          "default": false,
+          "type": "boolean"
+        },
+        "evidenceLevel": {
+          "type": "string",
+          "enum": [
+            "real-device",
+            "real-platform",
+            "e2e-host",
+            "simulation",
+            "unverified"
+          ]
+        },
+        "beforeState": {
+          "type": "string"
+        },
+        "afterState": {
+          "type": "string"
+        },
+        "rawReceipt": {
+          "type": "string"
+        },
+        "simulation": {
+          "type": "boolean"
+        },
+        "beforeStateDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "afterStateDigest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "receiptId",
+        "knowledgeId",
+        "actionId",
+        "tool",
+        "receiptStatus",
+        "summary",
+        "stateChanged",
+        "evidenceLevel",
+        "beforeState",
+        "rawReceipt",
+        "simulation",
+        "capturedAt"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

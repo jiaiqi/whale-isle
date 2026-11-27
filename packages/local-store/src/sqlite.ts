@@ -17,7 +17,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const CURRENT_SQLITE_SCHEMA_VERSION = 2;
+import { KnowledgeRepository, KNOWLEDGE_SCHEMA_SQL } from './knowledge-repo';
+export { KnowledgeRepository } from './knowledge-repo';
+
+export const CURRENT_SQLITE_SCHEMA_VERSION = 3;
 
 export type Platform = 'douyin' | 'bilibili' | 'local-host-input';
 
@@ -118,13 +121,20 @@ export class SqliteStore {
   private readonly dbPath: string;
   private txDepth = 0;
   private readonly _migrationInfo: SqliteMigrationInfo;
+  readonly knowledge: KnowledgeRepository;
 
   constructor(dbPath = ':memory:') {
     this.dbPath = dbPath;
     if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
     const existedBeforeOpen = dbPath !== ':memory:' && existsSync(dbPath);
     this.db = new DatabaseSync(dbPath);
-    this._migrationInfo = this.initializeAndMigrate(existedBeforeOpen);
+    try {
+      this._migrationInfo = this.initializeAndMigrate(existedBeforeOpen);
+      this.knowledge = new KnowledgeRepository(this.db, (fn) => this.runInTransaction(fn));
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   get migrationInfo(): SqliteMigrationInfo {
@@ -167,6 +177,8 @@ export class SqliteStore {
     }
 
     this.runInTransaction(() => {
+      // 04B：新表与版本号在同一事务内升级；失败不留下半迁移表。
+      this.db.exec(KNOWLEDGE_SCHEMA_SQL);
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_token_ledger_slot_ts ON token_ledger(slot, ts)');
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_grudge_ledger_score ON grudge_ledger(intimacy_score DESC, updated_at DESC)');
       this.setMeta('schema_version', String(CURRENT_SQLITE_SCHEMA_VERSION));
@@ -388,7 +400,7 @@ export class SqliteStore {
   // ---- 全量重置（开发期隐私合规总开关） ----
   wipeAllData(): void {
     this.runInTransaction(() => {
-      this.db.exec('DELETE FROM grudge_ledger; DELETE FROM token_ledger; DELETE FROM song_cache_index;');
+      this.db.exec('DELETE FROM grudge_ledger; DELETE FROM token_ledger; DELETE FROM song_cache_index; DELETE FROM knowledge_play_receipts; DELETE FROM knowledge_units; DELETE FROM knowledge_evidence; DELETE FROM knowledge_materials;');
     });
   }
 
