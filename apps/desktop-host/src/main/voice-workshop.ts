@@ -513,6 +513,10 @@ export class VoiceWorkshop {
     if (input.consent.attested !== true || input.consent.source.trim() === '') {
       throw new Error('保存克隆声线前必须确认声音权属并填写授权来源说明');
     }
+    // 儿童声音红线：未成年人声源必须有监护人书面授权，契约层与主进程双重拦截
+    if (input.consent.minorVoice && !input.consent.guardianConsent) {
+      throw new Error('未成年人声音必须由监护人签署书面授权后才能克隆（guardianConsent=true）');
+    }
     const label = input.label.trim();
     if (label === '') throw new Error('请为克隆声线填写名称');
 
@@ -716,6 +720,8 @@ export class VoiceWorkshop {
       source: target.label,
       attested: true,
       attestedAt: target.frozenAt,
+      minorVoice: false,
+      guardianConsent: false,
     };
     const updated: VoiceTimbreVersion = {
       ...target,

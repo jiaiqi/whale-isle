@@ -376,6 +376,8 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
         source: '本人亲录干声',
         attested: true,
         attestedAt: '2026-11-27T10:00:00.000Z',
+        minorVoice: false,
+        guardianConsent: false,
       },
       activate: true,
     });
@@ -392,7 +394,7 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
     expect(() => harness.workshop.createClonedVersion({
       wavBase64: Buffer.from('not-a-wav-file-at-all-00000000000000000000000000000000').toString('base64'),
       label: '坏文件',
-      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z', minorVoice: false, guardianConsent: false },
     })).toThrow('RIFF/WAVE');
   });
 
@@ -403,7 +405,7 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
     const v = harness.workshop.createClonedVersion({
       wavBase64: Buffer.from(wav).toString('base64'),
       label: '临时克隆',
-      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z', minorVoice: false, guardianConsent: false },
       activate: true,
     });
     const renamed = harness.workshop.renameVersion(v.id, '正式克隆 v2');
@@ -466,6 +468,8 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
         source: '源自 AI 音色设计候选',
         attested: true,
         attestedAt: '2026-11-27T10:00:00.000Z',
+        minorVoice: false,
+        guardianConsent: false,
       },
       characterId: 'blue-whale-maid',
       activate: true,
@@ -486,7 +490,7 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
     const v = harness.workshop.createClonedVersion({
       wavBase64: Buffer.from(wav).toString('base64'),
       label: '角色专属克隆',
-      consent: { kind: 'self_recorded', source: '本人亲录', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+      consent: { kind: 'self_recorded', source: '本人亲录', attested: true, attestedAt: '2026-11-27T10:00:00.000Z', minorVoice: false, guardianConsent: false },
       characterId: 'char-a',
       activate: true,
     });
@@ -514,6 +518,30 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
     expect(() => harness.workshop.bindCharacter('char-a', v.id)).toThrow('撤销授权');
   });
 
+  it('未成年人声音没有监护人书面授权时，主进程拒绝入库', () => {
+    const harness = makeHarness();
+    h = harness;
+    const wav = Buffer.from(buildPcmWav(6.0, 24_000, 0.35));
+    const base = {
+      kind: 'self_recorded' as const,
+      source: '监护人提供的儿童朗读素材',
+      attested: true as const,
+      attestedAt: '2026-11-27T10:00:00.000Z',
+    };
+    expect(() => harness.workshop.createClonedVersion({
+      wavBase64: wav.toString('base64'),
+      label: '儿童声线',
+      consent: { ...base, minorVoice: true, guardianConsent: false },
+    })).toThrow('监护人');
+    // 监护人已签署后可入库
+    const ok = harness.workshop.createClonedVersion({
+      wavBase64: wav.toString('base64'),
+      label: '儿童声线',
+      consent: { ...base, minorVoice: true, guardianConsent: true },
+    });
+    expect(ok.consent?.guardianConsent).toBe(true);
+  });
+
   it('MiMo Base64 > 10MB 参考音频在主进程硬拦截', () => {
     const harness = makeHarness();
     h = harness;
@@ -524,7 +552,7 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
     expect(() => harness.workshop.createClonedVersion({
       wavBase64: oversized.toString('base64'),
       label: '超大样本',
-      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z', minorVoice: false, guardianConsent: false },
     })).toThrow('MiMo 10 MB 上限');
   });
 

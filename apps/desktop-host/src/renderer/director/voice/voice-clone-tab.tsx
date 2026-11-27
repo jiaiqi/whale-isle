@@ -125,6 +125,9 @@ export function VoiceCloneTab(props: {
   const [consentKind, setConsentKind] = useState<VoiceCloneConsentKind>('self_recorded');
   const [consentSource, setConsentSource] = useState<string>(CONSENT_KINDS[0]!.defaultSource);
   const [consentChecked, setConsentChecked] = useState(false);
+  /** 声源为未成年人时必须另行取得监护人书面授权（契约层 `VoiceCloneConsentSchema` 双重拦截） */
+  const [minorVoice, setMinorVoice] = useState(false);
+  const [guardianConsent, setGuardianConsent] = useState(false);
   const [activateImmediately, setActivateImmediately] = useState(true);
   const [saving, setSaving] = useState(false);
   const [createdVersion, setCreatedVersion] = useState<VoiceTimbreVersion | null>(null);
@@ -388,6 +391,7 @@ export function VoiceCloneTab(props: {
     voiceName.trim().length > 0 &&
     consentChecked &&
     consentSource.trim().length > 0 &&
+    (!minorVoice || guardianConsent) &&
     !saving;
 
   const submitClone = async (): Promise<void> => {
@@ -419,6 +423,8 @@ export function VoiceCloneTab(props: {
           source: consentSource.trim(),
           attested: true,
           attestedAt: new Date().toISOString(),
+          minorVoice,
+          guardianConsent: minorVoice ? guardianConsent : false,
         },
         activate: activateImmediately,
         ...(activateImmediately ? { characterId } : {}),
@@ -936,6 +942,37 @@ export function VoiceCloneTab(props: {
               我确认拥有该声源的合法使用/复刻权限（非未授权他人或艺人声音），并了解：本地导入与裁剪不联网，仅在执行 VoiceClone 合成时会将<strong>裁剪后的参考副本</strong>发往小米 MiMo 云端。
             </span>
           </label>
+
+          <label className="flex items-center gap-2 rounded-xl p-3 text-[11.5px]" style={{ background: 'var(--inset)', border: '1px solid var(--stroke)' }}>
+            <input
+              type="checkbox"
+              data-clone-minor-check
+              checked={minorVoice}
+              onChange={(e) => {
+                setMinorVoice(e.target.checked);
+                if (!e.target.checked) setGuardianConsent(false);
+              }}
+              className="mt-0.5"
+            />
+            <span style={{ color: 'var(--text-1)' }}>
+              该声源是<b>未成年人（&lt;18）</b>的声音
+            </span>
+          </label>
+
+          {minorVoice && (
+            <label className="flex items-start gap-2 rounded-xl p-3 text-[11.5px] leading-relaxed" style={{ background: 'var(--inset)', border: '1px solid var(--amber, #b7791f)' }}>
+              <input
+                type="checkbox"
+                data-clone-guardian-check
+                checked={guardianConsent}
+                onChange={(e) => setGuardianConsent(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span style={{ color: 'var(--text-1)' }}>
+                <b>监护人已签署书面授权</b>（须可核验监护人身份与授权范围；未签署时契约层会直接拒绝入库）。儿童声音不得在无监护人授权的情况下克隆。
+              </span>
+            </label>
+          )}
 
           <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-2)' }}>
             <input

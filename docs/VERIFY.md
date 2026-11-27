@@ -398,3 +398,30 @@
 - **说话语音**：开发期 **MiMo 主线**（限时免费、页面无商用条款）+ **长期商业授权 TTS**；「自托管优先 / 本机可跑通」**不再作为目标**。依据替代引擎速评 `b9d2632`（本机全部不过）。
 - **历史条目的口径**：`offline_preferred` / `planVoiceFallback()` 的既有验证记录仍然有效（代码与探针没删），但它只证明**可选实验档**的行为，**不得**再被引用为「本地语音已达标」或产品承诺；对外验收只看云端商业 TTS 路径。
 - **唱歌链路不受影响**：SVC/SVS 是唱歌引擎，按 item 5 / ADR-005 执行；其许可红线见 [P3-song-console-host-verification.md](./v2/evidence/P3-song-console-host-verification.md) §8。
+
+## 2026-11-27 批次（声音工坊 2.0：接管未托管分支 `feat/voice-studio-redesign`）
+
+> 口径：这批代码来自本机**未推送**的 `feat/voice-studio-redesign`，原作者不在本单、**未经过 review**；本节只记录接管后真实跑过的门禁与 E2E，不替原作者背书，也不把 `[E2E-HOST]` 写成真机验收。
+
+### Mock/沙盒/单测已通过项
+
+| 项目 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| rebase 到主干 | git + 全量门禁 | rebase 到 `origin/feat/whale-isle-v2` @ `ecc82a1`，**无文本冲突**；`v2-kernel-host.ts` / `preload/index.ts` / `director/bridge.ts` / `shared-protocol/src/index.ts` 经核对同时含主干「唱歌素材」与分支「声音工坊」两套 IPC/导出 | 2026-11-27 |
+| 全量门禁 | `pnpm verify:gate` | **8/8 通过**：Gate 1 类型与边界 / Python ruff+mypy / 打包护栏；Gate 2 许可与密钥（347 文件 0 违规）/ 依赖漏洞（0 high）/ DST Lua；Gate 3 单测；Gate 4 回环 E2E | 2026-11-27 |
+| 单测与覆盖率 | `pnpm test` | **2081 passed / 1 skipped**（189 个测试文件）；Statements 96.83% / Branches **90.19%** / Functions 97.31% / Lines 98.23% | 2026-11-27 |
+| 儿童声音门禁（新增） | 契约单测 + 主进程单测 | `packages/shared-protocol/src/voice.spec.ts`：`minorVoice=true` 且 `guardianConsent=false` 时 `VoiceCloneConsentSchema` 与 `VoiceWorkshopCloneCreateInputSchema` 均拒绝；`apps/desktop-host/src/main/voice-workshop.spec.ts`：`createClonedVersion` 抛「监护人」；监护人签署后入库成功 | 2026-11-27 |
+| 声音工坊 2.0 UI | `[E2E-HOST]` `voice-studio.e2e.spec.ts` **1/1** | 真实 Electron + 预加载 IPC：五页签切换、9 角色快切、出厂声线 Hero 波形、设计台 4 拨盘 + 4 配方、克隆台真实上传 24kHz PCM WAV → 声学质检 → 权属门禁拦截 → 入库 / 重命名 / 回退出厂 / 删除、5 情绪矩阵 + 5 Viseme、4 轨路由 + 4 凭据卡；**全程零云端合成调用** | 2026-11-27 |
+| 桌宠工坊 + 语音中心回归 | `[E2E-HOST]` `studio.e2e.spec.ts` **1/1** | 在**装好随包素材**（`assets/pet-packs`，2GB，gitignored）的本机跑通；含 2.0 新断言（声线库 Hero、克隆台未勾权属时提交禁用、5 情绪 / 5 Viseme、4 轨 / 4 凭据） | 2026-11-27 |
+| 基线对照（诚实说明） | 独立 worktree @ `ecc82a1` | `studio.e2e.spec.ts` 在**干净 checkout**（无 `assets/pet-packs`）下于基线同样失败：它无条件断言 `[data-preview-canvas]`，而画布只在选中动作后渲染（本机角色注册表只有 1 个内置角色）。该失败**不是本分支引入**；本单把该断言移进 `actions > 0` 分支，但不改 `[data-voice-char] >= 10` 这类依赖素材数量的断言 | 2026-11-27 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收内容 | 状态 |
+| --- | --- | --- |
+| 真实 MiMo 云端发声闭环 | 用真实 API Key 走「创作 → 生产发声」：合成在租约外准备、真实 WAV + 口型帧驱动桌宠、失败时保留字幕不静默换声（E2E 全程零云端调用，未验证真实网络/配额/401/429/413 分支） | ⏳ 需 owner 真机 + 真实凭据 |
+| 麦克风录制与真实音频设备 | E2E 只走「上传合成 WAV」路径；麦克风录制、真实电平表、系统音频输出（桌面 vs OBS 路由 / Ducking）未在真机验证 | ⏳ 未开始 |
+| CAM++ 一致性体检 | 需要本机 `uv` + sherpa-onnx 模型；E2E 未触发体检（避免真实耗时），工具缺失时应如实 `unavailable` 的行为未在真机复核 | ⏳ 未开始 |
+| 波形拖拽与统一试听条手感 | 裁剪选区拖拽、A/B 并排对比、吸底试听条在多页签间的互斥与打断，属 OS 级手感，只能人工确认 | ⏳ 未开始 |
+| 儿童声音监护人授权 | 已补契约与 UI 双闸；**授权文件的法律效力与留存方式需 owner/法务确认**，本单不代替授权流程 | ⏳ 等 owner 确认 |
+| `studio.e2e` 在 CI 的定位 | 该 spec 依赖 2GB 随包素材，当前不在 CI 列表；是否改为「素材就位才跑」的独立 job 由 owner 决定 | ⏳ 待 owner 拍板 |

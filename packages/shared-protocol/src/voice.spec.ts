@@ -205,4 +205,37 @@ describe('VoiceProvider, LipSync & AudioMixer schemas (V2-P1-02)', () => {
     });
     expect(qa.grade).toBe('good');
   });
+
+  it('未成年人声音没有监护人书面授权时，权属声明在契约层直接拒绝', () => {
+    const base = {
+      kind: 'self_recorded' as const,
+      source: '监护人提供的儿童朗读素材',
+      attested: true as const,
+      attestedAt: '2026-11-27T10:00:00.000Z',
+    };
+
+    // 缺省字段 = 成年声源，保持向后兼容
+    const legacy = VoiceCloneConsentSchema.parse(base);
+    expect(legacy.minorVoice).toBe(false);
+    expect(legacy.guardianConsent).toBe(false);
+
+    // 标了未成年人但没勾监护人签署 → 拒绝
+    expect(VoiceCloneConsentSchema.safeParse({ ...base, minorVoice: true }).success).toBe(false);
+    expect(VoiceCloneConsentSchema.safeParse({ ...base, minorVoice: true, guardianConsent: false }).success).toBe(false);
+    expect(() => VoiceWorkshopCloneCreateInputSchema.parse({
+      wavBase64: 'UklGRg==',
+      label: '儿童声线',
+      consent: { ...base, minorVoice: true },
+    })).toThrow(/监护人/);
+
+    // 未成年人 + 监护人已签署 → 通过，且克隆入库路径可解析
+    const minor = VoiceCloneConsentSchema.parse({ ...base, minorVoice: true, guardianConsent: true });
+    expect(minor.minorVoice).toBe(true);
+    expect(minor.guardianConsent).toBe(true);
+    expect(VoiceWorkshopCloneCreateInputSchema.parse({
+      wavBase64: 'UklGRg==',
+      label: '儿童声线',
+      consent: { ...base, minorVoice: true, guardianConsent: true },
+    }).label).toBe('儿童声线');
+  });
 });

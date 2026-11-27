@@ -72,8 +72,10 @@ describe('[E2E-HOST] 桌宠工坊与语音中心', () => {
       }
       await page.click('[data-pet-studio-tab="library"]');
       await page.waitForSelector('[data-pet-library]', { timeout: 15_000 });
-      await page.waitForSelector('[data-preview-canvas]', { timeout: 15_000 });
       if (catalog.actions.length > 0) {
+        // 预览画布只在选中动作后渲染；干净 checkout（无 assets/pet-packs）没有动作可选中，
+        // 因此这条断言必须放在有动作的分支里，否则本文件头自述的「空态只断言结构」就不成立。
+        await page.waitForSelector('[data-preview-canvas]', { timeout: 15_000 });
         await page.waitForSelector('[data-action-item]', { timeout: 15_000 });
         expect(await page.locator('[data-action-item]').count()).toBeGreaterThan(5);
 

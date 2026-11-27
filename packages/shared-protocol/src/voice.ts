@@ -733,10 +733,18 @@ export const VoiceCloneConsentSchema = z.object({
   /** 必须由用户显式勾选确认（false/缺失在契约层直接拒绝） */
   attested: z.literal(true),
   attestedAt: z.string().min(1),
+  /** 声源是否为未成年人（<18）。为 true 时必须由监护人另行签署授权，见 `guardianConsent` */
+  minorVoice: z.boolean().default(false),
+  /** 监护人已签署书面授权；`minorVoice === true` 时必填 true，缺省视为未签署 */
+  guardianConsent: z.boolean().default(false),
   /** 撤销授权时间；一旦设置，立即禁止该声线继续参与任何克隆合成并触发本地样本清理 */
   revokedAt: z.string().min(1).optional(),
   revokeReason: z.string().trim().max(200).optional(),
-});
+})
+  .refine((val) => !(val.minorVoice && !val.guardianConsent), {
+    message: '未成年人声音必须由监护人签署书面授权（guardianConsent=true）才能克隆',
+    path: ['guardianConsent'],
+  });
 export type VoiceCloneConsent = z.infer<typeof VoiceCloneConsentSchema>;
 
 /** 参考音频确定性声学质检（全部由真实 PCM WAV 样本计算，严禁伪造指标） */
