@@ -5,7 +5,7 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, net, protocol, screen, type MenuItemConstructorOptions } from 'electron';
 import { execFile } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { registerStageIpc } from './passthrough';
 import { createPetPacksProtocolHandler, PET_PACKS_SCHEME, readBundledAboutmePacks, readCrossPetCharacters, readCrossPetEggScripts, registerPetPacksIpc, resolvePetPacksDir } from './pet-packs';
@@ -150,9 +150,19 @@ function migrateLegacyUserData(target: string): void {
 }
 
 // E2E 模式使用同一品牌目录下的独立 userData：与开发实例并发时 IndexedDB LevelDB 锁互不干扰。
+// 预览构建验收（V2-P4-05）：WHALE_USER_DATA_DIR 允许显式指定绝对路径的独立 userData，
+// 与 owner 正在跑的客户端完全隔离；该分支不迁移旧数据、也不碰默认目录。
 // 必须在 app ready 前调用。
 const userDataRoot = join(app.getPath('appData'), APP_DATA_DIR);
-if (TEST_MODE) {
+const userDataOverride = process.env.WHALE_USER_DATA_DIR;
+if (userDataOverride !== undefined && userDataOverride !== '') {
+  if (!isAbsolute(userDataOverride)) {
+    console.warn(`[brand] 忽略非绝对路径 WHALE_USER_DATA_DIR=${userDataOverride}`);
+    app.setPath('userData', userDataRoot);
+  } else {
+    app.setPath('userData', resolve(userDataOverride));
+  }
+} else if (TEST_MODE) {
   app.setPath('userData', join(userDataRoot, 'e2e-profile'));
 } else {
   migrateLegacyUserData(userDataRoot);

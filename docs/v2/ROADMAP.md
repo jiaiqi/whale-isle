@@ -213,6 +213,7 @@
 - **`V2-P4-01`（`NEXT`）：单角色“小鲸”全产品链路端到端整合与长时真机验收**（owner 决策「先把一个桌宠走通」后成为唯一激活主线；实现侧首件已完成：宿主在 `PET_STAGE_E2E` 下可注入仿真 BWF 端点，`single-pet-chain.e2e.spec.ts` 串起「启动 → 就绪 → 规则动作 → 三态回执 → 记忆可检索」全链路，`[E2E-HOST]` + `[SIMULATION]`，已进 macOS CI；证据 [P3-single-pet-chain-verification.md](./evidence/P3-single-pet-chain-verification.md)；仍待真机：LLM 大脑同链路、语音锁释放与气泡投影、长时浸泡）
 - **`V2-P4-02`：Social Digital Life L2 → L3（草稿审核到规则与授权边界内自主社交互动发布）**
 - **`V2-P4-03`：Evolution Engine Full（脱敏遥测、问题自动复现回放、策略化合并与灰度回滚）**
+- **`V2-P4-05`（`DONE`，2026-11-27）：内部开发预览构建 `0.2.0-dev.2`**（owner 口径：本版只保证「能装、能跑」，商用素材清源推后；从冻结 SHA `e4019f3` 打包 macOS arm64 DMG `2,322,093,040 B` / sha256 `1f87e71b…`，两个 Swift helper 预编译随包 `Contents/Resources/native/darwin-arm64/` 并带 sha256 清单，安装副本独立 userData 启动后中控台/桌宠/气泡正常、音频 helper 日志 `origin=prebuilt`、安装副本直接执行 `permission`/`probe` 通过；`pnpm verify:gate` **8/8**；证据 [PREVIEW-BUILD-e4019f3-verification.md](./evidence/PREVIEW-BUILD-e4019f3-verification.md)。**未验证**：真实音频播放、OS 输入端到端注入、真实星露谷/抖音/OBS、Windows 包、签名与公证；包内素材只盘点未清源）
 
 ---
 

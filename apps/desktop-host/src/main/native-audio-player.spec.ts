@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -208,6 +209,49 @@ describe('ensureNativeAudioHelper', () => {
     });
     expect(failed.ok).toBe(false);
     expect(failed.reason).toContain('compile_failed');
+  });
+
+  it('随包预编译二进制优先于源码编译；不可执行时 fail-closed 不回退', () => {
+    workDir = mkdtempSync(join(tmpdir(), 'whale-audio-helper-'));
+    const resourcesPath = join(workDir, 'Resources');
+    const bundleDir = join(resourcesPath, 'native', 'darwin-arm64');
+    mkdirSync(bundleDir, { recursive: true });
+    const helperPath = join(bundleDir, 'whale-audio-helper');
+    const binary = 'fake-prebuilt-audio-helper';
+    writeFileSync(helperPath, binary);
+    chmodSync(helperPath, 0o755);
+    const sha256 = createHash('sha256').update(binary).digest('hex');
+    writeFileSync(join(bundleDir, 'sha256.json'), JSON.stringify({ 'whale-audio-helper': sha256 }));
+
+    let compiles = 0;
+    const compile = (_src: string, out: string) => {
+      compiles += 1;
+      writeFileSync(out, 'binary');
+      return { ok: true };
+    };
+    const prebuilt = ensureNativeAudioHelper({
+      appPath: join(workDir, 'app'),
+      cacheDir: join(workDir, 'cache'),
+      compile,
+      platform: 'darwin',
+      arch: 'arm64',
+      resourcesPath,
+    });
+    expect(prebuilt).toMatchObject({ ok: true, helperPath, origin: 'prebuilt' });
+    expect(compiles).toBe(0);
+
+    chmodSync(helperPath, 0o644);
+    const notExecutable = ensureNativeAudioHelper({
+      appPath: join(workDir, 'app'),
+      cacheDir: join(workDir, 'cache'),
+      compile,
+      platform: 'darwin',
+      arch: 'arm64',
+      resourcesPath,
+    });
+    expect(notExecutable.ok).toBe(false);
+    expect(notExecutable.reason).toContain('prebuilt_not_executable');
+    expect(compiles).toBe(0);
   });
 
   it('非 darwin 平台一律如实报 unsupported_platform（CI 上可复跑）', () => {
