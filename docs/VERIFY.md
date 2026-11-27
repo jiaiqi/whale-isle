@@ -301,6 +301,7 @@
 | 工坊真实交互 | 在 owner 正在用的桌面端里点一次「生成候选 / 多句试戴 / 定格 / 体检」，确认 UI 与耗时体感（本轮代码只经单测与 E2E，桌面端未重起，改动随下次自然重启生效） | ⏳ 待 owner 试用 |
 | 工坊体检的稳定性口径 | 单次 10 条会在「锁得稳 / 偶尔飘」之间翻面（三次实测），是否要改成「连跑两次取较差」由 owner 定 | ⏳ 待 owner 决策 |
 
+
 ## 2026-11-27 批次（语音十一轮：替代引擎速评）
 
 ### Mock / 沙盒 / 真机 API 已通过项
@@ -316,6 +317,23 @@
 | 儿童感 / 情绪可听差别 | 听 Kokoro sid 41 与 Melo 的中性/调皮/撒娇样本，判断「像不像八九岁」「三档分不分得开」——本报告只给客观量，替不了耳朵 | ⏳ 待 owner 试听 |
 | 是否接受固定音色 | 若接受「固定音色、无情绪」，Kokoro 是唯一「许可干净 + 实时达标」项；否则维持商业 API 主线 | ⏳ 待 owner 决策 |
 | CosyVoice3 GGUF 是否值得另立一单 | Apache-2.0 + C++/Metal 预编译，可能解决实时；但属新模型，需重做音色与情绪验证 | ⏳ 待 owner 决定 |
+| 抖音个性化流（未接） | 公开精选页只读**不需要扫码**；当前版本即使扫码也只读精选，推荐/关注等个性化流尚未接入。生活页「打开登录窗（扫码）」只是用 owner 自己的抖音 App 把登录态留在本机隔离 Profile（AI 不代填密码、不在日志/DevTools 暴露凭据）；要验个性化流须先扩展来源 | ⏳ 未接，需先扩展 feed |
+| 真实风控出现时的处理体感 | 真实遇到验证码/风控时确认「立即停止 + 人话报错 + 同轮不硬刷」，owner 亲手处理后再重跑冒烟；当前只有代码路径与假页面单测 | ⏳ 待真实触发 |
+| 真实模型内容理解 | 冒烟只验证「读到公开内容」；真实供应商多模态理解仍取决于模型 Key/饭碗，未在本次触发 | ⏳ 待配 Key 联调 |
+| 多日自动 tick 浸泡 | 开关打开后连续多日：每日 ≤2 次 / ≤30 分钟、00–08 禁发、失败冷却、连续 2 次失败当日停发；本轮只做了单次真实会话 + 单测 | ⏳ 待长时浸泡 |
+| 生活页冒烟/登录按钮真机点击 | 在 owner 正在用的桌面端里点一次「真实冒烟（读 3 条）」「打开登录窗（扫码）」，确认 UI 文案与耗时体感（本轮经 IPC 调用同一处理逻辑，按钮未做 CGEvent 点击） | ⏳ 待 owner 试用 |
+
+## 2026-11-27 批次（`V2-P3-04H` 抖音 L1 只读真实平台接入，`IMPLEMENTED_UNVERIFIED`）
+
+### Mock / 沙盒 / 真实公开页已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `P3-04H` 抖音源单测 | `[SIMULATION]` 确定性单测 | `social-douyin.spec.ts` **18 例**：卡片解析（时长/播放量/日期/@作者不当标题）、话题抽取、公开字段文本拼装、候选映射去重、登录墙 `LOGIN_REQUIRED` 动手前拒绝、验证码 `recoverable:false` 且只加载 1 个视频页就停、2500ms 间隔只睡一次、未实测来源零 `load`、配额耗尽、理解配额、中途打断、可恢复失败继续、冒烟证据 ok/失败/7 天 TTL、`runnable` 口径、契约对齐；与执行器合计 **30/30**（`vitest run --coverage.enabled=false`，2 文件 30 用例，184ms） | 2026-11-27 |
+| `P3-04H` 真实冒烟 | **`[REAL-DEVICE]`（仅限真实抖音公开精选页 + 只读字段）** | `v2:social-douyin-smoke`（limit=5，minItems=3）：候选 **5** → 读到 **3**、读取失败 **0**、耗时 **26 308 ms**、`ok=true`，证据时间 `2026-11-27 09:10:55 CST`（epoch `1795741855233`），`feedUrl=https://www.douyin.com/jingxuan`；样本作者 `渡知局` / `幺九零三` / `40Hz - Bassline`，话题齐全；`loggedIn=false`、登录窗未打开。原始证据 [P3-04H-douyin-smoke.json](./v2/evidence/P3-04H-douyin-smoke.json) | 2026-11-27 |
+| `P3-04H` 真实会话（生产执行器） | **`[REAL-DEVICE]`（同上范围）** | `v2SocialPlan` → `v2SocialStart` → `SocialBrowseExecutor` → 同一抖音源：会话 `bs-65e7a249`，`interactionMode=readonly`，`itemsViewed=3`，`status=completed`，`stopReason=budget_exhausted`（`maxItems=3` 用完），`09:12:42 → 09:13:09 CST` 共 **27.6s**；前后快照 `executorReady=true`、`runnable=true`、能力矩阵 `douyin/read_public` 已登记。证据 [P3-04H-douyin-tick.json](./v2/evidence/P3-04H-douyin-tick.json) | 2026-11-27 |
+| `P3-04H` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**：Gate 1 `tsc -b` + depcruise + ruff/mypy + 四入口 build；Gate 2 license-scanner 335 文件 0 违规 + audit 0 high + luac；Gate 3 vitest + pytest；Gate 4 回环 0.6s | 2026-11-27 |
+| `P3-04H` 失败与修正 | 实测记录 | 首轮冒烟 **0/5**：登录弹窗「验证码登录 / 获取验证码」被裸「验证码」正则误判为风控页（说明「触发就停」生效但判据过粗）；改为只认真正人机校验文案后重跑 **5 候选 / 3 读到 / 0 失败**。作者字段补 `[data-e2e="user-info"]` 首行回退，避免「（未提供）」占位符。**未触发真实验证码** | 2026-11-27 |
 
 ## 2026-11-27 批次（唱歌链路阶段一：SVC/SVS 选型结论 + 素材清单，只出文档）
 

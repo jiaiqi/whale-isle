@@ -10,6 +10,11 @@ import { join } from 'node:path';
 import { BrowserWindow, session, type Session } from 'electron';
 import type { BrowserEnginePort, BrowserPageSnapshot } from '@workbench/runtime-core';
 import type { BrowserProfile } from '@workbench/shared-protocol';
+import type {
+  DouyinLoginState,
+  DouyinPageSnapshot,
+  DouyinWebSession,
+} from '@workbench/character-core';
 
 const LOAD_TIMEOUT_MS = 20_000;
 
@@ -35,6 +40,8 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
   private readonly profile: BrowserProfile;
   private readonly partition: Session;
   private window: BrowserWindow | null = null;
+  /** 可见登录窗：只在 owner 需要扫码时打开；与隐藏读写窗共享同一隔离 partition */
+  private loginWindow: BrowserWindow | null = null;
 
   constructor(options: { profile: BrowserProfile; show?: boolean }) {
     this.profile = options.profile;
@@ -100,11 +107,139 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
     return { title: page.title, text: page.text };
   }
 
+  // -------------------------------------------------------------------------
+  // 抖音 L1 只读：结构化公开字段 + 独立 Profile 登录态（V2-P3-04H）
+  // -------------------------------------------------------------------------
+
+  /**
+   * 打开公开页面并等待 SPA 渲染出候选卡片或详情字段（最多约 8s）。
+   * 只读取公开字段；页面文本一律按不可信数据处理，不执行页面里的任何指令。
+   */
+  async loadRich(url: string): Promise<DouyinPageSnapshot> {
+    await this.load(url);
+    const deadline = Date.now() + 8_000;
+    let snapshot = await this.readRichPage();
+    while (
+      Date.now() < deadline &&
+      snapshot.cards.length === 0 &&
+      (snapshot.heading ?? '').trim() === '' &&
+      (snapshot.detailText ?? '').trim() === ''
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      snapshot = await this.readRichPage();
+    }
+    return snapshot;
+  }
+
+  /** 登录态只从隔离 partition 的 Cookie 判断；绝不读取、导出或上报凭据本身 */
+  async loginState(): Promise<DouyinLoginState> {
+    const cookies = await this.partition.cookies.get({});
+    const names = new Set(cookies.map((cookie) => cookie.name));
+    return {
+      loggedIn: names.has('sessionid') || names.has('sessionid_ss') || names.has('sid_guard'),
+    };
+  }
+
+  /**
+   * 打开可见登录窗，由 owner 亲手扫码/登录；本类不代填密码、不触碰凭据。
+   * 登录成功后 Cookie 留在隔离 partition，关窗时回写 profile 目录（不进 Git）。
+   */
+  async openLoginWindow(url = 'https://www.douyin.com/'): Promise<void> {
+    if (this.loginWindow && !this.loginWindow.isDestroyed()) {
+      this.loginWindow.show();
+      this.loginWindow.focus();
+      return;
+    }
+    const win = new BrowserWindow({
+      show: true,
+      width: 420,
+      height: 720,
+      title: '抖音登录（请用抖音 App 扫码，登录态只保存在本机隔离 Profile）',
+      webPreferences: {
+        session: this.partition,
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        webSecurity: true,
+      },
+    });
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', (event, target) => {
+      try {
+        assertHttpUrl(target);
+      } catch {
+        event.preventDefault();
+      }
+    });
+    win.on('closed', () => {
+      this.loginWindow = null;
+      void this.persistCookies();
+    });
+    this.loginWindow = win;
+    await win.loadURL(assertHttpUrl(url).toString());
+  }
+
+  isLoginWindowOpen(): boolean {
+    return this.loginWindow !== null && !this.loginWindow.isDestroyed();
+  }
+
   async dispose(): Promise<void> {
     // 回写 Cookie 再关窗：人工交接登录后的新登录态必须落盘，否则下轮任务无登录态（单向导入缺陷修复）
     await this.persistCookies();
+    if (this.loginWindow && !this.loginWindow.isDestroyed()) this.loginWindow.destroy();
+    this.loginWindow = null;
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
+  }
+
+  /** 读取抖音页面结构化公开字段 + 首页候选卡片（data-aweme-id，缺失时回退 href） */
+  private async readRichPage(): Promise<DouyinPageSnapshot> {
+    return this.evaluate<DouyinPageSnapshot>(`
+      (() => {
+        const text = document.body && document.body.innerText ? document.body.innerText.slice(0, 200000) : '';
+        const cards = [];
+        const seen = new Set();
+        const push = (id, value) => {
+          if (!/^\\d{6,}$/.test(id) || seen.has(id)) return;
+          const cardText = String(value || '').trim();
+          if (!cardText) return;
+          seen.add(id);
+          cards.push({ videoId: id, text: cardText.slice(0, 800) });
+        };
+        for (const el of document.querySelectorAll('[data-aweme-id]')) {
+          push((el.getAttribute('data-aweme-id') || '').trim(), el.innerText);
+        }
+        if (cards.length === 0) {
+          for (const el of document.querySelectorAll('[href*="/video/"]')) {
+            const match = /\\/video\\/(\\d{6,})/.exec(el.getAttribute('href') || '');
+            if (match) push(match[1], el.innerText);
+          }
+        }
+        const pick = (selector) => {
+          const el = document.querySelector(selector);
+          return el ? ((el.innerText || el.textContent || '').trim()) : '';
+        };
+        const authorLink = document.querySelector('[data-e2e="user-info"] a[href*="/user/"]');
+        const userInfos = Array.from(document.querySelectorAll('[data-e2e="user-info"]'));
+        const userInfo = userInfos.find((el) => ((el.innerText || '').indexOf('\\n') >= 0)) || userInfos[0];
+        const authorFromInfo = userInfo
+          ? ((userInfo.innerText || '').trim().split('\\n')[0] || '').replace(/粉丝[\\d.万亿].*$/u, '').trim()
+          : '';
+        return {
+          url: location.href,
+          title: document.title || '',
+          text,
+          cards,
+          heading: (() => {
+            const h = document.querySelector('h1');
+            return h ? ((h.innerText || h.textContent || '').trim()) : '';
+          })().slice(0, 300),
+          author: (((authorLink && authorLink.innerText) || authorFromInfo) || '').trim().slice(0, 100),
+          publishTimeText: pick('[data-e2e="detail-video-publish-time"]').slice(0, 100),
+          detailText: pick('[data-e2e="detail-video-info"]').slice(0, 4000),
+        };
+      })()
+    `);
   }
 
   private ensureWindow(): BrowserWindow {
@@ -204,5 +339,39 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
     } catch (error) {
       console.warn('[browser-engine] Cookie 回写失败：', error instanceof Error ? error.message : error);
     }
+  }
+}
+
+/**
+ * 抖音只读会话适配器（V2-P3-04H）：
+ * 复用 ElectronBrowserEngine 的独立 partition / Cookie 落盘 / 隐藏窗口，
+ * 只向 character-core 暴露「加载页面 + 登录态 + 打开可见登录窗」三个只读能力。
+ * 不提供点赞/关注/评论/发布等任何写操作入口。
+ */
+export class ElectronDouyinSession implements DouyinWebSession {
+  private readonly engine: ElectronBrowserEngine;
+
+  constructor(profile: BrowserProfile) {
+    this.engine = new ElectronBrowserEngine({ profile });
+  }
+
+  load(url: string): Promise<DouyinPageSnapshot> {
+    return this.engine.loadRich(url);
+  }
+
+  loginState(): Promise<DouyinLoginState> {
+    return this.engine.loginState();
+  }
+
+  openLoginWindow(): Promise<void> {
+    return this.engine.openLoginWindow();
+  }
+
+  isLoginWindowOpen(): boolean {
+    return this.engine.isLoginWindowOpen();
+  }
+
+  dispose(): Promise<void> {
+    return this.engine.dispose();
   }
 }

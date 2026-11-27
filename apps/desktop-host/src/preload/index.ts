@@ -468,6 +468,9 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2SocialRecordViewed: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-record-viewed', input),
   v2SocialUnderstand: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-understand', input),
   v2SocialAutostartSettings: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-autostart-settings', input),
+  // V2-P3-04H：抖音 L1 只读真实平台（真实冒烟 / owner 扫码登录）
+  v2SocialDouyinSmoke: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:social-douyin-smoke', input ?? {}),
+  v2SocialDouyinLogin: (): Promise<unknown> => ipcRenderer.invoke('v2:social-douyin-login'),
   v2AutoAccountExport: (): Promise<unknown> => ipcRenderer.invoke('v2:auto-account-export'),
   v2AutoP5Confirm: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:auto-p5-confirm', input),
   v2AutoHandoffs: (): Promise<unknown[]> => ipcRenderer.invoke('v2:auto-handoffs'),
