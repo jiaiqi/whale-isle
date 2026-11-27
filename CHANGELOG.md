@@ -15,6 +15,11 @@
 - **验证**：`pnpm verify:gate` **8 过 / 0 跳过 / 0 待接线**（license-scanner 352 文件 0 违规；`pnpm audit` 0 high / 0 critical）；全量单测 **191 文件 / 2127 用例**、分支 **90.19%**；新增 `native-helper-bundle.spec.ts` 与两个 helper spec 的 prebuilt / fail-closed 用例。
 - **明确未做**：商用素材清源（按 owner 口径推后）、真实音频播放、OS 输入端到端注入、真实星露谷/抖音/OBS、Windows x64 包、Developer ID 签名与公证；签名仍是 adhoc（未申请、未伪造）。
 
+### Added（P3-04I 验证码复核证据归档与更正，`[DOC-ONLY]`）
+
+- 从 PR #8 原样收进 `docs/v2/evidence/P3-04I-douyin-captcha-retry.json`（SHA-256 `a9717e2b…`，字段未改），并新增 [更正说明](./docs/v2/evidence/P3-04I-douyin-captcha-retry-note.md)：① 该轮走旧 Electron 隔离 partition 链路（当时分支没有 `cdp-browser-engine.ts`），与 `P3-04K` 的 CDP 通过结论分开记；② 时间以原始 JSON 为准为 11:40:11 / 11:40:33 CST，PR #8 草稿的 10:20 CST 是误记；③ `usedFeed=recommended` / `loggedIn=false` 是 `selection` 未赋值时的默认回填，真实行为是未登录回落公开精选（`not_logged_in`）后撞验证码；④ 该文件只证明「未登录 + 撞验证码 + 未读到推荐流」，不能当作推荐流已验证。
+- **未做**：未从 PR #8 搬运任何功能代码，未改 `social-douyin.ts` / `cdp-browser-engine.ts` / `electron-browser-engine.ts`，未改覆盖率阈值或 v8 ignore。
+
 ### Added / Fixed（V2-P4-01 单角色 LLM 软件链路）
 
 - 新增 `single-pet-llm-chain.e2e.spec.ts`：本地 OpenAI Chat Completions stub 经真实模型网关与 LLM 规划器，验证租约收回时迟到动作不执行、交还后 BWF 三态事实回执及逐条记忆检索；6/6 Electron E2E（54.72s），加入 macOS CI。证据仅为 `[E2E-HOST]` + `[SIMULATION]`，不代表真实推理或真实游戏验收。
