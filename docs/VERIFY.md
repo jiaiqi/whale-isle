@@ -411,7 +411,7 @@
 | 全量门禁 | `pnpm verify:gate` | **8/8 通过**：Gate 1 类型与边界 / Python ruff+mypy / 打包护栏；Gate 2 许可与密钥（347 文件 0 违规）/ 依赖漏洞（0 high）/ DST Lua；Gate 3 单测；Gate 4 回环 E2E | 2026-11-27 |
 | 单测与覆盖率 | `pnpm test` | **2081 passed / 1 skipped**（189 个测试文件）；Statements 96.83% / Branches **90.19%** / Functions 97.31% / Lines 98.23% | 2026-11-27 |
 | 儿童声音门禁（新增） | 契约单测 + 主进程单测 | `packages/shared-protocol/src/voice.spec.ts`：`minorVoice=true` 且 `guardianConsent=false` 时 `VoiceCloneConsentSchema` 与 `VoiceWorkshopCloneCreateInputSchema` 均拒绝；`apps/desktop-host/src/main/voice-workshop.spec.ts`：`createClonedVersion` 抛「监护人」；监护人签署后入库成功 | 2026-11-27 |
-| 声音工坊 2.0 UI | `[E2E-HOST]` `voice-studio.e2e.spec.ts` **1/1** | 真实 Electron + 预加载 IPC：五页签切换、9 角色快切、出厂声线 Hero 波形、设计台 4 拨盘 + 4 配方、克隆台真实上传 24kHz PCM WAV → 声学质检 → 权属门禁拦截 → 入库 / 重命名 / 回退出厂 / 删除、5 情绪矩阵 + 5 Viseme、4 轨路由 + 4 凭据卡；**全程零云端合成调用** | 2026-11-27 |
+| 声音工坊 2.0 UI | `[E2E-HOST]` `voice-studio.e2e.spec.ts` **1/1** | 真实 Electron + 预加载 IPC：五页签切换、9 角色快切、出厂声线 Hero 波形、设计台 4 拨盘 + 4 配方、克隆台真实上传 24kHz PCM WAV → 声学质检 → 权属门禁拦截 → 入库 / 重命名 / 回退出厂 / 删除、5 情绪矩阵 + 5 Viseme、4 轨路由 + 4 凭据卡；**全程零云端合成调用**。**CI 首跑（PR #7）macOS 机器上因缺 per-test timeout（vitest 默认 5s）超时失败**，本机 2.6s 通过；已补 `{ timeout: 150_000 }` 并复跑通过，失败未被掩盖 | 2026-11-27 |
 | 桌宠工坊 + 语音中心回归 | `[E2E-HOST]` `studio.e2e.spec.ts` **1/1** | 在**装好随包素材**（`assets/pet-packs`，2GB，gitignored）的本机跑通；含 2.0 新断言（声线库 Hero、克隆台未勾权属时提交禁用、5 情绪 / 5 Viseme、4 轨 / 4 凭据） | 2026-11-27 |
 | 基线对照（诚实说明） | 独立 worktree @ `ecc82a1` | `studio.e2e.spec.ts` 在**干净 checkout**（无 `assets/pet-packs`）下于基线同样失败：它无条件断言 `[data-preview-canvas]`，而画布只在选中动作后渲染（本机角色注册表只有 1 个内置角色）。该失败**不是本分支引入**；本单把该断言移进 `actions > 0` 分支，但不改 `[data-voice-char] >= 10` 这类依赖素材数量的断言 | 2026-11-27 |
 

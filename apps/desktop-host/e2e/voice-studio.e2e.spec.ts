@@ -58,7 +58,9 @@ async function waitForDirector(app: Awaited<ReturnType<typeof electron.launch>>,
 }
 
 describe('[E2E-HOST] 声音工坊 2.0 全链路验证', () => {
-  it('声线库 + 音色设计 + 音色克隆真上传/质检/权属门禁/入库/回退/删除 + 表演 + 引擎', async () => {
+  // 宿主 E2E 要启动真实 Electron + 编解码真实 WAV，vitest 默认 5s 在 CI 机器上必超时；
+  // 内部各 waitForSelector 自带 15–40s 上限，这里给整个用例留足余量（与 studio.e2e 一致）。
+  it('声线库 + 音色设计 + 音色克隆真上传/质检/权属门禁/入库/回退/删除 + 表演 + 引擎', { timeout: 150_000 }, async () => {
     expect(existsSync(mainEntry)).toBe(true);
     const tmp = mkdtempSync(join(tmpdir(), 'whale-voice-studio-e2e-'));
     const sampleWavPath = join(tmp, 'self-recorded-clean.wav');
