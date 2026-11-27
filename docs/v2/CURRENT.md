@@ -4,9 +4,9 @@
 
 ## 1. 当前进度锚点
 
-- **当前分支**：`feat-social-douyin`（基于最新 `feat/whale-isle-v2` `8d76f32`；抖音 L1 只读真实平台 `V2-P3-04H` 已落地并完成真实冒烟/真实会话验收，准备开 PR 合入 `feat/whale-isle-v2`）
+- **当前分支**：`feat-social-douyin-personalized`（基于最新 `feat/whale-isle-v2` `a8bcc06`；抖音个性化流「推荐 / 关注」`V2-P3-04I` 代码与门禁已完成，真实冒烟被抖音「验证码中间页」阻塞，按红线停止，准备开 PR 合入 `feat/whale-isle-v2`）
 - **上一已完成/交接工单**：星露谷建档批次 `V2-P3-07`（**`DONE`**：`07A`–`07E` 全通，Electron E2E 10/10 + 真机冷启动 R1–R4 + 真实中控台点击拉起 R5 全通）
-- **当前唯一激活工单**：`V2-P4-01`（`NEXT`：单角色“小鲸”全产品链路端到端整合与长时真机验收；2026-11-27 已完成星露谷从 0 自动建档 `V2-P3-07A`–`E` 与真机 R1–R5 全闭环验收，证据 [P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)；`V2-P3-06` 缺陷①就绪重探亦已通过 R1/R2 真机冷启动竞态复验；剩余待人类验收或后续工单项为 P3-02 真实开播、P3-01 缺声/模资产，以及 `V2-P2-08`/`V2-P3-05`；另按 owner 2026-11-27 指令交付 `V2-P3-04H` 抖音 L1 只读真实平台，见本文件第 3 节第 3 行）
+- **当前唯一激活工单**：`V2-P4-01`（`NEXT`：单角色“小鲸”全产品链路端到端整合与长时真机验收；2026-11-27 已完成星露谷从 0 自动建档 `V2-P3-07A`–`E` 与真机 R1–R5 全闭环验收，证据 [P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)；`V2-P3-06` 缺陷①就绪重探亦已通过 R1/R2 真机冷启动竞态复验；剩余待人类验收或后续工单项为 P3-02 真实开播、P3-01 缺声/模资产，以及 `V2-P2-08`/`V2-P3-05`；另按 owner 2026-11-27 指令交付 `V2-P3-04H` 抖音 L1 只读真实平台与 `V2-P3-04I` 个性化流代码，见本文件第 3 节第 3 行）
 - **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01`/`V2-P3-02`/`V2-P3-03` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
 - **输入抢占口径（`ADR-004`）**：`ComputerUseLease` 只管 OS 合成输入/前台桌面控制；用户物理输入撤销它。`GameCharacterControlLease` 不受普通键鼠影响，只认 F7/UI 开关/P0 急停（T-M6-73）。P0 急停同时撤销两者。
 - **本地客户端常驻约定**：用户要求每次完成任务后保持本地桌面端运行（`pnpm --filter @workbench/desktop-host start`）以便随时测试；推进新工单重新构建后务必保持客户端处于运行状态。
@@ -66,7 +66,7 @@
 | --- | --- | --- | --- |
 | 1 | P3-06 缺陷① BWF 就绪竞态 | ✅ 已修（本日） | `readyTimeoutMs`/`readyPollMs` 就绪重探 + `stop()` 安静取消；单测 3 例 `[SIMULATION]`，真机冷启动待复验 |
 | 2 | P3-06 缺陷② CGEvent 点击依赖前台窗口 | 降级为验收基建（不影响产品链路） | 该缺陷只影响「自动验收脚本用坐标点自家按钮」，产品里按钮由人点。真解需要 `AXUIElementCopyElementAtPosition` **按目标 pid 作用域**命中（而不是 systemWide，后者仍会被遮挡窗吃掉）+ `kAXPressAction`，但这套能力在通用坐标点击路径上没有合法生产者（`ComputerInputStep` 不带 pid），硬接会变成死代码；建议验收脚本侧先 `bringToFront` 保证前台，或等真有「按元素点击」需求时单立工单 |
-| 3 | P3-04E 遗留：scheduler tick 自动发起社交会话的循环 | ✅ 已实现（`P3-04G` + `P3-04H`，`IMPLEMENTED_UNVERIFIED`） | owner 四条口径（默认关闭 / 每日 ≤2 次且 ≤30 分钟 / 00–08 禁发 / 连续 2 次失败当日停发）全部落成 + 23 例确定性单测；L1 执行器骨架（候选来源 / 逐条读取 / 理解配额 / 中途打断）12 例单测；**抖音公开精选页只读已在真实平台跑通（`P3-04H`）**：候选 5 → 读到 3、0 失败、26.3s，真实会话 `bs-65e7a249` 3 条 / `completed` / 27.6s，`runnable` 仅在证据有效期内为真并登记 `douyin/read_public`；公开页**无需扫码**；个性化流尚未接入（需先扩展 feed 再让 owner 扫码，当前扫码只保存登录态、不改变 feed）；验证码/登录墙即停不硬刷。未验：真实风控页面、真实模型理解、多日浸泡。证据 [P3-04H-douyin-l1-verification.md](./evidence/P3-04H-douyin-l1-verification.md)；下一步是长时浸泡与个性化流扩展 |
+| 3 | P3-04E 遗留：scheduler tick 自动发起社交会话的循环 | ✅ 已实现（`P3-04G` + `P3-04H` + `P3-04I`，`IMPLEMENTED_UNVERIFIED`） | owner 四条口径（默认关闭 / 每日 ≤2 次且 ≤30 分钟 / 00–08 禁发 / 连续 2 次失败当日停发）全部落成 + 23 例确定性单测；L1 执行器骨架（候选来源 / 逐条读取 / 理解配额 / 中途打断）12 例单测；**抖音公开精选页只读已在真实平台跑通（`P3-04H`）**：候选 5 → 读到 3、0 失败、26.3s，真实会话 `bs-65e7a249` 3 条 / `completed` / 27.6s，`runnable` 仅在证据有效期内为真并登记 `douyin/read_public`；公开页**无需扫码**。**`P3-04I` 已接个性化推荐/关注流**：三 feed + 未登录/重定向/登录墙/空流如实回落公开精选，按流分开存证，只有请求流自己读到 ≥3 条才置真；owner 2026-11-27 09:56:49 扫码登录成功，09:59 只读探测推荐 8 张 / 关注 2 张卡片，但 10:04 生产冒烟遇到抖音 **「验证码中间页」**，按红线立即停止、未绕过/未再刷，`ok=false`、`runnable=false`。未验：真实个性化冒烟（阻塞于真实验证码，需 owner 处理并冷却后重约）、关注流门槛、真实验证码恢复流程、真实模型理解、多日浸泡。证据 [P3-04H-douyin-l1-verification.md](./evidence/P3-04H-douyin-l1-verification.md) / [P3-04I-douyin-personalized-verification.md](./evidence/P3-04I-douyin-personalized-verification.md) |
 | 4 | 单桌宠全链路单一剧本 E2E | ✅ 已落地（`[E2E-HOST]`+`[SIMULATION]`） | 宿主 `PET_STAGE_E2E` 下可用 `WHALE_E2E_BWF_ENDPOINT` 指向仿真 BWF（`resolveBwfEndpoint()`，生产恒回落真实端口）；`single-pet-chain.e2e.spec.ts` 串起「启动 → 就绪 → 规则动作 → 三态回执 → 记忆可检索」，6.2s 通过并已进 macOS CI。未覆盖：LLM 大脑同链路、语音锁释放与气泡投影（气泡归 item 7） |
 
 **必须等 owner 的（不自行推进）**：

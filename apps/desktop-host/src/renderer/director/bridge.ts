@@ -116,7 +116,11 @@ import type {
   VoiceWorkshopDial,
   VoiceWorkshopState,
 } from '@workbench/shared-protocol';
-import type { DouyinBrowseEvidence } from '@workbench/character-core';
+import type {
+  DouyinBrowseEvidence,
+  DouyinFeedKind,
+  DouyinFeedSelection,
+} from '@workbench/character-core';
 
 export const GAME_OPTIONS = [
   { id: 'stardew', label: '星露谷物语', shortLabel: '星露谷' },
@@ -1275,15 +1279,32 @@ export interface DirectorBridge {
       available: boolean;
       loggedIn: boolean;
       loginWindowOpen: boolean;
+      /** 当前首选信息流：公开精选 / 推荐 / 关注 */
+      feed: DouyinFeedKind;
+      /** 首选流本身是否已通过真实冒烟（回落公开精选不算） */
+      feedVerified: boolean;
+      /** 首选流的证据是否确为请求的那条流（等价于 feedVerified，供 UI 明确语义） */
+      requestedFeedVerified: boolean;
+      /** 最近一次候选抓取实际用了哪条流、为何回落 */
+      selection: DouyinFeedSelection | null;
       sourceVerified: boolean;
       evidence: DouyinBrowseEvidence | null;
+      byFeed: Record<DouyinFeedKind, DouyinBrowseEvidence | null>;
     };
   }>;
   /** V2-P3-04H：真实冒烟（候选来源 → 逐条读取 ≥3 条公开内容 → 落证据） */
-  v2SocialDouyinSmoke(input?: { limit?: number }): Promise<{
+  v2SocialDouyinSmoke(input?: { limit?: number; feed?: DouyinFeedKind }): Promise<{
     ok: boolean;
     evidence?: DouyinBrowseEvidence | null;
     snapshot?: SocialAutostartSnapshot;
+    error?: string;
+  }>;
+  /** 只切换首选信息流；未验证时如实返回，不把回落公开精选当作个性化已验证 */
+  v2SocialDouyinFeed(input: { feed: DouyinFeedKind }): Promise<{
+    ok: boolean;
+    feed?: DouyinFeedKind;
+    feedVerified?: boolean;
+    evidence?: DouyinBrowseEvidence | null;
     error?: string;
   }>;
   /** V2-P3-04H：打开独立 Profile 的可见登录窗，由 owner 亲手扫码 */

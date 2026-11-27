@@ -10,10 +10,12 @@ import { join } from 'node:path';
 import { BrowserWindow, session, type Session } from 'electron';
 import type { BrowserEnginePort, BrowserPageSnapshot } from '@workbench/runtime-core';
 import type { BrowserProfile } from '@workbench/shared-protocol';
-import type {
-  DouyinLoginState,
-  DouyinPageSnapshot,
-  DouyinWebSession,
+import {
+  DOUYIN_FEED_URLS,
+  type DouyinFeedKind,
+  type DouyinLoginState,
+  type DouyinPageSnapshot,
+  type DouyinWebSession,
 } from '@workbench/character-core';
 
 const LOAD_TIMEOUT_MS = 20_000;
@@ -131,6 +133,42 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
     return snapshot;
   }
 
+  /**
+   * 打开指定信息流（只读导航）。
+   * 推荐流在桌面 Web 上直接访问 `/?recommend=1` 会被服务端重定向到 `/jingxuan`；
+   * 必须先加载精选页，再点击站内「推荐」导航标签，SPA 才会切到真实个性化推荐流。
+   * 这里只点击导航标签，不点赞、不关注、不评论、不发私信。
+   */
+  async openFeed(feed: DouyinFeedKind): Promise<DouyinPageSnapshot> {
+    if (feed !== 'recommended') return this.loadRich(DOUYIN_FEED_URLS[feed]);
+    await this.load(DOUYIN_FEED_URLS.public);
+    const clickDeadline = Date.now() + 8_000;
+    let clicked = false;
+    while (Date.now() < clickDeadline) {
+      clicked = await this.evaluate<boolean>(`
+        (() => {
+          const anchors = Array.from(document.querySelectorAll('a'));
+          const target = anchors.find((el) => ((el.innerText || el.textContent || '').trim()) === '推荐');
+          if (!target) return false;
+          target.click();
+          return true;
+        })()
+      `);
+      if (clicked) break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    const deadline = Date.now() + 8_000;
+    let snapshot = await this.readRichPage();
+    while (
+      Date.now() < deadline &&
+      (!clicked || !snapshot.url.includes('recommend=1') || snapshot.cards.length === 0)
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      snapshot = await this.readRichPage();
+    }
+    return snapshot;
+  }
+
   /** 登录态只从隔离 partition 的 Cookie 判断；绝不读取、导出或上报凭据本身 */
   async loginState(): Promise<DouyinLoginState> {
     const cookies = await this.partition.cookies.get({});
@@ -208,6 +246,14 @@ export class ElectronBrowserEngine implements BrowserEnginePort {
         };
         for (const el of document.querySelectorAll('[data-aweme-id]')) {
           push((el.getAttribute('data-aweme-id') || '').trim(), el.innerText);
+        }
+        // 关注流是单屏轮播：卡片没有 data-aweme-id / video 链接，公开 id 在 video-info 的 data-e2e-aweme-id 上
+        for (const el of document.querySelectorAll('[data-e2e="video-info"][data-e2e-aweme-id]')) {
+          const item = el.closest('[data-e2e="feed-item"]');
+          push(
+            (el.getAttribute('data-e2e-aweme-id') || '').trim(),
+            item ? item.innerText : el.innerText,
+          );
         }
         if (cards.length === 0) {
           for (const el of document.querySelectorAll('[href*="/video/"]')) {
@@ -357,6 +403,10 @@ export class ElectronDouyinSession implements DouyinWebSession {
 
   load(url: string): Promise<DouyinPageSnapshot> {
     return this.engine.loadRich(url);
+  }
+
+  openFeed(feed: DouyinFeedKind): Promise<DouyinPageSnapshot> {
+    return this.engine.openFeed(feed);
   }
 
   loginState(): Promise<DouyinLoginState> {

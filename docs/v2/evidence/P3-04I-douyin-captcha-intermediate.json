@@ -1,0 +1,24 @@
+[
+  {
+    "stage": "after-load-public",
+    "url": "https://www.douyin.com/jingxuan",
+    "cards": 0,
+    "title": "验证码中间页",
+    "head": "    "
+  },
+  {
+    "stage": "after-click",
+    "clicked": false,
+    "url": "https://www.douyin.com/jingxuan",
+    "cards": 0,
+    "title": "验证码中间页",
+    "head": "    "
+  },
+  {
+    "stage": "final",
+    "url": "https://www.douyin.com/jingxuan",
+    "cards": 0,
+    "title": "验证码中间页",
+    "head": "    "
+  }
+]

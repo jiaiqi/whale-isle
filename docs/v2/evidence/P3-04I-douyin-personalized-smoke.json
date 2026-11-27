@@ -1,0 +1,55 @@
+{
+  "at": "2026-11-27T02:03:39.890Z",
+  "waitedForScan": false,
+  "ok": false,
+  "smoke": {
+    "ok": false,
+    "evidence": {
+      "schemaVersion": 1,
+      "sourceId": "douyin-public-jingxuan",
+      "feedUrl": "https://www.douyin.com/jingxuan",
+      "requestedFeed": "recommended",
+      "usedFeed": "public",
+      "loggedIn": true,
+      "fallbackReason": "platform_redirected",
+      "verifiedAt": 1795745041325,
+      "durationMs": 21199,
+      "candidates": 0,
+      "itemsRead": 0,
+      "readFailures": 0,
+      "ok": false,
+      "failureReason": "抖音返回「验证码中间页」（真实风控门槛），已立即停止，未绕过/未重试；原始冒烟代码当时未识别该页，误归因为「没有可读候选」",
+      "samples": [],
+      "failureKind": "captcha",
+      "rawFailureReason": "抖音公开页没有可读候选（页面结构可能已变化），不伪造候选"
+    }
+  },
+  "executor": {
+    "wired": true,
+    "sources": [
+      {
+        "sourceId": "douyin-public-jingxuan",
+        "platform": "douyin",
+        "kind": "platform",
+        "verified": false,
+        "note": "抖音只读信息流（公开精选 / 推荐 / 关注，未登录时回落公开精选）；不点赞/不关注/不评论/不发私信"
+      }
+    ],
+    "runnable": false
+  },
+  "executorReady": false,
+  "autostart": {
+    "canStart": false,
+    "blockReason": "autostart_off",
+    "detail": "自主发起已关闭（默认关闭，需在生活页显式打开）",
+    "nextEligibleAt": null,
+    "maxItems": 20,
+    "maxDurationMs": 600000,
+    "maxUnderstandingCalls": 8
+  },
+  "annotation": {
+    "annotatedAt": "2026-11-27T10:10:00+08:00",
+    "reason": "同批 P3-04I-douyin-captcha-intermediate.json 证明真实页面标题为「验证码中间页」；按协调者要求把风控验证码作为显式失败原因，原始 failureReason 保留在 rawFailureReason，未改写原始读数。",
+    "source": "P3-04I-douyin-captcha-intermediate.json（临时诊断构建输出，诊断代码已移除）"
+  }
+}

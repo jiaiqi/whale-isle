@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BrowseCandidate, SocialPlatformCapabilityEntry } from '@workbench/shared-protocol';
 import { RuntimeEventBus } from '@workbench/runtime-core';
 import {
+  DOUYIN_FEED_URLS,
   DOUYIN_PUBLIC_FEED_URL,
   DOUYIN_SMOKE_MIN_ITEMS,
   DouyinBrowseCandidateSource,
+  DouyinBrowseEvidenceSchema,
   buildDouyinItemText,
   detectDouyinBlock,
+  douyinFeedKindFromUrl,
   extractDouyinTopics,
   isDouyinEvidenceUsable,
+  isDouyinRequestedFeedVerified,
   parseDouyinCardText,
   runDouyinSmoke,
   type DouyinPageSnapshot,
@@ -36,6 +40,7 @@ const DOUYIN_CAPABILITY: SocialPlatformCapabilityEntry = {
 
 class FakeDouyinWeb implements DouyinWebSession {
   readonly loads: string[] = [];
+  readonly openFeedCalls: string[] = [];
   loginChecks = 0;
   loginWindowOpened = 0;
 
@@ -49,6 +54,12 @@ class FakeDouyinWeb implements DouyinWebSession {
     const page = this.pages[url];
     if (!page) throw new Error(`测试未提供页面：${url}`);
     return page;
+  }
+
+  /** 测试里等价于直接 load 对应 URL；真实宿主会为推荐流在页内点「推荐」标签 */
+  async openFeed(feed: Parameters<NonNullable<DouyinWebSession['openFeed']>>[0]): Promise<DouyinPageSnapshot> {
+    this.openFeedCalls.push(feed);
+    return this.load(DOUYIN_FEED_URLS[feed]);
   }
 
   async loginState(): Promise<{ loggedIn: boolean }> {
@@ -75,9 +86,9 @@ function videoPage(index: number): DouyinPageSnapshot {
   };
 }
 
-function feedPage(count: number, options: { text?: string } = {}): DouyinPageSnapshot {
+function feedPage(count: number, options: { text?: string; url?: string } = {}): DouyinPageSnapshot {
   return {
-    url: DOUYIN_PUBLIC_FEED_URL,
+    url: options.url ?? DOUYIN_PUBLIC_FEED_URL,
     title: '抖音精选电脑版',
     text: options.text ?? '精选\n推荐\n关注\n登录',
     cards: Array.from({ length: count }, (_, i) => ({
@@ -163,6 +174,7 @@ describe('抖音公开内容字段抽取', () => {
 
   it('只把验证码/风控页判为必须停下的门槛；可读页面上的登录入口不误判', () => {
     expect(detectDouyinBlock({ title: '安全验证', text: '请完成验证码' })?.kind).toBe('captcha');
+    expect(detectDouyinBlock({ title: '验证码中间页', text: '    ' })?.kind).toBe('captcha');
     expect(detectDouyinBlock({ title: '抖音精选', text: '精选 推荐 登录' })).toBeNull();
     expect(detectDouyinBlock({ title: '视频', text: '登录后即可参与互动讨论' })?.kind).toBe('login');
   });
@@ -197,6 +209,16 @@ describe('抖音候选来源', () => {
   it('触发验证码 → 立即抛错，绝不继续读', async () => {
     const web = buildWeb(3, { feed: { title: '安全验证', text: '请完成人机验证' } });
     const source = new DouyinBrowseCandidateSource(web, { verified: true });
+    await expect(source.listCandidates({ objective: '看看', limit: 3 })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+      context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
+    });
+    expect(web.loads).toHaveLength(1);
+  });
+
+  it('验证码中间页（正文为空、只有标题）也立即停下，不继续读候选', async () => {
+    const web = buildWeb(3, { feed: { title: '验证码中间页', text: '    ', cards: [] } });
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'recommended', readIntervalMs: 0 });
     await expect(source.listCandidates({ objective: '看看', limit: 3 })).rejects.toMatchObject({
       code: 'PERMISSION_DENIED',
       context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
@@ -349,6 +371,182 @@ describe('真实冒烟证据', () => {
     const expired = new DouyinBrowseCandidateSource(web, { verified: isDouyinEvidenceUsable(null) });
     executor.registerSource(expired);
     expect(executor.status().runnable).toBe(false);
+  });
+});
+
+describe('个性化信息流与未登录回落', () => {
+  const RECOMMENDED_URL = DOUYIN_FEED_URLS.recommended;
+  const FOLLOWING_URL = DOUYIN_FEED_URLS.following;
+
+  it('最终 URL 能判出流；站外或未知路径不臆断', () => {
+    expect(douyinFeedKindFromUrl('https://www.douyin.com/?recommend=1')).toBe('recommended');
+    expect(douyinFeedKindFromUrl('https://www.douyin.com/')).toBe('recommended');
+    expect(douyinFeedKindFromUrl('https://www.douyin.com/follow')).toBe('following');
+    expect(douyinFeedKindFromUrl('https://www.douyin.com/jingxuan')).toBe('public');
+    expect(douyinFeedKindFromUrl('https://www.douyin.com/video/123456789')).toBeNull();
+    expect(douyinFeedKindFromUrl('https://example.com/?recommend=1')).toBeNull();
+  });
+
+  it('已登录请求推荐流 → 实际读推荐流，不回落', async () => {
+    const web = new FakeDouyinWeb(
+      {
+        [RECOMMENDED_URL]: feedPage(3, { url: RECOMMENDED_URL }),
+        [DOUYIN_PUBLIC_FEED_URL]: feedPage(1),
+      },
+      { loggedIn: true },
+    );
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'recommended', readIntervalMs: 0 });
+    const candidates = await source.listCandidates({ objective: '看看', limit: 3 });
+    expect(candidates).toHaveLength(3);
+    expect(web.loads).toEqual([RECOMMENDED_URL]);
+    expect(web.openFeedCalls).toEqual(['recommended']);
+    expect(source.lastSelection).toMatchObject({
+      requested: 'recommended',
+      used: 'recommended',
+      loggedIn: true,
+      fallbackReason: '',
+    });
+    expect(source.feedUrl).toBe(RECOMMENDED_URL);
+  });
+
+  it('未登录请求推荐流 → 不打开个性化页，直接回落公开精选并如实标记 not_logged_in', async () => {
+    const web = new FakeDouyinWeb({
+      [RECOMMENDED_URL]: feedPage(3, { url: RECOMMENDED_URL }),
+      [DOUYIN_PUBLIC_FEED_URL]: feedPage(2),
+    });
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'recommended', readIntervalMs: 0 });
+    const candidates = await source.listCandidates({ objective: '看看', limit: 2 });
+    expect(candidates).toHaveLength(2);
+    expect(web.loads).toEqual([DOUYIN_PUBLIC_FEED_URL]);
+    expect(source.lastSelection).toMatchObject({
+      requested: 'recommended',
+      used: 'public',
+      loggedIn: false,
+      fallbackReason: 'not_logged_in',
+      detail: '未登录，已回落公开精选',
+    });
+    expect(source.feedUrl).toBe(DOUYIN_PUBLIC_FEED_URL);
+  });
+
+  it('登录态读取失败也按未登录回落，不假装已登录', async () => {
+    const web = new FakeDouyinWeb({ [DOUYIN_PUBLIC_FEED_URL]: feedPage(2) });
+    vi.spyOn(web, 'loginState').mockRejectedValue(new Error('cookie store unavailable'));
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'recommended', readIntervalMs: 0 });
+    await source.listCandidates({ objective: '看看', limit: 2 });
+    expect(source.lastSelection).toMatchObject({ used: 'public', loggedIn: false, fallbackReason: 'not_logged_in' });
+  });
+
+  it('推荐流被平台重定向到精选 → 以最终 URL 为准，reason=platform_redirected', async () => {
+    const web = new FakeDouyinWeb(
+      {
+        [RECOMMENDED_URL]: feedPage(3, { url: DOUYIN_PUBLIC_FEED_URL }),
+        [DOUYIN_PUBLIC_FEED_URL]: feedPage(3),
+      },
+      { loggedIn: true },
+    );
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'recommended', readIntervalMs: 0 });
+    const candidates = await source.listCandidates({ objective: '看看', limit: 3 });
+    expect(candidates).toHaveLength(3);
+    expect(web.loads).toEqual([RECOMMENDED_URL]);
+    expect(source.lastSelection).toMatchObject({
+      requested: 'recommended',
+      used: 'public',
+      loggedIn: true,
+      fallbackReason: 'platform_redirected',
+    });
+  });
+
+  it('推荐流零候选且是登录墙 → 回落公开精选并标记 login_wall', async () => {
+    const web = new FakeDouyinWeb(
+      {
+        [RECOMMENDED_URL]: feedPage(0, { url: RECOMMENDED_URL, text: '扫码登录\n登录后查看推荐' }),
+        [DOUYIN_PUBLIC_FEED_URL]: feedPage(2),
+      },
+      { loggedIn: true },
+    );
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'recommended', readIntervalMs: 0 });
+    const candidates = await source.listCandidates({ objective: '看看', limit: 2 });
+    expect(candidates).toHaveLength(2);
+    expect(web.loads).toEqual([RECOMMENDED_URL, DOUYIN_PUBLIC_FEED_URL]);
+    expect(source.lastSelection).toMatchObject({ used: 'public', fallbackReason: 'login_wall' });
+  });
+
+  it('关注流零候选且不是登录墙 → 回落公开精选并标记 empty_preferred', async () => {
+    const web = new FakeDouyinWeb(
+      {
+        [FOLLOWING_URL]: feedPage(0, { url: FOLLOWING_URL, text: '关注\n暂时没有新内容' }),
+        [DOUYIN_PUBLIC_FEED_URL]: feedPage(2),
+      },
+      { loggedIn: true },
+    );
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, feed: 'following', readIntervalMs: 0 });
+    const candidates = await source.listCandidates({ objective: '看看', limit: 2 });
+    expect(candidates).toHaveLength(2);
+    expect(source.lastSelection).toMatchObject({ used: 'public', fallbackReason: 'empty_preferred' });
+  });
+
+  it('个性化流回落产生的冒烟证据：仍可用，但不等于请求的流已验证', async () => {
+    const pages: Record<string, DouyinPageSnapshot> = { [DOUYIN_PUBLIC_FEED_URL]: feedPage(3) };
+    for (let i = 0; i < 3; i += 1) {
+      const page = videoPage(i);
+      pages[page.url] = page;
+    }
+    const web = new FakeDouyinWeb(pages);
+    const source = new DouyinBrowseCandidateSource(web, { verified: false, readIntervalMs: 0, now: () => T0 });
+    let tick = T0;
+    const evidence = await runDouyinSmoke(source, { feed: 'recommended', limit: 3, now: () => (tick += 1_000) });
+    expect(evidence.ok).toBe(true);
+    expect(evidence.requestedFeed).toBe('recommended');
+    expect(evidence.usedFeed).toBe('public');
+    expect(evidence.loggedIn).toBe(false);
+    expect(evidence.fallbackReason).toBe('not_logged_in');
+    expect(evidence.feedUrl).toBe(DOUYIN_PUBLIC_FEED_URL);
+    expect(isDouyinEvidenceUsable(evidence, T0 + 1_000)).toBe(true);
+    expect(isDouyinRequestedFeedVerified(evidence, T0 + 1_000)).toBe(false);
+  });
+
+  it('已登录推荐流冒烟 → requestedFeed=usedFeed=recommended，请求流验证通过', async () => {
+    const pages: Record<string, DouyinPageSnapshot> = {
+      [RECOMMENDED_URL]: feedPage(3, { url: RECOMMENDED_URL }),
+    };
+    for (let i = 0; i < 3; i += 1) {
+      const page = videoPage(i);
+      pages[page.url] = page;
+    }
+    const web = new FakeDouyinWeb(pages, { loggedIn: true });
+    const source = new DouyinBrowseCandidateSource(web, { verified: false, readIntervalMs: 0, now: () => T0 });
+    let tick = T0;
+    const evidence = await runDouyinSmoke(source, { feed: 'recommended', limit: 3, now: () => (tick += 1_000) });
+    expect(evidence.ok).toBe(true);
+    expect(evidence.itemsRead).toBe(DOUYIN_SMOKE_MIN_ITEMS);
+    expect(evidence.requestedFeed).toBe('recommended');
+    expect(evidence.usedFeed).toBe('recommended');
+    expect(evidence.loggedIn).toBe(true);
+    expect(evidence.fallbackReason).toBe('');
+    expect(evidence.feedUrl).toBe(RECOMMENDED_URL);
+    expect(isDouyinRequestedFeedVerified(evidence, T0 + 1_000)).toBe(true);
+    expect(isDouyinRequestedFeedVerified(evidence, T0 + 8 * 24 * 3_600_000)).toBe(false);
+  });
+
+  it('旧证据没有 feed 字段时按公开精选解析，不炸也不冒充个性化已验证', async () => {
+    const legacy = {
+      schemaVersion: 1 as const,
+      sourceId: 'douyin-public-jingxuan',
+      feedUrl: DOUYIN_PUBLIC_FEED_URL,
+      verifiedAt: T0,
+      durationMs: 1_000,
+      candidates: 3,
+      itemsRead: 3,
+      readFailures: 0,
+      ok: true,
+      failureReason: '',
+      samples: [],
+    };
+    const parsed = DouyinBrowseEvidenceSchema.parse(legacy);
+    expect(parsed.requestedFeed).toBe('public');
+    expect(parsed.usedFeed).toBe('public');
+    expect(parsed.loggedIn).toBe(false);
+    expect(isDouyinRequestedFeedVerified(parsed, T0 + 1_000)).toBe(true);
   });
 });
 

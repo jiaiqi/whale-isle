@@ -323,6 +323,33 @@
 | 多日自动 tick 浸泡 | 开关打开后连续多日：每日 ≤2 次 / ≤30 分钟、00–08 禁发、失败冷却、连续 2 次失败当日停发；本轮只做了单次真实会话 + 单测 | ⏳ 待长时浸泡 |
 | 生活页冒烟/登录按钮真机点击 | 在 owner 正在用的桌面端里点一次「真实冒烟（读 3 条）」「打开登录窗（扫码）」，确认 UI 文案与耗时体感（本轮经 IPC 调用同一处理逻辑，按钮未做 CGEvent 点击） | ⏳ 待 owner 试用 |
 
+## 2026-11-27 批次（`V2-P3-04I` 抖音个性化流「推荐 / 关注」，`IMPLEMENTED_UNVERIFIED`，真实冒烟受阻）
+
+### Mock / 沙盒 / 部分真实只读已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `P3-04I` 个性化流单测 | `[SIMULATION]` 确定性单测 | `social-douyin.spec.ts` **29 例**（新增 11）：三种 feed、`openFeed` 端口、已登录推荐直读、未登录回落 `not_logged_in`、登录态读取失败按未登录、平台重定向 `platform_redirected`、登录墙 `login_wall`、空流 `empty_preferred`、回落证据可用但不等于请求流已验证、已登录推荐冒烟 `usedFeed=recommended`、旧证据兼容、**「验证码中间页」→ `CAPTCHA_REQUIRED` 只加载 1 页即停** | 2026-11-27 |
+| `P3-04I` owner 扫码登录 | **`[REAL-DEVICE]`** | 2026-11-27 09:56:49 CST，独立 `e2e-profile` 分区出现 `sessionid` / `sessionid_ss` / `sid_guard` / `passport_csrf_token`（**只检查名称，未读取值**）；AI 未代填密码、未导出凭据 | 2026-11-27 |
+| `P3-04I` 个性化流只读探测 | **`[REAL-DEVICE]`（非生产冒烟，不能置真）** | 09:59:20 在精选页内点击「推荐」标签 → `/?recommend=1`，真实读到 **8 张推荐卡片**；09:59:42 直接打开 `/follow` 真实读到 **2 张关注卡片**（低于冒烟门槛 3）。证据 [推荐探测](./v2/evidence/P3-04I-douyin-recommended-probe.json) / [关注探测](./v2/evidence/P3-04I-douyin-following-probe.json) | 2026-11-27 |
+| `P3-04I` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**。首次为 **7 过 / 1 败**（Gate 1 打包护栏：渲染层值导入 character-core 把 `node:fs/path/crypto` 打进包），修正为本地标签 + type-only 导入后通过；失败日志保留在 `.verify-gate/` | 2026-11-27 |
+
+### 真实冒烟失败 / 阻塞（不得写成通过）
+
+| 项目 | 真实现象 | 当前状态 |
+| --- | --- | --- |
+| `P3-04I` 生产链路个性化冒烟 | 10:04:01 CST，`v2:social-douyin-smoke`（feed=recommended）：`loggedIn=true`、`requestedFeed=recommended`、`usedFeed=public`、`fallbackReason=platform_redirected`、候选 0 / 读到 0、`ok=false`；真实页面标题 **「验证码中间页」**、正文为空，归档证据显式记 `failureKind=captcha`（原始归因保留在 `rawFailureReason`）。按红线立即停止，未识别/绕过验证码、未再发起真实请求；`runnable=false`。证据 [冒烟失败](./v2/evidence/P3-04I-douyin-personalized-smoke.json) / [验证码诊断](./v2/evidence/P3-04I-douyin-captcha-intermediate.json) | **BLOCKED（待 owner 处理验证码并冷却后重约）** |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收动作 | 状态 |
+| --- | --- | --- |
+| `P3-04I` 真实个性化冒烟 | owner 亲手处理抖音验证码并等待平台冷却后，再扫码/打开登录窗；由 AI 重跑 `recommended` 冒烟，目标 ≥3 条且 `usedFeed=recommended`，证据落盘后 `runnable` 才允许置真 | ⏳ 阻塞于真实验证码 |
+| `P3-04I` 关注流门槛 | 当前账号 `/follow` 只渲染 2 张可读卡片；需更多关注内容或后续只读翻页实现后再验 ≥3 条 | ⏳ |
+| `P3-04I` 生活页新控件 | 在 owner 正在用的桌面端点一次信息流下拉、「真实冒烟」「打开登录窗」，确认回落原因与请求/实际流展示符合直觉（本轮经 IPC 调同一处理逻辑，未做 CGEvent 点击） | ⏳ 待 owner 试用 |
+| `P3-04I` 真实验证码恢复流程 | 记录 owner 处理验证码后是否需要重新扫码、登录态是否仍有效、冷却时长 | ⏳ |
+| `P3-04I` 真实模型理解 / 多日浸泡 | 真实供应商理解调用；默认关、每日 ≤2 次 / ≤30 分钟、00–08 禁发、失败冷却的多日真机浸泡 | ⏳ 未验 |
+
 ## 2026-11-27 批次（`V2-P3-04H` 抖音 L1 只读真实平台接入，`IMPLEMENTED_UNVERIFIED`）
 
 ### Mock / 沙盒 / 真实公开页已通过项
