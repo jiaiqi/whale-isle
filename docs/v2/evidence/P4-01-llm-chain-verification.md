@@ -68,6 +68,20 @@ pnpm verify:gate
 
 macOS CI `.github/workflows/ci.yml` 显式加入 `single-pet-llm-chain.e2e.spec.ts`，保留原规则链路 E2E。跨语言生成器同时带出的既有语音字段漂移已从本单补丁移除；本单只提交 `BrainRuntimeConfig` 的新增字段。
 
+## PR CI 实测（PR #14，提交 `0cce081`）
+
+```text
+macOS · 完整 verify:gate + Electron E2E   pass  4m30s
+ubuntu · 类型/边界/单测/Python             pass  2m14s
+
+Electron E2E 步骤原始日志：
+✓ apps/desktop-host/e2e/single-pet-llm-chain.e2e.spec.ts (6 tests) 54538ms
+✓ apps/desktop-host/e2e/single-pet-chain.e2e.spec.ts (1 test) 7345ms
+Test Files 9 passed (9) / Tests 23 passed (23)
+```
+
+两平台均无跳过步骤；macOS job 的 `Full gate · pnpm verify:gate` 与 `Electron E2E` 步骤均 `success`。
+
 ## 待人类真机验收
 
 真实供应商推理、真实星露谷游戏动作、长时 LLM 浸泡、语音锁释放和气泡投影不在本次软件证据内，`V2-P4-01` 继续保持 `NEXT`。
