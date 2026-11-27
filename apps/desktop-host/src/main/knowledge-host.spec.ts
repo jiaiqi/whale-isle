@@ -74,6 +74,10 @@ describe('04D：知识宿主四段链路与反例', () => {
     expect(handlers.get('v2:knowledge-evidence')!(null)).toEqual(host.evidence());
     expect(handlers.get('v2:knowledge-list')!(null)).toEqual(host.list());
     expect(await handlers.get('v2:knowledge-assess')!(null, id)).toMatchObject({ executable: true });
+    const guarded = new Map<string, (_event: unknown, input?: unknown) => unknown>();
+    registerKnowledgeIpc({ handle: (channel, handler) => { guarded.set(channel, handler); } }, host, () => ({ ok: false, error: '拒绝来自子框架的知识 IPC' }));
+    expect(await guarded.get('v2:knowledge-execute')!(null, { knowledgeId: id, tool: 'water_crops' })).toEqual({ ok: false, error: '拒绝来自子框架的知识 IPC' });
+    expect(await guarded.get('v2:knowledge-list')!(null)).toEqual({ ok: false, error: '拒绝来自子框架的知识 IPC' });
   });
   it('材料缺失或修订变更后证据失败/部分抽取，停止执行且不写假回执', async () => {
     const { host, file, importMaterial, tools } = await setup();

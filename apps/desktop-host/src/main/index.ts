@@ -1154,7 +1154,17 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         };
       },
     });
-    registerKnowledgeIpc(ipcMain, knowledge);
+    // 与评论 IPC 同款最小守卫：只接受本应用中控台渲染进程的主框架，子框架/非本地页面一律拒绝。
+    const knowledgeRendererRoot = resolve(here, '../renderer');
+    const knowledgeIpcRejection = (event: unknown): { ok: false; error: string } | null => {
+      const frame = (event as { senderFrame?: { parent: unknown; url: string } } | null)?.senderFrame;
+      if (!frame || frame.parent !== null) return { ok: false, error: '拒绝来自子框架的知识 IPC' };
+      if (!frame.url.startsWith('file://')) return { ok: false, error: '拒绝来自非本地页面的知识 IPC' };
+      const target = relative(knowledgeRendererRoot, fileURLToPath(frame.url));
+      if (target === '' || target.startsWith('..') || isAbsolute(target)) return { ok: false, error: '拒绝来自非本应用页面的知识 IPC' };
+      return null;
+    };
+    registerKnowledgeIpc(ipcMain, knowledge, knowledgeIpcRejection);
     app.on('will-quit', () => knowledge.close());
   } catch (error) {
     // 新表迁移/本地导入失败不阻塞桌宠启动，也不以空库掩盖错误。

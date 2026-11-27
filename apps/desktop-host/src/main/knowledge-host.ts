@@ -213,13 +213,19 @@ export class KnowledgeHost {
   }
 }
 
+/** 只接受本应用中控台渲染进程的主框架；由宿主注入（测试与 CLI 默认放行）。 */
+export type KnowledgeIpcGuard = (event: unknown) => { ok: false; error: string } | null;
+
 /** IPC 仅使用固定通道与 Zod 入参。查询本地 SQLite 不开放外部写/评论/发布工具。 */
-export function registerKnowledgeIpc(ipc: { handle(channel: string, listener: (_event: unknown, input?: unknown) => unknown): void }, host: KnowledgeHost): void {
-  ipc.handle('v2:knowledge-source-status', () => host.sourceStatus());
-  ipc.handle('v2:knowledge-list', () => host.list());
-  ipc.handle('v2:knowledge-import', (_event, input) => host.importMaterial(input));
-  ipc.handle('v2:knowledge-evidence', (_event, input) => host.evidence(typeof input === 'string' ? input : undefined));
-  ipc.handle('v2:knowledge-receipts', (_event, input) => host.receipts(typeof input === 'string' ? input : undefined));
-  ipc.handle('v2:knowledge-assess', (_event, input) => host.assess(KnowledgeIdSchema.parse(input)));
-  ipc.handle('v2:knowledge-execute', (_event, input) => host.execute(input));
+export function registerKnowledgeIpc(ipc: { handle(channel: string, listener: (_event: unknown, input?: unknown) => unknown): void }, host: KnowledgeHost, guard: KnowledgeIpcGuard = () => null): void {
+  const handle = (channel: string, run: (input?: unknown) => unknown): void => {
+    ipc.handle(channel, (event, input) => guard(event) ?? run(input));
+  };
+  handle('v2:knowledge-source-status', () => host.sourceStatus());
+  handle('v2:knowledge-list', () => host.list());
+  handle('v2:knowledge-import', (input) => host.importMaterial(input));
+  handle('v2:knowledge-evidence', (input) => host.evidence(typeof input === 'string' ? input : undefined));
+  handle('v2:knowledge-receipts', (input) => host.receipts(typeof input === 'string' ? input : undefined));
+  handle('v2:knowledge-assess', (input) => host.assess(KnowledgeIdSchema.parse(input)));
+  handle('v2:knowledge-execute', (input) => host.execute(input));
 }
