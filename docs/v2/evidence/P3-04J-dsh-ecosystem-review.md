@@ -103,15 +103,18 @@
 | Skill candidate 结构：`{ name, description, invocation: { modelInvocable, userInvocable }, provider, source: 'bundled', resourceBase, rank, locator }` | `integrations/dsh/envoy-dsh/index.js:53-75` |
 | **首步链接路由**：监听 `agent/pre-step`，本轮第一步且用户消息含公开 http(s) 链接时，前置一条 user-role 路由消息，指向 `mcp__envoy__*` 工具 | `integrations/dsh/envoy-dsh/index.js:1-27`、`:94-140` |
 | 幂等：`LINK_ROUTING_MARKER = '[envoy-link-routing]'` + `LINK_ROUTING_FIRST_STEP = 1` 双保险 | `integrations/dsh/envoy-dsh/index.js:94-100` |
-| **登录墙显式建模为 `challenge_required` + 人这一步**（import cookies for one site scope, or sign in once），而不是编造内容 | `integrations/dsh/envoy-dsh/README.md`「What changes when it is installed」表「Login wall」行 |
-| **来源定位**：`material_id` 可引用；视频按时间轴读，ordered segments + keyframes + ASR transcripts 可定位到 `[mm:ss]` | `integrations/dsh/envoy-dsh/README.md` 首段与「Distill any link」节 |
+| **登录墙显式建模为 `challenge_required` + 人这一步**（import cookies for one site scope, or sign in once），而不是编造内容 | `integrations/dsh/envoy-dsh/README.md`「What changes when it is installed」表「Login wall」行；`integrations/dsh/envoy-dsh/skill/envoy.md:474-475`（真需人工时返回 `challenge_required` 而非 `empty_content`）、`:488-497`（`details.needs_user_action` 带 `requires_human` / `kind` / `question`，以及 `import_cookies` 由人类在终端执行、`--domain` 限定站点范围）、`:499-500`（导入的 cookie 只留在 Envoy 自己的 profile 且按域名限定） |
+| **「登录弹层 ≠ 验证码」的判定纪律**：判为真 challenge 前，先尝试无窗口关掉可关闭的登录弹层（含内嵌 frame），再看底层页面是否可读；滚动与懒加载后复查；「so its own wording (for example a `验证码登录` tab) is never mistaken for a captcha」 | `integrations/dsh/envoy-dsh/skill/envoy.md:467-472` |
+| **到达访问边界就停**：「Login, CAPTCHA, DRM, paywall, and private-network protection are the user's decision. Offer the smallest next action; never bypass, never guess a credential, never retry an unchanged condition in a loop.」 | `integrations/dsh/envoy-dsh/skill/envoy.md:147-150` |
+| **来源定位**：`material_id` 可引用；视频按时间轴读，ordered segments + keyframes + ASR transcripts 可定位到 `[mm:ss.000]`；「Each claim carries where it came from: a timestamp range, a heading or quoted phrase, or the `material_id` of a retained read. A deliverable whose claims cannot be traced back is not done.」 | `integrations/dsh/envoy-dsh/README.md` 首段与「Distill any link」节；`integrations/dsh/envoy-dsh/skill/envoy.md:144-146,154,700` |
 | 读不到时给 `partial` + 明确命名 gap，而不是 plausible guess | 同上表「Unreadable page」行 |
 | 跨平台 launcher 用纯 Node（`launch.cjs`）而非 POSIX shell，Windows 也能挂 | `integrations/dsh/envoy-dsh/launch.cjs`、`cordis.patch.yml` 注释块 |
 
 **值得借鉴**
 1. **「带来源定位的材料」这个概念本身**：`material_id` + `[mm:ss]` 级定位 + 「读不到就 `partial` 并点名 gap」。对照我们的 `ContentUnderstandingPipeline`（`packages/character-core/src/content-understanding.ts`）：我们目前是「逐条读取 → 配额内理解 → 记账」，**没有给理解结果一个可回溯的稳定引用**。值得借鉴的是：**在契约里给每条理解结果加一个 source locator（URL + 页内锚点 / 时间戳区间 + 内容哈希）**，让记忆落盘时能指回原始位置，也让「我看过这条」和「我记得这条」可区分。这条是纯架构设计，不涉及抄代码。
-2. **「challenge_required + 人这一步」作为一等状态**：不是「失败」，而是「需要人完成某一步，并且状态可枚举」。我们的 `detectDouyinBlock()`（`packages/character-core/src/social-douyin.ts:217-236`）已经返回 `DouyinBlockKind`，方向一致；但 Envoy 把「人该做什么」写进状态本身，值得对齐。
-3. **MCP 挂载 + Skill 注册的宿主扩展形态**：如果我们以后要开放第三方扩展，这是可参考的架构形状（但不是 DSH 那套，见 §4 结论）。
+2. **「challenge_required + 人这一步」作为一等状态**：不是「失败」，而是「需要人完成某一步，并且状态可枚举」。我们的 `detectDouyinBlock()`（主干 `a8bcc06`：`packages/character-core/src/social-douyin.ts:126`；未合并分支 `2de7e86`：`:217`）已经返回 `DouyinBlockKind`，方向一致；但 Envoy 把「人该做什么」写进状态本身，值得对齐。
+3. **「登录弹层 ≠ 验证码」的判定纪律**（`integrations/dsh/envoy-dsh/skill/envoy.md:467-472`）：他们明确警告不要因为弹层文案里带「验证码」就判成 captcha。这直接对应我们的 `CAPTCHA_RE` 与 `LOGIN_RE` 的切分——我们的两个正则**故意分开了**「验证码登录」和「验证码中间页」（注意：`验证码中间页` **只在未合并分支 `2de7e86` 的 `CAPTCHA_RE`（`social-douyin.ts:210-211`）里**，主干 `a8bcc06` 的 `:119-120` 还没有它；`验证码登录` 在 `LOGIN_RE` 里，主干 `:121` 与分支都有），方向与 Envoy 一致，值得把这个理由写进代码注释，别让后人把它们合并成一个正则。
+4. **MCP 挂载 + Skill 注册的宿主扩展形态**：如果我们以后要开放第三方扩展，这是可参考的架构形状（但不是 DSH 那套，见 §4 结论）。
 
 **不借鉴及原因**
 - `envoy.read/1` 协议本身、版本化 `envoy.capabilities/1`：与我们的 Zod 契约体系重复，且 `integrations/skills/envoy/SKILL.md` 是 Envoy 自己的 skill 正文，**引用需保留 Apache-2.0 NOTICE**（见 §7）。
@@ -238,15 +241,22 @@
 
 ## 3. 对照我们现状的差距表
 
-> 「我们的现状」列的路径按本报告基线 `feat/whale-isle-v2` @ `a1d9e5c` 标注；抖音个性化流的路径标注为 `feat-social-douyin-personalized` @ `2de7e86`（未合并）。
+> **基线（已在本单修正）**：`feat/whale-isle-v2` @ **`a8bcc06`** = PR #4「抖音 L1 只读真实平台接入（V2-P3-04H）」合并后的**主干 HEAD**。（本报告初稿误标为 `a1d9e5c`——那是 `a8bcc06` 的父提交。）
+>
+> 下表「我们的现状」每行都标注了它属于哪一侧：
+> - **[主干 a8bcc06]** = 已合并进主干，owner 现在跑得到；
+> - **[仅未合并分支 2de7e86]** = 只存在于未合并的 `feat-social-douyin-personalized` 分支，**主干还没有**。
+>
+> ⚠️ **两者的差别是实质性的，不是编号问题**：「验证码中间页」识别与 feed（推荐流/关注流）选择**都只在未合并分支上**（详见「验证码识别」「feed 选择」两行）。
 
 | 能力 | 我们的现状 | 他们怎么做 | 差距 | 建议 |
 | --- | --- | --- | --- | --- |
-| **浏览器驱动** | Electron `session.fromPartition(...)` + 隐藏 `BrowserWindow`；`apps/desktop-host/src/main/electron-browser-engine.ts:50,191-197,291-298`（`feat-social-douyin-personalized`） | **全部 4 个非 fork 仓库都是「真 Chrome/Edge + 真 profile + CDP」**：`browser-host.mjs:132-135`（`channel:'msedge'`, `headless:false`）、`lib/cdp.mjs:87-99`、`browser.mjs:307-308`、`mcp_server.py:461-478` | ⚠️ **最大差距**。我们是唯一用嵌入式 Chromium 驱动抖音的。Electron 默认 UA 含 `Electron/<version>` 字样（本项目 `electron ^45.4.1`，`apps/desktop-host/package.json:100`）——**据 Electron 默认行为推断，未在真机抓包核对 UA 字符串**；且隔离 partition 的浏览器指纹/登录上下文与真人日常浏览差异更大 | **借鉴（最高优先）**：下一轮重验改用真 Chrome/Edge + 持久 profile + CDP。详见 §4 |
-| **登录态存储** | 隔离 partition + `cookies.json` 回写/导入；`electron-browser-engine.ts:339-381`（只落本机隔离 Profile，不进 Git） | ① 真浏览器持久 profile（Cookie 只活在 profile 里，`README.md:90` studio）；② 默认 profile 直接复用（kdcadmin `index.js:1562-1568`）；③ 明文 cookie 落盘（fish-soul `lib/douyin-http.js:6-10`） | 我们比①更干净（不导出明文），比③更安全。② 与我们的隔离策略冲突 | **不借鉴**②③；保持现状 |
+| **浏览器驱动** | **[主干 a8bcc06]** Electron `session.fromPartition(...)` + 隐藏 `BrowserWindow`；`apps/desktop-host/src/main/electron-browser-engine.ts:48`（partition）、`:247`（隐藏窗口）、`:153`（可选登录窗）——该文件在主干共 **377 行**。**[仅未合并分支 2de7e86]** 同一形态，行号平移到 `:50,191-197,291-298`（该分支文件共 427 行）。**驱动形态两侧一致，只有行号不同** | **全部 4 个非 fork 仓库都是「真 Chrome/Edge + 真 profile + CDP」**：`browser-host.mjs:132-135`（`channel:'msedge'`, `headless:false`）、`lib/cdp.mjs:87-99`、`browser.mjs:307-308`、`mcp_server.py:461-478` | ⚠️ **最大差距**。我们是唯一用嵌入式 Chromium 驱动抖音的。Electron 默认 UA 含 `Electron/<version>` 字样（本项目 `electron ^45.4.1`，`apps/desktop-host/package.json:100`）——**据 Electron 默认行为推断，未在真机抓包核对 UA 字符串**；且隔离 partition 的浏览器指纹/登录上下文与真人日常浏览差异更大 | **借鉴（最高优先）**：下一轮重验改用真 Chrome/Edge + 持久 profile + CDP。详见 §4 |
+| **feed 选择（推荐流 / 关注流）** | **[主干 a8bcc06] 无**——`packages/character-core/src/social-douyin.ts` 主干版 grep `recommended\|following\|FEED_KINDS` **零命中**，只有公开精选页一条路。<br>**[仅未合并分支 2de7e86] 有**：`DOUYIN_FEED_KINDS = ['public','recommended','following']`（`social-douyin.ts:23-25`）、URL 映射 `:30-31`、流种类判定 `:76-78`、`isDouyinRequestedFeedVerified()` `:192` | kdcadmin 支持多入口/多流切换（`index.js` 的 `.need-captcha` / 多路收集脚本）；studio 走自己的浏览封装 | ⚠️ **主干没有 feed 选择能力**——owner 现在跑主干只能读公开精选页，取不到推荐流/关注流，也就无法复核「关注流够不够 3 条」 | **先合 PR #5**（未合并分支）再做 §4.3 的重验；否则重验验证不了 feed 维度 |
+| **登录态存储** | **[主干 a8bcc06]** 隔离 partition + `cookies.json` 回写/导入；`electron-browser-engine.ts:295`（读 `cookies.json`）、`:321-343`（`persistCookies()` 回写；只落本机隔离 Profile，不进 Git）。**[仅未合并分支 2de7e86]** 同一逻辑，行号平移到 `:339-381` | ① 真浏览器持久 profile（Cookie 只活在 profile 里，`README.md:90` studio）；② 默认 profile 直接复用（kdcadmin `index.js:1562-1568`）；③ 明文 cookie 落盘（fish-soul `lib/douyin-http.js:6-10`） | 我们比①更干净（不导出明文），比③更安全。② 与我们的隔离策略冲突 | **不借鉴**②③；保持现状 |
 | **UA / 反检测** | 全仓库 grep `setUserAgent` / `userAgent` **零命中**（唯一命中是 `apps/desktop-host/src/renderer/director/shell/titlebar.tsx:26` 读 `navigator.userAgent` 判 mac，与 UA 覆盖无关） | 同样**不做伪装**：grep `stealth` / `anti-detect` / `navigator.webdriver` / `webdriver` 在 7 个仓库 **零命中**。唯一 UA 相关是 fish-soul / kdcadmin 为 `a_bogus` 签名硬编码 UA，服务于它们各自不走的签名路线 | ✅ **无差距**。我们和他们的共同点正是「不伪装，只把架构做得更像真人浏览」 | **保持**。明确写进红线：不做 UA 覆盖 / stealth / 反检测（§6） |
-| **验证码识别** | `detectDouyinBlock()`：`CAPTCHA_RE` 含 `验证码中间页\|人机验证\|安全验证\|请完成验证\|完成下方验证\|拖动滑块\|访问过于频繁\|操作过于频繁\|captcha\|turnstile\|recaptcha\|verify you are are human`；`social-douyin.ts:210-236`（`feat-social-douyin-personalized`） | LockyBee：`core.mjs:327-328` 只覆盖 `请完成下方验证/请完成验证/安全验证/拖动滑块` + 容器选择器，**无「验证码中间页」**；studio：`lib/risk.mjs:16` 正则含 `captcha\|验证码\|安全验证`；fish-soul：`lib/douyin-social.js:217-221` 含 `滑块验证\|安全验证\|请完成验证\|拖动滑块` + iframe 检测 | 我们**比他们都全**（已覆盖「验证码中间页」）。但他们都还有一样我们没有的：**「没读到」与「没有」的三态区分**（fish-soul `lib/douyin-social.js:730-733`） | **借鉴**三态区分：我们现在是二态，检测不到就当没有；应区分「确认无 / 确认有 / 未确认」 |
-| **验证码处置** | 撞到即停：抛 `PERMISSION_DENIED(recoverable:false)` / `CAPTCHA_REQUIRED`，执行器中止；`social-douyin.ts:467-471` | ① LockyBee：停下 + **窗口留给本人**（`api-agent.mjs:323-327`、`diagnostics.mjs:107-110`）；② kdcadmin：**自动切带界面**让本人手动过，过完自动切回无头（`index.js:599`）；③ studio：风控码 → 冷却 + 只挡写（`lib/risk.mjs`） | 他们都比我们**多做了一步「给人一个可操作的恢复路径」**。我们目前是「停了，但用户不知道下一步做什么」 | **借鉴**：至少做到 LockyBee 那一档——停下时明确告诉 owner「请在保留的窗口里手动完成，完成后重跑」；**待议**：kdcadmin 的自动切有头/无头切换（我们的窗口本来就常驻可交互，可能不需要） |
+| **验证码识别** | **[主干 a8bcc06]** `detectDouyinBlock()` 在 `packages/character-core/src/social-douyin.ts:126`；`CAPTCHA_RE` 在 `:119-120`，**不含「验证码中间页」**；`LOGIN_RE` 在 `:121`（含「验证码登录」）。**主干该文件 grep「验证码中间页」= 零命中。**<br>**[仅未合并分支 2de7e86]** `CAPTCHA_RE` 在 `social-douyin.ts:210-211`，**含「验证码中间页」**；`detectDouyinBlock()` 在 `:217`。 | LockyBee：`core.mjs:327-328` 只覆盖 `请完成下方验证/请完成验证/安全验证/拖动滑块` + 容器选择器，**无「验证码中间页」**；studio：`lib/risk.mjs:16` 正则含 `captcha\|验证码\|安全验证`；fish-soul：`lib/douyin-social.js:217-221` 含 `滑块验证\|安全验证\|请完成验证\|拖动滑块` + iframe 检测；Envoy：`integrations/dsh/envoy-dsh/skill/envoy.md:467-472` 明确要求「登录弹层 ≠ captcha」 | ⚠️ **不是「天然更强」，而是「合并后才会更强」**：主干 a8bcc06 的 `CAPTCHA_RE` **不含**「验证码中间页」，这层加强**只在未合并的个性化分支上**。**主干若再撞到同一页，会走回 PR #5 修复前那条「没读到可读候选」的旧误归因路径**，而不是报出 `CAPTCHA_REQUIRED`。<br>但**相对这 7 个仓库**，主干现有的 `CAPTCHA_RE`（人机验证/安全验证/访问过于频繁/操作过于频繁/请完成验证/完成下方验证/拖动滑块/请输入验证码/captcha/turnstile/recaptcha）**仍然覆盖他们全部的检测式**——他们同样**没有**「验证码中间页」。<br>另外他们都还有一样我们没有的：**「没读到」与「没有」的三态区分**（fish-soul `lib/douyin-social.js:730-733`） | **① 先合 PR #5**（未合并分支），否则 §4.3 的重验拿不到「验证码中间页」的显式失败原因，也拿不到 feed 选择。<br>**② 借鉴三态区分**：我们现在是二态，检测不到就当没有；应区分「确认无 / 确认有 / 未确认」 |
+| **验证码处置** | **[主干 a8bcc06]** 撞到即停：抛 `PERMISSION_DENIED(recoverable:false)` / `CAPTCHA_REQUIRED`，执行器中止；`social-douyin.ts:305-311`。<br>**[仅未合并分支 2de7e86]** 同一逻辑，`social-douyin.ts:465-474`（`assertNoCaptcha()`） | ① LockyBee：停下 + **窗口留给本人**（`api-agent.mjs:323-327`、`diagnostics.mjs:107-110`）；② kdcadmin：**自动切带界面**让本人手动过，过完自动切回无头（`index.js:599`）；③ studio：风控码 → 冷却 + 只挡写（`lib/risk.mjs`） | 他们都比我们**多做了一步「给人一个可操作的恢复路径」**。我们目前是「停了，但用户不知道下一步做什么」 | **借鉴**：至少做到 LockyBee 那一档——停下时明确告诉 owner「请在保留的窗口里手动完成，完成后重跑」；**待议**：kdcadmin 的自动切有头/无头切换（我们的窗口本来就常驻可交互，可能不需要） |
 | **风控码分级冷却** | 无 | studio：`RISK_CODES=[352,412,2154,3002]`、按次数指数升级 `30→60→120→360` 分钟、只挡写读不受影响、到期自愈；`lib/risk.mjs:15-18,50-60,68-78` | 我们没有命中码的语义化分级，只有「停」 | **借鉴（架构形态）**：我们当前只读，可以先只落「分级冷却 + 到期自愈」的**通用机制**（不针对任何写操作） |
 | **每日预算口径** | 默认关 / 每日 ≤2 次且累计 ≤30 分钟 / 间隔 90–150 分钟 ±20% 抖动 / 收官或失败后冷却 ≥60 分钟 / 00:00–08:00 完全禁发 / 连续 2 次失败当日停发 / 单次 ≤20 条 / ≤10 分钟 / ≤8 次模型调用；`packages/shared-protocol/src/social.ts:202-212`、`:134-136` | LockyBee：`dailyMinutes`/`dailyRequests` 双额度（默认 10 分钟 / 30 次）、只记实际播放、Asia/Shanghai 时段；`video-limits.mjs:9,49,89-96`。studio：四道约束（通道日/小时/最小间隔/单人单楼）+ 总闸 + fail-closed；`lib/budget.mjs:38-60,18-21`。kdcadmin：谷时窗口 + `perDay`；`lib/state.mjs:28-36` | ✅ 我们**比他们严格得多**（我们有冷却/抖动/禁发时段/连续失败停发，他们基本只有日额度+时段） | **保持我们的口径**。唯一可借鉴：LockyBee「**只记实际播放**」（`video-limits.mjs:49`）——如果我们把「打开页面但没读」也算进 30 分钟，口径偏严 |
 | **模型调用预算** | 单次 ≤8 次模型调用（`social.ts:204` 注释） | LockyBee：`maxRequests` 每日请求数上限 + `UsageLedger` 记账；`video-limits.mjs:134-136`、`usage-ledger.mjs:19-48` | ✅ 我们有（≤8 次/轮）。他们多了**跨日持久 + 按来源/用途/模型分组**的账本 | **借鉴**：我们的 `UsageLedger` 是否有「未报告用量标未知」这个口径——LockyBee 明确 `unknownRequests` 不当零（`usage-ledger.mjs:16,45`） |
@@ -264,9 +274,17 @@
 
 ### 4.1 事实对照（逐条核实）
 
-**我们这边（`feat-social-douyin-personalized` @ `2de7e86`）**
-- 浏览器：`apps/desktop-host/src/main/electron-browser-engine.ts` 用 `session.fromPartition(...)`（`:50`）+ 隐藏 `BrowserWindow`（`:293-298`）+ 可选的可见登录窗（`:191-197`），**不是真 Chrome/Edge**。文件头注释自述「不连接用户日常 Chrome Profile」（`:3`）。
-- 登录态：隔离 partition + `cookies.json` 导入/回写（`:339-381`），只在本机隔离 Profile 目录，不进 Git。
+**我们这边**
+
+**主干 `feat/whale-isle-v2` @ `a8bcc06`（PR #4 合并后，owner 现在跑得到的那份）**
+- 浏览器：`apps/desktop-host/src/main/electron-browser-engine.ts` 用 `session.fromPartition(...)`（`:48`）+ 隐藏 `BrowserWindow`（`:247`）+ 可选的可见登录窗（`:153`），**不是真 Chrome/Edge**；该文件在主干共 **377 行**。文件头注释自述「不连接用户日常 Chrome Profile」（`:3`）。
+- 登录态：隔离 partition + `cookies.json` 导入/回写（读 `:295`、回写 `persistCookies()` `:321-343`），只在本机隔离 Profile 目录，不进 Git。
+- 验证码识别：`packages/character-core/src/social-douyin.ts` 主干版的 `CAPTCHA_RE` 在 `:119-120`，**不含「验证码中间页」**；`LOGIN_RE` 在 `:121`。**主干该文件 grep「验证码中间页」= 零命中。**
+
+**未合并分支 `feat-social-douyin-personalized` @ `2de7e86`（2026-11-27 那次真实冒烟所跑的版本）**
+- 浏览器：同一形态，行号平移到 `session.fromPartition(...)`（`:50`）+ 隐藏 `BrowserWindow`（`:293-298`）+ 可选的可见登录窗（`:191-197`），该分支文件共 **427 行**。
+- 登录态：隔离 partition + `cookies.json` 导入/回写（`:339-381`）。
+- 验证码识别：`CAPTCHA_RE` 在 `social-douyin.ts:210-211`，**含「验证码中间页」**；`detectDouyinBlock()` 在 `:217`。**这一层加强目前只在这条未合并分支上，主干还没有。**
 - UA：全仓库 grep `setUserAgent` / `userAgent` **零命中**（唯一命中 `apps/desktop-host/src/renderer/director/shell/titlebar.tsx:26` 是读 `navigator.userAgent` 判 macOS，与覆盖 UA 无关）。Electron 默认 UA 含 `Electron/<version>` 字样（本项目 `electron ^45.4.1`，`apps/desktop-host/package.json:100`）——**据 Electron 默认行为推断，未在真机抓包核对 UA 字符串**。
 - 真实结果：owner 2026-11-27 09:56:49 扫码登录成功（隔离 `e2e-profile`，只检查 Cookie 名称 `sessionid` / `sessionid_ss` / `sid_guard` / `passport_csrf_token`，未读取值）；09:59 只读 probe 读到推荐流 8 张卡片、`/follow` 2 张（< 门槛 3）；10:04 生产冒烟撞上「验证码中间页」（正文为空）→ 停止，`ok=false`、`runnable=false`、状态 `IMPLEMENTED_UNVERIFIED`。原始证据：`docs/v2/evidence/P3-04I-douyin-captcha-intermediate.json`（三阶段 `title: "验证码中间页"`、`cards: 0`）、`docs/v2/evidence/P3-04I-douyin-personalized-verification.md` §4。
 
@@ -290,7 +308,18 @@
 - `Britneycode-dsh-fish-soul/test/douyin-browser.mjs:62`（注释）：「某些环境（安全软件 / 浏览器扩展）会把 www.douyin.com 换成字节的「验证码中间页」，盖掉本地 mock 页面还吃掉点击。」
 - `regrevia-Envoy/docs/acceptance/envoy-read-failure-2026-10-25.md:117`：「于是模型改用主机自己的侧边栏浏览器打开页面（撞上验证码中间页），再把封面…」
 
-也就是说：**我们撞到的是一个他们也没在产品代码里显式建模的形态**。我们的 `CAPTCHA_RE`（`social-douyin.ts:210-211`）反而是覆盖到了。这说明我们的**识别层不弱，弱的是「用什么浏览器去看」**。
+也就是说：**我们撞到的是一个他们也没在产品代码里显式建模的形态**。
+
+但这里必须把两侧分清楚，否则 owner 会误判：
+
+- **未合并分支 `2de7e86`** 的 `CAPTCHA_RE`（`social-douyin.ts:210-211`）**确实覆盖**了「验证码中间页」——所以那次冒烟能报出**显式的** `CAPTCHA_REQUIRED`，而不是含糊的「没读到」。
+- **主干 `a8bcc06`** 的 `CAPTCHA_RE`（`social-douyin.ts:119-120`）**不含**「验证码中间页」。**主干若再撞到同一页，会走回 PR #5 修复前那条旧误归因路径**（读不到候选 → 当成「没读到可读内容」），而不是报出验证码原因。
+
+所以准确的说法不是「我们的识别层天然更强」，而是「**识别层在合并 PR #5 之后才会更强**」；而「**用什么浏览器去看**」这个更根本的问题，主干和未合并分支**同样存在**，两者都得靠 §4.3 的方案 A 才动得了。
+
+**补充（防止把结论过度外推）**：上表 4 行都是**抖音专项**仓库。Envoy 是通用阅读器，走的是**另一条路线**：`mcp__envoy__envoy_read` 返回 `blocked` / `challenge_required` / `auth_required` 时，用**自带的隔离 Chromium 运行时**在后台无头重试（`integrations/dsh/envoy-dsh/skill/envoy.md:462-466`），**同样不是真 Chrome、也没有持久日常 profile**。也就是说「用真浏览器」并不是「不会撞验证码」的充分条件——Envoy 在嵌入式 Chromium 上照样撞，并因此把验证码建模成一等状态（`skill/envoy.md:474-475` 返回 `challenge_required` 而不是 `empty_content`；`:488-497` 用 `details.needs_user_action` 把「人该做什么」带给人类）。
+
+这条同时反向支持我们第 4.2 节的判断：**「真浏览器 + 持久 profile」是他们的共同做法，但没有任何一个仓库证明它一定能避开「验证码中间页」**。它只是把概率往「像正常浏览」的方向推。**我们不能因为他们这么做就假设照做之后必然通过**——方案 A 的第 3 步（重跑并记录是否还出现中间页）之所以是「唯一要验证的命题」，原因就在这里。
 
 ### 4.2 判断：为什么会撞到「验证码中间页」
 
@@ -299,6 +328,12 @@
 **必须如实标注的不确定项**：以上是**基于代码形态的推断**，不是实测结论。我们**没有**抓包核对过抖音到底看了哪些信号，**没有**验证过「换成真 Chrome 后就不会撞验证码中间页」。我们唯一的事实是：2026-11-27 10:04 在 Electron 隔离 partition 上撞到了。
 
 ### 4.3 下一轮重验的建议方案
+
+> **前置条件（对 owner 决策至关重要）**：本节的重验**应在 PR #5（`feat-social-douyin-personalized` @ `2de7e86`）合并之后进行**。理由有两条，都可从 §3 表格直接读出：
+> 1. **主干 `a8bcc06` 的 `CAPTCHA_RE` 不含「验证码中间页」**——不先合并，重验时再撞同一页会退回旧误归因路径，我们拿不到可对比的失败原因，白跑一轮。
+> 2. **feed 选择（推荐流/关注流）只在未合并分支上**——不先合并，主干跑不了 `/follow`，也就复核不了「关注流够不够 3 条」这个原本触发重验的问题。
+>
+> 「要不要先合 PR #5」属于 owner 拍板，本单不代拍；本单只把依赖关系写清楚。
 
 **建议方案 A（推荐）：换真浏览器 + 持久 profile，形态对齐对照组**
 
@@ -461,7 +496,7 @@ DSH = **DeepSeek Harness**（`deepseek-ai/dsh`，见各仓库 `peerDependencies:
 `LICENSE` · `package.json`（`name: dsh-douyin-agent-plus`, `version: 1.4.9`）· git log `0c6a9a9`
 
 **regrevia/Envoy → integrations/dsh/envoy-dsh**（Apache-2.0）
-`integrations/dsh/envoy-dsh/LICENSE`、`NOTICE`（许可原文）· `README.md`（`engines.dsh >= 0.1.5`、Login wall 行、material_id / `[mm:ss]` / `partial` 行、Requirements 节）· `index.js:1-27,34-35,53-75,94-140`（`inject`、`ctx.skills`、candidate 结构、`agent/pre-step` 路由、幂等 marker）· `cordis.patch.yml`（bundle patch + launcher 说明）· `launch.cjs` · `integrations/skills/envoy/SKILL.md` · `docs/acceptance/envoy-read-failure-2026-10-25.md:117`（「验证码中间页」出现处）
+`integrations/dsh/envoy-dsh/LICENSE`、`NOTICE`（许可原文）· `integrations/dsh/envoy-dsh/skill/envoy.md:144-146,147-150,467-472,700`（source locator / 访问边界 / 登录弹层≠captcha / `[mm:ss.000]`）· `README.md`（`engines.dsh >= 0.1.5`、Login wall 行、material_id / `[mm:ss]` / `partial` 行、Requirements 节）· `index.js:1-27,34-35,53-75,94-140`（`inject`、`ctx.skills`、candidate 结构、`agent/pre-step` 路由、幂等 marker）· `cordis.patch.yml`（bundle patch + launcher 说明）· `launch.cjs` · `integrations/skills/envoy/SKILL.md` · `docs/acceptance/envoy-read-failure-2026-10-25.md:117`（「验证码中间页」出现处）
 
 **Britneycode/dsh-fish-soul**（⚠️ 无 LICENSE 文件，仅 package.json + README 标 MIT）
 `package.json`（`"license":"MIT"`、`name`、`dsh.client.inject:["slots"]`）· `README.md:170-172`（许可声明）· `cordis.patch.yml` · `lib/douyin-browse.js:1-14,40-76,125-131,178`（两条路 / `extractWorkSummary` / `CLICK_LIKE_JS` / `perDay`）· `lib/douyin-http.js:1-27,35-37,42-78,79-83,93-97`（纯 HTTP 签名路线）· `lib/vendor/douyin-bogus.js:1-13`（出处与说明）· `lib/douyin-social.js:217-221,730-733,1172`（验证码检测 / 三态区分）· `lib/browsers.js:17-30`（浏览器探测）· `lib/channels/vendor/douyin-bridge/browser.mjs:175-190,294-310`（`browserProcesses` / `--user-data-dir`）· `lib/channels/vendor/douyin-bridge/README.md`（vendored 出处）· `lib/channels/vendor/douyin-bridge/LICENSE` · `docs/douyin-identity-validation.md`（会话 ID 证据链 / 三道闸门 / 安全数据边界）· `test/douyin-browser.mjs:62`（「验证码中间页」出现处）
@@ -473,7 +508,7 @@ DSH = **DeepSeek Harness**（`deepseek-ai/dsh`，见各仓库 `peerDependencies:
 `LICENSE` · `package.json:15` · `index.js:48-49`（name/inject）· `index.js:92-140`（Config + volatile 约束）· `index.js:105-116`（写闸门默认全关）· `index.js:573-612`（`.need-captcha` / `.login-browser` / MCP 重启键 / `DOUYIN_HEADLESS`）· `index.js:1562-1568,1583-1597`（默认 profile 复用 / `needClose`）· `index.js:2391-2401`（验证码状态变化日志）· `index.js:2848-2930`（扫码/短信/滑块登录工具）· `lib/state.mjs:1-80`（家目录 / 谷时窗口 / `WINDOWS`）· `vendor/douyin-mcp/mcp_server.py:1-33,88-94,275-310,354-360,389-402,414-417,461-489`（设计要点 / UA / profile / CDP 复用 / 单实例约束 / headed vs headless / `launch_persistent_context`）· `README.md`（记忆与人设、家目录表、工具表、0.2.1 修复版）
 
 **我们这边（`feat/whale-isle-v2` @ `a1d9e5c`；抖音个性化流为 `feat-social-douyin-personalized` @ `2de7e86`）**
-`packages/shared-protocol/src/social.ts:134-136,202-212,237-238`（契约预算与 owner 口径注释）· `packages/character-core/src/social-runtime.ts:144-157,296,334,345-346,355-358,393-394,400,417`（预算收官 / 连续失败 / 冷却 / 禁发时段）· `packages/character-core/src/interest-sink.ts:29-41,51-80`（兴趣沉淀与噪声门槛）· `packages/character-core/src/content-understanding.ts:22-23,57-63,66-70`（页文字上限 / 模型输出形状 / JSON 抽取）· `apps/desktop-host/src/main/electron-browser-engine.ts:3,50,172-197,291-298,339-381`（partition / 登录窗 / 隐藏窗 / cookie 回写）· `apps/desktop-host/package.json:100`（`electron ^45.4.1`）· `docs/v2/evidence/P3-04I-douyin-personalized-verification.md`（§2 决策声明 / §4 真实读数与阻塞 / §5 红线执行）· `docs/v2/evidence/P3-04I-douyin-captcha-intermediate.json`（验证码中间页原始证据）· `docs/v2/evidence/P3-04-social-life-verification.md`（P3-04 A–F 交付清单与 `IMPLEMENTED_UNVERIFIED` 口径）· `tools/mock-harness/src/license-scanner.mjs:1-44`（Gate 2 扫描规则）· `AGENTS.md`（五层铁笼 / 单点事实源 / 运行时安全锁）
+`packages/shared-protocol/src/social.ts:134-136,202-212,237-238`（契约预算与 owner 口径注释）· `packages/character-core/src/social-runtime.ts:144-157,296,334,345-346,355-358,393-394,400,417`（预算收官 / 连续失败 / 冷却 / 禁发时段）· `packages/character-core/src/interest-sink.ts:29-41,51-80`（兴趣沉淀与噪声门槛）· `packages/character-core/src/content-understanding.ts:22-23,57-63,66-70`（页文字上限 / 模型输出形状 / JSON 抽取）· `apps/desktop-host/src/main/electron-browser-engine.ts`（**主干 a8bcc06**：`:3,48,153,247,295,321-343`，共 377 行——partition / 登录窗 / 隐藏窗 / cookie 读+回写；**仅未合并分支 2de7e86**：`:3,50,191-197,291-298,339-381`，共 427 行）· `packages/character-core/src/social-douyin.ts`（**主干 a8bcc06**：`:119-120` `CAPTCHA_RE`（**不含「验证码中间页」**）、`:121` `LOGIN_RE`、`:126` `detectDouyinBlock()`、`:305-311` 撞到即停；**仅未合并分支 2de7e86**：`:23-25` `DOUYIN_FEED_KINDS`、`:30-31` feed URL、`:76-78` 流种类判定、`:192` `isDouyinRequestedFeedVerified()`、`:210-211` `CAPTCHA_RE`（**含「验证码中间页」**）、`:217` `detectDouyinBlock()`、`:465-474` `assertNoCaptcha()`）· `apps/desktop-host/package.json:100`（`electron ^45.4.1`）· `docs/v2/evidence/P3-04I-douyin-personalized-verification.md`（§2 决策声明 / §4 真实读数与阻塞 / §5 红线执行）· `docs/v2/evidence/P3-04I-douyin-captcha-intermediate.json`（验证码中间页原始证据）· `docs/v2/evidence/P3-04-social-life-verification.md`（P3-04 A–F 交付清单与 `IMPLEMENTED_UNVERIFIED` 口径）· `tools/mock-harness/src/license-scanner.mjs:1-44`（Gate 2 扫描规则）· `AGENTS.md`（五层铁笼 / 单点事实源 / 运行时安全锁）
 
 ---
 
@@ -486,3 +521,5 @@ DSH = **DeepSeek Harness**（`deepseek-ai/dsh`，见各仓库 `peerDependencies:
 - **对 `Britneycode/dsh-fish-soul` 的许可状态如实记录**：仓库根目录无 LICENSE 文件，仅 `package.json` 与 `README.md` 标 MIT，已归入「引用前需再确认」档。
 - **对 `regrevia/Envoy` 只核实了 `integrations/dsh/envoy-dsh/` 这一层的 Apache-2.0**，主仓 LICENSE 单独确认。
 - 门禁结果见 PR 描述与交付回执（`pnpm verify:gate`）。
+- **基线口径已在本单内修正一次**（初稿写 `feat/whale-isle-v2` @ `a1d9e5c`，实为 `a8bcc06` 的父提交）。修正后 §3 表格每行都标注 **[主干 a8bcc06]** 还是 **[仅未合并分支 2de7e86]**，引用清单也按两组分别标注行号。**关键事实**：主干 `a8bcc06` 的 `CAPTCHA_RE` **不含「验证码中间页」**，且**没有 feed 选择**——这两层加强只在未合并的 `feat-social-douyin-personalized` @ `2de7e86` 上。因此「我们的识别层更强」是**合并 PR #5 之后**才成立，不是天然成立。
+- **本次修正只改本报告的表述与引用**，未重跑全量调研，未改任何产品代码。

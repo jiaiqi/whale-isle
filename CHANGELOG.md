@@ -13,6 +13,7 @@
 - **DSH 生态位结论：不接**（规范正交、我们已有 Zod 契约单点事实源、DSH 宿主 Windows 优先而我们是 macOS Electron、第三方插件在我们的宿主里没有对应物）。
 - **许可核实纠正**：7 仓中 **6 个有真实 LICENSE 文件**（5 × MIT + Envoy 集成 Apache-2.0），GitHub API 报 `spdxId=none` 是误判；`dsh-fish-soul` **无 LICENSE 文件**，仅 `package.json` + README 标 MIT，归「引用代码前需再确认」档。
 - 红线口径不变（owner 拍板）：严格 L1 只读、不绕验证码、不逆向签名、不改 UA/stealth、默认关、凭据不出本机。
+- **基线口径纠正（本单内修正）**：报告初稿把「我们的现状」标成 `feat/whale-isle-v2` @ `a1d9e5c`，实为 `a1d9e5c` 的父提交；已改为**主干 HEAD `a8bcc06`**（= PR #4 合并后）。§3 差距表每行现标注 **[主干 a8bcc06]** 还是 **[仅未合并分支 `feat-social-douyin-personalized` @ `2de7e86`]**，引用清单也按两组分别标行号。**关键事实**：主干 `a8bcc06` 的 `CAPTCHA_RE` **不含「验证码中间页」**（`social-douyin.ts:119-120`），且**没有 feed 选择**——这两层加强只在未合并分支上（`:210-211` / `:23-25,192`）。即「我们的识别层更强」是**合并 PR #5 之后**才成立，报告 §4.3 已把「先合 PR #5 再重验」写成前置条件（是否合并由 owner 拍板，本单不代拍）。
 
 ### Changed（verify:gate 失败必留档：哪道 gate 败 + 未截断原始输出）
 
