@@ -145,6 +145,7 @@ jobs:
         run: >
           pnpm exec vitest run --config vitest.e2e.config.mts
           apps/desktop-host/e2e/desktop.e2e.spec.ts
+          apps/desktop-host/e2e/boot-ipc.e2e.spec.ts
           apps/desktop-host/e2e/ui.e2e.spec.ts
           apps/desktop-host/e2e/pet-evolution.e2e.spec.ts
           apps/desktop-host/e2e/song-console.e2e.spec.ts

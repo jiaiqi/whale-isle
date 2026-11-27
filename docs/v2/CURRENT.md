@@ -40,9 +40,9 @@
 - **为什么不是 `DONE`**：本机**无合法 `.moc3` / `.vrm` 资产**（Live2D/VRM 画布目视无从谈起）、**无歌声合成（SVS）与音色转换（SVC）后端**（GPT-SoVITS 是 TTS 音色克隆，不能冒充唱歌）、情绪参考音频**真实五组全缺**（现有 `design_sweet_normal.wav` 已证实是合成 stub，不是真人声）、点歌台管线**已落地并接通宿主 IPC**（`v2:song-*` 五路，见 [P3-song-console-host-verification.md](./evidence/P3-song-console-host-verification.md)，但无 Demucs/RVC/曲库，分离·转换·首片播放未实测）。SVS/SVC 可部署候选与四层许可已核实（[O5-svs-svc-backend-research.md](./evidence/O5-svs-svc-backend-research.md)：SVS 首选 OpenVPI DiffSinger + OpenUtau，SVC 首选 RVC MIT 分支；官方 OpenCpop 检查点与 OpenVPI 声码器非商用、RMVPE 上游无 LICENSE，AGPL/GPL 分支禁入主线）。清单已报 owner，状态维持 `IMPLEMENTED_UNVERIFIED`。
 - **历史交接**（`V2-P3-03`，已转 `DONE`）：受控 Browser Use 与 Computer Use，真实 CGEvent 注入经 3c 自研 Swift helper 接线并真机验证（指针精确落位、合成事件不误伤租约），证据 [P3-browser-computer-use-verification.md](./evidence/P3-browser-computer-use-verification.md)。
 
-### 已知小缺陷（只记录，未修）
+### 已知小缺陷（`V2-P2-10` 已修，留档）
 
-- **`pet:sleep-status` 启动竞态**：客户端启动日志会出现 `Error occurred in handler for 'pet:sleep-status': No handler registered`。根因是 `apps/desktop-host/src/main/index.ts` 先 `createDirectorWindow()`（约 1408 行）再注册 `ipcMain.handle('pet:sleep-status')`（约 1475 行），中控台 renderer 挂载后立刻 `petSleepStatus()`（`App.tsx` 约 276 行），抢在注册之前。调用方 `.catch(() => undefined)` 吞掉了报错，所以只是日志噪音 + **首次开机时「睡眠」状态读不到（默认显示未睡）**，不影响其它功能。修法是把 pet:* 这组状态查询的注册挪到创建中控台窗之前（或让调用方在失败后重试）。**本次未改**。
+- **`pet:sleep-status` 启动竞态（已修）**：修复前客户端冷启动日志会出现 `Error occurred in handler for 'pet:sleep-status': No handler registered`。根因是 `apps/desktop-host/src/main/index.ts` 先 `createDirectorWindow()`（现约 1462 行）再注册 `ipcMain.handle('pet:sleep-status')`（修复前约 1519 行），而中控台 renderer 首挂即调用 `petSleepStatus()`（`App.tsx` 277 行），在 `await petWindowManager.open(...)` 让出事件循环的窗口里跑赢 boot。**实际影响比原记录小**：冷启动 `asleepAgents` 为空、`interaction.asleep` 初值 false，且代码里没有睡眠态持久化，`asleep:false` 本来就是正确答案，所以只有一条主进程 stderr 日志 + 丢失一次读取机会，不影响产品行为。修法是把这一条注册前移到 boot 顶部（与 `test:tray-popover` 同一位置/同一模式，`registerEarlyIpc()`，现约 354 行），**不加重试、不整组前移**（其余 `pet:*` handler 的闭包引用 boot 内后声明的 `prefs`/`characters`/`petControl` 等 `const`，整组前移会在早期调用时撞 TDZ）。验证：`boot-ipc.spec.ts` 5/5 + `boot-ipc.e2e.spec.ts`（真实 Electron 冷启动：直接调用成功、启动期 `console.error` 留档无该错误；把早期注册临时回退可稳定复现失败）。
 
 ## 3. 下一步行动（Next Agent 从这里接手）
 
