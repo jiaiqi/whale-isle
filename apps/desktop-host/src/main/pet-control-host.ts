@@ -14,6 +14,39 @@ import type { VoiceBindingStore } from './voice-bindings';
 import { readCrossPetCharacters } from './pet-packs';
 
 /**
+ * CrossPet 角色的夜间睡衣变体映射（基础角色 → `*-pajamas`）。
+ * 单一事实源：夜间换装（nightOutfit）与「同角色不并存」校验共用，避免两套正则漂移。
+ */
+export function pajamaVariantOf(characterId: string): string {
+  return characterId.replace(/^crosspet-(deepseek|claude|gemini|gpt)$/, 'crosspet-$1-pajamas');
+}
+
+/**
+ * 角色「家族」：基础角色与睡衣变体视为同一角色，绝不能同时在场。
+ * 双向归一：无论传入 `crosspet-claude` 还是 `crosspet-claude-pajamas`，
+ * 都得到同一个 {基础, 睡衣} 集合，避免「白天占基础、夜里开睡衣」绕过校验。
+ */
+export function characterFamilyOf(characterId: string): Set<string> {
+  const base = characterId.replace(/-pajamas$/, '');
+  return new Set([characterId, base, pajamaVariantOf(base)]);
+}
+
+/**
+ * 同角色不并存：返回除 `exceptAgentId` 外、已经占用该角色（含睡衣变体）的窗口。
+ * 所有「窗口取得/换成某角色」的入口都应收口到这一个判定。
+ */
+export function findCharacterHolder<T extends { agentId: string; characterId: string }>(
+  views: readonly T[],
+  characterId: string,
+  options: { exceptAgentId?: string } = {},
+): T | undefined {
+  const family = characterFamilyOf(characterId);
+  return views.find(
+    (view) => view.agentId !== options.exceptAgentId && family.has(view.characterId),
+  );
+}
+
+/**
  * 按角色找桌宠窗：夜间工作跟随会 summon `*-pajamas` 皮肤角色，
  * session.characterId 仍是基础角色，必须同时匹配睡衣变体（T-M6-54）。
  */
@@ -26,11 +59,21 @@ export function matchPetViewForCharacter<T extends { characterId: string }>(
     ?? views.find((view) => view.characterId === nightOutfit(characterId));
 }
 
+/** 统一校验结果：ok=false 时 error 可直接回给调用方/渲染层展示。 */
+export type CharacterAvailability =
+  | { ok: true }
+  | { ok: false; error: string; conflictAgentId?: string };
+
 export interface PetControlHost {
   /** 召唤（含夜间睡衣解析）；已存在则聚焦并返回原 agentId。 */
   summonPet(characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }>;
   /** 随机 summon 一只 egg-* 串门彩蛋（验收台/右键共用）。 */
   summonEgg(): Promise<{ ok: boolean; agentId?: string; characterId?: string; name?: string; error?: string }>;
+  /**
+   * 同角色不并存校验（所有「窗口取得/换成某角色」入口统一收口）。
+   * 角色不存在或已被别的窗口占用（含睡衣变体）时返回可读错误。
+   */
+  assertCharacterAvailable(characterId: string, options?: { exceptAgentId?: string }): CharacterAvailability;
   /** 对外本机驱动口（WebUI /api/pet 与插件 pet:control 共用） */
   petControlApi: {
     state(agentId: string): ReturnType<typeof PetApiStateSchema.parse> | null;
@@ -64,18 +107,37 @@ export function createPetControlHost(options: {
   const nightOutfit = (characterId: string, hour = new Date().getHours()): string => {
     if (hour >= 22 || hour < 7) {
       const pajamas = options.crossPetCharacters().find(
-        (character) => character.id === characterId.replace(/^crosspet-(deepseek|claude|gemini|gpt)$/, 'crosspet-$1-pajamas'),
+        (character) => character.id === pajamaVariantOf(characterId),
       );
       if (pajamas !== undefined) return pajamas.id;
     }
     return characterId;
   };
 
+  /** 角色是否在注册表里（未同步的 crosspet-* 绝不能开成一只「假桌宠」）。 */
+  const characterExists = (characterId: string): boolean =>
+    options.characters().list().some((character) => character.id === characterId);
+
+  const assertCharacterAvailable: PetControlHost['assertCharacterAvailable'] = (characterId, opts = {}) => {
+    const manager = options.manager();
+    if (manager === null) return { ok: false, error: '桌宠窗未就绪' };
+    if (!characterExists(characterId)) return { ok: false, error: `角色不存在：${characterId}` };
+    const holder = findCharacterHolder(manager.list(), characterId, { exceptAgentId: opts.exceptAgentId });
+    if (holder !== undefined) {
+      return { ok: false, error: `该角色已在场（${holder.agentId}），不能重复出现`, conflictAgentId: holder.agentId };
+    }
+    return { ok: true };
+  };
+
   const summonPet = async (characterId: string): Promise<{ ok: boolean; agentId?: string; error?: string }> => {
     const manager = options.manager();
     if (manager === null) return { ok: false, error: '桌宠窗未就绪' };
     const target = nightOutfit(characterId);
-    const existing = manager.list().find((view) => view.characterId === target);
+    // 角色必须真实存在：work-follow 的 multi 模式按 AI 来源映射 crosspet-*，
+    // 素材包未同步时这些 id 不在注册表，过去会开出一只「渲染成主宠的假桌宠」。
+    if (!characterExists(target)) return { ok: false, error: `角色不存在：${target}` };
+    // 同角色不并存（含睡衣变体）：已有一只在场就聚焦它，绝不新开第二只。
+    const existing = findCharacterHolder(manager.list(), target);
     if (existing !== undefined) {
       manager.sendAgent(existing.agentId, 'pet:summoned');
       return { ok: true, agentId: existing.agentId };
@@ -159,6 +221,7 @@ export function createPetControlHost(options: {
   const host: PetControlHost = {
     summonPet,
     summonEgg,
+    assertCharacterAvailable,
     petControlApi,
     closeAgent: (agentId) => options.manager()?.close(agentId) ?? false,
     nightOutfit,

@@ -85,6 +85,9 @@ export function createCharacterRegistry(options: {
   });
   ipcMain.handle('pet:character-manifest', (_e, id: string) => {
     const character = all().find((c) => c.id === id) ?? selected();
+    // 未知 id（如未同步的 crosspet-*、已删除的自定义角色）会回退到当前主宠渲染，
+    // 视觉上等于「第二只小鲸」。入口侧已禁止为未知角色开窗，这里补一条可诊断日志。
+    if (character.id !== id) console.warn(`[character-registry] 未知角色 ${id}，manifest 回退到 ${character.id}`);
     return registry.manifestOf(character);
   });
 

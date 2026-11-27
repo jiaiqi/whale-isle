@@ -26,9 +26,12 @@ function makeHost(customEggs: Array<{ id: string; displayName: string }> = []) {
     dismissAll: () => 0,
   };
   const characters = [
+    { id: 'blue-whale-maid', displayName: '小鲸（蓝鲸女仆）', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1 },
     { id: 'crosspet-claude', displayName: 'Claude', voiceId: 'Arrogant_Miss', voiceRatePercent: 100, voicePitchMul: 1.1 },
     { id: 'crosspet-deepseek', displayName: 'DeepSeek', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1.2 },
     { id: 'crosspet-deepseek-pajamas', displayName: 'DeepSeek 睡衣', voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1.2 },
+    // 自定义彩蛋/代理角色在真实注册表里同样来自 characters.list()，测试也照此建模。
+    ...customEggs.map((egg) => ({ id: egg.id, displayName: egg.displayName, voiceId: 'qiaopi_mengmei', voiceRatePercent: 100, voicePitchMul: 1.2 })),
   ];
   const voices: Array<{ text: string; characterId?: string; voiceId?: string }> = [];
   const asleep = new Set<string>();
@@ -44,7 +47,7 @@ function makeHost(customEggs: Array<{ id: string; displayName: string }> = []) {
     asleepAgents: asleep,
     openNotebook: () => undefined,
   });
-  return { host, sent, opened, closed, voices, asleep };
+  return { host, sent, opened, closed, voices, asleep, windows };
 }
 
 afterEach(() => { vi.useRealTimers(); });
@@ -98,6 +101,62 @@ describe('pet-control-host', () => {
   });
 });
 
+
+describe('同角色不并存（重影治理）', () => {
+  it('召唤不存在的角色直接拒绝，绝不开「假桌宠」', async () => {
+    const { host, opened } = makeHost();
+    const result = await host.summonPet('crosspet-claude-not-installed');
+    expect(result).toEqual({ ok: false, error: '角色不存在：crosspet-claude-not-installed' });
+    expect(opened).toHaveLength(0);
+  });
+
+  it('睡衣变体与基础角色视为同一角色：已有睡衣窗口时 summon 基础角色不再开新窗', async () => {
+    const { host, opened, windows } = makeHost();
+    windows.set('pet-pajamas', { agentId: 'pet-pajamas', characterId: 'crosspet-deepseek-pajamas', visible: true, bounds: { x: 0, y: 0, width: 400, height: 284 } });
+    const result = await host.summonPet('crosspet-deepseek');
+    expect(result).toEqual({ ok: true, agentId: 'pet-pajamas' });
+    expect(opened).toHaveLength(0);
+  });
+
+  it('反向同样命中：已有基础角色窗口时 summon 睡衣变体不再开新窗', async () => {
+    const { host, opened, windows } = makeHost();
+    windows.set('pet-base', { agentId: 'pet-base', characterId: 'crosspet-deepseek', visible: true, bounds: { x: 0, y: 0, width: 400, height: 284 } });
+    const result = await host.summonPet('crosspet-deepseek-pajamas');
+    expect(result).toEqual({ ok: true, agentId: 'pet-base' });
+    expect(opened).toHaveLength(0);
+  });
+
+  it('副宠想换成主宠占用的角色 → 统一校验返回可读错误（不静默开第二只）', () => {
+    const { host, windows } = makeHost();
+    windows.set('default', { agentId: 'default', characterId: 'blue-whale-maid', visible: true, bounds: { x: 0, y: 0, width: 400, height: 284 } });
+    const blocked = host.assertCharacterAvailable('blue-whale-maid', { exceptAgentId: 'pet-secondary' });
+    expect(blocked).toMatchObject({ ok: false, conflictAgentId: 'default' });
+    expect(blocked.ok === false ? blocked.error : '').toContain('该角色已在场（default）');
+    // 主宠自己刷新同一角色不算冲突
+    expect(host.assertCharacterAvailable('blue-whale-maid', { exceptAgentId: 'default' })).toEqual({ ok: true });
+  });
+
+  it('睡衣变体占用时同样命中统一校验', () => {
+    const { host, windows } = makeHost();
+    windows.set('pet-pajamas', { agentId: 'pet-pajamas', characterId: 'crosspet-deepseek-pajamas', visible: true, bounds: { x: 0, y: 0, width: 400, height: 284 } });
+    const blocked = host.assertCharacterAvailable('crosspet-deepseek', { exceptAgentId: 'pet-other' });
+    expect(blocked).toMatchObject({ ok: false, conflictAgentId: 'pet-pajamas' });
+  });
+
+  it('未知角色统一校验也拒绝（未同步 crosspet 素材包时不再伪装成主宠）', () => {
+    const { host } = makeHost();
+    expect(host.assertCharacterAvailable('crosspet-gpt')).toMatchObject({ ok: false, error: '角色不存在：crosspet-gpt' });
+  });
+
+  it('work-follow 代理角色（自定义 id）连续两次召唤只保留一只', async () => {
+    const { host, opened } = makeHost([{ id: 'custom-proxy-claude', displayName: '代理 Claude' }]);
+    const first = await host.summonPet('custom-proxy-claude');
+    expect(first.ok).toBe(true);
+    const second = await host.summonPet('custom-proxy-claude');
+    expect(second).toEqual({ ok: true, agentId: first.agentId });
+    expect(opened).toHaveLength(1);
+  });
+});
 
 describe('matchPetViewForCharacter（T-M6-54 夜间睡衣）', () => {
   it('基础角色在场直接命中；只开了睡衣变体时也能命中', () => {

@@ -166,6 +166,8 @@ export function createCoopHost(options: {
   voiceHost?: VoiceHost;
   petWindows?: PetWindowManager;
   characters?: CharacterRegistry;
+  /** 同角色不并存：开窗前校验目标角色是否已被其他窗口占用（含睡衣变体）。 */
+  assertCharacterAvailable?: (characterId: string, exceptAgentId: string) => { ok: true } | { ok: false; error: string };
   /** 同一 MCP 端点已被单机共玩页 Runner 占用时拒绝重复驾驶（默认端点 18080）。 */
   isEndpointBusyByMain?: (endpoint: string) => boolean;
   now?: () => number;
@@ -469,8 +471,14 @@ export function createCoopHost(options: {
     agent.starting = true;
     agent.error = null;
     try {
-      const adapter = createAdapter(agent.endpoint.gameId, { endpoint: agent.endpoint.endpoint, agentId: endpointRoutingId(agent.endpoint) });
       agent.character = characterOf(agent.endpoint);
+      // 同角色不并存：协作大厅的两个端点若指向同一角色，绝不能让它们在桌面上叠成两只。
+      const guard = options.assertCharacterAvailable?.(agent.character.id, agentId);
+      if (guard !== undefined && !guard.ok) {
+        agent.error = guard.error;
+        return { ok: false, error: guard.error };
+      }
+      const adapter = createAdapter(agent.endpoint.gameId, { endpoint: agent.endpoint.endpoint, agentId: endpointRoutingId(agent.endpoint) });
       let sessionId = '';
       const runner = createRunner(
         (event) => {

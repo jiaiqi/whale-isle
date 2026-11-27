@@ -104,6 +104,15 @@
 - 红线口径不变（owner 拍板）：严格 L1 只读、不绕验证码、不逆向签名、不改 UA/stealth、默认关、凭据不出本机。
 - **基线口径纠正（本单内修正）**：报告初稿把「我们的现状」标成 `feat/whale-isle-v2` @ `a1d9e5c`，实为 `a1d9e5c` 的父提交；已改为**主干 HEAD `a8bcc06`**（= PR #4 合并后）。§3 差距表每行现标注 **[主干 a8bcc06]** 还是 **[仅未合并分支 `feat-social-douyin-personalized` @ `2de7e86`]**，引用清单也按两组分别标行号。**关键事实**：主干 `a8bcc06` 的 `CAPTCHA_RE` **不含「验证码中间页」**（`social-douyin.ts:119-120`），且**没有 feed 选择**——这两层加强只在未合并分支上（`:210-211` / `:23-25,192`）。即「我们的识别层更强」是**合并 PR #5 之后**才成立，报告 §4.3 已把「先合 PR #5 再重验」写成前置条件（是否合并由 owner 拍板，本单不代拍）。
 
+### Fixed（副宠同角色重影治理 + 启动自动出现「第二只小鲸」根因）
+
+- **入口统一收口「同角色不并存」**：`pet-control-host.ts` 新增 `pajamaVariantOf()` / `characterFamilyOf()` / `findCharacterHolder()` / `assertCharacterAvailable()`；基础角色与 `*-pajamas` 睡衣变体双向归一为同一角色家族。收口入口：`pet:window-open`、`pet:window-prefs-set`（仅换角色时）、`pet:summon`/`summonPet`、work-follow `summon`/`switchCharacter`、串门彩蛋（`summonEgg` 与 `eggTheater.openEgg`）、协作大厅 `coop:start` 开窗。
+- **语义**：主宠切换仍走既有 twin 对调（用户期望一定成功）；副宠要占用别人已持有的角色时**返回可读错误 `该角色已在场（<agentId>）`**，不静默开第二只、也不隐式对调（避免协作大厅里把别的 AI 换角并级联）。
+- **启动即一主一副的根因**：不是恢复多宠布局——启动只 `open('default')` 一只。真实链路是 `work-follow.json {"mode":"multi"}` 在 owner 自己的 Claude Code/Codex 会话事件后自动 `summon('crosspet-*')`；而运行中的 `lancetfish` 工作区 `assets/pet-packs` 未同步 crosspet 素材，`crosspet-claude` 不在注册表；修复前 `summonPet` 不校验角色存在，`pet:character-manifest` 又把未知 id 回退成当前主宠（`?? selected()`），于是被渲染成「第二只小鲸（蓝鲸女仆）· 桌面伙伴」。
+- **修复**：`summonPet` 对不在注册表的角色直接拒绝（`角色不存在：…`），work-follow 召唤失败如实 `console.warn`；`pet:character-manifest` 未知 id 回退时补诊断日志。多 AI 同屏（multi）仍是设计行为，素材同步后显示各自 CrossPet 角色；不想要多只可切回 `single`。
+- **证据**：新增 [pet-dupe-guard-verification.md](./docs/v2/evidence/pet-dupe-guard-verification.md)（根因链路、入口矩阵、参考仓对照）。`pet-control-host.spec.ts` 13/13、相关 4 个 spec 46/46；`pnpm verify:gate` 8/8（首次因 worktree 内 Electron 正被并发解压，`pixel-avatar-v2.spec` 导入失败留档 `.verify-gate/`，解压完成后重跑 8/8）。
+- **需重启**：运行中的客户端（`lancetfish`，PID 88987）要重启才会加载本修复；已开着的重复窗口不做热迁移。
+
 ### Changed（verify:gate 失败必留档：哪道 gate 败 + 未截断原始输出）
 
 - `tools/scripts/verify-gate.mjs`：所有外部命令统一走 `run()` 录制原始 stdout/stderr；失败时写 `.verify-gate/failure-<stamp>.log`（含各 gate 结论与该次全部命令输出），终端打印失败 gate 名与日志路径；`.verify-gate/` 已 gitignore。
