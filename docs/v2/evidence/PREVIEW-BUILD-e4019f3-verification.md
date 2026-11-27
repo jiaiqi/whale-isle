@@ -4,7 +4,8 @@
 > 本文件只记录本轮实际执行过、可复跑的证据；未执行的项在 §7 如实列出，不用开发态或单测代替安装态结论。
 
 - **冻结发布 SHA**：`e4019f3eb6355461afb65249d3b129ec4e88e868`（开始前重新 `git fetch`，`origin/feat/whale-isle-v2` 仍指向该 SHA，未漂移）
-- **工作分支**：`preview-build-e4019f3`（工作区初始停在祖先提交 `f1ce271`，已 fast-forward 到冻结 SHA；未跟随任何新 HEAD）
+- **工作分支**：`preview-build-e4019f3`（工作区初始停在祖先提交 `f1ce271`，已 fast-forward 到冻结 SHA）
+- **分支合并说明**：开工后基分支又合入 `de43e3a`（PR #14，`V2-P4-01`），与本单文档产生 `CHANGELOG.md` 冲突；为让 PR 可合入，将 `de43e3a` 合入本分支并保留双方条目。**DMG 与全部安装态证据仍出自冻结 SHA `e4019f3`**，不含 `de43e3a` 的 `V2-P4-01` 代码；合并提交只解决文档冲突，不改变产物口径。
 - **构建主机**：macOS Darwin 27.2.0 / arm64 / Apple Swift 6.4.2 / Xcode 26.4.2 / Node 26.13.1 / pnpm 12.16.1
 - **构建时间**：2026-11-27 16:05–16:06 CST（`electron-builder` 打包窗口）
 - **版本**：`0.2.0-dev.2`（根 `package.json` 与 `apps/desktop-host/package.json` 同步；与 11-24 的 `0.2.0-dev.1` 明确区分）

@@ -15,6 +15,12 @@
 - **验证**：`pnpm verify:gate` **8 过 / 0 跳过 / 0 待接线**（license-scanner 352 文件 0 违规；`pnpm audit` 0 high / 0 critical）；全量单测 **191 文件 / 2127 用例**、分支 **90.19%**；新增 `native-helper-bundle.spec.ts` 与两个 helper spec 的 prebuilt / fail-closed 用例。
 - **明确未做**：商用素材清源（按 owner 口径推后）、真实音频播放、OS 输入端到端注入、真实星露谷/抖音/OBS、Windows x64 包、Developer ID 签名与公证；签名仍是 adhoc（未申请、未伪造）。
 
+### Added / Fixed（V2-P4-01 单角色 LLM 软件链路）
+
+- 新增 `single-pet-llm-chain.e2e.spec.ts`：本地 OpenAI Chat Completions stub 经真实模型网关与 LLM 规划器，验证租约收回时迟到动作不执行、交还后 BWF 三态事实回执及逐条记忆检索；6/6 Electron E2E（54.72s），加入 macOS CI。证据仅为 `[E2E-HOST]` + `[SIMULATION]`，不代表真实推理或真实游戏验收。
+- `BrainRuntimeConfig` 新增显式 `allowRuleStandin` 与有界 `plannerTimeoutMs`（100–120000ms，宿主默认 30s）；主进程在规划 HTTP 上实际传入超时信号，服务不可用/超时/非法工具/缺 Key 可进入标明「规则代驾」的确定性动作，旧配置默认安全暂停。重建大脑时保留自定义供应商与故障策略，跨语言生成产物同步。
+- 能力域对照复用既有 Magpie 思想网关与 BWF 执行链，重写本地协议 stub 和故障剧本，拒绝 Mod 内直连及无许可证源码；完整逐项结论与真机待验项见 `docs/v2/evidence/P4-01-llm-chain-verification.md`，总工单保持 `NEXT`。
+
 ### Changed / Fixed（抖音 CDP 四项补强，item 20 / P0-1，源自 31 仓审计）
 
 - **防后台节流**：`buildLaunchArgs` 追加 `--disable-backgrounding-occluded-windows`、`--disable-renderer-backgrounding`、`--disable-background-timer-throttling`，避免专用 Chrome 窗口被遮挡/后台化后停止绘制与计时器节流导致 feed 不 hydrate；**未**新增 `--disable-blink-features=AutomationControlled`、UA 覆盖或任何 stealth 参数（参考 `dsh-douyin-bridge/lib/browser.mjs:11-35`）。

@@ -6894,6 +6894,14 @@
             ],
             "additionalProperties": false
           }
+        },
+        "allowRuleStandin": {
+          "type": "boolean"
+        },
+        "plannerTimeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 120000
         }
       },
       "required": [
