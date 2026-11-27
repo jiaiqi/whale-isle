@@ -30,7 +30,7 @@
 - **生活页**：「真实冒烟（读 3 条）」「打开登录窗（扫码）」、证据时间/条数/耗时/失败原因与上一次 tick 结果；开关默认关，未实测/未登录继续 `platform_unverified` 拦截。
 - **真实读数（2026-11-27）**：冒烟候选 **5** → 读到 **3**、读取失败 **0**、耗时 **26.3s**（`09:10:55 CST`）；真实会话 `bs-65e7a249` **3 条 / `completed` / 27.6s**；公开精选页 **`loggedIn=false` 即可读，本次无需 owner 扫码**。
 - **测试与门禁**：`social-douyin.spec.ts` **18 例**（解析/话题/登录墙/验证码即停/限速/未实测零调用/配额/打断/证据 TTL），与执行器合计 **30/30**；`pnpm verify:gate` **8 过 / 0 跳过**。
-- **未验**：个性化推荐/关注流（需 owner 扫码）、真实验证码页面样本、真实模型内容理解、多日自动 tick 浸泡。证据 [P3-04H-douyin-l1-verification.md](./docs/v2/evidence/P3-04H-douyin-l1-verification.md)。
+- **未验**：个性化推荐/关注流（未接，需先扩展 feed 并让 owner 扫码；当前扫码只保存登录态、不改变 feed）、真实验证码页面样本、真实模型内容理解、多日自动 tick 浸泡。证据 [P3-04H-douyin-l1-verification.md](./docs/v2/evidence/P3-04H-douyin-l1-verification.md)。
 
 ### Added / Changed（音色工坊 M1+M2 + 表演 B 级接线收档，owner 拍板「m2+m1」）
 

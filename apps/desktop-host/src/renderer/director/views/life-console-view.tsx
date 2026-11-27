@@ -1336,7 +1336,7 @@ export function LifeConsoleView({
                 {socialSnap.douyin.loginWindowOpen ? '登录窗已开' : '登录窗未开'}
               </div>
               <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                公开精选页匿名可读，不需要登录；推荐/关注等个性化流才需要扫码。只读硬边界：不点赞、不关注、不评论、不发私信，
+                公开精选页匿名可读，不需要登录；当前版本即使扫码登录也只读精选公开页，推荐/关注等个性化流尚未接入。只读硬边界：不点赞、不关注、不评论、不发私信，
                 触发验证码/风控立即停下，不绕过。
               </div>
               <div className="mono text-[10px]" data-v2-social-douyin-evidence style={{ color: 'var(--text-3)' }}>
