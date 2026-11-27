@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Changed（owner 2026-11-27 拍板：放弃自托管语音，唱歌链路不受影响）
+
+- **说话语音**定为「开发期 MiMo 主线（限免、无商用条款）+ 长期商业授权 TTS」；「自托管优先 / 本机可跑通」不再作为目标（依据替代引擎速评 `b9d2632`，本机全部不过）。
+- 同步口径：ROADMAP（语音主线段 + 十二轮决策）、CURRENT、VERIFY（历史 `offline_preferred` 记录只证明可选实验档，不得当作产品承诺）、REQUIREMENTS `REQ-VOX-01`、VOICE-PERSONA、THIRD_PARTY_NOTICES（引擎仅评估、未随包）。
+- **唱歌链路保持原路线**：SVC/SVS 按 item 5 / ADR-005 执行，`V2-P3-07` 的素材与 `.pth` 阻塞条件不变。
+
 ### Added（唱歌链路 `V2-P3-07A` 契约先行：VoiceIdentity / SingingProfile / 素材与就绪判定）
 
 - **契约**：`packages/shared-protocol/src/singing.ts` 新增 `VoiceIdentity`（来源、授权范围、授权声明编号、儿童/监护人、权重许可、`.pth`/声库路径）、`SingingProfile`（`svc | svs | svs_svc` 路线 + 音域 + 风格 + 情绪参考 id）、`SingingMaterialManifest`（逐文件事实与问题码）、`SingingReadiness`（ready / commercialReady / blockers / warnings / 缺组）；已登记 `registry.ts` 并重生成 JSON Schema 与 Pydantic。

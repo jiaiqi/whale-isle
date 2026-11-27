@@ -56,6 +56,7 @@
 | `fruitstarzero/Don-t-Starve-Together-AI-Companion`（+ `qinming99/dst-admin`、`mathielo/dst-dedicated-server`） | ✅ **MIT**（LICENSE 原文核实） | **仅思想吸收，未复制源码**：QueryServer localhost tick、服务器侧权威 vanilla 动作、专用服 stdin 运维兜底 | `mods/dst-bridge/`、`services/dst-bridge-sidecar/`、`packages/game-bridge-mcp/src/dst-adapter.ts`、`docs/REFERENCE-dst-ai-companion.md` | 原创 Lua/Node/TS 实现；cluster_token 须人类配置不可绕过 | ✅ 已登记（思想参考） |
 | `Pryaxis/TShock`、`Pryaxis/TSAPI`、`JavidPack/HEROsMod`、`newcovid/TerraNoneBridge`、`carrot-hu23/dst-admin-go` | ⛔ **GPL-3.0**（传染性） | — | — | **⛔ 禁止复制任何源码/整体引入**（M7 调研核实）；仅机制思想可参考 | ⛔ 禁止引入 |
 | `Im-Chuyu/Journey-Together`、`Insight`、`Combined-Status`、`ActionQueue`、`DontStarveAI`、`xNarnia/TCR` | ⛔ **无 LICENSE / RecEx 受限**（核实） | — | — | 仅参考架构设计（如 Journey-Together 38 动作权限校验），**一行代码不能抄** | ⛔ 禁止引入 |
+| **TTS / 歌声引擎评估清单**（Kokoro-82M-v1.1-zh、MeloTTS-zh、Chatterbox Multilingual、CosyVoice2、Spark-TTS、F5-TTS、IndexTTS2、Fish Speech、Piper zh_CN、RVC、DiffSinger、OpenUtau） | 逐项许可与实时结论见 [tts-alternative-engine-eval.md](./v2/evidence/tts-alternative-engine-eval.md) 与 [V2-P3-07-svc-svs-selection.md](./v2/evidence/V2-P3-07-svc-svs-selection.md) | **未引入任何代码或权重**（仅本机评估目录 `artifacts/`，不入库、不进包） | — | 说话自托管已由 owner 2026-11-27 放弃（速评本机全部不过）；RVC 代码 MIT 但官方底模「仅供研究使用」、OpenCpop/OpenVPI 声码器非商用 → 唱歌商用须自训 | ✅ 仅评估，未随包 |
 
 ## 3. 素材资产台账
 
