@@ -443,6 +443,7 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2SingingMaterialsDir: (): Promise<unknown> => ipcRenderer.invoke('v2:singing-materials-dir'),
   v2SingingMaterialsState: (): Promise<unknown> => ipcRenderer.invoke('v2:singing-materials-state'),
   v2SingingMaterialsScan: (): Promise<unknown> => ipcRenderer.invoke('v2:singing-materials-scan'),
+  v2SingingMaterialsOpenDir: (): Promise<unknown> => ipcRenderer.invoke('v2:singing-materials-open-dir'),
   v2LiveSnapshot: (): Promise<unknown> => ipcRenderer.invoke('v2:live-snapshot'),
   v2LiveSessionStart: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:live-session-start', input),
   v2LiveSessionEnd: (reason?: string): Promise<unknown> => ipcRenderer.invoke('v2:live-session-end', reason),

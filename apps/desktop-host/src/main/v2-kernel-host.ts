@@ -6,10 +6,10 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, ipcMain, powerMonitor, systemPreferences } from 'electron';
+import { app, ipcMain, powerMonitor, shell, systemPreferences } from 'electron';
 import { z } from 'zod';
 import {
   AccountVault,
@@ -1873,6 +1873,17 @@ export async function createV2KernelHost(options: {
   // ---- V2-P3-07A 演唱素材（扫描真实 WAV → 事实 + 校验 + ready/commercialReady） ----
   ipcMain.handle('v2:singing-materials-dir', () => singingMaterialsHost.directory());
   ipcMain.handle('v2:singing-materials-state', () => singingMaterialsHost.last());
+  ipcMain.handle('v2:singing-materials-open-dir', async () => {
+    const dir = singingMaterialsHost.directory();
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch (err) {
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
+    }
+    // shell.openPath 返回空串表示成功；失败返回系统错误文案，不吞
+    const error = await shell.openPath(dir);
+    return error === '' ? { ok: true as const } : { ok: false as const, error };
+  });
   ipcMain.handle('v2:singing-materials-scan', async () => {
     try {
       return { ok: true as const, result: await singingMaterialsHost.scan() };

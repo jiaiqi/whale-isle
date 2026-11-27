@@ -1151,6 +1151,8 @@ export interface DirectorBridge {
   v2SingingMaterialsScan(): Promise<
     { ok: true; result: SingingMaterialScanResult } | { ok: false; error: string }
   >;
+  /** 在系统文件管理器里打开素材目录（目录不存在会先创建） */
+  v2SingingMaterialsOpenDir(): Promise<{ ok: true } | { ok: false; error: string }>;
   v2PerfSnapshot(): Promise<{
     performance: PerformanceSnapshot;
     stage: StageRuntimeSnapshot;

@@ -79,6 +79,15 @@ export function SingingMaterialsPanel(): React.JSX.Element {
     }
   };
 
+  const openDirectory = (): void => {
+    void window.directorBridge.v2SingingMaterialsOpenDir().then(
+      (response) => {
+        if (!response.ok) toast.error(`打开素材目录失败：${response.error}`);
+      },
+      (err: unknown) => toast.error(`打开素材目录失败：${err instanceof Error ? err.message : String(err)}`),
+    );
+  };
+
   const copyDirectory = (): void => {
     if (directory === '') return;
     void navigator.clipboard.writeText(directory).then(
@@ -106,6 +115,9 @@ export function SingingMaterialsPanel(): React.JSX.Element {
           )}
         </h2>
         <div className="flex items-center gap-2">
+          <button type="button" className="wb-foot-btn" data-singing-open-dir onClick={openDirectory}>
+            <FolderOpen size={12} /> 打开文件夹
+          </button>
           <button type="button" className="wb-foot-btn" onClick={copyDirectory} disabled={directory === ''}>
             <Copy size={12} /> 复制目录
           </button>

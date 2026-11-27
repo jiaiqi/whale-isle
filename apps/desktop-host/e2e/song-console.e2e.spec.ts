@@ -114,6 +114,29 @@ describe('[E2E-HOST] V2-P3-01 中控台点歌台面板', () => {
       );
       expect(snapshot.status?.state).toBe('unavailable');
 
+      // ⑥ 演唱素材面板：目录/六组/打开入口/重新扫描，全部来自宿主真实扫描
+      await director.waitForSelector('[data-singing-materials]', { timeout: 10_000 });
+      const singingDir = await director.locator('[data-singing-dir]').innerText();
+      expect(singingDir).toContain(join('singing', 'materials'));
+      // 「打开文件夹」只断言入口存在，**不点击**（点击会打开 Finder，干扰正在用机的 owner）
+      expect(await director.locator('[data-singing-open-dir]').count()).toBe(1);
+
+      await director.click('[data-singing-scan]');
+      await director.waitForSelector('[data-singing-verdict]', { timeout: 20_000 });
+      const emotionChips = await director.locator('[data-singing-emotions] .pill').count();
+      expect(emotionChips).toBe(6);
+      // 没有 consent.json 与可追溯 .pth → 必须如实阻断，不允许显示可唱
+      await director.waitForFunction(
+        () => (document.querySelector('[data-singing-ready]')?.textContent ?? '').trim() === '否',
+        undefined,
+        { timeout: 20_000 },
+      );
+      const blockersText = await director.locator('[data-singing-blockers]').innerText();
+      expect(blockersText).toContain('授权声明');
+      expect(blockersText).toContain('引擎未安装');
+      const commercial = (await director.locator('[data-singing-commercial-ready]').innerText()).trim();
+      expect(commercial).toBe('否');
+
       expect(pageErrors).toEqual([]);
     } finally {
       await app.close();

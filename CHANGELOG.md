@@ -22,7 +22,8 @@
 - **IPC + 面板**：`v2:singing-materials-dir/state/scan` 三路；中控台点歌台页签新增「演唱素材」面板——目录可复制、六组覆盖（缺组标红）、逐文件问题表、`ready`/`commercialReady` 两行结论。
 - **口径变更（owner 2026-11-27）**：情绪参考音按**六组**验收，`clumsy_panic` 与 `happy_rice` 并存；`SINGING_REQUIRED_EMOTION_KEYS`、扫描器与单测已改。
 - **录音清单**：新增 [SINGING-RECORDING-CHECKLIST.md](./docs/v2/SINGING-RECORDING-CHECKLIST.md)（六组固定台词、3–5 遍挑 2 条、24kHz/mono/16-bit、−3dBFS、目录命名、consent.json 与授权模板、SVC 训练干声规格）。
-- **测试**：扫描器 10/10、契约与判定 39/39；`pnpm verify:gate` 8/8。
+- **打开文件夹**：`v2:singing-materials-open-dir`（目录不存在先创建，`shell.openPath` 失败文案原样返回）；E2E 只断言入口存在、不点击，避免在 owner 用机时弹出 Finder。
+- **测试**：扫描器 10/10、契约与判定 39/39、`[E2E-HOST]` 点歌台 1/1（六组 chip + 扫描后 ready=否 + blockers 含授权与引擎未安装）；`pnpm verify:gate` 8/8。
 - **未做**：`Embodiment` 多形态模型（故 07A 不标 `DONE`）；阶段二真唱最小闭环仍 `BLOCKED` 于 owner 授权素材与可追溯 `.pth`。
 
 ### Added（唱歌链路阶段一：SVC/SVS 选型结论 + 素材清单，`[DOC-ONLY]`，不接入）
