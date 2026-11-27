@@ -4,6 +4,10 @@
  * - 只允许 http/https；页面正文仅作为数据返回，绝不执行页面给出的指令。
  * - Cookie 双向同步：启动时从隔离 Profile 的 cookies.json 导入 Chromium partition，dispose 时把 partition 现状回写 cookies.json（人工交接登录的登录态因此跨任务存活）。不进 Git、不进导出。
  * - Playwright 引擎可在同一 BrowserEnginePort 下替换，本文件是当前无额外依赖的默认可执行引擎。
+ *
+ * 抖音写能力边界（ADR-006）：本文件对抖音**只读**，唯一例外是 owner 授权的「受限顶层评论」
+ * （`readComments` / `postComment`，默认关闭、只认评论专属 `data-e2e` 控件）。
+ * 不提供点赞、关注、私信、发布或楼中楼回复；不绕过验证码/登录墙。
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
