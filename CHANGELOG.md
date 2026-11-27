@@ -5,6 +5,17 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Validated（表演重做强度阶梯 A/B/C `[REAL-DEVICE]`，18 条；判据先注册后跑）
+
+- owner 反馈「音色对，表演要重做，三档都要重做，主要是情绪太弱」→ 同一句 × 三档（调皮/傲娇/撒娇）× 三级（A 提级对照 / B 明显夸张 / C 副语言）× 每格 2 条，18/18 成功；**随包资产、默认声线、`VOICE-PERSONA`、UI 一律未动**。
+- **预注册判据**（§2.18.1）：P1 `Δ(F0) ≥ 2σ`；P2 `Δ(时长) ≥ 2σ` 且 `Δ(RMS) ≥ 2σ`；任一级成立即算「客观量拉开」，跑完不改线。
+- **结果**：A 不成立（Δ RMS 0.56 vs 2σ 3.37）；**B 成立**（Δ 时长 1.36 vs 0.83、Δ RMS 4.45 vs 2.74，P2 过）；C 不成立（Δ 时长 1.20 vs 1.83、Δ RMS 2.73 vs 6.65、Δ F0 50.96 vs 59.48，方差暴涨）。
+- **基频三档始终没分开**：B 级三档 F0 完全重合（348.1 / 347.8 / 347.8Hz）——能分开的是响度、语速和副语言，不是音高。
+- **与上一版并排**：Δ RMS 1.06 → **4.45dB**（夸张指令 + 标点贡献最大），Δ 时长 1.01 → 1.36s，Δ F0 12.8 → 51.0Hz（内联标签贡献最大，但档内 σ 同步涨到 30–42Hz）。
+- **标签生效是间接判断**：C 级比同档 B 长 2.3–2.9s，远超「念出英文词」的量级，但不是听感结论；`manifest.json` 逐条标了 `unverifiedTags`（`giggles` / `laughs` / `hmph` / `inhales` 未验证）。
+- 每档推荐：调皮 `tiaopi-B-1`（备选 `C-1`）、傲娇 `aojiao-B-2`（备选 `C-1`）、撒娇 `chajiao-B-1`（备选 `C-2`）；最终由 owner 听。
+- 新增 `tools/scripts/voice-performance-ladder.mts` 与 `tools/scripts/performance-ladder-summary.py`。
+
 ### Added / Fixed（`V2-P3-07A`–`07E`：星露谷从 0 自动建档、联机房主、默认存储隔离与中文双保险）
 
 - **契约先行（`V2-P3-07A`，`358f5a8`）**：新增 `packages/shared-protocol/src/stardew-launch.ts`（`StardewLaunchOptions`/`LaunchStatus`/`LanHostStatus`/`LaunchPrefs`/`NewSaveConfig`、locale → 星露谷语言码映射与跨语言 schema 同步）及 `StardewAvatarSyncSchema.syncDisplayName`。
