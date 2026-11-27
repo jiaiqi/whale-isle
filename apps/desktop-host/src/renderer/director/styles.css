@@ -42,6 +42,8 @@
 @source "./pets-panel.tsx";
 @source "./voice-panel.tsx";
 @source "./voice-studio-panel.tsx";
+@source "./voice-center-panel.tsx";
+@source "./voice";
 @source "./mods-panel.tsx";
 @source "./memory-panel.tsx";
 @source "./obs-panel.tsx";

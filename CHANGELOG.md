@@ -5,6 +5,16 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（声音工坊 2.0：接管未托管分支 `feat/voice-studio-redesign` 并 rebase 到主干）
+
+- **来源与边界**：本批代码来自本机**未推送**分支 `feat/voice-studio-redesign`（2 提交 / 30 文件 / +8041 −849），**原作者不在本单、代码未经 review**；本单只做接手机动——rebase 到 `origin/feat/whale-isle-v2` @ `ecc82a1`、跑门禁、核红线、补合规与文档。rebase 无文本冲突（两侧改的是同一批文件的不同区块），两侧改动均保留（`v2-kernel-host.ts` / `preload` / `bridge` / `shared-protocol/index.ts` 同时含唱歌素材与声音工坊两套 IPC）。
+- **两块工作**：① **工坊 2.0 UI/UX**（Tidepaper v3.1：五页签「声线库 / 音色设计 / 音色克隆 / 表演与精调 / 引擎与凭据」、统一吸底试听条、真实 PCM 波形裁剪与确定性声学质检、CAM++ 一致性体检）；② **生产发声闭环**（`VoiceHost` 改走 V2 `VoiceProviderRouter`，合成在全局播放租约外异步准备、拿到真实 WAV + `lipFrames` 后才占锁；试听 `purpose: 'preview'` 不抢正式麦、不发桌宠气泡；默认 `voiceCloudFallbackPolicy = 'subtitle_only'`，失败保留字幕报错，不静默换声）。
+- **R1（自托管语音不得回到默认路径）**：保留主干 `6fbddb3` 的 owner 决定——说话默认档仍是 MiMo 商业 API；`offline_preferred` 只在用户显式切换时生效，UI 原样引用 `OFFLINE_TIER_COST_TEXT`，未把本地 Worker 改回默认，也未改 `VoiceEngineTierSchema.default('commercial_default')`。
+- **R3（儿童声音）补闸**：`VoiceCloneConsentSchema` 新增 `minorVoice` / `guardianConsent`（默认 `false`，旧数据与旧调用向后兼容）；未成年人声源缺监护人书面授权时，**契约层 refine + 主进程 `createClonedVersion` 双重拒绝**；克隆台新增「声源是未成年人」勾选与监护人签署勾选，未签署时提交按钮保持禁用。
+- **R2 / R4（素材与许可）**：本批**未新增任何音频、字体、模型或 `.pth`**（diff 无二进制资产），无新增依赖；新增 CSS 仅使用系统字体与内联 data-URI SVG；许可扫描 0 违规。RVC 只保留路径参数与「来源可追溯」提示，不随包权重，也未引入任何歌手/他人录音。
+- **E2E 与 CI**：新增 `voice-studio.e2e.spec.ts`（`[E2E-HOST]`，零云端计费）并接进 CI macOS job；`studio.e2e.spec.ts` 补 2.0 断言，同时把 `[data-preview-canvas]` 断言移进 `catalog.actions.length > 0` 分支——该断言在干净 checkout（无 `assets/pet-packs`）下本就必挂，已在基线 `ecc82a1` 复现，非本分支引入；该文件依赖本地 2GB 随包素材，故仍不接 CI。
+- **验证**：`pnpm verify:gate` **8/8**；单测 **2081 passed / 1 skipped**（189 文件，分支覆盖率 90.19%）；`[E2E-HOST]` `studio` + `voice-studio` **2/2**（详见 `docs/VERIFY.md`）。
+
 ### Added（外部 dsh 系抖音生态仓库调研，`[DOC-ONLY]`，不改产品代码）
 
 - 新增 [P3-04J-dsh-ecosystem-review.md](./docs/v2/evidence/P3-04J-dsh-ecosystem-review.md)：对 7 个外部仓库（`LockyBee/dsh-douyin-agent` 及其 2 个 fork、`regrevia/Envoy` 的 DSH 集成、`Britneycode/dsh-fish-soul`、`dbbdbdhdbxb-design/dsh-douyin-studio`、`kdcadmin/dsh_douyin_tools`）的只读调研与借鉴评估。克隆在仓库外 `/tmp/dsh-research/`，未执行其安装脚本，未发起任何抖音真实请求。

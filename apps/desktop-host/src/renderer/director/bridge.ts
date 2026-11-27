@@ -109,6 +109,8 @@ import type {
   SocialPlatformCapabilityEntry,
   SocialPlatformId,
   StardewScreenBinding,
+  VoiceAudioQuality,
+  VoiceCloneConsent,
   VoiceConsistencyResult,
   VoicePerformanceIntensity,
   VoiceTimbreVersion,
@@ -872,6 +874,7 @@ export interface DirectorBridge {
     audioBase64?: string;
     durationMs: number;
     lipFrames: LipSyncFrame[];
+    cached?: boolean;
   }>;
   v2VoiceDesignPreview(input: {
     text: string;
@@ -910,16 +913,64 @@ export interface DirectorBridge {
     description: string;
     source: string;
   }>;
-  /** 音色工坊（M1 + M2）：声线版本时间线、体检、候选生成、多句试戴、定格与回退 */
+  /** 音色工坊 2.0：声线版本时间线、多角色绑定、收藏归档、撤销授权、体检、候选生成取消、克隆入库、多句试戴与音频读取 */
   v2VoiceWorkshopState(): Promise<VoiceWorkshopState>;
-  v2VoiceWorkshopGenerate(input: { description: string; dial?: VoiceWorkshopDial; count: number }): Promise<VoiceWorkshopCandidate[]>;
-  v2VoiceWorkshopAudition(input: { candidateId: string; intensity: VoicePerformanceIntensity }): Promise<Array<{
+  v2VoiceWorkshopGenerate(input: { description: string; dial?: VoiceWorkshopDial; count: number; previewText?: string; jobId?: string }): Promise<VoiceWorkshopCandidate[]>;
+  v2VoiceWorkshopCancelJob(jobId: string): Promise<{ cancelled: boolean }>;
+  v2VoiceWorkshopAudition(input: { candidateId: string; intensity: VoicePerformanceIntensity; customText?: string }): Promise<Array<{
     key: string; label: string; emotion: string | null; intensity: VoicePerformanceIntensity;
     text: string; audioBase64: string; providerKind: string; durationMs: number | null;
   }>>;
-  v2VoiceWorkshopFreeze(input: { candidateId: string; label?: string }): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopVersionAudition(input: { versionId: string; intensity: VoicePerformanceIntensity; customText?: string }): Promise<Array<{
+    key: string; label: string; emotion: string | null; intensity: VoicePerformanceIntensity;
+    text: string; audioBase64: string; providerKind: string; durationMs: number | null;
+  }>>;
+  v2VoiceWorkshopFreeze(input: { candidateId: string; label?: string; intensity?: VoicePerformanceIntensity; tags?: string[] }): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopCloneCreate(input: {
+    wavBase64?: string;
+    rawWavBase64?: string;
+    filePath?: string;
+    sourceCandidateId?: string;
+    sourceVersionId?: string;
+    label: string;
+    description?: string;
+    consent: VoiceCloneConsent;
+    activate?: boolean;
+    characterId?: string;
+    tags?: string[];
+  }): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopBind(input: { characterId: string; versionId: string }): Promise<{ characterId: string; version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopUnbind(input: { characterId: string }): Promise<{ characterId: string; unbound: boolean; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopFavorite(input: { versionId: string; favorite: boolean }): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopArchive(input: { versionId: string; archived: boolean }): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopRevokeConsent(input: { versionId: string; reason?: string }): Promise<{ version: VoiceTimbreVersion; unboundCharacters: string[]; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopRename(input: { versionId: string; label: string }): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopDelete(input: { versionId: string }): Promise<{ deletedId: string; currentVersion: VoiceTimbreVersion; state: VoiceWorkshopState }>;
+  v2VoiceWorkshopReadAudio(input: { kind: 'version' | 'candidate' | 'version-raw'; id: string }): Promise<{
+    audioBase64: string;
+    bytes: number;
+    durationMs: number | null;
+    quality: VoiceAudioQuality | null;
+    sha256: string;
+  }>;
   v2VoiceWorkshopRollback(versionId: string): Promise<{ version: VoiceTimbreVersion; state: VoiceWorkshopState }>;
   v2VoiceWorkshopConsistency(versionId?: string): Promise<{ result: VoiceConsistencyResult; state: VoiceWorkshopState }>;
+  v2VoiceCacheStats(): Promise<{ entries: number; maxEntries: number; estimatedBytes: number; maxBytes: number }>;
+  v2VoiceCacheClear(): Promise<{ cleared: number; stats: { entries: number; maxEntries: number; estimatedBytes: number; maxBytes: number } }>;
+  v2VoiceRouterTest(input?: { preferredProvider?: VoiceProviderKind; text?: string }): Promise<{
+    ok: boolean;
+    providerKind: string;
+    latencyMs: number;
+    durationMs?: number;
+    cached?: boolean;
+    audioBase64?: string;
+    error?: string;
+  }>;
+  v2VoicePersonaExtract(characterName?: string): Promise<{
+    characterName: string;
+    sourceSummary: string;
+    suggestedDescription: string;
+  }>;
   v2ProviderQuota(input: {
     providerId: string;
     planType?: 'PAY_AS_YOU_GO' | 'CODING_PLAN' | 'LOCAL_GPU';

@@ -15,7 +15,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { CoopSpeakerEvent } from '@workbench/shared-protocol';
+import { randomUUID } from 'node:crypto';
+import type { CoopSpeakerEvent, LipSyncFrame } from '@workbench/shared-protocol';
 import { GlobalAudioLeaseManager } from './audio-lease';
 
 export interface VoiceScene {
@@ -93,6 +94,10 @@ const SCENE_MODE: Record<string, string> = { normal: 'daily', inner: 'sleepy', p
 export interface VoiceHost {
   /** 入队播报（场景音速自动调整）；queued=true 表示已排队，不是已播放 */
   speak(voice: VoiceScene): { ok: boolean; error?: string; queued?: boolean; leaseId?: string };
+  /** 试听专用租约：不抢正式发言麦、不广播桌宠气泡，新试听顶掉旧试听 */
+  acquirePreview(play: () => PlaybackControl): { ok: boolean; queued: boolean; leaseId: string };
+  /** 仅停止试听（不影响正在进行的正式发言） */
+  stopPreview(): void;
   readonly config: VoiceConfig;
   setConfig(patch: Partial<VoiceConfig>): VoiceConfig;
   /** 当前全局抢麦状态（多桌宠动作/UI 高亮共用） */
@@ -293,29 +298,65 @@ export interface VoiceHostIpcOptions {
 }
 
 /**
- * 把合成结果落临时文件后用 afplay 播放（试听专用，不改全局配置）。
+ * 把合成结果落临时文件后用 afplay 播放，并返回可中断句柄（支持 P0 抢占与试听切换即时停止）。
  * Windows/Linux 播放链尚未适配，如实报错，不假装放过。
  */
-async function playBase64Audio(base64: string, format: string): Promise<void> {
+export function playBase64AudioWithControl(
+  base64: string,
+  format: string,
+  volume = 1,
+): PlaybackControl {
   if (process.platform !== 'darwin') {
-    throw new Error(`试听播放尚未适配 ${process.platform}（当前仅 macOS afplay）`);
+    return {
+      done: Promise.reject(new Error(`语音播放尚未适配 ${process.platform}（当前仅 macOS afplay）`)),
+      abort() { /* noop */ },
+    };
   }
   const ext = format === 'mp3' ? 'mp3' : format === 'ogg' ? 'ogg' : 'wav';
   const dir = mkdtempSync(join(tmpdir(), 'whale-audition-'));
   const file = join(dir, `preview.${ext}`);
   writeFileSync(file, Buffer.from(base64, 'base64'));
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const player = spawn('afplay', [file], { stdio: 'ignore' });
-      player.on('exit', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`afplay 退出码 ${String(code)}`));
-      });
-      player.on('error', (err) => reject(err));
+  let player: ChildProcess | null = null;
+  let cleaned = false;
+  const cleanup = (): void => {
+    if (cleaned) return;
+    cleaned = true;
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* 忽略 */ }
+  };
+  const safeVol = Math.min(1, Math.max(0.05, Number.isFinite(volume) ? volume : 1));
+  const done = new Promise<void>((resolve, reject) => {
+    player = spawn('afplay', ['-v', String(safeVol), file], { stdio: 'ignore' });
+    player.on('exit', (code, signal) => {
+      cleanup();
+      if (code === 0 || signal === 'SIGKILL' || signal === 'SIGTERM') resolve();
+      else reject(new Error(`afplay 退出码 ${String(code)}`));
     });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
+    player.on('error', (err) => {
+      cleanup();
+      reject(err);
+    });
+  });
+  return {
+    done,
+    abort() {
+      try { player?.kill('SIGKILL'); } catch { /* 已退出 */ }
+      cleanup();
+    },
+  };
+}
+
+async function playBase64Audio(base64: string, format: string, host?: VoiceHost): Promise<void> {
+  if (host === undefined) {
+    await playBase64AudioWithControl(base64, format).done;
+    return;
   }
+  await new Promise<void>((resolve, reject) => {
+    host.acquirePreview(() => {
+      const ctrl = playBase64AudioWithControl(base64, format, host.config.volume);
+      void ctrl.done.then(resolve, reject);
+      return ctrl;
+    });
+  });
 }
 
 export function registerVoiceHostIpc(host: VoiceHost, options: VoiceHostIpcOptions = {}): void {
@@ -340,7 +381,7 @@ export function registerVoiceHostIpc(host: VoiceHost, options: VoiceHostIpcOptio
             error: `${out.providerKind} 只返回口型帧、没有可播放音频；试听需要可用的商业 TTS 凭据`,
           };
         }
-        await playBase64Audio(out.audioBase64, out.format);
+        await playBase64Audio(out.audioBase64, out.format, host);
         return {
           ok: true,
           providerKind: out.providerKind,
@@ -385,6 +426,30 @@ export interface VoiceHostPlaybackInput {
   scene: string;
 }
 
+export interface VoiceHostSynthesizeInput {
+  characterId?: string;
+  voiceId: string;
+  text: string;
+  scene: 'normal' | 'inner' | 'p0';
+  signal: AbortSignal;
+}
+
+export type VoiceHostSynthesizeOutcome =
+  | {
+      ok: true;
+      audioBase64: string;
+      format: string;
+      lipFrames: LipSyncFrame[];
+      providerKind: string;
+      degraded?: boolean;
+    }
+  | {
+      ok: false;
+      error: string;
+      /** true=允许回落本机 mcode/say（需用户显式开启）；false=诚实报错保留字幕，绝不静默换声 */
+      allowLegacyFallback: boolean;
+    };
+
 export interface CreateVoiceHostOptions {
   /** character-registry 注入：charId → 默认 voiceId */
   resolveVoiceId?: (characterId: string) => string | null;
@@ -392,6 +457,12 @@ export interface CreateVoiceHostOptions {
   onSpeakerChange?: (event: CoopSpeakerEvent) => void;
   /** 播放租约终态：success/failed/TTL/interrupted → 气泡静音角标 */
   onSpeechResult?: (event: VoiceHostSpeechResult) => void;
+  /** 真实合成音频的口型帧回调（在真正进入播放租约时触发，用于驱动桌宠精准口型） */
+  onLipFrames?: (event: { agentId: string; frames: LipSyncFrame[] }) => void;
+  /** V2 生产合成注入：在租约外并行准备 WAV + lipFrames，避免网络往返占死全局播放锁 */
+  synthesize?: (input: VoiceHostSynthesizeInput) => Promise<VoiceHostSynthesizeOutcome>;
+  /** 播放已合成 WAV 音频（缺省使用 playBase64AudioWithControl，单测可注入） */
+  playAudio?: (input: { audioBase64: string; format: string; volume: number }) => PlaybackControl;
   /** 测试注入：替代真实 mcode/say 播放；返回可中断句柄 */
   play?: (input: VoiceHostPlaybackInput) => PlaybackControl;
 }
@@ -399,8 +470,13 @@ export interface CreateVoiceHostOptions {
 export function createVoiceHost(platform = process.platform, options: CreateVoiceHostOptions = {}): VoiceHost {
   let config: VoiceConfig = { ...DEFAULT_CONFIG };
   const lastTextAt = new Map<string, number>();
+  let speechEpoch = 0;
+  const inflightControllers = new Set<AbortController>();
+
   const leases = new GlobalAudioLeaseManager({
     onReceipt: (receipt) => {
+      // 试听租约不发正式气泡回执
+      if (receipt.purpose === 'preview') return;
       const status = receipt.status === 'COMPLETED'
         ? 'completed'
         : receipt.status === 'TTL_EXPIRED' ? 'timeout'
@@ -409,6 +485,8 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       options.onSpeechResult?.({ agentId: receipt.agentId, speakerName: receipt.speakerName, status });
     },
     onActiveChange: (event) => {
+      // 试听不触发 coop:speaker 角色正式发言态与气泡
+      if (event.activePurpose === 'preview') return;
       const state = event.activeAgentId === null
         ? { activeAgentId: null, speakerName: '', state: 'idle' as const }
         : {
@@ -421,6 +499,13 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
     },
   });
 
+  const abortAllInflightSynthesis = (): void => {
+    for (const ctrl of inflightControllers) {
+      ctrl.abort();
+    }
+    inflightControllers.clear();
+  };
+
   const speak = (voice: VoiceScene): { ok: boolean; error?: string; queued?: boolean; leaseId?: string } => {
     const scene = voice.scene ?? 'normal';
     if (!config.enabled) {
@@ -432,6 +517,7 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
     if (text === '') return { ok: false, error: '空台词' };
 
     const agentId = voice.agentId ?? 'default';
+    const speakerName = voice.speakerName ?? '小鲸';
     const resolvedVoiceId = voice.voiceId
       ?? (voice.characterId === undefined ? null : options.resolveVoiceId?.(voice.characterId) ?? null)
       ?? config.voiceId;
@@ -443,29 +529,108 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       // T-A 语音终态闭合：节流吞掉的台词不会建立租约，租约回执永不到来，
       // 渲染层气泡会停在 waiting 挂满 60s TTL。这句台词刚刚说过（已交付语义），
       // 按 completed 收泡而不是 failed/muted 挂字。
-      options.onSpeechResult?.({ agentId, speakerName: voice.speakerName ?? '小鲸', status: 'completed' });
+      options.onSpeechResult?.({ agentId, speakerName, status: 'completed' });
       return { ok: true };
     }
     lastTextAt.set(key, now);
     if (lastTextAt.size > 200) lastTextAt.clear();
 
-    if (platform !== 'darwin' && options.play === undefined) {
-      options.onSpeechResult?.({ agentId, speakerName: voice.speakerName ?? '小鲸', status: 'failed' });
+    if (platform !== 'darwin' && options.play === undefined && options.playAudio === undefined) {
+      options.onSpeechResult?.({ agentId, speakerName, status: 'failed' });
       return { ok: false, error: `平台 ${platform} 语音引擎待适配（当前支持 darwin）` };
     }
 
     const spoken = scene === 'inner' ? `…${text}` : text;
-    let playback: PlaybackControl | null = null;
     const effectiveConfig: VoiceConfig = {
       ...config,
       ...(typeof voice.ratePercent === 'number' ? { ratePercent: Math.min(200, Math.max(50, voice.ratePercent)) } : {}),
       ...(typeof voice.pitchMul === 'number' ? { pitchMul: Math.min(1.6, Math.max(1, voice.pitchMul)) } : {}),
     };
+    const priority = scene === 'p0' ? 'P0_INTERRUPT' : scene === 'inner' ? 'P2_IDLE' : 'P1_CADENCE';
+
+    // V2 生产合成闭环：合成在全局播放租约外异步准备，拿到真实音频与 lipFrames 再占播放锁；
+    // P0 到来立刻作废在飞旧合成并抢占在播，失败按策略诚实收口（默认保留字幕不静默换声）。
+    if (options.synthesize !== undefined) {
+      if (scene === 'p0') {
+        speechEpoch += 1;
+        abortAllInflightSynthesis();
+        leases.cancelPreviews();
+      }
+      const myEpoch = speechEpoch;
+      const controller = new AbortController();
+      inflightControllers.add(controller);
+      const leaseId = randomUUID();
+      const volume = scene === 'inner' ? Math.min(effectiveConfig.volume, 0.45) : effectiveConfig.volume;
+
+      void options.synthesize({
+        ...(voice.characterId === undefined ? {} : { characterId: voice.characterId }),
+        voiceId: resolvedVoiceId,
+        text,
+        scene,
+        signal: controller.signal,
+      }).then((outcome) => {
+        inflightControllers.delete(controller);
+        if (controller.signal.aborted || myEpoch !== speechEpoch) {
+          options.onSpeechResult?.({ agentId, speakerName, status: 'interrupted' });
+          return;
+        }
+        if (outcome.ok) {
+          let playback: PlaybackControl | null = null;
+          leases.acquire({
+            leaseId,
+            agentId,
+            speakerName,
+            voiceId: resolvedVoiceId,
+            priority,
+            purpose: 'speech',
+            ttlMs: 120_000,
+            start: async () => {
+              if (outcome.lipFrames.length > 0) {
+                options.onLipFrames?.({ agentId, frames: outcome.lipFrames });
+              }
+              playback = options.playAudio?.({ audioBase64: outcome.audioBase64, format: outcome.format, volume })
+                ?? playBase64AudioWithControl(outcome.audioBase64, outcome.format, volume);
+              await playback.done;
+            },
+            abort: () => playback?.abort(),
+          });
+          return;
+        }
+        if (!outcome.allowLegacyFallback) {
+          options.onSpeechResult?.({ agentId, speakerName, status: 'failed' });
+          return;
+        }
+        let playback: PlaybackControl | null = null;
+        leases.acquire({
+          leaseId,
+          agentId,
+          speakerName,
+          voiceId: resolvedVoiceId,
+          priority,
+          purpose: 'speech',
+          ttlMs: 120_000,
+          start: async () => {
+            playback = options.play?.({ text, voiceId: resolvedVoiceId, scene })
+              ?? playVoice(effectiveConfig, scene, SCENE_MODE[scene] ?? 'daily', text, spoken, resolvedVoiceId);
+            await playback.done;
+          },
+          abort: () => playback?.abort(),
+        });
+      }).catch(() => {
+        inflightControllers.delete(controller);
+        options.onSpeechResult?.({ agentId, speakerName, status: 'failed' });
+      });
+
+      return { ok: true, leaseId };
+    }
+
+    let playback: PlaybackControl | null = null;
     const result = leases.acquire({
       agentId,
-      speakerName: voice.speakerName ?? '小鲸',
+      speakerName,
       voiceId: resolvedVoiceId,
-      priority: scene === 'p0' ? 'P0_INTERRUPT' : scene === 'inner' ? 'P2_IDLE' : 'P1_CADENCE',
+      priority,
+      purpose: 'speech',
       ttlMs: 120_000,
       start: async () => {
         playback = options.play?.({ text, voiceId: resolvedVoiceId, scene })
@@ -477,8 +642,31 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
     return { ok: true, queued: result === 'queued' };
   };
 
+  const acquirePreview = (play: () => PlaybackControl): { ok: boolean; queued: boolean; leaseId: string } => {
+    const leaseId = randomUUID();
+    let playback: PlaybackControl | null = null;
+    const result = leases.acquire({
+      leaseId,
+      agentId: '__preview__',
+      speakerName: '试听',
+      priority: 'P2_IDLE',
+      purpose: 'preview',
+      ttlMs: 90_000,
+      start: async () => {
+        playback = play();
+        await playback.done;
+      },
+      abort: () => playback?.abort(),
+    });
+    return { ok: true, queued: result === 'queued', leaseId };
+  };
+
   return {
     speak,
+    acquirePreview,
+    stopPreview() {
+      leases.cancelPreviews();
+    },
     get config() {
       return config;
     },
@@ -496,16 +684,19 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
     },
     speakerState() {
       const current = leases.current();
-      return current.activeAgentId === null
-        ? { activeAgentId: null, speakerName: '', state: 'idle' }
-        : {
-            activeAgentId: current.activeAgentId,
-            speakerName: current.activeSpeakerName,
-            state: 'speaking',
-            ...(current.activeVoiceId === undefined ? {} : { voiceId: current.activeVoiceId }),
-          };
+      if (current.activeAgentId === null || current.activePurpose === 'preview') {
+        return { activeAgentId: null, speakerName: '', state: 'idle' };
+      }
+      return {
+        activeAgentId: current.activeAgentId,
+        speakerName: current.activeSpeakerName,
+        state: 'speaking',
+        ...(current.activeVoiceId === undefined ? {} : { voiceId: current.activeVoiceId }),
+      };
     },
     stopAll() {
+      speechEpoch += 1;
+      abortAllInflightSynthesis();
       leases.stopAll();
     },
   };

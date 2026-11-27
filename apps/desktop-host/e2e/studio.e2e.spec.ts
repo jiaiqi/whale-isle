@@ -72,8 +72,10 @@ describe('[E2E-HOST] 桌宠工坊与语音中心', () => {
       }
       await page.click('[data-pet-studio-tab="library"]');
       await page.waitForSelector('[data-pet-library]', { timeout: 15_000 });
-      await page.waitForSelector('[data-preview-canvas]', { timeout: 15_000 });
       if (catalog.actions.length > 0) {
+        // 预览画布只在选中动作后渲染；干净 checkout（无 assets/pet-packs）没有动作可选中，
+        // 因此这条断言必须放在有动作的分支里，否则本文件头自述的「空态只断言结构」就不成立。
+        await page.waitForSelector('[data-preview-canvas]', { timeout: 15_000 });
         await page.waitForSelector('[data-action-item]', { timeout: 15_000 });
         expect(await page.locator('[data-action-item]').count()).toBeGreaterThan(5);
 
@@ -180,18 +182,38 @@ describe('[E2E-HOST] 桌宠工坊与语音中心', () => {
       await page.waitForSelector('[data-acceptance-bench]', { timeout: 15_000 });
       await page.locator('[data-acceptance-bench] button[aria-label="关闭验收台"]').click();
 
-      // 语音中心：9 角色声线绑定条 + 两张状态卡 + 高阶精调页签
+      // 语音中心（声音工坊 2.0）：9 角色声线绑定条 + 紧凑状态栏 + 声线库 / 音色设计 / 音色克隆 / 表演与精调 / 引擎与凭据
       await page.click('[data-tab="voice"]');
       await page.waitForSelector('[data-voice-center]', { timeout: 15_000 });
       expect(await page.locator('[data-voice-char]').count()).toBeGreaterThanOrEqual(10);
       await page.waitForSelector('[data-voice-center] [data-voice-backend]', { timeout: 15_000 });
       const backend = await page.locator('[data-voice-center] [data-voice-backend]').first().getAttribute('data-voice-backend');
       expect(['mcode', 'say', 'unsupported', 'unknown']).toContain(backend);
+      // 默认页签「声线库」展示当前生效声线 Hero 与版本库
+      await page.waitForSelector('[data-voice-active-hero]', { timeout: 15_000 });
+      expect(await page.locator('[data-voice-version-grid]').innerText()).toContain('07 甜脆');
+
+      // 音色克隆台：上传/麦克风切换 + 权属声明未勾前禁止提交
+      await page.click('[data-voice-tab-btn="clone"]');
+      await page.waitForSelector('[data-voice-clone-studio]', { timeout: 15_000 });
+      expect(await page.locator('[data-clone-submit]').isDisabled()).toBe(true);
+      await page.click('[data-clone-mode="mic"]');
+      await page.waitForSelector('[data-clone-mic-panel]', { timeout: 15_000 });
+
+      // 表演与精调页签：5 情绪矩阵 + 口型 Viseme 监视器 + RVC 角色徽标
       await page.click('[data-voice-tab-btn="studio"]');
       await page.waitForSelector('[data-voice-studio-character]', { timeout: 15_000 });
       expect(await page.locator('[data-voice-studio-character]').innerText()).toContain('小鲸');
+      expect(await page.locator('[data-voice-emotion-pick]').count()).toBe(5);
+      expect(await page.locator('[data-viseme-cell]').count()).toBe(5);
 
-      // 音色工坊（M1+M2）：真实点击进入第四个页签，读出厂声线卡与版本时间线。
+      // 引擎与凭据页签：引擎档位 + AudioMixer 路由 + 凭据卡片
+      await page.click('[data-voice-tab-btn="engine"]');
+      await page.waitForSelector('[data-voice-engine-tab]', { timeout: 15_000 });
+      expect(await page.locator('[data-voice-route]').count()).toBe(4);
+      expect(await page.locator('[data-voice-credential]').count()).toBe(4);
+
+      // 音色设计台（融合 VoiceDesign + 音色工坊）：真实点击进入，读出厂声线卡与版本时间线。
       // 只验收 UI 与状态 IPC——**不点生成/体检**，以免在 E2E 里真花 MiMo 合成次数。
       await page.click('[data-voice-tab-btn="workshop"]');
       await page.waitForSelector('[data-voice-workshop] [data-workshop-current]', { timeout: 15_000 });
@@ -213,8 +235,9 @@ describe('[E2E-HOST] 桌宠工坊与语音中心', () => {
       expect(await page.locator('[data-workshop-current]').innerText()).toContain('xiaojing-07-tiancui-yuanqi.wav');
       expect(await page.locator('[data-workshop-versions]').innerText()).toContain('随包出厂');
       expect(await page.locator('[data-workshop-calls]').innerText()).toContain('MiMo 限免');
-      // 生成候选：4 个拨盘 + 条数默认 4 + 强度默认 B + 「未定格不能当固定声线」的警示
+      // 生成候选：4 个拨盘 + 4 快捷配方 + 条数默认 4 + 强度默认 B + 「未定格不能当固定声线」的警示
       expect(await page.locator('[data-workshop-dial]').count()).toBe(4);
+      expect(await page.locator('[data-workshop-recipe]').count()).toBe(4);
       expect(await page.locator('[data-workshop-generate]').innerText()).toContain('生成 4 条候选');
       expect(await page.locator('[data-workshop-intensity-option]').count()).toBe(3);
       expect(await page.locator('[data-workshop-intensity]').innerText()).toContain('实测 ΔRMS 4.45dB');

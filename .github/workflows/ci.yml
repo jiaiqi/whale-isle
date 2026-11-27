@@ -132,6 +132,8 @@ jobs:
 
       - name: Electron E2E（[E2E-HOST]，仅 macOS）
         # 宿主 E2E 文件；Gate 4 回环已在 verify:gate 内跑过，避免重复。
+        # studio.e2e.spec.ts 需要本地 2GB 随包素材（assets/pet-packs，gitignored），CI 干净 checkout
+        # 没有素材，因此不在此列，由 owner 在装好素材的机器上单独跑。
         run: >
           pnpm exec vitest run --config vitest.e2e.config.mts
           apps/desktop-host/e2e/desktop.e2e.spec.ts
@@ -141,3 +143,4 @@ jobs:
           apps/desktop-host/e2e/song-console.e2e.spec.ts
           apps/desktop-host/e2e/coop-identity.e2e.spec.ts
           apps/desktop-host/e2e/single-pet-chain.e2e.spec.ts
+          apps/desktop-host/e2e/voice-studio.e2e.spec.ts

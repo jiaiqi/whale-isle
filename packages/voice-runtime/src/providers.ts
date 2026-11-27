@@ -5,7 +5,9 @@
  * - 支持分句预取（bounded prefetch）、LRU 合成缓存、AbortSignal 取消与诚实降级追踪
  */
 import {
+  estimateDataUriBase64Bytes,
   LocalAudioWorkerHealthSchema,
+  MIMO_MAX_REFERENCE_BASE64_BYTES,
   VoiceProviderStatusSchema,
   VoiceSynthesisOutputSchema,
   VoiceSynthesisRequestSchema,
@@ -599,8 +601,8 @@ export interface MimoTtsOptions {
    * 返回 null 时回落静态值；两者都没有就按未配置处理。
    */
   resolveVoiceDescription?: () => string | null;
-  /** VoiceClone 必填：参考音频来源；返回 null 视为未配置 */
-  resolveReferenceAudio?: () => MimoTtsReferenceAudio | null;
+  /** VoiceClone 必填：按角色或全局解析参考音频；返回 null 视为未配置 */
+  resolveReferenceAudio?: (characterId?: string) => MimoTtsReferenceAudio | null;
   /**
    * 仅 `voicedesign`：`optimize_text_preview=true` 时官网允许省略 assistant 消息，
    * 只按音色描述做预览。其它模式传 true 会被忽略（不伪造字段）。
@@ -705,7 +707,7 @@ export class MimoTtsProvider implements VoiceProvider {
     if (!key) {
       throw new WhaleError('SECRET_UNAVAILABLE', 'MiMo TTS 缺少 API Key', { recoverable: true });
     }
-    const missing = this.missingConfig();
+    const missing = this.missingConfig(request.characterId);
     if (missing !== null) {
       throw new WhaleError('CONFIG_INVALID', `MiMo TTS 配置不完整：${missing}`, { recoverable: true });
     }
@@ -721,6 +723,15 @@ export class MimoTtsProvider implements VoiceProvider {
         signal,
       });
       if (!resp.ok) {
+        if (resp.status === 401 || resp.status === 403) {
+          throw new WhaleError('SECRET_UNAVAILABLE', `MiMo TTS 鉴权失败（HTTP ${resp.status}），请检查 API Key 或权限，勿盲目重试`, { recoverable: false });
+        }
+        if (resp.status === 429) {
+          throw new WhaleError('INTERNAL_ERROR', 'MiMo TTS 触发限流（HTTP 429），请稍后手动重试', { recoverable: true });
+        }
+        if (resp.status === 413) {
+          throw new WhaleError('CONFIG_INVALID', 'MiMo TTS 拒绝过大的参考音频（HTTP 413），请将参考干声裁剪至 Base64 ≤ 10MB', { recoverable: false });
+        }
         throw new WhaleError('INTERNAL_ERROR', `MiMo TTS HTTP ${resp.status}`, { recoverable: true });
       }
       const json = (await resp.json()) as {
@@ -770,10 +781,13 @@ export class MimoTtsProvider implements VoiceProvider {
   }
 
   /** 配置缺什么，返回一句人话；齐全时返回 null。probe 与 synthesize 共用同一判据 */
-  private missingConfig(): string | null {
+  private missingConfig(characterId?: string): string | null {
     if (this.mode === 'voiceclone') {
-      const ref = this.options.resolveReferenceAudio?.() ?? null;
+      const ref = this.options.resolveReferenceAudio?.(characterId) ?? null;
       if (ref === null || ref.bytes.byteLength === 0) return '未配置参考音频（VoiceClone 必需）';
+      if (estimateDataUriBase64Bytes(ref.bytes.byteLength, 'audio/wav') > MIMO_MAX_REFERENCE_BASE64_BYTES) {
+        return '参考音频 Base64 编码后超过 MiMo 10 MB 上限，请裁剪至 5–12 秒片段';
+      }
       return null;
     }
     if (this.mode === 'voicedesign' && this.effectiveVoiceDescription() === '') {
@@ -824,7 +838,7 @@ export class MimoTtsProvider implements VoiceProvider {
   private buildRequestBody(request: VoiceSynthesisRequest): Record<string, unknown> {
     const assistant = this.styledText(request);
     if (this.mode === 'voiceclone') {
-      const ref = this.options.resolveReferenceAudio?.() ?? null;
+      const ref = this.options.resolveReferenceAudio?.(request.characterId) ?? null;
       const dataUrl = `data:audio/wav;base64,${Buffer.from(ref?.bytes ?? new Uint8Array()).toString('base64')}`;
       return {
         model: this.model,
@@ -1085,15 +1099,40 @@ export class SystemFallbackVoiceProvider implements VoiceProvider {
 export interface VoiceProviderRouterOptions {
   providers: VoiceProvider[];
   maxCacheEntries?: number;
+  /** 可选：最大缓存字节估算上限（默认 128 MiB），避免长会话把 Base64 WAV 撑爆内存 */
+  maxCacheBytes?: number;
+  /** 可选：将当前参考音频 SHA-256 / 版本锚点混入缓存键，防止切换声线或撤权后串音 */
+  resolveCacheSalt?: (request: VoiceSynthesisRequest, preferredProvider?: VoiceProviderKind) => string;
 }
 
-/** 语音路由与缓存编排器：支持与 VoiceIdentity 解耦的后端切换、降级标注与流式分句预取 */
+/** 语音路由与缓存编排器：支持与 VoiceIdentity 解耦的后端切换、降级标注、SHA-256 锚定 LRU 缓存与流式分句预取 */
 export class VoiceProviderRouter {
   private readonly cache = new Map<string, VoiceSynthesisOutput>();
   private readonly maxCacheEntries: number;
+  private readonly maxCacheBytes: number;
+  private cachedBytes = 0;
 
   constructor(private readonly options: VoiceProviderRouterOptions) {
     this.maxCacheEntries = Math.max(4, options.maxCacheEntries ?? 64);
+    this.maxCacheBytes = Math.max(1024 * 1024, options.maxCacheBytes ?? 128 * 1024 * 1024);
+  }
+
+  /** 清空全部内存合成缓存（切换声线、撤销授权或用户手动清理时调用） */
+  clearCache(): number {
+    const count = this.cache.size;
+    this.cache.clear();
+    this.cachedBytes = 0;
+    return count;
+  }
+
+  /** 当前缓存占用摘要 */
+  cacheStats(): { entries: number; maxEntries: number; estimatedBytes: number; maxBytes: number } {
+    return {
+      entries: this.cache.size,
+      maxEntries: this.maxCacheEntries,
+      estimatedBytes: this.cachedBytes,
+      maxBytes: this.maxCacheBytes,
+    };
   }
 
   /** 从独立 VoiceIdentity 解析生效声线标识，避免换 Provider 丢失音色设定 */
@@ -1107,10 +1146,11 @@ export class VoiceProviderRouter {
 
   async synthesize(
     rawInput: VoiceSynthesisRequestInput,
-    opts: { preferredProvider?: VoiceProviderKind; signal?: AbortSignal } = {},
+    opts: { preferredProvider?: VoiceProviderKind; signal?: AbortSignal; allowFallback?: boolean } = {},
   ): Promise<VoiceSynthesisOutput> {
     const request = VoiceSynthesisRequestSchema.parse(rawInput);
-    const cacheKey = `${opts.preferredProvider ?? 'auto'}|${request.voiceRef}|${request.emotion}|${request.styleMode}|${request.speed}|${request.text}`;
+    const salt = this.options.resolveCacheSalt?.(request, opts.preferredProvider) ?? '';
+    const cacheKey = `${opts.preferredProvider ?? 'auto'}|${salt}|${request.characterId}|${request.voiceRef}|${request.emotion}|${request.styleMode}|${request.speed}|${request.text}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
       // 刷新 LRU 顺序
@@ -1127,17 +1167,26 @@ export class VoiceProviderRouter {
       if (b.kind === opts.preferredProvider) return 1;
       return 0;
     });
+    const candidates = opts.allowFallback === false && opts.preferredProvider !== undefined
+      ? ordered.filter((p) => p.kind === opts.preferredProvider)
+      : ordered;
 
     let degradedFrom: VoiceProviderKind | undefined;
     const failures: string[] = [];
 
-    for (const provider of ordered) {
+    for (const provider of candidates) {
       if (opts.signal?.aborted) {
         throw new WhaleError('RUNTIME_HALTED', '语音合成已取消', { recoverable: true });
       }
       const status = statusMap.get(provider.kind);
       if (!status?.available) {
-        if (opts.preferredProvider === provider.kind) degradedFrom = provider.kind;
+        if (opts.preferredProvider === provider.kind) {
+          degradedFrom = provider.kind;
+          if (opts.allowFallback === false) {
+            failures.push(`${provider.kind}: ${status?.detail ?? '不可用'}`);
+            break;
+          }
+        }
         continue;
       }
       try {
@@ -1157,7 +1206,7 @@ export class VoiceProviderRouter {
       }
     }
 
-    throw new WhaleError('INTERNAL_ERROR', `所有语音后端均不可用：${failures.join('；') || '无可用后端'}`, {
+    throw new WhaleError('INTERNAL_ERROR', `语音后端合成失败：${failures.join('；') || '无可用后端'}`, {
       recoverable: true,
     });
   }
@@ -1193,11 +1242,24 @@ export class VoiceProviderRouter {
     return results;
   }
 
+  private estimateOutputBytes(output: VoiceSynthesisOutput): number {
+    return (output.audioBase64?.length ?? 0) + output.lipFrames.length * 48 + 256;
+  }
+
   private rememberCache(key: string, output: VoiceSynthesisOutput): void {
-    if (this.cache.size >= this.maxCacheEntries) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest !== undefined) this.cache.delete(oldest);
+    const entryBytes = this.estimateOutputBytes(output);
+    const prev = this.cache.get(key);
+    if (prev !== undefined) {
+      this.cachedBytes = Math.max(0, this.cachedBytes - this.estimateOutputBytes(prev));
+      this.cache.delete(key);
+    }
+    while (this.cache.size >= this.maxCacheEntries || (this.cache.size > 0 && this.cachedBytes + entryBytes > this.maxCacheBytes)) {
+      const oldest = this.cache.entries().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest[0]);
+      this.cachedBytes = Math.max(0, this.cachedBytes - this.estimateOutputBytes(oldest[1]));
     }
     this.cache.set(key, output);
+    this.cachedBytes += entryBytes;
   }
 }

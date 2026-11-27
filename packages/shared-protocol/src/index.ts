@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommercialTtsProviderSchema, VoiceEngineTierSchema } from './voice';
+import { CommercialTtsProviderSchema, VoiceCloudFallbackPolicySchema, VoiceEngineTierSchema } from './voice';
 import { DEFAULT_BWF_MCP_PORT } from './stardew-launch';
 
 // ============================================================================
@@ -962,6 +962,8 @@ export const PetDesktopPrefsSchema = z.object({
   voiceOpenRouterModel: z.string().min(1).default('google/gemini-3.8-flash-tts'),
   /** `mimo-v2.5-tts` 用的内置音色 id（9 选 1；命中内置列表才生效） */
   voiceMimoBuiltinVoice: z.string().min(1).default('mimo_default'),
+  /** 云端 TTS 失败时的回退策略：默认 subtitle_only（保留气泡字幕、绝不静默换成系统机械音） */
+  voiceCloudFallbackPolicy: VoiceCloudFallbackPolicySchema.default('subtitle_only'),
 });
 export type PetDesktopPrefs = z.infer<typeof PetDesktopPrefsSchema>;
 
