@@ -9,6 +9,7 @@ import {
   GameAdapterRegistry,
   gameAdapters,
   humanizeBwfReceipt,
+  isStardewWorldReadyText,
   StardewAdapter,
   normalizeBwfEndpoint,
   type GameAdapter,
@@ -217,5 +218,33 @@ describe('normalizeBwfEndpoint（真机 2026-11-25：localhost 优先解析 ::1�
     const adapter = new StardewAdapter('http://localhost:18088/mcp');
     expect(adapter.unreachableMessage).toContain('127.0.0.1:18088');
     expect(adapter.unreachableMessage).not.toContain('localhost');
+  });
+});
+
+describe('V2-P3-07C StardewAdapter.ping() 世界就绪硬化', () => {
+  it('isStardewWorldReadyText：标题画面与读档过渡提示均返回 false，世界状态返回 true', () => {
+    expect(isStardewWorldReadyText('游戏还没有进入存档（在标题画面）')).toBe(false);
+    expect(isStardewWorldReadyText('请玩家先读取存档')).toBe(false);
+    expect(isStardewWorldReadyText('正在加载存档，请稍候')).toBe(false);
+    expect(isStardewWorldReadyText('当前位于 TitleMenu')).toBe(false);
+    expect(isStardewWorldReadyText('时间：第1年春1日 06:00')).toBe(true);
+    expect(isStardewWorldReadyText('')).toBe(true);
+  });
+
+  it('ping() 拒绝 HTTP 200 + 标题画面提示与 isError=true，只有真实进入存档才返回 true', async () => {
+    const makeRes = (text: string, isError = false) =>
+      ({ text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError } }) }) as unknown as Response;
+
+    const titleAdapter = new StardewAdapter('http://mock/mcp', (async () => makeRes('游戏还没有进入存档，请先进入存档')) as unknown as typeof fetch);
+    expect(await titleAdapter.ping()).toBe(false);
+
+    const errAdapter = new StardewAdapter('http://mock/mcp', (async () => makeRes('时间：第1年春1日 06:00', true)) as unknown as typeof fetch);
+    expect(await errAdapter.ping()).toBe(false);
+
+    const offlineAdapter = new StardewAdapter('http://mock/mcp', (async () => { throw new Error('ECONNREFUSED'); }) as unknown as typeof fetch);
+    expect(await offlineAdapter.ping()).toBe(false);
+
+    const readyAdapter = new StardewAdapter('http://mock/mcp', (async () => makeRes('时间：第1年春1日 06:00', false)) as unknown as typeof fetch);
+    expect(await readyAdapter.ping()).toBe(true);
   });
 });

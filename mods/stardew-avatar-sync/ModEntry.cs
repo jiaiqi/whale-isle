@@ -41,6 +41,7 @@ public sealed class AvatarConfig
     public string? SpriteSheetPath { get; set; }
     public string? SpriteTier { get; set; }
     public bool Liveliness { get; set; } = true;
+    public bool SyncDisplayName { get; set; } = true;
 }
 
 public sealed class ModEntry : StardewModdingAPI.Mod
@@ -196,7 +197,7 @@ public sealed class ModEntry : StardewModdingAPI.Mod
 
     private void ApplyPreset(Farmer farmer, AvatarConfig config)
     {
-        if (config.DisplayName.Length > 0 && farmer.Name != config.DisplayName)
+        if (config.SyncDisplayName && config.DisplayName.Length > 0 && farmer.Name != config.DisplayName)
             farmer.Name = config.DisplayName;
         farmer.changeHairStyle(Math.Max(0, config.Preset.Hair));
         farmer.changeHairColor(ParseColor(config.Preset.HairColor, new Color(138, 90, 43)));

@@ -1,0 +1,317 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewLaunchStatus",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewLaunchStatus",
+  "$defs": {
+    "StardewLaunchStatus": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "not_installed",
+            "launching",
+            "waiting_mcp",
+            "ready",
+            "timeout",
+            "failed"
+          ]
+        },
+        "install": {
+          "type": "object",
+          "properties": {
+            "gameInstalled": {
+              "type": "boolean"
+            },
+            "smapiInstalled": {
+              "type": "boolean"
+            },
+            "bwfInstalled": {
+              "type": "boolean"
+            },
+            "steamAppPresent": {
+              "default": false,
+              "type": "boolean"
+            },
+            "gameDir": {
+              "default": "",
+              "type": "string"
+            },
+            "executableDir": {
+              "default": "",
+              "type": "string"
+            },
+            "smapiBinary": {
+              "default": "",
+              "type": "string"
+            },
+            "modsDir": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "required": [
+            "gameInstalled",
+            "smapiInstalled",
+            "bwfInstalled"
+          ],
+          "additionalProperties": false
+        },
+        "strategy": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "smapi",
+                "steam"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallbackStrategy": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "smapi",
+                "steam"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "endpoint": {
+          "default": "",
+          "type": "string"
+        },
+        "mcpPort": {
+          "default": 18088,
+          "type": "integer"
+        },
+        "gameRunning": {
+          "default": false,
+          "type": "boolean"
+        },
+        "saveLoadRequested": {
+          "default": false,
+          "type": "boolean"
+        },
+        "autoLoadSave": {
+          "default": true,
+          "type": "boolean"
+        },
+        "attempts": {
+          "default": 0,
+          "type": "integer"
+        },
+        "startedAt": {
+          "default": null,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "elapsedMs": {
+          "default": 0,
+          "type": "integer"
+        },
+        "timeoutMs": {
+          "default": 120000,
+          "type": "integer"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        },
+        "hint": {
+          "default": "",
+          "type": "string"
+        },
+        "phase": {
+          "default": "idle",
+          "type": "string",
+          "enum": [
+            "idle",
+            "probing",
+            "spawning",
+            "waiting_bwf",
+            "waiting_title",
+            "syncing_avatar",
+            "creating_save",
+            "loading_save",
+            "waiting_world",
+            "waiting_lan_server",
+            "ready",
+            "failed"
+          ]
+        },
+        "errorCode": {
+          "default": "NONE",
+          "type": "string",
+          "enum": [
+            "NONE",
+            "INVALID_OPTIONS",
+            "GAME_NOT_INSTALLED",
+            "SMAPI_NOT_INSTALLED",
+            "BWF_NOT_INSTALLED",
+            "ISOLATION_REJECTED",
+            "SPAWN_FAILED",
+            "MCP_UNREACHABLE",
+            "BWF_PATCH_MISSING",
+            "LANGUAGE_LOADING",
+            "TITLE_NOT_READY",
+            "TOO_MANY_FARMS",
+            "SAVE_NOT_FOUND",
+            "CREATE_SAVE_FAILED",
+            "LOAD_SAVE_FAILED",
+            "COOP_SERVER_NOT_READY",
+            "TIMEOUT",
+            "CANCELLED"
+          ]
+        },
+        "savePolicy": {
+          "default": "load_only",
+          "type": "string",
+          "enum": [
+            "load_only",
+            "continue_or_create",
+            "always_new",
+            "manual"
+          ]
+        },
+        "gameMode": {
+          "default": "singleplayer",
+          "type": "string",
+          "enum": [
+            "singleplayer",
+            "coop_host"
+          ]
+        },
+        "storageMode": {
+          "default": "standard",
+          "type": "string",
+          "enum": [
+            "isolated",
+            "standard"
+          ]
+        },
+        "language": {
+          "default": "zh",
+          "type": "string",
+          "enum": [
+            "zh",
+            "en",
+            "ja",
+            "ko",
+            "ru",
+            "pt",
+            "es",
+            "de",
+            "th",
+            "fr",
+            "it",
+            "tr",
+            "hu"
+          ]
+        },
+        "createdSaveSlot": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lanHost": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "isHost": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "multiplayerMode": {
+                  "default": 0,
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "serverRunning": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "lanListening": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "lanPort": {
+                  "default": 24642,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "acceptIpConnections": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "inviteCode": {
+                  "default": null,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "startingCabins": {
+                  "default": 0,
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "availableFarmhandSlots": {
+                  "default": 0,
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "worldReady": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "saveFolderName": {
+                  "default": null,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "languageCode": {
+                  "default": null,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "install"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StardewLaunchOptions",
+  "contractVersion": "1.0.0",
+  "$ref": "#/$defs/StardewLaunchOptions",
+  "$defs": {
+    "StardewLaunchOptions": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 600000
+        },
+        "autoLoadSave": {
+          "type": "boolean"
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "smapi",
+            "steam"
+          ]
+        },
+        "isolateDataDir": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+        },
+        "storageMode": {
+          "type": "string",
+          "enum": [
+            "isolated",
+            "standard"
+          ]
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en",
+            "ja",
+            "ko",
+            "ru",
+            "pt",
+            "es",
+            "de",
+            "th",
+            "fr",
+            "it",
+            "tr",
+            "hu"
+          ]
+        },
+        "savePolicy": {
+          "type": "string",
+          "enum": [
+            "load_only",
+            "continue_or_create",
+            "always_new",
+            "manual"
+          ]
+        },
+        "gameMode": {
+          "type": "string",
+          "enum": [
+            "singleplayer",
+            "coop_host"
+          ]
+        },
+        "saveSlotName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "newSave": {
+          "type": "object",
+          "properties": {
+            "farmerName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24,
+              "pattern": "^[^<>:\"/\\\\|?*\\u0000-\\u001f]+$"
+            },
+            "farmName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24,
+              "pattern": "^[^<>:\"/\\\\|?*\\u0000-\\u001f]+$"
+            },
+            "favoriteThing": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24,
+              "pattern": "^[^<>:\"/\\\\|?*\\u0000-\\u001f]+$"
+            },
+            "farmType": {
+              "default": "standard",
+              "type": "string",
+              "enum": [
+                "standard",
+                "riverland",
+                "forest",
+                "hilltop",
+                "wilderness",
+                "four_corners",
+                "beach",
+                "meadowlands"
+              ]
+            },
+            "modFarmId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "mode": {
+              "default": "singleplayer",
+              "type": "string",
+              "enum": [
+                "singleplayer",
+                "coop_host"
+              ]
+            },
+            "startingCabins": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "cabinLayout": {
+              "default": "nearby",
+              "type": "string",
+              "enum": [
+                "nearby",
+                "separate"
+              ]
+            },
+            "skipIntro": {
+              "default": true,
+              "type": "boolean"
+            },
+            "separateWallets": {
+              "default": false,
+              "type": "boolean"
+            },
+            "profitMargin": {
+              "default": "normal",
+              "type": "string",
+              "enum": [
+                "25",
+                "50",
+                "75",
+                "normal"
+              ]
+            },
+            "pet": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "default": "Cat",
+                  "type": "string",
+                  "enum": [
+                    "Cat",
+                    "Dog"
+                  ]
+                },
+                "breed": {
+                  "default": "0",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                }
+              },
+              "additionalProperties": false
+            },
+            "appearance": {
+              "type": "object",
+              "properties": {
+                "characterId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "syncPixelAvatar": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "gender": {
+                  "default": "female",
+                  "type": "string",
+                  "enum": [
+                    "male",
+                    "female"
+                  ]
+                },
+                "skin": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "hair": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 120
+                },
+                "hairColor": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "shirt": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "pantsColor": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "eyeColor": {
+                  "type": "string",
+                  "pattern": "^#[0-9a-fA-F]{6}$"
+                },
+                "hatId": {
+                  "type": "integer",
+                  "minimum": -1
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "farmerName",
+            "farmName",
+            "favoriteThing"
+          ],
+          "additionalProperties": false
+        },
+        "modsPath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(\\/|[A-Za-z]:[\\\\/])"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

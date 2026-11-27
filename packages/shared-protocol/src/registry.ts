@@ -75,6 +75,13 @@ import {
   WorkFollowStatusSchema,
   StardewAvatarSyncSchema,
 } from './index';
+import {
+  StardewNewSaveConfigBaseSchema,
+  StardewLaunchOptionsBaseSchema,
+  StardewLaunchStatusSchema,
+  StardewLanHostStatusSchema,
+  StardewLaunchPrefsSchema,
+} from './stardew-launch';
 
 /**
  * 跨语言契约注册表（T-M0-02）。
@@ -164,4 +171,9 @@ export const CONTRACT_SCHEMAS: Record<string, ZodType> = {
   PetApiState: PetApiStateSchema,
   WorkFollowEvent: WorkFollowEventSchema,
   WorkFollowStatus: WorkFollowStatusSchema,
+  StardewNewSaveConfig: StardewNewSaveConfigBaseSchema,
+  StardewLaunchOptions: StardewLaunchOptionsBaseSchema,
+  StardewLaunchStatus: StardewLaunchStatusSchema,
+  StardewLanHostStatus: StardewLanHostStatusSchema,
+  StardewLaunchPrefs: StardewLaunchPrefsSchema,
 };

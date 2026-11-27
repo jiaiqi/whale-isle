@@ -63,6 +63,17 @@ function extractRpc(raw: string): { result?: unknown; error?: unknown } | null {
   return null;
 }
 
+/**
+ * BWF 标题画面 / 读档中未进存档的典型提示文本（2026-11-26 真机竞态根因）。
+ * 注意：空字符串不应误判为未就绪，以便兼容简化 Mock；真实 BWF 在标题画面必返回说明文字。
+ */
+export const STARDEW_NOT_IN_SAVE_RE = /还没有进入存档|请玩家先读取存档|正在加载存档|标题画面|请先进入存档|TitleMenu/;
+
+/** 判定 get_state 返回文本是否处于可操作的世界内状态（非标题画面/读档过渡）。 */
+export function isStardewWorldReadyText(text: string): boolean {
+  return !STARDEW_NOT_IN_SAVE_RE.test(text);
+}
+
 export class BwfMcpClient {
   constructor(
     private readonly endpoint: string = 'http://127.0.0.1:18080/mcp',
@@ -104,10 +115,10 @@ export class BwfMcpClient {
     }
   }
 
-  /** 快速连通性探测 */
+  /** 快速连通性探测（同时拒绝 isError=true 与标题画面提示，防止启动竞态误判就绪） */
   async ping(): Promise<boolean> {
     const res = await this.callTool('get_state', {}, { timeoutMs: 15_000 });
-    return res.kind === 'ok';
+    return res.kind === 'ok' && !res.isError && isStardewWorldReadyText(res.text);
   }
 }
 

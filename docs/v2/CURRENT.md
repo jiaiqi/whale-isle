@@ -4,16 +4,25 @@
 
 ## 1. 当前进度锚点
 
-- **当前分支**：`feat/whale-isle-v2`（已发布并推送至 `origin/feat/whale-isle-v2`；已完成 P0 & P1、P2 全部 8 单、`V2-P3-01`、`ADR-003` Tidepaper 主视觉升级、`V2-P3-02`、**`V2-P3-03`**，并已合入 `feat/stardew-launcher`（`V2-P3-06` 一键启动器）与 `feat/tidepaper-v3.1`（Tidepaper v3.1 外壳 + 空状态插画））
-- **上一已完成/交接工单**：`V2-P3-01` **真机补验**（统一表演系统；状态维持 `IMPLEMENTED_UNVERIFIED`——缺合法 `.moc3`/`.vrm` 与歌声后端权重，已列清单待 owner 提供）
-- **当前唯一激活工单**：无（`V2-P3-04` Digital Life L1 已以 `IMPLEMENTED_UNVERIFIED` 封口，A–F 六子单全绿，证据 [P3-04-social-life-verification.md](./evidence/P3-04-social-life-verification.md)；2026-11-26 真机验收：`V2-P2-06`、`V2-P3-03`（3c 真实 CGEvent 注入接线）、`V2-P3-06`（中控台「启动」按钮真实点击）已转 `DONE`，`V2-P3-01` 完成真机补验但仍为 `IMPLEMENTED_UNVERIFIED`；下一候选 `V2-P3-05` 多被动桌宠同屏，或继续清真机验收积压 `V2-P2-08` / `V2-P3-02`）
+- **当前分支**：`stardew-auto-new-save`（基于最新 `feat/whale-isle-v2`，已完成 PR #1/#2 等主干合流并交付星露谷从 0 自动建档/联机房主/默认隔离/中文双保险 `V2-P3-07A`–`E`，准备合入 `feat/whale-isle-v2`）
+- **上一已完成/交接工单**：星露谷建档批次 `V2-P3-07`（**`DONE`**：`07A`–`07E` 全通，Electron E2E 10/10 + 真机冷启动 R1–R4 + 真实中控台点击拉起 R5 全通）
+- **当前唯一激活工单**：`V2-P4-01`（`NEXT`：单角色“小鲸”全产品链路端到端整合与长时真机验收；2026-11-27 已完成星露谷从 0 自动建档 `V2-P3-07A`–`E` 与真机 R1–R5 全闭环验收，证据 [P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)；`V2-P3-06` 缺陷①就绪重探亦已通过 R1/R2 真机冷启动竞态复验；剩余待人类验收或后续工单项为 P3-02 真实开播、P3-01 缺声/模资产，以及 `V2-P2-08`/`V2-P3-05`）
 - **同步 UI/设计基准约束（`ADR-003`）**：已上线 `design/tidepaper/` 默认主题令牌（`tidepaper` + 晨雾/夜潮 + 5 强调色），并在顶栏提供 `obsidian-tide` / `tide-deep` 实时切换及 `V2-P2`/`V2-P3-01`/`V2-P3-02`/`V2-P3-03` 实盘面板（[P3-tidepaper-ui-verification.md](./evidence/P3-tidepaper-ui-verification.md)）。
 - **输入抢占口径（`ADR-004`）**：`ComputerUseLease` 只管 OS 合成输入/前台桌面控制；用户物理输入撤销它。`GameCharacterControlLease` 不受普通键鼠影响，只认 F7/UI 开关/P0 急停（T-M6-73）。P0 急停同时撤销两者。
 - **本地客户端常驻约定**：用户要求每次完成任务后保持本地桌面端运行（`pnpm --filter @workbench/desktop-host start`）以便随时测试；推进新工单重新构建后务必保持客户端处于运行状态。
 - **语音主线（2026-11-27 owner 决定）**：**小米 MiMo 定为主线**，默认档 `mimo-tts`（内置音色）；MiniMax 因额度耗尽停用（provider 与 BYOK 卡保留，可自行填凭据恢复）；`CANDIDATE_TTS_PROVIDERS` 本就不含 `minimax-tts`。语音中心「声线来源」重做为三卡：内置 9 音色（逐个试听/选中即切）、克隆声线（上传 wav → 试听 → 设为声线，IPC `v2:voice-clone-sample-info/save/clear`）、设计声线（漂移提示 + 跳设计台）；稳定两家与 OpenRouter 折叠为备用供应商。VoiceClone 锁定（自产参考 ×10 均值 0.8342 / 最小 0.7500）与 daily 情绪稳定性（时长 CV 6.2% / RMS σ 1.39dB / F0 中位 230.8–266.7Hz）已实测；`tools/scripts/voice-stability.py` 可复跑。**owner 判定当前音色与桌宠形象不匹配**，正在跑 VoiceDesign 描述矩阵选方向，定稿前 `VOICE-PERSONA-xiaojing.md` 正文不改。`verify:gate` 新增 **Gate 1 打包护栏**（`desktop-host build` 必过，owner 批准，由来：分支曾整天打不出 director 包而旧 dist 掩盖）。
 - **声线定稿（2026-11-27 owner 拍板）**：决赛圈两轮一致勾选四条，**默认 07 黏糊·调皮**（02/08/12 为备选），描述权威副本在契约层 `MIMO_TIMBRE_PRESETS`。产品路径「VoiceDesign 出参考音频 → VoiceClone 锁声线」已落地：随包基准 `assets/voice/xiaojing-07-nianhu-piqi.wav`（自产文本 + MiMo 生成，`DEV_ONLY_NON_COMMERCIAL`），默认档 `mimo-tts-voiceclone`，语音中心「声线库」可试听/锁定。回归：clone 锁定 ×10 余弦均值 0.8373/最小 0.7723/σ 0.0245；五档情绪 ×3 客观量档间跨度与档内波动同量级（**客观量上没拉开，听感待 owner**）。 **2026-11-27 七轮**：owner 听 07 锁定版判「音色不对味」→ 02/08/12 三候选各做全套（默认档未动）：锁定一致性 12 (0.8912/0.8340) > 08 (0.8705/0.7552) > 07 (0.8373/0.7723) > 02 (0.8275/0.7189)；**「设计版 vs 克隆版」余弦 07 0.8409 / 02 0.7925 / 08 0.8811 / 12 0.8987，与内部一致性同量级 → clone 没改音色**，故下一步是 owner 在 02/08/12 里挑一条，而不是修 clone。五档情绪在四条候选上客观量都「没拉开」。
 
-## 2. 本次 `V2-P3-01` 真机补验实际交付与验证证据
+## 2. 本次 `V2-P3-07`（2026-11-27）实际交付与真机 R1–R4 验证摘要
+
+- **原子工单拆分与提交**：`358f5a8`（`07A` 契约）、`2f9d7e8` + `f8d7d2a`（`07B` BWF 第 3 份增量补丁与 1.6 `isUnclaimedFarmhand` 修补 + `WhaleIsleAvatar` `SyncDisplayName`）、`6a746bc`（`07C` `BwfMcpClient.ping()` 与 `game-health` 就绪硬化及房主探活）、`3ff7e8b`（`07D` `stardew-launch-prefs` 默认隔离/中文双保险、`stardew-launcher` 编排与宿主 IPC）、`cceccd6`（`07E` 中控台 UI 一键入口/存储切换与 Electron E2E 10/10）。
+- **真机冷启动验收 R1–R4 全绿**（[P3-stardew-auto-new-save-verification.md](./evidence/P3-stardew-auto-new-save-verification.md)）：
+  - **R1 常规只读续玩**：SMAPI 拉起 `泡泡湾_454908853`（15.28s `ready`），`AutodriveRunner` 6 次重探零误报并完成 `wait` 回执（`COMPLETED`），`~/.config/StardewValley/Saves/` 全目录及各存档 mtime 零改动，截图 `artifacts/acceptance/P3-07-r1-standard-continue.png`；
+  - **R2 后台隔离中文单机从 0 建档**：零 CGEvent 后台创建 `鲸屿单机_455382664`（27.13s），`<languageCode>zh</languageCode>` 与 P2-06 2× 像素表生效且 `SaveGameInfo` 保留农夫名 `小鲸零号`，截图 `artifacts/acceptance/P3-07-r2-singleplayer-new-save.png`；
+  - **R3 后台隔离中文联机房主**：创建 `联机星露_455382728`（28.96s），UDP `24642` 监听（`lsof` 实证），`startingCabins=2`、`availableFarmhandSlots=2`，截图 `artifacts/acceptance/P3-07-r3-coop-host-new-save.png`；
+  - **R4 旧版 BWF 快败与恢复**：换回 `BlindWhaleFarmer.dll.bak-1.1.27-stock` 后 `/settings` 可达起 **1.81s**（< 5s）快败报 `BWF_PATCH_MISSING`，恢复补丁版后实证 `/settings` 全 5 项 `capabilities` 恢复正常；
+  - **R5 真实 Electron 中控台点击拉起**：`WHALE_E2E_REAL_STARDEW_LAUNCHER=1` 下真实点击 `[data-stardew-new-singleplayer]` 拉起 SMAPI（`pid 44533`），**17.53s** 隔离新建 `鲸屿_455395474` 并自动翻绿横幅，退出还原零残留与 `Saves/` 零改动（截图 `P3-07-07e-director-real-click.png` / `P3-07-07e-stardew-real-window.png`）。
+- **历史 `V2-P3-01` 真机补验摘要**：
 
 - **新增 `services/sing-worker/`**（FastAPI，端口 18880）：只转发到显式配置的 `WHALE_SING_SVS_ENDPOINT` / `WHALE_SING_SVC_ENDPOINT`；普通 TTS 单列 `ttsClone` 能力位并强制带「普通 TTS 不得当作 SVS/SVC 使用」告警；后端缺失 → 501 + 具体原因，**不返回任何伪造音频**；`neuralVerified` 仅在真实后端真返回音频时才置 `true`。
 - **修复探测造假** [v2-kernel-host.ts](../../apps/desktop-host/src/main/v2-kernel-host.ts)：`new SingEngine()` **从未传 `workerEndpoint`**（原实现 `probeBackends` 必然返回 svs/svc 双 unavailable，探测形同虚设），现由 `WHALE_SING_WORKER` 显式注入。

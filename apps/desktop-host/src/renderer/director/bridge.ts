@@ -321,8 +321,124 @@ export interface GameHealthView {
   checkedAt: number;
 }
 
-/** V2-P3-05 星露谷启动器视图（主进程真实状态机的渲染层镜像） */
+/** V2-P3-05 / V2-P3-07 星露谷启动器视图（主进程真实状态机的渲染层镜像） */
 export type StardewLaunchStateView = 'not_installed' | 'launching' | 'waiting_mcp' | 'ready' | 'timeout' | 'failed';
+export type StardewLaunchPhaseView =
+  | 'idle'
+  | 'probing'
+  | 'spawning'
+  | 'waiting_bwf'
+  | 'waiting_title'
+  | 'syncing_avatar'
+  | 'creating_save'
+  | 'loading_save'
+  | 'waiting_world'
+  | 'waiting_lan_server'
+  | 'ready'
+  | 'failed';
+export type StardewLaunchErrorCodeView =
+  | 'NONE'
+  | 'INVALID_OPTIONS'
+  | 'GAME_NOT_INSTALLED'
+  | 'SMAPI_NOT_INSTALLED'
+  | 'BWF_NOT_INSTALLED'
+  | 'ISOLATION_REJECTED'
+  | 'SPAWN_FAILED'
+  | 'MCP_UNREACHABLE'
+  | 'BWF_PATCH_MISSING'
+  | 'LANGUAGE_LOADING'
+  | 'TITLE_NOT_READY'
+  | 'TOO_MANY_FARMS'
+  | 'SAVE_NOT_FOUND'
+  | 'CREATE_SAVE_FAILED'
+  | 'LOAD_SAVE_FAILED'
+  | 'COOP_SERVER_NOT_READY'
+  | 'TIMEOUT'
+  | 'CANCELLED';
+export type StardewSavePolicyView = 'load_only' | 'continue_or_create' | 'always_new' | 'manual';
+export type StardewGameModeView = 'singleplayer' | 'coop_host';
+export type StardewStorageModeView = 'isolated' | 'standard';
+export type StardewLanguageCodeView = 'zh' | 'en' | 'ja' | 'ko' | 'ru' | 'pt' | 'es' | 'de' | 'th' | 'fr' | 'it' | 'tr' | 'hu';
+export type StardewFarmTypeView = 'standard' | 'riverland' | 'forest' | 'hilltop' | 'wilderness' | 'four_corners' | 'beach' | 'meadowlands';
+export type StardewCabinLayoutView = 'nearby' | 'separate';
+
+export interface StardewNewSaveConfigView {
+  farmerName: string;
+  farmName: string;
+  favoriteThing: string;
+  farmType?: StardewFarmTypeView;
+  modFarmId?: string;
+  mode?: StardewGameModeView;
+  startingCabins?: number;
+  cabinLayout?: StardewCabinLayoutView;
+  skipIntro?: boolean;
+  separateWallets?: boolean;
+  profitMargin?: 'normal' | '75' | '50' | '25';
+  pet?: { type?: 'Cat' | 'Dog'; breed?: string };
+  appearance?: {
+    characterId?: string;
+    syncPixelAvatar?: boolean;
+    gender?: 'male' | 'female';
+    skin?: number;
+    hair?: number;
+    hairColor?: string;
+    shirt?: number;
+    pantsColor?: string;
+    eyeColor?: string;
+    hatId?: number;
+  };
+}
+
+export interface StardewLaunchOptionsView {
+  port?: number;
+  timeoutMs?: number;
+  autoLoadSave?: boolean;
+  strategy?: 'auto' | 'smapi' | 'steam';
+  isolateDataDir?: string;
+  storageMode?: StardewStorageModeView;
+  language?: StardewLanguageCodeView;
+  savePolicy?: StardewSavePolicyView;
+  gameMode?: StardewGameModeView;
+  saveSlotName?: string;
+  newSave?: StardewNewSaveConfigView;
+  modsPath?: string;
+}
+
+export interface StardewLanHostStatusView {
+  isHost: boolean;
+  multiplayerMode: number;
+  serverRunning: boolean;
+  lanListening: boolean;
+  lanPort: number;
+  acceptIpConnections: boolean;
+  inviteCode: string | null;
+  startingCabins: number;
+  availableFarmhandSlots: number;
+  worldReady: boolean;
+  saveFolderName: string | null;
+  languageCode: string | null;
+}
+
+export interface StardewLaunchPrefsView {
+  storageMode: StardewStorageModeView;
+  language: StardewLanguageCodeView;
+  farmName: string;
+  favoriteThing: string;
+  farmType: StardewFarmTypeView;
+  startingCabins: number;
+  cabinLayout: StardewCabinLayoutView;
+  skipIntro: boolean;
+  syncPixelAvatar: boolean;
+}
+
+export interface StardewLaunchDefaultsView {
+  characterId: string;
+  farmerName: string;
+  spriteReady: boolean;
+  isolatedDataDir: string;
+  prefs: StardewLaunchPrefsView;
+  recommendedLanguage: StardewLanguageCodeView;
+}
 
 export interface StardewInstallInfoView {
   gameInstalled: boolean;
@@ -351,6 +467,14 @@ export interface StardewLaunchStatusView {
   timeoutMs: number;
   message: string;
   hint: string;
+  phase: StardewLaunchPhaseView;
+  errorCode: StardewLaunchErrorCodeView;
+  savePolicy: StardewSavePolicyView;
+  gameMode: StardewGameModeView;
+  storageMode: StardewStorageModeView;
+  language: StardewLanguageCodeView;
+  createdSaveSlot: string | null;
+  lanHost: StardewLanHostStatusView | null;
 }
 
 export interface AutodriveEventView {
@@ -427,10 +551,13 @@ export interface DirectorBridge {
   gameHealth(gameId: GameId, endpoint?: string): Promise<GameHealthView>;
   // DST 状态快照（T-M7-D5 面板补齐 /state 注入）
   gameDstState(): Promise<{ ok: boolean; snapshot?: import('@workbench/shared-protocol').DstStateSnapshot; error?: string }>;
-  // V2-P3-05 星露谷一键启动（主进程探测安装 → SMAPI/Steam 启动 → 轮询 MCP）
-  stardewLaunch(options?: { port?: number; timeoutMs?: number; autoLoadSave?: boolean; strategy?: 'auto' | 'smapi' | 'steam' }): Promise<StardewLaunchStatusView>;
+  // V2-P3-05 / V2-P3-07 星露谷启动、从 0 建档/建角色与存储隔离偏好
+  stardewLaunch(options?: StardewLaunchOptionsView): Promise<StardewLaunchStatusView>;
   stardewLaunchStatus(): Promise<StardewLaunchStatusView>;
   stardewLaunchCancel(): Promise<StardewLaunchStatusView>;
+  stardewLaunchPrefsGet(): Promise<StardewLaunchPrefsView>;
+  stardewLaunchPrefsSet(update: Partial<StardewLaunchPrefsView>): Promise<{ ok: boolean; prefs: StardewLaunchPrefsView; error?: string }>;
+  stardewLaunchDefaults(): Promise<StardewLaunchDefaultsView>;
   harnessPresets(): Promise<HarnessPresetInfo[]>;
   harnessStart(presetId: string): Promise<{ ok: boolean; error?: string; authMethods?: string[] }>;
   harnessPrompt(presetId: string, text: string): Promise<{ ok: boolean; error?: string; sessionId?: string }>;

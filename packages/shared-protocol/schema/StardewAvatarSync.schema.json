@@ -76,6 +76,10 @@
         "liveliness": {
           "default": true,
           "type": "boolean"
+        },
+        "syncDisplayName": {
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [

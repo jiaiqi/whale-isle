@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
   Activity, Brain, Hand, Monitor, Moon, OctagonAlert, Play, Radio, Rocket, RotateCcw,
-  ShieldAlert, Sparkles, Square, Volume2, VolumeX, Wheat,
+  ShieldAlert, Sparkles, Square, Users, Volume2, VolumeX, Wheat,
 } from 'lucide-react';
 import {
   ModelProviderConfigSchema,
@@ -25,6 +25,8 @@ import {
   type AutodriveEventView,
   type CharacterSummary,
   type GameId,
+  type StardewLaunchOptionsView,
+  type StardewLaunchPrefsView,
 } from './bridge';
 import { ProvidersPanel } from './providers-panel';
 import { HarnessPanel } from './harness-panel';
@@ -222,6 +224,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [editingBwfPort, setEditingBwfPort] = useState(false);
   const [bwfPortDraft, setBwfPortDraft] = useState('18088');
   const [avatarSync, setAvatarSync] = useState<AvatarSyncViewState | null>(null);
+  const [stardewPrefs, setStardewPrefs] = useState<StardewLaunchPrefsView | null>(null);
   const [objective, setObjective] = useState<string | null>(null);
 
   // V2 内核与 CharacterCore 实时快照（ControlOwnershipHud & V2 生命中枢单点数据源）
@@ -263,6 +266,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   useEffect(() => { void refreshAvatarSync(); }, [refreshAvatarSync]);
   useEffect(() => window.directorBridge.onStardewAvatarChanged(() => { void refreshAvatarSync(); }), [refreshAvatarSync]);
+  useEffect(() => {
+    void window.directorBridge.stardewLaunchPrefsGet().then(setStardewPrefs).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     void refreshV2Snapshot();
@@ -605,12 +611,16 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   }, [emergencyHalt, toggleTakeover, toggleSleep]);
 
   /**
-   * V2-P3-05：等待星露谷真正就绪（主进程 MCP get_state 应答）。
+   * V2-P3-05 / V2-P3-07：等待星露谷真正就绪（主进程 MCP get_state 应答，联机房主还需等待 LAN 24642 监听）。
    * 未安装 / 启动失败 / 超时都如实 toast，绝不把「进程起来了」当成「已就绪」。
    */
-  const waitForStardewReady = useCallback(async (): Promise<boolean> => {
+  const waitForStardewReady = useCallback(async (options?: StardewLaunchOptionsView): Promise<boolean> => {
     try {
-      const first = await window.directorBridge.stardewLaunch();
+      const effective: StardewLaunchOptionsView = options ?? {
+        savePolicy: 'continue_or_create',
+        gameMode: 'singleplayer',
+      };
+      const first = await window.directorBridge.stardewLaunch(effective);
       if (first.state === 'ready') return true;
       if (first.state === 'not_installed' || first.state === 'failed') {
         toast.error(first.message || '《星露谷物语》启动失败', { description: first.hint || undefined });
@@ -634,10 +644,12 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     }
   }, []);
 
-  const launchStardewOnly = async (): Promise<void> => {
+  const launchStardewOnly = async (options?: StardewLaunchOptionsView): Promise<void> => {
     setLaunchingGame(true);
-    toast('正在启动《星露谷物语》…');
-    const ok = await waitForStardewReady();
+    toast(options?.savePolicy === 'always_new'
+      ? `正在从 0 启动《星露谷物语》（${options.gameMode === 'coop_host' ? '联机房主' : '单机'}）…`
+      : '正在启动《星露谷物语》…');
+    const ok = await waitForStardewReady(options);
     setLaunchingGame(false);
     if (ok) toast.success('《星露谷物语》已就绪');
   };
@@ -843,6 +855,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
       { id: 'act:life', label: '打开 V2 生命中枢', group: '页面', icon: Sparkles, hint: '12域', run: () => setTab('life') },
       { id: 'act:drive', label: running ? '停止自动驾驶' : '启动自动驾驶', group: '全局动作', icon: running ? Square : Play, hint: '当前游戏', run: () => void (running ? stop() : start()) },
       { id: 'act:launch-stardew', label: launchingGame ? '正在启动星露谷…' : '启动星露谷', group: '全局动作', icon: Rocket, hint: 'SMAPI', run: () => void launchStardewOnly() },
+      { id: 'act:launch-stardew-new-sp', label: '从 0 单机开玩星露谷', group: '全局动作', icon: Rocket, hint: '新存档·中文', run: () => void launchStardewOnly({ savePolicy: 'always_new', gameMode: 'singleplayer' }) },
+      { id: 'act:launch-stardew-new-coop', label: '从 0 联机房主开玩星露谷', group: '全局动作', icon: Users, hint: 'LAN 24642', run: () => void launchStardewOnly({ savePolicy: 'always_new', gameMode: 'coop_host' }) },
       { id: 'act:brain', label: brain.mode === 'llm' ? '切换规则日程' : '切换 LLM 大脑', group: '全局动作', icon: Brain, hint: brain.mode, run: () => void switchBrain() },
       { id: 'act:voice', label: voiceOn ? '静音语音' : '开启语音', group: '全局动作', icon: voiceOn ? VolumeX : Volume2, run: () => void toggleVoice() },
       { id: 'act:feed', label: '投喂 5,000 粒米', group: '全局动作', icon: Wheat, hint: '饭碗', run: () => void feedRice() },
@@ -1014,6 +1028,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             editingBwfPort={editingBwfPort}
             bwfPortDraft={bwfPortDraft}
             avatarSync={avatarSync}
+            stardewPrefs={stardewPrefs}
+            onLaunchPrefsChanged={setStardewPrefs}
             dayPlan={dayPlan}
             insights={insights}
             stardewHealth={stardewHealth}
@@ -1086,13 +1102,45 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
               />
               以后自动启动（记住这个选择）
             </label>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
                 data-stardew-launch-cancel-prompt
                 className="btn-pill ghost"
                 onClick={() => setLaunchPromptOpen(false)}
               >
                 取消
+              </button>
+              <button
+                data-stardew-prompt-new-singleplayer
+                className="btn-pill"
+                disabled={launchingGame}
+                onClick={() => {
+                  setLaunchPromptOpen(false);
+                  void (async () => {
+                    setLaunchingGame(true);
+                    const ready = await waitForStardewReady({ savePolicy: 'always_new', gameMode: 'singleplayer' });
+                    setLaunchingGame(false);
+                    if (ready) await start();
+                  })();
+                }}
+              >
+                <Rocket size={11} />从 0 单机新建并托管
+              </button>
+              <button
+                data-stardew-prompt-new-coop-host
+                className="btn-pill"
+                disabled={launchingGame}
+                onClick={() => {
+                  setLaunchPromptOpen(false);
+                  void (async () => {
+                    setLaunchingGame(true);
+                    const ready = await waitForStardewReady({ savePolicy: 'always_new', gameMode: 'coop_host' });
+                    setLaunchingGame(false);
+                    if (ready) await start();
+                  })();
+                }}
+              >
+                <Users size={11} />从 0 联机房主新建并托管
               </button>
               <button
                 data-stardew-launch-confirm

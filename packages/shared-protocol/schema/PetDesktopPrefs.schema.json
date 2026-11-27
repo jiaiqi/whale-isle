@@ -136,6 +136,36 @@
         "peakOutfitOffPeak": {
           "default": "crosspet-deepseek-pajamas",
           "type": "string"
+        },
+        "voiceEngineTier": {
+          "default": "commercial_default",
+          "type": "string",
+          "enum": [
+            "commercial_default",
+            "offline_preferred"
+          ]
+        },
+        "voiceCommercialProvider": {
+          "default": "mimo-tts-voiceclone",
+          "type": "string",
+          "enum": [
+            "minimax-tts",
+            "openai-compatible-tts",
+            "openrouter-tts",
+            "mimo-tts",
+            "mimo-tts-voiceclone",
+            "mimo-tts-voicedesign"
+          ]
+        },
+        "voiceOpenRouterModel": {
+          "default": "google/gemini-3.8-flash-tts",
+          "type": "string",
+          "minLength": 1
+        },
+        "voiceMimoBuiltinVoice": {
+          "default": "mimo_default",
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

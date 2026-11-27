@@ -1,0 +1,626 @@
+diff --git a/BlindWhaleFarmer/McpServer.cs b/BlindWhaleFarmer/McpServer.cs
+index 17cad3a..8602643 100644
+--- a/BlindWhaleFarmer/McpServer.cs
++++ b/BlindWhaleFarmer/McpServer.cs
+@@ -7,6 +7,7 @@ using System.Text;
+ using System.Text.Json.Nodes;
+ using System.Threading;
+ using System.Threading.Tasks;
++using Microsoft.Xna.Framework;
+ using StardewModdingAPI;
+ using StardewValley;
+ using StardewValley.Menus;
+@@ -27,8 +28,8 @@ namespace BlindWhaleFarmer
+         /// <summary>只读取信息、不在游戏里执行动作的工具：不走 Tools、不记 transcript、结果不算“失败”。</summary>
+         private static readonly HashSet<string> InfoTools = new() { "get_state", "get_guide" };
+ 
+-        /// <summary>只有 MCP 有的控制工具（无人值守用）：开关内置 AI、在标题画面读档。内置 AI 自己用不着。</summary>
+-        private static readonly HashSet<string> ControlTools = new() { "toggle_ai", "load_save" };
++        /// <summary>只有 MCP 有的控制工具（无人值守用）：开关内置 AI、在标题画面读档/建档。内置 AI 自己用不着。</summary>
++        private static readonly HashSet<string> ControlTools = new() { "toggle_ai", "load_save", "create_new_save" };
+ 
+         private const string McpNotes = @"
+ 
+@@ -372,13 +373,40 @@ namespace BlindWhaleFarmer
+                 new JsonObject
+                 {
+                     ["name"] = "load_save",
+-                    ["description"] = "游戏停在标题画面时读取存档（单人）。不传 save 读最近玩的那个；读档要十几秒，之后用 get_state 确认进了游戏。",
++                    ["description"] = "游戏停在标题画面时读取存档（支持单人或联机房主模式）。不传 save 读最近玩的那个；读档要十几秒，之后用 get_state 确认进了游戏。",
+                     ["inputSchema"] = new JsonObject
+                     {
+                         ["type"] = "object",
+                         ["properties"] = new JsonObject
+                         {
+-                            ["save"] = new JsonObject { ["type"] = "string", ["description"] = "存档名（农夫名字，或存档文件夹名的一部分），不传读最近玩的" }
++                            ["save"] = new JsonObject { ["type"] = "string", ["description"] = "存档名（农夫名字，或存档文件夹名的一部分），不传读最近玩的" },
++                            ["coopHost"] = new JsonObject { ["type"] = "boolean", ["description"] = "true 时以联机房主（multiplayerMode=2）加载存档并开启 LAN 服务器，默认 false" },
++                            ["language"] = new JsonObject { ["type"] = "string", ["description"] = "读档前同步游戏语言代码（如 zh、en）" }
++                        }
++                    }
++                },
++                new JsonObject
++                {
++                    ["name"] = "create_new_save",
++                    ["description"] = "游戏停在标题画面时程序化新建存档并创建角色（支持 singleplayer 单机与 coop_host 联机房主，支持指定小屋数、农场类型、跳过片头与语言）。",
++                    ["inputSchema"] = new JsonObject
++                    {
++                        ["type"] = "object",
++                        ["required"] = new JsonArray("farmerName", "farmName", "favoriteThing"),
++                        ["properties"] = new JsonObject
++                        {
++                            ["farmerName"] = new JsonObject { ["type"] = "string", ["description"] = "农夫名字（1~24 字符）" },
++                            ["farmName"] = new JsonObject { ["type"] = "string", ["description"] = "农场名字（1~24 字符）" },
++                            ["favoriteThing"] = new JsonObject { ["type"] = "string", ["description"] = "最喜欢的东西（1~24 字符）" },
++                            ["farmType"] = new JsonObject { ["type"] = "string", ["description"] = "农场类型：standard/riverland/forest/hilltop/wilderness/four_corners/beach/meadowlands" },
++                            ["modFarmId"] = new JsonObject { ["type"] = "string", ["description"] = "自定义 Mod 农场 ID（可选）" },
++                            ["mode"] = new JsonObject { ["type"] = "string", ["description"] = "singleplayer（默认）或 coop_host（联机房主）" },
++                            ["startingCabins"] = new JsonObject { ["type"] = "integer", ["description"] = "初始小屋数量 0~7（coop_host 至少 1）" },
++                            ["cabinLayout"] = new JsonObject { ["type"] = "string", ["description"] = "nearby（相邻，默认）或 separate（分开）" },
++                            ["skipIntro"] = new JsonObject { ["type"] = "boolean", ["description"] = "是否跳过开场过场直接进第 1 天，默认 true" },
++                            ["separateWallets"] = new JsonObject { ["type"] = "boolean", ["description"] = "联机是否分开钱包，默认 false" },
++                            ["profitMargin"] = new JsonObject { ["type"] = "string", ["description"] = "利润率：normal/75/50/25" },
++                            ["language"] = new JsonObject { ["type"] = "string", ["description"] = "建档前同步游戏语言代码（如 zh、en）" }
+                         }
+                     }
+                 }
+@@ -405,7 +433,13 @@ namespace BlindWhaleFarmer
+                 string done;
+                 try
+                 {
+-                    done = await mod.MainThread.Invoke(() => name == "toggle_ai" ? ToggleAi(args?["on"]) : LoadSave(args?["save"]?.ToString())).ConfigureAwait(false);
++                    done = await mod.MainThread.Invoke(() => name switch
++                    {
++                        "toggle_ai" => ToggleAi(args?["on"]),
++                        "load_save" => LoadSave(args),
++                        "create_new_save" => CreateNewSave(args),
++                        _ => $"错误：未知控制工具 {name}"
++                    }).ConfigureAwait(false);
+                 }
+                 catch (Exception ex)
+                 {
+@@ -541,16 +575,21 @@ namespace BlindWhaleFarmer
+                 : "失败：内置 AI 没启动起来（多半是没有配置 API Key：Mods/BlindWhaleFarmer/config.json 的 ApiKey）";
+         }
+ 
+-        /// <summary>load_save：在标题画面读档，和在“读取游戏”里点存档一样（LoadGameMenu 的 SaveFileSlot.Activate）。在主线程上调用。</summary>
+-        private string LoadSave(string want)
++        /// <summary>load_save：在标题画面读档（支持单机或联机房主）。在主线程上调用。</summary>
++        private string LoadSave(JsonObject args)
+         {
+             if (Context.IsWorldReady)
+                 return $"成功：已经在存档里了（{Game1.player.Name} 的{Game1.player.farmName.Value}农场），不用读档";
+             if (Game1.activeClickableMenu is not TitleMenu || Game1.gameMode != Game1.titleScreenGameMode)
+-                return "失败：现在不在标题画面（游戏正在启动或正在读档），等 10 秒再用 get_state 看看";
++                return "失败：[TITLE_NOT_READY] 现在不在标题画面（游戏正在启动或正在读档），等 10 秒再用 get_state 看看";
+             // 标题菜单在 ticksUntilLanguageLoad 从 0 变为 -1 时才应用启动语言。
+             if (TitleMenu.ticksUntilLanguageLoad >= 0)
+-                return "失败：游戏还在启动（正在加载语言设置），等 2 秒再读档，不然进去会是英文界面";
++                return "失败：[LANGUAGE_LOADING] 游戏还在启动（正在加载语言设置），等 2 秒再读档，不然进去会是英文界面";
++            string lang = args?["language"]?.GetValue<string>() ?? mod.PreferredLanguage;
++            if (!string.IsNullOrWhiteSpace(lang))
++                mod.EnsureLanguage(lang);
++            string want = args?["save"]?.ToString();
++            bool coopHost = args?["coopHost"] is JsonNode ch && Tools.ParseBool(ch) == true;
+             var saves = new List<(string Slot, DateTime Played)>();
+             if (Directory.Exists(Constants.SavesPath))
+                 foreach (string dir in Directory.GetDirectories(Constants.SavesPath))
+@@ -562,19 +601,234 @@ namespace BlindWhaleFarmer
+                 }
+             saves.Sort((a, b) => b.Played.CompareTo(a.Played));
+             if (saves.Count == 0)
+-                return "失败：没有找到任何存档，请玩家先在游戏里新建一个";
++                return "失败：[SAVE_NOT_FOUND] 没有找到任何存档，请玩家先在游戏里新建一个";
+             string list = string.Join("、", saves.ConvertAll(s => $"{s.Slot}（{s.Played:MM-dd HH:mm}）"));
+             var pick = saves[0];
+             if (!string.IsNullOrWhiteSpace(want))
+             {
+                 int i = saves.FindIndex(s => s.Slot.Contains(want.Trim(), StringComparison.OrdinalIgnoreCase));
+                 if (i < 0)
+-                    return $"失败：没有名字里带“{want}”的存档。现有存档：{list}";
++                    return $"失败：[SAVE_NOT_FOUND] 没有名字里带“{want}”的存档。现有存档：{list}";
+                 pick = saves[i];
+             }
++            mod.BootTransitionUntilUtc = DateTime.UtcNow.AddSeconds(60);
++            Game1.multiplayerMode = coopHost ? (byte)2 : (byte)0;
++            if (coopHost && Game1.options != null)
++            {
++                Game1.options.enableServer = true;
++                Game1.options.ipConnectionsEnabled = true;
++            }
+             SaveGame.Load(pick.Slot);
+             Game1.exitActiveMenu();
+-            return $"成功：正在读取存档 {pick.Slot}（上次游玩 {pick.Played:MM-dd HH:mm}），要十几秒。等 15 秒后用 get_state 确认进了游戏";
++            return $"成功：正在读取存档 {pick.Slot}（{(coopHost ? "联机房主" : "单机")}，上次游玩 {pick.Played:MM-dd HH:mm}），要十几秒。等 15 秒后用 get_state 确认进了游戏";
++        }
++
++        private static readonly char[] IllegalSaveNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
++
++        private static bool IsValidSaveName(string value) =>
++            !string.IsNullOrWhiteSpace(value)
++            && value.Length <= 24
++            && value.IndexOfAny(IllegalSaveNameChars) < 0
++            && !value.Any(c => char.IsControl(c));
++
++        private static bool TryParseHexColor(string hex, out Color color)
++        {
++            if (!string.IsNullOrWhiteSpace(hex) && hex.Length == 7 && hex[0] == '#'
++                && int.TryParse(hex.Substring(1, 2), System.Globalization.NumberStyles.HexNumber, null, out int r)
++                && int.TryParse(hex.Substring(3, 2), System.Globalization.NumberStyles.HexNumber, null, out int g)
++                && int.TryParse(hex.Substring(5, 2), System.Globalization.NumberStyles.HexNumber, null, out int b))
++            {
++                color = new Color(r, g, b);
++                return true;
++            }
++            color = default;
++            return false;
++        }
++
++        private static ulong AllocateUniqueSaveId()
++        {
++            for (int attempt = 0; attempt < 32; attempt++)
++            {
++                ulong candidate = (ulong)Random.Shared.Next(100_000_000, 999_999_999);
++                bool collision = false;
++                if (Directory.Exists(Constants.SavesPath))
++                {
++                    string suffix = "_" + candidate;
++                    foreach (string dir in Directory.GetDirectories(Constants.SavesPath))
++                    {
++                        if (Path.GetFileName(dir).EndsWith(suffix, StringComparison.Ordinal))
++                        {
++                            collision = true;
++                            break;
++                        }
++                    }
++                }
++                if (!collision)
++                    return candidate;
++            }
++            return (ulong)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
++        }
++
++        /// <summary>create_new_save：在标题画面经 Stardew 1.6 公开 API 程序化建档、建角色并进场第 1 天。在主线程上调用。</summary>
++        private string CreateNewSave(JsonObject args)
++        {
++            if (Context.IsWorldReady)
++                return $"失败：[ALREADY_IN_SAVE] 已经在存档里了（{Game1.player.Name} 的{Game1.player.farmName.Value}农场），请先返回标题画面";
++            if (Game1.activeClickableMenu is not TitleMenu titleMenu || Game1.gameMode != Game1.titleScreenGameMode)
++                return "失败：[TITLE_NOT_READY] 现在不在标题画面，请稍后重试";
++            if (TitleMenu.ticksUntilLanguageLoad >= 0)
++                return "失败：[LANGUAGE_LOADING] 游戏还在启动（正在加载语言设置），等 2 秒再建档";
++            if (titleMenu.logoFadeTimer > 0 || titleMenu.fadeFromWhiteTimer > 0 || !titleMenu.titleInPosition)
++            {
++                titleMenu.skipToTitleButtons();
++                return "失败：[TITLE_NOT_READY] 已跳过标题入场动画，请 1 秒后重试";
++            }
++
++            string farmerName = (args?["farmerName"]?.GetValue<string>() ?? "").Trim();
++            string farmName = (args?["farmName"]?.GetValue<string>() ?? "").Trim();
++            string favoriteThing = (args?["favoriteThing"]?.GetValue<string>() ?? "").Trim();
++            if (!IsValidSaveName(farmerName) || !IsValidSaveName(farmName) || !IsValidSaveName(favoriteThing))
++                return "失败：[INVALID_OPTIONS] farmerName / farmName / favoriteThing 不能为空、不超过 24 字符且不能含路径非法字符";
++
++            string mode = (args?["mode"]?.GetValue<string>() ?? "singleplayer").Trim().ToLowerInvariant();
++            if (mode is not ("singleplayer" or "coop_host"))
++                return $"失败：[INVALID_OPTIONS] mode 仅支持 singleplayer 或 coop_host，收到：{mode}";
++            bool isCoopHost = mode == "coop_host";
++
++            int maxCabins = 7;
++            int requestedCabins = args?["startingCabins"] is JsonNode cabinsNode ? cabinsNode.GetValue<int>() : (isCoopHost ? 1 : 0);
++            if (requestedCabins < 0 || requestedCabins > maxCabins)
++                return $"失败：[INVALID_OPTIONS] startingCabins 必须在 0~{maxCabins} 之间，收到：{requestedCabins}";
++            if (isCoopHost && requestedCabins < 1)
++                return "失败：[INVALID_OPTIONS] 联机房主模式（coop_host）要求 startingCabins >= 1";
++
++            string cabinLayout = (args?["cabinLayout"]?.GetValue<string>() ?? "nearby").Trim().ToLowerInvariant();
++            if (cabinLayout is not ("nearby" or "separate"))
++                return $"失败：[INVALID_OPTIONS] cabinLayout 仅支持 nearby 或 separate，收到：{cabinLayout}";
++
++            string farmType = (args?["farmType"]?.GetValue<string>() ?? "standard").Trim().ToLowerInvariant();
++            string modFarmId = args?["modFarmId"]?.GetValue<string>()?.Trim();
++            bool skipIntro = args?["skipIntro"] is JsonNode siNode ? (Tools.ParseBool(siNode) ?? true) : true;
++            bool separateWallets = args?["separateWallets"] is JsonNode swNode && Tools.ParseBool(swNode) == true;
++            string profitMargin = (args?["profitMargin"]?.GetValue<string>() ?? "normal").Trim().ToLowerInvariant();
++            float difficultyMod = profitMargin switch
++            {
++                "normal" or "100" => 1f,
++                "75" => 0.75f,
++                "50" => 0.5f,
++                "25" => 0.25f,
++                _ => -1f,
++            };
++            if (difficultyMod < 0f)
++                return $"失败：[INVALID_OPTIONS] profitMargin 仅支持 normal/75/50/25，收到：{profitMargin}";
++
++            string lang = args?["language"]?.GetValue<string>() ?? mod.PreferredLanguage;
++            if (!string.IsNullOrWhiteSpace(lang))
++                mod.EnsureLanguage(lang);
++
++            mod.BootTransitionUntilUtc = DateTime.UtcNow.AddSeconds(60);
++            TitleMenu.subMenu = null;
++            Game1.resetPlayer();
++
++            var cc = new CharacterCustomization(
++                isCoopHost ? CharacterCustomization.Source.HostNewFarm : CharacterCustomization.Source.NewGame,
++                multiplayerServer: isCoopHost);
++            TitleMenu.subMenu = cc;
++
++            if (Game1.uniqueIDForThisGame == 0)
++                Game1.uniqueIDForThisGame = AllocateUniqueSaveId();
++
++            if (!string.IsNullOrEmpty(modFarmId) || farmType == "meadowlands")
++            {
++                string targetId = !string.IsNullOrEmpty(modFarmId) ? modFarmId : "MeadowlandsFarm";
++                var extraFarms = DataLoader.AdditionalFarms(Game1.content);
++                var matched = extraFarms?.FirstOrDefault(f => string.Equals(f.Id, targetId, StringComparison.OrdinalIgnoreCase));
++                if (matched == null)
++                    return $"失败：[INVALID_OPTIONS] 未找到农场类型 {targetId}";
++                Game1.whichFarm = Farm.mod_layout;
++                Game1.whichModFarm = matched;
++                Game1.spawnMonstersAtNight = matched.SpawnMonstersByDefault;
++            }
++            else
++            {
++                int farmIndex = farmType switch
++                {
++                    "standard" => Farm.default_layout,
++                    "riverland" => Farm.riverlands_layout,
++                    "forest" => Farm.forest_layout,
++                    "hilltop" => Farm.mountains_layout,
++                    "wilderness" => Farm.combat_layout,
++                    "four_corners" => Farm.fourCorners_layout,
++                    "beach" => Farm.beach_layout,
++                    _ => -1,
++                };
++                if (farmIndex < 0)
++                    return $"失败：[INVALID_OPTIONS] 未知 farmType：{farmType}";
++                Game1.whichFarm = farmIndex;
++                Game1.whichModFarm = null;
++                Game1.spawnMonstersAtNight = farmIndex == Farm.combat_layout;
++            }
++
++            Game1.startingCabins = requestedCabins;
++            Game1.cabinsSeparate = cabinLayout == "separate";
++            Game1.player.team.useSeparateWallets.Value = separateWallets;
++            Game1.player.difficultyModifier = difficultyMod;
++
++            if (args?["pet"] is JsonObject petObj)
++            {
++                string pType = (petObj["type"]?.GetValue<string>() ?? "Cat").Trim();
++                if (pType is "Cat" or "Dog")
++                    Game1.player.whichPetType = pType;
++                string pBreed = petObj["breed"]?.GetValue<string>()?.Trim();
++                if (!string.IsNullOrEmpty(pBreed))
++                    Game1.player.whichPetBreed = pBreed;
++            }
++
++            if (args?["appearance"] is JsonObject appObj)
++            {
++                string gender = (appObj["gender"]?.GetValue<string>() ?? "female").Trim().ToLowerInvariant();
++                Game1.player.changeGender(gender == "male");
++                if (appObj["skin"] is JsonNode skinNode)
++                    Game1.player.changeSkinColor(Math.Max(0, skinNode.GetValue<int>()), true);
++                if (appObj["hair"] is JsonNode hairNode)
++                    Game1.player.changeHairStyle(Math.Max(0, hairNode.GetValue<int>()));
++                if (TryParseHexColor(appObj["hairColor"]?.GetValue<string>(), out var hairColor))
++                    Game1.player.changeHairColor(hairColor);
++                if (appObj["shirt"] is JsonNode shirtNode)
++                    Game1.player.changeShirt(Math.Max(0, shirtNode.GetValue<int>()).ToString());
++                if (TryParseHexColor(appObj["pantsColor"]?.GetValue<string>(), out var pantsColor))
++                    Game1.player.changePantsColor(pantsColor);
++                if (TryParseHexColor(appObj["eyeColor"]?.GetValue<string>(), out var eyeColor))
++                    Game1.player.changeEyeColor(eyeColor);
++                if (appObj["hatId"] is JsonNode hatNode && hatNode.GetValue<int>() >= 0)
++                    Game1.player.changeHat(hatNode.GetValue<int>());
++            }
++            else
++            {
++                Game1.player.changeGender(false);
++            }
++
++            Game1.player.Name = Utility.FilterDirtyWordsIfStrictPlatform(farmerName);
++            Game1.player.displayName = Game1.player.Name;
++            Game1.player.farmName.Value = Utility.FilterDirtyWordsIfStrictPlatform(farmName);
++            Game1.player.favoriteThing.Value = Utility.FilterDirtyWordsIfStrictPlatform(favoriteThing);
++            Game1.player.isCustomized.Value = true;
++            Game1.player.ConvertClothingOverrideToClothesItems();
++            Game1.multiplayerMode = isCoopHost ? (byte)2 : (byte)0;
++            if (isCoopHost && Game1.options != null)
++            {
++                Game1.options.enableServer = true;
++                Game1.options.ipConnectionsEnabled = true;
++            }
++
++            titleMenu.createdNewCharacter(skipIntro);
++            // loadForNewGame 内部会重置 Game1.options；房主模式下确认服务端开关保持开启。
++            if (isCoopHost && Game1.options != null)
++            {
++                Game1.options.enableServer = true;
++                Game1.options.ipConnectionsEnabled = true;
++            }
++            return $"成功：正在创建新档（农夫={Game1.player.Name}，农场={Game1.player.farmName.Value}，模式={mode}，小屋={Game1.startingCabins}，语言={LocalizedContentManager.CurrentLanguageCode}），等待进入第 1 天";
+         }
+ 
+         private static string Shorten(string s, int n)
+@@ -614,22 +868,39 @@ namespace BlindWhaleFarmer
+                 string log = mod.ApplyRemoteSettings(settings);
+                 lastRevision = msg["revision"]?.GetValue<string>() ?? "";
+                 mod.Monitor?.Log(log, LogLevel.Info);
+-                await Write(resp, 200, SettingsSnapshot(log));
++                var runtime = await SafeRuntimeSnapshotAsync().ConfigureAwait(false);
++                await Write(resp, 200, SettingsSnapshot(log, runtime));
+                 return;
+             }
+             if (req.HttpMethod == "GET")
+             {
+-                await Write(resp, 200, SettingsSnapshot(null));
++                var runtime = await SafeRuntimeSnapshotAsync().ConfigureAwait(false);
++                await Write(resp, 200, SettingsSnapshot(null, runtime));
+                 return;
+             }
+             resp.AddHeader("Allow", "GET, POST");
+             await Write(resp, 405, null);
+         }
+ 
+-        private JsonObject SettingsSnapshot(string message)
++        private async Task<JsonObject> SafeRuntimeSnapshotAsync()
++        {
++            try
++            {
++                var task = mod.MainThread.Invoke(mod.RuntimeSnapshot);
++                if (await Task.WhenAny(task, Task.Delay(2500)).ConfigureAwait(false) == task)
++                    return await task.ConfigureAwait(false);
++            }
++            catch
++            {
++                // 降级返回基础快照，不阻塞 /settings 探活
++            }
++            return null;
++        }
++
++        private JsonObject SettingsSnapshot(string message, JsonObject runtime = null)
+         {
+             var c = mod.Config;
+-            return new JsonObject
++            var obj = new JsonObject
+             {
+                 ["instance"] = instance,
+                 ["revision"] = lastRevision,
+@@ -654,6 +925,15 @@ namespace BlindWhaleFarmer
+                     ? new JsonObject { ["minutes"] = g.Minutes, ["played"] = Math.Round(g.Played, 1), ["days"] = g.Days, ["daysDone"] = g.DaysDone, ["pending"] = mod.Session.GoalPending && !mod.PlayerInControl && mod.Agent?.Running != true }
+                     : null
+             };
++            if (runtime != null)
++            {
++                var lanNode = runtime["lan"];
++                if (lanNode != null)
++                    obj["lan"] = lanNode.DeepCloneValue();
++                runtime.Remove("lan");
++                obj["runtime"] = runtime;
++            }
++            return obj;
+         }
+ 
+         private static bool IsTrue(JsonNode n) => Tools.ParseBool(n) == true;
+diff --git a/BlindWhaleFarmer/ModEntry.cs b/BlindWhaleFarmer/ModEntry.cs
+index 875ba8d..ffc9b7e 100644
+--- a/BlindWhaleFarmer/ModEntry.cs
++++ b/BlindWhaleFarmer/ModEntry.cs
+@@ -3,6 +3,7 @@ using System.Collections.Generic;
+ using System.IO;
+ using System.Linq;
+ using System.Text;
++using System.Text.Json.Nodes;
+ using HarmonyLib;
+ using Microsoft.Xna.Framework;
+ using Microsoft.Xna.Framework.Graphics;
+@@ -10,6 +11,7 @@ using StardewModdingAPI;
+ using StardewModdingAPI.Events;
+ using StardewValley;
+ using StardewValley.Menus;
++using StardewValley.Network;
+ 
+ namespace BlindWhaleFarmer
+ {
+@@ -38,6 +40,12 @@ namespace BlindWhaleFarmer
+ 
+         /// <summary>玩家按了接管键：AI 的游戏动作一律拒绝，不冻结时间、不自动暂停。再按一次交还。</summary>
+         internal volatile bool PlayerInControl;
++        /// <summary>鲸屿冷启动建档/读档期间临时允许游戏在后台推进（避免 pauseWhenOutOfFocus 卡死 TitleMenu / NewDay）。</summary>
++        internal DateTime BootTransitionUntilUtc = DateTime.MinValue;
++        internal bool IsBootTransitionActive => DateTime.UtcNow < BootTransitionUntilUtc && !Context.IsWorldReady;
++        /// <summary>由 WHALE_STARDEW_LANG 注入的首选游戏语言（如 zh / en）；空串表示不干预。</summary>
++        internal string PreferredLanguage = "";
++        private bool bootLanguageSynced;
+         /// <summary>AI 在玩时临时关掉的“失去焦点时暂停”原值；null 表示没有改动。</summary>
+         private bool? savedPauseWhenOutOfFocus;
+         private string transcriptPath;
+@@ -53,6 +61,14 @@ namespace BlindWhaleFarmer
+         public override void Entry(IModHelper helper)
+         {
+             Config = helper.ReadConfig<ModConfig>();
++            int effectiveMcpPort = Config.McpPort;
++            if (int.TryParse(Environment.GetEnvironmentVariable("WHALE_BWF_MCP_PORT"), out int envPort)
++                && envPort >= 1024 && envPort <= 65535)
++            {
++                effectiveMcpPort = envPort;
++                Monitor.Log($"检测到 WHALE_BWF_MCP_PORT={effectiveMcpPort}，本次运行覆盖 MCP 端口（不改写 config.json）。", LogLevel.Info);
++            }
++            PreferredLanguage = (Environment.GetEnvironmentVariable("WHALE_STARDEW_LANG") ?? "").Trim();
+             Monitor.Log(Guide.Load(helper.DirectoryPath, Config.GuideFile), LogLevel.Info);
+             Guide.SetOverrides(Config.GuideOverrides);
+             GameActions.PersistSaveReserved = SaveNotes;
+@@ -120,14 +136,14 @@ namespace BlindWhaleFarmer
+             {
+                 try
+                 {
+-                    Mcp = new McpServer(this, Config.McpPort);
++                    Mcp = new McpServer(this, effectiveMcpPort);
+                     Mcp.Start();
+-                    Monitor.Log($"MCP 服务器已启动：http://127.0.0.1:{Config.McpPort}/mcp （WorkBuddy 等 MCP 客户端可以连这个地址来玩）", LogLevel.Info);
++                    Monitor.Log($"MCP 服务器已启动：http://127.0.0.1:{effectiveMcpPort}/mcp （WorkBuddy 等 MCP 客户端可以连这个地址来玩）", LogLevel.Info);
+                 }
+                 catch (Exception ex)
+                 {
+                     Mcp = null;
+-                    Monitor.Log($"MCP 服务器启动失败（端口 {Config.McpPort} 可能被占用，可在 config.json 改 McpPort）：{ex.Message}", LogLevel.Warn);
++                    Monitor.Log($"MCP 服务器启动失败（端口 {effectiveMcpPort} 可能被占用，可在 config.json 改 McpPort）：{ex.Message}", LogLevel.Warn);
+                 }
+             }
+         }
+@@ -151,6 +167,7 @@ namespace BlindWhaleFarmer
+ 
+         private void OnSaveLoaded(object sender, SaveLoadedEventArgs e)
+         {
++            BootTransitionUntilUtc = DateTime.MinValue;
+             var data = Helper.Data.ReadJsonFile<SaveData>(NotesFile) ?? new SaveData();
+             Agent.Notes = data.Notes ?? "";
+             GameActions.LoadSaveReserved(data.Reserved);
+@@ -356,6 +373,11 @@ namespace BlindWhaleFarmer
+         private void OnUpdateTicked(object sender, UpdateTickedEventArgs e)
+         {
+             bool ready = Context.IsWorldReady;
++            if (!ready && !bootLanguageSynced && TitleMenu.ticksUntilLanguageLoad < 0 && !string.IsNullOrWhiteSpace(PreferredLanguage))
++            {
++                bootLanguageSynced = true;
++                EnsureLanguage(PreferredLanguage);
++            }
+             if (ready)
+                 CurrentStamp = Util.Stamp();
+ 
+@@ -383,8 +405,8 @@ namespace BlindWhaleFarmer
+             if (ready && Agent.Running && !MainThread.IsBusy && e.IsMultipleOf(60) && Session.Ended)
+                 Agent.Stop("本次游玩时间到了", onItsOwn: true);
+ 
+-            // 用 MCP 客户端玩时游戏窗口通常在后台；默认的“失去焦点时暂停”会让 Game1.Update 直接返回，人物走不动
+-            KeepRunningInBackground(ready && (Agent.Running || mcpPlaying || MainThread.IsBusy));
++            // 用 MCP 客户端玩或冷启动自动建档/读档过渡期，游戏窗口通常在后台；关掉“失去焦点时暂停”避免过渡态冻结
++            KeepRunningInBackground((ready && (Agent.Running || mcpPlaying || MainThread.IsBusy)) || IsBootTransitionActive);
+             // 剧情标记卡住（eventUp 还开着、却没有剧情/界面/切场景）时自己解开；只在 AI 玩的时候管，不碰玩家自己玩
+             if (ready && (Agent.Running || mcpPlaying || MainThread.IsBusy))
+             {
+@@ -499,6 +521,123 @@ namespace BlindWhaleFarmer
+                 Monitor.LogOnce("HUD 绘制失败：" + ex.Message, LogLevel.Warn);
+             }
+         }
++
++        /// <summary>同步星露谷当前语言码（避免全新隔离目录缺少 startup_preferences 时回退英文）。在主线程上调用。</summary>
++        internal bool EnsureLanguage(string code)
++        {
++            if (string.IsNullOrWhiteSpace(code))
++                return false;
++            if (!Utility.TryParseEnum<LocalizedContentManager.LanguageCode>(code.Trim(), out var parsed)
++                || parsed == LocalizedContentManager.LanguageCode.mod)
++            {
++                return false;
++            }
++            if (LocalizedContentManager.CurrentLanguageCode != parsed)
++            {
++                LocalizedContentManager.CurrentLanguageCode = parsed;
++                Monitor.Log($"已同步游戏语言：{parsed}", LogLevel.Info);
++            }
++            if (Game1.activeClickableMenu is TitleMenu tm && tm.startupPreferences != null)
++            {
++                tm.startupPreferences.languageCode = parsed.ToString();
++                if (tm.startupPreferences.isLoaded)
++                    tm.startupPreferences.savePreferences(async: false, update_language_from_ingame_language: true);
++            }
++            return true;
++        }
++
++        /// <summary>采集运行态与联机房主 LAN 服务器状态快照（在主线程上调用）。</summary>
++        internal JsonObject RuntimeSnapshot()
++        {
++            bool worldReady = Context.IsWorldReady && Game1.gameMode == 3 && !Game1.newDay;
++            bool isHost = Game1.IsServer;
++            bool serverRunning = Game1.server != null;
++            bool lanListening = false;
++            if (serverRunning && Game1.server is GameServer gs)
++            {
++                try
++                {
++                    var servers = Helper.Reflection.GetField<List<Server>>(gs, "servers", required: false)?.GetValue();
++                    if (servers != null)
++                    {
++                        foreach (var srv in servers)
++                        {
++                            if (srv is LidgrenServer lidgren && lidgren.connected())
++                            {
++                                lanListening = true;
++                                break;
++                            }
++                        }
++                    }
++                    else
++                    {
++                        lanListening = isHost && (Game1.options?.enableServer ?? false) && (Game1.options?.ipConnectionsEnabled ?? false);
++                    }
++                }
++                catch
++                {
++                    lanListening = isHost && (Game1.options?.enableServer ?? false) && (Game1.options?.ipConnectionsEnabled ?? false);
++                }
++            }
++            string inviteCode = null;
++            try
++            {
++                inviteCode = Game1.server?.getInviteCode();
++            }
++            catch
++            {
++                inviteCode = null;
++            }
++            int startingCabins = Game1.startingCabins;
++            int availableFarmhandSlots = 0;
++            if (Context.IsWorldReady && Game1.getFarm() is { } farm)
++            {
++                int cabinCount = 0;
++                int freeCount = 0;
++                foreach (var building in farm.buildings)
++                {
++                    if (!building.isCabin)
++                        continue;
++                    cabinCount++;
++                    if (building.GetIndoors() is StardewValley.Locations.Cabin cabin && (!cabin.HasOwner || cabin.owner?.isUnclaimedFarmhand == true))
++                        freeCount++;
++                }
++                startingCabins = cabinCount;
++                availableFarmhandSlots = freeCount;
++            }
++            string langCode = LocalizedContentManager.CurrentLanguageCode.ToString();
++            string saveFolder = Context.IsWorldReady ? Constants.SaveFolderName : null;
++
++            var lan = new JsonObject
++            {
++                ["isHost"] = isHost,
++                ["multiplayerMode"] = (int)Game1.multiplayerMode,
++                ["serverRunning"] = serverRunning,
++                ["lanListening"] = lanListening,
++                ["lanPort"] = LidgrenServer.defaultPort,
++                ["acceptIpConnections"] = Game1.options?.ipConnectionsEnabled == true,
++                ["inviteCode"] = inviteCode,
++                ["startingCabins"] = startingCabins,
++                ["availableFarmhandSlots"] = availableFarmhandSlots,
++                ["worldReady"] = worldReady,
++                ["saveFolderName"] = saveFolder,
++                ["languageCode"] = langCode,
++            };
++
++            return new JsonObject
++            {
++                ["worldReady"] = worldReady,
++                ["gameMode"] = (int)Game1.gameMode,
++                ["newDay"] = Game1.newDay,
++                ["inTitleMenu"] = Game1.activeClickableMenu is TitleMenu,
++                ["titleSubMenu"] = TitleMenu.subMenu?.GetType().Name,
++                ["ticksUntilLanguageLoad"] = TitleMenu.ticksUntilLanguageLoad,
++                ["languageCode"] = langCode,
++                ["saveFolderName"] = saveFolder,
++                ["capabilities"] = new JsonArray("load_save", "host_load_save", "create_new_save", "lan_status", "language_sync"),
++                ["lan"] = lan,
++            };
++        }
+     }
+ 
+     /// <summary>屏幕左上角的小面板：显示 AI 状态、想法和当前动作。</summary>

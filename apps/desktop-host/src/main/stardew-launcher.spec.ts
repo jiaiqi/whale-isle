@@ -314,3 +314,255 @@ describe('V2-P2-09B 联机隔离实例（XDG 注入）', () => {
     expect(spawn.calls.map((call) => call.command)).toEqual([SMAPI]);
   });
 });
+
+describe('V2-P3-07D 从 0 建档/联机房主、默认隔离与中文双保险', () => {
+  const DEFAULT_ISO = '/Users/tester/.whale-isle/stardew-isolated';
+  const NEW_SAVE = {
+    farmerName: '小鲸',
+    farmName: '鲸屿',
+    favoriteThing: '白米饭',
+    farmType: 'standard' as const,
+    mode: 'singleplayer' as const,
+    startingCabins: 0,
+    cabinLayout: 'nearby' as const,
+    skipIntro: true,
+    separateWallets: false,
+    profitMargin: 'normal' as const,
+  };
+
+  it('storageMode=isolated 默认启用隔离根目录，注入 WHALE_STARDEW_LANG/WHALE_BWF_MCP_PORT 与 --mods-path，并触发语言初始化与形象预同步', async () => {
+    const spawn = envCapturingSpawn();
+    const ensuredDirs: string[] = [];
+    const syncedLanguages: Array<{ dir: string; lang: string }> = [];
+    const syncCalls: Array<{ farmerName: string; modsPath?: string }> = [];
+    const mcpCalls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      const target = String(url);
+      if (target.endsWith('/settings')) {
+        return new Response(JSON.stringify({
+          revision: 'r1',
+          runtime: {
+            worldReady: true,
+            saveFolderName: '鲸屿_1001',
+            capabilities: ['load_save', 'host_load_save', 'create_new_save', 'lan_status', 'language_sync'],
+          },
+          lan: null,
+        }), { status: 200 });
+      }
+      const req = JSON.parse(String(init?.body ?? '{}')) as { params?: { name?: string; arguments?: Record<string, unknown> } };
+      const toolName = req.params?.name ?? '';
+      mcpCalls.push({ tool: toolName, args: req.params?.arguments ?? {} });
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { content: [{ type: 'text', text: '成功：正在创建新档' }], isError: false },
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const launcher = createStardewLauncher(baseDeps({
+      defaultIsolateDataDir: DEFAULT_ISO,
+      spawnImpl: spawn.impl,
+      ensureDir: (p) => { ensuredDirs.push(p); },
+      ensureIsolatedLanguage: (dir, lang) => { syncedLanguages.push({ dir, lang }); },
+      syncAvatar: (input) => { syncCalls.push(input); return { ok: true }; },
+      fetchImpl,
+      probe: sequenceProbe([
+        { status: 'offline', detail: '尚未监听' },
+        { status: 'reachable', detail: '标题画面' },
+        { status: 'online', detail: '第1年春1日 06:00' },
+      ]),
+    }));
+
+    const first = await launcher.launch({
+      port: 19088,
+      storageMode: 'isolated',
+      language: 'zh',
+      savePolicy: 'always_new',
+      gameMode: 'singleplayer',
+      modsPath: '/tmp/custom-mods',
+      newSave: { ...NEW_SAVE, appearance: { characterId: 'blue-whale-maid', syncPixelAvatar: true, gender: 'female' } },
+    });
+    expect(first.state).toBe('launching');
+    expect(first.storageMode).toBe('isolated');
+    expect(first.language).toBe('zh');
+    expect(spawn.calls[0]?.args).toEqual(['--mods-path', '/tmp/custom-mods']);
+    expect(spawn.calls[0]?.env?.XDG_CONFIG_HOME).toBe(`${DEFAULT_ISO}/xdg-config`);
+    expect(spawn.calls[0]?.env?.WHALE_BWF_MCP_PORT).toBe('19088');
+    expect(spawn.calls[0]?.env?.WHALE_STARDEW_LANG).toBe('zh');
+    expect(ensuredDirs).toEqual([`${DEFAULT_ISO}/xdg-config`, `${DEFAULT_ISO}/xdg-data`]);
+    expect(syncedLanguages).toEqual([{ dir: `${DEFAULT_ISO}/xdg-config`, lang: 'zh' }]);
+    expect(syncCalls).toEqual([{ characterId: 'blue-whale-maid', farmerName: '小鲸', modsPath: '/tmp/custom-mods' }]);
+
+    const done = await settle(launcher);
+    expect(done.state).toBe('ready');
+    expect(done.phase).toBe('ready');
+    expect(done.createdSaveSlot).toBe('鲸屿_1001');
+    expect(mcpCalls.some((c) => c.tool === 'create_new_save' && c.args.language === 'zh' && c.args.skipIntro === true)).toBe(true);
+  });
+
+  it('always_new：遇到 [LANGUAGE_LOADING]/[TITLE_NOT_READY] 不放弃继续重试，之后成功建档', async () => {
+    let createCount = 0;
+    const fetchImpl = (async (url: string | URL) => {
+      if (String(url).endsWith('/settings')) {
+        return new Response(JSON.stringify({
+          runtime: { capabilities: ['create_new_save', 'lan_status'], saveFolderName: '鲸屿_2002' },
+        }), { status: 200 });
+      }
+      createCount += 1;
+      const text = createCount === 1
+        ? '失败：[LANGUAGE_LOADING] 语言加载中'
+        : createCount === 2
+          ? '失败：[TITLE_NOT_READY] 标题动画中'
+          : '成功：正在创建新档';
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { content: [{ type: 'text', text }], isError: createCount <= 2 },
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const launcher = createStardewLauncher(baseDeps({
+      fetchImpl,
+      probe: sequenceProbe([
+        { status: 'offline', detail: '启动中' },
+        { status: 'reachable', detail: '标题画面' },
+        { status: 'reachable', detail: '标题画面' },
+        { status: 'reachable', detail: '标题画面' },
+        { status: 'online', detail: '进入第1天' },
+      ]),
+    }));
+
+    await launcher.launch({ savePolicy: 'always_new', newSave: NEW_SAVE, timeoutMs: 30_000 });
+    const done = await settle(launcher);
+    expect(createCount).toBe(3);
+    expect(done.state).toBe('ready');
+    expect(done.createdSaveSlot).toBe('鲸屿_2002');
+  });
+
+  it('continue_or_create：load_save 返回 [SAVE_NOT_FOUND] 时自动降级触发 create_new_save', async () => {
+    const called: string[] = [];
+    const fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/settings')) {
+        return new Response(JSON.stringify({
+          runtime: { capabilities: ['load_save', 'create_new_save'], saveFolderName: '鲸屿_3003' },
+        }), { status: 200 });
+      }
+      const req = JSON.parse(String(init?.body ?? '{}')) as { params?: { name?: string } };
+      const tool = req.params?.name ?? '';
+      called.push(tool);
+      const isLoad = tool === 'load_save';
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          content: [{ type: 'text', text: isLoad ? '失败：[SAVE_NOT_FOUND] 没有找到任何存档' : '成功：正在创建新档' }],
+          isError: isLoad,
+        },
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const launcher = createStardewLauncher(baseDeps({
+      fetchImpl,
+      probe: sequenceProbe([
+        { status: 'offline', detail: '启动中' },
+        { status: 'reachable', detail: '标题画面' },
+        { status: 'online', detail: '就绪' },
+      ]),
+    }));
+
+    await launcher.launch({ savePolicy: 'continue_or_create', newSave: NEW_SAVE });
+    const done = await settle(launcher);
+    expect(called).toEqual(['load_save', 'create_new_save']);
+    expect(done.state).toBe('ready');
+  });
+
+  it('coop_host：进档后若 lanListening=false 则维持 waiting_lan_server，直到 LAN 监听才 ready 并填满 lanHost', async () => {
+    let settingsChecks = 0;
+    const fetchImpl = (async (url: string | URL) => {
+      if (String(url).endsWith('/settings')) {
+        settingsChecks += 1;
+        const listening = settingsChecks >= 3;
+        return new Response(JSON.stringify({
+          runtime: {
+            worldReady: true,
+            saveFolderName: '联机湾_888',
+            capabilities: ['create_new_save', 'lan_status'],
+          },
+          lan: {
+            isHost: true,
+            multiplayerMode: 2,
+            serverRunning: true,
+            lanListening: listening,
+            lanPort: 24642,
+            acceptIpConnections: true,
+            inviteCode: null,
+            startingCabins: 2,
+            availableFarmhandSlots: 2,
+            worldReady: true,
+            saveFolderName: '联机湾_888',
+            languageCode: 'zh',
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { content: [{ type: 'text', text: '成功：正在创建新档' }], isError: false },
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const launcher = createStardewLauncher(baseDeps({
+      fetchImpl,
+      probe: sequenceProbe([
+        { status: 'offline', detail: '启动中' },
+        { status: 'reachable', detail: '标题画面' },
+        { status: 'online', detail: '游戏已进档' },
+        { status: 'online', detail: '游戏已进档' },
+      ]),
+    }));
+
+    await launcher.launch({
+      savePolicy: 'always_new',
+      gameMode: 'coop_host',
+      newSave: { ...NEW_SAVE, farmName: '联机湾', mode: 'coop_host', startingCabins: 2 },
+    });
+    const done = await settle(launcher);
+    expect(done.state).toBe('ready');
+    expect(done.phase).toBe('ready');
+    expect(done.lanHost?.lanListening).toBe(true);
+    expect(done.lanHost?.startingCabins).toBe(2);
+    expect(done.createdSaveSlot).toBe('联机湾_888');
+  });
+
+  it('旧版 BWF 缺少 create_new_save 能力时快败 BWF_PATCH_MISSING，不空等超时', async () => {
+    const fetchImpl = (async (url: string | URL) => {
+      if (String(url).endsWith('/settings')) {
+        return new Response(JSON.stringify({ settings: { showHud: true } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { message: 'Unknown tool' } }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const launcher = createStardewLauncher(baseDeps({
+      fetchImpl,
+      probe: sequenceProbe([
+        { status: 'offline', detail: '启动中' },
+        { status: 'reachable', detail: '标题画面' },
+      ]),
+    }));
+
+    await launcher.launch({ savePolicy: 'always_new', newSave: NEW_SAVE, timeoutMs: 60_000 });
+    const done = await settle(launcher);
+    expect(done.state).toBe('failed');
+    expect(done.errorCode).toBe('BWF_PATCH_MISSING');
+  });
+
+  it('已进存档状态时触发 always_new 直接报错拒绝，不伪造新建档', async () => {
+    const launcher = createStardewLauncher(baseDeps({
+      probe: sequenceProbe([{ status: 'online', detail: '已在游戏内' }]),
+    }));
+    const res = await launcher.launch({ savePolicy: 'always_new', newSave: NEW_SAVE });
+    expect(res.state).toBe('failed');
+    expect(res.errorCode).toBe('CREATE_SAVE_FAILED');
+  });
+});

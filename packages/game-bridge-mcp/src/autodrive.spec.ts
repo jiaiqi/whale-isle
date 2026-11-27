@@ -1529,3 +1529,43 @@ describe('T-M6-73 主人临时接管（human-control）', () => {
     expect(events.filter((event) => event.type === 'human-control').length).toBe(2);
   });
 });
+
+describe('V2-P3-07C StardewAdapter 启动竞态：标题画面绝不误判就绪', () => {
+  it('标题画面回 200+还没有进入存档 → AutodriveRunner 等待直到真正进档才开跑', async () => {
+    let callIdx = 0;
+    const replies = [
+      '游戏还没有进入存档，请在标题画面选择存档',
+      '正在加载存档…',
+      STATE_OK,
+      STATE_OK,
+    ];
+    const fetchImpl = (async () => {
+      const text = replies[Math.min(callIdx, replies.length - 1)] ?? STATE_OK;
+      callIdx += 1;
+      return { text: async () => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ text }], isError: false } }) } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const events: AutodriveEvent[] = [];
+    let fakeTime = 0;
+    const runner = new AutodriveRunner(
+      (e) => events.push(e),
+      {
+        maxCycles: 1,
+        stepDelayMs: 0,
+        pollDelayMs: 0,
+        errorDelayMs: 0,
+        readyTimeoutMs: 20_000,
+        readyPollMs: 2_000,
+        now: () => fakeTime,
+        sleep: async (ms) => { fakeTime += ms; },
+      },
+      new StardewAdapter('http://mock/mcp', fetchImpl),
+    );
+    await runner.start();
+    expect(runner.isRunning()).toBe(true);
+    await runner.stopAndWait();
+    const waitings = events.filter((e) => e.type === 'watchdog' && String(e.detail).includes('启动竞态'));
+    expect(waitings).toHaveLength(2);
+    expect(events.some((e) => e.type === 'state')).toBe(true);
+  });
+});

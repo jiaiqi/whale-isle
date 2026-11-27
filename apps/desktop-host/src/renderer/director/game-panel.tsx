@@ -9,9 +9,23 @@
  * 任何未连接/未就绪都如实展示引导，不显示虚假的「已连接」。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, PlugZap, RefreshCw, Rocket, Square } from 'lucide-react';
+import { ChevronDown, PlugZap, RefreshCw, Rocket, ShieldCheck, SlidersHorizontal, Square, Users } from 'lucide-react';
 import { summarizeAutodriveQuality, formatRate } from '@workbench/game-bridge-mcp/metrics';
-import type { AutodriveEventView, GameHealthView, GameId, StardewLaunchStateView, StardewLaunchStatusView } from './bridge';
+import type {
+  AutodriveEventView,
+  GameHealthView,
+  GameId,
+  StardewCabinLayoutView,
+  StardewFarmTypeView,
+  StardewLanguageCodeView,
+  StardewLaunchDefaultsView,
+  StardewLaunchOptionsView,
+  StardewLaunchPhaseView,
+  StardewLaunchPrefsView,
+  StardewLaunchStateView,
+  StardewLaunchStatusView,
+  StardewStorageModeView,
+} from './bridge';
 import { EmptyIllustration } from './shell/empty-illustration';
 
 /** 回执状态色（语义色 token，深浅主题通用） */
@@ -133,18 +147,57 @@ export const STARDEW_LAUNCH_LABEL: Record<StardewLaunchStateView, string> = {
   failed: '启动失败',
 };
 
+export const STARDEW_PHASE_LABEL: Record<StardewLaunchPhaseView, string> = {
+  idle: '待命',
+  probing: '环境探测',
+  spawning: '拉起 SMAPI',
+  waiting_bwf: '等待 BWF 端口',
+  waiting_title: '等待标题画面',
+  syncing_avatar: '同步像素形象',
+  creating_save: '自动创建新档',
+  loading_save: '自动载入存档',
+  waiting_world: '进入第 1 天中',
+  waiting_lan_server: '等待联机房主 LAN 监听',
+  ready: '已就绪',
+  failed: '失败',
+};
+
+const FARM_TYPE_OPTIONS: ReadonlyArray<readonly [StardewFarmTypeView, string]> = [
+  ['standard', '标准农场'],
+  ['meadowlands', '草原农场（1.6）'],
+  ['four_corners', '四角农场'],
+  ['forest', '森林农场'],
+  ['hilltop', '山顶农场'],
+  ['riverland', '河边农场'],
+  ['beach', '海滩农场'],
+  ['wilderness', '荒野农场'],
+];
+
+const LANGUAGE_OPTIONS: ReadonlyArray<readonly [StardewLanguageCodeView, string]> = [
+  ['zh', '简体中文（zh）'],
+  ['en', 'English（en）'],
+  ['ja', '日本語（ja）'],
+  ['ko', '한국어（ko）'],
+];
+
 /**
- * V2-P3-05：星露谷一键启动的渲染层状态轮询。
- * 主进程启动后立即返回，这里按 800ms 拉取真实状态；只有主进程确认 MCP get_state 应答才显示「已就绪」。
+ * V2-P3-05 / V2-P3-07：星露谷启动、从 0 建档/联机房主与存储/语言偏好的渲染层状态钩子。
+ * 主进程启动后立即返回，这里按 800ms 拉取真实状态；只有主进程确认 MCP get_state（及房主 LAN）应答才显示「已就绪」。
  */
 export function useStardewLaunch(onReady?: () => void): {
   status: StardewLaunchStatusView | null;
   busy: boolean;
-  launch: () => Promise<void>;
+  prefs: StardewLaunchPrefsView | null;
+  defaults: StardewLaunchDefaultsView | null;
+  launch: (options?: StardewLaunchOptionsView) => Promise<void>;
   cancel: () => Promise<void>;
+  updatePrefs: (patch: Partial<StardewLaunchPrefsView>) => Promise<{ ok: boolean; error?: string }>;
+  refreshDefaults: () => Promise<void>;
 } {
   const [status, setStatus] = useState<StardewLaunchStatusView | null>(null);
   const [busy, setBusy] = useState(false);
+  const [prefs, setPrefs] = useState<StardewLaunchPrefsView | null>(null);
+  const [defaults, setDefaults] = useState<StardewLaunchDefaultsView | null>(null);
   const timerRef = useRef<number | null>(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
@@ -156,7 +209,20 @@ export function useStardewLaunch(onReady?: () => void): {
     }
   }, []);
 
-  useEffect(() => clearTimer, [clearTimer]);
+  const refreshDefaults = useCallback(async (): Promise<void> => {
+    try {
+      const next = await window.directorBridge.stardewLaunchDefaults();
+      setDefaults(next);
+      setPrefs(next.prefs);
+    } catch {
+      /* preload/非桌面环境下静默容错 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDefaults();
+    return clearTimer;
+  }, [clearTimer, refreshDefaults]);
 
   const settle = useCallback((next: StardewLaunchStatusView): void => {
     setStatus(next);
@@ -167,10 +233,10 @@ export function useStardewLaunch(onReady?: () => void): {
     }
   }, [clearTimer]);
 
-  const launch = useCallback(async (): Promise<void> => {
+  const launch = useCallback(async (options?: StardewLaunchOptionsView): Promise<void> => {
     setBusy(true);
     try {
-      const first = await window.directorBridge.stardewLaunch();
+      const first = await window.directorBridge.stardewLaunch(options);
       settle(first);
       if (STARDEW_LAUNCH_TERMINAL.includes(first.state)) return;
       clearTimer();
@@ -193,7 +259,18 @@ export function useStardewLaunch(onReady?: () => void): {
     }
   }, [clearTimer, settle]);
 
-  return { status, busy, launch, cancel };
+  const updatePrefs = useCallback(async (patch: Partial<StardewLaunchPrefsView>): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const res = await window.directorBridge.stardewLaunchPrefsSet(patch);
+      setPrefs(res.prefs);
+      setDefaults((prev) => (prev === null ? prev : { ...prev, prefs: res.prefs }));
+      return { ok: res.ok, ...(res.error === undefined ? {} : { error: res.error }) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }, []);
+
+  return { status, busy, prefs, defaults, launch, cancel, updatePrefs, refreshDefaults };
 }
 
 /**
@@ -207,17 +284,97 @@ export function GameConnectionBanner({
   report,
   probing,
   onReprobe,
+  onPrefsChanged,
 }: {
   gameId: GameId;
   report: GameHealthView | null;
   probing: boolean;
   onReprobe: () => void;
+  onPrefsChanged?: (prefs: StardewLaunchPrefsView) => void;
 }): React.JSX.Element {
   const name = GAME_FULL_NAME[gameId];
   const status = report?.status ?? 'unknown';
   const connected = status === 'online';
   const launchState = useStardewLaunch(onReprobe);
   const launchStatus = launchState.status;
+  const prefs = launchState.prefs;
+  const defaults = launchState.defaults;
+
+  const [configOpen, setConfigOpen] = useState(false);
+  const [farmerName, setFarmerName] = useState('小鲸');
+  const [farmerTouched, setFarmerTouched] = useState(false);
+  const [farmName, setFarmName] = useState('鲸屿');
+  const [favoriteThing, setFavoriteThing] = useState('白米饭');
+  const [farmType, setFarmType] = useState<StardewFarmTypeView>('standard');
+  const [startingCabins, setStartingCabins] = useState(1);
+  const [cabinLayout, setCabinLayout] = useState<StardewCabinLayoutView>('nearby');
+  const [skipIntro, setSkipIntro] = useState(true);
+  const [syncPixelAvatar, setSyncPixelAvatar] = useState(true);
+  const [storageMode, setStorageMode] = useState<StardewStorageModeView>('isolated');
+  const [language, setLanguage] = useState<StardewLanguageCodeView>('zh');
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
+
+  useEffect(() => {
+    if (defaults !== null && !farmerTouched) {
+      setFarmerName(defaults.farmerName);
+    }
+  }, [defaults, farmerTouched]);
+
+  useEffect(() => {
+    if (prefs !== null && !prefsHydrated) {
+      setStorageMode(prefs.storageMode);
+      setLanguage(prefs.language);
+      setFarmName(prefs.farmName);
+      setFavoriteThing(prefs.favoriteThing);
+      setFarmType(prefs.farmType);
+      setStartingCabins(prefs.startingCabins);
+      setCabinLayout(prefs.cabinLayout);
+      setSkipIntro(prefs.skipIntro);
+      setSyncPixelAvatar(prefs.syncPixelAvatar);
+      setPrefsHydrated(true);
+    }
+  }, [prefs, prefsHydrated]);
+
+  const handleStorageChange = (nextMode: StardewStorageModeView): void => {
+    setStorageMode(nextMode);
+    void launchState.updatePrefs({ storageMode: nextMode }).then((res) => {
+      if (res.ok && launchState.prefs) onPrefsChanged?.({ ...launchState.prefs, storageMode: nextMode });
+      else void launchState.refreshDefaults().then(() => {
+        if (launchState.prefs) onPrefsChanged?.(launchState.prefs);
+      });
+    });
+  };
+
+  const handleLanguageChange = (nextLang: StardewLanguageCodeView): void => {
+    setLanguage(nextLang);
+    void launchState.updatePrefs({ language: nextLang }).then((res) => {
+      if (res.ok && launchState.prefs) onPrefsChanged?.({ ...launchState.prefs, language: nextLang });
+    });
+  };
+
+  const buildNewSave = (mode: 'singleplayer' | 'coop_host') => {
+    const cleanFarmer = farmerName.trim() || defaults?.farmerName || '小鲸';
+    const cleanFarm = farmName.trim() || '鲸屿';
+    const cleanFav = favoriteThing.trim() || '白米饭';
+    return {
+      farmerName: cleanFarmer.slice(0, 24),
+      farmName: cleanFarm.slice(0, 24),
+      favoriteThing: cleanFav.slice(0, 24),
+      farmType,
+      mode,
+      startingCabins: mode === 'coop_host' ? Math.max(1, Math.min(7, startingCabins)) : 0,
+      cabinLayout,
+      skipIntro,
+      separateWallets: false,
+      profitMargin: 'normal' as const,
+      appearance: {
+        ...(defaults?.characterId ? { characterId: defaults.characterId } : {}),
+        syncPixelAvatar,
+        gender: 'female' as const,
+      },
+    };
+  };
+
   const launchTone = launchStatus?.state === 'ready'
     ? 'var(--green)'
     : launchStatus?.state === 'failed' || launchStatus?.state === 'timeout' || launchStatus?.state === 'not_installed'
@@ -229,88 +386,333 @@ export function GameConnectionBanner({
     <div
       data-game-conn-banner
       data-game-conn={status}
-      className="mb-4 flex flex-wrap items-center gap-3 px-4 py-3"
+      className="mb-4 flex flex-col gap-3 px-4 py-3"
       style={{
         borderRadius: 'var(--r-xl)',
         border: `1px solid ${connected ? 'var(--green-line)' : 'var(--amber-line)'}`,
         background: connected ? 'var(--green-dim)' : 'var(--amber-dim)',
       }}
     >
-      <div className="min-w-0 flex-1">
-        {connected ? (
-          <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--green)' }}>
-            <span className="pulse-dot" />《{name}》已连接
-            <span className="truncate text-[11.5px] font-normal" style={{ color: 'var(--text-2)' }}>{report?.detail}</span>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--amber)' }}>
-              <PlugZap size={14} />
-              {status === 'reachable' ? `《${name}》已连上但游戏侧未就绪` : `等待连接到《${name}》`}
-              {probing && <span className="text-[11px] font-normal" style={{ color: 'var(--text-2)' }}>探测中…</span>}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {connected ? (
+            <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--green)' }}>
+              <span className="pulse-dot" />《{name}》已连接
+              <span className="truncate text-[11.5px] font-normal" style={{ color: 'var(--text-2)' }}>{report?.detail}</span>
             </div>
-            <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              {report?.detail}
-              {report?.error ? `（${report.error.slice(0, 120)}）` : ''}
-            </div>
-            <ol className="mt-1.5 flex list-decimal flex-col gap-0.5 pl-4 text-[11.5px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
-              {(report?.guidance ?? []).map((step) => <li key={step}>{step}</li>)}
-            </ol>
-          </>
-        )}
-        {showLaunchProgress && launchStatus !== null && (
-          <div
-            data-stardew-launch-progress
-            className="mt-2 rounded-lg px-2.5 py-2 text-[11px]"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}
-          >
-            <div className="flex items-center gap-1.5 font-semibold" style={{ color: launchTone }}>
-              <Rocket size={11} />
-              {STARDEW_LAUNCH_LABEL[launchStatus.state]}
-              {launchStatus.elapsedMs > 0 && (
-                <span className="font-normal" style={{ color: 'var(--text-3)' }}>
-                  已等待 {Math.round(launchStatus.elapsedMs / 1000)}s
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--amber)' }}>
+                <PlugZap size={14} />
+                {status === 'reachable' ? `《${name}》已连上但游戏侧未就绪` : `等待连接到《${name}》`}
+                {probing && <span className="text-[11px] font-normal" style={{ color: 'var(--text-2)' }}>探测中…</span>}
+                {gameId === 'stardew' && (
+                  <span className="pill text-[10px]" style={{ color: 'var(--text-2)' }}>
+                    <ShieldCheck size={10} />
+                    {storageMode === 'isolated' ? '鲸屿隔离目录' : '常规存档目录'} · {language}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+                {report?.detail}
+                {report?.error ? `（${report.error.slice(0, 120)}）` : ''}
+              </div>
+              <ol className="mt-1.5 flex list-decimal flex-col gap-0.5 pl-4 text-[11.5px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+                {(report?.guidance ?? []).map((step) => <li key={step}>{step}</li>)}
+              </ol>
+            </>
+          )}
+          {showLaunchProgress && launchStatus !== null && (
+            <div
+              data-stardew-launch-progress
+              className="mt-2 rounded-lg px-2.5 py-2 text-[11px]"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}
+            >
+              <div className="flex flex-wrap items-center gap-1.5 font-semibold" style={{ color: launchTone }}>
+                <Rocket size={11} />
+                {STARDEW_LAUNCH_LABEL[launchStatus.state]}
+                <span className="pill text-[9.5px]" style={{ color: 'var(--text-2)' }}>
+                  {STARDEW_PHASE_LABEL[launchStatus.phase] ?? launchStatus.phase}
                 </span>
+                <span className="pill text-[9.5px]" style={{ color: 'var(--text-3)' }}>
+                  {launchStatus.storageMode === 'isolated' ? '隔离' : '常规'} · {launchStatus.language}
+                </span>
+                {launchStatus.createdSaveSlot && (
+                  <span className="pill pill-green text-[9.5px]" data-stardew-created-slot>
+                    存档 {launchStatus.createdSaveSlot}
+                  </span>
+                )}
+                {launchStatus.errorCode !== 'NONE' && (
+                  <span className="mono text-[10px]" style={{ color: 'var(--red)' }}>{launchStatus.errorCode}</span>
+                )}
+                {launchStatus.elapsedMs > 0 && (
+                  <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+                    已等待 {Math.round(launchStatus.elapsedMs / 1000)}s
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>{launchStatus.message}</div>
+              {launchStatus.hint !== '' && (
+                <div className="mt-0.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>{launchStatus.hint}</div>
+              )}
+              {launchStatus.lanHost !== null && (
+                <div
+                  data-stardew-lan-status
+                  className="mt-1.5 flex flex-wrap items-center gap-2 rounded px-2 py-1 text-[10.5px]"
+                  style={{ background: 'var(--inset)', border: '1px solid var(--stroke)' }}
+                >
+                  <Users size={11} />
+                  <span>LAN 端口 {launchStatus.lanHost.lanPort}</span>
+                  <span>{launchStatus.lanHost.lanListening ? '监听中' : '未监听'}</span>
+                  <span>空余小屋 {launchStatus.lanHost.availableFarmhandSlots}/{launchStatus.lanHost.startingCabins}</span>
+                  {launchStatus.lanHost.inviteCode && <span className="mono">邀请码 {launchStatus.lanHost.inviteCode}</span>}
+                </div>
               )}
             </div>
-            <div className="mt-0.5 leading-relaxed" style={{ color: 'var(--text-2)' }}>{launchStatus.message}</div>
-            {launchStatus.hint !== '' && (
-              <div className="mt-0.5 leading-relaxed" style={{ color: 'var(--text-3)' }}>{launchStatus.hint}</div>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
-        {gameId === 'stardew' && !connected && (
-          <div
-            data-stardew-launch-panel
-            data-stardew-launch-state={launchStatus?.state ?? 'idle'}
-            className="flex items-center gap-1.5"
-          >
-            <button
-              data-stardew-launch
-              className="btn-pill primary"
-              onClick={() => void launchState.launch()}
-              disabled={launchState.busy}
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {gameId === 'stardew' && !connected && (
+            <div
+              data-stardew-launch-panel
+              data-stardew-launch-state={launchStatus?.state ?? 'idle'}
+              className="flex flex-wrap items-center justify-end gap-1.5"
             >
-              <Rocket size={11} />{launchState.busy ? '启动中…' : '启动星露谷'}
-            </button>
-            {launchState.busy && (
-              <button data-stardew-launch-cancel className="btn-pill ghost" onClick={() => void launchState.cancel()}>
-                取消
+              <button
+                data-stardew-launch
+                className="btn-pill primary"
+                onClick={() => void launchState.launch({
+                  savePolicy: 'continue_or_create',
+                  gameMode: 'singleplayer',
+                  storageMode,
+                  language,
+                  newSave: buildNewSave('singleplayer'),
+                })}
+                disabled={launchState.busy}
+                title="优先续玩最近档；当前目录暂无存档时自动按下方设定新建"
+              >
+                <Rocket size={11} />{launchState.busy ? '启动中…' : '启动星露谷'}
               </button>
+              <button
+                data-stardew-new-singleplayer
+                className="btn-pill"
+                onClick={() => void launchState.launch({
+                  savePolicy: 'always_new',
+                  gameMode: 'singleplayer',
+                  storageMode,
+                  language,
+                  newSave: buildNewSave('singleplayer'),
+                })}
+                disabled={launchState.busy}
+                title="无需键鼠点击，通过 BWF Mod 在标题画面自动新建单机存档并进入第 1 天"
+              >
+                <Rocket size={11} />从 0 单机开玩
+              </button>
+              <button
+                data-stardew-new-coop-host
+                className="btn-pill"
+                onClick={() => void launchState.launch({
+                  savePolicy: 'always_new',
+                  gameMode: 'coop_host',
+                  storageMode,
+                  language,
+                  newSave: buildNewSave('coop_host'),
+                })}
+                disabled={launchState.busy}
+                title="新建联机房主存档并开启 LAN 服务器（默认端口 24642）"
+              >
+                <Users size={11} />从 0 联机房主开玩
+              </button>
+              <button
+                data-stardew-config-toggle
+                className="btn-pill ghost"
+                onClick={() => setConfigOpen((prev) => !prev)}
+                aria-expanded={configOpen}
+              >
+                <SlidersHorizontal size={11} />建档与存储设置
+              </button>
+              {launchState.busy && (
+                <button data-stardew-launch-cancel className="btn-pill ghost" onClick={() => void launchState.cancel()}>
+                  取消
+                </button>
+              )}
+            </div>
+          )}
+          <button
+            data-game-reprobe
+            className={`btn-pill ${connected ? 'ghost' : 'primary'} shrink-0`}
+            onClick={onReprobe}
+            disabled={probing}
+          >
+            <RefreshCw size={11} />{connected ? '刷新状态' : '重新探测连接'}
+          </button>
+        </div>
+      </div>
+
+      {gameId === 'stardew' && !connected && configOpen && (
+        <div
+          data-stardew-new-save-form
+          className="grid grid-cols-1 gap-2.5 rounded-lg p-3 text-[11.5px] md:grid-cols-3"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}
+        >
+          <div className="md:col-span-2 flex flex-wrap items-center gap-2" data-stardew-storage-mode={storageMode}>
+            <span className="font-semibold" style={{ color: 'var(--text-1)' }}>存档存储目录：</span>
+            <button
+              type="button"
+              data-stardew-storage-isolated
+              className={`pill cursor-pointer${storageMode === 'isolated' ? ' pill-green' : ''}`}
+              onClick={() => handleStorageChange('isolated')}
+            >
+              鲸屿隔离目录（默认 · 保护个人存档）
+            </button>
+            <button
+              type="button"
+              data-stardew-storage-standard
+              className={`pill cursor-pointer${storageMode === 'standard' ? ' pill-amber' : ''}`}
+              onClick={() => handleStorageChange('standard')}
+            >
+              常规星露谷目录（~/.config/StardewValley）
+            </button>
+          </div>
+          <label className="flex items-center gap-2">
+            <span className="shrink-0" style={{ color: 'var(--text-2)' }}>游戏语言</span>
+            <select
+              data-stardew-language-select
+              value={language}
+              onChange={(e) => handleLanguageChange(e.target.value as StardewLanguageCodeView)}
+              className="w-full rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            >
+              {LANGUAGE_OPTIONS.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ color: 'var(--text-2)' }}>农夫名</span>
+            <input
+              data-stardew-farmer-name
+              value={farmerName}
+              maxLength={24}
+              onChange={(e) => { setFarmerTouched(true); setFarmerName(e.target.value); }}
+              className="rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ color: 'var(--text-2)' }}>农场名</span>
+            <input
+              data-stardew-farm-name
+              value={farmName}
+              maxLength={24}
+              onChange={(e) => {
+                setFarmName(e.target.value);
+                void launchState.updatePrefs({ farmName: e.target.value || '鲸屿' });
+              }}
+              className="rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ color: 'var(--text-2)' }}>最喜欢的东西</span>
+            <input
+              data-stardew-favorite-thing
+              value={favoriteThing}
+              maxLength={24}
+              onChange={(e) => {
+                setFavoriteThing(e.target.value);
+                void launchState.updatePrefs({ favoriteThing: e.target.value || '白米饭' });
+              }}
+              className="rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ color: 'var(--text-2)' }}>农场类型</span>
+            <select
+              data-stardew-farm-type
+              value={farmType}
+              onChange={(e) => {
+                const next = e.target.value as StardewFarmTypeView;
+                setFarmType(next);
+                void launchState.updatePrefs({ farmType: next });
+              }}
+              className="rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            >
+              {FARM_TYPE_OPTIONS.map(([id, label]) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ color: 'var(--text-2)' }}>联机初始小屋数（1~7）</span>
+            <input
+              data-stardew-starting-cabins
+              type="number"
+              min={1}
+              max={7}
+              value={startingCabins}
+              onChange={(e) => {
+                const n = Math.max(1, Math.min(7, Number(e.target.value) || 1));
+                setStartingCabins(n);
+                void launchState.updatePrefs({ startingCabins: n });
+              }}
+              className="rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ color: 'var(--text-2)' }}>联机小屋布局</span>
+            <select
+              data-stardew-cabin-layout
+              value={cabinLayout}
+              onChange={(e) => {
+                const next = e.target.value as StardewCabinLayoutView;
+                setCabinLayout(next);
+                void launchState.updatePrefs({ cabinLayout: next });
+              }}
+              className="rounded px-2 py-1 text-[11.5px]"
+              style={{ background: 'var(--inset)', border: '1px solid var(--stroke)', color: 'var(--text-1)' }}
+            >
+              <option value="nearby">相邻（nearby）</option>
+              <option value="separate">分开（separate）</option>
+            </select>
+          </label>
+          <div className="md:col-span-3 flex flex-wrap items-center gap-4 pt-1">
+            <label className="flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
+              <input
+                type="checkbox"
+                data-stardew-skip-intro
+                checked={skipIntro}
+                onChange={(e) => {
+                  setSkipIntro(e.target.checked);
+                  void launchState.updatePrefs({ skipIntro: e.target.checked });
+                }}
+              />
+              跳过片头动画（默认）
+            </label>
+            <label className="flex items-center gap-1.5" style={{ color: 'var(--text-2)' }}>
+              <input
+                type="checkbox"
+                data-stardew-sync-avatar
+                checked={syncPixelAvatar}
+                onChange={(e) => {
+                  setSyncPixelAvatar(e.target.checked);
+                  void launchState.updatePrefs({ syncPixelAvatar: e.target.checked });
+                }}
+              />
+              建档同步当前桌宠像素形象（不改写农夫名）
+            </label>
+            {defaults && storageMode === 'isolated' && (
+              <span className="truncate text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                隔离路径：{defaults.isolatedDataDir}
+              </span>
             )}
           </div>
-        )}
-        <button
-          data-game-reprobe
-          className={`btn-pill ${connected ? 'ghost' : 'primary'} shrink-0`}
-          onClick={onReprobe}
-          disabled={probing}
-        >
-          <RefreshCw size={11} />{connected ? '刷新状态' : '重新探测连接'}
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

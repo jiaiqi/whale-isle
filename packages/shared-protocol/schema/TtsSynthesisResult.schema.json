@@ -33,6 +33,13 @@
           "default": false,
           "type": "boolean"
         },
+        "placeholder": {
+          "default": false,
+          "type": "boolean"
+        },
+        "placeholderReason": {
+          "type": "string"
+        },
         "format": {
           "type": "string",
           "enum": [
