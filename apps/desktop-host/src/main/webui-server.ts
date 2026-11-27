@@ -29,6 +29,7 @@ import {
   type PetApiActionRequest,
   type PetApiSayRequest,
   type PetApiState,
+  type LiveObsStagePayload,
 } from '@workbench/shared-protocol';
 import {
   authorize,
@@ -74,6 +75,8 @@ export interface WebUIRuntimeState {
   brainMode?: string | null;
   /** 当前活跃桌宠角色名（T-M6-59：OBS 状态卡顶栏展示） */
   characterName?: string;
+  /** LiveRuntime 的只读投影，浏览器不维护第二份进度/榜单。 */
+  liveStage?: LiveObsStagePayload;
   memoryStats?: {
     nodes?: number;
     edges?: number;
@@ -461,6 +464,25 @@ function renderObsHtml(token: string): string {
   html[data-layout="compact"] .action { margin-top: 2px; font-size: 15px; }
   html[data-layout="compact"] .intent { display: none; }
   html[data-layout="compact"] .receipt { font-size: 11px; }
+  .engagement { position: fixed; top: 28px; right: 28px; width: min(360px, calc(100vw - 56px)); display: grid; gap: 12px; font-size: 14px; line-height: 1.5; }
+  .engagement .card { --obs-accent: #559ee8; background: rgba(10,10,14,0.94); padding: 16px; overflow-wrap: anywhere; }
+  html[data-theme="light"] .engagement .card { --obs-accent: #0a84ff; background: rgba(255,255,255,0.96); }
+  .engagement[hidden], .engagement [hidden] { display: none !important; }
+  .engagement h2 { font-size: 15px; margin: 0 0 8px; letter-spacing: .04em; }
+  .engagement ul { margin: 0; padding-left: 20px; }
+  .engagement li + li { margin-top: 8px; }
+  .engagement small { display: block; color: var(--obs-sub); font-size: 12px; margin-top: 8px; }
+  .engagement .numbers { font-size: 22px; font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+  .engagement progress { width: 100%; height: 10px; accent-color: var(--obs-accent); }
+  .engagement table { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .engagement th:first-child { width: 16%; }
+  .engagement th:last-child { width: 26%; }
+  .engagement td:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .engagement th { font-weight: 400; color: var(--obs-sub); font-size: 12px; }
+  .engagement td, .engagement th { padding: 5px 0; text-align: left; }
+  .engagement td:last-child, .engagement th:last-child { text-align: right; }
+  html[data-layout="compact"] .engagement { top: 18px; right: 18px; width: min(300px, calc(100vw - 36px)); gap: 8px; }
+  html[data-layout="compact"] .engagement .card { padding: 12px; }
 </style>
 </head>
 <body>
@@ -472,6 +494,11 @@ function renderObsHtml(token: string): string {
   </div>
   <div class="card receipt hide" id="receipt-card"><b id="receipt-status"></b> <span id="receipt-text"></span></div>
 </div>
+<aside class="engagement" aria-label="直播互动" hidden id="engagement">
+  <section class="card" id="engagement-rules"><h2>本场互动规则</h2><ul id="rule-list"></ul><small id="engagement-source"></small></section>
+  <section class="card" id="engagement-likes"><h2>点赞目标</h2><div class="numbers" id="like-count"></div><progress id="like-progress" aria-label="本周期点赞进度" value="0" max="15000"></progress><small id="like-status"></small><p id="engagement-cue" role="status"></p></section>
+  <section class="card" id="engagement-board"><h2>本场投喂榜</h2><table><thead><tr><th scope="col">名次</th><th scope="col">观众</th><th scope="col" id="board-unit">份心意</th></tr></thead><tbody id="board-rows"></tbody></table><small id="board-note"></small></section>
+</aside>
 <script>
 (function () {
   var TOOL_LABELS = ${JSON.stringify(WORKBENCH_TOOL_LABELS_ZH)};
@@ -525,13 +552,54 @@ function renderObsHtml(token: string): string {
       return res.ok ? res.json() : null;
     }).catch(function () { return null; });
   }
+  function renderEngagement(state) {
+    var stage = state && state.liveStage;
+    var engagement = stage && stage.engagement;
+    var visible = Boolean(stage && stage.liveActive && engagement && engagement.config.enabled);
+    document.getElementById('engagement').hidden = !visible;
+    if (!visible) return;
+    var config = engagement.config;
+    document.getElementById('engagement-rules').hidden = !config.showRules;
+    document.getElementById('engagement-likes').hidden = !config.showLikeGoal;
+    document.getElementById('engagement-board').hidden = !config.showLeaderboard;
+    var rules = document.getElementById('rule-list');
+    rules.replaceChildren();
+    engagement.ruleCards.forEach(function (rule) {
+      var li = document.createElement('li'); li.textContent = rule.text; rules.appendChild(li);
+    });
+    document.getElementById('engagement-source').textContent = (stage.platform === 'local_replay' ? '[SIMULATION] 本地回放' : stage.realPlatformVerified ? '直播事件' : '平台事件 · 尚未实播验真') + ' · 全局间隔 ' + config.globalCooldownMs / 1000 + ' 秒';
+    document.getElementById('like-count').textContent = engagement.likes.toLocaleString('zh-CN') + ' / ' + config.likeGoal.toLocaleString('zh-CN');
+    var progress = document.getElementById('like-progress');
+    progress.max = config.likeGoal; progress.value = Math.min(engagement.likes, config.likeGoal);
+    progress.setAttribute('aria-valuetext', engagement.likes + ' / ' + config.likeGoal + ' 点赞');
+    document.getElementById('like-status').textContent = (engagement.goalReached ? '目标已达成 · 每条彩蛋规则本周期至多触发一次' : '等待本周期点赞事件') + (config.resetAfterMs ? ' · 每 ' + config.resetAfterMs / 60000 + ' 分钟重置' : ' · 下次开播重置');
+    var cue = engagement.latestAction;
+    document.getElementById('engagement-cue').textContent = cue && Date.now() - cue.at < 12000 ? (cue.action.type === 'bubble' ? cue.action.text : '已触发点歌请求，等待授权门禁与队列处理') : '';
+    var metric = config.leaderboardMetric;
+    document.getElementById('board-unit').textContent = metric === 'count' ? '份心意' : '币（标价）';
+    var rows = document.getElementById('board-rows'); rows.replaceChildren();
+    engagement.leaderboard.forEach(function (entry) {
+      var row = document.createElement('tr');
+      [String(entry.rank), entry.nickname, entry[metric].toLocaleString('zh-CN')].forEach(function (text) {
+        var cell = document.createElement('td'); cell.textContent = text; cell.title = text; row.appendChild(cell);
+      });
+      rows.appendChild(row);
+    });
+    document.getElementById('board-note').textContent = (engagement.leaderboard.length ? '按礼物增量统计 · 同分同名次 · 非平台结算到账' : '尚无礼物事件') + (engagement.leaderboardLimited ? ' · 已达人数上限，仅累计已入榜用户' : '');
+  }
   api('/api/state').then(function (state) {
+    renderEngagement(state);
     if (!state) return;
     setRunning(state.running === true);
     setCharacter(state.characterName);
     var events = Array.isArray(state.events) ? state.events : [];
     for (var i = events.length - 1; i >= 0 && i >= events.length - 20; i -= 1) applyEvent(events[i]);
   });
+  // 只读本机快照；串行轮询不叠请求，断线即隐藏，重连从权威快照恢复。
+  function pollEngagement() {
+    api('/api/state').then(renderEngagement).finally(function () { setTimeout(pollEngagement, 1000); });
+  }
+  setTimeout(pollEngagement, 1000);
   function connect() {
     var scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
     var socket = new WebSocket(scheme + location.host + '/ws?token=' + encodeURIComponent(token));
@@ -836,6 +904,7 @@ export function createWebUIServer(options: WebUIServerOptions = {}): WebUIServer
         characterName: state.characterName ?? '',
         memoryStats: state.memoryStats ?? null,
         voice: state.voice ?? null,
+        ...(state.liveStage === undefined ? {} : { liveStage: state.liveStage }),
       });
       return;
     }

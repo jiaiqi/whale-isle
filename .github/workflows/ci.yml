@@ -149,6 +149,7 @@ jobs:
           apps/desktop-host/e2e/ui.e2e.spec.ts
           apps/desktop-host/e2e/pet-evolution.e2e.spec.ts
           apps/desktop-host/e2e/song-console.e2e.spec.ts
+          apps/desktop-host/e2e/live-engagement.e2e.spec.ts
           apps/desktop-host/e2e/coop-identity.e2e.spec.ts
           apps/desktop-host/e2e/single-pet-chain.e2e.spec.ts
           apps/desktop-host/e2e/single-pet-llm-chain.e2e.spec.ts

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CommercialTtsProviderSchema, VoiceCloudFallbackPolicySchema, VoiceEngineTierSchema } from './voice';
 import { DEFAULT_BWF_MCP_PORT } from './stardew-launch';
+import { LiveEngagementConfigSchema } from './live';
 
 // ============================================================================
 // 1. 桌宠渲染与音频锁契约 (源自 dsh-pet 复评结论，预留 Live2D 扩展)
@@ -555,7 +556,7 @@ export const LiveProgramStateSchema = z.enum([
 export const NormalizedLiveEventSchema = z.object({
   eventId: z.string().uuid(),
   platform: z.enum(['douyin', 'bilibili', 'local-host-input']),
-  eventType: z.enum(['DANMAKU', 'GIFT', 'LIKE', 'ENTER_ROOM', 'SONG_REQUEST', 'VOTE_CHOICE']),
+  eventType: z.enum(['DANMAKU', 'GIFT', 'LIKE', 'FOLLOW', 'ENTER_ROOM', 'SONG_REQUEST', 'VOTE_CHOICE']),
   sender: z.object({
     uid: z.string(),
     nickname: z.string(),
@@ -567,7 +568,11 @@ export const NormalizedLiveEventSchema = z.object({
     sanitizedText: z.string().optional(), // 经过输入防封护栏清洗后的文本
     mergedCount: z.number().int().default(1), // 同观众短时刷屏或礼物连击合并计数
     giftName: z.string().optional(),
+    /** 此事件的合计标价；不是单价，不是平台结算到账。 */
     giftDiamondValue: z.number().nonnegative().optional(),
+    /** 正增量；未提供时沿用 mergedCount，禁止把平台累计总量当增量。 */
+    likeCount: z.number().int().min(1).max(1_000_000_000).optional(),
+    giftCount: z.number().int().min(1).max(1_000_000).optional(),
     songTitle: z.string().optional(),
   }),
   assignedPriority: z.enum(['P0_INTERRUPT', 'P1_CADENCE', 'P2_IDLE']),
@@ -903,6 +908,8 @@ export const PetBubbleFontIdSchema = z.enum([
 export type PetBubbleFontId = z.infer<typeof PetBubbleFontIdSchema>;
 
 export const PetDesktopPrefsSchema = z.object({
+  /** 直播互动编排：沿用设置 IPC 与 userData 原子保存，默认关闭。 */
+  liveEngagement: LiveEngagementConfigSchema.prefault({}),
   /** 窗口左上角 DIP 坐标；displayId 为空表示主屏/未知 */
   position: z.object({
     x: z.number(),

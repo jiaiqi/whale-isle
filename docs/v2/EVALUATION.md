@@ -5,6 +5,10 @@
 
 ---
 
+## V2-P3-02A 直播互动编排（2026-11-27）
+
+`[SIMULATION]` 新增 12 项编排/运行时测试，覆盖真实关注匹配、礼物下限、同人冷却/全局节流、去重、点赞恰好或跨越阈值与补发、周期重置、按份数/币值排序及并列、容量边界、版权拒绝与授权只排队；专项合计 90/90。`[E2E-HOST]` 临时 userData 的 Electron UI 保存/重启恢复、真实鉴权 `/obs` 的三张卡、12/10 进度、昵称转义、深浅布局与开关/停播隐藏均通过 1/1。`verify:gate` 首次 7/8（WebUI 新空字段破坏旧调用方精确断言），修复为可选字段后 8/8，未放宽阈值，失败原始输出已留档。状态 `IMPLEMENTED_UNVERIFIED`，真实开播/OBS Studio 观感未验证；证据 [P3-02A](./evidence/P3-02A-live-engagement-verification.md)。
+
 ## V2-P4-01 LLM 软件链路增量（2026-11-27）
 
 `single-pet-llm-chain.e2e.spec.ts` 6/6（54.72s）验证真实 Electron / IPC / 模型网关 HTTP / LLM 规划器 / 租约阻断与交还 / 三态回执 / 磁盘记忆检索；本地模型 stub 与 BWF 仿真均属 `[SIMULATION]`，总体证据为 `[E2E-HOST]` + `[SIMULATION]`。503、超时、非法工具与缺 Key 在显式配置下进入可见规则代驾，省略配置时安全暂停；真实模型推理、真实游戏与长时验收未做，状态不升级为 `DONE`。能力域对照、回退和原始验证命令见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)。

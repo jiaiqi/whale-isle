@@ -481,3 +481,22 @@
 | 「首次真实单条核验」 | 生活页点一次显式核验，确认平台侧可见、回读 ID 与全文一致，且能力矩阵 `lastVerifiedAt` 只在 `sent` 后更新 | ⏳ 待 owner 操作 |
 | 浏览 → 评论闭环 | 开启自动评论跑一次「浏览正常结束 → 模型决定 → 最多一条」，确认生活页当日记录可查、额度正确、失败即暂停 | ⏳ 待真实链路 |
 | 验证码/风控体感 | 真实命中时确认立即停止、人话报错、不硬刷、自动关闭评论开关 | ⏳ 待真实触发 |
+
+## 2026-11-27 批次（`V2-P3-02A` 直播互动编排第一切片，`IMPLEMENTED_UNVERIFIED`）
+
+### Mock / 沙盒 / 宿主 E2E 已通过项
+
+| 工单 | 验证方式 | 证据摘要 | 日期 |
+| --- | --- | --- | --- |
+| `P3-02A` 编排引擎单测 | `[SIMULATION]` 确定性单测 | `engagement.spec.ts` **12 例**：显式 `FOLLOW` 才匹配关注规则（`ENTER_ROOM`/弹幕不匹配）、同人 + 全局冷却、eventId 去重、gift 份数合计不乘币值、`LIKE` 缺省 `mergedCount`、9 币阈值边界、点赞恰好/跨越只触发一次（关闭再开不能绕过、新场 reset）、被全局节流目标后续点赞补发、周期重置保榜保冷却、count/value 排序与 1/1/3 并列、TopN、同 uid 改名、10001 用户容量与 seen/cooldown 界限、无效会话与 Guard 丢弃、点歌未授权拒绝且只排队、订阅者异常不打断收流、快照不可变 | 2026-11-27 |
+| `P3-02A` 专项回归 | `[SIMULATION]` + `[E2E-HOST]` | `pnpm exec vitest run apps/desktop-host/src/webui/webui-server.spec.ts packages/live-stream-hub/src --coverage.enabled=false` → 4 文件 **90/90**；首次 60 过 1 败为曲库 fixture 缺 `voiceConsentSource` 被 Zod 拦截，补齐后通过（未放宽断言） | 2026-11-27 |
+| `P3-02A` OBS 互动挂件 E2E | `[E2E-HOST]` | `live-engagement.e2e.spec.ts` **1/1**（最终构建 9.89s）：临时 profile 隔离；中控台开关/目标保存并重启恢复；同 eventId 点赞两次只累计 12；礼物 3/3/1；恶意昵称纯文本（无 `img` DOM）；真实鉴权 `/obs` 三卡、`12 / 10`、`progress` 截断、`[SIMULATION]` 来源、1/1/3 并列、窄屏不溢出、改口径即时更新、关闭/再开保留进度、停播隐藏、`pageerror` 为空 | 2026-11-27 |
+| `P3-02A` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**：Gate 1 `tsc -b` + depcruise + ruff/mypy + 四入口 build；Gate 2 license-scanner 356 文件 0 违规 + audit 0 high/critical + luac 5 文件；Gate 3 vitest + pytest + 7 个卡死剧本；Gate 4 回环 0.4s。首轮 7/8（WebUI 新空字段破坏旧精确断言），改可选输出后通过；原始 `.log` 按仓库 `*.log` 忽略约定保留本地，关键断言摘录见 [P3-02A 证据](./v2/evidence/P3-02A-live-engagement-verification.md) | 2026-11-27 |
+
+### 待人类宿主真机验收项
+
+| 项目 | 验收动作 | 状态 |
+| --- | --- | --- |
+| 真实平台事件归一 | 真实直播间关注、礼物连击、点赞增量进入 `LiveRuntime` 后，规则匹配、点赞累计与投喂榜数值与平台侧显示一致 | ⏳ 待 `[REAL-DEVICE]` |
+| OBS 实播观感 | OBS Studio 实际开播画面中三卡可读、角色气泡出现且不抢语音/游戏动作 | ⏳ 待 `[REAL-DEVICE]` |
+| 多规则 / Top10 纵向布局 | 12 条规则 + Top10 在常用 OBS 画布高度内不裁切（本轮仅验证窄屏横向不溢出） | ⏳ 待验收 |

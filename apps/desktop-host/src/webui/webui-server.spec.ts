@@ -7,6 +7,7 @@
  */
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
+import { LiveRuntimeV2 } from '@workbench/live-stream-hub';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -149,6 +150,17 @@ describe('[WebUI] 鉴权与状态', () => {
       memoryStats: { nodes: 3, edges: 2, lastDay: null },
       voice: { enabled: true, voiceId: 'qiaopi_mengmei', volume: 1 },
     });
+  });
+
+  it('/api/state 保留可选的 LiveRuntime 互动投影，旧调用方不增加空字段', async () => {
+    const runtime = new LiveRuntimeV2({ characterId: 'test' });
+    runtime.engagement.configure({ enabled: true });
+    await runtime.startSession({ platform: 'local_replay' });
+    const server = await startWebUI({ getState: () => ({ liveStage: runtime.obsStageSnapshot() }) });
+    const response = await fetch(`${base(server)}/api/state?token=${TEST_TOKEN}`);
+    const body = await response.json() as { liveStage: unknown };
+    expect(body.liveStage).toEqual(runtime.obsStageSnapshot());
+    runtime.hub.dispose();
   });
 
   it('事件环形缓冲按上限保留最近 N 条；无法序列化的事件被丢弃', async () => {

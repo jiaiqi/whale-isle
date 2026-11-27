@@ -1770,6 +1770,7 @@ class EventType(StrEnum):
     DANMAKU = 'DANMAKU'
     GIFT = 'GIFT'
     LIKE = 'LIKE'
+    FOLLOW = 'FOLLOW'
     ENTER_ROOM = 'ENTER_ROOM'
     SONG_REQUEST = 'SONG_REQUEST'
     VOTE_CHOICE = 'VOTE_CHOICE'
@@ -1794,6 +1795,8 @@ class Payload(BaseModel):
     mergedCount: int | None = 1
     giftName: str | None = None
     giftDiamondValue: Annotated[float | None, Field(ge=0.0)] = None
+    likeCount: Annotated[int | None, Field(ge=1, le=1000000000)] = None
+    giftCount: Annotated[int | None, Field(ge=1, le=1000000)] = None
     songTitle: str | None = None
 
 
@@ -1970,6 +1973,100 @@ class StardewModsConfig(BaseModel):
     bwfMcpPort: Annotated[int | None, Field(ge=1024, le=65535)] = 18088
 
 
+class LeaderboardMetric(StrEnum):
+    count = 'count'
+    value = 'value'
+
+
+class Trigger(StrEnum):
+    follow = 'follow'
+    gift = 'gift'
+    like_goal = 'like_goal'
+
+
+class Action1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['bubble']
+    text: Annotated[str, Field(max_length=120, min_length=1)]
+
+
+class Action2(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    type: Literal['song_request']
+    title: Annotated[str, Field(max_length=120, min_length=1)]
+
+
+class Rule(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    id: Annotated[str, Field(max_length=48, min_length=1)]
+    enabled: bool | None = True
+    trigger: Trigger
+    minGiftValue: Annotated[float | None, Field(ge=0.0, le=1000000.0)] = 0
+    cooldownMs: Annotated[int | None, Field(ge=1000, le=86400000)] = 120000
+    action: Action1 | Action2
+
+
+class LiveEngagement(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    enabled: bool | None = False
+    showRules: bool | None = True
+    showLikeGoal: bool | None = True
+    showLeaderboard: bool | None = True
+    likeGoal: Annotated[int | None, Field(ge=1, le=1000000000)] = 15000
+    resetAfterMs: Annotated[int | None, Field(ge=0, le=86400000)] = 0
+    globalCooldownMs: Annotated[int | None, Field(ge=1000, le=300000)] = 5000
+    leaderboardMetric: LeaderboardMetric | None = 'count'
+    topN: Annotated[int | None, Field(ge=1, le=10)] = 5
+    rules: Annotated[list[Rule] | None, Field(max_length=12, validate_default=True)] = (
+        cast(
+            'list[Rule] | None',
+            [
+                {
+                    'id': 'welcome',
+                    'enabled': True,
+                    'trigger': 'follow',
+                    'minGiftValue': 0,
+                    'cooldownMs': 120000,
+                    'action': {
+                        'type': 'bubble',
+                        'text': '欢迎新朋友！一起看看今天的节目吧。',
+                    },
+                },
+                {
+                    'id': 'gift-thanks',
+                    'enabled': True,
+                    'trigger': 'gift',
+                    'minGiftValue': 0,
+                    'cooldownMs': 120000,
+                    'action': {
+                        'type': 'bubble',
+                        'text': '收到这份心意啦，谢谢你的支持！',
+                    },
+                },
+                {
+                    'id': 'like-celebration',
+                    'enabled': True,
+                    'trigger': 'like_goal',
+                    'minGiftValue': 0,
+                    'cooldownMs': 120000,
+                    'action': {
+                        'type': 'bubble',
+                        'text': '今天的点赞目标达成，送上小鲸的感谢！',
+                    },
+                },
+            ],
+        )
+    )
+
+
 class Position12(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -2016,9 +2113,17 @@ class VoiceCommercialProvider(StrEnum):
     mimo_tts_voicedesign = 'mimo-tts-voicedesign'
 
 
+class VoiceCloudFallbackPolicy(StrEnum):
+    subtitle_only = 'subtitle_only'
+    system_say = 'system_say'
+
+
 class PetDesktopPrefs(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
+    )
+    liveEngagement: Annotated[LiveEngagement | None, Field(validate_default=True)] = (
+        cast('LiveEngagement | None', {})
     )
     position: Annotated[Position12 | None, Field(validate_default=True)] = cast(
         'Position12 | None', {'x': 80, 'y': 80, 'displayId': ''}
@@ -2048,6 +2153,7 @@ class PetDesktopPrefs(BaseModel):
         'google/gemini-3.8-flash-tts'
     )
     voiceMimoBuiltinVoice: Annotated[str | None, Field(min_length=1)] = 'mimo_default'
+    voiceCloudFallbackPolicy: VoiceCloudFallbackPolicy | None = 'subtitle_only'
 
 
 class Kind1(StrEnum):
@@ -2541,7 +2647,7 @@ class Pack(BaseModel):
     idleClipId: str | None = ''
 
 
-class Action1(BaseModel):
+class Action3(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -2619,7 +2725,7 @@ class PetStudioCatalog(BaseModel):
     )
     generatedAt: str | None = ''
     packs: Annotated[list[Pack] | None, Field(validate_default=True)] = []
-    actions: Annotated[list[Action1] | None, Field(validate_default=True)] = []
+    actions: Annotated[list[Action3] | None, Field(validate_default=True)] = []
     slots: Annotated[list[Slot] | None, Field(validate_default=True)] = []
     skins: Annotated[list[Skin1] | None, Field(validate_default=True)] = []
     fonts: Annotated[list[Font] | None, Field(validate_default=True)] = []

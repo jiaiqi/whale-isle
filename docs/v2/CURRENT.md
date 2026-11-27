@@ -4,6 +4,8 @@
 
 ## 1. 当前进度锚点
 
+- **直播互动第一切片 `V2-P3-02A`（2026-11-27，`IMPLEMENTED_UNVERIFIED`）**：owner 授权支线 `live-engagement` 基于 `feat/whale-isle-v2` `c205410`（已 rebase）；新增确定规则卡、点赞周期目标、按份数/币值的 Top N 投喂榜与合并感谢优先级。配置在 `pet-desktop-prefs.json.liveEngagement`，中控台「生活 → 直播互动编排」编辑并保存，默认 `enabled=false`；真实 `/obs` 只读快照每秒刷新。`FOLLOW` 与 `likeCount/giftCount` 为兼容扩展，进房不触发关注规则、点赞不再冒充关注感谢；只触发气泡/经版权门禁的点歌请求，游戏繁忙/睡眠时不投桌宠气泡，不改 P4 动作或语音链。专项 90/90 + 隔离 Electron 全链路 1/1；门禁首轮 7/8（可选 WebUI 字段兼容断言），修复后 8/8；原始失败留档见 [P3-02A 证据](./evidence/P3-02A-live-engagement-verification.md)。真实直播增量归一/OBS 实播仍待验，SVC 真唱与累计赠礼触发留后续；P4-01 继续唯一 `NEXT`。
+
 - **V2-P4-01 LLM 软件链路（2026-11-27）**：`single-pet-llm-chain.e2e.spec.ts` 已通过 6/6（54.72s），经真实 `brain:apply-config → ModelGateway HTTP → LlmPlanner → 控制租约 → BWF 三态回执 → 记忆检索`；模型服务与游戏服务均为本地仿真，证据等级 `[E2E-HOST]` + `[SIMULATION]`。增加显式 `allowRuleStandin` 与有界 `plannerTimeoutMs` 配置，503/超时/非法工具/缺 Key 分别验证规则代驾，省略开关仍默认安全暂停；未使用真实模型 Key。能力域「复用 / 重写 / 拒绝」与边界见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)，总工单继续 `NEXT`，真实模型与游戏长时验收仍待。
 
 - **当前分支**：`feat-social-douyin-comments`（已 rebase 到 `feat/whale-isle-v2` `e114b5f`，PR #10；本轮 `V2-P3-04K`＝「真浏览器 + 独立持久 Profile + CDP」只读驱动 + owner 授权的受限自动顶层评论 + **评论端口下沉到 CDP 驱动**）
