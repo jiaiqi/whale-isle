@@ -5,6 +5,14 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Changed / Fixed（抖音 CDP 四项补强，item 20 / P0-1，源自 31 仓审计）
+
+- **防后台节流**：`buildLaunchArgs` 追加 `--disable-backgrounding-occluded-windows`、`--disable-renderer-backgrounding`、`--disable-background-timer-throttling`，避免专用 Chrome 窗口被遮挡/后台化后停止绘制与计时器节流导致 feed 不 hydrate；**未**新增 `--disable-blink-features=AutomationControlled`、UA 覆盖或任何 stealth 参数（参考 `dsh-douyin-bridge/lib/browser.mjs:11-35`）。
+- **导航后校验 `location.href`**：`CdpPageDriver.navigate` 在 `Page.navigate` 后读回 `location.href`，若仍停在 `about:blank` / `chrome-error://` / 未离开原页面，则沿用现有错误口径重试一次，再抛「页面导航失败」；避免 `Page.navigate` 静默失败被当成加载超时（参考同仓 `browser.mjs` goto）。
+- **视频详情 `?modal_id=` 降级**：`RealBrowserDouyinSession.load` 直跳 `/video/<id>`（或 `/note/<id>`）后被重定向回精选页时，改用 `https://www.douyin.com/?modal_id=<awemeId>` 备用路径再读一次；**撞到验证码时绝不降级/重试**，仍立即停并保留窗口（参考 `dsh-douyin-bridge/lib/comment.mjs:27-35`）。
+- **验证码只认「可见且够大」的元素**：`douyin-page-reader.ts` 新增可见性探针（`getBoundingClientRect` 宽高 >120×120、`display!=='none'`、`visibility!=='hidden'`、`opacity>0.1`），快照新增可选 `captchaVisible`；`assertNoCaptcha` 先看 DOM 证据：隐藏 verify iframe 造成的**正文**文案误报放行，但**标题本身命中验证码页**（真实「验证码中间页」证据）、「访问/操作过于频繁」限流文案、以及旧驱动（无该字段）仍沿用原正则路径立即停（参考 `dsh_douyin_tools` `mcp_server.py:815-826` 尺寸过滤）。
+- **验证**：新增/更新单测覆盖三参数存在性、href 静默失败重试、modal_id 降级与验证码不降级、可见性尺寸过滤（含隐藏 iframe 误报），两个 spec 合计 **68 例全过**；`pnpm typecheck` 零错误。未启动真浏览器，四项真机复跑待 owner 授权（见 `docs/VERIFY.md`）。
+
 ### Added（外部参考融合四交付物立项入库，`[DOC-ONLY]`，不改产品代码）
 
 - 新增 `docs/v2/evidence/EXTERNAL-FUSION-A~E`：差距审计（逐项「已实现 / 已真实验证 / 只有契约或 UI / 重复建设风险 / 可由哪仓补足 / 已被原生覆盖」，每条带 `path:line`）、复用研究（九仓固定 SHA + 许可证边界 + 关键实现 + 缺陷 + 决策）、增量技术设计（契约增量 / SQLite 迁移 / 权限 / Tidepaper 知识页 / 回滚）、原子工单 `V2-P4-04A…J`（全部 `PENDING`，唯一 `NEXT` 仍为 `V2-P4-01`）、第一垂直切片（Envoy + 星露谷攻略 → 真实 Evidence Pack → 实玩回执）。

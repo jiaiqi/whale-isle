@@ -234,6 +234,45 @@ describe('抖音候选来源', () => {
     expect(web.loads).toHaveLength(1);
   });
 
+  it('隐藏 verify iframe 造成的正文验证码文案误报：DOM 无可见验证码元素时放行', async () => {
+    const web = buildWeb(3, {
+      feed: { title: '抖音精选电脑版', text: '精选 推荐 请完成验证', captchaVisible: false },
+    });
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, readIntervalMs: 0 });
+    const candidates = await source.listCandidates({ objective: '看看', limit: 3 });
+    expect(candidates).toHaveLength(3);
+  });
+
+  it('真实「验证码中间页」（标题命中、正文为空）：即使没有可见元素也立即停，不当作误报', async () => {
+    const web = buildWeb(3, { feed: { title: '验证码中间页', text: '', captchaVisible: false } });
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, readIntervalMs: 0 });
+    await expect(source.listCandidates({ objective: '看看', limit: 3 })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+      context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
+    });
+    expect(web.loads).toHaveLength(1);
+  });
+
+  it('可见且够大的验证码元素：即使文案正常也立即停下', async () => {
+    const web = buildWeb(3, { feed: { text: '精选 推荐 关注', captchaVisible: true } });
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, readIntervalMs: 0 });
+    await expect(source.listCandidates({ objective: '看看', limit: 3 })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+      context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
+    });
+    expect(web.loads).toHaveLength(1);
+  });
+
+  it('限流文案不是误报：即使没有可见验证码元素也立即停下', async () => {
+    const web = buildWeb(3, { feed: { title: '抖音', text: '访问过于频繁，请稍后再试', captchaVisible: false } });
+    const source = new DouyinBrowseCandidateSource(web, { verified: true, readIntervalMs: 0 });
+    await expect(source.listCandidates({ objective: '看看', limit: 3 })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+      context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
+    });
+    expect(web.loads).toHaveLength(1);
+  });
+
   it('逐条读取按 readIntervalMs 限速（两次读取之间等待一次）', async () => {
     const sleeps: number[] = [];
     const web = buildWeb(3);

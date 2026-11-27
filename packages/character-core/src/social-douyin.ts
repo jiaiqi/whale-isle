@@ -107,6 +107,11 @@ export interface DouyinPageSnapshot {
   publishTimeText?: string;
   /** 视频页公开信息块（标题/点赞/评论/收藏/发布时间） */
   detailText?: string;
+  /**
+   * 页面里是否存在「可见且够大」的验证码元素（由页面读取脚本按 DOM 尺寸/可见性判定）。
+   * 旧驱动或旧快照不带该字段时，验证码判断回落到文案正则。
+   */
+  captchaVisible?: boolean;
 }
 
 export interface DouyinLoginState {
@@ -209,9 +214,15 @@ const AUTHOR_RE = /^@/u;
 // 只认真正的人机校验/风控页文案，避免把可读页面误判成验证码页。
 const CAPTCHA_RE =
   /(人机验证|安全验证|验证码中间页|访问过于频繁|操作过于频繁|请完成验证|完成下方验证|拖动滑块|请输入验证码|captcha|turnstile|recaptcha|verify\s+you\s+are\s+human)/iu;
+// 频率限制类文案是真实的门槛，不属于「隐藏 verify iframe」误报，必须照旧立即停。
+const RATE_LIMIT_RE = /(访问过于频繁|操作过于频繁)/u;
 const LOGIN_RE = /(扫码登录|登录后|请先登录|密码登录|验证码登录|登录即代表同意)/u;
 
 export type DouyinBlockKind = 'captcha' | 'login';
+
+/** 验证码门槛的统一文案：立即停、保留窗口、不重试、不绕过 */
+export const DOUYIN_CAPTCHA_STOP_DETAIL =
+  '抖音需要验证码（真实风控门槛）。本轮已立即停止、未重试、未绕过；浏览器窗口已保留，请在该窗口手动完成后重新发起。';
 
 /** 只识别「必须停下」的门槛；可正常阅读的页面即使带登录入口也不拦 */
 export function detectDouyinBlock(page: Pick<DouyinPageSnapshot, 'title' | 'text'>): {
@@ -222,8 +233,7 @@ export function detectDouyinBlock(page: Pick<DouyinPageSnapshot, 'title' | 'text
   if (CAPTCHA_RE.test(haystack)) {
     return {
       kind: 'captcha',
-      detail:
-        '抖音需要验证码（真实风控门槛）。本轮已立即停止、未重试、未绕过；浏览器窗口已保留，请在该窗口手动完成后重新发起。',
+      detail: DOUYIN_CAPTCHA_STOP_DETAIL,
     };
   }
   if (LOGIN_RE.test(haystack)) {
@@ -464,14 +474,30 @@ export class DouyinBrowseCandidateSource implements SocialBrowseCandidateSource,
   }
 
   private assertNoCaptcha(page: DouyinPageSnapshot): void {
-    const block = detectDouyinBlock(page);
-    if (block?.kind === 'captcha') {
-      throw new WhaleError('PERMISSION_DENIED', block.detail, {
-        // 风控一旦触发就结束本次运行，绝不在同一轮里换条硬刷
-        recoverable: false,
-        context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
-      });
+    // ① DOM 层证据优先：页面确实有「可见且够大」的验证码元素 → 立即停（哪怕文案正常）。
+    if (page.captchaVisible === true) {
+      throw this.captchaError();
     }
+    const block = detectDouyinBlock(page);
+    if (block?.kind !== 'captcha') return;
+    // ② 页面明确探测过、且没有任何可见验证码元素：正文里的纯验证码文案多为抖音常驻隐藏 verify iframe 的误报，放行。
+    //    但以下两类不是误报，仍然立即停：
+    //    - 标题本身就是验证码页（真实「验证码中间页」证据里正文为空、只有标题）；
+    //    - 「访问/操作过于频繁」这类真实限流门槛。
+    const titleSaysCaptcha = detectDouyinBlock({ title: page.title, text: '' })?.kind === 'captcha';
+    if (page.captchaVisible === false && !titleSaysCaptcha && !RATE_LIMIT_RE.test(`${page.title}\n${page.text}`)) {
+      return;
+    }
+    // ③ 没有可见性证据（旧驱动/旧快照）、标题命中验证码页或命中限流 → 沿用原正则路径兜底，立即停。
+    throw this.captchaError(block.detail);
+  }
+
+  private captchaError(detail: string = DOUYIN_CAPTCHA_STOP_DETAIL): WhaleError {
+    return new WhaleError('PERMISSION_DENIED', detail, {
+      // 风控一旦触发就结束本次运行，绝不在同一轮里换条硬刷
+      recoverable: false,
+      context: { platform: 'douyin', reason: 'CAPTCHA_REQUIRED' },
+    });
   }
 
   private urlFor(feed: DouyinFeedKind): string {

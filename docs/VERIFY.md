@@ -335,6 +335,7 @@
 | `P3-04I` 门禁 | `pnpm verify:gate` | **8 过 / 0 跳过 / 0 待接线**。首次为 **7 过 / 1 败**（Gate 1 打包护栏：渲染层值导入 character-core 把 `node:fs/path/crypto` 打进包），修正为本地标签 + type-only 导入后通过；失败日志保留在 `.verify-gate/` | 2026-11-27 |
 | `P3-04K` 真浏览器驱动 | **`[REAL-DEVICE]`** | Google Chrome **158.0.8127.88**，专用 Profile `~/Library/Application Support/Whale Isle/douyin-browser-profile`，CDP `127.0.0.1:9333` 仅回环；启动参数无 headless / 无 `AutomationControlled` / 无 UA 覆盖；单实例复用，未拉第二个浏览器 | 2026-11-27 |
 | `P3-04K` 真机只读复验 | **`[REAL-DEVICE]`** | owner 11:12:54 扫码后只检查 Cookie 名称（`sessionid/sessionid_ss/sid_guard`）；未登录公开精选 **60 卡**、推荐探测 **9 卡**、关注探测 **0 卡**（「暂时没有更多作品」）；生产冒烟连续两轮 `candidates=5 / itemsRead=3 / readFailures=0 / ok=true`（6.9s、6.3s）。**登录后全程未出现「验证码中间页」**。推荐流本轮置真；关注流因账号无可读作品仍不可运行。证据 [P3-04K-verification.md](./v2/evidence/P3-04K-douyin-real-browser-verification.md) | 2026-11-27 |
+| `item 20` 抖音 CDP 四项补强 | `[SIMULATION]` 确定性单测（未启动真浏览器） | ① 启动参数含防后台节流三参数且仍无 stealth/UA/headless；② `Page.navigate` 后校验 `location.href`，停在 `about:blank`/错误页则重试一次后按「页面导航失败」报错（真实页面被重定向回同一地址不误判，交给降级逻辑）；③ 直跳 `/video/<id>` 被重定向回精选页时降级 `/?modal_id=<awemeId>` 再读一次（撞验证码时绝不降级）；④ 验证码只认可见且 >120×120 的元素：隐藏 verify iframe 的**正文**误报放行，但标题命中验证码页、限流文案、旧驱动无字段三种情况仍按原正则立即停。`cdp-browser-engine.spec.ts` + `social-douyin.spec.ts` 合计 **68 例全过**，`pnpm typecheck` 零错误 | 2026-11-27 |
 
 ### 真实冒烟失败 / 阻塞（不得写成通过）
 
@@ -354,6 +355,7 @@
 | `P3-04K` 桌面端生产冒烟置真 | owner 在正式桌面端点「真实冒烟（读 3 条）」并选「推荐流」，确认推荐流被登记为已实测、`runnable` 转真；本轮用的是与 IPC 同源的会话/冒烟链路，未做 CGEvent 点击 | ⏳ 待 owner 试用 |
 | `P3-04K` 风控长期观察 | 本轮单账号单时段未再撞「验证码中间页」，**不构成规避保证**；后续多日/多时段复跑若再撞，仍按红线停止、保留窗口、交 owner 手动处理 | ⏳ 长期 |
 | `P3-04K` 关注流可读性 | 当前账号 `/follow` 为 0 卡片（「暂时没有更多作品」）；需 owner 关注更多创作者或平台出现新作品后，再验 ≥3 条才可置真 | ⏳ |
+| `item 20` 四项补强真机复跑 | 本机有专用 Chrome 且不打扰 owner 时，做一次只读冒烟确认：防后台节流三参数生效、`location.href` 校验/重试未误伤正常导航、`/video/<id>` 被重定向时 `?modal_id=` 能读到详情、隐藏 verify iframe 不再误报验证码。本轮未启动浏览器（避免弹窗打扰），**四项均只完成单测/静态验证** | ⏳ 待 owner 授权真机只读冒烟 |
 | `P3-04I` 真实模型理解 / 多日浸泡 | 真实供应商理解调用；默认关、每日 ≤2 次 / ≤30 分钟、00–08 禁发、失败冷却的多日真机浸泡 | ⏳ 未验 |
 
 ## 2026-11-27 批次（`V2-P3-04H` 抖音 L1 只读真实平台接入，`IMPLEMENTED_UNVERIFIED`）

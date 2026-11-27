@@ -8,6 +8,35 @@
  * - 不注入任何反检测 / stealth 代码，不改 `navigator.webdriver`，不覆盖 UA。
  */
 
+/**
+ * 验证码候选元素选择器。
+ * 抖音页面里常驻一个隐藏的 verify iframe：光看「存在 iframe/captcha 类」会误报，
+ * 必须再按可见性与尺寸过滤（参考 dsh_douyin_tools 的 `mcp_server.py` 尺寸过滤）。
+ */
+export const DOUYIN_CAPTCHA_CANDIDATE_SELECTOR =
+  'iframe[src*="nocaptcha"], iframe[src*="captcha"], [class*="captcha"]';
+
+/**
+ * 只认「真的显示出来」的验证码元素：有实际渲染框、尺寸 >120×120、
+ * 且没有被 `display:none` / `visibility:hidden` / 近乎全透明隐藏。
+ * 返回布尔值；由页面读取脚本内联使用。
+ */
+export const DOUYIN_CAPTCHA_VISIBILITY_SCRIPT = String.raw`(() => {
+  const nodes = document.querySelectorAll('${DOUYIN_CAPTCHA_CANDIDATE_SELECTOR}');
+  for (const el of nodes) {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    if (
+      rect.width > 120 &&
+      rect.height > 120 &&
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      Number(style.opacity || 1) > 0.1
+    ) return true;
+  }
+  return false;
+})()`;
+
 /** 返回 `DouyinPageSnapshot` 形状的只读页面快照（在页面主世界执行） */
 export const DOUYIN_PAGE_READER_SCRIPT = String.raw`
 (() => {
@@ -60,6 +89,8 @@ export const DOUYIN_PAGE_READER_SCRIPT = String.raw`
     author: (((authorLink && authorLink.innerText) || authorFromInfo) || '').trim().slice(0, 100),
     publishTimeText: pick('[data-e2e="detail-video-publish-time"]').slice(0, 100),
     detailText: pick('[data-e2e="detail-video-info"]').slice(0, 4000),
+    // 只有「可见且够大」的验证码元素才算命中；隐藏 verify iframe 不算（避免误报）
+    captchaVisible: ${DOUYIN_CAPTCHA_VISIBILITY_SCRIPT},
   };
 })()
 `;
