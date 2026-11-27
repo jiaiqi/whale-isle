@@ -1,7 +1,7 @@
 {
   "name": "@workbench/desktop-host",
   "productName": "鲸屿",
-  "version": "0.2.0-dev.1",
+  "version": "0.2.0-dev.2",
   "private": true,
   "description": "鲸屿 Whale Isle · Electron 跨平台宿主（透明桌宠 / AI 自治 / 直播中控台 / WebUI）",
   "type": "module",
@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b && node scripts/build.mjs",
     "start": "node scripts/build.mjs && electron dist/main/index.js",
-    "package": "pnpm build && pnpm build:avatar-mod && electron-builder",
+    "package": "pnpm build && pnpm build:native-helpers && pnpm build:avatar-mod && electron-builder",
+    "build:native-helpers": "node scripts/build-native-helpers.mjs",
     "build:avatar-mod": "node ../../tools/scripts/build-avatar-mod.mjs"
   },
   "build": {
@@ -18,11 +19,16 @@
     "directories": {
       "output": "../../release"
     },
+    "beforePack": "scripts/before-pack-native.cjs",
     "files": [
       "dist/**/*",
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "build/native",
+        "to": "native"
+      },
       {
         "from": "../../guide-forager",
         "to": "guide-forager"

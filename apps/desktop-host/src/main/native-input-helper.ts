@@ -3,7 +3,9 @@
  * 作为 `nativeInjector` 接入 ComputerInputExecutor。
  *
  * 安全与诚实口径：
- * - helper 源码在仓库内、构建期/首次使用时用系统 swiftc 编译到 userData 缓存目录（不进 Git、不随包分发二进制）。
+ * - 安装态优先使用随包预编译二进制（Contents/Resources/native/darwin-<arch>/，含 sha256 清单）；
+ *   开发态随包目录不存在时，才用系统 swiftc 把仓库内源码编译到 userData 缓存（按源码 SHA-256 版本化）。
+ * - 随包二进制缺失/哈希不符/不可执行 → fail-closed 如实报不可用，绝不回退冒充成功。
  * - 调用一律 spawnSync 参数数组，不走 shell，杜绝命令注入；参数先经 ComputerInputStep 白名单映射。
  * - swiftc 缺失或编译失败时返回不可用（executor 如实回报 not_implemented），绝不伪造执行成功。
  * - 权限由调用方 permissionProbe（Electron systemPreferences.isTrustedAccessibilityClient）把关；
@@ -14,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ComputerInputStep } from '@workbench/runtime-core';
+import { locatePrebuiltHelper } from './native-helper-bundle';
 
 export interface NativeInputHelperInfo {
   ok: boolean;
@@ -21,6 +24,8 @@ export interface NativeInputHelperInfo {
   reason?: string;
   /** 编译耗时（仅当本次触发编译） */
   compileMs?: number;
+  /** 二进制来源：随包预编译 / 本次源码编译 / 源码哈希缓存 */
+  origin?: 'prebuilt' | 'compiled' | 'cache';
 }
 
 /** 从 appPath 向上查找仓库根的 tools/native/macos-input-helper.swift */
@@ -37,24 +42,46 @@ export function locateHelperSource(appPath: string): string | null {
 }
 
 /**
- * 确保 helper 二进制可用：缓存命中（源码 SHA-256 一致）则直接复用，否则调用 swiftc 编译。
+ * 确保 helper 二进制可用：优先使用随包预编译二进制；开发态（随包目录不存在）才回退
+ * 到「源码 SHA-256 缓存命中复用 / swiftc 编译」。
+ * 随包目录存在但内容坏（缺文件/哈希不符/不可执行）时 fail-closed，不回退编译。
  * 纯函数式依赖注入（编译器与文件系统操作可替换）以便单测。
  */
 export function ensureNativeInputHelper(options: {
   appPath: string;
   cacheDir: string;
   compile?: (source: string, out: string) => { ok: boolean; stderr?: string };
+  /** 测试可注入；生产固定 process.platform */
+  platform?: NodeJS.Platform;
+  /** 测试可注入；生产固定 process.arch */
+  arch?: string;
+  /** 安装态传 process.resourcesPath；开发态传 null 跳过随包查找 */
+  resourcesPath?: string | null;
 }): NativeInputHelperInfo {
-  if (process.platform !== 'darwin') {
+  const platform = options.platform ?? process.platform;
+  if (platform !== 'darwin') {
     return { ok: false, reason: 'unsupported_platform' };
   }
+  const prebuilt = locatePrebuiltHelper({
+    name: 'whale-input-helper',
+    platform,
+    arch: options.arch ?? process.arch,
+    resourcesPath: options.resourcesPath,
+  });
+  if (prebuilt.ok && prebuilt.helperPath !== undefined) {
+    return { ok: true, helperPath: prebuilt.helperPath, origin: 'prebuilt' };
+  }
+  if (prebuilt.fatal === true) {
+    return { ok: false, reason: prebuilt.reason ?? 'prebuilt_invalid' };
+  }
+
   const source = locateHelperSource(options.appPath);
   if (!source) return { ok: false, reason: 'source_not_found' };
 
   const sourceHash = createHash('sha256').update(readFileSync(source)).digest('hex').slice(0, 16);
   const helperPath = join(options.cacheDir, `whale-input-helper-${sourceHash}`);
   if (existsSync(helperPath) && statSync(helperPath).size > 0) {
-    return { ok: true, helperPath };
+    return { ok: true, helperPath, origin: 'cache' };
   }
 
   mkdirSync(options.cacheDir, { recursive: true });
@@ -64,7 +91,7 @@ export function ensureNativeInputHelper(options: {
   if (!result.ok) {
     return { ok: false, reason: `compile_failed: ${result.stderr ?? 'unknown'}` };
   }
-  return { ok: true, helperPath, compileMs: Date.now() - startedAt };
+  return { ok: true, helperPath, compileMs: Date.now() - startedAt, origin: 'compiled' };
 }
 
 function defaultCompile(source: string, out: string): { ok: boolean; stderr?: string } {

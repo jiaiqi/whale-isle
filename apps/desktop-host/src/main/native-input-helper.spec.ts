@@ -2,7 +2,8 @@
  * V2-P3-03c native-input-helper 单元测试（[SIMULATION]：不触碰真实 OS 输入，
  * 编译与 spawn 均以注入的替身验证路径解析、缓存命中、参数映射与错误回报）。
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -84,6 +85,48 @@ describe('native-input-helper（V2-P3-03c）', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toContain('compile_failed');
     expect(result.reason).toContain('swiftc exploded');
+  });
+
+  it('随包预编译二进制优先于源码编译；哈希不符时 fail-closed 不回退', () => {
+    const resourcesPath = join(workDir, 'Resources');
+    const bundleDir = join(resourcesPath, 'native', 'darwin-arm64');
+    mkdirSync(bundleDir, { recursive: true });
+    const helperPath = join(bundleDir, 'whale-input-helper');
+    const binary = 'fake-prebuilt-input-helper';
+    writeFileSync(helperPath, binary);
+    chmodSync(helperPath, 0o755);
+    const sha256 = createHash('sha256').update(binary).digest('hex');
+    writeFileSync(join(bundleDir, 'sha256.json'), JSON.stringify({ 'whale-input-helper': sha256 }));
+
+    let compileCalls = 0;
+    const compile = (_source: string, out: string) => {
+      compileCalls += 1;
+      writeFileSync(out, 'compiled');
+      return { ok: true };
+    };
+    const prebuilt = ensureNativeInputHelper({
+      appPath: join(workDir, 'apps', 'desktop-host'),
+      cacheDir: join(workDir, 'cache'),
+      compile,
+      platform: 'darwin',
+      arch: 'arm64',
+      resourcesPath,
+    });
+    expect(prebuilt).toMatchObject({ ok: true, helperPath, origin: 'prebuilt' });
+    expect(compileCalls).toBe(0);
+
+    writeFileSync(join(bundleDir, 'sha256.json'), JSON.stringify({ 'whale-input-helper': '0'.repeat(64) }));
+    const tampered = ensureNativeInputHelper({
+      appPath: join(workDir, 'apps', 'desktop-host'),
+      cacheDir: join(workDir, 'cache'),
+      compile,
+      platform: 'darwin',
+      arch: 'arm64',
+      resourcesPath,
+    });
+    expect(tampered.ok).toBe(false);
+    expect(tampered.reason).toContain('prebuilt_integrity_mismatch');
+    expect(compileCalls).toBe(0); // 不得静默回退源码编译
   });
 
   it('stepToHelperArgs 白名单映射与非法输入拒绝', () => {

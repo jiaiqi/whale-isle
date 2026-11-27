@@ -7,8 +7,10 @@
  * 调用方据此驱动 `PerformanceDirector.tickClock()`，才算把 `positionMs` 接到真实播放位置。
  *
  * 安全与诚实口径：
- * - helper 源码在仓库内，首次使用时用系统 `swiftc` 编译到 userData 缓存（按源码 SHA-256 版本化，
- *   不进 Git、不随包分发二进制），调用一律参数数组、不走 shell。
+ * - 安装态优先使用随包预编译二进制（Contents/Resources/native/darwin-<arch>/，含 sha256 清单）；
+ *   开发态随包目录不存在时，才用系统 `swiftc` 把仓库内源码编译到 userData 缓存
+ *   （按源码 SHA-256 版本化），调用一律参数数组、不走 shell。
+ * - 随包二进制缺失/哈希不符/不可执行 → fail-closed 如实报不可用，绝不回退冒充成功。
  * - swiftc 缺失/编译失败 → 返回 `ok:false`，调用方回退 `afplay` 并如实标记 `realPlayhead=false`，
  *   绝不把墙钟推算冒充成真实播放头。
  * - helper 输出非法 JSON 或提前崩溃 → 结果按失败返回，不静默当成播放成功。
@@ -21,6 +23,7 @@ type AudioHelperChild = ChildProcessByStdio<null, Readable, Readable>;
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { locatePrebuiltHelper } from './native-helper-bundle';
 
 const HELPER_SOURCE_NAME = 'macos-audio-helper.swift';
 
@@ -30,6 +33,8 @@ export interface NativeAudioHelperInfo {
   reason?: string;
   /** 本次触发编译的耗时 */
   compileMs?: number;
+  /** 二进制来源：随包预编译 / 本次源码编译 / 源码哈希缓存 */
+  origin?: 'prebuilt' | 'compiled' | 'cache';
 }
 
 /** 从 appPath 向上查找仓库根的 tools/native/macos-audio-helper.swift */
@@ -45,29 +50,51 @@ export function locateAudioHelperSource(appPath: string): string | null {
   return null;
 }
 
-/** 确保 helper 二进制可用：源码 SHA-256 命中缓存则复用，否则调用 swiftc 编译 */
+/**
+ * 确保 helper 二进制可用：优先随包预编译二进制；开发态随包目录不存在才回退源码编译，
+ * 源码 SHA-256 命中缓存则复用。
+ */
 export function ensureNativeAudioHelper(options: {
   appPath: string;
   cacheDir: string;
   compile?: (source: string, out: string) => { ok: boolean; stderr?: string };
   /** 测试可注入；生产固定 process.platform（非 darwin 一律如实报不可用） */
   platform?: NodeJS.Platform;
+  /** 测试可注入；生产固定 process.arch */
+  arch?: string;
+  /** 安装态传 process.resourcesPath；开发态传 null 跳过随包查找 */
+  resourcesPath?: string | null;
 }): NativeAudioHelperInfo {
   const platform = options.platform ?? process.platform;
   if (platform !== 'darwin') return { ok: false, reason: 'unsupported_platform' };
+  const prebuilt = locatePrebuiltHelper({
+    name: 'whale-audio-helper',
+    platform,
+    arch: options.arch ?? process.arch,
+    resourcesPath: options.resourcesPath,
+  });
+  if (prebuilt.ok && prebuilt.helperPath !== undefined) {
+    return { ok: true, helperPath: prebuilt.helperPath, origin: 'prebuilt' };
+  }
+  if (prebuilt.fatal === true) {
+    return { ok: false, reason: prebuilt.reason ?? 'prebuilt_invalid' };
+  }
+
   const source = locateAudioHelperSource(options.appPath);
   if (source === null) return { ok: false, reason: 'source_not_found' };
 
   const sourceHash = createHash('sha256').update(readFileSync(source)).digest('hex').slice(0, 16);
   const helperPath = join(options.cacheDir, `whale-audio-helper-${sourceHash}`);
-  if (existsSync(helperPath) && statSync(helperPath).size > 0) return { ok: true, helperPath };
+  if (existsSync(helperPath) && statSync(helperPath).size > 0) {
+    return { ok: true, helperPath, origin: 'cache' };
+  }
 
   mkdirSync(options.cacheDir, { recursive: true });
   const compile = options.compile ?? defaultCompile;
   const startedAt = Date.now();
   const result = compile(source, helperPath);
   if (!result.ok) return { ok: false, reason: `compile_failed: ${result.stderr ?? 'unknown'}` };
-  return { ok: true, helperPath, compileMs: Date.now() - startedAt };
+  return { ok: true, helperPath, compileMs: Date.now() - startedAt, origin: 'compiled' };
 }
 
 function defaultCompile(source: string, out: string): { ok: boolean; stderr?: string } {

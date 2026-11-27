@@ -5,6 +5,16 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（内部开发预览构建 `0.2.0-dev.2`，`V2-P4-05`）
+
+- **原生 helper 随包**：`whale-input-helper` / `whale-audio-helper` 改为预编译产物随包分发（`Contents/Resources/native/darwin-arm64/` + `sha256.json`），安装态不再依赖仓库 `tools/native/*.swift`，也不要求用户机器装 Xcode Command Line Tools；源码编译保留为开发态回退。随包目录存在但二进制缺失 / 清单损坏 / 哈希不符 / 不可执行时 **fail-closed**，不回退编译、不冒充成功；`electron-builder` 的 `beforePack` 钩子在打包前再次校验，缺产物直接中断打包。新增 `build:native-helpers` 脚本（`swiftc -O -target <arch>-apple-macos12.0`）与 `native-helper-bundle.ts` 统一解析层；启动日志打印 helper 来源（`prebuilt` / `compiled` / `cache`）或不可用原因。
+- **独立 userData 覆盖**：新增 `WHALE_USER_DATA_DIR`（仅接受绝对路径）用于安装态验收与多实例隔离；该分支不迁移旧数据、不碰默认 `~/Library/Application Support/Whale Isle`。
+- **版本与产物**：根与 `apps/desktop-host` 版本升至 `0.2.0-dev.2`（与 11-24 的 `0.2.0-dev.1` 区分）。从冻结 SHA `e4019f3eb6355461afb65249d3b129ec4e88e868` 打包 `release/鲸屿 Whale Isle-0.2.0-dev.2-arm64.dmg`：**2,322,093,040 B**，sha256 **`1f87e71bb8e0f3a53324b38c658a5174f4f24032513fe2e56ffbce8550a44360`**。
+- **安装态验收**：安装到 `~/Applications/鲸屿 Whale Isle Preview.app`，以 `/tmp/whale-preview-userdata` 独立 userData 启动；中控台 `鲸屿 · 中控台` 1360×860、小鲸与 CrossPet 两个 pet-stage 窗 400×284 正常，CrossPet 气泡可见；启动日志 `[native-audio] helper 就绪（prebuilt）`；安装副本直接执行 `whale-input-helper permission` → `granted`、`whale-audio-helper probe` → `{"type":"probe","durationMs":4000}`。owner 的 `/Applications` 旧包与 18780 客户端未动；预览 WebUI 因 18780 被占用回退 57086。
+- **包内素材盘点（只盘点，不清源）**：`aboutme-pets` 1.9GB / 2,624 文件（CC BY-NC-SA 4.0，`DEV_ONLY_NON_COMMERCIAL`）、`crosspet` 89MB / 946 文件（CC BY-NC-SA 4.0）、`上首软糖体.ttf`（许可未单独声明）、`guide-forager` 12 篇（CC BY-NC-SA 3.0）、`xiaojing-07-tiancui-yuanqi.wav`（MiMo 生成，`DEV_ONLY_NON_COMMERCIAL`）、`blue-whale-maid` webm（CC BY-NC-SA 4.0）、`genki_ref.wav`（来源未登记，`UNREGISTERED_DEV_ONLY`）、3 个 OFL 1.1 字体。清单与「开发态 vs 安装态」能力差异表见 [PREVIEW-BUILD-e4019f3-verification.md](./docs/v2/evidence/PREVIEW-BUILD-e4019f3-verification.md)；`THIRD_PARTY_NOTICES.md` 补登 `guide-forager` 与 `genki_ref.wav` 两行。
+- **验证**：`pnpm verify:gate` **8 过 / 0 跳过 / 0 待接线**（license-scanner 352 文件 0 违规；`pnpm audit` 0 high / 0 critical）；全量单测 **191 文件 / 2127 用例**、分支 **90.19%**；新增 `native-helper-bundle.spec.ts` 与两个 helper spec 的 prebuilt / fail-closed 用例。
+- **明确未做**：商用素材清源（按 owner 口径推后）、真实音频播放、OS 输入端到端注入、真实星露谷/抖音/OBS、Windows x64 包、Developer ID 签名与公证；签名仍是 adhoc（未申请、未伪造）。
+
 ### Added（P3-04I 验证码复核证据归档与更正，`[DOC-ONLY]`）
 
 - 从 PR #8 原样收进 `docs/v2/evidence/P3-04I-douyin-captcha-retry.json`（SHA-256 `a9717e2b…`，字段未改），并新增 [更正说明](./docs/v2/evidence/P3-04I-douyin-captcha-retry-note.md)：① 该轮走旧 Electron 隔离 partition 链路（当时分支没有 `cdp-browser-engine.ts`），与 `P3-04K` 的 CDP 通过结论分开记；② 时间以原始 JSON 为准为 11:40:11 / 11:40:33 CST，PR #8 草稿的 10:20 CST 是误记；③ `usedFeed=recommended` / `loggedIn=false` 是 `selection` 未赋值时的默认回填，真实行为是未登录回落公开精选（`not_logged_in`）后撞验证码；④ 该文件只证明「未登录 + 撞验证码 + 未读到推荐流」，不能当作推荐流已验证。

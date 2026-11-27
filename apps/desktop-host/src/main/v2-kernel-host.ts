@@ -631,7 +631,15 @@ export async function createV2KernelHost(options: {
   const nativeAudioHelper = ensureNativeAudioHelper({
     appPath: app.getAppPath(),
     cacheDir: join(options.userDataDir, 'native'),
+    // 安装态从 Contents/Resources/native/darwin-<arch>/ 取随包预编译二进制；
+    // 开发态显式传 null，继续走仓库源码编译回退。
+    resourcesPath: app.isPackaged ? process.resourcesPath : null,
   });
+  console.log(
+    nativeAudioHelper.ok
+      ? `[native-audio] helper 就绪（${nativeAudioHelper.origin ?? 'unknown'}）：${nativeAudioHelper.helperPath ?? ''}`
+      : `[native-audio] helper 不可用：${nativeAudioHelper.reason ?? 'unknown'}（播放将回退 afplay，realPlayhead=false）`,
+  );
   const nativeAudioPlayer = nativeAudioHelper.ok && nativeAudioHelper.helperPath !== undefined
     ? createNativeAudioPlayer({ helperPath: nativeAudioHelper.helperPath })
     : null;
@@ -844,8 +852,16 @@ export async function createV2KernelHost(options: {
     ? ensureNativeInputHelper({
         appPath: app.getAppPath(),
         cacheDir: join(options.userDataDir, 'native'),
+        resourcesPath: app.isPackaged ? process.resourcesPath : null,
       })
     : ({ ok: false, reason: 'feature_disabled' } as const);
+  if (osInputEnabled) {
+    console.log(
+      nativeHelper.ok
+        ? `[native-input] helper 就绪（${nativeHelper.origin ?? 'unknown'}）：${nativeHelper.helperPath ?? ''}`
+        : `[native-input] helper 不可用：${nativeHelper.reason ?? 'unknown'}（OS 输入保持 not_implemented）`,
+    );
+  }
   const inputExecutor = new ComputerInputExecutor({
     leases: computerLeaseMgr,
     enabled: osInputEnabled,
