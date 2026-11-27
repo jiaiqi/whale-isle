@@ -5,6 +5,10 @@
 
 ---
 
+## V2-P4-01 LLM 软件链路增量（2026-11-27）
+
+`single-pet-llm-chain.e2e.spec.ts` 6/6（54.72s）验证真实 Electron / IPC / 模型网关 HTTP / LLM 规划器 / 租约阻断与交还 / 三态回执 / 磁盘记忆检索；本地模型 stub 与 BWF 仿真均属 `[SIMULATION]`，总体证据为 `[E2E-HOST]` + `[SIMULATION]`。503、超时、非法工具与缺 Key 在显式配置下进入可见规则代驾，省略配置时安全暂停；真实模型推理、真实游戏与长时验收未做，状态不升级为 `DONE`。能力域对照、回退和原始验证命令见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)。
+
 ## 一、四级证据口径（强制前缀标注）
 
 | 证据标识 | 定义与边界 | 允许宣称范围 |

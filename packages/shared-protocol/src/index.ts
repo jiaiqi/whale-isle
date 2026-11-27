@@ -871,6 +871,10 @@ export const BrainRuntimeConfigSchema = z.object({
   providerModels: z.record(z.string(), z.string()).default({}),
   /** 渲染层合并后的服务商清单（内置覆盖 + 自定义；不含密钥，key 只在主进程 vault） */
   providers: z.array(ModelProviderConfigSchema).default([]),
+  /** 显式允许模型故障时规则代驾；省略或 false 仍按 ADR-002 D-103 安全暂停。 */
+  allowRuleStandin: z.boolean().optional(),
+  /** 单次游戏规划请求超时（毫秒）；省略时宿主采用 30 秒。 */
+  plannerTimeoutMs: z.number().int().min(100).max(120_000).optional(),
 });
 export type BrainRuntimeConfig = z.infer<typeof BrainRuntimeConfigSchema>;
 

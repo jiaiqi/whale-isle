@@ -225,6 +225,17 @@
 | 安装包断网 | 断网启动 DMG：9 角色与皮肤彩蛋全部可用、动作原声可播、`/api/pet/default/say` 从本机脚本可调通 | ⏳ |
 | 卡死修复真机复验（2026-11-24） | 重启后同一存档（第1年夏2日 Beach、背包里没有鱼竿）启动自驾：不应再出现连续「失败 钓鱼 (fish)」刷屏；最多两次 fish 失败后应看到替代动作（采集/去镇上/买鱼竿），或规则日程转采集/清地；聊天下单失败应看到「chat_order FAILED｜没办成：原因」与桌宠如实说明 | ⏳ |
 
+## 2026-11-27 V2-P4-01 LLM 软件链路
+
+### Mock / 沙盒验证已通过项
+
+- `[E2E-HOST]` + `[SIMULATION]`：`single-pet-llm-chain.e2e.spec.ts` 6/6（54.72s）；本地 OpenAI 协议 stub 经真实 `ModelGateway → LlmPlanner → 控制租约 → BWF 三态回执 → 记忆检索`，收回租约时迟到动作被阻断，交还后逐项得到 `COMPLETED / FAILED / UNCERTAIN`，三条事实原文均可检索。503、真实 HTTP 超时、非法工具、缺 Key 在显式配置下进入规则代驾；旧配置继续安全暂停，非法工具零下发。
+- `pnpm verify:gate`：**8 过 / 0 跳过 / 0 待接线**，覆盖率阈值与 v8 ignore 未改；macOS CI 已加入新 E2E 文件。能力域对照和命令见 [P4-01-llm-chain-verification.md](./v2/evidence/P4-01-llm-chain-verification.md)。
+
+### 待人类宿主真机验收项
+
+真实供应商模型推理与真实星露谷同链路、长时 LLM 浸泡、语音锁释放与气泡投影仍未验收；本轮没有真实平台写入、开播或推流操作，总工单继续 `NEXT`。
+
 ## 2026-11-26 批次（单桌宠链路优先 / P3-06 缺陷①）
 
 ### Mock / 沙盒验证已通过项

@@ -210,7 +210,7 @@
 
 ## P4：单角色全功能闭环、自主社区交互与 Evolution Engine Full
 
-- **`V2-P4-01`（`NEXT`）：单角色“小鲸”全产品链路端到端整合与长时真机验收**（owner 决策「先把一个桌宠走通」后成为唯一激活主线；实现侧首件已完成：宿主在 `PET_STAGE_E2E` 下可注入仿真 BWF 端点，`single-pet-chain.e2e.spec.ts` 串起「启动 → 就绪 → 规则动作 → 三态回执 → 记忆可检索」全链路，`[E2E-HOST]` + `[SIMULATION]`，已进 macOS CI；证据 [P3-single-pet-chain-verification.md](./evidence/P3-single-pet-chain-verification.md)；仍待真机：LLM 大脑同链路、语音锁释放与气泡投影、长时浸泡）
+- **`V2-P4-01`（`NEXT`）：单角色“小鲸”全产品链路端到端整合与长时真机验收**（owner 决策「先把一个桌宠走通」后成为唯一激活主线；实现侧首件已完成：宿主在 `PET_STAGE_E2E` 下可注入仿真 BWF 端点，`single-pet-chain.e2e.spec.ts` 串起「启动 → 就绪 → 规则动作 → 三态回执 → 记忆可检索」全链路，`[E2E-HOST]` + `[SIMULATION]`，已进 macOS CI；证据 [P3-single-pet-chain-verification.md](./evidence/P3-single-pet-chain-verification.md)；2026-11-27 补齐 **LLM 软件链路**：本地 OpenAI 协议 stub 经真实 `ModelGateway → LlmPlanner → 控制租约 → BWF 三态回执 → 记忆检索`，新 Electron E2E 6/6，进 macOS CI；显式规则代驾分别覆盖 503/超时/非法工具/缺 Key，旧配置仍默认安全暂停，证据 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)（含能力域复用/重写/拒绝结论）；仍待真机：真实供应商推理与真实游戏同链路、语音锁释放与气泡投影、长时浸泡）
 - **`V2-P4-02`：Social Digital Life L2 → L3（草稿审核到规则与授权边界内自主社交互动发布）**
 - **`V2-P4-03`：Evolution Engine Full（脱敏遥测、问题自动复现回放、策略化合并与灰度回滚）**
 
