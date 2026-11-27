@@ -537,3 +537,163 @@ export const MIMO_DEFAULT_TIMBRE_ID = '07-tiancui-yuanqi';
  * 路径相对 `assets/voice/`；打包后落在 `resources/voice/`。
  */
 export const MIMO_BUNDLED_REFERENCE_ASSET = 'xiaojing-07-tiancui-yuanqi.wav';
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 音色工坊（M1 声线库/定格状态/一致性体检/版本管理 + M2 生成流）
+ *
+ * 边界（owner 2026-11-27 拍板）：
+ * - 出厂默认仍是随包 `MIMO_TIMBRE_PRESETS` 那条，工坊的定格**只写本地**（userData + 本地资产），不进 git；
+ * - 每次定格存全元数据（描述原文 / 定格指令 / 采样参数 / 参考音频路径），给 M3「换引擎重做」留钥匙；
+ * - M3（上传录音通道、音色包导入导出、换引擎一键重做）**不做**，UI 不留半成品入口。
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** 表演强度（与 `@workbench/voice-runtime` 的 `MIMO_PERFORMANCE_INTENSITY_LEVELS` 同值，避免渲染层拉运行时包） */
+export const VoicePerformanceIntensitySchema = z.enum(['A', 'B', 'C']);
+export type VoicePerformanceIntensity = z.infer<typeof VoicePerformanceIntensitySchema>;
+
+/** 工坊拨盘：年龄段 / 声音质感 / 语速 / 尾音习惯（拼进 VoiceDesign 描述，不单独作为参数下发） */
+export const VoiceWorkshopDialSchema = z.object({
+  age: z.enum(['child', 'teen', 'young_adult', 'adult']).optional(),
+  texture: z.enum(['sweet_crisp', 'soft_nasal', 'clear_bright', 'husky_low']).optional(),
+  pace: z.enum(['slow', 'medium', 'fast']).optional(),
+  ending: z.enum(['rising', 'flat', 'dragging']).optional(),
+});
+export type VoiceWorkshopDial = z.infer<typeof VoiceWorkshopDialSchema>;
+
+/** 拨盘选项与它们拼进描述时用的中文短语（UI 直接渲染，主进程直接拼） */
+export const VOICE_WORKSHOP_DIAL_OPTIONS = [
+  {
+    key: 'age',
+    label: '年龄段',
+    options: [
+      { value: 'child', label: '八九岁', phrase: '八九岁小女孩' },
+      { value: 'teen', label: '少女', phrase: '十四五岁少女' },
+      { value: 'young_adult', label: '年轻女性', phrase: '二十岁左右的年轻女性' },
+      { value: 'adult', label: '成熟女性', phrase: '三十岁上下的成熟女性' },
+    ],
+  },
+  {
+    key: 'texture',
+    label: '声音质感',
+    options: [
+      { value: 'sweet_crisp', label: '甜脆', phrase: '声音甜而脆' },
+      { value: 'soft_nasal', label: '软糯带鼻音', phrase: '声音软糯、鼻音偏重' },
+      { value: 'clear_bright', label: '清亮', phrase: '声音清亮通透' },
+      { value: 'husky_low', label: '微沙偏低', phrase: '声音微沙、音调偏低' },
+    ],
+  },
+  {
+    key: 'pace',
+    label: '语速',
+    options: [
+      { value: 'slow', label: '慢', phrase: '语速偏慢' },
+      { value: 'medium', label: '中', phrase: '语速适中' },
+      { value: 'fast', label: '快', phrase: '语速偏快' },
+    ],
+  },
+  {
+    key: 'ending',
+    label: '尾音习惯',
+    options: [
+      { value: 'rising', label: '上扬', phrase: '句尾往上翘' },
+      { value: 'flat', label: '平收', phrase: '句尾收得干脆' },
+      { value: 'dragging', label: '拖长', phrase: '句尾习惯拖长' },
+    ],
+  },
+] as const;
+
+/** 拨盘 → 描述后缀短语（顺序固定，保证同一组拨盘拼出同一段描述） */
+export function composeVoiceWorkshopDescription(base: string, dial: VoiceWorkshopDial | undefined): string {
+  const trimmed = base.trim();
+  const phrases: string[] = [];
+  for (const group of VOICE_WORKSHOP_DIAL_OPTIONS) {
+    const chosen = dial?.[group.key];
+    if (chosen === undefined) continue;
+    const option = group.options.find((item) => item.value === chosen);
+    if (option !== undefined) phrases.push(option.phrase);
+  }
+  return phrases.length === 0 ? trimmed : `${trimmed}，${phrases.join('，')}`;
+}
+
+export const VoiceWorkshopGenerateInputSchema = z.object({
+  description: z.string().trim().min(2).max(300),
+  dial: VoiceWorkshopDialSchema.optional(),
+  /** 一次出 4–8 条候选（每条一次 VoiceDesign 调用） */
+  count: z.number().int().min(4).max(8).default(4),
+});
+export type VoiceWorkshopGenerateInput = z.infer<typeof VoiceWorkshopGenerateInputSchema>;
+
+export const VoiceWorkshopCandidateSchema = z.object({
+  id: z.string().min(1),
+  description: z.string(),
+  /** 生成候选时用的正文（自产台词） */
+  text: z.string(),
+  file: z.string().min(1),
+  bytes: z.number().int().nonnegative(),
+  durationMs: z.number().nullable(),
+  createdAt: z.string(),
+});
+export type VoiceWorkshopCandidate = z.infer<typeof VoiceWorkshopCandidateSchema>;
+
+/** 多句试戴：中性 + 调皮 + 傲娇 + 撒娇，四个情绪各一句 */
+export const MIMO_WORKSHOP_AUDITION_LINES = [
+  { key: 'neutral', label: '中性', emotion: null, text: '主人，今天也辛苦啦，我给你倒杯热茶好不好呀。' },
+  { key: 'tiaopi', label: '调皮', emotion: 'bright', text: '主人主人！你看我新学会的本事，厉害吧～' },
+  { key: 'aojiao', label: '傲娇', emotion: 'tsundere', text: '哼，才、才不是特意等你的，别自作多情。' },
+  { key: 'chajiao', label: '撒娇', emotion: 'daily', text: '主人～再陪我一会儿嘛，就一小会儿。' },
+] as const;
+
+export const VoiceWorkshopAuditionInputSchema = z.object({
+  candidateId: z.string().min(1),
+  intensity: VoicePerformanceIntensitySchema.default('B'),
+});
+export type VoiceWorkshopAuditionInput = z.infer<typeof VoiceWorkshopAuditionInputSchema>;
+
+export const VoiceWorkshopFreezeInputSchema = z.object({
+  candidateId: z.string().min(1),
+  label: z.string().trim().min(1).max(40).optional(),
+});
+export type VoiceWorkshopFreezeInput = z.infer<typeof VoiceWorkshopFreezeInputSchema>;
+
+/** 一致性体检结论：人话判定 + 数字；`unavailable` 表示本机没有可用的说话人嵌入工具，**不给假数字** */
+export const VoiceConsistencyVerdictSchema = z.enum(['stable', 'drifty', 'swapped', 'unavailable']);
+export type VoiceConsistencyVerdict = z.infer<typeof VoiceConsistencyVerdictSchema>;
+
+export const VoiceConsistencyResultSchema = z.object({
+  verdict: VoiceConsistencyVerdictSchema,
+  /** 人话结论（UI 直接显示） */
+  detail: z.string(),
+  mean: z.number().nullable(),
+  min: z.number().nullable(),
+  std: z.number().nullable(),
+  samples: z.number().int().nonnegative(),
+  checkedAt: z.string(),
+});
+export type VoiceConsistencyResult = z.infer<typeof VoiceConsistencyResultSchema>;
+
+export const VoiceTimbreVersionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  description: z.string(),
+  source: z.enum(['factory', 'ai-design', 'uploaded']),
+  referencePath: z.string().min(1),
+  referenceBytes: z.number().int().nonnegative(),
+  frozenAt: z.string(),
+  /** 定格元数据：换引擎重做时要靠它（描述原文 + 指令 + 采样参数 + 参考音频） */
+  freeze: z.object({
+    text: z.string(),
+    intensity: VoicePerformanceIntensitySchema,
+    provider: z.string(),
+    mode: z.string(),
+  }),
+  consistency: VoiceConsistencyResultSchema.nullable(),
+});
+export type VoiceTimbreVersion = z.infer<typeof VoiceTimbreVersionSchema>;
+
+export const VoiceWorkshopStateSchema = z.object({
+  currentVersionId: z.string().min(1),
+  versions: z.array(VoiceTimbreVersionSchema),
+  /** 本次会话（进程生命周期）已经花掉的合成次数，UI 如实显示；MiMo 限免，耗尽要明说 */
+  sessionCalls: z.number().int().nonnegative(),
+});
+export type VoiceWorkshopState = z.infer<typeof VoiceWorkshopStateSchema>;

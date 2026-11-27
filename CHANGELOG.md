@@ -5,6 +5,17 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added / Changed（音色工坊 M1+M2 + 表演 B 级接线收档，owner 拍板「m2+m1」）
+
+- **B 级接线**：`MIMO_EMOTION_STYLE_HINTS` 的 `daily` / `bright` / `tsundere` 三档改为强度阶梯 B 级指令原文；新增 `MIMO_PERFORMANCE_INTENSITY_LEVELS` / `MIMO_DEFAULT_PERFORMANCE_INTENSITY = 'B'` / `MIMO_PERFORMANCE_A_SUFFIX` / `MIMO_PERFORMANCE_C_SUFFIX` / `MIMO_PERFORMANCE_B_HINTS` 与 `resolveMimoEmotionHint()`。A/C 只作为工坊试戴强度，`sleepy` / `surprised` 没有阶梯数据、不编造模板；C 级内联标签仍标注「间接推断、未经听感」。
+- **判死一条路**：**音高区分情绪在 MiMo 指令层上不成立**（B 级三档 F0 中位 348.1 / 347.8 / 347.8Hz），能拉开的是响度、语速与副语言。
+- **契约先行**：`packages/shared-protocol/src/voice.ts` 新增工坊合同——`VOICE_WORKSHOP_DIAL_OPTIONS`（年龄段/质感/语速/尾音）、`composeVoiceWorkshopDescription()`、生成/试戴/定格输入、`MIMO_WORKSHOP_AUDITION_LINES`（中性/调皮/傲娇/撒娇）、候选/版本/状态/体检 schema。
+- **主进程**：新增 `apps/desktop-host/src/main/voice-workshop.ts`（声线版本时间线 + 一致性体检 + 候选生成 + 多句试戴 + 定格/回退），六个 `v2:voice-workshop-*` IPC；定格写 `versions/<id>.wav` 与本地克隆参考，回退出厂即删本地副本（随包资产永不被覆盖）。体检沿用 `tools/scripts/speaker-cosine.py`（CAM++），工具缺失返回 `unavailable` 并写原因，**不给假数字**。
+- **语音中心**：新增第四个页签「音色工坊」（声线卡 / 版本时间线 / 一致性体检 / 生成候选 / 多句试戴 / 定格此音色 / 试戴强度 A/B/C 默认 B），如实显示本次会话合成次数；未定格候选标「不能当固定声线」。
+- **真实体检读数（同句 ×10，同一随包参考）**：bench 0.9059 / 0.8814 / σ0.0148、工坊第一次 **0.8632 / 0.7296 / σ0.0451**、第二次 **0.8795 / 0.7876 / σ0.0402** → 结论会在「锁得稳 / 偶尔飘」之间翻面；**判据保持原样不改**，UI 注明「单次有抽样波动，拿不准就再跑一次」，§2.17 的单一数字今后必须带波动区间。
+- **测试**：`voice-workshop.spec.ts` 19/19；`studio.e2e.spec.ts` 增加工坊页签真实点击验收（不点生成/体检，避免花合成次数）。
+- **边界**：出厂默认不动；定格只写本地 `userData/` 不进 git；M3（上传录音 / 音色包导入导出 / 换引擎重做）不做且不留半成品入口，元数据格式先存全；`pet:sleep-status` 竞态继续只读记录不修。证据 §2.19。
+
 ### Validated（表演重做强度阶梯 A/B/C `[REAL-DEVICE]`，18 条；判据先注册后跑）
 
 - owner 反馈「音色对，表演要重做，三档都要重做，主要是情绪太弱」→ 同一句 × 三档（调皮/傲娇/撒娇）× 三级（A 提级对照 / B 明显夸张 / C 副语言）× 每格 2 条，18/18 成功；**随包资产、默认声线、`VOICE-PERSONA`、UI 一律未动**。

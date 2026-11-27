@@ -191,6 +191,36 @@ describe('[E2E-HOST] 桌宠工坊与语音中心', () => {
       await page.waitForSelector('[data-voice-studio-character]', { timeout: 15_000 });
       expect(await page.locator('[data-voice-studio-character]').innerText()).toContain('小鲸');
 
+      // 音色工坊（M1+M2）：真实点击进入第四个页签，读出厂声线卡与版本时间线。
+      // 只验收 UI 与状态 IPC——**不点生成/体检**，以免在 E2E 里真花 MiMo 合成次数。
+      await page.click('[data-voice-tab-btn="workshop"]');
+      await page.waitForSelector('[data-voice-workshop] [data-workshop-current]', { timeout: 15_000 });
+      await page.waitForFunction(
+        () => (document.querySelector('[data-workshop-current]')?.textContent ?? '').includes('出厂 · 已定格'),
+        undefined,
+        { timeout: 15_000 },
+      );
+      const workshop = await page.evaluate(() => (window as unknown as {
+        directorBridge: { v2VoiceWorkshopState(): Promise<{ currentVersionId: string; sessionCalls: number; versions: Array<{ id: string; source: string; label: string; referencePath: string }> }> };
+      }).directorBridge.v2VoiceWorkshopState());
+      const factory = workshop.versions.find((item) => item.id === 'factory');
+      expect(factory).toMatchObject({ source: 'factory' });
+      expect(factory?.label).toContain('07 甜脆');
+      expect(factory?.referencePath.endsWith('xiaojing-07-tiancui-yuanqi.wav')).toBe(true);
+      expect(workshop.currentVersionId).toBeTypeOf('string');
+      expect(workshop.sessionCalls).toBeTypeOf('number');
+      // 声线卡：参考音频路径可读、版本时间线含随包出厂、会话计数如实显示限免
+      expect(await page.locator('[data-workshop-current]').innerText()).toContain('xiaojing-07-tiancui-yuanqi.wav');
+      expect(await page.locator('[data-workshop-versions]').innerText()).toContain('随包出厂');
+      expect(await page.locator('[data-workshop-calls]').innerText()).toContain('MiMo 限免');
+      // 生成候选：4 个拨盘 + 条数默认 4 + 强度默认 B + 「未定格不能当固定声线」的警示
+      expect(await page.locator('[data-workshop-dial]').count()).toBe(4);
+      expect(await page.locator('[data-workshop-generate]').innerText()).toContain('生成 4 条候选');
+      expect(await page.locator('[data-workshop-intensity-option]').count()).toBe(3);
+      expect(await page.locator('[data-workshop-intensity]').innerText()).toContain('实测 ΔRMS 4.45dB');
+      expect(await page.locator('[data-workshop-generate-box]').innerText()).toContain('不能当固定声线');
+      expect(await page.locator('[data-workshop-composed]').innerText()).toContain('八九岁小女孩');
+
       // 语音绑定：把「蓝蓝」改绑到嗲嗲学妹并读回（落 userData/voice-bindings.json）
       const bind = await page.evaluate(() => (window as unknown as {
         directorBridge: { voiceCharacterBind(id: string, voiceId: string): Promise<{ ok: boolean }>; voiceCharacterBindings(): Promise<Array<{ characterId: string; voiceId: string; overridden: boolean }>> };

@@ -364,6 +364,13 @@ contextBridge.exposeInMainWorld('directorBridge', {
   v2VoiceCloneSampleClear: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-clone-sample-clear'),
   v2VoiceReferenceInfo: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-reference-info'),
   v2VoiceReferenceGenerate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-reference-generate', input),
+  // 音色工坊（M1 + M2）：版本管理 / 一致性体检 / 候选生成 / 多句试戴 / 定格
+  v2VoiceWorkshopState: (): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-state'),
+  v2VoiceWorkshopGenerate: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-generate', input),
+  v2VoiceWorkshopAudition: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-audition', input),
+  v2VoiceWorkshopFreeze: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-freeze', input),
+  v2VoiceWorkshopRollback: (versionId: string): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-rollback', versionId),
+  v2VoiceWorkshopConsistency: (versionId?: string): Promise<unknown> => ipcRenderer.invoke('v2:voice-workshop-consistency', versionId),
   v2ProviderQuota: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota', input),
   v2ProviderQuotaMatrix: (input?: unknown): Promise<unknown> => ipcRenderer.invoke('v2:provider-quota-matrix', input),
   v2MemoryAdd: (input: unknown): Promise<unknown> => ipcRenderer.invoke('v2:memory-add', input),

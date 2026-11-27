@@ -519,17 +519,54 @@ export type MimoTtsAuthScheme = (typeof MIMO_TTS_AUTH_SCHEMES)[number];
  * 与 `docs/v2/VOICE-PERSONA-xiaojing.md` 的表逐行一致，改一处必须同步另一处。
  */
 export const MIMO_EMOTION_STYLE_HINTS: Record<string, string> = {
-  daily: '温柔甜软，带笑意，语速适中',
-  bright: '俏皮上扬，语气活泼，句尾轻轻挑起',
-  tsundere: '傲娇嘴硬，稍不服气，音量略大',
+  daily: '情绪外放夸张，甜得发腻，语调起伏大，尾音拖长，带撒娇的鼻音',
+  bright: '情绪外放夸张，语调起伏大，重音明显，尾音拖长上扬，像在台上表演',
+  tsundere: '情绪外放夸张，语气冲，咬字重，尾音先压下再挑起，明显不服气',
   sleepy: '慵懒困倦，气声偏多，语速偏慢',
   surprised: '惊喜元气，语气上扬，节奏轻快',
-  sweet_normal: '温柔甜软，带笑意，语速适中',
-  tsundere_refuse: '傲娇嘴硬，稍不服气，音量略大',
+  sweet_normal: '情绪外放夸张，甜得发腻，语调起伏大，尾音拖长，带撒娇的鼻音',
+  tsundere_refuse: '情绪外放夸张，语气冲，咬字重，尾音先压下再挑起，明显不服气',
   rage_spray: '生气反驳，音量偏大，语速偏快',
   lazy_yawn: '慵懒困倦，气声偏多，语速偏慢',
   clumsy_panic: '心虚慌乱，语速偏快，带一点不确定',
 };
+
+/**
+ * 表演强度（2026-11-27 强度阶梯实测：A/B/C，B 为产品默认）。
+ *
+ * 只有 `bright / tsundere / daily`（调皮 / 傲娇 / 撒娇）实测过分级；其余档不做分级，
+ * 任何级别都回落基础指令——**不编造没测过的模板**。
+ * - A：基础指令 + 「更外放」（提级对照）
+ * - B：上表里的重写指令（默认，判据在 §2.18.2 成立：ΔRMS 1.06 → 4.45dB）
+ * - C：B + 允许副语言（语气词/笑/哼/叹气/吸气）；C 级的内联标签**未验证**，只给工坊实验用，不接产品
+ */
+export const MIMO_PERFORMANCE_INTENSITY_LEVELS = ['A', 'B', 'C'] as const;
+export type MimoPerformanceIntensity = (typeof MIMO_PERFORMANCE_INTENSITY_LEVELS)[number];
+export const MIMO_DEFAULT_PERFORMANCE_INTENSITY: MimoPerformanceIntensity = 'B';
+
+/** A 级只是在基础指令后加这一句，正文与默认完全一致 */
+export const MIMO_PERFORMANCE_A_SUFFIX = '，更外放';
+/** C 级在 B 的指令后再加这一句（内联标签本身要写进正文，指令只是放行） */
+export const MIMO_PERFORMANCE_C_SUFFIX = '，可以笑出声、哼气、叹气、吸气';
+/** 只有这三档有实测过的 B 级重写指令 */
+export const MIMO_PERFORMANCE_B_HINTS: Record<string, string> = {
+  bright: '情绪外放夸张，语调起伏大，重音明显，尾音拖长上扬，像在台上表演',
+  tsundere: '情绪外放夸张，语气冲，咬字重，尾音先压下再挑起，明显不服气',
+  daily: '情绪外放夸张，甜得发腻，语调起伏大，尾音拖长，带撒娇的鼻音',
+};
+
+/** 按强度解析某一档的风格指令；没分级过的档一律回落基础指令（不编造） */
+export function resolveMimoEmotionHint(
+  emotion: string,
+  intensity: MimoPerformanceIntensity = MIMO_DEFAULT_PERFORMANCE_INTENSITY,
+): string {
+  const base = MIMO_EMOTION_STYLE_HINTS[emotion]?.trim() ?? '';
+  if (base === '') return '';
+  if (intensity === 'A') return `${base}${MIMO_PERFORMANCE_A_SUFFIX}`;
+  if (intensity === 'B') return MIMO_PERFORMANCE_B_HINTS[emotion] ?? base;
+  const strong = MIMO_PERFORMANCE_B_HINTS[emotion] ?? base;
+  return `${strong}${MIMO_PERFORMANCE_C_SUFFIX}`;
+}
 
 /**
  * 五档情绪 → 助手前缀风格标签（渲染成 `(Tag)要说的文本`）。

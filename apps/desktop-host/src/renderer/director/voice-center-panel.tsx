@@ -9,7 +9,7 @@
  * 离线档的体感代价直接引用 shared-protocol 的 `OFFLINE_TIER_COST_TEXT`，不许在这里另写数字。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioLines, KeyRound, Lock, Radio, Sliders, Sparkles, Timer, Volume2 } from 'lucide-react';
+import { AudioLines, FlaskConical, KeyRound, Lock, Radio, Sliders, Sparkles, Timer, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   MIMO_TIMBRE_PRESETS,
@@ -24,6 +24,7 @@ import type { CharacterSummary } from './bridge';
 import { VoiceDesignLab } from './voice-design-lab';
 import { VoicePanel } from './voice-panel';
 import { VoiceStudioPanel } from './voice-studio-panel';
+import { VoiceWorkshopPanel } from './voice-workshop-panel';
 
 /** 语音中心的凭据卡片：providerId 必须与主进程 `kernel.secrets.resolve(...)` 查的 id 完全一致 */
 const VOICE_CREDENTIALS = [
@@ -49,7 +50,7 @@ export function VoiceCenterPanel(props: {
   onSelectCharacter: (id: string) => void;
 }): React.JSX.Element {
   const { characters, characterId, onSelectCharacter } = props;
-  const [tab, setTab] = useState<'catalog' | 'design' | 'studio'>('catalog');
+  const [tab, setTab] = useState<'catalog' | 'design' | 'studio' | 'workshop'>('catalog');
   const [bindings, setBindings] = useState<BindingView[]>([]);
   const [backend, setBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
   const [sfx, setSfx] = useState({ enabled: true, volume: 0.7 });
@@ -382,6 +383,9 @@ export function VoiceCenterPanel(props: {
           </button>
           <button type="button" role="tab" data-voice-tab-btn="studio" aria-selected={tab === 'studio'} className={`seg-tab${tab === 'studio' ? ' on' : ''}`} onClick={() => setTab('studio')}>
             <Sliders size={12} />高阶精调与 RVC
+          </button>
+          <button type="button" role="tab" data-voice-tab-btn="workshop" aria-selected={tab === 'workshop'} className={`seg-tab${tab === 'workshop' ? ' on' : ''}`} onClick={() => setTab('workshop')}>
+            <FlaskConical size={12} />音色工坊
           </button>
         </div>
       </header>
@@ -833,7 +837,9 @@ export function VoiceCenterPanel(props: {
         ? <VoicePanel bare characterName={characterName} boundVoiceId={boundVoiceId} onBind={bind} />
         : tab === 'design'
           ? <VoiceDesignLab />
-          : <VoiceStudioPanel bare characterId={characterId} characterName={characterName} />}
+          : tab === 'studio'
+            ? <VoiceStudioPanel bare characterId={characterId} characterName={characterName} />
+            : <VoiceWorkshopPanel />}
     </div>
   );
 }

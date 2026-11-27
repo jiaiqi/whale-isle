@@ -50,6 +50,9 @@ import {
   MIMO_BUNDLED_REFERENCE_ASSET,
   MIMO_DEFAULT_TIMBRE_ID,
   MIMO_TIMBRE_PRESETS,
+  VoiceWorkshopAuditionInputSchema,
+  VoiceWorkshopFreezeInputSchema,
+  VoiceWorkshopGenerateInputSchema,
   PetDesktopPrefsSchema,
   type CharacterCoreSnapshot,
   type DanceRoutineInput,
@@ -68,6 +71,7 @@ import { ElectronBrowserEngine } from './electron-browser-engine';
 import { createNativeInjector, ensureNativeInputHelper } from './native-input-helper';
 import { createNativeAudioPlayer, ensureNativeAudioHelper } from './native-audio-player';
 import { MediaGenerationGateway } from './media-gateway';
+import { VoiceWorkshop, createSpeakerCosineRunner } from './voice-workshop';
 import { Pipeline3dManager } from './pipeline-3d';
 import { CharacterStudioV2, inspectLive2dOrLayered2d } from './character-studio-v2';
 import { PixelAvatarPipelineV2 } from './pixel-avatar-v2';
@@ -94,6 +98,7 @@ import {
   MiniMaxTtsProvider,
   MimoTtsProvider,
   OpenRouterTtsProvider,
+  resolveMimoEmotionHint,
   PerformanceDirector,
   SingEngine,
   SystemFallbackVoiceProvider,
@@ -1035,6 +1040,86 @@ export async function createV2KernelHost(options: {
     return { ...cloneSampleInfo(), providerKind: result.providerKind, durationMs: result.durationMs };
   });
 
+  /**
+   * 音色工坊（M1 声线版本/体检 + M2 生成流，owner 2026-11-27 拍板「m2+m1」）。
+   *
+   * - 出厂版本永远是随包 `assets/voice/xiaojing-07-tiancui-yuanqi.wav`，工坊的定格只写 userData；
+   * - 体检沿用仓库既有工具（sherpa-onnx CAM++），工具缺失就如实 `unavailable`，不给假数字；
+   * - 每次合成都会计入会话计数（MiMo 限免，UI 要如实显示用掉多少次）。
+   */
+  const workshopTimbre = MIMO_TIMBRE_PRESETS.find((item) => item.id === MIMO_DEFAULT_TIMBRE_ID);
+  const voiceWorkshop = new VoiceWorkshop({
+    userDataDir: options.userDataDir,
+    bundledReferencePath: bundledReferencePath(),
+    bundledLabel: workshopTimbre?.label ?? MIMO_DEFAULT_TIMBRE_ID,
+    bundledDescription: workshopTimbre?.description ?? '',
+    cloneSamplePath,
+    synth: async (input) => {
+      const provider = new MimoTtsProvider({
+        mode: input.mode,
+        voiceDescription: input.description,
+        emotionStyleHints: input.emotion === undefined
+          ? {}
+          : { [input.emotion]: resolveMimoEmotionHint(input.emotion, input.intensity) },
+        emotionStyleTags: MIMO_EMOTION_STYLE_TAGS,
+        resolveReferenceAudio: () => {
+          if (input.referencePath === undefined) return null;
+          return { bytes: new Uint8Array(readFileSync(input.referencePath)) };
+        },
+        resolveApiKey: resolveMimoKey,
+      });
+      const identity = characterCore.profile.voiceIdentity();
+      const result = await provider.synthesize(VoiceSynthesisRequestSchema.parse({
+        requestId: randomUUID(),
+        characterId: identity.characterId,
+        voiceRef: 'voice-workshop',
+        text: input.text,
+        ...(input.emotion === undefined ? {} : { emotion: input.emotion }),
+      }));
+      if (result.audioBase64 === undefined) {
+        throw new Error('合成失败：后端没有返回音频');
+      }
+      return {
+        bytes: new Uint8Array(Buffer.from(result.audioBase64, 'base64')),
+        providerKind: result.providerKind,
+        ...(result.durationMs === undefined ? {} : { durationMs: result.durationMs }),
+      };
+    },
+    runSpeakerCosine: createSpeakerCosineRunner(),
+  });
+  ipcMain.handle('v2:voice-workshop-state', () => voiceWorkshop.snapshot());
+  ipcMain.handle('v2:voice-workshop-generate', (_e, rawInput: unknown) =>
+    voiceWorkshop.generateCandidates(VoiceWorkshopGenerateInputSchema.parse(rawInput)));
+  ipcMain.handle('v2:voice-workshop-audition', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopAuditionInputSchema.parse(rawInput);
+    return voiceWorkshop.audition({ candidateId: parsed.candidateId, intensity: parsed.intensity });
+  });
+  ipcMain.handle('v2:voice-workshop-freeze', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopFreezeInputSchema.parse(rawInput);
+    const version = voiceWorkshop.freeze({
+      candidateId: parsed.candidateId,
+      ...(parsed.label === undefined ? {} : { label: parsed.label }),
+    });
+    // 定格即切档：角色描述 + 克隆档，音色工坊的版本才会真正生效
+    characterCore.profile.updateVoiceIdentity({
+      voiceDescription: version.description,
+      preferredProviderId: 'mimo-tts-voiceclone',
+    });
+    return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-rollback', (_e, versionId: string) => {
+    const version = voiceWorkshop.rollback(String(versionId ?? ''));
+    characterCore.profile.updateVoiceIdentity({
+      voiceDescription: version.description,
+      preferredProviderId: 'mimo-tts-voiceclone',
+    });
+    return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-consistency', async (_e, versionId?: unknown) => {
+    const id = typeof versionId === 'string' && versionId !== '' ? versionId : undefined;
+    const result = await voiceWorkshop.checkConsistency(id);
+    return { result, state: voiceWorkshop.snapshot() };
+  });
   /**
    * 音色设计台（VoiceDesign Lab）：音色描述由用户在 UI 里现场编辑，所以不能走固定实例的 router，
    * 这里按请求临时构造一个 voicedesign provider，情绪指令/标签与真机实测用的同一份常量。
