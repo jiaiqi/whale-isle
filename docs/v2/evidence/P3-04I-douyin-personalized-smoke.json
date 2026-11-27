@@ -18,8 +18,10 @@
       "itemsRead": 0,
       "readFailures": 0,
       "ok": false,
-      "failureReason": "抖音公开页没有可读候选（页面结构可能已变化），不伪造候选",
-      "samples": []
+      "failureReason": "抖音返回「验证码中间页」（真实风控门槛），已立即停止，未绕过/未重试；原始冒烟代码当时未识别该页，误归因为「没有可读候选」",
+      "samples": [],
+      "failureKind": "captcha",
+      "rawFailureReason": "抖音公开页没有可读候选（页面结构可能已变化），不伪造候选"
     }
   },
   "executor": {
@@ -44,5 +46,10 @@
     "maxItems": 20,
     "maxDurationMs": 600000,
     "maxUnderstandingCalls": 8
+  },
+  "annotation": {
+    "annotatedAt": "2026-11-27T10:10:00+08:00",
+    "reason": "同批 P3-04I-douyin-captcha-intermediate.json 证明真实页面标题为「验证码中间页」；按协调者要求把风控验证码作为显式失败原因，原始 failureReason 保留在 rawFailureReason，未改写原始读数。",
+    "source": "P3-04I-douyin-captcha-intermediate.json（临时诊断构建输出，诊断代码已移除）"
   }
 }

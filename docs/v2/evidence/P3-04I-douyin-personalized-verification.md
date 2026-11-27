@@ -60,7 +60,8 @@
 | `fallbackReason` | `platform_redirected` |
 | 候选 / 读到 | **0 / 0** |
 | `ok` | **false** |
-| `failureReason` | 抖音公开页没有可读候选（页面结构可能已变化），不伪造候选 |
+| `failureKind` | **`captcha`**（真实风控「验证码中间页」；原始冒烟代码当时未识别该页，`rawFailureReason` 保留为「没有可读候选」） |
+| `failureReason`（归档标注） | 抖音返回「验证码中间页」（真实风控门槛），已立即停止，未绕过/未重试 |
 | 真实页面标题（临时诊断） | **「验证码中间页」**，正文为空 |
 | 诊断证据 | [P3-04I-douyin-captcha-intermediate.json](./P3-04I-douyin-captcha-intermediate.json) |
 | 冒烟原始结果 | [P3-04I-douyin-personalized-smoke.json](./P3-04I-douyin-personalized-smoke.json) |
@@ -137,5 +138,5 @@
 
 - [P3-04I-douyin-recommended-probe.json](./P3-04I-douyin-recommended-probe.json)：已登录后点击「推荐」标签的真实只读探测（8 张卡片）。
 - [P3-04I-douyin-following-probe.json](./P3-04I-douyin-following-probe.json)：已登录 `/follow` 真实页面结构（2 张卡片）。
-- [P3-04I-douyin-personalized-smoke.json](./P3-04I-douyin-personalized-smoke.json)：生产链路真实冒烟失败结果与执行器状态。
+- [P3-04I-douyin-personalized-smoke.json](./P3-04I-douyin-personalized-smoke.json)：生产链路真实冒烟失败结果与执行器状态。归档时按同批验证码诊断补 `failureKind=captcha` 与显式 `failureReason`，原始归因保留在 `rawFailureReason`，未改写原始读数。
 - [P3-04I-douyin-captcha-intermediate.json](./P3-04I-douyin-captcha-intermediate.json)：真实「验证码中间页」临时诊断输出（诊断代码已移除）。

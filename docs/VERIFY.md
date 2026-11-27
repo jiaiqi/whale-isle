@@ -338,7 +338,7 @@
 
 | 项目 | 真实现象 | 当前状态 |
 | --- | --- | --- |
-| `P3-04I` 生产链路个性化冒烟 | 10:04:01 CST，`v2:social-douyin-smoke`（feed=recommended）：`loggedIn=true`、`requestedFeed=recommended`、`usedFeed=public`、`fallbackReason=platform_redirected`、候选 0 / 读到 0、`ok=false`；真实页面标题 **「验证码中间页」**、正文为空。按红线立即停止，未识别/绕过验证码、未再发起真实请求；`runnable=false`。证据 [冒烟失败](./v2/evidence/P3-04I-douyin-personalized-smoke.json) / [验证码诊断](./v2/evidence/P3-04I-douyin-captcha-intermediate.json) | **BLOCKED（待 owner 处理验证码并冷却后重约）** |
+| `P3-04I` 生产链路个性化冒烟 | 10:04:01 CST，`v2:social-douyin-smoke`（feed=recommended）：`loggedIn=true`、`requestedFeed=recommended`、`usedFeed=public`、`fallbackReason=platform_redirected`、候选 0 / 读到 0、`ok=false`；真实页面标题 **「验证码中间页」**、正文为空，归档证据显式记 `failureKind=captcha`（原始归因保留在 `rawFailureReason`）。按红线立即停止，未识别/绕过验证码、未再发起真实请求；`runnable=false`。证据 [冒烟失败](./v2/evidence/P3-04I-douyin-personalized-smoke.json) / [验证码诊断](./v2/evidence/P3-04I-douyin-captcha-intermediate.json) | **BLOCKED（待 owner 处理验证码并冷却后重约）** |
 
 ### 待人类宿主真机验收项
 
