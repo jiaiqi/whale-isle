@@ -17,7 +17,7 @@
 
 - **采用**：浏览器 UI 只读路径——独立 Electron `persist:whale-char_xiaojing-douyin-owner` Profile + 隐藏窗口读取「抖音精选」公开页与视频页公开字段（标题/作者/发布时间/话题），接入既有四段端口（候选来源 → 逐条读取 → 理解 → 记账），**不改接口契约**。低频率（逐条间隔 ≥2.5s、单会话 ≤20 条 / 10 分钟）。
 - **不采用**：① 不采用 HTTP 签名伪造/逆向接口（易碎且触碰平台条款）；② 不采用浏览器自动化做直播弹幕（弹幕主线仍是 `dyhub`，本单不碰）；③ 不采用任何验证码识别/绕过服务；④ 不采用本地夹具冒充真实平台（`allowLocalFixture=false`，夹具源永远 `verified=false`）。
-- **回退**：证据 7 天过期或冒烟失败 → 来源 `verified=false`、执行器 `runnable=false` → 调度器 `platform_not_ready` 拦截，开关打开也不会发起；删除 `v2-douyin-browse-evidence.json` 即可让抖音源回到未实测状态。
+- **回退**：证据 7 天过期或冒烟失败 → 来源 `verified=false`、执行器 `runnable=false` → 调度器以 `executor_not_ready` 拦截，开关打开也不会发起；长驻进程在每次 tick / 快照 / 发起前复核证据，不只在启动时看一次。能力矩阵保留 `lastVerifiedAt` 历史读数、不自动删除 owner 声明，动手门禁以来源自述为准；删除 `v2-douyin-browse-evidence.json` 即可让抖音源回到未实测状态。
 
 ## 3. 真实读数（本机 macOS，2026-11-27）
 

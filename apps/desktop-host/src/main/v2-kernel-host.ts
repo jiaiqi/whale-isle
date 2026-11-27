@@ -888,6 +888,13 @@ export async function createV2KernelHost(options: {
   };
   registerDouyinSource(isDouyinEvidenceUsable(douyinEvidenceStore.get().latest));
 
+  /** 证据过期后必须回到未实测：长驻进程每次 tick / 快照 / 发起前都复核，不能只在启动时看一次 */
+  const refreshDouyinSourceVerification = (): void => {
+    if (!douyinSource) return;
+    const fresh = isDouyinEvidenceUsable(douyinEvidenceStore.get().latest);
+    if (douyinSource.descriptor.verified !== fresh) registerDouyinSource(fresh);
+  };
+
   /** 冒烟通过后把抖音只读能力如实登记进能力矩阵（owner 显式拒绝的条目不会被覆盖） */
   const seedDouyinCapabilityFromEvidence = (): void => {
     const evidence = douyinEvidenceStore.get().latest;
@@ -947,6 +954,7 @@ export async function createV2KernelHost(options: {
   const runSocialSession = async (sessionId: string): Promise<void> => {
     const session = socialRuntime.getSession(sessionId);
     if (!session || socialRunLocks.has(sessionId)) return;
+    refreshDouyinSourceVerification();
     const reader = socialReaders.get(session.platform);
     if (!reader || !socialExecutor.status().runnable) return;
     socialRunLocks.add(sessionId);
@@ -981,6 +989,8 @@ export async function createV2KernelHost(options: {
   /** 本调度器真正发起过的会话（只有这些计入自主预算，owner 手动发起的会话不占额度） */
   const autoStartedSessions = new Set<string>();
   const socialAutostartFacts = (): SocialAutostartFacts => {
+    // 证据过期后来源必须回到未实测；每次取事实（快照 / tick）前复核一次
+    refreshDouyinSourceVerification();
     const active = socialRuntime
       .listSessions()
       .find((session) => session.status === 'active' || session.status === 'paused' || session.status === 'awaiting_human');
