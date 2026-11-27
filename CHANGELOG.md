@@ -5,6 +5,12 @@
 
 ## [Unreleased] — 2026-11-27
 
+### Added（外部参考融合四交付物立项入库，`[DOC-ONLY]`，不改产品代码）
+
+- 新增 `docs/v2/evidence/EXTERNAL-FUSION-A~E`：差距审计（逐项「已实现 / 已真实验证 / 只有契约或 UI / 重复建设风险 / 可由哪仓补足 / 已被原生覆盖」，每条带 `path:line`）、复用研究（九仓固定 SHA + 许可证边界 + 关键实现 + 缺陷 + 决策）、增量技术设计（契约增量 / SQLite 迁移 / 权限 / Tidepaper 知识页 / 回滚）、原子工单 `V2-P4-04A…J`（全部 `PENDING`，唯一 `NEXT` 仍为 `V2-P4-01`）、第一垂直切片（Envoy + 星露谷攻略 → 真实 Evidence Pack → 实玩回执）。
+- **未做**：未写产品代码、未加依赖、未改 `ROADMAP.md`/`CURRENT.md` 工单状态、未运行任何参考仓代码、未发起真实平台请求。参考仓只读克隆在仓库外，未修改（含 `dsh-stardew-blind-whale-farmer` 的既有本地补丁）。
+- **许可证结论**：`dsh-fish-soul` 根目录无 `LICENSE` → 仅重写思想；Envoy（Apache-2.0）以**外部 MCP 进程**接入、不 vendor；其余 MIT 仓默认重写、不复制源码；`dsh-pet` 等 CC BY-NC-SA 素材继续保持 `DEV_ONLY_NON_COMMERCIAL`。
+
 ### Added（声音工坊 2.0：接管未托管分支 `feat/voice-studio-redesign` 并 rebase 到主干）
 
 - **来源与边界**：本批代码来自本机**未推送**分支 `feat/voice-studio-redesign`（2 提交 / 30 文件 / +8041 −849），**原作者不在本单、代码未经 review**；本单只做接手机动——rebase 到 `origin/feat/whale-isle-v2` @ `ecc82a1`、跑门禁、核红线、补合规与文档。rebase 无文本冲突（两侧改的是同一批文件的不同区块），两侧改动均保留（`v2-kernel-host.ts` / `preload` / `bridge` / `shared-protocol/index.ts` 同时含唱歌素材与声音工坊两套 IPC）。
