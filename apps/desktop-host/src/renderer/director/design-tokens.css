@@ -1769,3 +1769,52 @@ input[type='range'].wb-range::-webkit-slider-thumb {
   transform: translateY(-2px);
   box-shadow: 0 6px 14px -6px var(--accent);
 }
+
+/* 声线库右侧上下文详情面板（宽屏吸顶，窄屏自然流式） */
+.vs-inspector {
+  position: sticky;
+  top: 16px;
+}
+
+/* 克隆台：从 AI 设计选取音频列表 */
+.vs-ai-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* 统一吸底试听播放器（Tidepaper 磨砂纸面，单实例互斥播放） */
+.vs-sticky-player {
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--surface-solid) 95%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--stroke-2);
+  box-shadow: var(--shadow-2);
+}
+.vs-sticky-progress {
+  margin-top: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--inset);
+  overflow: hidden;
+  cursor: pointer;
+}
+.vs-sticky-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+

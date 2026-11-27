@@ -123,4 +123,55 @@ describe('createVoiceHost（T-M6-38 全局串行抢麦）', () => {
     expect(host.speak({ agentId: 'agent-a', speakerName: '小鲸', text: '   ' }).ok).toBe(false);
     expect(results).toEqual([]);
   });
+
+  it('V2 生产合成闭环：推送真实 WAV 口型帧、失败不静默换声、试听租约不发正式气泡状态', async () => {
+    const results: Array<{ status: string }> = [];
+    const speakers: Array<{ state: string }> = [];
+    const lipBatches: number[] = [];
+    let legacyPlayCalls = 0;
+
+    const host = createVoiceHost('darwin', {
+      onSpeakerChange: (e) => speakers.push({ state: e.state }),
+      onSpeechResult: (e) => results.push({ status: e.status }),
+      onLipFrames: (e) => lipBatches.push(e.frames.length),
+      play: () => {
+        legacyPlayCalls += 1;
+        return { done: Promise.resolve(), abort: () => undefined };
+      },
+      playAudio: () => ({ done: Promise.resolve(), abort: () => undefined }),
+      synthesize: async (input) => {
+        if (input.text.includes('失败测试')) {
+          return { ok: false, error: 'MiMo 401 鉴权失败', allowLegacyFallback: false };
+        }
+        return {
+          ok: true,
+          audioBase64: 'UklGRg==',
+          format: 'wav',
+          providerKind: 'mimo-tts-voiceclone',
+          lipFrames: [{ timestampMs: 0, durationMs: 60, viseme: 'open', amplitude: 0.7, rmsDb: -12 }],
+        };
+      },
+    });
+
+    // 1. 成功路径：收到真实 lipFrames 且回执 completed
+    host.speak({ agentId: 'agent-a', characterId: 'blue-whale-maid', speakerName: '小鲸', text: '真实合成闭环' });
+    await vi.waitFor(() => expect(results.at(-1)).toEqual({ status: 'completed' }));
+    expect(lipBatches).toEqual([1]);
+    expect(legacyPlayCalls).toBe(0);
+
+    // 2. 失败不静默换声（allowLegacyFallback=false）：绝不回落 legacy play，发出唯一 failed 终态
+    host.speak({ agentId: 'agent-a', characterId: 'blue-whale-maid', speakerName: '小鲸', text: '失败测试台词' });
+    await vi.waitFor(() => expect(results.at(-1)).toEqual({ status: 'failed' }));
+    expect(legacyPlayCalls).toBe(0);
+
+    // 3. 试听租约不广播 coop:speaker 也不发正式气泡回执
+    const prevSpeakers = speakers.length;
+    const prevResults = results.length;
+    const gate = deferred();
+    host.acquirePreview(() => ({ done: gate.promise, abort: () => gate.resolve() }));
+    gate.resolve();
+    await vi.waitFor(() => expect(host.speakerState().state).toBe('idle'));
+    expect(speakers.length).toBe(prevSpeakers);
+    expect(results.length).toBe(prevResults);
+  });
 });

@@ -14,11 +14,13 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   composeVoiceWorkshopDescription,
+  estimateDataUriBase64Bytes,
+  MIMO_MAX_REFERENCE_BASE64_BYTES,
   MIMO_WORKSHOP_AUDITION_LINES,
   VOICE_WORKSHOP_DIAL_OPTIONS,
   type VoiceAudioQuality,
@@ -41,6 +43,8 @@ export interface WorkshopSynthInput {
   intensity: VoicePerformanceIntensity;
   /** voiceclone 用：参考音频路径 */
   referencePath?: string;
+  /** 可选：中止信号（用于中途取消在飞候选生成） */
+  signal?: AbortSignal;
 }
 
 export interface WorkshopSynthResult {
@@ -65,6 +69,8 @@ export interface VoiceWorkshopDeps {
   cloneSamplePath: string;
   synth: WorkshopSynth;
   runSpeakerCosine?: SpeakerCosineRunner;
+  /** 参考音频、角色绑定或授权状态变化时触发（用于失效主进程 TTS 合成缓存） */
+  onReferenceChanged?: () => void;
   now?: () => Date;
 }
 
@@ -83,8 +89,10 @@ export interface WorkshopAuditionRow {
 export const CONSISTENCY_SENTENCE = '主人，今天也辛苦啦，我给你倒杯热茶好不好呀。';
 /** 体检样本数：固定 10 条（UI 跑前要提示消耗 10 次合成） */
 export const CONSISTENCY_SAMPLES = 10;
-/** 单个参考音频字节上限（20 MB，与既有 v2:voice-clone-sample-save 口径一致） */
-export const MAX_REFERENCE_WAV_BYTES = 20 * 1024 * 1024;
+/** 单个参考音频原始字节上限（对应 MiMo Base64 编码后 ≤ 10,000,000 bytes，约 7.49 MB） */
+export const MAX_REFERENCE_WAV_BYTES = Math.floor(((MIMO_MAX_REFERENCE_BASE64_BYTES - 24) / 4) * 3);
+/** 本地留存的未裁剪原始素材副本字节上限（绝不直接发云端） */
+const MAX_LOCAL_RAW_WAV_BYTES = 30 * 1024 * 1024;
 
 /**
  * 判据（写死，不随 UI 调）：
@@ -107,10 +115,13 @@ export function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-/** 严格校验 RIFF/WAVE 文件头与大小上限 */
+/** 严格校验 RIFF/WAVE 文件头与 MiMo Base64 ≤ 10MB 硬红线 */
 export function assertValidWavBytes(bytes: Uint8Array): void {
-  if (bytes.byteLength > MAX_REFERENCE_WAV_BYTES) {
-    throw new Error('参考音频超过 20MB 上限，请裁剪到更短的片段');
+  const encodedBytes = estimateDataUriBase64Bytes(bytes.byteLength, 'audio/wav');
+  if (encodedBytes > MIMO_MAX_REFERENCE_BASE64_BYTES) {
+    throw new Error(
+      `参考音频 Base64 编码后（${(encodedBytes / 1_000_000).toFixed(2)} MB）超过 MiMo 10 MB 上限（原始 WAV 约 7.5 MB），请裁剪至 5–12 秒片段`,
+    );
   }
   if (bytes.byteLength < 44) {
     throw new Error('WAV 文件过小或损坏（不足 44 字节）');
@@ -289,6 +300,14 @@ interface StoredState {
   schemaVersion: 1;
   currentVersionId: string;
   versions: VoiceTimbreVersion[];
+  characterBindings?: Record<string, string>;
+}
+
+function writeFileAtomic(filePath: string, content: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.${randomUUID().slice(0, 8)}.tmp`;
+  writeFileSync(tmp, content, 'utf8');
+  renameSync(tmp, filePath);
 }
 
 export class VoiceWorkshop {
@@ -296,6 +315,8 @@ export class VoiceWorkshop {
   private state: StoredState;
   /** 候选索引（落 `voice-workshop/candidates/index.json`）：定格/试戴要读回描述与台词 */
   private candidates: Map<string, VoiceWorkshopCandidate>;
+  /** 在飞生成任务取消控制器（jobId → AbortController） */
+  private activeJobs = new Map<string, AbortController>();
   /** 本次会话（进程生命周期）已花掉的合成次数：MiMo 限免，UI 要如实显示 */
   private sessionCalls = 0;
 
@@ -308,37 +329,61 @@ export class VoiceWorkshop {
     this.candidates = this.loadCandidates();
   }
 
-  /** 工坊状态（声线卡 + 版本时间线 + 已持久化候选 + 会话调用计数） */
+  /** 工坊状态（声线卡 + 版本时间线 + 多角色绑定 + 已持久化候选 + 会话调用计数） */
   snapshot(): VoiceWorkshopState {
     return {
       currentVersionId: this.state.currentVersionId,
       versions: this.state.versions,
+      characterBindings: { ...(this.state.characterBindings ?? {}) },
       candidates: [...this.candidates.values()].reverse(),
       sessionCalls: this.sessionCalls,
     };
   }
 
+  /** 中止正在进行的设计候选生成任务 */
+  cancelJob(jobId: string): boolean {
+    const controller = this.activeJobs.get(jobId);
+    if (controller === undefined) return false;
+    controller.abort();
+    this.activeJobs.delete(jobId);
+    return true;
+  }
+
   /**
    * 生成候选：描述 + 拨盘 → VoiceDesign 一次一条，共 `count` 条。
-   * 每次调用都计入会话计数；失败逐条如实抛错（不补位、不伪造候选）。
+   * 支持 `jobId` 中途中止；每次调用都计入会话计数；失败逐条如实抛错（不补位、不伪造候选）。
    */
   async generateCandidates(input: {
     description: string;
     dial?: VoiceWorkshopDial;
     count: number;
     previewText?: string;
+    jobId?: string;
+    signal?: AbortSignal;
   }): Promise<VoiceWorkshopCandidate[]> {
     const description = composeVoiceWorkshopDescription(input.description, input.dial);
     const candidates: VoiceWorkshopCandidate[] = [];
     const text = input.previewText?.trim() || MIMO_WORKSHOP_AUDITION_LINES[0].text;
+    const jobController = input.jobId !== undefined ? new AbortController() : null;
+    if (input.jobId !== undefined && jobController !== null) {
+      this.activeJobs.set(input.jobId, jobController);
+    }
+    const signal = input.signal ?? jobController?.signal;
     try {
       for (let i = 0; i < input.count; i++) {
+        if (signal?.aborted) {
+          throw new Error('生成任务已取消');
+        }
         const result = await this.synth({
           mode: 'voicedesign',
           text,
           description,
           intensity: 'B',
+          ...(signal === undefined ? {} : { signal }),
         });
+        if (signal?.aborted) {
+          throw new Error('生成任务已取消');
+        }
         const id = randomUUID();
         const file = join(this.candidatesDir(), `${id}.wav`);
         writeFileSync(file, result.bytes);
@@ -356,7 +401,8 @@ export class VoiceWorkshop {
         candidates.push(candidate);
       }
     } finally {
-      // 中途失败也要落索引：已经付过费的候选不能因为后面一条报错就丢掉
+      if (input.jobId !== undefined) this.activeJobs.delete(input.jobId);
+      // 中途失败或取消也要落索引：已经付过费的候选不能因为后面一条报错就丢掉
       if (this.candidates.size > 0) this.persistCandidates();
     }
     return candidates;
@@ -387,6 +433,7 @@ export class VoiceWorkshop {
     customText?: string;
   }): Promise<WorkshopAuditionRow[]> {
     const version = this.currentVersion(input.versionId);
+    this.assertNotRevoked(version);
     const referencePath = this.effectiveReferencePath(version);
     if (!existsSync(referencePath)) {
       throw new Error(`找不到这条声线版本的参考音频：${referencePath}`);
@@ -426,6 +473,7 @@ export class VoiceWorkshop {
       referenceSha256: sha256Hex(rawBytes),
       durationMs: candidate.durationMs ?? quality?.durationMs ?? null,
       licenseScope: 'DEV_ONLY_NON_COMMERCIAL',
+      originCandidateId: candidate.id,
       ...(quality === null ? {} : { audioQuality: quality }),
       ...(input.tags === undefined || input.tags.length === 0 ? {} : { tags: input.tags }),
       frozenAt: this.iso(),
@@ -440,20 +488,26 @@ export class VoiceWorkshop {
     this.state.versions.push(version);
     this.state.currentVersionId = version.id;
     this.persist();
+    this.deps.onReferenceChanged?.();
     return version;
   }
 
   /**
-   * 创建真人录音 / 本地音频克隆声线版本（带 RIFF 校验、声学质检、SHA-256 与权属声明留痕）。
-   * 写入 `versions/<id>.wav`；若 activate=true 则同步写 `cloneSamplePath` 并切为当前版本。
+   * 创建克隆声线版本（支持本地音频上传、麦克风亲录、以及直接从 AI 音色设计候选/版本选取并精修裁剪）。
+   * 强制 RIFF 校验、MiMo Base64 ≤ 10MB 红线、声学质检、SHA-256 与声音权属声明留痕。
+   * 可选保存未裁剪原始副本（rawWavBase64）支持撤回重裁，仅裁剪后副本发往云端。
    */
   createClonedVersion(input: {
     wavBase64?: string;
+    rawWavBase64?: string;
     filePath?: string;
+    sourceCandidateId?: string;
+    sourceVersionId?: string;
     label: string;
     description?: string;
     consent: VoiceCloneConsent;
     activate?: boolean;
+    characterId?: string;
     tags?: string[];
   }): VoiceTimbreVersion {
     if (input.consent.attested !== true || input.consent.source.trim() === '') {
@@ -461,6 +515,16 @@ export class VoiceWorkshop {
     }
     const label = input.label.trim();
     if (label === '') throw new Error('请为克隆声线填写名称');
+
+    let originCandidate: VoiceWorkshopCandidate | null = null;
+    let originVersion: VoiceTimbreVersion | null = null;
+    if (input.sourceCandidateId !== undefined && input.sourceCandidateId.trim() !== '') {
+      originCandidate = this.findCandidate(input.sourceCandidateId);
+    }
+    if (input.sourceVersionId !== undefined && input.sourceVersionId.trim() !== '') {
+      originVersion = this.currentVersion(input.sourceVersionId);
+      this.assertNotRevoked(originVersion);
+    }
 
     let bytes: Uint8Array;
     if (input.wavBase64 !== undefined && input.wavBase64.trim() !== '') {
@@ -470,8 +534,14 @@ export class VoiceWorkshop {
         throw new Error(`找不到指定的参考音频文件：${input.filePath}`);
       }
       bytes = new Uint8Array(readFileSync(input.filePath));
+    } else if (originCandidate !== null) {
+      bytes = new Uint8Array(readFileSync(originCandidate.file));
+    } else if (originVersion !== null) {
+      const refPath = this.effectiveReferencePath(originVersion);
+      if (!existsSync(refPath)) throw new Error(`源声线版本的参考音频不存在：${refPath}`);
+      bytes = new Uint8Array(readFileSync(refPath));
     } else {
-      throw new Error('缺少参考音频数据（需要 wavBase64 或 filePath）');
+      throw new Error('缺少参考音频数据（需要 wavBase64、filePath、sourceCandidateId 或 sourceVersionId）');
     }
 
     assertValidWavBytes(bytes);
@@ -480,31 +550,56 @@ export class VoiceWorkshop {
     const versionFile = join(this.versionsDir(), `${id}.wav`);
     writeFileSync(versionFile, bytes);
 
+    // 可选保留未裁剪原始副本（本地保存，绝不直接上传云端，方便后续撤回重裁）
+    let rawReferencePath: string | undefined;
+    if (input.rawWavBase64 !== undefined && input.rawWavBase64.trim() !== '') {
+      const rawBuf = new Uint8Array(Buffer.from(input.rawWavBase64, 'base64'));
+      if (rawBuf.byteLength >= 44 && rawBuf.byteLength <= MAX_LOCAL_RAW_WAV_BYTES) {
+        const riff = String.fromCharCode(rawBuf[0] ?? 0, rawBuf[1] ?? 0, rawBuf[2] ?? 0, rawBuf[3] ?? 0);
+        const wave = String.fromCharCode(rawBuf[8] ?? 0, rawBuf[9] ?? 0, rawBuf[10] ?? 0, rawBuf[11] ?? 0);
+        if (riff === 'RIFF' && wave === 'WAVE') {
+          rawReferencePath = join(this.versionsDir(), `${id}.raw.wav`);
+          writeFileSync(rawReferencePath, rawBuf);
+        }
+      }
+    }
+
     const activate = input.activate !== false;
     if (activate) {
       copyFileSync(versionFile, this.deps.cloneSamplePath);
     }
 
-    const description = input.description?.trim() || `本地参考音频克隆（${input.consent.source.trim()}）`;
+    const derivedFromAi = originCandidate !== null || (originVersion !== null && (originVersion.source === 'ai-design' || originVersion.source === 'factory'));
+    const fallbackDesc = originCandidate !== null
+      ? originCandidate.description
+      : originVersion !== null
+        ? originVersion.description
+        : `本地参考音频克隆（${input.consent.source.trim()}）`;
+    const description = input.description?.trim() || fallbackDesc;
     const version: VoiceTimbreVersion = {
       id,
       label,
       description,
       source: 'uploaded',
       referencePath: versionFile,
+      ...(rawReferencePath === undefined ? {} : { rawReferencePath }),
       referenceBytes: bytes.byteLength,
       referenceSha256: sha256Hex(bytes),
       durationMs: quality?.durationMs ?? null,
-      licenseScope: input.consent.kind === 'ai_synthetic' ? 'DEV_ONLY_NON_COMMERCIAL' : 'COMMERCIAL_READY',
+      licenseScope: input.consent.kind === 'ai_synthetic' || derivedFromAi ? 'DEV_ONLY_NON_COMMERCIAL' : 'COMMERCIAL_READY',
       consent: input.consent,
       ...(quality === null ? {} : { audioQuality: quality }),
       ...(input.tags === undefined || input.tags.length === 0 ? {} : { tags: input.tags }),
+      ...(originCandidate === null ? {} : { originCandidateId: originCandidate.id }),
+      ...(originVersion === null ? {} : { originVersionId: originVersion.id }),
       frozenAt: this.iso(),
       freeze: {
-        text: `（本地音频克隆 · ${input.consent.kind} · ${input.consent.source.trim()}）`,
+        text: derivedFromAi
+          ? `（AI 设计派生克隆 · ${originCandidate?.text ?? originVersion?.label ?? ''}）`
+          : `（本地音频克隆 · ${input.consent.kind} · ${input.consent.source.trim()}）`,
         intensity: 'B',
         provider: 'mimo-tts-voiceclone',
-        mode: 'uploaded → voiceclone',
+        mode: derivedFromAi ? 'ai-design → trim → voiceclone' : 'uploaded → voiceclone',
       },
       consistency: null,
     };
@@ -512,9 +607,152 @@ export class VoiceWorkshop {
     this.state.versions.push(version);
     if (activate) {
       this.state.currentVersionId = version.id;
+      if (input.characterId !== undefined && input.characterId.trim() !== '') {
+        this.state.characterBindings = {
+          ...(this.state.characterBindings ?? {}),
+          [input.characterId.trim()]: version.id,
+        };
+      }
     }
     this.persist();
+    this.deps.onReferenceChanged?.();
     return version;
+  }
+
+  /** 将指定角色显式锁定到某个声线版本（支持多角色各自独立 VoiceClone 参考锚点） */
+  bindCharacter(characterId: string, versionId: string): { characterId: string; version: VoiceTimbreVersion } {
+    const charId = characterId.trim();
+    if (charId === '') throw new Error('角色 ID 不能为空');
+    const version = this.currentVersion(versionId);
+    this.assertNotRevoked(version);
+    const refPath = this.effectiveReferencePath(version);
+    if (!existsSync(refPath)) {
+      throw new Error(`该声线版本的参考音频已缺失：${refPath}`);
+    }
+    this.state.characterBindings = {
+      ...(this.state.characterBindings ?? {}),
+      [charId]: version.id,
+    };
+    this.persist();
+    this.deps.onReferenceChanged?.();
+    return { characterId: charId, version };
+  }
+
+  /** 解除角色显式绑定，恢复跟随默认/出厂声线 */
+  unbindCharacter(characterId: string): { characterId: string; unbound: boolean } {
+    const charId = characterId.trim();
+    const map = { ...(this.state.characterBindings ?? {}) };
+    const existed = charId in map;
+    delete map[charId];
+    this.state.characterBindings = map;
+    if (existed) {
+      this.persist();
+      this.deps.onReferenceChanged?.();
+    }
+    return { characterId: charId, unbound: existed };
+  }
+
+  /**
+   * 为生产播报/试听解析指定角色实际锁定的声线版本与参考音频路径。
+   * 优先命中角色显式绑定 → 否则跟随全局 currentVersionId → 否则出厂。
+   */
+  resolveReferenceForCharacter(characterId?: string): {
+    version: VoiceTimbreVersion;
+    referencePath: string;
+    revoked: boolean;
+  } {
+    const boundId = characterId !== undefined ? this.state.characterBindings?.[characterId] : undefined;
+    const version = this.state.versions.find((v) => v.id === boundId)
+      ?? this.state.versions.find((v) => v.id === this.state.currentVersionId)
+      ?? this.state.versions[0]!;
+    const revoked = version.consent?.revokedAt !== undefined;
+    return {
+      version,
+      referencePath: this.effectiveReferencePath(version),
+      revoked,
+    };
+  }
+
+  /** 收藏 / 取消收藏声线版本 */
+  setFavorite(versionId: string, favorite: boolean): VoiceTimbreVersion {
+    const index = this.state.versions.findIndex((item) => item.id === versionId);
+    if (index < 0) throw new Error('没有这个声线版本');
+    const updated: VoiceTimbreVersion = { ...this.state.versions[index]!, favorite };
+    this.state.versions[index] = updated;
+    this.persist();
+    return updated;
+  }
+
+  /** 软归档 / 取消归档声线版本（软归档不影响已有角色引用） */
+  setArchived(versionId: string, archived: boolean): VoiceTimbreVersion {
+    const index = this.state.versions.findIndex((item) => item.id === versionId);
+    if (index < 0) throw new Error('没有这个声线版本');
+    const target = this.state.versions[index]!;
+    if (target.source === 'factory' && archived) {
+      throw new Error('出厂默认声线受保护，不可归档');
+    }
+    const updated: VoiceTimbreVersion = { ...target, archivedAt: archived ? this.iso() : null };
+    this.state.versions[index] = updated;
+    this.persist();
+    return updated;
+  }
+
+  /**
+   * 撤销声音授权（合规闭环）：
+   * - 立即记录 revokedAt，阻止该版本继续用于任何克隆合成/试戴/绑定
+   * - 删除本地参考音频与原始副本
+   * - 解绑所有引用该版本的角色；若当前激活它，自动安全回退出厂声线并触发缓存清理
+   */
+  revokeConsent(versionId: string, reason?: string): { version: VoiceTimbreVersion; unboundCharacters: string[] } {
+    const index = this.state.versions.findIndex((item) => item.id === versionId);
+    if (index < 0) throw new Error('没有这个声线版本');
+    const target = this.state.versions[index]!;
+    if (target.source === 'factory') {
+      throw new Error('随包出厂声线不可撤权，请直接切换其他声线');
+    }
+    const nowIso = this.iso();
+    const baseConsent: VoiceCloneConsent = target.consent ?? {
+      kind: target.source === 'ai-design' ? 'ai_synthetic' : 'self_recorded',
+      source: target.label,
+      attested: true,
+      attestedAt: target.frozenAt,
+    };
+    const updated: VoiceTimbreVersion = {
+      ...target,
+      consent: {
+        ...baseConsent,
+        revokedAt: nowIso,
+        ...(reason !== undefined && reason.trim() !== '' ? { revokeReason: reason.trim() } : {}),
+      },
+      archivedAt: target.archivedAt ?? nowIso,
+    };
+    this.state.versions[index] = updated;
+
+    // 清理本地参考副本与未裁剪原始副本
+    for (const file of [target.referencePath, target.rawReferencePath]) {
+      if (file !== undefined && existsSync(file)) {
+        try { rmSync(file); } catch { /* 忽略 */ }
+      }
+    }
+
+    // 解绑全部引用该版本的角色
+    const unboundCharacters: string[] = [];
+    const bindings = { ...(this.state.characterBindings ?? {}) };
+    for (const [charId, vId] of Object.entries(bindings)) {
+      if (vId === versionId) {
+        delete bindings[charId];
+        unboundCharacters.push(charId);
+      }
+    }
+    this.state.characterBindings = bindings;
+
+    if (this.state.currentVersionId === versionId) {
+      if (existsSync(this.deps.cloneSamplePath)) rmSync(this.deps.cloneSamplePath);
+      this.state.currentVersionId = 'factory';
+    }
+    this.persist();
+    this.deps.onReferenceChanged?.();
+    return { version: updated, unboundCharacters };
   }
 
   /** 重命名任意非出厂声线版本 */
@@ -533,7 +771,11 @@ export class VoiceWorkshop {
     return updated;
   }
 
-  /** 删除任意非出厂声线版本；若删的是当前激活版，自动安全回退到出厂版本 */
+  /**
+   * 删除任意非出厂声线版本：
+   * - 若正被任一角色显式绑定，禁止永久删除，要求先解绑/替换（或使用软归档）
+   * - 若删的是全局当前激活版，自动安全回退到出厂版本
+   */
   deleteVersion(versionId: string): { deletedId: string; currentVersion: VoiceTimbreVersion } {
     const index = this.state.versions.findIndex((item) => item.id === versionId);
     if (index < 0) throw new Error('没有这个声线版本');
@@ -541,34 +783,48 @@ export class VoiceWorkshop {
     if (target.source === 'factory') {
       throw new Error('出厂默认声线受保护，不可删除');
     }
+    const boundCharacters = Object.entries(this.state.characterBindings ?? {})
+      .filter(([, boundId]) => boundId === versionId)
+      .map(([charId]) => charId);
+    if (boundCharacters.length > 0) {
+      throw new Error(`该声线正被角色（${boundCharacters.join('、')}）锁定绑定，请先解除绑定或改绑其他声线，或使用「归档」隐藏`);
+    }
     this.state.versions.splice(index, 1);
-    try {
-      if (existsSync(target.referencePath)) rmSync(target.referencePath);
-    } catch {
-      /* 忽略已被外部清理的文件 */
+    for (const file of [target.referencePath, target.rawReferencePath]) {
+      if (file !== undefined && existsSync(file)) {
+        try { rmSync(file); } catch { /* 忽略已被外部清理的文件 */ }
+      }
     }
     if (this.state.currentVersionId === versionId) {
       const factory = this.rollback('factory');
       return { deletedId: versionId, currentVersion: factory };
     }
     this.persist();
+    this.deps.onReferenceChanged?.();
     return { deletedId: versionId, currentVersion: this.currentVersion() };
   }
 
   /**
-   * 安全读取已登记版本或候选的 WAV 音频（仅白名单 ID 查找，彻底杜绝路径穿越），
-   * 供前端绘制真实波形与试听。
+   * 安全读取已登记版本、未裁剪原始副本或候选的 WAV 音频（仅白名单 ID 查找，彻底杜绝路径穿越），
+   * 供前端绘制真实波形、试听与重新裁剪。
    */
-  readAudio(target: { kind: 'version' | 'candidate'; id: string }): {
+  readAudio(target: { kind: 'version' | 'candidate' | 'version-raw'; id: string }): {
     audioBase64: string;
     bytes: number;
     durationMs: number | null;
     quality: VoiceAudioQuality | null;
     sha256: string;
   } {
-    const filePath = target.kind === 'version'
-      ? this.effectiveReferencePath(this.currentVersion(target.id))
-      : this.findCandidate(target.id).file;
+    let filePath: string;
+    if (target.kind === 'candidate') {
+      filePath = this.findCandidate(target.id).file;
+    } else {
+      const version = this.currentVersion(target.id);
+      this.assertNotRevoked(version);
+      filePath = target.kind === 'version-raw' && version.rawReferencePath !== undefined && existsSync(version.rawReferencePath)
+        ? version.rawReferencePath
+        : this.effectiveReferencePath(version);
+    }
     if (!existsSync(filePath)) {
       throw new Error(`音频文件不存在：${filePath}`);
     }
@@ -587,6 +843,7 @@ export class VoiceWorkshop {
   rollback(versionId: string): VoiceTimbreVersion {
     const version = this.state.versions.find((item) => item.id === versionId);
     if (version === undefined) throw new Error('没有这个声线版本');
+    this.assertNotRevoked(version);
     if (version.source === 'factory') {
       if (existsSync(this.deps.cloneSamplePath)) rmSync(this.deps.cloneSamplePath);
     } else {
@@ -597,6 +854,7 @@ export class VoiceWorkshop {
     }
     this.state.currentVersionId = version.id;
     this.persist();
+    this.deps.onReferenceChanged?.();
     return version;
   }
 
@@ -606,6 +864,7 @@ export class VoiceWorkshop {
    */
   async checkConsistency(versionId?: string): Promise<VoiceConsistencyResult> {
     const version = this.currentVersion(versionId);
+    this.assertNotRevoked(version);
     const referencePath = this.effectiveReferencePath(version);
     if (!existsSync(referencePath)) {
       return this.storeConsistency(version, {
@@ -666,6 +925,12 @@ export class VoiceWorkshop {
       label: group.label,
       options: group.options,
     }));
+  }
+
+  private assertNotRevoked(version: VoiceTimbreVersion): void {
+    if (version.consent?.revokedAt !== undefined) {
+      throw new Error(`声线「${version.label}」已于 ${version.consent.revokedAt.slice(0, 10)} 撤销授权，已禁止继续用于合成、试戴或绑定`);
+    }
   }
 
   private async runAuditionWithReference(input: {
@@ -755,7 +1020,7 @@ export class VoiceWorkshop {
   }
 
   private persistCandidates(): void {
-    writeFileSync(this.candidatesIndexPath(), JSON.stringify([...this.candidates.values()], null, 2));
+    writeFileAtomic(this.candidatesIndexPath(), JSON.stringify([...this.candidates.values()], null, 2));
   }
 
   private async synth(input: WorkshopSynthInput): Promise<WorkshopSynthResult> {
@@ -832,19 +1097,26 @@ export class VoiceWorkshop {
               consistency: storedFactory.consistency ?? null,
             };
         const others = raw.versions.filter((item) => item.id !== 'factory' && typeof item.id === 'string');
-        const current = raw.currentVersionId === 'factory' || others.some((item) => item.id === raw.currentVersionId)
-          ? raw.currentVersionId
-          : 'factory';
-        return { schemaVersion: 1, currentVersionId: current, versions: [nextFactory, ...others] };
+        const validIds = new Set(['factory', ...others.map((v) => v.id)]);
+        const current = validIds.has(raw.currentVersionId) ? raw.currentVersionId : 'factory';
+        const bindings: Record<string, string> = {};
+        if (raw.characterBindings !== undefined && typeof raw.characterBindings === 'object' && raw.characterBindings !== null) {
+          for (const [charId, vId] of Object.entries(raw.characterBindings)) {
+            if (typeof charId === 'string' && charId.trim() !== '' && typeof vId === 'string' && validIds.has(vId)) {
+              bindings[charId] = vId;
+            }
+          }
+        }
+        return { schemaVersion: 1, currentVersionId: current, versions: [nextFactory, ...others], characterBindings: bindings };
       }
     } catch {
       /* 首次运行或状态文件损坏：回到出厂版本，用户可在 UI 里重新定格 */
     }
-    return { schemaVersion: 1, currentVersionId: 'factory', versions: [factory] };
+    return { schemaVersion: 1, currentVersionId: 'factory', versions: [factory], characterBindings: {} };
   }
 
   private persist(): void {
-    writeFileSync(this.statePath(), JSON.stringify(this.state, null, 2));
+    writeFileAtomic(this.statePath(), JSON.stringify(this.state, null, 2));
   }
 }
 

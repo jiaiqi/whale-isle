@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   AudioMixerSnapshotSchema,
+  estimateDataUriBase64Bytes,
   LipSyncFrameSchema,
+  MIMO_MAX_REFERENCE_BASE64_BYTES,
   VoiceAudioQualitySchema,
   VoiceCloneConsentSchema,
+  VoiceCloudFallbackPolicySchema,
   VoiceProviderStatusSchema,
   VoiceSynthesisOutputSchema,
   VoiceSynthesisRequestSchema,
+  VoiceWorkshopArchiveInputSchema,
+  VoiceWorkshopBindCharacterInputSchema,
   VoiceWorkshopCloneCreateInputSchema,
   VoiceWorkshopDeleteInputSchema,
+  VoiceWorkshopFavoriteInputSchema,
   VoiceWorkshopRenameInputSchema,
+  VoiceWorkshopRevokeConsentInputSchema,
 } from './voice';
 
 describe('VoiceProvider, LipSync & AudioMixer schemas (V2-P1-02)', () => {
@@ -149,6 +156,37 @@ describe('VoiceProvider, LipSync & AudioMixer schemas (V2-P1-02)', () => {
       consent: validConsent,
     });
     expect(parsedClone.activate).toBe(true);
+
+    // 支持从 AI 设计候选或已有 AI 设计版本直接选入克隆（亦可附带裁剪后 wavBase64）
+    const fromAiDesign = VoiceWorkshopCloneCreateInputSchema.parse({
+      sourceCandidateId: 'cand-123',
+      wavBase64: 'UklGRg==',
+      label: 'AI 设计精修克隆',
+      consent: {
+        kind: 'ai_synthetic',
+        source: '源自 AI 音色设计候选',
+        attested: true,
+        attestedAt: '2026-11-27T10:00:00.000Z',
+      },
+    });
+    expect(fromAiDesign.sourceCandidateId).toBe('cand-123');
+    expect(VoiceWorkshopCloneCreateInputSchema.parse({
+      sourceVersionId: 'ver-ai-1',
+      label: '从 AI 设计版本派生',
+      consent: validConsent,
+    }).sourceVersionId).toBe('ver-ai-1');
+
+    // MiMo Base64 ≤ 10MB 体积估算
+    expect(MIMO_MAX_REFERENCE_BASE64_BYTES).toBe(10_000_000);
+    expect(estimateDataUriBase64Bytes(7_400_000)).toBeLessThan(MIMO_MAX_REFERENCE_BASE64_BYTES);
+    expect(estimateDataUriBase64Bytes(7_600_000)).toBeGreaterThan(MIMO_MAX_REFERENCE_BASE64_BYTES);
+
+    // 角色绑定、收藏、归档、授权撤销与云端回退策略契约
+    expect(VoiceWorkshopBindCharacterInputSchema.parse({ characterId: 'blue-whale-maid', versionId: 'v1' }).versionId).toBe('v1');
+    expect(VoiceWorkshopFavoriteInputSchema.parse({ versionId: 'v1', favorite: true }).favorite).toBe(true);
+    expect(VoiceWorkshopArchiveInputSchema.parse({ versionId: 'v1', archived: true }).archived).toBe(true);
+    expect(VoiceWorkshopRevokeConsentInputSchema.parse({ versionId: 'v1', reason: '不再使用' }).reason).toBe('不再使用');
+    expect(VoiceCloudFallbackPolicySchema.parse('subtitle_only')).toBe('subtitle_only');
 
     expect(VoiceWorkshopRenameInputSchema.safeParse({ versionId: 'v1', label: '   ' }).success).toBe(false);
     expect(VoiceWorkshopDeleteInputSchema.parse({ versionId: 'v1' }).versionId).toBe('v1');

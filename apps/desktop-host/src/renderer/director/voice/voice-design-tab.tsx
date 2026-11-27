@@ -1,17 +1,17 @@
 /**
- * Tab 2：「音色设计台」（AI Voice Design Studio — 融合旧 VoiceDesignLab + VoiceWorkshop）
+ * Tab 2：「音色设计台」（AI Voice Design Studio）
  *
- * 四步引导闭环（对标 ElevenLabs Voice Design + MiniMax Voice Design + 鲸屿实测漂移红线）：
- * 1. 配方构思：快捷配方起点 + 4 维度结构化拨盘（年龄段/质感/语速/尾音）+ 自然语言描述
- * 2. 候选生成：一次批量生成 2–8 条候选（默认 4），另提供单句快测（支持 optimize_text_preview）
- * 3. 真波形试听 & A/B 并排对比 & 4 情绪多句试戴（强度 A/B/C 默认 B + 内联标签快捷键）
- * 4. 命名定格为 VoiceClone 固定声线（防止 VoiceDesign 0.4145 漂移）+ 自动 CAM++ 一致性体检
+ * 吸收语音中心 V2 规格与行业最佳实践：
+ * 1. 配方构思：4 套快捷配方 + 从当前角色人设一键摘取（预览确认，绝不读取聊天日志）+ 4 维拨盘 + 自然语言描述
+ * 2. 透明可控的候选生成：支持 1/3/4/6/8 条，每条独立状态（等待/生成中/就绪/失败/已取消），支持中途取消与「仅重试失败项」
+ * 3. 真波形试听（统一底部播放器互斥）+ A/B 并排对拍槽 + 4 情绪/自定义试戴（强度 A/B/C）
+ * 4. 双出口闭环：① 直接命名定格为 VoiceClone；② 「送入克隆台精修」跳至克隆台裁剪/归一化/再克隆
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Activity, ArrowLeftRight, CheckCircle2, Flame, Loader2, Pin, Play,
-  RotateCcw, ShieldAlert, Sparkles, Wand2,
+  RefreshCw, RotateCcw, Scissors, ShieldAlert, Sparkles, Square, UserRoundSearch, Wand2, X,
 } from 'lucide-react';
 import {
   composeVoiceWorkshopDescription,
@@ -26,6 +26,7 @@ import {
   type VoiceWorkshopState,
 } from '@workbench/shared-protocol';
 import { formatBytes } from './audio-dsp';
+import { useAuditionPlayer } from './audition-player';
 import { ConsistencyGauge, WaveformPlayer } from './waveform-player';
 
 const INTENSITIES: Array<{ id: VoicePerformanceIntensity; label: string; hint: string }> = [
@@ -42,12 +43,22 @@ interface AuditionRow {
   durationMs: number | null;
 }
 
+interface GenerationSlot {
+  index: number;
+  status: 'queued' | 'synthesizing' | 'ready' | 'failed' | 'cancelled';
+  error?: string;
+  candidateId?: string;
+}
+
 export function VoiceDesignTab(props: {
+  characterName: string;
   workshop: VoiceWorkshopState | null;
   onRefreshWorkshop: () => void;
   onUpdateWorkshop: (next: VoiceWorkshopState) => void;
+  onSendCandidateToClone: (candidate: VoiceWorkshopCandidate) => void;
 }): React.JSX.Element {
-  const { workshop, onRefreshWorkshop, onUpdateWorkshop } = props;
+  const { characterName, workshop, onRefreshWorkshop, onUpdateWorkshop, onSendCandidateToClone } = props;
+  const player = useAuditionPlayer();
 
   const [busy, setBusy] = useState<string | null>(null);
   const [description, setDescription] = useState('八九岁小女孩，声音甜而脆，元气满满，语速快，句尾翘起来，像随时要跳起来');
@@ -57,6 +68,15 @@ export function VoiceDesignTab(props: {
   const [optimizePreview, setOptimizePreview] = useState(false);
   const [quickPreviewB64, setQuickPreviewB64] = useState<string | null>(null);
   const [quickPreviewDuration, setQuickPreviewDuration] = useState<number | null>(null);
+
+  // 角色人设摘取预览确认
+  const [personaDraft, setPersonaDraft] = useState<{ characterName: string; sourceSummary: string; suggestedDescription: string } | null>(null);
+
+  // 独立候选槽队列（支持中途取消与仅重试失败项）
+  const [slots, setSlots] = useState<GenerationSlot[]>([]);
+  const [lastGenSpec, setLastGenSpec] = useState<{ description: string; dial: VoiceWorkshopDial; previewText: string } | null>(null);
+  const cancelGenRef = useRef(false);
+  const activeJobIdRef = useRef<string | null>(null);
 
   const [candidates, setCandidates] = useState<VoiceWorkshopCandidate[]>(workshop?.candidates ?? []);
   const [intensity, setIntensity] = useState<VoicePerformanceIntensity>('B');
@@ -94,6 +114,18 @@ export function VoiceDesignTab(props: {
     toast(`已套用配方起点「${recipe.label}」`);
   };
 
+  const extractFromPersona = async (): Promise<void> => {
+    setBusy('extract-persona');
+    try {
+      const res = await window.directorBridge.v2VoicePersonaExtract(characterName);
+      setPersonaDraft(res);
+    } catch (err) {
+      toast.error(`摘取人设失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const runQuickSinglePreview = async (): Promise<void> => {
     if (composed.trim().length < 2) return;
     setBusy('quick-preview');
@@ -109,8 +141,18 @@ export function VoiceDesignTab(props: {
       }
       setQuickPreviewB64(res.audioBase64);
       setQuickPreviewDuration(res.durationMs);
-      void new Audio(`data:audio/wav;base64,${res.audioBase64}`).play().catch(() => undefined);
-      toast.success('单句快测已生成（仅供听配方方向，如需定格请用批量候选）');
+      if (player !== null) {
+        player.playTrack({
+          id: `quick-preview-${Date.now()}`,
+          title: '单句快测结果',
+          sourceLabel: 'VoiceDesign 快测',
+          subtitle: previewText.trim() || MIMO_WORKSHOP_AUDITION_LINES[0].text,
+          audioBase64: res.audioBase64,
+          downloadName: 'quick-design-preview.wav',
+          durationHintSec: res.durationMs / 1000,
+        });
+      }
+      toast.success('单句快测已生成（仅供听配方方向，如需定格或克隆请生成候选）');
     } catch (err) {
       toast.error(`单句快测失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -118,27 +160,103 @@ export function VoiceDesignTab(props: {
     }
   };
 
-  const generate = async (): Promise<void> => {
+  const runSlots = async (
+    targetIndices: number[],
+    spec: { description: string; dial: VoiceWorkshopDial; previewText: string },
+  ): Promise<void> => {
+    cancelGenRef.current = false;
     setBusy('generate');
-    try {
-      const list = await window.directorBridge.v2VoiceWorkshopGenerate({
-        description,
-        dial,
-        count,
-        ...(previewText.trim() !== '' ? { previewText: previewText.trim() } : {}),
-      });
-      setCandidates((prev) => [...list, ...prev]);
-      setAuditions({});
-      onRefreshWorkshop();
-      toast.success(`已生成 ${list.length} 条候选（消耗 ${list.length} 次合成）`);
-    } catch (err) {
-      toast.error(`生成候选失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setBusy(null);
+    let okCount = 0;
+    let failCount = 0;
+
+    for (const idx of targetIndices) {
+      if (cancelGenRef.current) {
+        setSlots((prev) => prev.map((s) => (s.index === idx ? { ...s, status: 'cancelled' } : s)));
+        continue;
+      }
+      const jobId = `vd-${Date.now()}-${idx}`;
+      activeJobIdRef.current = jobId;
+      setSlots((prev) => prev.map((s) => (s.index === idx ? { ...s, status: 'synthesizing', error: undefined } : s)));
+      try {
+        const list = await window.directorBridge.v2VoiceWorkshopGenerate({
+          description: spec.description,
+          dial: spec.dial,
+          count: 1,
+          jobId,
+          ...(spec.previewText.trim() !== '' ? { previewText: spec.previewText.trim() } : {}),
+        });
+        const created = list[0];
+        if (created !== undefined) {
+          okCount += 1;
+          setCandidates((prev) => [created, ...prev]);
+          setSlots((prev) => prev.map((s) => (s.index === idx ? { ...s, status: 'ready', candidateId: created.id } : s)));
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (cancelGenRef.current || msg.includes('取消') || msg.includes('中止')) {
+          setSlots((prev) => prev.map((s) => (s.index === idx ? { ...s, status: 'cancelled' } : s)));
+        } else {
+          failCount += 1;
+          setSlots((prev) => prev.map((s) => (s.index === idx ? { ...s, status: 'failed', error: msg } : s)));
+        }
+      } finally {
+        activeJobIdRef.current = null;
+      }
+    }
+
+    onRefreshWorkshop();
+    setBusy(null);
+    if (cancelGenRef.current) {
+      toast(`已取消剩余生成（保留已完成 ${okCount} 条候选）`);
+    } else if (failCount > 0) {
+      toast.error(`生成完成：成功 ${okCount} 条，失败 ${failCount} 条（可点击「仅重试失败项」）`);
+    } else if (okCount > 0) {
+      toast.success(`已生成 ${okCount} 条候选（消耗 ${okCount} 次合成）`);
     }
   };
 
-  const auditionCandidate = async (candidateId: string, customOnly = false): Promise<void> => {
+  const generate = async (): Promise<void> => {
+    const spec = { description, dial: { ...dial }, previewText };
+    setLastGenSpec(spec);
+    const initial: GenerationSlot[] = Array.from({ length: count }, (_, i) => ({ index: i, status: 'queued' }));
+    setSlots(initial);
+    await runSlots(initial.map((s) => s.index), spec);
+  };
+
+  const retryFailedSlots = async (): Promise<void> => {
+    if (lastGenSpec === null) return;
+    const failedIndices = slots.filter((s) => s.status === 'failed' || s.status === 'cancelled').map((s) => s.index);
+    if (failedIndices.length === 0) return;
+    setSlots((prev) => prev.map((s) => (failedIndices.includes(s.index) ? { ...s, status: 'queued', error: undefined } : s)));
+    await runSlots(failedIndices, lastGenSpec);
+  };
+
+  const cancelGeneration = (): void => {
+    cancelGenRef.current = true;
+    const jobId = activeJobIdRef.current;
+    if (jobId !== null) {
+      void window.directorBridge.v2VoiceWorkshopCancelJob(jobId).catch(() => undefined);
+    }
+    setSlots((prev) => prev.map((s) => (s.status === 'queued' ? { ...s, status: 'cancelled' } : s)));
+  };
+
+  const playAuditionRow = (candidateIdx: number, row: AuditionRow): void => {
+    if (player !== null) {
+      player.playTrack({
+        id: `cand-audition-${candidateIdx}-${row.key}-${row.text.slice(0, 10)}`,
+        title: `候选 #${candidateIdx + 1} · ${row.label}`,
+        sourceLabel: '设计试戴',
+        subtitle: row.text,
+        audioBase64: row.audioBase64,
+        downloadName: `candidate-${candidateIdx + 1}-${row.key}.wav`,
+        ...(row.durationMs !== null ? { durationHintSec: row.durationMs / 1000 } : {}),
+      });
+    } else {
+      void new Audio(`data:audio/wav;base64,${row.audioBase64}`).play().catch(() => undefined);
+    }
+  };
+
+  const auditionCandidate = async (candidateId: string, idx: number, customOnly = false): Promise<void> => {
     const custom = customOnly ? customAuditionText.trim() : '';
     setBusy(`audition-${candidateId}`);
     try {
@@ -152,9 +270,7 @@ export function VoiceDesignTab(props: {
         [candidateId]: customOnly ? [...(prev[candidateId] ?? []).filter((r) => r.key !== 'custom'), ...rows] : rows,
       }));
       onRefreshWorkshop();
-      if (rows[0]?.audioBase64) {
-        void new Audio(`data:audio/wav;base64,${rows[0].audioBase64}`).play().catch(() => undefined);
-      }
+      if (rows[0] !== undefined) playAuditionRow(idx, rows[0]);
       toast.success(customOnly ? '自定义台词试戴完成（消耗 1 次合成）' : `已出 4 句情绪试戴（强度 ${intensity}，消耗 4 次合成）`);
     } catch (err) {
       toast.error(`试戴失败：${err instanceof Error ? err.message : String(err)}`);
@@ -194,11 +310,8 @@ export function VoiceDesignTab(props: {
     try {
       const { result, state: next } = await window.directorBridge.v2VoiceWorkshopConsistency();
       onUpdateWorkshop(next);
-      if (result.verdict === 'unavailable') {
-        toast.error(`体检未完成：${result.detail}`);
-      } else {
-        toast.success(`体检完成：均值 ${result.mean?.toFixed(4)} · 最低 ${result.min?.toFixed(4)}`);
-      }
+      if (result.verdict === 'unavailable') toast.error(`体检未完成：${result.detail}`);
+      else toast.success(`体检完成：均值 ${result.mean?.toFixed(4)} · 最低 ${result.min?.toFixed(4)}`);
     } catch (err) {
       toast.error(`体检失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -226,10 +339,11 @@ export function VoiceDesignTab(props: {
 
   const candA = candidates.find((c) => c.id === pinA) ?? null;
   const candB = candidates.find((c) => c.id === pinB) ?? null;
+  const failedSlotCount = slots.filter((s) => s.status === 'failed' || s.status === 'cancelled').length;
 
   return (
     <div className="space-y-4" data-voice-workshop>
-      {/* 顶部上下文条：当前定格声线 + 快速版本回退 + 额度消耗诚实计数 */}
+      {/* 顶部上下文条：当前定格基线 + 快速版本回退 + 额度消耗诚实计数 */}
       <section className="card p-4" data-workshop-current>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -267,7 +381,7 @@ export function VoiceDesignTab(props: {
           </span>
           <div className="flex flex-wrap items-center gap-1.5" data-workshop-versions>
             <span className="text-[10.5px] font-semibold" style={{ color: 'var(--text-2)' }}>版本时间线：</span>
-            {(workshop?.versions ?? []).slice(0, 5).map((version) => {
+            {(workshop?.versions ?? []).filter((v) => !v.archivedAt && !v.consent?.revokedAt).slice(0, 5).map((version) => {
               const on = version.id === workshop?.currentVersionId;
               return (
                 <span key={version.id} className="inline-flex items-center gap-1" data-workshop-version={version.id}>
@@ -293,15 +407,15 @@ export function VoiceDesignTab(props: {
         </div>
       </section>
 
-      {/* 主双栏创作工作台：左「配方与生成」 / 右「候选池 · A/B 对比 · 多句试戴与定格」 */}
+      {/* 主双栏创作工作台 */}
       <div className="grid gap-4 lg:grid-cols-[minmax(360px,0.95fr)_1.25fr]">
         {/* 左栏：音色配方编辑器 */}
         <section className="card flex flex-col gap-4 p-5" data-workshop-generate-box>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
               <h2 className="wb-display text-lg">① 构思音色配方</h2>
               <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                自然语言 + 4 项拨盘描述声线，批量抽卡试戴后定格。
+                自然语言 + 4 拨盘描述声线，抽卡后定格或送克隆台精修。
               </p>
             </div>
             <span className="pill pill-amber" style={{ fontSize: 10 }}>
@@ -309,9 +423,21 @@ export function VoiceDesignTab(props: {
             </span>
           </div>
 
-          {/* 快捷配方起点 */}
+          {/* 快捷配方起点 + 从角色人设摘取 */}
           <div>
-            <div className="mb-1.5 text-[11px] font-semibold" style={{ color: 'var(--text-3)' }}>快捷配方起点</div>
+            <div className="mb-1.5 flex items-center justify-between text-[11px]">
+              <span className="font-semibold" style={{ color: 'var(--text-3)' }}>快捷配方起点</span>
+              <button
+                type="button"
+                data-workshop-extract-persona
+                disabled={busy !== null}
+                onClick={() => void extractFromPersona()}
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-medium transition"
+                style={{ border: '1px solid var(--accent-line)', background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                <UserRoundSearch size={11} />从「{characterName}」人设摘取
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {VOICE_DESIGN_STARTER_RECIPES.map((recipe) => (
                 <button
@@ -327,6 +453,33 @@ export function VoiceDesignTab(props: {
               ))}
             </div>
           </div>
+
+          {/* 人设摘取预览确认条（用户确认后才写入描述） */}
+          {personaDraft !== null && (
+            <div className="rounded-xl p-3 text-[11.5px]" style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' }} data-workshop-persona-preview>
+              <div className="flex items-center justify-between gap-2">
+                <strong style={{ color: 'var(--accent)' }}>人设声音摘取预览 · {personaDraft.characterName}</strong>
+                <button type="button" className="vs-icon-btn" onClick={() => setPersonaDraft(null)} aria-label="关闭摘取预览"><X size={11} /></button>
+              </div>
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--text-1)' }}>{personaDraft.suggestedDescription}</p>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{personaDraft.sourceSummary}</span>
+                <button
+                  type="button"
+                  data-workshop-persona-apply
+                  className="btn-pill primary"
+                  style={{ padding: '3px 10px', fontSize: 10.5 }}
+                  onClick={() => {
+                    setDescription(personaDraft.suggestedDescription);
+                    setPersonaDraft(null);
+                    toast.success('已将角色声音描述填入编辑框');
+                  }}
+                >
+                  确认填入描述
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 4 维度结构化拨盘 */}
           <div className="grid grid-cols-2 gap-2.5">
@@ -363,14 +516,14 @@ export function VoiceDesignTab(props: {
               rows={3}
               className="w-full rounded-xl px-3 py-2 text-xs leading-relaxed outline-none"
               style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)', resize: 'vertical' }}
-              placeholder="年龄、音质、语速、尾音习惯、性格投射；勿写「大肥鱼」雷区词或模仿真人"
+              placeholder="建议 1–4 句：年龄、音质、语速、尾音习惯、性格投射；勿写「大肥鱼」雷区词或模仿真人"
             />
           </div>
 
           {/* 实际下发描述预览 */}
           <div className="inset p-3 text-[11px] leading-relaxed" data-workshop-composed>
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-              最终合成提示词（已合并拨盘）
+              最终合成提示词（已合并拨盘 · {composed.length} 字）
             </div>
             <span style={{ color: 'var(--text-1)' }}>{composed}</span>
           </div>
@@ -378,7 +531,7 @@ export function VoiceDesignTab(props: {
           {/* 试听预览句 + 单句快测 */}
           <div>
             <div className="mb-1 flex items-center justify-between text-[11px]">
-              <span className="font-semibold" style={{ color: 'var(--text-2)' }}>候选预览台词</span>
+              <span className="font-semibold" style={{ color: 'var(--text-2)' }}>固定试听台词（默认不自动改写 · {previewText.trim().length} 字）</span>
               <div className="flex flex-wrap gap-1">
                 {VOICE_INLINE_SOUND_TAGS.map((item) => (
                   <button
@@ -412,63 +565,117 @@ export function VoiceDesignTab(props: {
             </label>
           </div>
 
-          {/* 生成操作栏 */}
-          <div className="flex flex-wrap items-center gap-2 border-t pt-3" style={{ borderColor: 'var(--stroke)' }}>
-            <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
-              候选数
-              <select
-                data-workshop-count
-                value={count}
-                onChange={(e) => setCount(Number(e.target.value))}
-                className="rounded-lg px-2 py-1 text-xs"
-                style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
+          {/* 生成操作栏（透明展示请求次数 + 取消按钮） */}
+          <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--stroke)' }}>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-2)' }}>
+                候选数
+                <select
+                  data-workshop-count
+                  value={count}
+                  onChange={(e) => setCount(Number(e.target.value))}
+                  className="rounded-lg px-2 py-1 text-xs"
+                  style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
+                >
+                  {[1, 2, 3, 4, 6, 8].map((n) => <option key={n} value={n}>{n} 条</option>)}
+                </select>
+              </label>
+              {busy === 'generate' ? (
+                <button
+                  type="button"
+                  data-workshop-cancel-gen
+                  onClick={cancelGeneration}
+                  className="btn-pill red flex-1"
+                >
+                  <Square size={12} />取消剩余生成
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-workshop-generate
+                  disabled={busy !== null || description.trim().length < 2}
+                  onClick={() => void generate()}
+                  className="btn-pill primary flex-1"
+                >
+                  <Sparkles size={13} />
+                  生成 {count} 条候选（{count} 次独立请求）
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy !== null || description.trim().length < 2}
+                onClick={() => void runQuickSinglePreview()}
+                className="btn-pill ghost"
+                title="仅消耗 1 次合成快速试听这段描述，不写入候选列表"
               >
-                {[2, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n} 条</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
-              data-workshop-generate
-              disabled={busy !== null || description.trim().length < 2}
-              onClick={() => void generate()}
-              className="btn-pill primary flex-1"
-            >
-              {busy === 'generate' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-              {busy === 'generate' ? `批量生成中（${count} 次合成）…` : `生成 ${count} 条候选（消耗 ${count} 次合成）`}
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null || description.trim().length < 2}
-              onClick={() => void runQuickSinglePreview()}
-              className="btn-pill ghost"
-              title="仅消耗 1 次合成快速试听这段描述，不写入候选列表"
-            >
-              {busy === 'quick-preview' ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-              单句快测 (1 次)
-            </button>
+                {busy === 'quick-preview' ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                单句快测 (1 次)
+              </button>
+            </div>
+            <div className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+              发起 {count} 次独立 MiMo VoiceDesign 请求（描述 {composed.length} 字 + 台词 {previewText.trim().length} 字）；按条独立返回，可随时取消或仅重试失败项。
+            </div>
           </div>
+
+          {/* 独立候选槽实时进度条 */}
+          {slots.length > 0 && (
+            <div className="inset p-3 text-[11px]" data-workshop-slot-progress>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-semibold" style={{ color: 'var(--text-2)' }}>本批生成槽状态</span>
+                {failedSlotCount > 0 && busy === null && (
+                  <button
+                    type="button"
+                    data-workshop-retry-failed
+                    onClick={() => void retryFailedSlots()}
+                    className="btn-pill ghost"
+                    style={{ padding: '2px 9px', fontSize: 10.5 }}
+                  >
+                    <RefreshCw size={10} />仅重试失败/取消项 ({failedSlotCount})
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {slots.map((s) => (
+                  <span
+                    key={s.index}
+                    className={`pill ${s.status === 'ready' ? 'pill-green' : s.status === 'failed' ? 'pill-red' : s.status === 'synthesizing' ? 'pill-blue' : ''}`}
+                    style={{ fontSize: 10, padding: '1.5px 8px' }}
+                    title={s.error}
+                  >
+                    #{s.index + 1} · {s.status === 'queued' ? '等待' : s.status === 'synthesizing' ? '生成中…' : s.status === 'ready' ? '已就绪' : s.status === 'cancelled' ? '已取消' : '失败'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {quickPreviewB64 !== null && (
             <div className="inset p-2.5">
               <div className="mb-1 text-[10.5px] font-semibold" style={{ color: 'var(--text-2)' }}>单句快测结果</div>
-              <WaveformPlayer audioBase64={quickPreviewB64} durationMs={quickPreviewDuration} downloadName="quick-design-preview.wav" compact />
+              <WaveformPlayer
+                trackId="quick-design-preview"
+                audioBase64={quickPreviewB64}
+                durationMs={quickPreviewDuration}
+                downloadName="quick-design-preview.wav"
+                label="单句快测"
+                sourceLabel="VoiceDesign 快测"
+                compact
+              />
             </div>
           )}
 
           <p className="rounded-xl px-3 py-2 text-[11px] leading-relaxed" style={{ background: 'var(--amber-dim)', border: '1px solid var(--amber-line)', color: 'var(--amber)' }}>
-            实测提醒：未定格的候选<strong>不能当固定声线</strong>（VoiceDesign 同描述 ×10 说话人余弦最低 0.4145）。正确路径是「批量出候选 → 对比并 4 情绪试戴 → 点定格锁成 VoiceClone 固定声线」。
+            实测提醒：未定格的候选<strong>不能当固定声线</strong>（VoiceDesign 同描述 ×10 余弦最低 0.4145）。建议对比试戴后「定格此音色」或「送入克隆台精修」锁定为 VoiceClone。
           </p>
         </section>
 
-        {/* 右栏：候选池 · A/B 对比 · 4 情绪试戴与定格 */}
+        {/* 右栏：候选池 · A/B 对比 · 4 情绪试戴 · 定格 / 送克隆台 */}
         <section className="card flex flex-col gap-3.5 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="wb-display text-lg">② 对比试戴与定格（{candidates.length} 条候选）</h2>
-              <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                候选音频持久化在本地 userData，切页不丢失；把心仪的两条固定到 A/B 槽可快速盲听对拍。
-              </p>
-            </div>
+          <div>
+            <h2 className="wb-display text-lg">② 对比试戴、定格或送入克隆台（{candidates.length} 条候选）</h2>
+            <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
+              候选音频持久化在本地 userData，切页不丢失；可钉到 A/B 槽盲听，或直接送入「音色克隆」裁剪归一化。
+            </p>
           </div>
 
           {/* 试戴强度阶梯（A / B / C） */}
@@ -514,7 +721,7 @@ export function VoiceDesignTab(props: {
             </div>
           </div>
 
-          {/* A / B 并排对比栏（固定任意候选后显现） */}
+          {/* A / B 并排对比栏 */}
           {(candA !== null || candB !== null) && (
             <div className="rounded-xl p-3" style={{ border: '1px solid var(--accent-line)', background: 'var(--accent-soft)' }} data-workshop-ab-compare>
               <div className="mb-2 flex items-center justify-between text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>
@@ -535,10 +742,12 @@ export function VoiceDesignTab(props: {
                       {cand !== null ? (
                         <WaveformPlayer
                           compact
+                          trackId={`ab-${slot}-${cand.id}`}
                           audioBase64={audioCache[cand.id] ?? null}
                           onRequestAudio={() => fetchCandidateAudio(cand.id)}
                           durationMs={cand.durationMs}
                           label={`对比槽 ${slot}`}
+                          sourceLabel="A/B 对拍"
                           eagerLoad
                         />
                       ) : (
@@ -558,7 +767,7 @@ export function VoiceDesignTab(props: {
                 <Sparkles size={22} style={{ color: 'var(--text-3)', opacity: 0.6 }} />
                 <p className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>还没有设计候选</p>
                 <p className="max-w-sm text-[11px]" style={{ color: 'var(--text-3)' }}>
-                  在左侧调好配方拨盘与描述，点击「生成 4 条候选」，系统会并行保存所有已生成的 WAV 供你波形试听、A/B 对拍、4 情绪试戴并定格。
+                  在左侧调好配方拨盘与描述，点击「生成候选」后，既可以直接定格，也可以一键送到「音色克隆」裁切归一化再克隆。
                 </p>
               </div>
             ) : (
@@ -605,21 +814,23 @@ export function VoiceDesignTab(props: {
                     <div className="mt-2">
                       <WaveformPlayer
                         compact
+                        trackId={`cand-${candidate.id}`}
                         audioBase64={audioCache[candidate.id] ?? null}
                         onRequestAudio={() => fetchCandidateAudio(candidate.id)}
                         durationMs={candidate.durationMs}
                         downloadName={`candidate-${index + 1}.wav`}
-                        label={`候选 ${index + 1}`}
+                        label={`设计候选 #${index + 1}`}
+                        sourceLabel="AI 设计候选"
                       />
                     </div>
 
-                    {/* 试戴与命名定格操作行 */}
+                    {/* 试戴、送克隆台、命名定格操作行 */}
                     <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
                         data-workshop-audition={candidate.id}
                         disabled={busy !== null}
-                        onClick={() => void auditionCandidate(candidate.id, false)}
+                        onClick={() => void auditionCandidate(candidate.id, index, false)}
                         className="btn-pill ghost"
                         style={{ padding: '4px 10px', fontSize: 11 }}
                       >
@@ -630,20 +841,31 @@ export function VoiceDesignTab(props: {
                         <button
                           type="button"
                           disabled={busy !== null}
-                          onClick={() => void auditionCandidate(candidate.id, true)}
+                          onClick={() => void auditionCandidate(candidate.id, index, true)}
                           className="btn-pill ghost"
                           style={{ padding: '4px 10px', fontSize: 11 }}
                         >
                           试这句 (1 次)
                         </button>
                       )}
+                      <button
+                        type="button"
+                        data-workshop-send-to-clone={candidate.id}
+                        disabled={busy !== null}
+                        onClick={() => onSendCandidateToClone(candidate)}
+                        className="btn-pill ghost"
+                        style={{ padding: '4px 10px', fontSize: 11 }}
+                        title="带此候选 WAV 跳转到音色克隆台进行波形裁剪、-3 dBFS 归一化与克隆入库"
+                      >
+                        <Scissors size={10} />送克隆台精修
+                      </button>
                       <input
                         type="text"
                         value={freezeLabels[candidate.id] ?? ''}
                         maxLength={40}
                         onChange={(e) => setFreezeLabels((prev) => ({ ...prev, [candidate.id]: e.target.value }))}
                         placeholder="定格名称（如：小鲸·元气 v2）"
-                        className="ml-auto min-w-[140px] flex-1 rounded-full px-2.5 py-1 text-[11px] outline-none sm:max-w-[200px]"
+                        className="ml-auto min-w-[130px] flex-1 rounded-full px-2.5 py-1 text-[11px] outline-none sm:max-w-[190px]"
                         style={{ border: '1px solid var(--stroke)', background: 'var(--surface)', color: 'var(--text-1)' }}
                       />
                       <button
@@ -667,7 +889,7 @@ export function VoiceDesignTab(props: {
                             <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--text-2)' }} title={row.text}>{row.text}</span>
                             <button
                               type="button"
-                              onClick={() => void new Audio(`data:audio/wav;base64,${row.audioBase64}`).play().catch(() => undefined)}
+                              onClick={() => playAuditionRow(index, row)}
                               className="btn-pill ghost"
                               style={{ padding: '2px 9px', fontSize: 10.5 }}
                             >

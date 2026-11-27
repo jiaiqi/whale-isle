@@ -28,14 +28,27 @@ export const VoiceBackendQualitySchema = z.enum([
 ]);
 export type VoiceBackendQuality = z.infer<typeof VoiceBackendQualitySchema>;
 
-/**
- * 语音引擎档位（item 10 实测结论的落地形态）。
- *
- * 默认 `commercial_default`：商业 API 优先，本地引擎只作为**用户主动选择**的离线档。
- * 严禁用「本地引擎装没装」隐式决定优先级——装了就自动优先本地，会让用户莫名等 17–43 秒。
- */
+/** 语音引擎档位（item 10 实测结论的落地形态）。 */
 export const VoiceEngineTierSchema = z.enum(['commercial_default', 'offline_preferred']);
 export type VoiceEngineTier = z.infer<typeof VoiceEngineTierSchema>;
+
+/**
+ * 云端 TTS 失败时的回退策略（诚实不静默换声）：
+ * - `subtitle_only`（默认推荐）：明确报错并保留桌宠气泡字幕，绝不悄悄把角色克隆声线换成系统机械音
+ * - `system_say`：用户显式允许回退本机 mcode/say，并在 UI 标示降级
+ */
+export const VoiceCloudFallbackPolicySchema = z.enum(['subtitle_only', 'system_say']);
+export type VoiceCloudFallbackPolicy = z.infer<typeof VoiceCloudFallbackPolicySchema>;
+
+/** 小米 MiMo 参考音频 Base64 编码后硬上限（官方文档：≤10 MB，按十进制保守计，原始 WAV 约 7.5 MB） */
+export const MIMO_MAX_REFERENCE_BASE64_BYTES = 10_000_000;
+
+/** 计算原始音频字节拼上 data URI Base64 后的保守字节数 */
+export function estimateDataUriBase64Bytes(rawBytes: number, mime = 'audio/wav'): number {
+  if (rawBytes <= 0) return 0;
+  const prefixBytes = `data:${mime};base64,`.length;
+  return 4 * Math.ceil(rawBytes / 3) + prefixBytes;
+}
 
 /**
  * 离线档的体感代价（item 10 本机实测，Apple Silicon / CosyVoice2-0.5B，n=150）。
@@ -618,10 +631,12 @@ export function composeVoiceWorkshopDescription(base: string, dial: VoiceWorksho
 export const VoiceWorkshopGenerateInputSchema = z.object({
   description: z.string().trim().min(2).max(300),
   dial: VoiceWorkshopDialSchema.optional(),
-  /** 一次出 2–8 条候选（默认 4，每条一次 VoiceDesign 调用） */
-  count: z.number().int().min(2).max(8).default(4),
+  /** 一次出 1–8 条候选（默认 4，支持单条重试与批量生成） */
+  count: z.number().int().min(1).max(8).default(4),
   /** 可选：自定义预览台词（缺省用默认中性台词） */
   previewText: z.string().trim().min(1).max(200).optional(),
+  /** 可选：前端传入的生成任务 ID，供用户中途取消在飞请求 */
+  jobId: z.string().trim().min(1).max(80).optional(),
 });
 export type VoiceWorkshopGenerateInput = z.infer<typeof VoiceWorkshopGenerateInputSchema>;
 
@@ -718,6 +733,9 @@ export const VoiceCloneConsentSchema = z.object({
   /** 必须由用户显式勾选确认（false/缺失在契约层直接拒绝） */
   attested: z.literal(true),
   attestedAt: z.string().min(1),
+  /** 撤销授权时间；一旦设置，立即禁止该声线继续参与任何克隆合成并触发本地样本清理 */
+  revokedAt: z.string().min(1).optional(),
+  revokeReason: z.string().trim().max(200).optional(),
 });
 export type VoiceCloneConsent = z.infer<typeof VoiceCloneConsentSchema>;
 
@@ -762,18 +780,31 @@ export const VoiceWorkshopFreezeInputSchema = z.object({
 export type VoiceWorkshopFreezeInput = z.infer<typeof VoiceWorkshopFreezeInputSchema>;
 
 export const VoiceWorkshopCloneCreateInputSchema = z.object({
-  /** 前端裁剪/归一化/录制后的 WAV Base64（与 filePath 二选一） */
+  /** 前端裁剪/归一化/录制后的 WAV Base64（与 filePath 互斥；可与 sourceCandidateId/sourceVersionId 联用以保留血缘） */
   wavBase64: z.string().min(1).optional(),
-  /** 本地 WAV 文件绝对路径（与 wavBase64 二选一） */
+  /** 可选：未裁剪的原始录音/上传 WAV，保留副本支持后续撤回重裁（绝不直接发往云端） */
+  rawWavBase64: z.string().min(1).optional(),
+  /** 本地 WAV 文件绝对路径（与 wavBase64 互斥） */
   filePath: z.string().min(1).max(2000).optional(),
+  /** 从 AI 音色设计生成的候选音频直接选入克隆 */
+  sourceCandidateId: z.string().min(1).optional(),
+  /** 从已有声线版本（如 AI 设计定格版）派生/精修克隆 */
+  sourceVersionId: z.string().min(1).optional(),
   label: z.string().trim().min(1).max(40),
   description: z.string().trim().max(300).default(''),
   consent: VoiceCloneConsentSchema,
   activate: z.boolean().default(true),
+  /** 若提供角色 ID 且 activate=true，同时将该角色绑定到此克隆版本 */
+  characterId: z.string().min(1).optional(),
   tags: z.array(z.string().trim().min(1).max(24)).max(8).optional(),
-}).refine((val) => Boolean(val.wavBase64) !== Boolean(val.filePath), {
-  message: '必须且只能提供 wavBase64 或 filePath 之一',
-});
+})
+  .refine((val) => !(Boolean(val.wavBase64) && Boolean(val.filePath)), {
+    message: 'wavBase64 与 filePath 不可同时提供',
+  })
+  .refine(
+    (val) => Boolean(val.wavBase64) || Boolean(val.filePath) || Boolean(val.sourceCandidateId) || Boolean(val.sourceVersionId),
+    { message: '必须提供 wavBase64、filePath、sourceCandidateId 或 sourceVersionId 之一' },
+  );
 export type VoiceWorkshopCloneCreateInput = z.infer<typeof VoiceWorkshopCloneCreateInputSchema>;
 
 export const VoiceWorkshopRenameInputSchema = z.object({
@@ -786,6 +817,35 @@ export const VoiceWorkshopDeleteInputSchema = z.object({
   versionId: z.string().min(1),
 });
 export type VoiceWorkshopDeleteInput = z.infer<typeof VoiceWorkshopDeleteInputSchema>;
+
+export const VoiceWorkshopBindCharacterInputSchema = z.object({
+  characterId: z.string().min(1),
+  versionId: z.string().min(1),
+});
+export type VoiceWorkshopBindCharacterInput = z.infer<typeof VoiceWorkshopBindCharacterInputSchema>;
+
+export const VoiceWorkshopUnbindCharacterInputSchema = z.object({
+  characterId: z.string().min(1),
+});
+export type VoiceWorkshopUnbindCharacterInput = z.infer<typeof VoiceWorkshopUnbindCharacterInputSchema>;
+
+export const VoiceWorkshopFavoriteInputSchema = z.object({
+  versionId: z.string().min(1),
+  favorite: z.boolean(),
+});
+export type VoiceWorkshopFavoriteInput = z.infer<typeof VoiceWorkshopFavoriteInputSchema>;
+
+export const VoiceWorkshopArchiveInputSchema = z.object({
+  versionId: z.string().min(1),
+  archived: z.boolean(),
+});
+export type VoiceWorkshopArchiveInput = z.infer<typeof VoiceWorkshopArchiveInputSchema>;
+
+export const VoiceWorkshopRevokeConsentInputSchema = z.object({
+  versionId: z.string().min(1),
+  reason: z.string().trim().max(200).optional(),
+});
+export type VoiceWorkshopRevokeConsentInput = z.infer<typeof VoiceWorkshopRevokeConsentInputSchema>;
 
 /** 一致性体检结论：人话判定 + 数字；`unavailable` 表示本机没有可用的说话人嵌入工具，**不给假数字** */
 export const VoiceConsistencyVerdictSchema = z.enum(['stable', 'drifty', 'swapped', 'unavailable']);
@@ -809,6 +869,8 @@ export const VoiceTimbreVersionSchema = z.object({
   description: z.string(),
   source: z.enum(['factory', 'ai-design', 'uploaded']),
   referencePath: z.string().min(1),
+  /** 未裁剪原始素材副本路径（仅在用户导入/录音裁剪保存时可选留存，便于撤回重裁） */
+  rawReferencePath: z.string().min(1).optional(),
   referenceBytes: z.number().int().nonnegative(),
   referenceSha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   durationMs: z.number().nonnegative().nullable().optional(),
@@ -816,6 +878,11 @@ export const VoiceTimbreVersionSchema = z.object({
   consent: VoiceCloneConsentSchema.optional(),
   audioQuality: VoiceAudioQualitySchema.optional(),
   tags: z.array(z.string()).optional(),
+  favorite: z.boolean().optional(),
+  archivedAt: z.string().nullable().optional(),
+  /** 血缘追溯：由哪条 AI 设计候选或版本派生 */
+  originCandidateId: z.string().min(1).optional(),
+  originVersionId: z.string().min(1).optional(),
   frozenAt: z.string(),
   /** 定格元数据：换引擎重做时要靠它（描述原文 + 指令 + 采样参数 + 参考音频） */
   freeze: z.object({
@@ -831,6 +898,8 @@ export type VoiceTimbreVersion = z.infer<typeof VoiceTimbreVersionSchema>;
 export const VoiceWorkshopStateSchema = z.object({
   currentVersionId: z.string().min(1),
   versions: z.array(VoiceTimbreVersionSchema),
+  /** 多角色声线锁定表：characterId → versionId（未绑定时回落 currentVersionId / factory） */
+  characterBindings: z.record(z.string(), z.string()).optional(),
   /** 已持久化的最近候选列表（重启/切页不丢已付费音频） */
   candidates: z.array(VoiceWorkshopCandidateSchema).optional(),
   /** 本次会话（进程生命周期）已经花掉的合成次数，UI 如实显示；MiMo 限免，耗尽要明说 */

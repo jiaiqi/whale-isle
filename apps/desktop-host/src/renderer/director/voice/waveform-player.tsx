@@ -4,10 +4,11 @@
  * 2. WaveformTrimmer：交互式裁剪波形器（展示 5–12s 黄金克隆区间 + 选区试听）
  * 3. ConsistencyGauge：CAM++ 说话人余弦一致性质检仪表条（0.70 / 0.80 / 0.85 三档硬标尺）
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Pause, Play, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { VoiceConsistencyResult } from '@workbench/shared-protocol';
 import { decodeBase64ToBytes, extractWavPeaks, formatTimeSec } from './audio-dsp';
+import { useAuditionPlayer } from './audition-player';
 
 export function WaveformPlayer(props: {
   /** 已知的 base64 音频（有则立刻绘制真实波形并可播） */
@@ -19,21 +20,42 @@ export function WaveformPlayer(props: {
   downloadName?: string;
   compact?: boolean;
   label?: string;
+  sourceLabel?: string;
+  /** 可选轨道 ID，用于跨组件同步全局吸底播放器状态 */
+  trackId?: string;
   /** 加载就绪后是否自动拉取波形（仅主卡/已展开项开，避免列表一次读几十个文件） */
   eagerLoad?: boolean;
 }): React.JSX.Element {
-  const { audioBase64: propBase64, onRequestAudio, durationMs, downloadName, compact = false, label, eagerLoad = false } = props;
+  const {
+    audioBase64: propBase64,
+    onRequestAudio,
+    durationMs,
+    downloadName,
+    compact = false,
+    label,
+    sourceLabel = '参考音频',
+    trackId: propTrackId,
+    eagerLoad = false,
+  } = props;
+  const fallbackId = useId();
+  const trackId = propTrackId ?? fallbackId;
+  const globalPlayer = useAuditionPlayer();
+
   const [loadedBase64, setLoadedBase64] = useState<string | null>(propBase64 ?? null);
   const [loading, setLoading] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState((durationMs ?? 0) / 1000);
+  const [localPlaying, setLocalPlaying] = useState(false);
+  const [localCurrentTime, setLocalCurrentTime] = useState(0);
+  const [localDuration, setLocalDuration] = useState((durationMs ?? 0) / 1000);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const effectiveBase64 = propBase64 ?? loadedBase64;
+  const isGlobalActive = globalPlayer !== null && globalPlayer.track?.id === trackId;
+  const playing = globalPlayer !== null ? (isGlobalActive && globalPlayer.playing) : localPlaying;
+  const currentTime = isGlobalActive ? globalPlayer.currentTime : localCurrentTime;
+  const duration = isGlobalActive && globalPlayer.duration > 0 ? globalPlayer.duration : localDuration;
 
   useEffect(() => {
     if (propBase64 !== undefined && propBase64 !== null) {
@@ -86,35 +108,52 @@ export function WaveformPlayer(props: {
 
   const togglePlay = async (): Promise<void> => {
     setError(null);
-    if (playing) {
-      audioRef.current?.pause();
-      setPlaying(false);
-      return;
-    }
-    if (effectiveBase64 === null && onRequestAudio !== undefined) {
+    let b64 = effectiveBase64;
+    if (b64 === null && onRequestAudio !== undefined) {
       setLoading(true);
       try {
-        const b64 = await onRequestAudio();
+        b64 = await onRequestAudio();
         setLoadedBase64(b64);
-        // 等待 audio src 挂载到下一个微任务再播放
-        setTimeout(() => {
-          const el = audioRef.current;
-          if (el !== null) {
-            void el.play().then(() => setPlaying(true)).catch(() => undefined);
-          }
-        }, 40);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
+        return;
       } finally {
         setLoading(false);
       }
+    }
+    if (globalPlayer !== null) {
+      if (b64 === null || b64 === '') return;
+      globalPlayer.playTrack({
+        id: trackId,
+        title: label ?? downloadName ?? '音频试听',
+        sourceLabel,
+        audioBase64: b64,
+        ...(downloadName === undefined ? {} : { downloadName }),
+        ...(duration > 0 ? { durationHintSec: duration } : {}),
+      });
+      return;
+    }
+    if (localPlaying) {
+      audioRef.current?.pause();
+      setLocalPlaying(false);
       return;
     }
     const el = audioRef.current;
     if (el === null) return;
-    void el.play().then(() => setPlaying(true)).catch((err: unknown) => {
+    void el.play().then(() => setLocalPlaying(true)).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
+  };
+
+  const seekTo = (sec: number): void => {
+    if (isGlobalActive) {
+      globalPlayer.seek(sec);
+      return;
+    }
+    const el = audioRef.current;
+    if (el === null || duration <= 0) return;
+    el.currentTime = sec;
+    setLocalCurrentTime(sec);
   };
 
   const progress = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
@@ -123,18 +162,18 @@ export function WaveformPlayer(props: {
 
   return (
     <div className={`vs-wave-player${compact ? ' compact' : ''}`}>
-      {audioUrl !== null && (
+      {globalPlayer === null && audioUrl !== null && (
         <audio
           ref={audioRef}
           src={audioUrl}
           onLoadedMetadata={(e) => {
             if (Number.isFinite(e.currentTarget.duration) && e.currentTarget.duration > 0) {
-              setDuration(e.currentTarget.duration);
+              setLocalDuration(e.currentTarget.duration);
             }
           }}
-          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-          onEnded={() => { setPlaying(false); setCurrentTime(0); }}
-          onPause={() => setPlaying(false)}
+          onTimeUpdate={(e) => setLocalCurrentTime(e.currentTarget.currentTime)}
+          onEnded={() => { setLocalPlaying(false); setLocalCurrentTime(0); }}
+          onPause={() => setLocalPlaying(false)}
         />
       )}
       <button
@@ -156,22 +195,17 @@ export function WaveformPlayer(props: {
         aria-valuemax={Math.round(duration * 1000)}
         aria-valuenow={Math.round(currentTime * 1000)}
         onClick={(e) => {
-          const el = audioRef.current;
-          if (el === null || duration <= 0) return;
+          if (duration <= 0) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-          el.currentTime = ratio * duration;
-          setCurrentTime(ratio * duration);
+          seekTo(ratio * duration);
         }}
         onKeyDown={(e) => {
-          const el = audioRef.current;
-          if (el === null || duration <= 0) return;
+          if (duration <= 0) return;
           if (e.key === 'ArrowRight') {
-            el.currentTime = Math.min(duration, el.currentTime + 1);
-            setCurrentTime(el.currentTime);
+            seekTo(Math.min(duration, currentTime + 1));
           } else if (e.key === 'ArrowLeft') {
-            el.currentTime = Math.max(0, el.currentTime - 1);
-            setCurrentTime(el.currentTime);
+            seekTo(Math.max(0, currentTime - 1));
           }
         }}
         title={hasRealWave ? '真实 PCM 波形（点击定位播放）' : '点击播放按钮加载真实波形'}

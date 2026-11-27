@@ -12,6 +12,7 @@ import type { AudioPlaybackReceipt } from '@workbench/shared-protocol';
 
 export type AudioLeaseStatus = AudioPlaybackReceipt['status'];
 export type PlaybackPriority = 'P0_INTERRUPT' | 'P1_CADENCE' | 'P2_IDLE';
+export type AudioLeasePurpose = 'speech' | 'preview';
 
 export interface GlobalAudioLeaseRequest {
   leaseId?: string;
@@ -19,6 +20,8 @@ export interface GlobalAudioLeaseRequest {
   speakerName: string;
   voiceId?: string;
   priority: PlaybackPriority;
+  /** speech=正式桌宠发声；preview=声音工坊试听（不抢正式麦、不发桌宠气泡/直播状态） */
+  purpose?: AudioLeasePurpose;
   ttlMs: number;
   /** 真正开始合成/播放；resolve = 播放完成（onended/afplay exit），reject = 设备/合成失败 */
   start(): Promise<void>;
@@ -31,10 +34,12 @@ export interface GlobalAudioLeaseEvent {
   activeSpeakerName: string;
   activeVoiceId?: string;
   activeLeaseId: string | null;
+  activePurpose?: AudioLeasePurpose;
 }
 
 interface NormalizedRequest extends GlobalAudioLeaseRequest {
   leaseId: string;
+  purpose: AudioLeasePurpose;
 }
 
 interface ActiveLease {
@@ -47,7 +52,7 @@ interface ActiveLease {
 export interface GlobalAudioLeaseManagerOptions {
   now?: () => number;
   onActiveChange?: (event: GlobalAudioLeaseEvent) => void;
-  onReceipt?: (receipt: AudioPlaybackReceipt & { agentId: string; speakerName: string }) => void;
+  onReceipt?: (receipt: AudioPlaybackReceipt & { agentId: string; speakerName: string; purpose: AudioLeasePurpose }) => void;
 }
 
 export class GlobalAudioLeaseManager {
@@ -67,23 +72,43 @@ export class GlobalAudioLeaseManager {
       activeSpeakerName: this.active.request.speakerName,
       ...(this.active.request.voiceId === undefined ? {} : { activeVoiceId: this.active.request.voiceId }),
       activeLeaseId: this.active.request.leaseId ?? null,
+      activePurpose: this.active.request.purpose,
     };
   }
 
-  /** 申请租约；P0 抢占在播，其余排队。返回 granted/queued/preempted 三态。 */
+  /**
+   * 申请租约（始终保证 active ≤ 1）：
+   * - P0 正式语音抢占任意在播（含正式与试听）
+   * - 正式语音（P1/P2）自动打断正在播的试听，绝不让试听挡住正式发声
+   * - 新试听可顶掉旧试听，但绝不抢占正在进行的正式发声（只入队尾等待）
+   */
   acquire(input: GlobalAudioLeaseRequest): 'granted' | 'queued' | 'preempted' {
     const request = this.normalize(input);
     if (this.active === null) {
       this.start(request);
       return 'granted';
     }
-    if (request.priority === 'P0_INTERRUPT') {
+    if (request.priority === 'P0_INTERRUPT' && request.purpose === 'speech') {
       this.finishActive('INTERRUPTED_BY_P0');
       this.start(request);
       return 'preempted';
     }
+    if (this.active.request.purpose === 'preview') {
+      this.finishActive('CANCELLED');
+      this.start(request);
+      return request.purpose === 'speech' ? 'preempted' : 'granted';
+    }
     this.queue.push(request);
     return 'queued';
+  }
+
+  /** 仅停止/清空试听租约，不影响正式发言 */
+  cancelPreviews(): void {
+    this.queue = this.queue.filter((item) => item.purpose !== 'preview');
+    if (this.active?.request.purpose === 'preview') {
+      this.finishActive('CANCELLED');
+      this.dequeue();
+    }
   }
 
   cancel(leaseId: string): boolean {
@@ -111,6 +136,7 @@ export class GlobalAudioLeaseManager {
     return {
       ...input,
       leaseId: input.leaseId ?? randomUUID(),
+      purpose: input.purpose ?? 'speech',
       ttlMs: Math.min(300_000, Math.max(500, Math.round(input.ttlMs))),
     };
   }
@@ -144,6 +170,7 @@ export class GlobalAudioLeaseManager {
       timestamp: (this.options.now ?? Date.now)(),
       agentId: active.request.agentId,
       speakerName: active.request.speakerName,
+      purpose: active.request.purpose,
     });
     this.emitActive();
     this.dequeue();
@@ -155,6 +182,7 @@ export class GlobalAudioLeaseManager {
     if (active.timer !== null) clearTimeout(active.timer);
     active.verdict = status;
     this.active = null;
+    try { active.request.abort(); } catch { /* 已结束 */ }
     this.options.onReceipt?.({
       leaseId: active.request.leaseId,
       status,
@@ -162,13 +190,15 @@ export class GlobalAudioLeaseManager {
       timestamp: (this.options.now ?? Date.now)(),
       agentId: active.request.agentId,
       speakerName: active.request.speakerName,
+      purpose: active.request.purpose,
     });
     this.emitActive();
   }
 
   private dequeue(): void {
     if (this.active !== null) return;
-    let index = this.queue.findIndex((request) => request.priority === 'P0_INTERRUPT');
+    let index = this.queue.findIndex((request) => request.priority === 'P0_INTERRUPT' && request.purpose === 'speech');
+    if (index < 0) index = this.queue.findIndex((request) => request.purpose === 'speech');
     if (index < 0) index = 0;
     const next = this.queue.splice(index, 1)[0];
     if (next !== undefined) this.start(next);

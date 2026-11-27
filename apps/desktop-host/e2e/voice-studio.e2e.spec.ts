@@ -89,37 +89,50 @@ describe('[E2E-HOST] 声音工坊 2.0 全链路验证', () => {
         });
       }
 
-      // 1. 声线库默认页签：Hero 卡 + 出厂声线 + 内置 9 音色
+      // 1. 声线库默认页签：Hero 卡 + 出厂声线 + 右侧详情栏 + 吸底试听播放器 + 内置 9 音色
       await page.waitForSelector('[data-voice-active-hero]', { timeout: 15_000 });
+      await page.waitForSelector('[data-voice-inspector]', { timeout: 15_000 });
+      await page.waitForSelector('[data-voice-sticky-player]', { timeout: 15_000 });
+      await page.waitForSelector('[data-voice-library-search]', { timeout: 15_000 });
       await page.waitForFunction(() => (document.querySelector('[data-voice-active-hero]')?.textContent ?? '').includes('07 甜脆'), undefined, { timeout: 15_000 });
       expect(await page.locator('[data-voice-mimo-builtin]').count()).toBe(9);
       if (captureDir) await page.screenshot({ path: join(captureDir, '01-voices-light.png') });
 
-      // 2. 音色设计台：4 拨盘 + 4 快捷配方 + 强度 A/B/C + 漂移警示
+      // 2. 音色设计台：4 拨盘 + 4 快捷配方 + 角色人设摘取预览 + 强度 A/B/C
       await page.click('[data-voice-tab-btn="workshop"]');
       await page.waitForSelector('[data-voice-workshop] [data-workshop-current]', { timeout: 15_000 });
       expect(await page.locator('[data-workshop-dial]').count()).toBe(4);
       expect(await page.locator('[data-workshop-recipe]').count()).toBe(4);
       expect(await page.locator('[data-workshop-intensity-option]').count()).toBe(3);
       expect(await page.locator('[data-workshop-composed]').innerText()).toContain('八九岁小女孩');
+      await page.click('[data-workshop-extract-persona]');
+      await page.waitForSelector('[data-workshop-persona-preview]', { timeout: 10_000 });
       if (captureDir) await page.screenshot({ path: join(captureDir, '02-design-light.png') });
 
-      // 3. 音色克隆台：上传真实 WAV → 真实 PCM 波形 & 声学质检 → 权属拦截 → 勾选后真实入库
+      // 3A. 音色克隆台：测试「从 AI 设计音色选取」模式（用户明确需求）
       await page.click('[data-voice-tab-btn="clone"]');
       await page.waitForSelector('[data-voice-clone-studio]', { timeout: 15_000 });
       expect(await page.locator('[data-clone-submit]').isDisabled()).toBe(true);
-
-      await page.setInputFiles('[data-voice-clone-upload-input]', sampleWavPath);
+      await page.click('[data-clone-mode="ai-design"]');
+      await page.waitForSelector('[data-clone-ai-picker]', { timeout: 15_000 });
+      await page.click('[data-clone-pick-ai="version:factory"]');
       await page.waitForSelector('[data-clone-trimmer]', { timeout: 15_000 });
+      await page.waitForSelector('[data-clone-base64-check]', { timeout: 15_000 });
+      expect(await page.locator('[data-clone-base64-check]').innerText()).toContain('合规');
+      if (captureDir) await page.screenshot({ path: join(captureDir, '03a-clone-from-ai-light.png') });
+
+      // 3B. 音色克隆台：上传真实 WAV → 真实 PCM 波形 & 声学质检 → 权属拦截 → 勾选后真实入库并锁定角色
+      await page.click('[data-clone-mode="upload"]');
+      await page.setInputFiles('[data-voice-clone-upload-input]', sampleWavPath);
       await page.waitForSelector('[data-clone-qa-metrics]', { timeout: 15_000 });
-      expect(await page.locator('[data-clone-qa-metrics]').innerText()).toContain('6.0s');
+      await page.waitForFunction(() => (document.querySelector('[data-clone-qa-metrics]')?.textContent ?? '').includes('6.0s'), undefined, { timeout: 15_000 });
       expect(await page.locator('[data-clone-qa-metrics]').innerText()).toContain('24 kHz');
 
       // 未勾选权属声明时，提交按钮必须依然禁用（强门禁）
       await page.fill('[data-clone-label-input]', 'E2E 亲录小鲸');
       expect(await page.locator('[data-clone-submit]').isDisabled()).toBe(true);
 
-      // 勾选声明后提交，验证真正落盘到 VoiceWorkshop 版本库
+      // 勾选声明后提交，验证真正落盘到 VoiceWorkshop 版本库并锁定到当前角色
       await page.check('[data-clone-consent-check]');
       expect(await page.locator('[data-clone-submit]').isDisabled()).toBe(false);
       if (captureDir) await page.screenshot({ path: join(captureDir, '03-clone-light.png') });
@@ -128,7 +141,7 @@ describe('[E2E-HOST] 声音工坊 2.0 全链路验证', () => {
       await page.waitForSelector('[data-clone-created]', { timeout: 15_000 });
       expect(await page.locator('[data-clone-created]').innerText()).toContain('E2E 亲录小鲸');
 
-      // 回到声线库：新版本已生效且可回退并清理删除
+      // 回到声线库：新版本已锁定到当前角色，验证被锁定保护删除 → 解绑后删除自动安全回退出厂版
       await page.click('[data-voice-tab-btn="voices"]');
       await page.waitForSelector('[data-voice-version-grid]', { timeout: 15_000 });
       expect(await page.locator('[data-voice-active-hero]').innerText()).toContain('E2E 亲录小鲸');
@@ -136,7 +149,11 @@ describe('[E2E-HOST] 声音工坊 2.0 全链路验证', () => {
       const stateAfterClone = await page.evaluate(() =>
         (window as unknown as {
           directorBridge: {
-            v2VoiceWorkshopState(): Promise<{ currentVersionId: string; versions: Array<{ id: string; label: string; source: string }> }>;
+            v2VoiceWorkshopState(): Promise<{
+              currentVersionId: string;
+              characterBindings?: Record<string, string>;
+              versions: Array<{ id: string; label: string; source: string }>;
+            }>;
           };
         }).directorBridge.v2VoiceWorkshopState(),
       );
@@ -144,25 +161,53 @@ describe('[E2E-HOST] 声音工坊 2.0 全链路验证', () => {
       expect(created).toBeDefined();
       expect(created?.source).toBe('uploaded');
 
-      // 通过真实 IPC 删除该测试克隆版本，确认自动安全回退出厂版
-      const deleted = await page.evaluate(
-        (versionId) => (window as unknown as {
-          directorBridge: { v2VoiceWorkshopDelete(input: { versionId: string }): Promise<{ deletedId: string; currentVersion: { id: string } }> };
-        }).directorBridge.v2VoiceWorkshopDelete({ versionId }),
-        created!.id,
+      // 先验证：有角色锁定时直接删除会被保护拦截；解绑全部角色后删除成功并回退出厂
+      const deleteCheck = await page.evaluate(
+        async (args: { versionId: string; boundCharIds: string[] }) => {
+          const b = (window as unknown as {
+            directorBridge: {
+              v2VoiceWorkshopDelete(input: { versionId: string }): Promise<{ deletedId: string; currentVersion: { id: string } }>;
+              v2VoiceWorkshopUnbind(input: { characterId: string }): Promise<{ unbound: boolean }>;
+            };
+          }).directorBridge;
+          let blocked = false;
+          if (args.boundCharIds.length > 0) {
+            try {
+              await b.v2VoiceWorkshopDelete({ versionId: args.versionId });
+            } catch {
+              blocked = true;
+            }
+            for (const cid of args.boundCharIds) {
+              await b.v2VoiceWorkshopUnbind({ characterId: cid });
+            }
+          }
+          const deleted = await b.v2VoiceWorkshopDelete({ versionId: args.versionId });
+          return { blocked, currentId: deleted.currentVersion.id };
+        },
+        {
+          versionId: created!.id,
+          boundCharIds: Object.entries(stateAfterClone.characterBindings ?? {})
+            .filter(([, vid]) => vid === created!.id)
+            .map(([cid]) => cid),
+        },
       );
-      expect(deleted.currentVersion.id).toBe('factory');
+      expect(deleteCheck.blocked).toBe(true);
+      expect(deleteCheck.currentId).toBe('factory');
 
-      // 4. 表演与精调页签：5 情绪矩阵 + 5 口型 Viseme + RVC
+      // 4. 表演与精调页签：5 情绪矩阵 + 5 口型 Viseme + 导演三段指令脱敏预览
       await page.click('[data-voice-tab-btn="studio"]');
       await page.waitForSelector('[data-voice-performance-tab]', { timeout: 15_000 });
       expect(await page.locator('[data-voice-emotion-pick]').count()).toBe(5);
       expect(await page.locator('[data-viseme-cell]').count()).toBe(5);
+      await page.waitForSelector('[data-voice-director-preview]', { timeout: 10_000 });
       if (captureDir) await page.screenshot({ path: join(captureDir, '04-performance-light.png') });
 
-      // 5. 引擎与凭据页签：档位开关 + 4 轨输出路由 + 4 张凭据卡片
+      // 5. 引擎与凭据页签：档位开关 + 回退策略 + 真实连通测试 + 缓存卡片 + 4 轨输出路由 + 4 张凭据卡片
       await page.click('[data-voice-tab-btn="engine"]');
       await page.waitForSelector('[data-voice-engine-tab]', { timeout: 15_000 });
+      await page.waitForSelector('[data-voice-fallback-policy]', { timeout: 10_000 });
+      await page.waitForSelector('[data-voice-real-connect-test]', { timeout: 10_000 });
+      await page.waitForSelector('[data-voice-cache-clear]', { timeout: 10_000 });
       expect(await page.locator('[data-voice-route]').count()).toBe(4);
       expect(await page.locator('[data-voice-credential]').count()).toBe(4);
       if (captureDir) await page.screenshot({ path: join(captureDir, '05-engine-light.png') });

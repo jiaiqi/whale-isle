@@ -435,4 +435,113 @@ describe('VoiceWorkshop 2.0 · 声学质检 / 音色克隆 / 版本管理 / 音�
     expect(audio.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(() => harness.workshop.readAudio({ kind: 'candidate', id: '../../etc/passwd' })).toThrow('找不到');
   });
+
+  it('从 AI 设计候选直接选入克隆：保留血缘 originCandidateId、自动标记 DEV_ONLY、支持裁剪后音频', async () => {
+    const cleanWav = buildPcmWav(6.0, 24_000, 0.35);
+    let refChanged = 0;
+    const harness = makeHarness({
+      synth: async () => ({ bytes: cleanWav, providerKind: 'mimo-tts-voicedesign' }),
+    });
+    h = harness;
+    const workshopWithHook = new VoiceWorkshop({
+      userDataDir: harness.userDataDir,
+      bundledReferencePath: harness.bundledReferencePath,
+      bundledLabel: '07 甜脆·元气',
+      bundledDescription: BUNDLED_DESCRIPTION,
+      cloneSamplePath: harness.cloneSamplePath,
+      synth: async () => ({ bytes: cleanWav, providerKind: 'mimo-tts-voicedesign' }),
+      onReferenceChanged: () => { refChanged += 1; },
+      now: () => new Date('2026-11-27T10:00:00.000Z'),
+    });
+
+    const [cand] = await workshopWithHook.generateCandidates({ description: '柔和少女', count: 1 });
+    const trimmed = buildPcmWav(5.2, 24_000, 0.3);
+    const cloned = workshopWithHook.createClonedVersion({
+      sourceCandidateId: cand!.id,
+      wavBase64: Buffer.from(trimmed).toString('base64'),
+      rawWavBase64: Buffer.from(cleanWav).toString('base64'),
+      label: '柔和少女 · 精修克隆',
+      consent: {
+        kind: 'ai_synthetic',
+        source: '源自 AI 音色设计候选',
+        attested: true,
+        attestedAt: '2026-11-27T10:00:00.000Z',
+      },
+      characterId: 'blue-whale-maid',
+      activate: true,
+    });
+    expect(cloned.originCandidateId).toBe(cand!.id);
+    expect(cloned.licenseScope).toBe('DEV_ONLY_NON_COMMERCIAL');
+    expect(cloned.rawReferencePath).toBeDefined();
+    expect(existsSync(cloned.rawReferencePath!)).toBe(true);
+    expect(workshopWithHook.readAudio({ kind: 'version-raw', id: cloned.id }).bytes).toBe(cleanWav.byteLength);
+    expect(workshopWithHook.snapshot().characterBindings?.['blue-whale-maid']).toBe(cloned.id);
+    expect(refChanged).toBeGreaterThanOrEqual(1);
+  });
+
+  it('多角色绑定锁定保护删除 + 收藏/软归档 + 撤销授权立即清理磁盘并阻止合成', () => {
+    const harness = makeHarness();
+    h = harness;
+    const wav = buildPcmWav(6.0, 24_000, 0.35);
+    const v = harness.workshop.createClonedVersion({
+      wavBase64: Buffer.from(wav).toString('base64'),
+      label: '角色专属克隆',
+      consent: { kind: 'self_recorded', source: '本人亲录', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+      characterId: 'char-a',
+      activate: true,
+    });
+
+    // 收藏与软归档
+    expect(harness.workshop.setFavorite(v.id, true).favorite).toBe(true);
+    expect(harness.workshop.setArchived(v.id, true).archivedAt).toBeTruthy();
+    expect(harness.workshop.setArchived(v.id, false).archivedAt).toBeNull();
+
+    // 正被角色绑定时禁止永久删除
+    expect(() => harness.workshop.deleteVersion(v.id)).toThrow('锁定绑定');
+
+    // 解析角色参考命中绑定版本
+    const resolved = harness.workshop.resolveReferenceForCharacter('char-a');
+    expect(resolved.version.id).toBe(v.id);
+    expect(resolved.revoked).toBe(false);
+
+    // 撤销授权：清理磁盘文件、解绑角色、回退出厂、后续禁止试戴与回退
+    const revoked = harness.workshop.revokeConsent(v.id, '用户撤权');
+    expect(revoked.unboundCharacters).toEqual(['char-a']);
+    expect(revoked.version.consent?.revokedAt).toBeTruthy();
+    expect(existsSync(v.referencePath)).toBe(false);
+    expect(harness.workshop.snapshot().currentVersionId).toBe('factory');
+    expect(() => harness.workshop.rollback(v.id)).toThrow('撤销授权');
+    expect(() => harness.workshop.bindCharacter('char-a', v.id)).toThrow('撤销授权');
+  });
+
+  it('MiMo Base64 > 10MB 参考音频在主进程硬拦截', () => {
+    const harness = makeHarness();
+    h = harness;
+    // 构造 7.6 MB 的合法 RIFF/WAVE（Base64 编码后约 10.13 MB > 10,000,000）
+    const oversized = Buffer.alloc(7_600_000);
+    oversized.write('RIFF', 0, 'ascii');
+    oversized.write('WAVE', 8, 'ascii');
+    expect(() => harness.workshop.createClonedVersion({
+      wavBase64: oversized.toString('base64'),
+      label: '超大样本',
+      consent: { kind: 'self_recorded', source: '本人', attested: true, attestedAt: '2026-11-27T10:00:00.000Z' },
+    })).toThrow('MiMo 10 MB 上限');
+  });
+
+  it('cancelJob 可中途取消在飞候选生成任务', async () => {
+    let seenSignal: AbortSignal | undefined;
+    const harness = makeHarness({
+      synth: async (input) => {
+        seenSignal = input.signal;
+        return new Promise((_resolve, reject) => {
+          input.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      },
+    });
+    h = harness;
+    const pending = harness.workshop.generateCandidates({ description: '可取消测试', count: 2, jobId: 'job-cancel-1' });
+    expect(harness.workshop.cancelJob('job-cancel-1')).toBe(true);
+    await expect(pending).rejects.toThrow();
+    expect(seenSignal?.aborted).toBe(true);
+  });
 });

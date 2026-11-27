@@ -51,13 +51,20 @@ import {
   MIMO_BUNDLED_REFERENCE_ASSET,
   MIMO_DEFAULT_TIMBRE_ID,
   MIMO_TIMBRE_PRESETS,
+  VoiceWorkshopArchiveInputSchema,
   VoiceWorkshopAuditionInputSchema,
+  VoiceWorkshopBindCharacterInputSchema,
   VoiceWorkshopCloneCreateInputSchema,
   VoiceWorkshopDeleteInputSchema,
+  VoiceWorkshopFavoriteInputSchema,
   VoiceWorkshopFreezeInputSchema,
   VoiceWorkshopGenerateInputSchema,
   VoiceWorkshopRenameInputSchema,
+  VoiceWorkshopRevokeConsentInputSchema,
+  VoiceWorkshopUnbindCharacterInputSchema,
   VoiceWorkshopVersionAuditionInputSchema,
+  estimateDataUriBase64Bytes,
+  MIMO_MAX_REFERENCE_BASE64_BYTES,
   PetDesktopPrefsSchema,
   type CharacterCoreSnapshot,
   type DanceRoutineInput,
@@ -103,6 +110,7 @@ import {
   MiniMaxTtsProvider,
   MimoTtsProvider,
   OpenRouterTtsProvider,
+  resolveCommercialTtsProvider,
   resolveMimoEmotionHint,
   PerformanceDirector,
   SingEngine,
@@ -124,7 +132,7 @@ import type { AutodriveHost } from './autodrive-host';
 import { createSongConsoleHost, loadSongBlacklist, resolveSongBlacklistPath, type SongPlaybackPort } from './song-console-host';
 import { createSingingMaterialsHost } from './singing-materials';
 import type { MemoryHost } from './memory-host';
-import type { VoiceHost } from './voice-host';
+import type { VoiceHost, VoiceHostSynthesizeInput, VoiceHostSynthesizeOutcome } from './voice-host';
 import {
   deleteVaultKey,
   hasVaultKey,
@@ -162,11 +170,14 @@ export interface V2KernelHost {
   readonly characterCore: CharacterCore;
   readonly audioMixer: AudioMixer;
   readonly voiceRouter: VoiceProviderRouter;
+  readonly voiceWorkshop: VoiceWorkshop;
   readonly performanceDirector: PerformanceDirector;
   readonly stageRuntime: StageRuntime;
   readonly liveRuntime: LiveRuntimeV2;
   readonly computerLeaseMgr: ComputerUseLeaseManager;
   readonly browserRuntime: BrowserRuntime;
+  /** V2 生产语音闭环：按角色解析锁定版本、走 VoiceProviderRouter、返回真实 WAV + lipFrames（绝不静默换声） */
+  synthesizeForProduction(input: VoiceHostSynthesizeInput): Promise<VoiceHostSynthesizeOutcome>;
   attachV1Bridges(deps: { autodrive: AutodriveHost; voice: VoiceHost; memory?: MemoryHost }): void;
   stop(): Promise<void>;
 }
@@ -420,7 +431,7 @@ export async function createV2KernelHost(options: {
    * 读取 prefs 文件（只读；坏文件回落默认值）。OpenRouter 模型 id 与 MiMo 内置音色都从 UI 改，
    * provider 构造一次但模型/音色每次合成时重读，不用重启进程。
    */
-  const readVoicePrefs = (): { voiceOpenRouterModel: string; voiceMimoBuiltinVoice: string } => {
+  const readVoicePrefs = () => {
     try {
       const parsed = PetDesktopPrefsSchema.safeParse(
         JSON.parse(readFileSync(join(options.userDataDir, 'pet-desktop-prefs.json'), 'utf8')),
@@ -450,7 +461,20 @@ export async function createV2KernelHost(options: {
       ? join(process.resourcesPath, 'voice')
       : join(dirname(fileURLToPath(import.meta.url)), '../../../../assets/voice');
   const bundledReferencePath = (): string => join(bundledVoiceDir(), MIMO_BUNDLED_REFERENCE_ASSET);
-  const resolveMimoReference = (): MimoTtsReferenceAudio | null => {
+  let voiceWorkshopRef: VoiceWorkshop | null = null;
+  const resolveMimoReference = (characterId?: string): MimoTtsReferenceAudio | null => {
+    // 优先按角色显式绑定 / 声音工坊激活版本解析；若已撤销授权，直接拒绝（不悄悄落回旧样本）
+    if (voiceWorkshopRef !== null) {
+      try {
+        const resolved = voiceWorkshopRef.resolveReferenceForCharacter(characterId);
+        if (resolved.revoked) return null;
+        if (existsSync(resolved.referencePath)) {
+          return { bytes: new Uint8Array(readFileSync(resolved.referencePath)) };
+        }
+      } catch {
+        /* 继续向下解析 */
+      }
+    }
     try {
       if (existsSync(cloneSamplePath)) {
         return { bytes: new Uint8Array(readFileSync(cloneSamplePath)) };
@@ -486,6 +510,14 @@ export async function createV2KernelHost(options: {
     }
   };
   const voiceRouter = new VoiceProviderRouter({
+    resolveCacheSalt: (req, preferred) => {
+      const prefs = readVoicePrefs();
+      const ref = voiceWorkshopRef?.resolveReferenceForCharacter(req.characterId);
+      const refKey = ref === undefined
+        ? 'no-workshop'
+        : `${ref.version.id}:${ref.version.referenceSha256 ?? ''}:${ref.revoked ? 'revoked' : 'ok'}`;
+      return `${preferred ?? 'auto'}|${refKey}|${prefs.voiceMimoBuiltinVoice}|${prefs.voiceOpenRouterModel}`;
+    },
     providers: [
       new MiniMaxTtsProvider({ resolveApiKey: resolveMiniMaxKey }),
       new CloudOpenAiTtsProvider({ resolveApiKey: resolveOpenAiTtsKey }),
@@ -1258,19 +1290,16 @@ export async function createV2KernelHost(options: {
       throw new Error('参考音频合成失败：后端没有返回音频');
     }
     const bytes = Buffer.from(result.audioBase64, 'base64');
-    if (bytes.byteLength > 20 * 1024 * 1024) {
-      throw new Error('参考音频超过 20MB 上限');
+    if (estimateDataUriBase64Bytes(bytes.byteLength, 'audio/wav') > MIMO_MAX_REFERENCE_BASE64_BYTES) {
+      throw new Error('参考音频 Base64 编码后超过 MiMo 10 MB 上限（原始 WAV 约 7.5 MB）');
     }
     writeFileSync(cloneSamplePath, bytes);
+    voiceRouter.clearCache();
     return { ...cloneSampleInfo(), providerKind: result.providerKind, durationMs: result.durationMs };
   });
 
   /**
-   * 音色工坊（M1 声线版本/体检 + M2 生成流，owner 2026-11-27 拍板「m2+m1」）。
-   *
-   * - 出厂版本永远是随包 `assets/voice/xiaojing-07-tiancui-yuanqi.wav`，工坊的定格只写 userData；
-   * - 体检沿用仓库既有工具（sherpa-onnx CAM++），工具缺失就如实 `unavailable`，不给假数字；
-   * - 每次合成都会计入会话计数（MiMo 限免，UI 要如实显示用掉多少次）。
+   * 音色工坊 2.0：声线版本/多角色绑定/撤销授权/体检/候选生成/克隆（含从 AI 设计直选）与实时缓存失效。
    */
   const workshopTimbre = MIMO_TIMBRE_PRESETS.find((item) => item.id === MIMO_DEFAULT_TIMBRE_ID);
   const voiceWorkshop = new VoiceWorkshop({
@@ -1279,6 +1308,9 @@ export async function createV2KernelHost(options: {
     bundledLabel: workshopTimbre?.label ?? MIMO_DEFAULT_TIMBRE_ID,
     bundledDescription: workshopTimbre?.description ?? '',
     cloneSamplePath,
+    onReferenceChanged: () => {
+      voiceRouter.clearCache();
+    },
     synth: async (input) => {
       const provider = new MimoTtsProvider({
         mode: input.mode,
@@ -1294,13 +1326,16 @@ export async function createV2KernelHost(options: {
         resolveApiKey: resolveMimoKey,
       });
       const identity = characterCore.profile.voiceIdentity();
-      const result = await provider.synthesize(VoiceSynthesisRequestSchema.parse({
-        requestId: randomUUID(),
-        characterId: identity.characterId,
-        voiceRef: 'voice-workshop',
-        text: input.text,
-        ...(input.emotion === undefined ? {} : { emotion: input.emotion }),
-      }));
+      const result = await provider.synthesize(
+        VoiceSynthesisRequestSchema.parse({
+          requestId: randomUUID(),
+          characterId: identity.characterId,
+          voiceRef: 'voice-workshop',
+          text: input.text,
+          ...(input.emotion === undefined ? {} : { emotion: input.emotion }),
+        }),
+        input.signal,
+      );
       if (result.audioBase64 === undefined) {
         throw new Error('合成失败：后端没有返回音频');
       }
@@ -1312,6 +1347,71 @@ export async function createV2KernelHost(options: {
     },
     runSpeakerCosine: createSpeakerCosineRunner(),
   });
+  voiceWorkshopRef = voiceWorkshop;
+
+  /** V2 生产播报闭环：按角色解析锁定版本 + 走 VoiceProviderRouter + 返回真实 WAV 与 lipFrames */
+  const synthesizeForProduction = async (input: VoiceHostSynthesizeInput): Promise<VoiceHostSynthesizeOutcome> => {
+    const prefs = readVoicePrefs();
+    const allowLegacyFallback = prefs.voiceCloudFallbackPolicy === 'system_say';
+    const resolvedRef = voiceWorkshop.resolveReferenceForCharacter(input.characterId);
+    if (resolvedRef.revoked) {
+      return {
+        ok: false,
+        error: `声线「${resolvedRef.version.label}」已撤销声音授权，已阻止继续发声`,
+        allowLegacyFallback: false,
+      };
+    }
+    const emotion = input.scene === 'p0' ? 'tsundere' : input.scene === 'inner' ? 'sleepy' : 'daily';
+    const styleMode = input.scene === 'p0' ? 'p0' : input.scene === 'inner' ? 'inner' : 'normal';
+    const identity = characterCore.profile.voiceIdentity();
+    const charId = input.characterId ?? identity.characterId;
+
+    let preferredProvider: 'local-audio-worker' | ReturnType<typeof resolveCommercialTtsProvider>['provider'];
+    if (prefs.voiceEngineTier === 'offline_preferred') {
+      preferredProvider = 'local-audio-worker';
+    } else {
+      const statuses = await voiceRouter.listStatuses();
+      const available = statuses.filter((s) => s.available).map((s) => s.kind);
+      const choice = resolveCommercialTtsProvider({ preference: prefs.voiceCommercialProvider, available });
+      preferredProvider = choice.provider;
+    }
+
+    try {
+      const out = await voiceRouter.synthesize(
+        {
+          requestId: randomUUID(),
+          characterId: charId,
+          voiceRef: input.voiceId || voiceRouter.resolveVoiceRef(identity),
+          text: input.text,
+          emotion,
+          styleMode,
+        },
+        { preferredProvider, signal: input.signal, allowFallback: false },
+      );
+      if (out.audioBase64 === undefined || out.audioBase64 === '' || out.placeholder) {
+        return {
+          ok: false,
+          error: `${out.providerKind} 未返回可播放真实语音（${out.placeholderReason ?? '无音频载荷'}）`,
+          allowLegacyFallback,
+        };
+      }
+      return {
+        ok: true,
+        audioBase64: out.audioBase64,
+        format: out.format,
+        lipFrames: out.lipFrames,
+        providerKind: out.providerKind,
+        degraded: out.degraded,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        allowLegacyFallback,
+      };
+    }
+  };
+
   ipcMain.handle('v2:voice-workshop-state', () => voiceWorkshop.snapshot());
   ipcMain.handle('v2:voice-workshop-generate', (_e, rawInput: unknown) => {
     const parsed = VoiceWorkshopGenerateInputSchema.parse(rawInput);
@@ -1320,8 +1420,12 @@ export async function createV2KernelHost(options: {
       count: parsed.count,
       ...(parsed.dial === undefined ? {} : { dial: parsed.dial }),
       ...(parsed.previewText === undefined ? {} : { previewText: parsed.previewText }),
+      ...(parsed.jobId === undefined ? {} : { jobId: parsed.jobId }),
     });
   });
+  ipcMain.handle('v2:voice-workshop-cancel-job', (_e, jobId: unknown) => ({
+    cancelled: voiceWorkshop.cancelJob(String(jobId ?? '')),
+  }));
   ipcMain.handle('v2:voice-workshop-audition', (_e, rawInput: unknown) => {
     const parsed = VoiceWorkshopAuditionInputSchema.parse(rawInput);
     return voiceWorkshop.audition({
@@ -1361,7 +1465,11 @@ export async function createV2KernelHost(options: {
       consent: parsed.consent,
       activate: parsed.activate,
       ...(parsed.wavBase64 === undefined ? {} : { wavBase64: parsed.wavBase64 }),
+      ...(parsed.rawWavBase64 === undefined ? {} : { rawWavBase64: parsed.rawWavBase64 }),
       ...(parsed.filePath === undefined ? {} : { filePath: parsed.filePath }),
+      ...(parsed.sourceCandidateId === undefined ? {} : { sourceCandidateId: parsed.sourceCandidateId }),
+      ...(parsed.sourceVersionId === undefined ? {} : { sourceVersionId: parsed.sourceVersionId }),
+      ...(parsed.characterId === undefined ? {} : { characterId: parsed.characterId }),
       ...(parsed.tags === undefined ? {} : { tags: parsed.tags }),
     });
     if (parsed.activate) {
@@ -1371,6 +1479,31 @@ export async function createV2KernelHost(options: {
       });
     }
     return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-bind', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopBindCharacterInputSchema.parse(rawInput);
+    const res = voiceWorkshop.bindCharacter(parsed.characterId, parsed.versionId);
+    return { ...res, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-unbind', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopUnbindCharacterInputSchema.parse(rawInput);
+    const res = voiceWorkshop.unbindCharacter(parsed.characterId);
+    return { ...res, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-favorite', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopFavoriteInputSchema.parse(rawInput);
+    const version = voiceWorkshop.setFavorite(parsed.versionId, parsed.favorite);
+    return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-archive', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopArchiveInputSchema.parse(rawInput);
+    const version = voiceWorkshop.setArchived(parsed.versionId, parsed.archived);
+    return { version, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-workshop-revoke-consent', (_e, rawInput: unknown) => {
+    const parsed = VoiceWorkshopRevokeConsentInputSchema.parse(rawInput);
+    const res = voiceWorkshop.revokeConsent(parsed.versionId, parsed.reason);
+    return { ...res, state: voiceWorkshop.snapshot() };
   });
   ipcMain.handle('v2:voice-workshop-rename', (_e, rawInput: unknown) => {
     const parsed = VoiceWorkshopRenameInputSchema.parse(rawInput);
@@ -1387,7 +1520,7 @@ export async function createV2KernelHost(options: {
     return { deletedId: res.deletedId, currentVersion: res.currentVersion, state: voiceWorkshop.snapshot() };
   });
   ipcMain.handle('v2:voice-workshop-read-audio', (_e, rawInput: unknown) => {
-    const parsed = z.object({ kind: z.enum(['version', 'candidate']), id: z.string().min(1) }).parse(rawInput);
+    const parsed = z.object({ kind: z.enum(['version', 'candidate', 'version-raw']), id: z.string().min(1) }).parse(rawInput);
     return voiceWorkshop.readAudio(parsed);
   });
   ipcMain.handle('v2:voice-workshop-rollback', (_e, versionId: string) => {
@@ -1402,6 +1535,76 @@ export async function createV2KernelHost(options: {
     const id = typeof versionId === 'string' && versionId !== '' ? versionId : undefined;
     const result = await voiceWorkshop.checkConsistency(id);
     return { result, state: voiceWorkshop.snapshot() };
+  });
+  ipcMain.handle('v2:voice-cache-stats', () => voiceRouter.cacheStats());
+  ipcMain.handle('v2:voice-cache-clear', () => ({ cleared: voiceRouter.clearCache(), stats: voiceRouter.cacheStats() }));
+  /** 真实短句连通性测试（明确消耗 1 次合成，绝不拿列表探测冒充 TTS 可用） */
+  ipcMain.handle('v2:voice-router-test', async (_e, rawInput?: unknown) => {
+    const parsed = z.object({
+      preferredProvider: VoiceProviderKindSchema.optional(),
+      text: z.string().trim().min(1).max(120).optional(),
+    }).parse(rawInput ?? {});
+    const prefs = readVoicePrefs();
+    const provider = parsed.preferredProvider ?? (prefs.voiceEngineTier === 'offline_preferred' ? 'local-audio-worker' : prefs.voiceCommercialProvider);
+    const identity = characterCore.profile.voiceIdentity();
+    const started = Date.now();
+    try {
+      const out = await voiceRouter.synthesize(
+        {
+          requestId: randomUUID(),
+          characterId: identity.characterId,
+          voiceRef: voiceRouter.resolveVoiceRef(identity),
+          text: parsed.text ?? '你好呀，这是一条真实语音连通测试。',
+          emotion: 'daily',
+          styleMode: 'normal',
+        },
+        { preferredProvider: provider, allowFallback: false },
+      );
+      return {
+        ok: Boolean(out.audioBase64) && !out.placeholder,
+        providerKind: out.providerKind,
+        latencyMs: out.latencyMs || (Date.now() - started),
+        durationMs: out.durationMs,
+        cached: out.cached,
+        audioBase64: out.audioBase64,
+        ...(out.placeholder ? { error: out.placeholderReason ?? '返回占位波形，不是真实人声' } : {}),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        providerKind: provider,
+        latencyMs: Date.now() - started,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+  /** 从当前角色人设摘取声音描述草稿（只读角色身份/基础性格特质，绝不触碰聊天记录与私人记忆） */
+  ipcMain.handle('v2:voice-persona-extract', (_e, rawCharName?: unknown) => {
+    const snap = characterCore.snapshot();
+    const voiceId = snap.voiceIdentity;
+    const identity = snap.identity;
+    const personality = snap.personality;
+    const name = typeof rawCharName === 'string' && rawCharName.trim() !== '' ? rawCharName.trim() : identity.displayName;
+    const existing = voiceId.voiceDescription?.trim();
+    const topTraits = Object.entries(personality.stableTraits)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([k]) => k);
+    const bio = identity.description.trim();
+    const parts = [
+      bio.length > 0 ? bio.slice(0, 120) : '',
+      topTraits.length > 0 ? `性格倾向：${topTraits.join('、')}` : '',
+    ].filter((s) => s.length > 0);
+    const suggestedDescription = existing && existing.length >= 6
+      ? existing
+      : parts.length > 0
+        ? `${name}风格声线，${parts.join('，')}，普通话清晰自然，口语节奏灵动`
+        : `${name}专属声线，清亮自然的年轻女声，带一点俏皮亲近感，咬字清晰，尾音轻轻上扬`;
+    return {
+      characterName: name,
+      sourceSummary: existing ? '来自当前角色档案 voiceDescription（未读取任何聊天记录或记忆）' : '来自当前角色身份与稳定特质（未读取任何聊天记录或记忆）',
+      suggestedDescription: suggestedDescription.slice(0, 280),
+    };
   });
   /**
    * 音色设计台（VoiceDesign Lab）：音色描述由用户在 UI 里现场编辑，所以不能走固定实例的 router，
@@ -2585,11 +2788,13 @@ export async function createV2KernelHost(options: {
     characterCore,
     audioMixer,
     voiceRouter,
+    voiceWorkshop,
     performanceDirector,
     stageRuntime,
     liveRuntime,
     computerLeaseMgr,
     browserRuntime,
+    synthesizeForProduction,
     attachV1Bridges({ autodrive, voice, memory }) {
       memoryHostRef = memory ?? null;
       autodriveRef = autodrive;

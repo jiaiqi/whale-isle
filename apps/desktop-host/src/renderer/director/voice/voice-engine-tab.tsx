@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import {
-  KeyRound, Lock, Play, Radio, RefreshCw, SlidersHorizontal, Timer, Volume2,
+  Database, KeyRound, Lock, Play, Radio, RefreshCw, ShieldCheck, SlidersHorizontal, Timer, Trash2, Volume2, Zap,
 } from 'lucide-react';
 import {
   MIMO_TTS_CANDIDATE_NOTICE,
@@ -18,6 +18,7 @@ import {
   type AudioMixerSnapshot,
   type AudioTrackKind,
   type CommercialTtsProvider,
+  type VoiceCloudFallbackPolicy,
   type VoiceEngineTier,
   type VoiceProviderStatus,
 } from '@workbench/shared-protocol';
@@ -26,6 +27,7 @@ import {
   COMMERCIAL_TTS_PROVIDERS,
   resolveCommercialTtsProvider,
 } from '@workbench/voice-runtime/browser';
+import { formatBytes } from './audio-dsp';
 
 export const VOICE_CREDENTIALS = [
   { id: 'mimo-tts', label: '小米 MiMo（当前主线）', unlocks: '内置音色 / VoiceClone / VoiceDesign 三模型共用一个 Key' },
@@ -46,6 +48,13 @@ const ROUTE_PRESETS = ['default', 'system-speakers', 'blackhole-2ch-obs', 'virtu
 export function VoiceEngineTab(props: {
   tier: VoiceEngineTier;
   onToggleTier: () => void;
+  fallbackPolicy: VoiceCloudFallbackPolicy;
+  onChangeFallbackPolicy: (next: VoiceCloudFallbackPolicy) => void;
+  cacheStats: { entries: number; maxEntries: number; estimatedBytes: number; maxBytes: number } | null;
+  onClearCache: () => Promise<void>;
+  onRunRealConnectTest: () => Promise<void>;
+  testingConnect: boolean;
+  connectResult: { ok: boolean; providerKind: string; latencyMs: number; detail: string } | null;
   commercial: CommercialTtsProvider;
   onPickCommercial: (next: CommercialTtsProvider) => void;
   openRouterModel: string;
@@ -67,6 +76,13 @@ export function VoiceEngineTab(props: {
   const {
     tier,
     onToggleTier,
+    fallbackPolicy,
+    onChangeFallbackPolicy,
+    cacheStats,
+    onClearCache,
+    onRunRealConnectTest,
+    testingConnect,
+    connectResult,
     commercial,
     onPickCommercial,
     openRouterModel,
@@ -289,6 +305,77 @@ export function VoiceEngineTab(props: {
               {MIMO_TTS_CANDIDATE_NOTICE}
             </p>
           )}
+
+          {/* 生产回退护栏 + 真实短句连通测试 + SHA-256 锚定缓存 */}
+          <div className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-3" style={{ borderColor: 'var(--stroke)' }}>
+            <div className="inset p-3 text-[11.5px]">
+              <div className="mb-1.5 flex items-center gap-1.5 font-semibold">
+                <ShieldCheck size={12} style={{ color: 'var(--accent)' }} />云端失败回退策略
+              </div>
+              <select
+                data-voice-fallback-policy
+                value={fallbackPolicy}
+                onChange={(e) => onChangeFallbackPolicy(e.target.value as VoiceCloudFallbackPolicy)}
+                className="w-full rounded-lg px-2 py-1.5 text-[11px] outline-none"
+                style={{ border: '1px solid var(--stroke)', background: 'var(--surface-solid)', color: 'var(--text-1)' }}
+              >
+                <option value="subtitle_only">保留气泡字幕，明确报错（推荐，不静默换声）</option>
+                <option value="system_say">允许显式回落本机 mcode / macOS say</option>
+              </select>
+              <p className="mt-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                生产播报默认不偷偷把克隆声线换成系统机械音；选「保留字幕」时报错但不断对话。
+              </p>
+            </div>
+
+            <div className="inset p-3 text-[11.5px]">
+              <div className="mb-1.5 flex items-center justify-between font-semibold">
+                <span className="flex items-center gap-1.5"><Zap size={12} style={{ color: 'var(--green)' }} />真实短句连通测试</span>
+                <button
+                  type="button"
+                  data-voice-real-connect-test
+                  disabled={testingConnect}
+                  onClick={() => void onRunRealConnectTest()}
+                  className="btn-pill ghost"
+                  style={{ padding: '2px 9px', fontSize: 10.5 }}
+                >
+                  {testingConnect ? '测试中…' : '真实测试 (1 次)'}
+                </button>
+              </div>
+              <p className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                列表探测只查凭据；此按钮实际合成 1 句短台词并回放（可能产生 1 次计费/额度消耗）。
+              </p>
+              {connectResult !== null && (
+                <p
+                  className="mt-1.5 text-[10.5px] font-medium"
+                  style={{ color: connectResult.ok ? 'var(--green)' : 'var(--red)' }}
+                  data-voice-connect-result
+                >
+                  {connectResult.ok ? '✓' : '✗'} {connectResult.providerKind} · {connectResult.latencyMs}ms · {connectResult.detail}
+                </p>
+              )}
+            </div>
+
+            <div className="inset p-3 text-[11.5px]">
+              <div className="mb-1.5 flex items-center justify-between font-semibold">
+                <span className="flex items-center gap-1.5"><Database size={12} style={{ color: 'var(--violet)' }} />TTS 合成缓存</span>
+                <button
+                  type="button"
+                  data-voice-cache-clear
+                  onClick={() => void onClearCache()}
+                  className="btn-pill ghost"
+                  style={{ padding: '2px 9px', fontSize: 10.5 }}
+                >
+                  <Trash2 size={10} />清空缓存
+                </button>
+              </div>
+              <div className="mono text-[11px]" style={{ color: 'var(--text-1)' }}>
+                {cacheStats === null ? '读取中…' : `${cacheStats.entries} / ${cacheStats.maxEntries} 条 · ${formatBytes(cacheStats.estimatedBytes)}`}
+              </div>
+              <p className="mt-1 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                按角色版本与参考音频 SHA-256 锚定；切换声线或撤销授权时自动失效防串音。
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 

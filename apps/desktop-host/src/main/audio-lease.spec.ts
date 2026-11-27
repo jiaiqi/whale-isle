@@ -87,4 +87,28 @@ describe('GlobalAudioLeaseManager：cancel 语义（批次B 低危修复）', ()
       vi.useRealTimers();
     }
   });
+
+  it('试听租约隔离：正式语音自动顶掉试听，试听绝不抢正式麦，新试听顶掉旧试听', () => {
+    const receipts: Array<Receipt & { purpose: string }> = [];
+    const mgr = new GlobalAudioLeaseManager({ onReceipt: (r) => receipts.push(r) });
+
+    // 1. 试听 A 开播 → 新试听 B 顶掉试听 A（CANCELLED）
+    const p1 = makeRequest({ purpose: 'preview', priority: 'P2_IDLE' });
+    const p2 = makeRequest({ purpose: 'preview', priority: 'P2_IDLE' });
+    expect(mgr.acquire(p1)).toBe('granted');
+    expect(mgr.acquire(p2)).toBe('granted');
+    expect(receipts[0]?.status).toBe('CANCELLED');
+    expect(receipts[0]?.purpose).toBe('preview');
+    expect(mgr.activeCount()).toBe(1);
+
+    // 2. 正式语音（即使 P1）立刻抢占试听 B
+    const formal = makeRequest({ purpose: 'speech', priority: 'P1_CADENCE' });
+    expect(mgr.acquire(formal)).toBe('preempted');
+    expect(mgr.current().activePurpose).toBe('speech');
+
+    // 3. 正式发言进行中，新试听只能排队，不能抢正式麦
+    const p3 = makeRequest({ purpose: 'preview', priority: 'P2_IDLE' });
+    expect(mgr.acquire(p3)).toBe('queued');
+    expect(mgr.current().activePurpose).toBe('speech');
+  });
 });

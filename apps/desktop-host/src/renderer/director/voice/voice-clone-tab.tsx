@@ -1,39 +1,52 @@
 /**
  * Tab 3：「音色克隆台」（Instant Voice Cloning Studio）
- * 对标 ElevenLabs IVC + Fish Audio Studio + Cartesia Sonic：
  *
- * 四步闭环（100% 真实 DSP，零假指标，强声音权属合规门禁）：
- * 1. 获取参考干声：拖拽/选择多格式音频（WAV/MP3/M4A/OGG/WebM，浏览器端自动重采样 24kHz 单声道 WAV）
- *    或浏览器麦克风现场录制（实时电平表 + 3 套中文朗读提词卡）
- * 2. 波形裁剪与声学质检：交互式起止裁剪（5–12s 黄金区间）+ 可选 -3 dBFS 归一化 + 真实时长/RMS/Peak/SNR 计算
- * 3. 声音权属与合规确认：《民法典》1023 条红线，强制声明来源并显式勾选，未确认不可入库
- * 4. 裁剪转码入库：写入 `VoiceTimbreVersion(source='uploaded')` + SHA-256 留痕，立即支持 4 情绪试戴与 CAM++ 体检
+ * 三路获取干声 + 真实 PCM 裁剪质检 + MiMo Base64 ≤ 10MB 硬校验 + 权属合规门禁：
+ * 1. 获取参考干声（三选一）：
+ *    - 上传本地音频（WAV/MP3/M4A/OGG/WebM）
+ *    - 麦克风现场录制（实时 VU 电平 + 3 套朗读提词卡）
+ *    - ★ 从 AI 设计音色选取（直接选取本机 AI 音色设计生成的候选或已定格 AI 音色，送入波形裁剪与归一化再克隆！）
+ * 2. 波形裁剪与确定性声学质检：保留原始素材可随时重置/试听原声，输出 24kHz 单声道 WAV，实时校核 MiMo Base64 ≤ 10MB 上限
+ * 3. 声音权属门禁 + 明确告知云端边界（本地导入/裁剪不上传；仅裁剪后副本在克隆合成时发往小米云端）
+ * 4. 入库自动锁定到当前角色并支持立即 4 情绪试戴与 CAM++ 体检
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Activity, CheckCircle2, FileAudio, Mic, Pause, Play, RotateCcw,
-  ShieldAlert, ShieldCheck, Square, Upload, Waves,
+  Activity, CheckCircle2, FileAudio, Loader2, Mic, Pause, Play, RotateCcw,
+  ShieldAlert, ShieldCheck, Sparkles, Square, Upload, Waves,
 } from 'lucide-react';
 import {
+  estimateDataUriBase64Bytes,
+  MIMO_MAX_REFERENCE_BASE64_BYTES,
   VOICE_CLONE_READING_SCRIPTS,
   type VoiceCloneConsentKind,
   type VoiceTimbreVersion,
+  type VoiceWorkshopCandidate,
   type VoiceWorkshopState,
 } from '@workbench/shared-protocol';
 import {
   bytesToBase64,
   computePcmQuality,
   decodeAudioBlob,
+  decodeBase64ToBytes,
+  encodePcm16MonoWav,
   formatBytes,
   formatTimeSec,
   trimAndEncodeMonoWav,
 } from './audio-dsp';
+import { useAuditionPlayer } from './audition-player';
 import { WaveformTrimmer } from './waveform-player';
+
+export type PendingCloneAiSource =
+  | { kind: 'candidate'; candidate: VoiceWorkshopCandidate }
+  | { kind: 'version'; version: VoiceTimbreVersion };
 
 interface LoadedClip {
   name: string;
-  sourceMode: 'upload' | 'mic';
+  sourceMode: 'upload' | 'mic' | 'ai-design';
+  sourceCandidateId?: string;
+  sourceVersionId?: string;
   samples: Float32Array;
   sampleRate: number;
   durationSec: number;
@@ -55,29 +68,43 @@ const CONSENT_KINDS: Array<{ id: VoiceCloneConsentKind; title: string; desc: str
   },
   {
     id: 'ai_synthetic',
-    title: '合规 AI 合成素材',
-    desc: '由合规 AI 工具生成的非真人声线参考（自动标记 DEV_ONLY_NON_COMMERCIAL）',
-    defaultSource: '合规 AI 合成派生参考音',
+    title: '合规 AI 合成 / AI 音色设计派生',
+    desc: '由 AI 音色设计或合规合成工具生成的非真人声线（自动标记 DEV_ONLY_NON_COMMERCIAL）',
+    defaultSource: '源自本机 AI 音色设计生成的参考音频',
   },
 ];
 
 export function VoiceCloneTab(props: {
+  characterId: string;
+  characterName: string;
+  workshop: VoiceWorkshopState | null;
+  pendingAiSource: PendingCloneAiSource | null;
+  onClearPendingAiSource: () => void;
   onUpdateWorkshop: (next: VoiceWorkshopState) => void;
   onSwitchToLibrary: () => void;
+  onSwitchToDesign: () => void;
 }): React.JSX.Element {
-  const { onUpdateWorkshop, onSwitchToLibrary } = props;
+  const {
+    characterId,
+    characterName,
+    workshop,
+    pendingAiSource,
+    onClearPendingAiSource,
+    onUpdateWorkshop,
+    onSwitchToLibrary,
+    onSwitchToDesign,
+  } = props;
 
-  const [inputMode, setInputMode] = useState<'upload' | 'mic'>('upload');
+  const player = useAuditionPlayer();
+  const [inputMode, setInputMode] = useState<'upload' | 'mic' | 'ai-design'>('upload');
   const [dragging, setDragging] = useState(false);
   const [clip, setClip] = useState<LoadedClip | null>(null);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [normalize, setNormalize] = useState(true);
-  const [playingTrim, setPlayingTrim] = useState(false);
   const [playheadSec, setPlayheadSec] = useState<number | null>(null);
+  const [loadingAiId, setLoadingAiId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
 
   // 麦克风录制状态
   const [scriptId, setScriptId] = useState<string>(VOICE_CLONE_READING_SCRIPTS[0].id);
@@ -102,14 +129,9 @@ export function VoiceCloneTab(props: {
   const [saving, setSaving] = useState(false);
   const [createdVersion, setCreatedVersion] = useState<VoiceTimbreVersion | null>(null);
   const [postBusy, setPostBusy] = useState<string | null>(null);
-  const [postAuditions, setPostAuditions] = useState<Array<{ key: string; label: string; text: string; audioBase64: string }>>([]);
+  const [postAuditions, setPostAuditions] = useState<Array<{ key: string; label: string; text: string; audioBase64: string; durationMs: number | null }>>([]);
 
-  useEffect(() => () => {
-    stopMicResources();
-    if (previewUrlRef.current !== null) URL.revokeObjectURL(previewUrlRef.current);
-  }, []);
-
-  const stopMicResources = (): void => {
+  const stopMicResources = useCallback((): void => {
     if (meterRafRef.current !== null) cancelAnimationFrame(meterRafRef.current);
     meterRafRef.current = null;
     if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
@@ -119,26 +141,122 @@ export function VoiceCloneTab(props: {
     void meterCtxRef.current?.close().catch(() => undefined);
     meterCtxRef.current = null;
     setMicLevel(0);
-  };
+  }, []);
 
-  const loadBlobAsClip = async (blob: Blob, name: string, sourceMode: 'upload' | 'mic'): Promise<void> => {
+  useEffect(() => () => {
+    stopMicResources();
+  }, [stopMicResources]);
+
+  const loadBlobAsClip = useCallback(async (
+    blob: Blob,
+    name: string,
+    sourceMode: 'upload' | 'mic' | 'ai-design',
+    meta?: {
+      sourceCandidateId?: string;
+      sourceVersionId?: string;
+      suggestedLabel?: string;
+      suggestedNote?: string;
+      consentPreset?: { kind: VoiceCloneConsentKind; source: string };
+    },
+  ): Promise<void> => {
     try {
       const decoded = await decodeAudioBlob(blob);
       const suggestedEnd = Math.min(decoded.durationSec, decoded.durationSec > 15 ? 10 : decoded.durationSec);
-      setClip({ name, sourceMode, ...decoded });
+      setClip({
+        name,
+        sourceMode,
+        ...(meta?.sourceCandidateId === undefined ? {} : { sourceCandidateId: meta.sourceCandidateId }),
+        ...(meta?.sourceVersionId === undefined ? {} : { sourceVersionId: meta.sourceVersionId }),
+        ...decoded,
+      });
       setTrimStart(0);
       setTrimEnd(Math.max(0.5, Number(suggestedEnd.toFixed(1))));
       setCreatedVersion(null);
       setPostAuditions([]);
-      if (voiceName.trim() === '') {
+      if (meta?.suggestedLabel !== undefined) {
+        setVoiceName(meta.suggestedLabel.slice(0, 40));
+      } else if (voiceName.trim() === '') {
         const base = name.replace(/\.[^.]+$/, '').slice(0, 24);
         setVoiceName(sourceMode === 'mic' ? '我的亲录声线' : `${base} · 克隆`);
       }
-      toast.success(`已载入音频「${name}」（${decoded.durationSec.toFixed(1)}s · ${decoded.sampleRate} Hz）`);
+      if (meta?.suggestedNote !== undefined) {
+        setVoiceNote(meta.suggestedNote.slice(0, 300));
+      }
+      if (meta?.consentPreset !== undefined) {
+        setConsentKind(meta.consentPreset.kind);
+        setConsentSource(meta.consentPreset.source);
+        setConsentChecked(false); // 仍需用户显式勾选确认合规门禁
+      }
+      toast.success(`已载入参考干声「${name}」（${decoded.durationSec.toFixed(1)}s · ${decoded.sampleRate} Hz）`);
     } catch (err) {
       toast.error(`音频解码失败：${err instanceof Error ? err.message : String(err)}`);
     }
+  }, [voiceName]);
+
+  const loadFromAiSource = useCallback(async (source: PendingCloneAiSource): Promise<void> => {
+    const id = source.kind === 'candidate' ? source.candidate.id : source.version.id;
+    setLoadingAiId(id);
+    try {
+      const audio = await window.directorBridge.v2VoiceWorkshopReadAudio({
+        kind: source.kind === 'candidate' ? 'candidate' : 'version',
+        id,
+      });
+      const bytes = decodeBase64ToBytes(audio.audioBase64);
+      const copy = new Uint8Array(bytes.byteLength);
+      copy.set(bytes);
+      const blob = new Blob([copy], { type: 'audio/wav' });
+      const title = source.kind === 'candidate'
+        ? `AI 设计候选 ${source.candidate.id.slice(0, 6)}`
+        : source.version.label;
+      const desc = source.kind === 'candidate' ? source.candidate.description : source.version.description;
+      await loadBlobAsClip(blob, `${title}.wav`, 'ai-design', {
+        ...(source.kind === 'candidate' ? { sourceCandidateId: source.candidate.id } : { sourceVersionId: source.version.id }),
+        suggestedLabel: `${title} · 克隆`,
+        suggestedNote: desc,
+        consentPreset: {
+          kind: 'ai_synthetic',
+          source: `源自 AI 音色设计（${title}）`,
+        },
+      });
+    } catch (err) {
+      toast.error(`载入 AI 设计音色失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoadingAiId(null);
+    }
+  }, [loadBlobAsClip]);
+
+  const previewAiSource = async (source: PendingCloneAiSource): Promise<void> => {
+    const id = source.kind === 'candidate' ? source.candidate.id : source.version.id;
+    setLoadingAiId(`play-${id}`);
+    try {
+      const audio = await window.directorBridge.v2VoiceWorkshopReadAudio({
+        kind: source.kind === 'candidate' ? 'candidate' : 'version',
+        id,
+      });
+      const title = source.kind === 'candidate' ? `AI 候选 ${source.candidate.id.slice(0, 6)}` : source.version.label;
+      if (player !== null) {
+        player.playTrack({
+          id: `clone-ai-preview-${source.kind}-${id}`,
+          title,
+          sourceLabel: 'AI 设计素材',
+          subtitle: source.kind === 'candidate' ? source.candidate.description : source.version.description,
+          audioBase64: audio.audioBase64,
+          ...(audio.durationMs !== null ? { durationHintSec: audio.durationMs / 1000 } : {}),
+        });
+      }
+    } catch (err) {
+      toast.error(`试听失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoadingAiId(null);
+    }
   };
+
+  // 从「音色设计」或「声线库」跳转带入 AI 音色
+  useEffect(() => {
+    if (pendingAiSource === null) return;
+    setInputMode('ai-design');
+    void loadFromAiSource(pendingAiSource).finally(() => onClearPendingAiSource());
+  }, [pendingAiSource, loadFromAiSource, onClearPendingAiSource]);
 
   const handleFiles = (files: FileList | null): void => {
     const file = files?.[0];
@@ -153,7 +271,7 @@ export function VoiceCloneTab(props: {
   const startRecording = async (): Promise<void> => {
     setMicError(null);
     if (typeof navigator === 'undefined' || navigator.mediaDevices?.getUserMedia === undefined) {
-      setMicError('当前环境不支持浏览器麦克风采集，请改用「上传本地音频」');
+      setMicError('当前环境不支持浏览器麦克风采集，请改用「上传本地音频」或「从 AI 设计音色选取」');
       return;
     }
     try {
@@ -162,7 +280,6 @@ export function VoiceCloneTab(props: {
       });
       mediaStreamRef.current = stream;
 
-      // 实时电平分析（真实时域 RMS）
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioCtx !== undefined) {
         const ctx = new AudioCtx();
@@ -211,15 +328,14 @@ export function VoiceCloneTab(props: {
 
   const stopRecording = (): void => {
     const rec = mediaRecorderRef.current;
-    if (rec !== null && rec.state !== 'inactive') {
-      rec.stop();
-    } else {
+    if (rec !== null && rec.state !== 'inactive') rec.stop();
+    else {
       stopMicResources();
       setRecording(false);
     }
   };
 
-  // 基于当前裁剪选区实时计算声学质检与输出估算
+  // 基于当前裁剪选区实时计算声学质检与 MiMo Base64 体积校核
   const processed = useMemo(() => {
     if (clip === null) return null;
     const encoded = trimAndEncodeMonoWav(clip.samples, clip.sampleRate, trimStart, trimEnd, {
@@ -227,44 +343,75 @@ export function VoiceCloneTab(props: {
       normalizeToDb: normalize ? -3 : null,
     });
     const quality = computePcmQuality(encoded.processedSamples, encoded.sampleRate, 1, 16);
-    return { ...encoded, quality };
+    const encodedBase64Bytes = estimateDataUriBase64Bytes(encoded.wavBytes.byteLength, 'audio/wav');
+    const fitsMimoLimit = encodedBase64Bytes <= MIMO_MAX_REFERENCE_BASE64_BYTES;
+    return { ...encoded, quality, encodedBase64Bytes, fitsMimoLimit };
   }, [clip, trimStart, trimEnd, normalize]);
 
+  const trimTrackId = clip !== null ? `clone-trim-${clip.name}-${trimStart.toFixed(1)}-${trimEnd.toFixed(1)}` : 'clone-trim';
+  const rawTrackId = clip !== null ? `clone-raw-${clip.name}` : 'clone-raw';
+  const playingTrim = player?.playing === true && player.track?.id === trimTrackId;
+  const playingRaw = player?.playing === true && player.track?.id === rawTrackId;
+
   const togglePlayTrim = (): void => {
-    if (playingTrim) {
-      previewAudioRef.current?.pause();
-      setPlayingTrim(false);
-      setPlayheadSec(null);
-      return;
-    }
-    if (processed === null) return;
-    if (previewUrlRef.current !== null) URL.revokeObjectURL(previewUrlRef.current);
-    const copy = new Uint8Array(processed.wavBytes.byteLength);
-    copy.set(processed.wavBytes);
-    const url = URL.createObjectURL(new Blob([copy], { type: 'audio/wav' }));
-    previewUrlRef.current = url;
-    const audio = new Audio(url);
-    previewAudioRef.current = audio;
-    audio.ontimeupdate = () => setPlayheadSec(trimStart + audio.currentTime);
-    audio.onended = () => { setPlayingTrim(false); setPlayheadSec(null); };
-    audio.onpause = () => setPlayingTrim(false);
-    void audio.play().then(() => setPlayingTrim(true)).catch(() => setPlayingTrim(false));
+    if (processed === null || clip === null || player === null) return;
+    player.playTrack({
+      id: trimTrackId,
+      title: `${clip.name}（裁剪选区）`,
+      sourceLabel: '克隆裁剪预览',
+      subtitle: `${trimStart.toFixed(1)}s – ${trimEnd.toFixed(1)}s · 仅本地播放，未上传云端`,
+      audioBytes: processed.wavBytes,
+      durationHintSec: trimEnd - trimStart,
+      onTimeUpdateSec: (sec) => setPlayheadSec(trimStart + sec),
+      onEnded: () => setPlayheadSec(null),
+    });
+  };
+
+  const togglePlayRaw = (): void => {
+    if (clip === null || player === null) return;
+    const rawWav = encodePcm16MonoWav(clip.samples, clip.sampleRate);
+    player.playTrack({
+      id: rawTrackId,
+      title: `${clip.name}（完整原声）`,
+      sourceLabel: '原始素材',
+      subtitle: '未裁剪原声 · 仅留本地，不会整段发往云端',
+      audioBytes: rawWav,
+      durationHintSec: clip.durationSec,
+      onTimeUpdateSec: (sec) => setPlayheadSec(sec),
+      onEnded: () => setPlayheadSec(null),
+    });
   };
 
   const canSubmit =
     processed !== null &&
+    processed.fitsMimoLimit &&
     voiceName.trim().length > 0 &&
     consentChecked &&
     consentSource.trim().length > 0 &&
     !saving;
 
   const submitClone = async (): Promise<void> => {
-    if (!canSubmit || processed === null) return;
+    if (!canSubmit || processed === null || clip === null) return;
     setSaving(true);
     try {
       const wavBase64 = bytesToBase64(processed.wavBytes);
+      // 保留未裁剪原始副本（若 ≤ 6MB，则直接写入本地 .raw.wav 便于后续撤回重裁）
+      let rawWavBase64: string | undefined;
+      if (clip.sourceMode !== 'ai-design' && (trimStart > 0.05 || trimEnd < clip.durationSec - 0.05)) {
+        const rawWav = encodePcm16MonoWav(clip.samples, clip.sampleRate);
+        if (rawWav.byteLength <= 6 * 1024 * 1024) {
+          rawWavBase64 = bytesToBase64(rawWav);
+        }
+      }
+      const sourceTag = clip.sourceMode === 'ai-design'
+        ? 'AI 设计派生'
+        : clip.sourceMode === 'mic' ? '麦克风亲录' : '音频上传';
+
       const { version, state } = await window.directorBridge.v2VoiceWorkshopCloneCreate({
         wavBase64,
+        ...(rawWavBase64 === undefined ? {} : { rawWavBase64 }),
+        ...(clip.sourceCandidateId === undefined ? {} : { sourceCandidateId: clip.sourceCandidateId }),
+        ...(clip.sourceVersionId === undefined ? {} : { sourceVersionId: clip.sourceVersionId }),
         label: voiceName.trim(),
         description: voiceNote.trim() || `本地克隆声线（${consentSource.trim()}）`,
         consent: {
@@ -274,14 +421,15 @@ export function VoiceCloneTab(props: {
           attestedAt: new Date().toISOString(),
         },
         activate: activateImmediately,
-        tags: [clip?.sourceMode === 'mic' ? '麦克风亲录' : '音频上传', 'VoiceClone'],
+        ...(activateImmediately ? { characterId } : {}),
+        tags: [sourceTag, 'VoiceClone'],
       });
       onUpdateWorkshop(state);
       if (activateImmediately) {
         await window.directorBridge.prefsSet({ voiceCommercialProvider: 'mimo-tts-voiceclone' });
       }
       setCreatedVersion(version);
-      toast.success(`已入库克隆声线「${version.label}」（${formatBytes(version.referenceBytes)}）${activateImmediately ? '，并已设为当前默认声线' : ''}`);
+      toast.success(`已入库克隆声线「${version.label}」（${formatBytes(version.referenceBytes)}）${activateImmediately ? `，并锁定到「${characterName}」` : ''}`);
     } catch (err) {
       toast.error(`入库失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -295,8 +443,14 @@ export function VoiceCloneTab(props: {
     try {
       const rows = await window.directorBridge.v2VoiceWorkshopVersionAudition({ versionId: createdVersion.id, intensity: 'B' });
       setPostAuditions(rows);
-      if (rows[0]?.audioBase64) {
-        void new Audio(`data:audio/wav;base64,${rows[0].audioBase64}`).play().catch(() => undefined);
+      if (rows[0] !== undefined && player !== null) {
+        player.playTrack({
+          id: `clone-post-${createdVersion.id}-${rows[0].key}`,
+          title: `${createdVersion.label} · ${rows[0].label}`,
+          sourceLabel: '克隆试戴',
+          subtitle: rows[0].text,
+          audioBase64: rows[0].audioBase64,
+        });
       }
       toast.success(`克隆声线 4 情绪试戴已生成（消耗 ${rows.length} 次合成）`);
     } catch (err) {
@@ -322,30 +476,37 @@ export function VoiceCloneTab(props: {
   };
 
   const activeScript = VOICE_CLONE_READING_SCRIPTS.find((s) => s.id === scriptId) ?? VOICE_CLONE_READING_SCRIPTS[0];
+  const aiCandidates = workshop?.candidates ?? [];
+  const aiVersions = (workshop?.versions ?? []).filter(
+    (v) => (v.source === 'ai-design' || v.source === 'factory') && v.consent?.revokedAt === undefined,
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.15fr_0.95fr]" data-voice-clone-studio>
-      {/* 左栏：Step 1 采集/上传 + Step 2 波形裁剪与声学质检 */}
+      {/* 左栏：Step 1 获取参考干声（上传 / 麦录 / 从 AI 设计选） + Step 2 波形裁剪与声学质检 */}
       <div className="space-y-4">
         <section className="card p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="wb-display text-lg">① 获取参考干声（5–12 秒最佳）</h2>
               <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                所有转码、裁剪与归一化均在本地浏览器完成；不上传任何未确认音频。
+                支持本地上传、麦克风亲录，或直接从「AI 音色设计」生成的声音里挑选并裁剪精修。
               </p>
             </div>
             <div className="seg" role="tablist" aria-label="音频获取方式">
               <button type="button" className={inputMode === 'upload' ? 'on' : ''} data-clone-mode="upload" onClick={() => setInputMode('upload')}>
-                <Upload size={12} />上传本地音频
+                <Upload size={12} />上传音频
               </button>
               <button type="button" className={inputMode === 'mic' ? 'on' : ''} data-clone-mode="mic" onClick={() => setInputMode('mic')}>
-                <Mic size={12} />麦克风现场录制
+                <Mic size={12} />麦克风录制
+              </button>
+              <button type="button" className={inputMode === 'ai-design' ? 'on' : ''} data-clone-mode="ai-design" onClick={() => setInputMode('ai-design')}>
+                <Sparkles size={12} />从 AI 设计选 ({aiCandidates.length + aiVersions.length})
               </button>
             </div>
           </div>
 
-          {inputMode === 'upload' ? (
+          {inputMode === 'upload' && (
             <div
               data-clone-dropzone
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -374,10 +535,12 @@ export function VoiceCloneTab(props: {
                 拖拽音频到此处，或点击选择本地文件
               </div>
               <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                支持 WAV / MP3 / M4A / OGG / WebM · 自动转为 24 kHz 单声道 16-bit PCM WAV
+                支持 WAV / MP3 / M4A / OGG / WebM · 本地转为 24 kHz 单声道 16-bit WAV（导入不会上传云端）
               </div>
             </div>
-          ) : (
+          )}
+
+          {inputMode === 'mic' && (
             <div className="inset p-4" data-clone-mic-panel>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] font-semibold" style={{ color: 'var(--text-2)' }}>朗读提词卡（读一段自然中文即可）</span>
@@ -432,30 +595,160 @@ export function VoiceCloneTab(props: {
               )}
             </div>
           )}
+
+          {inputMode === 'ai-design' && (
+            <div className="inset space-y-3 p-3.5" data-clone-ai-picker>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11.5px] font-semibold" style={{ color: 'var(--text-1)' }}>
+                  从 AI 音色设计生成的声音中挑选参考干声
+                </span>
+                <button type="button" className="btn-pill ghost" style={{ padding: '2px 10px', fontSize: 10.5 }} onClick={onSwitchToDesign}>
+                  <Sparkles size={10} />去设计更多候选
+                </button>
+              </div>
+
+              {aiCandidates.length > 0 && (
+                <div>
+                  <div className="mb-1.5 text-[10.5px] font-semibold" style={{ color: 'var(--text-3)' }}>
+                    最近 AI 音色设计候选（{aiCandidates.length} 条）
+                  </div>
+                  <div className="vs-ai-picker-list">
+                    {aiCandidates.map((cand, idx) => {
+                      const picked = clip?.sourceCandidateId === cand.id;
+                      return (
+                        <div
+                          key={cand.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs"
+                          style={{
+                            border: `1px solid ${picked ? 'var(--accent-line)' : 'var(--stroke)'}`,
+                            background: picked ? 'var(--accent-soft)' : 'var(--surface-solid)',
+                          }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold" style={{ color: 'var(--text-1)' }}>AI 候选 #{idx + 1}</span>
+                              <span className="pill pill-violet" style={{ fontSize: 9.5, padding: '0.5px 6px' }}>VoiceDesign</span>
+                              <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                                {formatBytes(cand.bytes)}{cand.durationMs ? ` · ${(cand.durationMs / 1000).toFixed(1)}s` : ''}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 truncate text-[11px]" style={{ color: 'var(--text-2)' }}>{cand.description}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              className="btn-pill ghost"
+                              style={{ padding: '3px 9px', fontSize: 10.5 }}
+                              disabled={loadingAiId !== null}
+                              onClick={() => void previewAiSource({ kind: 'candidate', candidate: cand })}
+                            >
+                              {loadingAiId === `play-${cand.id}` ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}试听
+                            </button>
+                            <button
+                              type="button"
+                              data-clone-pick-ai={`candidate:${cand.id}`}
+                              className={`btn-pill ${picked ? 'accent' : 'primary'}`}
+                              style={{ padding: '3px 10px', fontSize: 10.5 }}
+                              disabled={loadingAiId !== null}
+                              onClick={() => void loadFromAiSource({ kind: 'candidate', candidate: cand })}
+                            >
+                              {loadingAiId === cand.id ? <Loader2 size={10} className="animate-spin" /> : null}
+                              {picked ? '已载入裁剪器' : '选为克隆素材'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="mb-1.5 text-[10.5px] font-semibold" style={{ color: 'var(--text-3)' }}>
+                  已定格的 AI 设计 / 出厂 AI 声线（{aiVersions.length} 条）
+                </div>
+                <div className="vs-ai-picker-list">
+                  {aiVersions.map((ver) => {
+                    const picked = clip?.sourceVersionId === ver.id;
+                    return (
+                      <div
+                        key={ver.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs"
+                        style={{
+                          border: `1px solid ${picked ? 'var(--accent-line)' : 'var(--stroke)'}`,
+                          background: picked ? 'var(--accent-soft)' : 'var(--surface-solid)',
+                        }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold" style={{ color: 'var(--text-1)' }}>{ver.label}</span>
+                            <span className={`pill ${ver.source === 'factory' ? 'pill-blue' : 'pill-violet'}`} style={{ fontSize: 9.5, padding: '0.5px 6px' }}>
+                              {ver.source === 'factory' ? '出厂 AI 基线' : 'AI 设计定格'}
+                            </span>
+                            <span className="mono text-[10px]" style={{ color: 'var(--text-3)' }}>
+                              {formatBytes(ver.referenceBytes)}{ver.durationMs ? ` · ${(ver.durationMs / 1000).toFixed(1)}s` : ''}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate text-[11px]" style={{ color: 'var(--text-2)' }}>{ver.description}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="btn-pill ghost"
+                            style={{ padding: '3px 9px', fontSize: 10.5 }}
+                            disabled={loadingAiId !== null}
+                            onClick={() => void previewAiSource({ kind: 'version', version: ver })}
+                          >
+                            {loadingAiId === `play-${ver.id}` ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}试听
+                          </button>
+                          <button
+                            type="button"
+                            data-clone-pick-ai={`version:${ver.id}`}
+                            className={`btn-pill ${picked ? 'accent' : 'primary'}`}
+                            style={{ padding: '3px 10px', fontSize: 10.5 }}
+                            disabled={loadingAiId !== null}
+                            onClick={() => void loadFromAiSource({ kind: 'version', version: ver })}
+                          >
+                            {loadingAiId === ver.id ? <Loader2 size={10} className="animate-spin" /> : null}
+                            {picked ? '已载入裁剪器' : '选为克隆素材'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Step 2: 真实波形裁剪与确定性声学质检 */}
         <section className="card p-5" data-clone-qa-panel>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="wb-display text-lg">② 波形裁剪与声学质检</h2>
+              <h2 className="wb-display text-lg">② 波形裁剪、响度归一与声学质检</h2>
               <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                所有指标由真实 PCM 采样实时计算；避开静音头尾、掌声或底噪段可显著提高克隆一致性。
+                原始素材保留在本地可随时重置；仅裁剪后的副本会在克隆合成时发往云端。
               </p>
             </div>
             {clip !== null && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button type="button" className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={togglePlayTrim}>
                   {playingTrim ? <Pause size={11} /> : <Play size={11} />}
-                  {playingTrim ? '停止选区' : `试听选区 (${(trimEnd - trimStart).toFixed(1)}s)`}
+                  {playingTrim ? '暂停选区' : `试听选区 (${(trimEnd - trimStart).toFixed(1)}s)`}
+                </button>
+                <button type="button" className="btn-pill ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={togglePlayRaw}>
+                  {playingRaw ? <Pause size={11} /> : <Play size={11} />}
+                  {playingRaw ? '暂停原声' : '听原声'}
                 </button>
                 <button
                   type="button"
                   className="btn-pill ghost"
                   style={{ padding: '4px 10px', fontSize: 11 }}
-                  onClick={() => { setClip(null); setCreatedVersion(null); }}
+                  onClick={() => { setTrimStart(0); setTrimEnd(Number(clip.durationSec.toFixed(1))); }}
+                  title="撤回裁剪，恢复选中完整原声"
                 >
-                  <RotateCcw size={11} />清空
+                  <RotateCcw size={11} />重置裁剪
                 </button>
               </div>
             )}
@@ -464,10 +757,24 @@ export function VoiceCloneTab(props: {
           {clip === null || processed === null ? (
             <div className="inset flex flex-col items-center justify-center gap-1.5 py-10 text-center">
               <Waves size={22} style={{ color: 'var(--text-3)', opacity: 0.5 }} />
-              <p className="text-xs" style={{ color: 'var(--text-2)' }}>载入或录制音频后，这里将展示真实 PCM 波形与声学体检</p>
+              <p className="text-xs" style={{ color: 'var(--text-2)' }}>上传、录制或从「AI 设计音色」选入音频后，这里将展示真实 PCM 波形与声学质检</p>
             </div>
           ) : (
             <div className="space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <span className="font-semibold" style={{ color: 'var(--text-1)' }}>
+                  当前素材：{clip.name}
+                  {clip.sourceMode === 'ai-design' && <span className="pill pill-violet ml-2" style={{ fontSize: 9.5 }}>源自 AI 音色设计</span>}
+                </span>
+                <span
+                  className={`pill ${processed.fitsMimoLimit ? 'pill-green' : 'pill-red'}`}
+                  style={{ fontSize: 10 }}
+                  data-clone-base64-check
+                >
+                  MiMo Base64：{(processed.encodedBase64Bytes / 1_000_000).toFixed(2)} / 10.00 MB {processed.fitsMimoLimit ? '✓ 合规' : '✗ 超限'}
+                </span>
+              </div>
+
               <WaveformTrimmer
                 peaks={clip.peaks}
                 durationSec={clip.durationSec}
@@ -536,11 +843,11 @@ export function VoiceCloneTab(props: {
       {/* 右栏：Step 3 权属合规门禁与入库 + Step 4 克隆后验证 */}
       <div className="space-y-4">
         <section className="card flex flex-col gap-3.5 p-5" data-clone-consent-panel>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
               <h2 className="wb-display text-lg">③ 权属声明与命名入库</h2>
               <p className="mt-0.5 text-[11.5px]" style={{ color: 'var(--text-3)' }}>
-                严禁未经授权克隆他人声音（《民法典》第 1023 条合规红线）。
+                严禁未经授权克隆他人声音（《民法典》1023 条红线）；入库后随时可一键撤销授权并清理本地副本。
               </p>
             </div>
             <span className="pill pill-amber" style={{ fontSize: 10 }}><ShieldAlert size={10} />必选门禁</span>
@@ -554,7 +861,7 @@ export function VoiceCloneTab(props: {
               value={voiceName}
               maxLength={40}
               onChange={(e) => setVoiceName(e.target.value)}
-              placeholder="例如：小鲸 · 原创配音版 v1"
+              placeholder="例如：小鲸 · AI 精修克隆 v1"
               className="rounded-lg px-3 py-2 text-xs outline-none"
               style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
             />
@@ -567,7 +874,7 @@ export function VoiceCloneTab(props: {
               value={voiceNote}
               maxLength={300}
               onChange={(e) => setVoiceNote(e.target.value)}
-              placeholder="记录音色特点、适用角色或录制环境，便于日后检索与换引擎重做"
+              placeholder="记录音色特点、适用角色或 AI 设计来源，便于日后检索与换引擎重做"
               className="rounded-lg px-3 py-2 text-xs outline-none"
               style={{ border: '1px solid var(--stroke)', background: 'var(--inset)', color: 'var(--text-1)' }}
             />
@@ -626,7 +933,7 @@ export function VoiceCloneTab(props: {
               className="mt-0.5"
             />
             <span style={{ color: 'var(--text-1)' }}>
-              我确认该参考音频为本人录制或已取得声音权人明确书面授权，不含未授权的真人或艺人声源，且仅在合法合规场景下使用。
+              我确认拥有该声源的合法使用/复刻权限（非未授权他人或艺人声音），并了解：本地导入与裁剪不联网，仅在执行 VoiceClone 合成时会将<strong>裁剪后的参考副本</strong>发往小米 MiMo 云端。
             </span>
           </label>
 
@@ -636,7 +943,7 @@ export function VoiceCloneTab(props: {
               checked={activateImmediately}
               onChange={(e) => setActivateImmediately(e.target.checked)}
             />
-            入库后立即设为当前角色默认声线（切换至 MiMo VoiceClone）
+            入库后立即锁定绑定到角色「<b>{characterName}</b>」（切至 MiMo VoiceClone）
           </label>
 
           <button
@@ -681,7 +988,13 @@ export function VoiceCloneTab(props: {
                       type="button"
                       className="btn-pill ghost"
                       style={{ padding: '2px 9px', fontSize: 10.5 }}
-                      onClick={() => void new Audio(`data:audio/wav;base64,${row.audioBase64}`).play().catch(() => undefined)}
+                      onClick={() => player?.playTrack({
+                        id: `clone-post-${createdVersion.id}-${row.key}`,
+                        title: `${createdVersion.label} · ${row.label}`,
+                        sourceLabel: '克隆试戴',
+                        subtitle: row.text,
+                        audioBase64: row.audioBase64,
+                      })}
                     >
                       播放
                     </button>

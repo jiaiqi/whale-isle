@@ -908,25 +908,38 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   }, 5_000).unref();
   app.on('will-quit', () => { altMonitor.stop(); globalShortcut.unregisterAll(); });
 
-  // 语音宿主（D11）：先创建并注册 IPC，再注入 autodrive（DI——IPC 只挂一次）
+  // 语音宿主（V2 生产闭环）：创作与生产统一走 V2 VoiceProviderRouter + 真实 WAV 口型包络 + 失败不静默换声
   let activeLipPlayer: LipSyncTimelinePlayer | null = null;
+  let lipPlayerDrivenByRealWav = false;
+  const startLipTimeline = (agentId: string, frames: ReturnType<typeof synthesizeTextLipSyncFrames>, realWav: boolean): void => {
+    activeLipPlayer?.stop(true);
+    activeLipPlayer = null;
+    lipPlayerDrivenByRealWav = realWav;
+    activeLipPlayer = new LipSyncTimelinePlayer({
+      frames,
+      onFrame: (frame) => {
+        petWindowManager?.broadcast('pet:lip-sync', { agentId, frame });
+      },
+    });
+    activeLipPlayer.start();
+  };
   const voice = createVoiceHost(process.platform, {
     resolveVoiceId: (characterId) => voiceBindings.resolve(characterId) ?? null,
+    synthesize: (input) => v2KernelHost.synthesizeForProduction(input),
+    onLipFrames: ({ agentId, frames }) => {
+      startLipTimeline(agentId, frames, true);
+    },
     onSpeakerChange: (event) => {
       v2KernelHost.audioMixer.setSpeechDucking(event.state === 'speaking');
-      activeLipPlayer?.stop(true);
-      activeLipPlayer = null;
       if (event.state === 'speaking' && event.activeAgentId !== null) {
-        const agentId = event.activeAgentId;
-        const frames = synthesizeTextLipSyncFrames(event.speakerName || '小鲸', 1800, 60);
-        activeLipPlayer = new LipSyncTimelinePlayer({
-          frames,
-          onFrame: (frame) => {
-            petWindowManager?.broadcast('pet:lip-sync', { agentId, frame });
-          },
-        });
-        activeLipPlayer.start();
+        if (!lipPlayerDrivenByRealWav) {
+          const frames = synthesizeTextLipSyncFrames(event.speakerName || '小鲸', 1800, 60);
+          startLipTimeline(event.activeAgentId, frames, false);
+        }
       } else {
+        activeLipPlayer?.stop(true);
+        activeLipPlayer = null;
+        lipPlayerDrivenByRealWav = false;
         petWindowManager?.broadcast('pet:lip-sync', {
           agentId: 'default',
           frame: { timestampMs: 0, durationMs: 0, viseme: 'closed', amplitude: 0, rmsDb: -80 },
@@ -938,6 +951,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     onSpeechResult: (event) => {
       activeLipPlayer?.stop(true);
       activeLipPlayer = null;
+      lipPlayerDrivenByRealWav = false;
       petWindowManager?.broadcast('pet:speech-result', { ...event });
       if (directorWindow && !directorWindow.isDestroyed()) directorWindow.webContents.send('pet:speech-result', event);
     },
