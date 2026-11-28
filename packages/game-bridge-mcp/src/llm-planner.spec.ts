@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
 import { StardewAdapter } from './adapter';
-import { buildAutonomousDecisionMessages, buildRepeatedEmptyResultSection } from './llm-prompt';
+import { buildAutonomousDecisionMessages, buildRepeatedEmptyResultSection, buildStateContext } from './llm-prompt';
 import {
   BrainSwitch,
   buildFailureMemorySection,
@@ -171,6 +171,57 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(text).toContain('生命值危险（20%）');
     expect(text).toContain('背包空位为 0');
     expect(text).toContain('完全由你自主决定');
+  });
+
+  it('状态上下文按章节预算保留标题与省略说明，不静默截断半行', () => {
+    const short = '时间：第1年春1日 06:00\n## 位置\n地点：Farm';
+    expect(buildStateContext(short, 4000)).toBe(short);
+    expect(buildStateContext('   ', 4000)).toBe('');
+
+    const section = (name: string, n: number) => `## ${name}\n${Array.from({ length: n }, (_, i) => `${name}行${i}: ${'内容'.repeat(12)}`).join('\n')}\n`;
+    const raw = `时间：第1年夏27日 06:20（Sat），天气：晴\n## 基本状态\n体力：270/270\n${section('背包', 90)}${section('箱子', 70)}${section('文字地图', 90)}${section('任务', 30)}`;
+    expect(raw.length).toBeGreaterThan(6000);
+    const out = buildStateContext(raw, 3000);
+    expect(out.length).toBeLessThan(raw.length);
+    for (const header of ['## 基本状态', '## 背包', '## 箱子', '## 文字地图', '## 任务']) {
+      expect(out).toContain(header);
+    }
+    expect(out).toContain('因上下文预算省略约');
+    expect(out).toContain('get_state full=true');
+    // 不得出现半行截断：每行要么完整来自原文，要么是明确的省略说明
+    for (const line of out.split('\n')) {
+      if (line === '') continue;
+      if (line.startsWith('（本节因上下文预算省略约')) continue;
+      expect(raw).toContain(line);
+    }
+    expect(out).not.toContain('…');
+
+    // 单节超长也要标注，且不出现整节静默消失
+    const huge = `## 任务\n${'很长的任务描述'.repeat(800)}`;
+    const truncated = buildStateContext(huge, 1200);
+    expect(truncated).toContain('## 任务');
+    expect(truncated).toContain('因上下文预算省略约');
+  });
+
+  it('状态上下文预算覆盖短原文、无章节、空章节与超长单行分支', () => {
+    expect(buildStateContext('')).toBe('');
+    expect(buildStateContext('   \n  ')).toBe('');
+    expect(buildStateContext('时间：第1年春1日 06:00\n地点：Farm', 4000)).toContain('地点：Farm');
+    const noSections = '很长的无章节状态'.repeat(400);
+    const noSectionCtx = buildStateContext(noSections, 500);
+    expect(noSectionCtx).toContain('因上下文预算省略约');
+    expect(noSectionCtx.length).toBeLessThan(noSections.length + 120);
+    // 保留前缀必须整行、来自原文
+    const keptPrefix = noSectionCtx.split('\n（因上下文预算省略约')[0]!;
+    expect(noSections.startsWith(keptPrefix)).toBe(true);
+    const emptySection = `## 基本状态\n${'填充'.repeat(600)}\n## 任务\n## 作物\n`;
+    const out = buildStateContext(emptySection, 900);
+    expect(out).toContain('## 任务');
+    expect(out).toContain('## 作物');
+    const oneLine = `## 背包\n${'物品'.repeat(900)}`;
+    const cut = buildStateContext(oneLine, 600);
+    expect(cut).toContain('## 背包');
+    expect(cut).toContain('因上下文预算省略约');
   });
 
   it('重复空结果保留成功事实并提醒核对进展，不伪造失败或指定玩法', () => {

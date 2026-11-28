@@ -662,6 +662,85 @@ export function validateMandatoryCommandDecision(
   };
 }
 
+/**
+ * 状态上下文按 `## 章节` 分配预算（V2-P4-01，2026-11-28 真实采样）：
+ * 真机 Town 采购日状态 3993～4506 字符，盲切 4000/3500 会多次切断「任务」与「文字地图」，
+ * 而「箱子/出口/任务」恰是避免空箱取料与空区域清理所需事实。
+ * 本函数只决定每节给多少字符，不决定玩什么；任何省略都写明原字符数与可用工具，绝不静默切半行。
+ */
+const STATE_SECTION_PRIORITY: ReadonlyArray<{ match: RegExp; weight: number }> = [
+  { match: /^基本状态/, weight: 3 },
+  { match: /^当前界面/, weight: 6 },
+  { match: /^位置/, weight: 6 },
+  { match: /^背包/, weight: 8 },
+  { match: /^穿戴/, weight: 2 },
+  { match: /^箱子/, weight: 7 },
+  { match: /^本地出口/, weight: 5 },
+  { match: /^人物/, weight: 2 },
+  { match: /^作物/, weight: 4 },
+  { match: /^附近物体/, weight: 6 },
+  { match: /^文字地图/, weight: 7 },
+  { match: /^任务/, weight: 5 },
+];
+
+function stateSectionWeight(header: string): number {
+  for (const rule of STATE_SECTION_PRIORITY) {
+    if (rule.match.test(header)) return rule.weight;
+  }
+  return 3;
+}
+
+/** 在整行边界内裁剪正文；不产生半行，不用省略号替换正文内容。 */
+function clampToLineBoundary(body: string, budget: number): string {
+  if (body.length <= budget) return body;
+  const candidate = body.slice(0, Math.max(0, budget));
+  const lastBreak = candidate.lastIndexOf('\n');
+  return lastBreak > 0 ? candidate.slice(0, lastBreak) : candidate;
+}
+
+export function buildStateContext(raw: string, budget = 12_000): string {
+  const text = raw.replace(/\r\n/g, '\n').trim();
+  if (text === '') return '';
+  if (text.length <= budget) return text;
+
+  const lines = text.split('\n');
+  const prefix: string[] = [];
+  const sections: Array<{ header: string; body: string[] }> = [];
+  for (const line of lines) {
+    if (line.startsWith('## ')) sections.push({ header: line, body: [] });
+    else if (sections.length === 0) prefix.push(line);
+    else sections[sections.length - 1]!.body.push(line);
+  }
+  if (sections.length === 0) {
+    // 无 `##` 章节的罕见状态也不能静默切半行：按行边界保留并明确标注。
+    const kept = clampToLineBoundary(text, budget);
+    const omitted = text.length - kept.length;
+    return omitted > 0 ? `${kept}\n（因上下文预算省略约 ${omitted} 字；需要完整内容请用 get_state full=true）` : kept;
+  }
+
+  const overhead = sections.reduce((sum, sec) => sum + sec.header.length + 2, 0) + prefix.join('\n').length + 40;
+  const contentBudget = Math.max(400, budget - overhead);
+  const totalWeight = sections.reduce((sum, sec) => sum + stateSectionWeight(sec.header), 0);
+  const out: string[] = [...prefix];
+  for (const sec of sections) {
+    const weight = stateSectionWeight(sec.header);
+    const share = Math.max(200, Math.floor(contentBudget * (weight / totalWeight)));
+    const body = sec.body.join('\n').replace(/\n+$/, '');
+    if (body === '') {
+      out.push(sec.header);
+      continue;
+    }
+    if (body.length <= share) {
+      out.push(`${sec.header}\n${body}`);
+      continue;
+    }
+    const kept = clampToLineBoundary(body, share);
+    const omitted = body.length - kept.length;
+    out.push(`${sec.header}\n${kept}\n（本节因上下文预算省略约 ${omitted} 字；需要完整内容请用对应只读工具查询，例如 get_state full=true、list_chests、get_guide）`);
+  }
+  return out.join('\n');
+}
+
 export function buildAdapterDecisionMessages(params: {
   systemPrompt: string;
   stateRaw: string;
@@ -674,7 +753,7 @@ export function buildAdapterDecisionMessages(params: {
   const extra = params.extraContext === '' ? '' : `\n\n${params.extraContext}`;
   return [
     { role: 'system', content: params.systemPrompt },
-    { role: 'user', content: `当前游戏状态：\n${params.stateRaw.slice(0, 4000)}\n\n最近回执：\n${receipts}${failSection}${extra}\n\n请决定下一步动作，只输出一行 JSON。` },
+    { role: 'user', content: `当前游戏状态：\n${buildStateContext(params.stateRaw)}\n\n最近回执：\n${receipts}${failSection}${extra}\n\n请决定下一步动作，只输出一行 JSON。` },
   ];
 }
 
@@ -699,7 +778,7 @@ export function buildMorningPlanMessages(params: {
 新的一天刚起床（${params.state.season}${params.state.day}日），请根据当前季节/季末、日期、天气（下雨/绿雨不用浇水）、节日、金钱、体力与矿石储备、攻略与经验心得，自主制定今天的游玩计划（2～5 条目标 + 理由 + 今日心情）。
 ${extraParts.join('\n\n')}
 只输出一行 JSON：{"plan":[{"goal":"今日目标","why":"这么安排的理由"}],"mood":"一句话人设心情"}`;
-  const user = `当前晨间状态：\n${params.state.raw.slice(0, 3500)}\n\n请制定今日计划，只输出一行 JSON。`;
+  const user = `当前晨间状态：\n${buildStateContext(params.state.raw, 10_000)}\n\n请制定今日计划，只输出一行 JSON。`;
   return [
     { role: 'system', content: system },
     { role: 'user', content: user },
@@ -773,7 +852,7 @@ export function buildAutonomousDecisionMessages(
 
   // 4) 当前状态 + 环境提示 + 最近回执
   const receiptsText = params.recentReceipts.slice(-5).map((r) => `- ${r}`).join('\n') || '（刚开始）';
-  sections.push(`## 当前游戏状态\n${params.state.raw.slice(0, 4000)}${
+  sections.push(`## 当前游戏状态\n${buildStateContext(params.state.raw)}${
     params.environmentHints === '' ? '' : `\n\n环境事实提示：${params.environmentHints}`
   }\n\n## 最近回执\n${receiptsText}`);
 
