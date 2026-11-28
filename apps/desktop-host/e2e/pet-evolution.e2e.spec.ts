@@ -283,3 +283,103 @@ describe('[E2E-HOST] 桌宠深度体验三阶段', () => {
     }
   });
 });
+
+
+describe('[E2E-HOST] 状态与对话、思考共存', () => {
+  it('状态即时分页且三种气泡全文可读，默认与1.4字号不裁切、不遮脸', { timeout: 100_000 }, async () => {
+    const app = await electron.launch({
+      args: ['--use-mock-keychain', mainEntry], executablePath: electronBinary,
+      env: { ...process.env, PET_STAGE_E2E: '1' },
+    });
+    try {
+      const stage = await waitForWindow(app, 'pet-stage');
+      await stage.waitForFunction(() => Boolean((window as unknown as { __petStageReady?: boolean }).__petStageReady));
+      for (const fontScale of [1, 1.4]) {
+        await stage.emulateMedia({ reducedMotion: fontScale === 1 ? 'no-preference' : 'reduce' });
+        const result = await stage.evaluate(async (scale) => {
+          type Kind = 'dialog' | 'thought' | 'status';
+          const hooks = (window as unknown as { __petStageTest: {
+            hideBubbles(): void;
+            showBubble(kind: string, text: string, opts?: { ttlMs: number }): void;
+            setBubbleStageBox(box: { width: number; height: number }): void;
+            setBubbleContext(context: { fontScale: number; occupied: unknown[] }): void;
+          } }).__petStageTest;
+          hooks.hideBubbles();
+          hooks.setBubbleStageBox({ width: 400, height: 260 });
+          document.documentElement.style.setProperty('--pet-bubble-font-scale', String(scale));
+          hooks.setBubbleContext({ fontScale: scale, occupied: [] });
+          await document.fonts.load('13.5px ShangShouGummy', 'clear_area正在核对');
+          await document.fonts.ready;
+          const full: Record<Kind, string> = {
+            dialog: '先整理背包，再按真实回执记录收获与剩余体力。',
+            thought: '还要确认时间，不能把历史条件当作当前事实。',
+            status: 'clear_area：正在核对本轮任务状态与执行回执，请等待真实结果。'.repeat(3),
+          };
+          hooks.showBubble('dialog', full.dialog, { ttlMs: 60_000 });
+          hooks.showBubble('thought', full.thought, { ttlMs: 60_000 });
+          hooks.showBubble('status', 'clear_area', { ttlMs: 60_000 });
+          const shortNode = document.querySelector('.pet-bubble--status') as HTMLElement;
+          const shortText = shortNode.querySelector('.pet-bubble__text') as HTMLElement;
+          const short = { text: shortText.textContent, width: shortNode.offsetWidth, textWidth: shortText.clientWidth,
+            fits: shortText.scrollHeight <= shortText.clientHeight + 1 && shortText.scrollWidth <= shortText.clientWidth + 1 };
+          hooks.showBubble('status', full.status, { ttlMs: 60_000 });
+          const pages: Record<Kind, string[]> = { dialog: [], thought: [], status: [] };
+          const complete: Record<Kind, boolean> = { dialog: false, thought: false, status: false };
+          let fits = true;
+          let wholeLines = true;
+          let noOverlap = true;
+          let avoidsFace = true;
+          let statusInstant = true;
+          const started = performance.now();
+          while (performance.now() - started < 32_000) {
+            const rects: Array<{ x: number; y: number; width: number; height: number }> = [];
+            for (const kind of ['dialog', 'thought', 'status'] as const) {
+              const node = document.querySelector(`.pet-bubble--${kind}`) as HTMLElement;
+              const text = node.querySelector('.pet-bubble__text') as HTMLElement;
+              const pageText = node.dataset.pageText ?? '';
+              const content = text.textContent ?? '';
+              if (kind === 'status') statusInstant &&= content === pageText;
+              fits &&= text.scrollHeight <= text.clientHeight + 1 && text.scrollWidth <= text.clientWidth + 1;
+              if (content === pageText && content !== '') {
+                const index = Number(node.dataset.page ?? '1') - 1;
+                pages[kind][index] = content;
+                complete[kind] = index + 1 === Number(node.dataset.pageCount);
+                const range = document.createRange();
+                range.selectNodeContents(text);
+                const bounds = [text, text.parentElement!, node].map((el) => el.getBoundingClientRect());
+                const top = Math.max(...bounds.map((r) => r.top));
+                const bottom = Math.min(...bounds.map((r) => r.bottom));
+                wholeLines &&= [...range.getClientRects()].every((r) => r.top >= top - 1 && r.bottom <= bottom + 1);
+              }
+              rects.push({ x: node.offsetLeft, y: node.offsetTop, width: node.offsetWidth, height: node.offsetHeight });
+            }
+            const overlaps = (a: typeof rects[number], b: typeof rects[number]): boolean =>
+              a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+            const face = { x: 144, y: 73, width: 112, height: 159 };
+            avoidsFace &&= rects.every((rect) => !overlaps(rect, face));
+            noOverlap &&= rects.every((rect, index) => rects.slice(index + 1).every((other) => !overlaps(rect, other)));
+            if (Object.values(complete).every(Boolean)) break;
+            await new Promise((resolve) => setTimeout(resolve, 40));
+          }
+          hooks.hideBubbles();
+          document.documentElement.style.setProperty('--pet-bubble-font-scale', '1');
+          hooks.setBubbleContext({ fontScale: 1, occupied: [] });
+          return { full, pages, complete, fits, wholeLines, statusInstant, short, noOverlap, avoidsFace };
+        }, fontScale);
+        expect(result.short).toMatchObject({ text: 'clear_area', fits: true });
+        expect(result.short.width).toBeGreaterThanOrEqual(120);
+        expect(result.short.textWidth).toBeGreaterThanOrEqual(60);
+        expect(result.statusInstant).toBe(true);
+        expect(result.complete).toEqual({ dialog: true, thought: true, status: true });
+        for (const kind of ['dialog', 'thought', 'status'] as const) expect(result.pages[kind].join('')).toBe(result.full[kind]);
+        expect(result.pages.status.length).toBeGreaterThan(1);
+        expect(result.fits).toBe(true);
+        expect(result.wholeLines).toBe(true);
+        expect(result.noOverlap).toBe(true);
+        expect(result.avoidsFace).toBe(true);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});

@@ -1,5 +1,7 @@
 # Whale Isle V2 需求追踪矩阵（Requirements Traceability Matrix）
 
+> V2-P4-01 桌宠可读性/稳定性续修：status不再豁免容量测量；renderer过期请求不得销毁新实例，旧播放回调不得消费新队列，动作音频释放绑定拥有者。Electron三泡回归覆盖默认/1.4字号与逐页全文，角色回归覆盖旧视频延迟、并发重载及旧动作延迟；真实重影与夏26后溢出继续观察。
+
 > 矩阵沿用工程化编号（`REQ-CORE`…），与原文同名编号不同义，引用时以本文档映射为准。
 
 > **上游依据**：[blueprint/](./blueprint/README.md)（`MASTER` + `01`–`17`）、[REQUIREMENTS.md](./REQUIREMENTS.md) 及用户第一轮架构审查反馈（2026-11-25）。  

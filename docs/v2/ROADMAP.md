@@ -1,5 +1,7 @@
 # Whale Isle V2 完整开发路线图（P0–P5 · 唯一工单真源）
 
+> V2-P4-01 13:09续修：状态气泡统一容量分页并扩大最小宽度；角色加载、播放回调与动作音频按独立实例释放。Electron三泡共存及角色延迟重载回归3/3通过，最终音频归属修改后角色回归1/1通过；隔离存档推进夏26，仍未达到秋1目标，保持唯一NEXT。
+
 > **工单状态机（7 态唯一流转）**：  
 > `PENDING` → `NEXT`（全局唯一激活待办）→ `DOING` → `IMPLEMENTED_UNVERIFIED`（代码与单测/仿真通过，待真机/真实平台验证） / `BLOCKED`（依赖或外部阻塞） → `DONE`（全部验收标准 + 真实验证证据齐全） | `REOPENED`（复测退回重开）  
 > **铁律**：每完成一个工单必须同步更新本文件、[TRACEABILITY.md](./TRACEABILITY.md)、[CURRENT.md](./CURRENT.md) 与 [EVALUATION.md](./EVALUATION.md)；不得用 Mock/仿真通过冒充真机/真实平台 `DONE`。

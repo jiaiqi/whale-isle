@@ -502,7 +502,8 @@ export function bubbleWidthBudget(
         : Math.min(Math.floor(safeWidth * 0.54), 228);
   }
   const maxWidth = Math.max(48, Math.min(rawMax, safeWidth - 8));
-  const rawMin = kind === 'status' ? 88 : kind === 'reaction' ? 76 : 104;
+  // 状态条还需预留图标、gap 与双侧 padding，避免 clear_area 等短状态被挤成窄列。
+  const rawMin = kind === 'status' ? 120 : kind === 'reaction' ? 76 : 104;
   return { minWidth: Math.min(rawMin, maxWidth), maxWidth };
 }
 

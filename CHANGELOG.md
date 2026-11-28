@@ -1,5 +1,7 @@
 # Changelog
 
+> 2026-11-28 V2-P4-01：状态气泡按真实容量分页，避免clear_area被挤成窄列；角色每次加载独立renderer，过期加载/播放不再清理新角色资源，动作音频按实例释放。新增三气泡共存与延迟角色重载Electron回归；真实两季验收仍进行中。
+
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 

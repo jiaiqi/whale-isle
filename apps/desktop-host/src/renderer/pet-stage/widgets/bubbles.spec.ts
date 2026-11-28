@@ -47,6 +47,15 @@ function assertNoOverlapAndInside(rects: readonly BubbleRect[], stage: { width: 
 }
 
 describe('bubble-types（7 种语义 × 7 种情绪 × 4 套随包字体）', () => {
+  it('三泡布局为短状态词保留图标与正文预算，极窄舞台仍受边界约束', () => {
+    const status = estimateBubbleSize({ kind: 'status', text: 'clear_area', stage: STAGE, activeCount: 3 });
+    expect(status.width).toBeGreaterThanOrEqual(120);
+    expect(status.lines).toBe(1);
+    expect(computeTypewriterPlan('status', 'clear_area').enabled).toBe(false);
+    const narrow = bubbleWidthBudget('status', 80, 3);
+    expect(narrow.minWidth).toBeLessThanOrEqual(narrow.maxWidth);
+    expect(narrow.maxWidth).toBeLessThanOrEqual(72);
+  });
   it('7 种气泡（含 legacy 经典蓝玻）均具备独立优先级、TTL 与零彩色 Emoji 令牌', () => {
     expect(ALL_BUBBLE_KINDS).toHaveLength(7);
     expect(ALL_BUBBLE_KINDS).toContain('legacy');

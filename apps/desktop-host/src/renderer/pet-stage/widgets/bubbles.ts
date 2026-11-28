@@ -594,7 +594,7 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       let pages: string[];
       let blocked = availableH < linePx || node.text.clientWidth <= 0;
       try {
-        pages = blocked ? [remaining] : kind === 'status' ? [fullText] : paginateBubbleText(remaining, (candidate) => {
+        pages = blocked ? [remaining] : paginateBubbleText(remaining, (candidate) => {
           node.text.textContent = candidate;
           return node.text.scrollHeight <= node.text.clientHeight + 1 && node.text.scrollWidth <= node.text.clientWidth + 1;
         });

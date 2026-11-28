@@ -332,8 +332,7 @@ const videoFactory: VideoFactory = (src): VideoHandle => {
   };
 };
 
-const webmRenderer = new WebmVideoRenderer({ host, videoFactory });
-let renderer: WebmVideoRenderer | SpritesheetRenderer | PoseSkinRenderer = webmRenderer;
+let renderer: WebmVideoRenderer | SpritesheetRenderer | PoseSkinRenderer = new WebmVideoRenderer({ host, videoFactory });
 
 /** T-M6-48：CrossPet 姿势图句柄（<img> 交叉淡入）。 */
 class PoseImageSurface implements VideoHandle {
@@ -457,20 +456,28 @@ class CanvasSpriteSurface implements VideoHandle {
 let activeSpriteAudio: HTMLAudioElement | null = null;
 let sfxVolume = 0.7;
 let speakerDucking = false;
-const spriteAudio: SpriteAudioController = {
-  async play(src, opts) {
-    activeSpriteAudio?.pause();
-    const audio = new Audio(src);
-    activeSpriteAudio = audio;
-    audio.volume = opts.volume;
-    await audio.play();
-  },
-  stop() { activeSpriteAudio?.pause(); activeSpriteAudio = null; },
-  setVolume(volume) {
-    sfxVolume = volume;
-    if (activeSpriteAudio !== null) activeSpriteAudio.volume = speakerDucking ? volume * 0.15 : volume;
-  },
-};
+function createSpriteAudio(): SpriteAudioController {
+  let ownedAudio: HTMLAudioElement | null = null;
+  return {
+    async play(src, opts) {
+      activeSpriteAudio?.pause();
+      const audio = new Audio(src);
+      ownedAudio = audio;
+      activeSpriteAudio = audio;
+      audio.volume = opts.volume;
+      await audio.play();
+    },
+    stop() {
+      ownedAudio?.pause();
+      if (activeSpriteAudio === ownedAudio) activeSpriteAudio = null;
+      ownedAudio = null;
+    },
+    setVolume(volume) {
+      sfxVolume = volume;
+      if (ownedAudio !== null) ownedAudio.volume = speakerDucking ? volume * 0.15 : volume;
+    },
+  };
+}
 const surfaceFactory = (src: string, meta: SpriteMeta, rate: number): VideoHandle => new CanvasSpriteSurface(src, meta, rate);
 
 
@@ -505,12 +512,15 @@ function safePlayAction(action: PetActionState): void {
     return;
   }
   playInFlight = true;
-  void renderer.play(action)
+  const playbackRenderer = renderer;
+  void playbackRenderer.play(action)
     .catch((err: unknown) => {
+      if (playbackRenderer !== renderer) return;
       if (err instanceof Error && err.message.includes('禁止并发切换')) {
         queuedPlayAction = action;
         if (queuedPlayTimer === null) {
           queuedPlayTimer = setTimeout(() => {
+            if (playbackRenderer !== renderer) return;
             queuedPlayTimer = null;
             const retry = queuedPlayAction;
             queuedPlayAction = null;
@@ -520,6 +530,7 @@ function safePlayAction(action: PetActionState): void {
       }
     })
     .finally(() => {
+      if (playbackRenderer !== renderer) return;
       playInFlight = false;
       const next = queuedPlayAction;
       if (next !== null && queuedPlayTimer === null) {
@@ -551,40 +562,51 @@ async function loadCharacterManifest(id: string): Promise<void> {
     ? await bridge.crossPetLines(id).catch(() => ({}))
     : undefined;
   if (seq !== manifestLoadSeq) return;
-  renderer.dispose();
-  // 防重影：切换角色/渲染器时清空残留媒体层，防止异步切换留下多张叠层
-  for (const media of stage.querySelectorAll('video, canvas, img')) media.remove();
-  playInFlight = false;
-  queuedPlayAction = null;
-  if (queuedPlayTimer !== null) {
-    clearTimeout(queuedPlayTimer);
-    queuedPlayTimer = null;
-  }
+  // 每次加载独立持有资源；过期请求只能清理自己的实例。
+  let nextRenderer: typeof renderer;
   if (rawManifest.renderer === 'sprite-sheet') {
-    renderer = new SpritesheetRenderer({
+    nextRenderer = new SpritesheetRenderer({
       host,
       surfaceFactory,
-      audio: spriteAudio,
+      audio: createSpriteAudio(),
       sfxVolume,
       spriteMetaLoader: async (src) => (await fetch(src)).json() as Promise<unknown>,
     });
   } else if (rawManifest.renderer === 'pose-skin') {
-    renderer = new PoseSkinRenderer({
+    nextRenderer = new PoseSkinRenderer({
       host,
       imageFactory: poseImageFactory,
       lines: poseLines ?? {},
       effects: mergePoseEffects(POSE_EFFECTS, config?.ok === true ? config.fx : undefined),
     });
   } else {
-    renderer = webmRenderer;
+    nextRenderer = new WebmVideoRenderer({ host, videoFactory });
   }
-  await renderer.load(rawManifest);
-  if (seq !== manifestLoadSeq) {
+  try {
+    await nextRenderer.load(rawManifest);
+    if (seq !== manifestLoadSeq) {
+      nextRenderer.dispose();
+      return;
+    }
     renderer.dispose();
-    return;
+    for (const media of stage.querySelectorAll('video, canvas, img')) media.remove();
+    renderer = nextRenderer;
+    playInFlight = false;
+    queuedPlayAction = null;
+    if (queuedPlayTimer !== null) {
+      clearTimeout(queuedPlayTimer);
+      queuedPlayTimer = null;
+    }
+    await nextRenderer.play('idle');
+    if (seq !== manifestLoadSeq) {
+      nextRenderer.dispose();
+      return;
+    }
+  } catch (error) {
+    nextRenderer.dispose();
+    if (seq !== manifestLoadSeq) return;
+    throw error;
   }
-  await renderer.play('idle');
-  if (seq !== manifestLoadSeq) return;
   poseConfig = config?.ok === true ? config : null;
   lastFailureAt = 0;
   if (longThinkTimer !== null) { clearTimeout(longThinkTimer); longThinkTimer = null; }
@@ -1874,6 +1896,8 @@ void bridge.appMeta().then((meta) => {
   (window as unknown as { __petStageReady: boolean }).__petStageReady = Boolean(meta);
   if (meta.testMode) {
     (window as unknown as { __petStageTest: object }).__petStageTest = {
+      reloadCharacter: (id: string) => loadCharacterManifest(id),
+      playAction: (action: PetActionState) => safePlayAction(action),
       showBubbles(input: { thought: string; dialog: string }) {
         widgets?.showThought(input.thought);
         widgets?.showDialog(input.dialog);
