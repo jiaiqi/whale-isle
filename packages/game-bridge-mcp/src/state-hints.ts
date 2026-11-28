@@ -427,6 +427,19 @@ export function extractEnvironmentHints(
     normal.push('多箱查找先 list_chests({}) 看全览坐标；1.6工具名 喷壶/十字镐/竹鱼竿');
   }
 
+  // 真机 2026-11-28 秋9：interact(13,7) 撞「只有玛妮的好朋友才能进她的卧室」对话框 →
+  // dialogue 关掉 → 再 move_to/interact 又被同一个对话框打断，连续 11 次失败。
+  // 这类「再次靠近就重新弹同一句拒绝对话」的门是硬前置（好感/剧情/时间），当场无法绕过。
+  const blockedDoor = /(?:有界面打开了|移动被打断)[\s\S]{0,40}对话框[\s\S]{0,80}?(?:只有|才能|得先)/.test(last3Receipts)
+    || /(?:只有[^。\n]{0,20}(?:好朋友|朋友|好感)|得先和[^。\n]{0,20}好感)[^。\n]{0,10}(?:才能|才可)/.test(last3Receipts);
+  if (blockedDoor) {
+    const door = /对话框[：:]\s*([^\n]{1,40})/.exec(last3Receipts)?.[1]?.trim() ?? '';
+    normal.push(`靠近就被同一句对话挡住${door === '' ? '' : `（「${door.slice(0, 30)}」）`}：这属好感/剧情/时间门槛，当场再试不会变，换个目标或改日再来`);
+  } else if (/(?:移动被打断|有界面打开了)[\s\S]{0,30}DialogueBox/.test(last3Receipts)) {
+    // 刚 dialogue 完又被说「有界面打开」：界面状态需以 get_state 为准，别在怀疑中反复重试同一坐标。
+    normal.push('刚关过对话又报「有界面打开」：先 get_state 确认真实界面，再决定是否重试同一坐标');
+  }
+
   // 真机 2026-11-28 秋8：Farm → Town → Farm → Town 连续往返（travelPingPong 3 次），
   // 每次都是「去下一件事」而没把当前地图的事收尾。这里只陈述往返事实。
   const travelDests = recentReceipts

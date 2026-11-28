@@ -178,6 +178,26 @@ describe('T-M6-69 规则日程解析器', () => {
     expect(night).toContain('sleep({"force":true})');
   });
 
+  it('反复撞同一扇好感门时点名门槛（真机 2026-11-28 秋9 玛妮卧室）', () => {
+    const stateRaw = '时间：第1年秋9日 09:10（Wed）\n## 位置\n地点：Forest';
+    const receipts = [
+      'FAILED interact: 失败：移动被打断：有界面打开了（DialogueBox），请先处理界面。当前界面：\n对话框：只有玛妮的好朋友才能进入她的卧室。\n（用 dialogue 不带参数继续/关闭对话）',
+      'COMPLETED dialogue: 成功：对话已推进。当前界面：无（可以自由行动）',
+      'FAILED move_to: 失败：移动被打断：有界面打开了（DialogueBox），请先处理界面。当前界面：',
+    ];
+    const hints = extractEnvironmentHints(stateRaw, 9 * 60 + 10, receipts);
+    expect(hints).toContain('好感/剧情/时间门槛');
+    expect(hints).toContain('玛妮');
+
+    // 普通对话打断（不是拒绝对话）给的是核对界面，不是门槛结论
+    const plain = [
+      'FAILED interact: 失败：移动被打断：有界面打开了（DialogueBox），请先处理界面。当前界面：\n对话框：你好呀。',
+    ];
+    const plainHints = extractEnvironmentHints(stateRaw, 9 * 60 + 10, plain);
+    expect(plainHints).toContain('先 get_state 确认真实界面');
+    expect(plainHints).not.toContain('好感/剧情/时间门槛');
+  });
+
   it('当季作物收益事实进入环境提示；季末来不及成熟时不给数字', () => {
     const autumnEarly = '时间：第1年秋2日 08:00（Tue）\n## 位置\n地点：Farm';
     const h = extractEnvironmentHints(autumnEarly, 8 * 60, []);
