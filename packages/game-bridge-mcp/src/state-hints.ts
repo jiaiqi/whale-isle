@@ -434,7 +434,15 @@ export function extractEnvironmentHints(
     || /(?:只有[^。\n]{0,20}(?:好朋友|朋友|好感)|得先和[^。\n]{0,20}好感)[^。\n]{0,10}(?:才能|才可)/.test(last3Receipts);
   if (blockedDoor) {
     const door = /对话框[：:]\s*([^\n]{1,40})/.exec(last3Receipts)?.[1]?.trim() ?? '';
-    normal.push(`靠近就被同一句对话挡住${door === '' ? '' : `（「${door.slice(0, 30)}」）`}：这属好感/剧情/时间门槛，当场再试不会变，换个目标或改日再来`);
+    // 回执若已给出「几点出门/wait until=X」这类**限时**预兆，门槛是会自己消失的，
+    // 不能只说「改日再来」（真机 2026-11-28 秋9：玛妮 10:00 出门，模型仍先去撞门）。
+    const timed = /(\d{1,2}:\d{2})[^。\n]{0,20}出门|wait[^。\n]{0,12}until\s*=\s*(\d{1,2}:\d{2})/.exec(last3Receipts);
+    const at = timed?.[1] ?? timed?.[2] ?? '';
+    if (at !== '') {
+      urgent.push(`这扇门是限时的：回执说 ${at} 之后就能进（现在还没到）。先去别处做事，或 wait({"until":"${at}"})，不要继续在门口换坐标试探`);
+    } else {
+      normal.push(`靠近就被同一句对话挡住${door === '' ? '' : `（「${door.slice(0, 30)}」）`}：这属好感/剧情/时间门槛，当场再试不会变，换个目标或改日再来`);
+    }
   } else if (/(?:移动被打断|有界面打开了)[\s\S]{0,30}DialogueBox/.test(last3Receipts)) {
     // 刚 dialogue 完又被说「有界面打开」：界面状态需以 get_state 为准，别在怀疑中反复重试同一坐标。
     normal.push('刚关过对话又报「有界面打开」：先 get_state 确认真实界面，再决定是否重试同一坐标');

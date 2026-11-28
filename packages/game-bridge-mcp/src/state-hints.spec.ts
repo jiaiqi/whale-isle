@@ -178,6 +178,19 @@ describe('T-M6-69 规则日程解析器', () => {
     expect(night).toContain('sleep({"force":true})');
   });
 
+  it('限时门槛（几点出门）给 wait 方案而不是只说改日再来（真机 2026-11-28 秋9）', () => {
+    const stateRaw = '时间：第1年秋9日 09:00（Wed）\n## 位置\n地点：Forest';
+    const timed = [
+      'FAILED move_to: 失败：找不到通往(13,7)的路（要穿过玛妮的房门，得先和玛妮有 2 心好感才能进。玛妮按今天的日程 10:00 出门去皮埃尔的杂货店（SeedShop），到时候再找（wait 可以写 until=10:00））',
+    ];
+    const hints = extractEnvironmentHints(stateRaw, 9 * 60, timed);
+    expect(hints).toContain('这扇门是限时的');
+    expect(hints).toContain('10:00');
+    expect(hints).toContain('wait');
+    // 限时门槛不该退化成「改日再来」
+    expect(hints).not.toContain('改日再来');
+  });
+
   it('反复撞同一扇好感门时点名门槛（真机 2026-11-28 秋9 玛妮卧室）', () => {
     const stateRaw = '时间：第1年秋9日 09:10（Wed）\n## 位置\n地点：Forest';
     const receipts = [
