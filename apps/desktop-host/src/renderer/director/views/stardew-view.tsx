@@ -53,13 +53,20 @@ export interface GameWorkspaceViewProps {
   objective: string | null;
   chatFilter: ReceiptFilter;
   bwfHud: boolean;
+  dockToGame?: boolean;
   bwfPort: number;
   editingBwfPort: boolean;
   bwfPortDraft: string;
   avatarSync: AvatarSyncViewState | null;
   stardewPrefs?: StardewLaunchPrefsView | null;
   onLaunchPrefsChanged?: (prefs: StardewLaunchPrefsView) => void;
-  dayPlan: { dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null;
+  dayPlan: {
+    dayKey: string;
+    items: Array<{ goal: string; why: string; status: string; addedAt?: string; completedAt?: string }>;
+    mood?: string;
+    updateWhy?: string;
+    history?: Array<{ atClock: string; atTs: number; kind: 'morning' | 'update'; summary: string; why?: string }>;
+  } | null;
   insights: Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }>;
   stardewHealth: { report: GameHealthView | null; probing: boolean; reprobe: () => void };
   sessionId: string | undefined;
@@ -67,6 +74,7 @@ export interface GameWorkspaceViewProps {
   onSetGameSubtab: (sub: 'monitor' | 'mods') => void;
   onSetChatFilter: (filter: ReceiptFilter) => void;
   onToggleBwfHud: () => void;
+  onToggleDockToGame?: () => void;
   onSetEditingBwfPort: (editing: boolean) => void;
   onSetBwfPortDraft: (draft: string) => void;
   onSaveBwfPort: () => void;
@@ -93,6 +101,7 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
     objective,
     chatFilter,
     bwfHud,
+    dockToGame = true,
     bwfPort,
     editingBwfPort,
     bwfPortDraft,
@@ -107,6 +116,7 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
     onSetGameSubtab,
     onSetChatFilter,
     onToggleBwfHud,
+    onToggleDockToGame,
     onSetEditingBwfPort,
     onSetBwfPortDraft,
     onSaveBwfPort,
@@ -221,6 +231,15 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
               className={`pill cursor-pointer${bwfHud ? ' pill-green' : ''}`}
             >
               <Monitor size={11} />游戏内提示 {bwfHud ? '开' : '关'}
+            </button>
+            <button
+              type="button"
+              data-dock-to-game={dockToGame ? 'on' : 'off'}
+              onClick={onToggleDockToGame}
+              title="开启后：打开星露谷自动将桌宠停靠到游戏窗口右下角（手拖移开后本局不再拉回）"
+              className={`pill cursor-pointer${dockToGame ? ' pill-green' : ''}`}
+            >
+              <Monitor size={11} />桌宠贴边游戏 {dockToGame ? '开' : '关'}
             </button>
             {editingBwfPort ? (
               <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px]" style={{ border: '1px solid var(--blue-line)', background: 'var(--inset)' }} data-bwf-port-editor>
@@ -351,23 +370,43 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
               />
               <GameDecisionTimeline decisions={decisions} objectiveActive={objective !== null} />
               <div className="card px-4 py-3.5" data-day-plan-panel>
-                <div className="mb-1.5 flex items-center justify-between text-[11px]" style={{ color: 'var(--text-2)' }}>
-                  <span>当日计划（只读 · {dayPlan?.dayKey ?? '未生成'}）</span>
-                  {dayPlan?.mood !== undefined && <span className="text-[9.5px]" style={{ color: 'var(--violet)' }}>{dayPlan.mood}</span>}
+                <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]" style={{ color: 'var(--text-2)' }}>
+                  <div className="flex items-center gap-1.5">
+                    <span>当日 Todo List（{dayPlan?.dayKey ?? '未生成'}）</span>
+                    {dayPlan !== null && dayPlan.items.length > 0 && (
+                      <span className="pill pill-green mono" style={{ fontSize: 9 }}>
+                        {dayPlan.items.filter((i) => i.status === 'done').length}/{dayPlan.items.length} 完成
+                      </span>
+                    )}
+                  </div>
+                  {dayPlan?.mood !== undefined && <span className="truncate text-[9.5px]" style={{ color: 'var(--violet)' }}>{dayPlan.mood}</span>}
                 </div>
                 {dayPlan?.updateWhy !== undefined && (
-                  <div className="mb-1.5 text-[10px]" style={{ color: 'var(--amber)' }}>调整原因：{dayPlan.updateWhy}</div>
+                  <div className="mb-2 rounded-md px-2 py-1 text-[10px]" style={{ color: 'var(--amber)', background: 'var(--inset)' }}>
+                    最近调整原因：{dayPlan.updateWhy}
+                  </div>
                 )}
                 {dayPlan !== null && dayPlan.items.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
                     {dayPlan.items.map((item, idx) => (
-                      <div key={`${item.goal}:${idx}`} className="rounded-lg px-2 py-1 text-[10.5px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
-                        <div className="flex items-center gap-1.5">
+                      <div key={`${item.goal}:${idx}`} data-day-plan-item={item.status} className="rounded-lg px-2.5 py-1.5 text-[10.5px]" style={{ background: 'var(--surface-2)', border: '1px solid var(--stroke)' }}>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="mono font-bold" style={{
+                            color: item.status === 'done' ? 'var(--green)' : item.status === 'in_progress' ? 'var(--blue)' : 'var(--text-3)',
+                          }}>{item.status === 'done' ? '☑' : item.status === 'in_progress' ? '▶' : '☐'}</span>
                           <span className="rounded px-1 py-px text-[9px]" style={{
                             color: item.status === 'done' ? 'var(--green)' : item.status === 'in_progress' ? 'var(--blue)' : 'var(--text-3)',
                             background: 'var(--inset)',
                           }}>{item.status === 'done' ? '已完成' : item.status === 'in_progress' ? '进行中' : '待办'}</span>
-                          <span style={{ color: 'var(--text-1)' }}>{item.goal}</span>
+                          <span className={item.status === 'done' ? 'line-through opacity-75' : ''} style={{ color: 'var(--text-1)' }}>{item.goal}</span>
+                          {item.status === 'done' && item.completedAt !== undefined && item.completedAt !== '' && (
+                            <span className="mono ml-auto rounded px-1 py-px text-[9px]" style={{ color: 'var(--green)', background: 'var(--inset)' }}>
+                              ✓ {item.completedAt}
+                            </span>
+                          )}
+                          {item.status !== 'done' && item.addedAt !== undefined && item.addedAt !== '' && (
+                            <span className="mono ml-auto text-[9px]" style={{ color: 'var(--text-3)' }}>建 {item.addedAt}</span>
+                          )}
                         </div>
                         {item.why !== '' && <div className="mt-0.5 text-[9.5px]" style={{ color: 'var(--text-3)' }}>{item.why}</div>}
                       </div>
@@ -376,8 +415,44 @@ export function GameWorkspaceView(props: GameWorkspaceViewProps): React.JSX.Elem
                 ) : (
                   <span className="text-[10.5px]" style={{ color: 'var(--text-3)' }}>开启 LLM 大脑启动后，小鲸起床会自动拟定今日计划。</span>
                 )}
+                {dayPlan?.history !== undefined && dayPlan.history.length > 0 && (
+                  <div className="mt-2.5 pt-2" style={{ borderTop: '1px dashed var(--stroke)' }} data-day-plan-history>
+                    <div className="mb-1 flex items-center justify-between text-[10px]" style={{ color: 'var(--text-3)' }}>
+                      <span>计划更改与完成日志</span>
+                      <span className="mono">{dayPlan.history.length} 条</span>
+                    </div>
+                    <div className="flex max-h-36 flex-col gap-1 overflow-y-auto">
+                      {[...dayPlan.history].reverse().map((h, hIdx) => {
+                        const wall = new Date(h.atTs).toTimeString().slice(0, 5);
+                        return (
+                          <div key={`${h.atTs}:${hIdx}`} className="rounded-md px-2 py-1 text-[9.5px]" style={{ background: 'var(--inset)' }}>
+                            <div className="flex items-center gap-1.5">
+                              <span className="mono rounded px-1 py-px text-[8.5px]" style={{
+                                color: h.kind === 'morning' ? 'var(--violet)' : 'var(--amber)',
+                                background: 'var(--surface-2)',
+                              }}>{h.kind === 'morning' ? '晨间立项' : '调整'}</span>
+                              <span className="mono" style={{ color: 'var(--text-2)' }}>{h.atClock}</span>
+                              <span className="mono ml-auto text-[8.5px]" style={{ color: 'var(--text-3)' }}>{wall}</span>
+                            </div>
+                            <div className="mt-0.5" style={{ color: 'var(--text-1)' }}>{h.summary}</div>
+                            {h.why !== undefined && h.why !== '' && (
+                              <div className="mt-0.5" style={{ color: 'var(--text-3)' }}>原因：{h.why}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-              <GameGoalChain goals={STARDEW_GOALS} activeIndex={0} />
+              <GameGoalChain
+                goals={dayPlan !== null && dayPlan.items.length > 0
+                  ? dayPlan.items.map((item) => (item.status === 'done' ? `✓ ${item.goal}` : item.goal))
+                  : STARDEW_GOALS}
+                activeIndex={dayPlan !== null && dayPlan.items.length > 0
+                  ? Math.max(0, dayPlan.items.findIndex((item) => item.status === 'in_progress'))
+                  : 0}
+              />
             </section>
 
             <GameReceiptTimeline

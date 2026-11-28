@@ -693,6 +693,7 @@ export interface DirectorBridge {
   // T-M6-20 桌宠缩放（中控台滑块）——主进程按脚底锚点改窗口尺寸
   prefsGet(): Promise<PetDesktopPrefs>;
   prefsSet(update: Partial<PetDesktopPrefs>): Promise<unknown>;
+  onGlobalPrefsChanged(handler: (prefs: PetDesktopPrefs) => void): () => void;
   // T-M6-21 多角色
   characterList(): Promise<CharacterSummary[]>;
   characterSelect(id: string): Promise<{ ok: boolean; error?: string }>;

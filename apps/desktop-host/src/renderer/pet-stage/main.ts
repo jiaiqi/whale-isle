@@ -54,7 +54,8 @@ interface PetStageBridge {
   setPeek?(active: boolean): Promise<{ ok: boolean }>;
   onGlobalPrefsChanged?(handler: (prefs: PetDesktopPrefs) => void): () => void;
   onCoopSpeaker?(handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void;
-  onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }) => void): () => void;
+  onSpeechResult?(handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled'; text?: string }) => void): () => void;
+  onGameDockState?(handler: (payload: { active: boolean }) => void): () => void;
   onLipSync?(handler: (event: { agentId: string; frame: { viseme: string; amplitude: number } }) => void): () => void;
   onPetAction?(handler: (event: { agentId: string; action: string }) => void): void;
   onPetBubble?(handler: (event: { agentId: string; text: string; kind?: PetBubbleKind; mood?: PetBubbleMood; ttlMs?: number }) => void): void;
@@ -153,6 +154,14 @@ let patrolClipActive = false;
 let patrolFlipped = false;
 let workBusy = false;
 let workAsking = false;
+let gameDockActive = false;
+let autodriveBusyUntil = 0;
+bridge.onGameDockState?.((payload) => {
+  gameDockActive = payload.active;
+  void Promise.all([bridge.winPosition(), bridge.screenBounds()]).then(([pos, bounds]) => {
+    if (pos !== null) updateEdgeHint(pos[0], bounds.windowBounds ?? bounds, dockedEdge);
+  }).catch(() => undefined);
+});
 let workCardCount = 0;
 let wasWorkBusy = false;
 let lastWorkShakeLineAt = 0;
@@ -206,11 +215,13 @@ function syncBubbleContext(): void {
 function updateEdgeHint(winX: number, wb: { minX: number; maxX: number }, docked: 'left' | 'right' | null): void {
   const next: ScreenEdgeHint = docked !== null
     ? docked
-    : winX <= wb.minX + 48
-      ? 'left'
-      : winX >= wb.maxX - 48
-        ? 'right'
-        : null;
+    : gameDockActive
+      ? 'right'
+      : winX <= wb.minX + 48
+        ? 'left'
+        : winX >= wb.maxX - 48
+          ? 'right'
+          : null;
   if (next !== bubbleEdgeHint) {
     bubbleEdgeHint = next;
     syncBubbleContext();
@@ -268,32 +279,54 @@ const host: RendererHost = {
 
 const videoFactory: VideoFactory = (src): VideoHandle => {
   const el = document.createElement('video');
-  el.src = src;
   el.muted = true;
   el.playsInline = true;
   el.style.position = 'absolute';
-  let rejectLoad: ((reason: Error) => void) | null = null;
-  el.addEventListener('error', () => rejectLoad?.(new Error('video load error')));
+  let settle: ((ok: boolean, reason?: Error) => void) | null = null;
+  const finish = (ok: boolean, reason?: Error): void => {
+    const fn = settle;
+    settle = null;
+    fn?.(ok, reason);
+  };
+  el.addEventListener('error', () => finish(false, new Error('video load error')));
+  el.src = src;
   return {
     src,
     el,
     play(loop, playbackRate) {
       return new Promise((resolve, reject) => {
-        rejectLoad = reject;
-        el.loop = loop;
-        el.playbackRate = playbackRate;
-        const onReady = () => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const onReady = (): void => finish(true);
+        const cleanup = (): void => {
           el.removeEventListener('loadeddata', onReady);
+          if (timer !== null) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          if (settle === handleSettle) settle = null;
+        };
+        const handleSettle = (ok: boolean, reason?: Error): void => {
+          cleanup();
+          if (!ok) {
+            reject(reason ?? new Error('video aborted'));
+            return;
+          }
+          el.loop = loop;
+          el.playbackRate = playbackRate;
           el.play().then(() => resolve()).catch(reject);
         };
-        if (el.readyState >= 2) onReady();
+        settle = handleSettle;
+        timer = setTimeout(() => finish(false, new Error(`video load timeout: ${src}`)), 6_000);
+        if (el.readyState >= 2) handleSettle(true);
         else el.addEventListener('loadeddata', onReady);
       });
     },
     pause() {
+      finish(false, new Error('video paused before ready'));
       el.pause();
     },
     detach() {
+      finish(false, new Error('video detached'));
       el.remove();
     },
   };
@@ -462,9 +495,45 @@ let poseConfig: {
 let lastPoseName = 'idle';
 let lastFailureAt = 0;
 let longThinkTimer: ReturnType<typeof setTimeout> | null = null;
+let playInFlight = false;
+let queuedPlayAction: PetActionState | null = null;
+let queuedPlayTimer: ReturnType<typeof setTimeout> | null = null;
+/** 串行/合并播放切换请求：避免快速事件流触发 WebmVideoRenderer「禁止并发切换」未捕获异常。 */
+function safePlayAction(action: PetActionState): void {
+  if (playInFlight) {
+    queuedPlayAction = action;
+    return;
+  }
+  playInFlight = true;
+  void renderer.play(action)
+    .catch((err: unknown) => {
+      if (err instanceof Error && err.message.includes('禁止并发切换')) {
+        queuedPlayAction = action;
+        if (queuedPlayTimer === null) {
+          queuedPlayTimer = setTimeout(() => {
+            queuedPlayTimer = null;
+            const retry = queuedPlayAction;
+            queuedPlayAction = null;
+            if (retry !== null) safePlayAction(retry);
+          }, 90);
+        }
+      }
+    })
+    .finally(() => {
+      playInFlight = false;
+      const next = queuedPlayAction;
+      if (next !== null && queuedPlayTimer === null) {
+        queuedPlayAction = null;
+        if (next !== action) safePlayAction(next);
+      }
+    });
+}
+let manifestLoadSeq = 0;
 async function loadCharacterManifest(id: string): Promise<void> {
+  const seq = ++manifestLoadSeq;
   currentCharacterId = id;
   const res = await bridge.characterManifest(id);
+  if (seq !== manifestLoadSeq) return;
   if (!res.ok || res.manifest === undefined) throw new Error(res.error ?? 'manifest 不可用');
   const rawManifest = res.manifest as PetAvatarManifest;
   // webmPath 为仓库视角（assets/...）→ 渲染进程相对 html 改写为 ./assets/...
@@ -477,8 +546,21 @@ async function loadCharacterManifest(id: string): Promise<void> {
   const config = bridge.customPoseConfig === undefined
     ? null
     : await bridge.customPoseConfig(id).catch(() => null);
+  if (seq !== manifestLoadSeq) return;
+  const poseLines = rawManifest.renderer === 'pose-skin'
+    ? await bridge.crossPetLines(id).catch(() => ({}))
+    : undefined;
+  if (seq !== manifestLoadSeq) return;
+  renderer.dispose();
+  // 防重影：切换角色/渲染器时清空残留媒体层，防止异步切换留下多张叠层
+  for (const media of stage.querySelectorAll('video, canvas, img')) media.remove();
+  playInFlight = false;
+  queuedPlayAction = null;
+  if (queuedPlayTimer !== null) {
+    clearTimeout(queuedPlayTimer);
+    queuedPlayTimer = null;
+  }
   if (rawManifest.renderer === 'sprite-sheet') {
-    renderer.dispose();
     renderer = new SpritesheetRenderer({
       host,
       surfaceFactory,
@@ -487,20 +569,22 @@ async function loadCharacterManifest(id: string): Promise<void> {
       spriteMetaLoader: async (src) => (await fetch(src)).json() as Promise<unknown>,
     });
   } else if (rawManifest.renderer === 'pose-skin') {
-    const lines = await bridge.crossPetLines(id).catch(() => ({}));
-    renderer.dispose();
     renderer = new PoseSkinRenderer({
       host,
       imageFactory: poseImageFactory,
-      lines,
+      lines: poseLines ?? {},
       effects: mergePoseEffects(POSE_EFFECTS, config?.ok === true ? config.fx : undefined),
     });
-  } else if (!(renderer instanceof WebmVideoRenderer)) {
-    renderer.dispose();
+  } else {
     renderer = webmRenderer;
   }
   await renderer.load(rawManifest);
+  if (seq !== manifestLoadSeq) {
+    renderer.dispose();
+    return;
+  }
   await renderer.play('idle');
+  if (seq !== manifestLoadSeq) return;
   poseConfig = config?.ok === true ? config : null;
   lastFailureAt = 0;
   if (longThinkTimer !== null) { clearTimeout(longThinkTimer); longThinkTimer = null; }
@@ -663,7 +747,7 @@ if (petStageBridge?.onPetPreview) {
     if (previewTimer) clearTimeout(previewTimer);
     previewTimer = setTimeout(() => {
       previewTimer = null;
-      void renderer.play('idle');
+      safePlayAction('idle');
     }, AMBIENT_PLAY_MS);
   });
 }
@@ -899,13 +983,18 @@ if (window.directorBridge?.onAutodriveEvent) {
         if (renderer instanceof PoseSkinRenderer) void renderer.playPose(pose).catch(() => undefined);
       }, Math.max(1, after) * 1_000);
     }
+    if (event.type === 'decision' || event.type === 'receipt' || event.type === 'state') {
+      autodriveBusyUntil = Date.now() + 45_000;
+    } else if (event.type === 'cycle-end') {
+      autodriveBusyUntil = 0;
+    }
     if (shouldBlockWhileAsleep(interaction, event.type === 'receipt' ? 'work' : 'thought')) return;
     lastActivityAt = Date.now();
-    if (dockedEdge !== null) {
+    if (dockedEdge !== null && event.type !== 'state' && event.type !== 'cycle-end') {
       const edge = dockedEdge;
       dockedEdge = null;
       void bridge.dockWindow?.(dockedAgentId, null);
-      if (edge !== null) scheduleDockBack(edge);
+      if (edge !== null && !gameDockActive) scheduleDockBack(edge);
     }
     // 旧会话的迟到事件（切游戏/重启后）不得再驱动动画与内心戏
     if (typeof event.generation === 'number') {
@@ -931,14 +1020,22 @@ if (window.directorBridge?.onAutodriveEvent) {
     if (event.type === 'receipt' && event.status && event.tool !== 'autodrive') {
       const kind = classifyAutodriveReceipt(event.status, event.tool ?? '', event.summary ?? '');
       const action = GAME_EVENT_ACTION_MAP[kind];
-      if (action) void renderer.play(action);
+      if (action) safePlayAction(action);
     }
-    if (event.type === 'decision') void renderer.play('game_focus');
+    if (event.type === 'decision') safePlayAction('game_focus');
     if (event.type === 'state' && typeof event.clock === 'string') {
       widgets?.show('status', `星露谷 ${event.clock}`);
     }
   });
 }
+
+const stageVoiceStyle = document.createElement('style');
+stageVoiceStyle.textContent = [
+  '#stage{transition:transform 75ms ease-out;}',
+  'html[data-voice-speaking="true"]:not([data-power-saver="true"]) #stage{transform:translateY(calc(var(--pet-lip-amplitude, 0) * -4px));}',
+  'html[data-power-saver="true"] #stage{transition:none !important;transform:none !important;}',
+].join('');
+document.head.appendChild(stageVoiceStyle);
 
 // ── T-M6-38：多桌宠发言态 / 定向动作 / 定向气泡 ──
 // 同一时刻最多一只 speaking；非发言桌宠切倾听微动作，idle 后回无事态。
@@ -949,15 +1046,21 @@ bridge.onCoopSpeaker?.((event) => {
   if (event.state === 'speaking') {
     if (event.activeAgentId === petContext.agentId) {
       bubbleState = speechStarted(bubbleState).state;
+      document.documentElement.dataset.voiceSpeaking = interaction.asleep ? 'false' : 'true';
+      widgets?.setDialogSpeaking(!interaction.asleep);
       listeningToTeammate = false;
       lastEventAt = Date.now();
       // 现有角色动作库没有独立 talk 槽位：用「认真状态」承载开口播报，避免假装有口型资产
       void renderer.play('game_focus').catch(() => undefined);
     } else if (event.activeAgentId !== null) {
+      document.documentElement.dataset.voiceSpeaking = 'false';
+      widgets?.setDialogSpeaking(false);
       listeningToTeammate = true;
       void renderer.play('thinking_tail_wag').catch(() => undefined);
     }
   } else {
+    document.documentElement.dataset.voiceSpeaking = 'false';
+    widgets?.setDialogSpeaking(false);
     const effect = speakerIdle(bubbleState);
     bubbleState = effect.state;
     if (effect.hide) widgets?.hideDialog();
@@ -969,9 +1072,17 @@ bridge.onCoopSpeaker?.((event) => {
 });
 bridge.onSpeechResult?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
+  if (event.text !== undefined && bubbleState.text !== '' && event.text !== bubbleState.text) {
+    return;
+  }
+  document.documentElement.dataset.voiceSpeaking = 'false';
+  widgets?.setDialogSpeaking(false);
   const effect = speechResult(bubbleState, event.status);
   bubbleState = effect.state;
-  if (effect.hide) widgets?.hideDialog();
+  if (effect.hide) {
+    if (event.status === 'cancelled') widgets?.hide('dialog');
+    else widgets?.hideDialog();
+  }
   widgets?.setDialogMuted(effect.muted);
   document.documentElement.dataset.viseme = 'closed';
   document.documentElement.style.setProperty('--pet-lip-amplitude', '0');
@@ -980,6 +1091,9 @@ bridge.onLipSync?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
   document.documentElement.dataset.viseme = event.frame.viseme;
   document.documentElement.style.setProperty('--pet-lip-amplitude', String(event.frame.amplitude));
+  const active = event.frame.viseme !== 'closed' && event.frame.amplitude > 0.02 && !interaction.asleep;
+  document.documentElement.dataset.voiceSpeaking = active ? 'true' : 'false';
+  widgets?.setDialogSpeaking(active);
 });
 bridge.onPetAction?.((event) => {
   if (!isEventForThisPet(event.agentId)) return;
@@ -1052,19 +1166,24 @@ function applyBubbleFontScale(): void {
   syncBubbleContext();
 }
 
-/** 当前可见的姿势图（交叉淡入期间取透明度最高的那张）。 */
-function activePoseImage(): HTMLImageElement | null {
-  let best: HTMLImageElement | null = null;
+/** 在指定标签中选择当前可见透明度最高的元素（避开 opacity=0 的待命画面）。 */
+function activeMediaOf<T extends HTMLElement>(selector: string): T | null {
+  let best: T | null = null;
   let bestOpacity = 0.05;
-  for (const img of stage.querySelectorAll('img')) {
-    if (img.naturalWidth === 0) continue;
-    const opacity = Number(getComputedStyle(img).opacity);
+  for (const el of stage.querySelectorAll<T>(selector)) {
+    const opacity = Number(getComputedStyle(el).opacity);
     if (opacity > bestOpacity) {
-      best = img;
+      best = el;
       bestOpacity = opacity;
     }
   }
   return best;
+}
+
+/** 当前可见的姿势图（交叉淡入期间取透明度最高的那张）。 */
+function activePoseImage(): HTMLImageElement | null {
+  const best = activeMediaOf<HTMLImageElement>('img');
+  return best !== null && best.naturalWidth > 0 ? best : null;
 }
 
 /**
@@ -1086,7 +1205,7 @@ function samplePoseImageAlpha(img: HTMLImageElement, vx: number, vy: number): nu
 /** 同步采样舞台局部坐标 (vx, vy) 处的像素 alpha；越界或读图失败统一返回 0（透明不可拖）。 */
 function sampleAlphaAtStage(vx: number, vy: number): number {
   if (vx < 0 || vy < 0 || vx >= BASE_STAGE.width || vy >= BASE_STAGE.height) return 0;
-  const video = stage.querySelector('video');
+  const video = activeMediaOf<HTMLVideoElement>('video');
   if (video !== null && video.readyState >= 2) {
     try {
       probeCtx?.clearRect(0, 0, 1, 1);
@@ -1096,7 +1215,7 @@ function sampleAlphaAtStage(vx: number, vy: number): number {
       return 0;
     }
   }
-  const sprite = stage.querySelector('canvas');
+  const sprite = activeMediaOf<HTMLCanvasElement>('canvas');
   if (sprite !== null) {
     const ctx = sprite.getContext('2d');
     if (ctx === null) return 0;
@@ -1277,11 +1396,15 @@ window.addEventListener('keydown', (event) => {
 stage.addEventListener('mouseenter', () => {
   pointerOnStage = true;
   lastActivityAt = Date.now();
+  if (dockBackTimer !== null) {
+    clearTimeout(dockBackTimer);
+    dockBackTimer = null;
+  }
   if (dockedEdge !== null) {
     const edge = dockHomeEdge;
     dockedEdge = null;
     void bridge.dockWindow?.(dockedAgentId, null);
-    if (edge !== null) scheduleDockBack(edge);
+    if (edge !== null && !gameDockActive) scheduleDockBack(edge);
   }
 });
 stage.addEventListener('mouseleave', () => { pointerOnStage = false; setPeek(false); });
@@ -1339,6 +1462,10 @@ setInterval(() => {
   const bubbleEffect = bubbleTick(bubbleState, Date.now());
   bubbleState = bubbleEffect.state;
   if (bubbleEffect.hide) widgets?.hideDialog();
+  // 画面自愈：若清单已装载但舞台上无任何不透明可见媒体元素且无切换在途，立即恢复 idle 避免突然消失
+  if (renderer.manifest !== null && !playInFlight && activeMediaOf<HTMLElement>('video, canvas, img') === null) {
+    safePlayAction(renderer.currentAction() ?? 'idle');
+  }
   const idle = Date.now() - lastActivityAt;
   const next = shouldEnterPowerSaver(lastActivityAt, Date.now(), powerSaverEnabled, 30_000);
   if (next !== powerSaver) {
@@ -1411,6 +1538,12 @@ stage.addEventListener('mousedown', (event) => {
   event.preventDefault();
   dragging = true;
   // 手动拖离 = 放弃「干活自动探出」的自动收回记忆（T-M6-64）
+  if (dockBackTimer !== null) {
+    clearTimeout(dockBackTimer);
+    dockBackTimer = null;
+  }
+  dockedEdge = null;
+  dockHomeEdge = null;
   void bridge.clearDock?.(dockedAgentId).catch(() => undefined);
   if (patrolState.status === 'walking') {
     patrolState = { status: 'idle', nextAt: Date.now() + 30_000, endsAt: 0, direction: patrolState.direction };
@@ -1457,22 +1590,29 @@ window.addEventListener('mousemove', (event) => {
   void bridge.dragTo(event.screenX - grabOffset.x, event.screenY - grabOffset.y);
 });
 
+let dockBackTimer: ReturnType<typeof setTimeout> | null = null;
+
 async function applyDockEdge(position: [number, number]): Promise<void> {
   const bounds = await bridge.screenBounds();
   const wb = bounds.windowBounds ?? bounds;
   const width = window.innerWidth;
-  const edge = dockEdgeFor({ x: position[0], width }, { x: wb.minX, width: wb.maxX - wb.minX + width });
+  // 游戏贴边开启且处于贴靠状态时，禁止屏幕边缘 55% 半隐，避免游戏在屏右缘时误把桌宠推进屏幕外
+  const edge = gameDockActive
+    ? null
+    : dockEdgeFor({ x: position[0], width }, { x: wb.minX, width: wb.maxX - wb.minX + width });
   if (edge !== dockedEdge) {
     dockedEdge = edge;
     dockHomeEdge = edge;
-    await bridge.dockWindow?.(dockedAgentId, edge);
+    if (edge !== null) await bridge.dockWindow?.(dockedAgentId, edge);
   }
   updateEdgeHint(position[0], wb, edge);
 }
 
 function scheduleDockBack(edge: 'left' | 'right'): void {
-  setTimeout(() => {
-    if (!pointerOnStage && Date.now() - lastActivityAt >= 10_000) {
+  if (dockBackTimer !== null) clearTimeout(dockBackTimer);
+  dockBackTimer = setTimeout(() => {
+    dockBackTimer = null;
+    if (!pointerOnStage && !gameDockActive && Date.now() - lastActivityAt >= 10_000) {
       dockedEdge = edge;
       void bridge.dockWindow?.(dockedAgentId, edge);
     }
@@ -1598,21 +1738,21 @@ async function patrolTick(): Promise<void> {
   if (position === null) return;
   const screen = await bridge.screenBounds();
   const wb = screen.windowBounds ?? screen;
-  const clip = renderer.activeClip();
+  const clip = renderer instanceof SpritesheetRenderer ? renderer.activeClip() : null;
   const patrolClip = findPatrolClip();
   const result = stepPatrol(patrolState, {
     bounds: { x: position[0], y: position[1], width: window.innerWidth, height: window.innerHeight },
     workArea: { x: wb.minX, y: wb.minY, width: wb.maxX - wb.minX, height: wb.maxY - wb.minY },
     facing: clip?.facing ?? null,
     moving: clip?.moving ?? null,
-    frameIndex: renderer.currentFrameIndex(),
+    frameIndex: renderer instanceof SpritesheetRenderer ? renderer.currentFrameIndex() : 0,
     direction: patrolState.direction,
     enabled: patrolEnabled && patrolClip !== null,
     locked: petLocked,
     docked: dockedEdge !== null,
     dragging,
     asleep: interaction.asleep,
-    busy: workBusy || workAsking,
+    busy: workBusy || workAsking || gameDockActive || Date.now() < autodriveBusyUntil,
   }, nowMs);
   patrolState = result.state;
   if (result.started) playPatrolClip();
@@ -1640,7 +1780,7 @@ const leaseManager = new AudioLeaseManager({
         const tick = (): void => {
           const elapsed = performance.now() - started;
           const current = timeline.find((item) => item.atMs <= elapsed)?.viseme ?? 'closed';
-          void renderer.play('idle'); // 动作切换由情绪映射决定（见下）
+          safePlayAction('idle'); // 动作切换由情绪映射决定（见下）
           void current;
           if (elapsed >= total) resolve();
           else requestAnimationFrame(tick);
@@ -1664,7 +1804,7 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
   const { lease, visemeTimeline } = buildPlaybackLease({ leaseId, request });
   visemeTimelines.set(leaseId, visemeTimeline);
   // 情绪 → 桌宠动作切换（SPEC §3.4）
-  void renderer.play(lease.actionState);
+  safePlayAction(lease.actionState);
   const granted = leaseManager.acquire({
     leaseId: lease.leaseId,
     priority: lease.priority,
@@ -1682,6 +1822,10 @@ function speakWithEmotion(request: SpeakRequest, leaseId: string): void {
 widgets = mountBubbleWidgets(stage, { width: BASE_STAGE.width * petScale, height: BASE_STAGE.height * petScale });
 widgets.setFont(bubbleFontIdPref);
 syncBubbleContext();
+void (window as unknown as { directorBridge?: { voiceConfigGet?: () => Promise<{ enabled: boolean }> } })
+  .directorBridge?.voiceConfigGet?.()
+  .then((config) => { bubbleVoiceEnabled = config.enabled; })
+  .catch(() => undefined);
 void Promise.all([bridge.winPosition(), bridge.screenBounds()]).then(([pos, bounds]) => {
   if (pos !== null) {
     const wb = bounds.windowBounds ?? bounds;
@@ -1828,7 +1972,7 @@ const ambientLoop = setInterval(() => {
   }
   previewTimer = setTimeout(() => {
     previewTimer = null;
-    void renderer.play('idle');
+    safePlayAction('idle');
     lastPoseName = 'idle';
   }, AMBIENT_PLAY_MS);
 }, 5_000);

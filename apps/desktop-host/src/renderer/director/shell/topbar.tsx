@@ -86,6 +86,7 @@ export interface TopbarProps {
   title: string;
   voiceOn: boolean;
   voiceBackend?: { backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null;
+  voiceRouteLabel?: string | null;
   brainMode: string;
   llmReady: boolean;
   mainModelId: string;
@@ -108,7 +109,7 @@ export interface TopbarProps {
 }
 
 export function Topbar({
-  group, title, voiceOn, voiceBackend, brainMode, llmReady, mainModelId, gameId, gameEnabled, running,
+  group, title, voiceOn, voiceBackend, voiceRouteLabel, brainMode, llmReady, mainModelId, gameId, gameEnabled, running,
   theme, themeMode = theme, skin = 'tidepaper', accent = 'coral',
   onOpenCommandPalette, onToggleVoice, onSwitchBrain, onSelectGame, onToggleDrive, onToggleTheme,
   onSelectSystemTheme, onSelectSkin, onSelectAccent,
@@ -175,14 +176,16 @@ export function Topbar({
         data-voice-backend={voiceBackend?.backend ?? 'probing'}
         onClick={onToggleVoice}
         className={`wb-ctrl${voiceOn ? ' on-green' : ''}`}
-        title={`切换全局语音播报 · 当前后端：${voiceBackend?.detail ?? '探测中'}`}
+        title={`切换全局语音播报 · 当前后端：${voiceRouteLabel ? `${voiceRouteLabel}（回落 ${voiceBackend?.backend ?? 'say'}）` : (voiceBackend?.detail ?? '探测中')}`}
       >
         {voiceOn ? <Volume2 size={12} /> : <VolumeX size={12} />}
         <span>
           {voiceOn ? '语音开' : '语音关'}
-          {voiceBackend != null && voiceBackend.backend !== 'mcode'
-            ? ` · ${voiceBackend.backend === 'say' ? 'say' : '未适配'}`
-            : ''}
+          {voiceRouteLabel
+            ? ` · ${voiceRouteLabel}`
+            : voiceBackend != null && voiceBackend.backend !== 'mcode'
+              ? ` · ${voiceBackend.backend === 'say' ? 'say' : '未适配'}`
+              : ''}
         </span>
       </button>
       <button

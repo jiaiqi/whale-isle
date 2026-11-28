@@ -434,9 +434,9 @@ export function ControlOwnershipHud(props: ControlOwnershipHudProps): React.JSX.
       )}
 
       {running && (
-        <span className="pill pill-blue" style={{ fontSize: 9.5 }}>
+        <span className={`pill ${isTakeover ? 'pill-amber' : 'pill-blue'}`} style={{ fontSize: 9.5 }}>
           <Brain size={9} />
-          <span>{brainMode === 'paused' ? 'AI 安全暂停' : brainMode === 'rule-standin' ? '规则代驾中' : brainMode === 'rule' ? '手动规则模式' : '游戏接管中'}</span>
+          <span>{isTakeover ? '游戏接管中' : brainMode === 'paused' ? 'AI 安全暂停' : brainMode === 'rule-standin' ? '规则代驾中' : brainMode === 'rule' ? '手动规则模式' : 'AI 自主托管'}</span>
         </span>
       )}
 

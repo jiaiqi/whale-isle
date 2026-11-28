@@ -18,6 +18,7 @@ import {
   type ModelProviderConfig,
   type WorkbenchRoleSlot,
 } from '@workbench/shared-protocol';
+import { resolveCommercialTtsProvider } from '@workbench/voice-runtime/browser';
 import type { DirectorStore } from '@workbench/local-store/dexie';
 import {
   GAME_OPTIONS,
@@ -188,7 +189,13 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [running, setRunning] = useState(false);
   const [humanControl, setHumanControl] = useState(false);
   const [brain, setBrain] = useState<{ mode: string; llmReady: boolean }>({ mode: 'rule', llmReady: false });
-  const [dayPlan, setDayPlan] = useState<{ dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null>(null);
+  const [dayPlan, setDayPlan] = useState<{
+    dayKey: string;
+    items: Array<{ goal: string; why: string; status: string; addedAt?: string; completedAt?: string }>;
+    mood?: string;
+    updateWhy?: string;
+    history?: Array<{ atClock: string; atTs: number; kind: 'morning' | 'update'; summary: string; why?: string }>;
+  } | null>(null);
   const [insights, setInsights] = useState<Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }>>([]);
   const [mainModelId, setMainModelId] = useState('');
   const [characters, setCharacters] = useState<CharacterSummary[]>([]);
@@ -199,6 +206,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [benchSignal, setBenchSignal] = useState(0);
   const [voiceOn, setVoiceOn] = useState(true);
   const [voiceBackend, setVoiceBackend] = useState<{ backend: 'mcode' | 'say' | 'unsupported'; detail: string } | null>(null);
+  const [voiceRouteLabel, setVoiceRouteLabel] = useState<string | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -221,6 +229,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
   const [guides, setGuides] = useState<string[]>([]);
   const [chatFilter, setChatFilter] = useState<ReceiptFilter>('all');
   const [bwfHud, setBwfHud] = useState(false);
+  const [dockToGame, setDockToGame] = useState(true);
   const [bwfPort, setBwfPort] = useState(18088);
   const [editingBwfPort, setEditingBwfPort] = useState(false);
   const [bwfPortDraft, setBwfPortDraft] = useState('18088');
@@ -267,6 +276,9 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
 
   useEffect(() => { void refreshAvatarSync(); }, [refreshAvatarSync]);
   useEffect(() => window.directorBridge.onStardewAvatarChanged(() => { void refreshAvatarSync(); }), [refreshAvatarSync]);
+  useEffect(() => window.directorBridge.onGlobalPrefsChanged((next) => {
+    if (typeof next.dockToGame === 'boolean') setDockToGame(next.dockToGame);
+  }), []);
   useEffect(() => {
     void window.directorBridge.stardewLaunchPrefsGet().then(setStardewPrefs).catch(() => undefined);
   }, []);
@@ -301,9 +313,21 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         if (typeof nextMode === 'string') setBrain((prev) => ({ ...prev, mode: nextMode }));
       }
       if ((event as { type: string }).type === 'plan') {
-        const p = event as unknown as { dayKey?: string; plan?: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string };
+        const p = event as unknown as {
+          dayKey?: string;
+          plan?: Array<{ goal: string; why: string; status: string; addedAt?: string; completedAt?: string }>;
+          mood?: string;
+          updateWhy?: string;
+          history?: Array<{ atClock: string; atTs: number; kind: 'morning' | 'update'; summary: string; why?: string }>;
+        };
         if (typeof p.dayKey === 'string' && Array.isArray(p.plan)) {
-          setDayPlan({ dayKey: p.dayKey, items: p.plan, ...(p.mood === undefined ? {} : { mood: p.mood }), ...(p.updateWhy === undefined ? {} : { updateWhy: p.updateWhy }) });
+          setDayPlan({
+            dayKey: p.dayKey,
+            items: p.plan,
+            ...(p.mood === undefined ? {} : { mood: p.mood }),
+            ...(p.updateWhy === undefined ? {} : { updateWhy: p.updateWhy }),
+            ...(Array.isArray(p.history) ? { history: p.history } : {}),
+          });
         }
       }
       if ((event as { type: string }).type === 'insight') {
@@ -322,7 +346,13 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     void window.directorBridge.plannerStatus().then((s) => {
       setBrain(s);
       const ext = s as unknown as {
-        dayPlan?: { dayKey: string; items: Array<{ goal: string; why: string; status: string }>; mood?: string; updateWhy?: string } | null;
+        dayPlan?: {
+          dayKey: string;
+          items: Array<{ goal: string; why: string; status: string; addedAt?: string; completedAt?: string }>;
+          mood?: string;
+          updateWhy?: string;
+          history?: Array<{ atClock: string; atTs: number; kind: 'morning' | 'update'; summary: string; why?: string }>;
+        } | null;
         insights?: Array<{ id: string; source: string; claim: string; when: string; verdict: string; why: string; hits: number; updatedDay: string }>;
       };
       if (ext.dayPlan !== undefined && ext.dayPlan !== null) setDayPlan(ext.dayPlan);
@@ -338,9 +368,38 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     window.directorBridge.onOpenPetNotebook(() => { setTab('pet'); setNotebookSignal((v) => v + 1); });
     window.directorBridge.onOpenCreator(() => { setTab('pet'); setCreatorSignal((v) => v + 1); });
     window.directorBridge.onOpenBench(() => { setTab('pet'); setBenchSignal((v) => v + 1); });
-    void window.directorBridge.prefsGet().then((p) => {
-      if (typeof p.characterId === 'string') setCharacterId(p.characterId);
-    }).catch(() => undefined);
+    const refreshVoiceRoute = (): void => {
+      void Promise.all([
+        window.directorBridge.prefsGet(),
+        window.directorBridge.v2VoiceProviders().catch(() => []),
+      ]).then(([p, list]) => {
+        if (typeof p.characterId === 'string') setCharacterId(p.characterId);
+        if (typeof p.dockToGame === 'boolean') setDockToGame(p.dockToGame);
+        if (p.voiceEngineTier === 'offline_preferred') {
+          setVoiceRouteLabel('本地引擎');
+          return;
+        }
+        const avail = list.filter((item) => item.available).map((item) => item.kind);
+        if (avail.length === 0) {
+          setVoiceRouteLabel(null);
+          return;
+        }
+        const choice = resolveCommercialTtsProvider({
+          preference: p.voiceCommercialProvider ?? 'mimo-tts-voiceclone',
+          available: avail,
+        });
+        const names: Record<string, string> = {
+          'mimo-tts-voiceclone': 'MiMo 锁声',
+          'mimo-tts-voicedesign': 'MiMo 设计',
+          'mimo-tts': 'MiMo',
+          'minimax-tts': 'MiniMax',
+          'openai-tts': 'OpenAI TTS',
+          'openrouter-tts': 'Gemini TTS',
+        };
+        setVoiceRouteLabel(names[choice.provider] ?? choice.provider);
+      }).catch(() => undefined);
+    };
+    refreshVoiceRoute();
     void window.directorBridge.voiceConfigGet().then((c) => setVoiceOn(c.enabled));
     void window.directorBridge.voiceBackend().then(setVoiceBackend).catch(() => setVoiceBackend(null));
     void window.directorBridge.riceStatus().then((r) => { setRice(r.balance); setRiceCap(r.budget); });
@@ -737,6 +796,13 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     toast(next.enabled ? '语音已开启' : '已静音：仅字幕与云朵气泡');
   };
 
+  const toggleDockToGame = async (): Promise<void> => {
+    const next = !dockToGame;
+    setDockToGame(next);
+    await window.directorBridge.prefsSet({ dockToGame: next });
+    toast(next ? '已开启：打开星露谷后自动贴边游戏右下角' : '已关闭打开游戏自动贴边');
+  };
+
   const toggleBwfHud = async (): Promise<void> => {
     const next = !bwfHud;
     setBwfHud(next);
@@ -767,7 +833,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
     const state = await window.directorBridge.stardewAvatarSetEnabled(next);
     setAvatarSync(state);
     if (next && !state.modInstalled) toast('已开启同步：还需要点「安装 Mod」把 WhaleIsleAvatar 装进星露谷 Mods 目录');
-    else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内保持当前外观，不再随桌宠切换');
+    else toast(next ? '已开启：切桌宠/换肤会实时写进星露谷' : '已关闭：游戏内将恢复原生角色形象（运行中约 0.2s 热恢复）');
   };
 
   const toggleAvatarLiveliness = async (): Promise<void> => {
@@ -909,6 +975,7 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
         title={currentTitle}
         voiceOn={voiceOn}
         voiceBackend={voiceBackend}
+        voiceRouteLabel={voiceRouteLabel}
         brainMode={brain.mode}
         llmReady={brain.llmReady}
         mainModelId={mainModelId}
@@ -1026,6 +1093,8 @@ export function App({ profiles, slotLabels, providers, store, storeKey }: AppPro
             objective={objective}
             chatFilter={chatFilter}
             bwfHud={bwfHud}
+            dockToGame={dockToGame}
+            onToggleDockToGame={() => void toggleDockToGame()}
             bwfPort={bwfPort}
             editingBwfPort={editingBwfPort}
             bwfPortDraft={bwfPortDraft}

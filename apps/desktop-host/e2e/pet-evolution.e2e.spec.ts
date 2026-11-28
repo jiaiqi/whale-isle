@@ -29,7 +29,7 @@ interface PetStageBridge {
   eggCatch(): Promise<{ ok: boolean; caught?: boolean; error?: string }>;
 }
 
-async function waitFor(app: import('playwright-core').ElectronApplication, fn: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
+async function waitFor(app: unknown, fn: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await fn()) return;
@@ -84,6 +84,136 @@ describe('[E2E-HOST] 桌宠深度体验三阶段', () => {
       });
       expect(fontFamily).toContain('ShangShouGummy');
       console.log('[pet-evolution-e2e] bubble font ok');
+
+      // 真实 Chromium 侧翼布局：单页逐字增长、外框稳定；这里只测侧翼尺寸，不声称宽度超过 240px。
+      await stage.emulateMedia({ reducedMotion: 'no-preference' });
+      const reveal = await stage.evaluate(async () => {
+        const hooks = (window as unknown as { __petStageTest: {
+          hideBubbles(): void;
+          showBubble(kind: string, text: string, options?: { ttlMs: number }): void;
+        } }).__petStageTest;
+        hooks.hideBubbles();
+        await document.fonts.ready;
+        const full = '今天先整理背包，再去农场照料作物。';
+        hooks.showBubble('dialog', full, { ttlMs: 10_000 });
+        const node = document.querySelector('.pet-bubble--dialog') as HTMLElement;
+        const text = node.querySelector('.pet-bubble__text') as HTMLElement;
+        const samples: Array<{ length: number; width: number; height: number }> = [];
+        const started = performance.now();
+        while (performance.now() - started < 4_000) {
+          samples.push({ length: Array.from(text.textContent ?? '').length, width: node.offsetWidth, height: node.offsetHeight });
+          if (text.textContent === full) break;
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        return { fullLength: Array.from(full).length, text: text.textContent, full, samples };
+      });
+      expect(reveal.samples[0]!.length).toBeLessThan(reveal.fullLength);
+      expect(reveal.text).toBe(reveal.full);
+      expect(reveal.samples.some((sample) => sample.length > 1 && sample.length < reveal.fullLength)).toBe(true);
+      expect(reveal.samples.every((sample, index) => index === 0 || sample.length >= reveal.samples[index - 1]!.length)).toBe(true);
+      expect(new Set(reveal.samples.map((sample) => sample.width)).size).toBe(1);
+      expect(new Set(reveal.samples.map((sample) => sample.height)).size).toBe(1);
+      expect(reveal.samples[0]!.width).toBeGreaterThan(80);
+      await stage.emulateMedia({ reducedMotion: 'reduce' });
+      const reduced = await stage.evaluate(() => {
+        const hooks = (window as unknown as { __petStageTest: { showBubble(kind: string, text: string): void } }).__petStageTest;
+        const full = '减少动态效果时直接显示完整气泡文字。';
+        hooks.showBubble('dialog', full);
+        return { text: document.querySelector('.pet-bubble--dialog .pet-bubble__text')?.textContent, full };
+      });
+      expect(reduced.text).toBe(reduced.full);
+      await stage.emulateMedia({ reducedMotion: 'no-preference' });
+      console.log('[pet-evolution-e2e] typewriter and stable bubble geometry ok');
+
+      // 多页以真实 DOM 整行容量为准，普通 TTL 和 reduced-motion 都不能漏掉后页。
+      for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+        await stage.emulateMedia({ reducedMotion });
+        const pagination = await stage.evaluate(async (fontScale) => {
+          const hooks = (window as unknown as { __petStageTest: {
+            hideBubbles(): void;
+            showBubble(kind: string, text: string, options?: { ttlMs: number }): void;
+            setBubbleContext(context: { fontScale: number }): void;
+          } }).__petStageTest;
+          hooks.hideBubbles();
+          document.documentElement.style.setProperty('--pet-bubble-font-scale', String(fontScale));
+          hooks.setBubbleContext({ fontScale });
+          await document.fonts.ready;
+          const full = '今天整理背包并确认作物状态，然后根据真实观察规划出门路线；遇到商店未营业就重新考虑安排，完成后记录收获与工具回执，回家前检查体力和剩余时间。🐳最后这一句也必须完整看见，不能被省略号吞掉。';
+          hooks.showBubble('dialog', full, { ttlMs: 1_500 });
+          const node = document.querySelector('.pet-bubble--dialog') as HTMLElement;
+          const text = node.querySelector('.pet-bubble__text') as HTMLElement;
+          const pages: string[] = [];
+          const sizes: string[] = [];
+          let fits = true;
+          let wholeLines = true;
+          const start = performance.now();
+          while (performance.now() - start < 40_000) {
+            sizes.push(`${node.offsetWidth}/${node.offsetHeight}`);
+            if (text.textContent === node.dataset.pageText && text.textContent !== '') {
+              const page = Number(node.dataset.page ?? '1');
+              pages[page - 1] = text.textContent;
+              fits &&= text.scrollHeight <= text.clientHeight + 1 && text.scrollWidth <= text.clientWidth + 1;
+              const range = document.createRange();
+              range.selectNodeContents(text);
+              const bounds = text.getBoundingClientRect();
+              const bodyBounds = text.parentElement!.getBoundingClientRect();
+              const rootBounds = node.getBoundingClientRect();
+              const top = Math.max(bounds.top, bodyBounds.top, rootBounds.top);
+              const bottom = Math.min(bounds.bottom, bodyBounds.bottom, rootBounds.bottom);
+              wholeLines &&= [...range.getClientRects()].every((rect) => rect.top >= top - 1 && rect.bottom <= bottom + 1);
+              if (page === Number(node.dataset.pageCount)) break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 40));
+          }
+          const preserved = node.dataset.fullText;
+          hooks.hideBubbles();
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          const cancelled = node.style.display === 'none';
+          hooks.showBubble('dialog', '新台词');
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          const replacement = node.dataset.fullText;
+          hooks.hideBubbles();
+          document.documentElement.style.setProperty('--pet-bubble-font-scale', '1');
+          hooks.setBubbleContext({ fontScale: 1 });
+          return { full, pages, fits, wholeLines, preserved, sizes, cancelled, replacement };
+        }, reducedMotion === 'reduce' ? 1.4 : 1);
+        expect(pagination.pages.length).toBeGreaterThan(1);
+        expect(pagination.pages.join('')).toBe(pagination.full);
+        expect(pagination.preserved).toBe(pagination.full);
+        expect(pagination.fits).toBe(true);
+        expect(pagination.wholeLines).toBe(true);
+        expect(new Set(pagination.sizes).size).toBe(1);
+        expect(pagination.cancelled).toBe(true);
+        expect(pagination.replacement).toBe('新台词');
+      }
+      await stage.emulateMedia({ reducedMotion: 'no-preference' });
+      const recovered = await stage.evaluate(async () => {
+        const hooks = (window as unknown as { __petStageTest: {
+          hideBubbles(): void;
+          showBubble(kind: string, text: string, options?: { ttlMs: number }): void;
+          setBubbleContext(context: { fontScale: number }): void;
+          setBubbleStageBox(box: { width: number; height: number }): void;
+        } }).__petStageTest;
+        hooks.hideBubbles();
+        document.documentElement.style.setProperty('--pet-bubble-font-scale', '1.4');
+        hooks.setBubbleContext({ fontScale: 1.4 });
+        hooks.setBubbleStageBox({ width: 80, height: 48 });
+        const full = '空间恢复以后继续完整阅读。';
+        hooks.showBubble('dialog', full, { ttlMs: 1_500 });
+        const node = document.querySelector('.pet-bubble--dialog') as HTMLElement;
+        const blocked = node.dataset.readingBlocked === 'true';
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        const retained = node.dataset.fullText === full;
+        hooks.setBubbleStageBox({ width: window.innerWidth, height: window.innerHeight });
+        document.documentElement.style.setProperty('--pet-bubble-font-scale', '1');
+        hooks.setBubbleContext({ fontScale: 1 });
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        const resumed = node.dataset.readingBlocked === 'false'
+          && (node.querySelector('.pet-bubble__text')?.textContent?.length ?? 0) > 0;
+        hooks.hideBubbles();
+        return { blocked, retained, resumed };
+      });
+      expect(recovered).toEqual({ blocked: true, retained: true, resumed: true });
 
       // ③ 显示层级 / 气泡字号持久化并生效
       await stage.evaluate(() => (window as unknown as { petStage: PetStageBridge }).petStage.prefsSet({ windowLayer: 'normal', bubbleFontScale: 1.4 }));

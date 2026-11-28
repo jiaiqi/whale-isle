@@ -84,7 +84,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
   const [voice, setVoice] = useState({ enabled: true, innerVoice: true, volume: 1 });
   const [showGoals, setShowGoals] = useState(true);
   const [scale, setScale] = useState(1); // 气泡字号「跟随人物」的兜底基准（缩放入口已按主分支要求移除）
-  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false, windowLayer: 'always' as 'always' | 'follow-ai' | 'normal', bubbleFontScale: null as number | null, patrolEnabled: true, randomEggEnabled: true, peakOutfitEnabled: false, peakOutfitDay: 'crosspet-deepseek', peakOutfitOffPeak: 'crosspet-deepseek-pajamas' });
+  const [desk, setDesk] = useState({ powerSaverEnabled: true, shortcutHideEnabled: true, autoHideFullscreen: true, dockToGame: true, sfxEnabled: true, sfxVolume: 0.7, followFrontApp: false, windowLayer: 'always' as 'always' | 'follow-ai' | 'normal', bubbleFontScale: null as number | null, patrolEnabled: true, randomEggEnabled: true, peakOutfitEnabled: false, peakOutfitDay: 'crosspet-deepseek', peakOutfitOffPeak: 'crosspet-deepseek-pajamas' });
   const [peak, setPeak] = useState<{ period: 'peak' | 'off-peak'; minutesOfDay: number; nextSwitchInMinutes: number; family: boolean } | null>(null);
 
   useEffect(() => {
@@ -108,6 +108,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
         powerSaverEnabled: p.powerSaverEnabled ?? true,
         shortcutHideEnabled: p.shortcutHideEnabled ?? true,
         autoHideFullscreen: p.autoHideFullscreen ?? true,
+        dockToGame: p.dockToGame ?? true,
         sfxEnabled: p.sfxEnabled ?? true,
         sfxVolume: p.sfxVolume ?? 0.7,
         followFrontApp: p.followFrontApp ?? false,
@@ -120,6 +121,19 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
         peakOutfitOffPeak: p.peakOutfitOffPeak ?? 'crosspet-deepseek-pajamas',
       });
     }).catch(() => undefined);
+    const offPrefs = window.directorBridge.onGlobalPrefsChanged?.((p) => {
+      setDesk((prev) => ({
+        ...prev,
+        powerSaverEnabled: p.powerSaverEnabled ?? prev.powerSaverEnabled,
+        shortcutHideEnabled: p.shortcutHideEnabled ?? prev.shortcutHideEnabled,
+        autoHideFullscreen: p.autoHideFullscreen ?? prev.autoHideFullscreen,
+        dockToGame: p.dockToGame ?? prev.dockToGame,
+        windowLayer: p.windowLayer ?? prev.windowLayer,
+        patrolEnabled: p.patrolEnabled ?? prev.patrolEnabled,
+        randomEggEnabled: p.randomEggEnabled ?? prev.randomEggEnabled,
+      }));
+    });
+    return () => { offPrefs?.(); };
   }, [characterId]);
 
   const latestState = [...events].reverse().find((e) => e.type === 'state');
@@ -382,6 +396,7 @@ export function PetStagePanel({ events, running, characters, characterId, onSele
             ['闲置 30s 降低渲染帧率', 'powerSaverEnabled'],
             ['Ctrl+Option+P 暂藏/唤回', 'shortcutHideEnabled'],
             ['全屏应用时自动隐藏', 'autoHideFullscreen'],
+            ['打开游戏后自动贴边游戏右下角', 'dockToGame'],
             ['播放动作原声', 'sfxEnabled'],
             ['跟随前台 AI 应用自动切角', 'followFrontApp'],
             ['空闲自主巡逻（25–45s 随机散步）', 'patrolEnabled'],

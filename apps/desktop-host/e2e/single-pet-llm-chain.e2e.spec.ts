@@ -196,6 +196,7 @@ describe('[E2E-HOST] [SIMULATION] V2-P4-01 单角色 LLM 链路', () => {
         expect(memory.ok).toBe(true);
         expect(memory.hits.some((hit) => hit.text.includes(String(receipt.summary)))).toBe(true);
       }
+      expect(model.calls.some((c) => c.messages.some((m) => String(m.content).includes('## 长期经验与主人记忆')))).toBe(true);
       expect(calls.filter((c) => c.tool === 'harvest_crops').length).toBeGreaterThanOrEqual(3);
     } finally {
       await app?.close();
