@@ -258,6 +258,38 @@ describe('computeSmartBubbleLayout（智能定位 + legacy 右下 + 不重叠）
     assertNoOverlapAndInside(leftLayout.ordered.map((i) => i.rect), STAGE);
   });
 
+  it('气泡永不覆盖脸保护区（真机 2026-11-28 overlapFace 回归）', () => {
+    // 真机采样出现过气泡整体压到脸上；修复后脸保护区是最外层硬约束。
+    const stage = { width: 400, height: 260 };
+    const guardW = Math.round(stage.width * 0.28);
+    const guardTop = Math.round(stage.height * 0.28);
+    const guard: BubbleRect = { x: Math.round(stage.width / 2 - guardW / 2), y: guardTop, width: guardW, height: stage.height - 28 - guardTop };
+
+    const cases: Array<Array<{ kind: BubbleKind; text: string }>> = [
+      [{ kind: 'dialog', text: '这段台词很长很啰嗦需要占满整个舞台宽度和高度才能放下，所以要检查布局是否会不择手段地盖住桌宠的脸' }],
+      [
+        { kind: 'thought', text: '先去海边钓一条比目鱼再回来做饭，顺便看看有没有贝壳可以捡' },
+        { kind: 'dialog', text: '鱼竿、鱼饵、鱼篓都带好了，这一杆肯定能钓到大货，别小看我！' },
+        { kind: 'status', text: '星露谷 第1年秋7日 17:00' },
+      ],
+      [
+        { kind: 'dialog', text: '超长台词'.repeat(12) },
+        { kind: 'reaction', text: '矿洞探险顺利！' },
+        { kind: 'hint', text: '屋里礼物箱在 (62,18)：直接 interact 领种子' },
+        { kind: 'notice', text: '有 3 封未读信：直接 read_mail' },
+      ],
+    ];
+
+    for (const items of cases) {
+      for (const facing of ['center', 'left', 'right'] as const) {
+        const layout = computeSmartBubbleLayout(stage, items, { anchor: { xRatio: 0.5, headYRatio: 0.34, facing } });
+        for (const placed of layout.ordered) {
+          expect(rectsOverlap(placed.rect, guard), `${placed.kind} 盖住了脸保护区 (facing=${facing})`).toBe(false);
+        }
+      }
+    }
+  });
+
   it('legacy 半透蓝泡默认落在角色右下方且避开底部居中饭碗与脸身区', () => {
     const avatarGuard: BubbleRect = { x: 144, y: 73, width: 112, height: 159 };
     const riceBowl: BubbleRect = { x: 136, y: 228, width: 128, height: 30 };
@@ -449,8 +481,7 @@ describe('computeBubbleLayout（兼容双轨不重叠接口）', () => {
   });
 });
 
-describe('cleanBubbleText（<think> 标签渲染层防御清洗）', () => {
-  it('thought 轨取 think 块内文；其余 6 种轨一律剥离闭合与未闭合 think 块', () => {
+describe('cleanBubbleText（<think> 标签渲染层防御清洗）', () => {  it('thought 轨取 think 块内文；其余 6 种轨一律剥离闭合与未闭合 think 块', () => {
     expect(cleanBubbleText('<think>今晚吃几碗白米饭</think>', 'thought')).toBe('今晚吃几碗白米饭');
     expect(cleanBubbleText('a<think>一</think>b<think>二</think>c', 'thought')).toBe('一 二');
     expect(cleanBubbleText('开头<think>偷偷数', 'thought')).toBe('开头');

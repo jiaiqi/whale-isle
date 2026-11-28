@@ -689,10 +689,12 @@ export function computeSmartBubbleLayout(
         ? findGridSlot(sideCompact, placedRects, occupied, safeStage, preferredSide, margin, gap, bottomLimit)
         : null);
     const matchPlaced = slotWithObstacles ?? candidates.find((c) => !overlapsAny(c, placedRects, gap));
+    // 脸保护区是最后一道约束：宁可让这一轮退回「纵向堆叠到顶部」，
+    // 也不要为了塞下气泡而盖住桌宠的脸（真机 2026-11-28 采样出现过 1 次 bubble-overlapFace）。
     const slot = matchPlaced
-      ?? findGridSlot(entry.size, placedRects, [], safeStage, preferredSide, margin, gap, bottomLimit)
+      ?? findGridSlot(entry.size, placedRects, avatarGuard === null ? [] : [avatarGuard], safeStage, preferredSide, margin, gap, bottomLimit)
       ?? (sideCompact !== null
-        ? findGridSlot(sideCompact, placedRects, [], safeStage, preferredSide, margin, gap, bottomLimit)
+        ? findGridSlot(sideCompact, placedRects, avatarGuard === null ? [] : [avatarGuard], safeStage, preferredSide, margin, gap, bottomLimit)
         : null);
 
     if (slot === null) {
@@ -708,8 +710,12 @@ export function computeSmartBubbleLayout(
     const usableW = Math.max(24 * n, safeStage.width - margin * 2 - gap * (n - 1));
     const colW = Math.max(16, Math.floor(usableW / n));
     const maxColH = Math.max(18, safeStage.height - margin * 2);
+    // 兜底列布局也只占脸保护区的**上方**：真机采样曾出现气泡整体压到脸上，
+    // 这里把每列高度限制到 guardTop 之上（不够就压到最小高度，宁可短也不盖脸）。
+    const fallbackBottom = avatarGuard === null ? margin + maxColH : Math.max(margin + 18, avatarGuard.y - gap);
     for (let i = 0; i < n; i += 1) {
-      const h = Math.min(sized[i]!.size.height, maxColH);
+      const room = Math.max(18, fallbackBottom - margin);
+      const h = Math.min(sized[i]!.size.height, room);
       placedRects.push({
         x: margin + i * (colW + gap),
         y: margin,
