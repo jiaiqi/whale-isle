@@ -872,6 +872,7 @@ export interface DecisionPromptParams {
   insightsText?: string;
   longTermMemoryText?: string;
   verifiedKnowledgeText?: string;
+  failedActionLedgerText?: string;
   state: GameStateSnapshot;
   effectiveFreeSlots: number;
   environmentHints: string;
@@ -952,6 +953,10 @@ export function buildAutonomousDecisionMessages(
   }
   if (params.longTermMemoryText !== undefined && params.longTermMemoryText.trim() !== '') {
     sections.push(`## 长期经验与主人记忆（历史回顾，仅作参考，优先核对当前游戏状态）\n${params.longTermMemoryText.trim()}`);
+  }
+  // 跨日累计失败动作（V2-P4-01 秋5 真机）：夏28 学到的限制在秋5 必须被再次提醒。
+  if (params.failedActionLedgerText !== undefined && params.failedActionLedgerText.trim() !== '') {
+    sections.push(params.failedActionLedgerText.trim());
   }
 
   // 8) 主人普通聊天建议 + 团队/目标上下文

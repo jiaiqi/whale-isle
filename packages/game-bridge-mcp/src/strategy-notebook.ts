@@ -18,6 +18,14 @@ import {
 } from '@workbench/shared-protocol';
 import { z } from 'zod';
 import { evaluateGuideCompatibility } from './guide-library';
+import {
+  createFailedActionLedger,
+  parseFailedActionLedgerFile,
+  recordFailedAction,
+  serializeFailedActionLedger,
+  type FailedActionLedger,
+  type FailedActionRecord,
+} from './failed-action-ledger';
 
 export const MAX_NOTEBOOK_INSIGHTS = 200;
 
@@ -61,6 +69,20 @@ export const StrategyNotebookFileSchema = z.object({
   lastReflectedDay: z.string().default(''),
   tomorrowHint: z.string().default(''),
   insights: z.array(StrategyInsightSchema).default([]),
+  /** V2-P4-01：跨日失败动作账本（同一存档目录，随心得本一起持久化） */
+  failedActionLedger: z.object({
+    version: z.literal(1).default(1),
+    records: z.array(z.object({
+      signature: z.string().min(1),
+      tool: z.string().min(1),
+      subject: z.string().default(''),
+      count: z.number().int().min(1),
+      lastClock: z.string().default(''),
+      lastSummary: z.string().default(''),
+      lastTs: z.string().default(''),
+      firstDayKey: z.string().default('未知'),
+    })).default([]),
+  }).optional(),
 });
 
 export type StrategyNotebookFile = z.infer<typeof StrategyNotebookFileSchema>;
@@ -203,6 +225,8 @@ export class StrategyNotebook {
   private tomorrowHint = '';
   private insights: StrategyInsight[] = [];
   private seq = 0;
+  /** V2-P4-01：跨日失败动作账本（与心得本同文件持久化，跨日与跨进程保留） */
+  private failedActionLedger: FailedActionLedger = createFailedActionLedger();
 
   constructor(
     private readonly options: {
@@ -273,6 +297,7 @@ export class StrategyNotebook {
       this.lastReflectedDay = parsed.data.lastReflectedDay;
       this.tomorrowHint = parsed.data.tomorrowHint;
       this.insights = parsed.data.insights;
+      this.failedActionLedger = parseFailedActionLedgerFile(parsed.data.failedActionLedger ?? null);
       this.syncSeq();
     } catch {
       /* 损坏的心得文件安全退回空本，绝不阻断决策 */
@@ -289,6 +314,7 @@ export class StrategyNotebook {
       lastReflectedDay: this.lastReflectedDay,
       tomorrowHint: this.tomorrowHint,
       insights: this.insights,
+      failedActionLedger: serializeFailedActionLedger(this.failedActionLedger),
     };
     const tmp = `${path}.tmp-${process.pid}`;
     writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
@@ -297,6 +323,17 @@ export class StrategyNotebook {
 
   list(): StrategyInsight[] {
     return this.insights.map(cloneInsight);
+  }
+
+  /** V2-P4-01：读取跨日失败动作账本（供 planner 注入事实提示） */
+  failedActionLedgerSnapshot(): FailedActionLedger {
+    return { records: this.failedActionLedger.records.map((r) => ({ ...r })) };
+  }
+
+  /** V2-P4-01：记入一次失败并落盘（跨日保留） */
+  recordFailedActionLedgerEntry(entry: FailedActionRecord): void {
+    this.failedActionLedger = recordFailedAction(this.failedActionLedger, entry);
+    this.saveToDisk();
   }
 
   listKnowledgeItems(): GameKnowledgeItem[] {

@@ -11,6 +11,7 @@ import { BrainSwitch, type BrainMode } from './brain-switch';
 import { DayPlanStore, parseMorningPlanObject, type DayPlanSnapshot } from './day-plan';
 import { detectRuntimeContextFromState, formatReadGuideReply, GuideLibrary } from './guide-library';
 import { extractSaveNameFromState, StrategyNotebook, type StrategyInsight } from './strategy-notebook';
+import { observeFailedAction, failedActionLedgerPromptText } from './failed-action-ledger-wiring';
 import { runNightlyReflection, summarizeReceiptsForReflection, type ReceiptRecord } from './reflection';
 import {
   buildAdapterDecisionMessages, buildAutonomousDecisionMessages, buildMorningPlanMessages, extractDecisionJson,
@@ -154,6 +155,10 @@ export class LlmPlanner implements Planner {
     this.fallback.observeReceipt?.(tool, status, summary);
     this.todayReceipts.push({ tool, status, summary });
     if (this.todayReceipts.length > 60) this.todayReceipts.splice(0, this.todayReceipts.length - 60);
+    // 跨日失败动作账本：失败的签名要跨日保留（夏28 学到的限制，秋5 又踩同一处时必须被提醒）。
+    observeFailedAction(this.notebook, {
+      tool, status, summary, clock: this.lastObservedClock, dayKey: this.planDay || '当前', ts: new Date(this.now()).toISOString(),
+    });
     if (this.pendingInsightVerify !== null && this.pendingInsightVerify.tool === tool) {
       const { id, dayKey } = this.pendingInsightVerify;
       this.pendingInsightVerify = null;
@@ -350,6 +355,7 @@ export class LlmPlanner implements Planner {
     const messages = buildAutonomousDecisionMessages({
       ...(personaPrompt === undefined ? {} : { personaPrompt }), guidesHint, insightsText: this.insightsTextForState(state),
       ...extraCtx,
+      failedActionLedgerText: failedActionLedgerPromptText(this.notebook, this.planDay),
       state, effectiveFreeSlots: effectiveSlots, environmentHints: extractEnvironmentHints(state.raw, state.clockMinutes, recent),
       recentReceipts: recent, dayPlanText: this.dayPlanStore.formatForPrompt(),
       failureMemory: { lastSignature: this.lastFailSignature, streak: this.failStreak, lastSummary: this.lastFailSummary, clockStallSec },

@@ -1087,6 +1087,53 @@ describe('S01–S07 卡死回归剧本内存同构验证（免端口绑定验证
   }
 });
 
+describe('V2-P4-01：跨日失败动作账本注入 LlmPlanner（秋5 真机）', () => {
+  it('同一签名跨日累计失败后，事实提示段进入自主决策 prompt', async () => {
+    const prompts: string[] = [];
+    let callIdx = 0;
+    const planner = new LlmPlanner({
+      chat: async (_slot, msgs) => {
+        prompts.push(msgs.map((m) => m.content).join('\n'));
+        callIdx += 1;
+        if (callIdx === 1) return { content: '{"plan":[{"goal":"去海边钓鱼","why":"晴天"},{"goal":"整理背包","why":"省格"}],"mood":"干劲满满"}' };
+        return { content: '{"tool":"forage","args":{},"intent":"先采集一圈"}' };
+      },
+    });
+
+    // 夏28 踩过的坑：同一坐标取箱失败
+    planner.observeReceipt('take_items', 'FAILED', '失败：(69,16) 四周没有可以站的地方');
+    // 秋5 又踩一次：签名相同、跨日累计
+    planner.observeReceipt('take_items', 'FAILED', '失败：(69,16) 四周没有可以站的地方');
+
+    const decision = await planner.decide(state());
+    expect(decision).toMatchObject({ kind: 'act', tool: 'forage' });
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    const decisionPrompt = prompts[prompts.length - 1]!;
+    expect(decisionPrompt).toContain('跨日累计失败动作');
+    expect(decisionPrompt).toContain('(69,16)');
+    expect(decisionPrompt).toContain('累计失败2次');
+    // AI-first 红线：只陈述事实，不出现硬性措辞
+    expect(decisionPrompt).not.toMatch(/必须去|只能换|立刻前往/);
+  });
+
+  it('成功回执不进账本，不产生提示段', async () => {
+    const prompts: string[] = [];
+    let callIdx = 0;
+    const planner = new LlmPlanner({
+      chat: async (_slot, msgs) => {
+        prompts.push(msgs.map((m) => m.content).join('\n'));
+        callIdx += 1;
+        if (callIdx === 1) return { content: '{"plan":[{"goal":"整理背包","why":"省格"}],"mood":"干劲满满"}' };
+        return { content: '{"tool":"forage","args":{},"intent":"先采集一圈"}' };
+      },
+    });
+    planner.observeReceipt('take_items', 'COMPLETED', '成功：从箱子取出：木材x10');
+    await planner.decide(state());
+    const decisionPrompt = prompts[prompts.length - 1]!;
+    expect(decisionPrompt).not.toContain('跨日累计失败动作');
+  });
+});
+
 describe('V2-P4-01：长期记忆与知识库检索注入 LlmPlanner', () => {
   it('buildPlannerMemoryQuery 与 resolvePlannerContexts 正常拼接查询并隔离异常', () => {
     const s = parseGameState(`${STATE_OK}\n今日：生日 阿比盖尔；节日 花舞节`);
