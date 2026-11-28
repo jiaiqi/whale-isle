@@ -944,6 +944,12 @@ export function buildAutonomousDecisionMessages(
   // 6) 失败记忆段
   const failSection = buildFailureMemorySection(params.failureMemory, params.recentReceipts);
   if (failSection !== '') sections.push(failSection.trim());
+  // 跨日累计失败动作（V2-P4-01 秋5 真机）：紧挨失败记忆放，模型才看得见。
+  // 秋5 真机：夏28 学到的 (69,16) 站位不可达，跨到秋5 又在同坐标失败 3 次——
+  // 提示若排在长文之后会被稀释，紧邻「失败记忆」才真正起作用。
+  if (params.failedActionLedgerText !== undefined && params.failedActionLedgerText.trim() !== '') {
+    sections.push(params.failedActionLedgerText.trim());
+  }
 
   // 7) 攻略索引 + 相关经验心得（T-M6-72）+ 已实测知识与长期记忆（V2-P4-01）
   if (params.guidesHint.trim() !== '') sections.push(params.guidesHint.trim());
@@ -953,10 +959,6 @@ export function buildAutonomousDecisionMessages(
   }
   if (params.longTermMemoryText !== undefined && params.longTermMemoryText.trim() !== '') {
     sections.push(`## 长期经验与主人记忆（历史回顾，仅作参考，优先核对当前游戏状态）\n${params.longTermMemoryText.trim()}`);
-  }
-  // 跨日累计失败动作（V2-P4-01 秋5 真机）：夏28 学到的限制在秋5 必须被再次提醒。
-  if (params.failedActionLedgerText !== undefined && params.failedActionLedgerText.trim() !== '') {
-    sections.push(params.failedActionLedgerText.trim());
   }
 
   // 8) 主人普通聊天建议 + 团队/目标上下文

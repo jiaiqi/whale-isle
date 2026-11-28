@@ -1114,6 +1114,13 @@ describe('V2-P4-01：跨日失败动作账本注入 LlmPlanner（秋5 真机）'
     expect(decisionPrompt).toContain('累计失败2次');
     // AI-first 红线：只陈述事实，不出现硬性措辞
     expect(decisionPrompt).not.toMatch(/必须去|只能换|立刻前往/);
+    // 位置：紧挨「失败与停滞记忆」，排在长篇长期经验之前（秋5 真机：排在长文后被稀释）
+    const failIdx = decisionPrompt.indexOf('失败与停滞记忆');
+    const ledgerIdx = decisionPrompt.indexOf('跨日累计失败动作');
+    const memoryIdx = decisionPrompt.indexOf('长期经验与主人记忆');
+    expect(failIdx).toBeGreaterThanOrEqual(0);
+    expect(ledgerIdx).toBeGreaterThan(failIdx);
+    if (memoryIdx >= 0) expect(ledgerIdx).toBeLessThan(memoryIdx);
   });
 
   it('成功回执不进账本，不产生提示段', async () => {

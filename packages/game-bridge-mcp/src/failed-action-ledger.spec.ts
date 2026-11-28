@@ -67,6 +67,9 @@ describe('跨日失败动作账本（V2-P4-01 秋5 真机）', () => {
     ledger = recordFailedAction(ledger, rec('FAILED take_items: 失败：(69,16) 四周没有可以站的地方')!);
     const section = buildFailedActionLedgerSection(ledger, '1-秋5');
     expect(section).not.toMatch(/必须|只能|立刻前往|禁止/);
+    // 但要给出「换个做法」的具体可选项，否则模型只是知道失败过、不知道该怎么做
+    expect(section).toContain('相邻');
+    expect(section).toContain('list_chests');
   });
 
   it('失败原因无坐标无引号时按首句归并', () => {
