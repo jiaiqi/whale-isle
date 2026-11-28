@@ -56,7 +56,7 @@
   - `packages/shared-protocol`：`PetDesktopPrefsSchema` 新增 `dockToGame`（默认 `true`），新增 `apps/desktop-host/src/main/game-dock.ts`（`computeGameBottomRightBounds` / `GameDockTracker`），检测到窗口化《星露谷》即自动将 `default` 桌宠贴边至游戏窗内右下角（底部物品栏上方、右侧体力条左侧），跟随移动并支持手动拖拽让位及闭游恢复。
   - 中控台星露谷工作区（`[data-dock-to-game]`）、桌宠舞台面板（`[data-desk-pref="dockToGame"]`）与桌宠右键菜单（「打开游戏时贴边右下角」）三处双向实时同步。
 - **桌宠气泡、语音标记与星露谷首日体验打磨**：
-  - 修复启动未同步静音标记与旧 `onSpeechResult` 误把最新对话标成 `[静音]`；修复日内 `plan(update)` 频繁顶掉主对话气泡并重复 TTS（改用低干扰 `thought` 气泡）；修复 5~6 行对话底部像素裁切与 `clear_ar\nea` 断词；游戏贴边/自主游玩期间暂停 `patrolTick` 乱跑。
+  - 修复启动未同步静音标记与旧 `onSpeechResult` 误把最新对话标成 `[静音]`；修复日内 `plan(update)` 频繁顶掉主对话气泡并重复 TTS（改用低干扰 `thought` 气泡）；修复 5~6 行对话底部像素裁切与 `clear_ar\n\n> 2026-11-28 14:19 V2-P4-01：参考复评确认本仓晨间计划未吃「今日节日/生日/可执行任务/季末」事实（planner已解析但day-plan未用）。新增 today-schedule.ts 解析节日名称地点时间窗、生日、带交付方式的任务、季末，汇总为事实段注入晨间计划，并允许计划项带 timeHint 时间安排；只陈述客观信息不指定玩法。今日安排事实回归5/5通过，包编译通过；完整门禁待执行。证据见 docs/v2/evidence/P4-01-today-schedule-facts.md。\nea` 断词；游戏贴边/自主游玩期间暂停 `patrolTick` 乱跑。
   - `packages/game-bridge-mcp`：`llm-prompt.ts` 归一化 `clear_area`/`till_area` 冗余坐标入参；`state-hints.ts` 增补 `FarmHouse` 礼盒坐标提示、`Farm` 首动 `till_area` 与背包低余量造箱提示。
 - **验证状态**：构建与回归单测（`game-bridge-mcp` + `game-dock` + `bubbles` 共 24 套件 341/341）及真实 macOS Keychain（DeepSeek + MiMo 锁声）+ 真实星露谷隔离新档首日实玩闭环通过；完整全天 `soak-real` 与物理 `F7` 仍待续测，`V2-P4-01` 维持 `NEXT`。
 

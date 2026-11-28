@@ -5,7 +5,7 @@
  *   - 普通聊天建议 vs `/` 强制命令；网关异常或连续失范切 RulePlanner 代驾并每 2 分钟探测恢复。
  */
 import type { GameRuntimeContext } from '@workbench/shared-protocol';
-import { RulePlanner, type GameStateSnapshot, type Planner, type PlannerDecision } from './planner';
+import { buildTodayScheduleFacts } from './today-schedule';import { RulePlanner, type GameStateSnapshot, type Planner, type PlannerDecision } from './planner';
 import { extractEnvironmentHints } from './state-hints';
 import { BrainSwitch, type BrainMode } from './brain-switch';
 import { DayPlanStore, parseMorningPlanObject, type DayPlanSnapshot } from './day-plan';
@@ -297,9 +297,13 @@ export class LlmPlanner implements Planner {
     if (!freeToAct || this.dayPlanStore.hasAttemptedToday(dayKey) || this.activeCommand !== null || this.objective !== null) return {};
     this.dayPlanStore.markAttempted(dayKey);
     const tomorrowHint = this.notebook.getTomorrowHint();
+    const todayFacts = buildTodayScheduleFacts({
+      raw: state.raw, season: state.season, day: state.day, weather: state.weather,
+    });
     const messages = buildMorningPlanMessages({
       ...(personaPrompt === undefined ? {} : { personaPrompt }), guidesHint, insightsText, ...extra,
       ...(tomorrowHint === '' ? {} : { tomorrowHint }), state,
+      ...(todayFacts === '' ? {} : { todayFacts }),
     });
     try {
       this.askCount += 1;

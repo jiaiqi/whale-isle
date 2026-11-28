@@ -839,6 +839,8 @@ export function buildMorningPlanMessages(params: {
   verifiedKnowledgeText?: string;
   tomorrowHint?: string;
   state: GameStateSnapshot;
+  /** 今日安排事实（节日/生日/天气/季末/可执行任务）；无则空串 */
+  todayFacts?: string;
 }): Array<{ role: 'system' | 'user'; content: string }> {
   const persona = params.personaPrompt?.trim() || '你是「小鲸」——一条住在主人桌面上的傲娇干饭蓝鲸女仆';
   const extraParts = [
@@ -847,11 +849,13 @@ export function buildMorningPlanMessages(params: {
     params.verifiedKnowledgeText?.trim() ? `## 已实测知识与避坑清单（非必须服从的命令）\n${params.verifiedKnowledgeText.trim()}` : '',
     params.longTermMemoryText?.trim() ? `## 长期经验与主人记忆（历史回顾，仅供参考）\n${params.longTermMemoryText.trim()}` : '',
     params.tomorrowHint !== undefined && params.tomorrowHint.trim() !== '' ? `昨日复盘给今天的建议：${params.tomorrowHint.trim()}` : '',
+    params.todayFacts !== undefined && params.todayFacts.trim() !== '' ? params.todayFacts.trim() : '',
   ].filter((x) => x !== '');
   const system = `${persona}，此刻你正在替主人全自动游玩《星露谷物语》。
 新的一天刚起床（${params.state.season}${params.state.day}日），请根据当前季节/季末、日期、天气（下雨/绿雨不用浇水）、节日、金钱、体力与矿石储备、攻略与经验心得，自主制定今天的游玩计划（2～5 条目标 + 理由 + 今日心情）。
 ${extraParts.join('\n\n')}
-只输出一行 JSON：{"plan":[{"goal":"今日目标","why":"这么安排的理由"}],"mood":"一句话人设心情"}`;
+只输出一行 JSON：{"plan":[{"goal":"今日目标","why":"这么安排的理由","timeHint":"时间安排（可留空）"}],"mood":"一句话人设心情"}
+要求：像人一样按一天的时间推进——有节日/生日/任务/季末时，请给相关目标留出对应时段（例如「22:00 前参加月光水母之舞」「上午砍树攒木材」），timeHint 只是给人看的安排说明；要不要做、做哪几件、几点做由你自己决定。`;
   const user = `当前晨间状态：\n${buildStateContext(params.state.raw, 10_000)}\n\n请制定今日计划，只输出一行 JSON。`;
   return [
     { role: 'system', content: system },

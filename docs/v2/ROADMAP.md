@@ -1,4 +1,4 @@
-# Whale Isle V2 完整开发路线图（P0–P5 · 唯一工单真源）
+#\n> 2026-11-28 14:19 V2-P4-01：参考复评确认本仓晨间计划未吃「今日节日/生日/可执行任务/季末」事实（planner已解析但day-plan未用）。新增 today-schedule.ts 解析节日名称地点时间窗、生日、带交付方式的任务、季末，汇总为事实段注入晨间计划，并允许计划项带 timeHint 时间安排；只陈述客观信息不指定玩法。今日安排事实回归5/5通过，包编译通过；完整门禁待执行。证据见 docs/v2/evidence/P4-01-today-schedule-facts.md。\n Whale Isle V2 完整开发路线图（P0–P5 · 唯一工单真源）
 
 > 2026-11-28 14:08 V2-P4-01：恢复桌面客户端后发现真实 pet-window-prefs.json 累积13条窗口记录（12条为一次性伴生桌宠 pet-crosspet-claude-*，多个坐标完全相同）。根因是 save() 对已关闭窗口的持久化记录一律保留、仅对 pet- 前缀封顶12个，导致每次召唤-关闭都留孤儿记录。已改为不再写回临时召唤类窗口，常驻桌宠坐标保留不变；磁盘残留已清理为仅 default。pet-window-manager回归17/17通过；完整门禁待执行。证据见 docs/v2/evidence/P4-01-pet-window-config-leak.md。
 

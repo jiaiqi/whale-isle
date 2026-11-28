@@ -14,6 +14,8 @@ export interface DayPlanItem {
   addedAt?: string;
   /** 标记为已完成时的游戏时钟 */
   completedAt?: string;
+  /** 模型自拟的时间安排（如「22:00 前」「上午」）；仅为展示，不驱动行为 */
+  timeHint?: string;
 }
 
 export interface DayPlanHistoryEntry {
@@ -69,9 +71,13 @@ export function normalizePlanItem(raw: unknown): DayPlanItem | null {
     : typeof rec['reason'] === 'string'
       ? rec['reason'].trim().slice(0, 160)
       : '';
+  const timeHintRaw = typeof rec['timeHint'] === 'string' ? rec['timeHint']
+    : typeof rec['when'] === 'string' ? rec['when'] : '';
+  const timeHint = timeHintRaw.trim().slice(0, 32);
   return {
     goal,
     why,
+    ...(timeHint === '' ? {} : { timeHint }),
     status: normalizeStatus(rec['status']),
   };
 }
