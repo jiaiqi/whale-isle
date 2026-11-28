@@ -134,6 +134,29 @@ describe('PetWindowManager', () => {
   });
 
 
+  it('一次性伴生桌宠关闭后不再写回磁盘，常驻桌宠坐标仍保留', async () => {
+    const { manager, dir } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    await manager.open('pet-crosspet-claude-9k54', 'crosspet-claude');
+    await manager.open('agent-2', 'blue-whale-maid');
+    // 先让三个窗口都落盘（scheduleSave 有 200ms 防抖）
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    manager.flush();
+    manager.close('pet-crosspet-claude-9k54');
+    manager.close('agent-2');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    manager.flush();
+
+    const saved = JSON.parse(readFileSync(join(dir, 'pet-window-prefs.json'), 'utf8')) as {
+      windows: Record<string, { characterId: string }>;
+    };
+    // 常驻桌宠关闭后仍保留坐标（下次打开原位恢复）
+    expect(saved.windows['agent-2']).toBeDefined();
+    // 一次性伴生桌宠不再残留，避免磁盘配置无限膨胀
+    expect(saved.windows['pet-crosspet-claude-9k54']).toBeUndefined();
+    expect(saved.windows['default']).toBeDefined();
+  });
+
   it('贴边探出逐帧 setBounds 并最终回到原位置', async () => {
     const { manager, windows } = makeManager();
     await manager.open('default', 'blue-whale-maid');

@@ -1,5 +1,7 @@
 # Whale Isle V2 完整开发路线图（P0–P5 · 唯一工单真源）
 
+> 2026-11-28 14:08 V2-P4-01：恢复桌面客户端后发现真实 pet-window-prefs.json 累积13条窗口记录（12条为一次性伴生桌宠 pet-crosspet-claude-*，多个坐标完全相同）。根因是 save() 对已关闭窗口的持久化记录一律保留、仅对 pet- 前缀封顶12个，导致每次召唤-关闭都留孤儿记录。已改为不再写回临时召唤类窗口，常驻桌宠坐标保留不变；磁盘残留已清理为仅 default。pet-window-manager回归17/17通过；完整门禁待执行。证据见 docs/v2/evidence/P4-01-pet-window-config-leak.md。
+
 > 2026-11-28 14:02 V2-P4-01【目标达成】真实到达第1年秋1日06:50并完成3次目标日动作（reachedTargetDay=true、targetDayActions=3）。两季共56游戏日、3075次真实动作、金钱500g→771g；本次运行62决策/1211s，clipped/overlap/emptyShell/watchdog全0，控制台错误0，语音完成3次，记忆2450节点，真实存档mtime零变化。秋1日完成社区中心「夏季采集」收集包并领夏季种子x30。证据归档 docs/v2/evidence/P4-01-two-season-acceptance.md 与 two-season-data/。仍未验：物理F7、Windows、人类听感、原生形象视觉抽验、多层重影整屏对照。
 
 > 2026-11-28 13:59 V2-P4-01：夏28月光水母之舞真实执行 enter COMPLETED（在场29人）、greet 与27人打招呼成功。但 festival start 的「刘易斯没有问要不要开始…没有主活动」被回执分类误判 UNCERTAIN（原文含“可能”），与紧邻 FAILED 语义冲突，模型连续重试3次。已改为确定性结论判 FAILED，真正不确定仍保留；adapter回归17/17通过。完整门禁待执行。证据见 docs/v2/evidence/P4-01-festival-receipt-semantics.md。

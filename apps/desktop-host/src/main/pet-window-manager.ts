@@ -769,15 +769,14 @@ export class PetWindowManager {
     for (const [agentId, entry] of this.entries) {
       windows[agentId] = { ...entry.preference, position: { ...entry.preference.position } };
     }
-    // 已关闭窗口的持久化坐标不能因保存而丢失：保留常驻/自定义 id；跳过一次性彩蛋 id 并对临时召唤 id 封顶
-    let closedEphemeralPets = 0;
+    // 已关闭窗口的持久化坐标不能因保存而丢失：只保留常驻/自定义 id。
+    // 一次性彩蛋（egg-）与伴生桌宠（pet-）是临时召唤，关闭后不再写回：
+    // 否则每次召唤-关闭都会在磁盘上留下一条孤儿记录（真实环境曾累积到 13 条 crosspet-claude），
+    // 使配置无限膨胀，并可能被按 id 遍历的逻辑误当成需要恢复的桌宠。
     for (const [agentId, preference] of Object.entries(this.read().windows)) {
       if (windows[agentId] !== undefined) continue;
       if (agentId.startsWith('egg-')) continue;
-      if (agentId.startsWith('pet-')) {
-        if (closedEphemeralPets >= 12) continue;
-        closedEphemeralPets += 1;
-      }
+      if (agentId.startsWith('pet-')) continue;
       windows[agentId] = preference;
     }
     mkdirSync(dirname(this.path), { recursive: true });
