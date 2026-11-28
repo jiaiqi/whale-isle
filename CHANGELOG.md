@@ -1,4 +1,7 @@
 # Changelog
+> 2026-11-28 16:32 V2-P4-01：秋8-秋9 真机连续暴露三处「同一处反复试探」同源缺陷：① explore_mine({"levels":0}) 等于什么都不做，体力 12+背包剩 1 格时连发两次（已给 levels 加下限 1、start_level 收敛 1..120，并补体力≤10%+背包≤2 格的组合告警）；② 同一界面被重复打开（书摊 interact(109,26) 两次、矿洞电梯菜单两次），原检测要求≥3 条抓不到，新增按工具+界面名聚合≥2 次点名；③ 玛妮卧室门口死循环——interact(13,7) 撞「只有玛妮的好朋友才能进入她的卧室」→dialogue 关掉→再靠近又重弹，连续 11 次失败（repeatedToolFail=21/uiOpenClose=16），已加好感/剧情门槛点名与「先 get_state 确认界面」。三处修法统一：只陈述事实不指定动作。回归 llm-planner 42/42、state-hints 21/21、seed-table 14/14，门禁 8/8。证据见 docs/v2/evidence/P4-01-same-spot-retry-loops.md。另：uiOpenClose 实为「开界面次数+close_menu 次数」累计总数，不是循环次数（4=正常 2 次开合，16 才异常），已记录不改口径。
+
+
 > 2026-11-28 16:12 V2-P4-01：秋8 真机暴露两处与「像人一样玩」冲突的行为：① 06:50 调 sleep({"force":true}) 把整白天睡掉，当日 0 收益只走 3 个地点（根因：体力低提示无条件引导 sleep）；② Farm→Town→Farm→Town 连续折返，travelPingPong 3→5（10 次跨地图 5 次是折返，根因：缺少折返事实）。已修：体力低提示按时间分流（白天先做零耗体事或买吃的、只有深夜才引导收工）；新增白天「sleep 会跳过整天」事实；新增 A→B→A 折返序列事实陈述。state-hints 回归 19/19、门禁 8/8。另修气泡布局把脸保护区作为不可越过硬约束（真机 overlapFace 1 次，回归 26/26）。证据见 docs/v2/evidence/P4-01-daytime-sleep-and-travel-churn.md。验收脚本新增 petWindowList 跨窗口多层桌宠检测（此前从未检测过，是我的盲区）。
 
 
