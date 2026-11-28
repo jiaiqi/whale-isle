@@ -144,4 +144,129 @@ describe('T-M6-69 规则日程解析器', () => {
     expect(seedShopStatus(10 * 60, null, null)).toEqual({ open: true, reason: 'open' });
     expect(seedShopStatus(Number.NaN, 2, null)).toEqual({ open: false, reason: 'before-hours' });
   });
+
+  it('在 FarmHouse 室内且有农活/种子时给出 travel_to(Farm) 与礼物箱坐标提示', () => {
+    const house = '时间：第1年春1日 06:00（Mon）\n## 位置\n地点：FarmHouse（鲸屿农场）\n附近物件：- 礼物箱（里面有：防风草种子x15） [interact 打开]：(3,7)\n## 背包\n1: 防风草种子 x15';
+    const hints = extractEnvironmentHints(house, 6 * 60, []);
+    expect(hints).toContain('travel_to({"location":"Farm"})');
+    expect(hints).toContain('interact({"x":3,"y":7})');
+    const emptyFarm = '时间：第1年春1日 06:10（Mon）\n## 位置\n地点：Farm\n## 背包\n1: 防风草种子 x15';
+    expect(extractEnvironmentHints(emptyFarm, 6 * 60 + 10, [])).toContain('x1,y1,x2,y2');
+    expect(extractEnvironmentHints('时间：第1年春1日 06:00（Mon）\n## 位置\n地点：Farm', 6 * 60, [])).not.toContain('在屋里');
+  });
+
+  it('无箱且木材不足50时阻止 tidy_backpack/craft(Chest)；低体力真实区分有无[可食用]食物与未读邮件', () => {
+    const farmNoChestLowWood = `时间：第1年春1日 08:20（Mon）
+金钱：500g  体力：30/270  生命：100/100
+邮箱里有 2 封未读信件：邮箱在 Farm 的 (68,16)
+## 位置
+地点：Farm
+## 背包（序号: 物品）
+0: 斧头（手持）
+1: 木材 x18
+背包空位：2 个（共 12 格）
+## 箱子（所有地点）
+无`;
+    const h1 = extractEnvironmentHints(farmNoChestLowWood, 8 * 60 + 20, []);
+    expect(h1).toContain('read_mail');
+    expect(h1).toContain('别调 eat');
+    expect(h1).toContain('木材 18/50');
+    expect(h1).toContain('别调 tidy_backpack');
+
+    const withEdible = farmNoChestLowWood.replace('1: 木材 x18', '1: 木材 x55\n2: 韭葱 [可食用 +40 体力] x1');
+    const h2 = extractEnvironmentHints(withEdible, 8 * 60 + 20, []);
+    expect(h2).toContain('eat({"item":"韭葱"})');
+    expect(h2).toContain('木材已有 55/50');
+
+    const wateredFarm = '时间：第1年春1日 08:10（Mon）\n## 位置\n地点：Farm\n## 作物（本地点全部）\n生长中：防风草 x15（最快约 4 天后成熟）\n农田：共 15 格耕地：作物 15，空 0';
+    expect(extractEnvironmentHints(wateredFarm, 8 * 60 + 10, [])).toContain('0 株待浇水');
+    const summaryWatered = '时间：第1年春1日 08:10（Mon）\n## 位置\n地点：Farm\n## 作物\n（农场概况：共 15 株作物，需浇水 0，可收获 0）';
+    expect(extractEnvironmentHints(summaryWatered, 8 * 60 + 10, [])).toContain('0 株待浇水');
+    const unwateredFarm = '时间：第1年春1日 08:10（Mon）\n## 位置\n地点：Farm\n## 作物（本地点全部）\n需要浇水 3 株：(62,18)\n生长中：防风草 x15（最快约 4 天后成熟）';
+    expect(extractEnvironmentHints(unwateredFarm, 8 * 60 + 10, [])).not.toContain('0 株待浇水');
+  });
+
+  it('跨季/深夜/节日/升级职业/起名与低血线提示准确不误报', () => {
+    const midnight = '时间：第1年夏1日 00:40（Mon）\n生命：20/100\n## 位置\n地点：Farm\n枯死作物 9 株（可用镰刀清除）：(62,18)';
+    const hMidnight = extractEnvironmentHints(midnight, 40, []);
+    expect(hMidnight).toContain('立刻 sleep');
+    expect(hMidnight).not.toContain('09:00 才开门');
+    expect(hMidnight).toContain('枯死作物');
+    expect(hMidnight).toContain('生命仅 20/100');
+
+    const fest = '时间：第1年春13日 09:00\n你正在节日里：时间不走，普通工具不能用';
+    expect(extractEnvironmentHints(fest, 9 * 60, [])).toContain('festival');
+
+    const prof = '升级了，需要选择职业（用 choose_profession，left 或 right）';
+    expect(extractEnvironmentHints(prof, 6 * 60, [])).toContain('choose_profession');
+
+    const naming = '要起名字：用 set_name 传一个名字';
+    expect(extractEnvironmentHints(naming, 6 * 60, [])).toContain('set_name');
+
+    const day28 = '时间：第1年春28日 07:00（Sun）\n## 位置\n地点：Town';
+    expect(extractEnvironmentHints(day28, 7 * 60, [])).toContain('季末第28天');
+
+    const wed = '时间：第1年春3日 09:30（Wed）\n## 位置\n地点：Farm';
+    expect(extractEnvironmentHints(wed, 9 * 60 + 30, [])).toContain('JojaMart');
+
+    const guildLocked = extractEnvironmentHints('时间：第1年夏2日 14:00\n## 位置\n地点：Mountain', 14 * 60, [
+      'FAILED travel_to: 门锁着进不去 AdventureGuild：信件提示「仅限货真价实的冒险者」',
+    ]);
+    expect(guildLocked).toContain('勿再进 AdventureGuild');
+    expect(guildLocked.length).toBeLessThanOrEqual(240);
+
+    const missingCan = extractEnvironmentHints(
+      '时间：第1年夏2日 07:00\n## 位置\n地点：Farm\n需要浇水 4 株：(62,18)\n## 背包\n0: 十字镐（手持）',
+      7 * 60,
+      ['FAILED water_crops: 没有水壶'],
+    );
+    expect(missingCan).toContain('喷壶');
+    expect(missingCan.length).toBeLessThanOrEqual(240);
+
+    const missingPick = extractEnvironmentHints(
+      '时间：第1年夏2日 11:00\n## 位置\n地点：Mine\n## 背包\n0: 喷壶（手持）',
+      11 * 60,
+      ['FAILED explore_mine: 没有镐子'],
+    );
+    expect(missingPick).toContain('十字镐');
+
+    const shipInteract = extractEnvironmentHints('时间：第1年夏2日 18:00\n## 位置\n地点：Farm', 18 * 60, [
+      'COMPLETED interact: 这是出货箱，交互没有反应',
+    ]);
+    expect(shipInteract).toContain('ship_items');
+
+    const stuckMine = extractEnvironmentHints('时间：第1年夏17日 08:10\n## 位置\n地点：UndergroundMine21', 8 * 60 + 10, [
+      'FAILED explore_mine: 这一层找不到楼梯，也没有能走到的石头了',
+    ]);
+    expect(stuckMine).toContain('travel_to({"location":"Mine"})');
+
+    const unreachable = extractEnvironmentHints('时间：第1年夏6日 14:00\n## 位置\n地点：AnimalShop', 14 * 60, [
+      'FAILED interact: 走不到(13,7) 旁边',
+    ]);
+    expect(unreachable).toContain('立刻换目标');
+
+    const lowHpReservedOnly = extractEnvironmentHints(
+      '时间：第1年夏18日 15:40\n生命：43/115\n## 位置\n地点：UndergroundMine25\n## 背包\n0: 葡萄 【留着】[可食用 +15]',
+      15 * 60 + 40,
+      ['FAILED fight: 生命只剩 43/115'],
+    );
+    expect(lowHpReservedOnly).toContain('别 eat/fight');
+    expect(lowHpReservedOnly.length).toBeLessThanOrEqual(240);
+
+    const bagFullMine = extractEnvironmentHints(
+      '时间：第1年夏21日 14:30\n## 位置\n地点：UndergroundMine31',
+      14 * 60 + 30,
+      ['FAILED explore_mine: 停下原因：背包满了，地上的 紫水晶 捡不起来'],
+    );
+    expect(bagFullMine).toContain('tidy_backpack');
+
+    const lateOutdoor = extractEnvironmentHints('时间：第1年夏22日 23:10\n## 位置\n地点：Town', 23 * 60 + 10, []);
+    expect(lateOutdoor).toContain('避免 02:00 晕倒');
+
+    const boulderLoop = extractEnvironmentHints('时间：第1年夏22日 14:10\n## 位置\n地点：Mine', 14 * 60 + 10, [
+      'COMPLETED use_tool: 对 (27,8) 使用 十字镐 1 次，目标从“圆石”变为“圆石”',
+      'FAILED interact: 当前界面： 对话框：你的十字镐不够坚硬，无法敲开它。',
+    ]);
+    expect(boulderLoop).toContain('大圆石');
+  });
 });

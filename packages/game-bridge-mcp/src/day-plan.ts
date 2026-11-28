@@ -10,6 +10,20 @@ export interface DayPlanItem {
   goal: string;
   why: string;
   status: DayPlanStatus;
+  /** 加入或立项时的游戏时钟 */
+  addedAt?: string;
+  /** 标记为已完成时的游戏时钟 */
+  completedAt?: string;
+}
+
+export interface DayPlanHistoryEntry {
+  /** 触发记录时的游戏时钟 */
+  atClock: string;
+  /** 触发记录时的现实时间戳 */
+  atTs: number;
+  kind: 'morning' | 'update';
+  summary: string;
+  why?: string;
 }
 
 export interface DayPlanSnapshot {
@@ -17,6 +31,7 @@ export interface DayPlanSnapshot {
   items: DayPlanItem[];
   mood?: string;
   updateWhy?: string;
+  history?: DayPlanHistoryEntry[];
 }
 
 export interface DayPlanUpdate {
@@ -61,6 +76,14 @@ export function normalizePlanItem(raw: unknown): DayPlanItem | null {
   };
 }
 
+/** 更新中省略状态表示保留旧状态，不能在解析时提前变成 pending。 */
+function normalizePlanUpdateItem(raw: unknown): { goal: string; why: string; status?: DayPlanStatus } | null {
+  const item = normalizePlanItem(raw);
+  if (item === null) return null;
+  const hasStatus = typeof raw === 'object' && raw !== null && 'status' in raw && raw.status !== undefined;
+  return { goal: item.goal, why: item.why, ...(hasStatus ? { status: item.status } : {}) };
+}
+
 /** 解析清晨计划 JSON：`{"plan":[{"goal":"...","why":"..."}],"mood":"..."}` */
 export function parseMorningPlanObject(obj: Record<string, unknown>): { items: DayPlanItem[]; mood?: string } | null {
   const rawList = obj['plan'];
@@ -83,7 +106,7 @@ export function parsePlanUpdate(raw: unknown): DayPlanUpdate | null {
   if (Array.isArray(raw)) {
     const replace: Array<{ goal: string; why?: string; status?: DayPlanStatus }> = [];
     for (const entry of raw) {
-      const item = normalizePlanItem(entry);
+      const item = normalizePlanUpdateItem(entry);
       if (item !== null) replace.push(item);
     }
     return replace.length > 0 ? { replace } : null;
@@ -110,8 +133,8 @@ export function parsePlanUpdate(raw: unknown): DayPlanUpdate | null {
   let add: Array<{ goal: string; why?: string; status?: DayPlanStatus } | string> | undefined;
   if (Array.isArray(rec['add'])) {
     const parsedAdd = rec['add']
-      .map((entry) => normalizePlanItem(entry))
-      .filter((item): item is DayPlanItem => item !== null);
+      .map((entry) => normalizePlanUpdateItem(entry))
+      .filter((item): item is NonNullable<ReturnType<typeof normalizePlanUpdateItem>> => item !== null);
     if (parsedAdd.length > 0) add = parsedAdd;
   }
 
@@ -119,8 +142,8 @@ export function parsePlanUpdate(raw: unknown): DayPlanUpdate | null {
   if (Array.isArray(rec['replace'] ?? rec['items'] ?? rec['plan'])) {
     const src = (rec['replace'] ?? rec['items'] ?? rec['plan']) as unknown[];
     const parsedReplace = src
-      .map((entry) => normalizePlanItem(entry))
-      .filter((item): item is DayPlanItem => item !== null);
+      .map((entry) => normalizePlanUpdateItem(entry))
+      .filter((item): item is NonNullable<ReturnType<typeof normalizePlanUpdateItem>> => item !== null);
     if (parsedReplace.length > 0) replace = parsedReplace;
   }
 
@@ -137,15 +160,25 @@ export function parsePlanUpdate(raw: unknown): DayPlanUpdate | null {
   };
 }
 
+function normalizeGoalKey(goal: string): string {
+  return goal.replace(/[\s，。、：:！!？?（）()【】[\]「」"'`]+/g, '').trim().toLowerCase();
+}
+
 function matchesRef(item: DayPlanItem, index: number, ref: string | number): boolean {
   if (typeof ref === 'number') return index === ref;
   const needle = ref.trim();
   return needle !== '' && (item.goal === needle || item.goal.includes(needle) || needle.includes(item.goal));
 }
 
+function shortGoalLabel(goal: string): string {
+  const s = goal.trim();
+  return s.length > 24 ? `${s.slice(0, 23)}…` : s;
+}
+
 export class DayPlanStore {
   private current: DayPlanSnapshot | null = null;
   private attemptedDay = '';
+  private history: DayPlanHistoryEntry[] = [];
 
   /** 跨日清空旧计划 */
   rollover(dayKey: string): boolean {
@@ -153,6 +186,7 @@ export class DayPlanStore {
     const changed = this.attemptedDay !== dayKey;
     if (this.current !== null && this.current.dayKey !== dayKey) {
       this.current = null;
+      this.history = [];
     }
     return changed;
   }
@@ -165,56 +199,141 @@ export class DayPlanStore {
     if (dayKey !== '') this.attemptedDay = dayKey;
   }
 
-  setMorningPlan(dayKey: string, items: DayPlanItem[], mood?: string): DayPlanSnapshot {
+  setMorningPlan(dayKey: string, items: DayPlanItem[], mood?: string, atClock = ''): DayPlanSnapshot {
     this.attemptedDay = dayKey;
-    const normalized = items.slice(0, 8).map((item, idx) => ({
-      ...item,
-      status: idx === 0 && item.status === 'pending' ? ('in_progress' as const) : item.status,
-    }));
+    const stamp = atClock.trim() !== '' ? atClock.trim() : dayKey;
+    const normalized = items.slice(0, 8).map((item, idx) => {
+      const status = idx === 0 && item.status === 'pending' ? ('in_progress' as const) : item.status;
+      return {
+        ...item,
+        status,
+        addedAt: item.addedAt ?? stamp,
+        ...(status === 'done' ? { completedAt: item.completedAt ?? stamp } : {}),
+      };
+    });
+    this.history = [{
+      atClock: stamp,
+      atTs: Date.now(),
+      kind: 'morning',
+      summary: `晨间拟定 ${normalized.length} 项待办`,
+      ...(mood === undefined ? {} : { why: mood }),
+    }];
     this.current = {
       dayKey,
       items: normalized,
       ...(mood === undefined ? {} : { mood }),
+      history: this.history.map((entry) => ({ ...entry })),
     };
     return this.snapshot()!;
   }
 
-  applyUpdate(dayKey: string, update: DayPlanUpdate): DayPlanSnapshot | null {
+  applyUpdate(dayKey: string, update: DayPlanUpdate, atClock = ''): DayPlanSnapshot | null {
     const baseItems: DayPlanItem[] = this.current?.dayKey === dayKey ? this.current.items.map((it) => ({ ...it })) : [];
+    const stamp = atClock.trim() !== '' ? atClock.trim() : dayKey;
     let nextItems = baseItems;
+    const doneGoals: string[] = [];
+    const progressGoals: string[] = [];
+    const addedGoals: string[] = [];
+    const removedGoals: string[] = [];
+    let replacedCount: number | null = null;
 
     if (update.replace !== undefined) {
       nextItems = update.replace
         .map((entry) => normalizePlanItem(entry))
         .filter((item): item is DayPlanItem => item !== null)
-        .slice(0, 8);
+        .slice(0, 8)
+        .map((item) => {
+          const existing = baseItems.find((old) => normalizeGoalKey(old.goal) === normalizeGoalKey(item.goal));
+          const requested = update.replace!.find((entry) => normalizePlanItem(entry)?.goal === item.goal)?.status;
+          const status = existing?.status === 'done' ? 'done' : requested ?? existing?.status ?? 'pending';
+          if (status === 'done' && existing?.status !== 'done') doneGoals.push(item.goal);
+          return {
+            ...item,
+            status,
+            addedAt: existing?.addedAt ?? stamp,
+            ...(status === 'done' ? { completedAt: existing?.completedAt ?? stamp } : {}),
+          };
+        });
+      replacedCount = nextItems.length;
     } else {
       if (update.done !== undefined) {
-        nextItems = nextItems.map((item, idx) =>
-          update.done!.some((ref) => matchesRef(item, idx, ref)) ? { ...item, status: 'done' } : item);
+        nextItems = nextItems.map((item, idx) => {
+          if (!update.done!.some((ref) => matchesRef(item, idx, ref))) return item;
+          if (item.status !== 'done') doneGoals.push(item.goal);
+          return { ...item, status: 'done', completedAt: item.completedAt ?? stamp };
+        });
       }
       if (update.inProgress !== undefined) {
-        nextItems = nextItems.map((item, idx) =>
-          update.inProgress!.some((ref) => matchesRef(item, idx, ref)) ? { ...item, status: 'in_progress' } : item);
+        nextItems = nextItems.map((item, idx) => {
+          if (item.status === 'done' || !update.inProgress!.some((ref) => matchesRef(item, idx, ref))) return item;
+          if (item.status !== 'in_progress') progressGoals.push(item.goal);
+          return { ...item, status: 'in_progress' };
+        });
       }
       if (update.remove !== undefined) {
-        nextItems = nextItems.filter((item, idx) => !update.remove!.some((ref) => matchesRef(item, idx, ref)));
+        nextItems = nextItems.filter((item, idx) => {
+          const hit = update.remove!.some((ref) => matchesRef(item, idx, ref));
+          if (hit) removedGoals.push(item.goal);
+          return !hit;
+        });
       }
       if (update.add !== undefined) {
         for (const raw of update.add) {
           const item = normalizePlanItem(raw);
-          if (item !== null && nextItems.length < 8) nextItems.push(item);
+          if (item === null) continue;
+          const key = normalizeGoalKey(item.goal);
+          const dupIdx = nextItems.findIndex((existing) => normalizeGoalKey(existing.goal) === key);
+          if (dupIdx >= 0) {
+            const existing = nextItems[dupIdx]!;
+            const explicitStatus = typeof raw === 'object' ? raw.status : undefined;
+            const nextStatus = existing.status === 'done' ? 'done' : explicitStatus ?? existing.status;
+            if (nextStatus === 'done' && existing.status !== 'done') doneGoals.push(existing.goal);
+            nextItems[dupIdx] = {
+              goal: existing.goal,
+              why: item.why !== '' ? item.why : existing.why,
+              status: nextStatus,
+              ...(existing.addedAt === undefined ? { addedAt: stamp } : { addedAt: existing.addedAt }),
+              ...(nextStatus === 'done' ? { completedAt: existing.completedAt ?? stamp } : {}),
+            };
+          } else if (nextItems.length < 8) {
+            addedGoals.push(item.goal);
+            nextItems.push({
+              ...item,
+              addedAt: stamp,
+              ...(item.status === 'done' ? { completedAt: stamp } : {}),
+            });
+          }
         }
       }
     }
 
-    if (nextItems.length === 0) return null;
+    if (nextItems.length === 0 && baseItems.length === 0) return null;
     this.attemptedDay = dayKey;
+    const changeParts: string[] = [];
+    if (replacedCount !== null) changeParts.push(`重排为 ${replacedCount} 项`);
+    if (doneGoals.length > 0) changeParts.push(`完成「${doneGoals.map(shortGoalLabel).join('、')}」`);
+    if (progressGoals.length > 0) changeParts.push(`推进「${progressGoals.map(shortGoalLabel).join('、')}」`);
+    if (addedGoals.length > 0) changeParts.push(`新增「${addedGoals.map(shortGoalLabel).join('、')}」`);
+    if (removedGoals.length > 0) changeParts.push(`移除「${removedGoals.map(shortGoalLabel).join('、')}」`);
+    if (changeParts.length > 0 || update.why !== undefined) {
+      if (this.current?.dayKey !== dayKey) this.history = [];
+      this.history = [
+        ...this.history.slice(-39),
+        {
+          atClock: stamp,
+          atTs: Date.now(),
+          kind: 'update',
+          summary: changeParts.join(' · ') || `记录计划说明（共 ${nextItems.length} 项，目标状态未变）`,
+          ...(update.why === undefined ? {} : { why: update.why }),
+        },
+      ];
+    }
     this.current = {
       dayKey,
       items: nextItems,
       ...(this.current?.mood === undefined ? {} : { mood: this.current.mood }),
       ...(update.why === undefined ? {} : { updateWhy: update.why }),
+      ...(this.history.length > 0 ? { history: this.history.map((entry) => ({ ...entry })) } : {}),
     };
     return this.snapshot();
   }
@@ -226,6 +345,7 @@ export class DayPlanStore {
       items: this.current.items.map((item) => ({ ...item })),
       ...(this.current.mood === undefined ? {} : { mood: this.current.mood }),
       ...(this.current.updateWhy === undefined ? {} : { updateWhy: this.current.updateWhy }),
+      ...(this.history.length > 0 ? { history: this.history.map((entry) => ({ ...entry })) } : {}),
     };
   }
 
@@ -239,7 +359,7 @@ export class DayPlanStore {
       pending: '[待办]',
     };
     const lines = this.current.items.map((item, idx) =>
-      `${idx + 1}. ${badge[item.status]} ${item.goal}${item.why === '' ? '' : `（理由：${item.why}）`}`);
+      `[ref=${idx}] ${badge[item.status]} ${item.goal}${item.why === '' ? '' : `（理由：${item.why}）`}`);
     const moodLine = this.current.mood === undefined ? '' : `今日心情：${this.current.mood}\n`;
     return `${moodLine}${lines.join('\n')}`;
   }

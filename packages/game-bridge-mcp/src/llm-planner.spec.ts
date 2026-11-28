@@ -16,9 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
 import { StardewAdapter } from './adapter';
+import { buildAutonomousDecisionMessages } from './llm-prompt';
 import {
   BrainSwitch,
   buildFailureMemorySection,
+  buildPlannerMemoryQuery,
   buildSurvivalReminder,
   DayPlanStore,
   extractDecisionJson,
@@ -35,6 +37,8 @@ import {
   pickGuideContext,
   pickPrematureReservedEdible,
   pickShippableItem,
+  resolvePlannerContexts,
+  StrategyNotebook,
   type BrainMode,
   type ChatStanceEmission,
   type PlanEmission,
@@ -194,8 +198,11 @@ describe('DayPlanStore 与计划修订（§4.2）', () => {
 
     const store = new DayPlanStore();
     expect(store.formatForPrompt()).toContain('尚未建立');
-    const morning = store.setMorningPlan('春16', parsed!.items, parsed!.mood);
+    const morning = store.setMorningPlan('春16', parsed!.items, parsed!.mood, '第1年春16日 06:00');
     expect(morning.items[0]?.status).toBe('in_progress');
+    expect(morning.items[0]?.addedAt).toBe('第1年春16日 06:00');
+    expect(morning.history).toHaveLength(1);
+    expect(morning.history?.[0]?.kind).toBe('morning');
     expect(store.formatForPrompt()).toContain('[进行中] 浇水收菜');
 
     const upd = parsePlanUpdate({
@@ -205,11 +212,16 @@ describe('DayPlanStore 与计划修订（§4.2）', () => {
       add: [{ goal: '下矿挖铜', reason: '顺路' }],
     });
     expect(upd).not.toBeNull();
-    const after = store.applyUpdate('春16', upd!);
+    const after = store.applyUpdate('春16', upd!, '第1年春16日 06:20');
     expect(after?.items[0]?.status).toBe('done');
+    expect(after?.items[0]?.completedAt).toBe('第1年春16日 06:20');
     expect(after?.items[1]?.status).toBe('in_progress');
     expect(after?.items[2]?.goal).toBe('下矿挖铜');
+    expect(after?.items[2]?.addedAt).toBe('第1年春16日 06:20');
     expect(after?.updateWhy).toBe('下雨不用浇水');
+    expect(after?.history).toHaveLength(2);
+    expect(after?.history?.[1]?.summary).toContain('完成「浇水收菜」');
+    expect(after?.history?.[1]?.why).toBe('下雨不用浇水');
 
     const replaced = store.applyUpdate('春16', parsePlanUpdate([{ title: '早点睡觉', status: 'pending' }])!);
     expect(replaced?.items).toHaveLength(1);
@@ -219,6 +231,15 @@ describe('DayPlanStore 与计划修订（§4.2）', () => {
     store.rollover('春17');
     expect(store.snapshot()).toBeNull();
     expect(store.hasAttemptedToday('春17')).toBe(false);
+
+    // 重复目标去重：同名/同义标点不会重复推入 add 列表
+    const dedup = new DayPlanStore();
+    dedup.setMorningPlan('春1', [{ goal: '开礼物箱拿种子', why: '晨间', status: 'in_progress' }]);
+    const res = dedup.applyUpdate('春1', parsePlanUpdate({
+      add: [{ goal: '开礼物箱拿种子！', why: '补充理由' }, { goal: '走到礼物箱旁' }, { goal: '走到礼物箱旁' }],
+    })!);
+    expect(res?.items).toHaveLength(2);
+    expect(res?.items[0]?.why).toBe('补充理由');
   });
 });
 
@@ -630,7 +651,8 @@ describe('多游戏 adapter seam 与多步目标兼容（M7 & T-M6-54）', () =>
     })!);
     expect(added?.items).toHaveLength(2);
     const removed = freshStore.applyUpdate('春16', { remove: ['去砍树', 1] });
-    expect(removed).toBeNull();
+    expect(removed?.items).toEqual([]);
+    expect(freshStore.snapshot()?.items).toEqual([]);
     const fromItemsKey = parsePlanUpdate({ items: [{ goal: '备选计划', status: 'invalid' as 'pending' }] });
     expect(fromItemsKey?.replace?.[0]?.status).toBe('pending');
 
@@ -893,4 +915,119 @@ describe('S01–S07 卡死回归剧本内存同构验证（免端口绑定验证
       }
     });
   }
+});
+
+describe('V2-P4-01：长期记忆与知识库检索注入 LlmPlanner', () => {
+  it('buildPlannerMemoryQuery 与 resolvePlannerContexts 正常拼接查询并隔离异常', () => {
+    const s = parseGameState(`${STATE_OK}\n今日：生日 阿比盖尔；节日 花舞节`);
+    const q = buildPlannerMemoryQuery(s, {
+      objective: '送礼',
+      goalHint: '去皮埃尔买花',
+      lastFailSignature: 'fish|无鱼竿|Beach',
+      pendingSuggestion: '一起下矿',
+    });
+    expect(q).toContain('Farm');
+    expect(q).toContain('生日 阿比盖尔');
+    expect(q).toContain('节日 花舞节');
+    expect(q).toContain('送礼');
+    expect(q).toContain('fish 无鱼竿 Beach');
+
+    const okCtx = resolvePlannerContexts(s, {
+      memoryContextProvider: (query) => `记忆命中(${query.slice(0, 4)})`,
+      knowledgeContextProvider: () => '知识条目：晴天浇水',
+    });
+    expect(okCtx.longTermMemoryText).toContain('记忆命中');
+    expect(okCtx.verifiedKnowledgeText).toContain('知识条目');
+
+    const safeFail = resolvePlannerContexts(s, {
+      memoryContextProvider: () => { throw new Error('db locked'); },
+      knowledgeContextProvider: () => { throw new Error('knowledge failed'); },
+    });
+    expect(safeFail).toEqual({ longTermMemoryText: '', verifiedKnowledgeText: '' });
+  });
+
+  it('晨间计划与每轮自主决策均注入记忆与知识上下文，并在 debugSnapshot 暴露配置状态', async () => {
+    const prompts: string[] = [];
+    let callIdx = 0;
+    const planner = new LlmPlanner({
+      chat: async (_slot, msgs) => {
+        prompts.push(msgs.map((m) => m.content).join('\n'));
+        callIdx += 1;
+        if (callIdx === 1) {
+          return { content: '{"plan":[{"goal":"去海边钓鱼","why":"晴天"},{"goal":"整理背包","why":"省格"}],"mood":"干劲满满"}' };
+        }
+        return { content: '{"tool":"forage","args":{},"intent":"先采集一圈"}' };
+      },
+      memoryContextProvider: (query) => `【相关经历】之前在 ${query.split(' ')[0]} 捡到过韭葱`,
+      knowledgeContextProvider: () => '- [已晋升 90%] Farm：晴天优先批量浇水',
+    });
+
+    const decision = await planner.decide(state());
+    expect(decision).toMatchObject({ kind: 'act', tool: 'forage' });
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toContain('已实测知识与避坑清单');
+    expect(prompts[0]).toContain('长期经验与主人记忆');
+    expect(prompts[1]).toContain('之前在 Farm 捡到过韭葱');
+    expect(prompts[1]).toContain('[已晋升 90%] Farm');
+    expect(planner.debugSnapshot()['retrieval']).toEqual({ memoryConfigured: true, knowledgeConfigured: true });
+    expect(normalizeToolArgs({ target: 'Farm' }, 'travel_to')).toEqual({ location: 'Farm' });
+    expect(normalizeToolArgs({ destination: ['Town'] }, 'travel_to')).toEqual({ location: 'Town' });
+    expect(normalizeToolArgs({ x: 64, y: 15, radius: 3 }, 'clear_area')).toEqual({ radius: 3 });
+    expect(normalizeToolArgs({ x: 64, y: 15, r: 4 }, 'clear_area')).toEqual({ radius: 4 });
+    expect(normalizeToolArgs({ x: 64, y: 15 }, 'clear_area')).toEqual({ x1: 62, y1: 13, x2: 66, y2: 17 });
+    expect(normalizeToolArgs({ x: 64, y: 16, count: 12 }, 'till_area')).toEqual({ count: 12 });
+    expect(normalizeToolArgs({ shop: 'SeedShop' }, 'open_shop')).toEqual({ shop_id: 'SeedShop' });
+    expect(normalizeToolArgs({ count: 8 }, 'fish')).toEqual({ casts: 8 });
+    expect(normalizeToolArgs({ confirm: true }, 'sleep')).toEqual({ force: true });
+    expect(normalizeToolArgs({ step: 'greet' }, 'festival')).toEqual({ action: 'greet' });
+    expect(normalizeToolArgs({ choice: '右' }, 'choose_profession')).toEqual({ side: 'right' });
+    expect(normalizeToolArgs({ petName: '蓝蓝' }, 'set_name')).toEqual({ name: '蓝蓝' });
+    expect(normalizeToolArgs({ item: 'watering_can' }, 'upgrade_tool')).toEqual({ tool: 'watering_can' });
+    expect(normalizeToolArgs({ gift: '黄水仙' }, 'give_gift')).toEqual({ item: '黄水仙' });
+    expect(normalizeToolArgs({ count: 9 }, 'clear_area')).toEqual({ radius: 3 });
+    expect(normalizeToolArgs({ chest_x: 68, chest_y: 17, items: ['石头'], count: 10 }, 'store_items')).toEqual({ x: 68, y: 17, items: '石头' });
+    expect(normalizeToolArgs({ box_x: 68, box_y: 17, from_chest: true, chest: 'home', location: 'Farm', items: '喷壶' }, 'take_items')).toEqual({ x: 68, y: 17, items: '喷壶' });
+    expect(normalizeToolArgs({ item: '昆虫头部', container: 'Farm (68,18)' }, 'store_items')).toEqual({ items: '昆虫头部', x: 68, y: 18 });
+
+    const spMessages = buildAutonomousDecisionMessages({
+      state: state(),
+      recentReceipts: [],
+      dayPlanText: '（暂无）',
+      failureMemory: { lastSignature: null, streak: 0, lastSummary: '', clockStallSec: 0 },
+      mandatoryCommand: null,
+      pendingSuggestion: null,
+      handoverSummary: null,
+      teamAndObjectiveText: '',
+      allowedTools: LLM_TOOL_WHITELIST,
+      environmentHints: '',
+      guidesHint: '',
+      effectiveFreeSlots: 8,
+    });
+    expect(spMessages[0]?.content).not.toContain('say,');
+
+    const mpMessages = buildAutonomousDecisionMessages({
+      state: { ...state(), raw: `${state().raw}\n模式：联机` },
+      recentReceipts: [],
+      dayPlanText: '（暂无）',
+      failureMemory: { lastSignature: null, streak: 0, lastSummary: '', clockStallSec: 0 },
+      mandatoryCommand: null,
+      pendingSuggestion: null,
+      handoverSummary: null,
+      teamAndObjectiveText: '',
+      allowedTools: LLM_TOOL_WHITELIST,
+      environmentHints: '',
+      guidesHint: '',
+      effectiveFreeSlots: 8,
+    });
+    expect(mpMessages[0]?.content).toContain(', say,');
+
+    // StrategyNotebook 跨日近似表述去重合并，防止 56 天泛滥同义心得，同时不误合并不同作物策略
+    const nb = new StrategyNotebook();
+    nb.upsert('春1', { source: '每晚复盘', claim: '下雨天免浇水，适合去矿洞或河边钓鱼', verdict: 'adopt', why: '实测' });
+    nb.upsert('春5', { source: '每晚复盘', claim: '下雨天不用浇水，适合去矿洞或河边钓鱼', verdict: 'adopt', why: '再验证' });
+    expect(nb.size()).toBe(1);
+    nb.upsert('春6', { source: '每晚复盘', claim: '春季第一周多种土豆收益稳定', verdict: 'adopt', why: '作物对比' });
+    nb.upsert('春7', { source: '每晚复盘', claim: '春季第一周多种草莓收益更高', verdict: 'adopt', why: '作物对比' });
+    expect(nb.size()).toBe(3);
+  });
 });

@@ -124,11 +124,14 @@ export class BwfMcpClient {
 
 /** 长动作判定（BWF 语义：>45s 先回「还在执行」） */
 export function isLongAction(tool: string): boolean {
-  return ['fish', 'explore_mine', 'water_crops', 'harvest_crops', 'donate_bundles', 'crack_geodes',
-    'quest_board', 'ship_items', 'tidy_backpack', 'store_items', 'travel_to', 'interact', 'give_gift',
-    'clear_area', 'till_area', 'plant_seeds', 'place_item', 'set_name',
-    'sleep', 'care_animals', 'festival', 'leave_festival', 'fight',
-    'check_crab_pots', 'upgrade_house', 'build', 'read_mail', 'repair_boat', 'mermaid_show', 'wait'].includes(tool);
+  return ['fish', 'explore_mine', 'water_crops', 'harvest_crops', 'donate_bundles', 'donate_museum',
+    'crack_geodes', 'quest_board', 'special_orders', 'special_order_dropbox', 'prize_machine',
+    'ship_items', 'tidy_backpack', 'store_items', 'take_items', 'travel_to', 'interact', 'give_gift',
+    'clear_area', 'till_area', 'plant_seeds', 'place_item', 'use_tool', 'use_item', 'forage', 'cook',
+    'set_name', 'sleep', 'care_animals', 'buy_animal', 'festival', 'leave_festival', 'fight',
+    'check_crab_pots', 'upgrade_house', 'upgrade_tool', 'build', 'read_mail', 'repair_boat',
+    'mermaid_show', 'pan', 'mastery', 'collect_walnuts', 'feed_parrot', 'field_office', 'grandpa',
+    'joja', 'wait'].includes(tool);
 }
 
 export function actionTimeoutMs(tool: string): number {

@@ -172,6 +172,43 @@ function latestChestSummary(receipts: readonly string[]): string {
   return '';
 }
 
+/** 从背包提取可食用（未标【留着】）的食物名 */
+function listEdibleNames(bag: string): string[] {
+  const out: string[] = [];
+  for (const line of bag.split('\n')) {
+    const match = /^\s*\d+:\s*(.+)$/.exec(line);
+    if (match?.[1] === undefined) continue;
+    const text = match[1];
+    if (!/\[可食用/.test(text) || /【(?:留着|保留)/.test(text)) continue;
+    const name = cleanStackText(text);
+    if (name !== '') out.push(name);
+  }
+  return out.reverse();
+}
+
+function parseWoodCount(bag: string | null): number | null {
+  if (bag === null) return null;
+  let total = 0;
+  for (const line of bag.split('\n')) {
+    if (!/^\s*\d+:\s*(?:木材|Wood)(?=\s|$|x\d)/i.test(line)) continue;
+    const cnt = /x(\d+)/i.exec(line);
+    total += cnt?.[1] === undefined ? 1 : Number(cnt[1]);
+  }
+  return total;
+}
+
+function chestSectionPresent(raw: string): 'has-chest' | 'empty' | 'unknown' {
+  const chestSec = /##\s*箱子[^\n]*\n([\s\S]*?)(?=\n## |\n\n|$)/.exec(raw)?.[1];
+  if (chestSec !== undefined) {
+    if (/和上次 get_state 一样/.test(chestSec)) return 'unknown';
+    return /[-\d].*(?:箱|Chest)/i.test(chestSec) ? 'has-chest' : 'empty';
+  }
+  if (/附近物体|附近物件/.test(raw)) {
+    return /(?:箱子|宝箱|Chest)\s*[:：(（]/.test(raw) ? 'has-chest' : 'empty';
+  }
+  return 'unknown';
+}
+
 /**
  * @param stateRaw 最近一次 get_state 原文（BWF 文本）
  * @param clockMinutes 游戏内分钟数（6:00 = 360）
@@ -182,25 +219,196 @@ export function extractEnvironmentHints(
   clockMinutes: number,
   recentReceipts: readonly string[],
 ): string {
-  const facts: string[] = [];
-  const backpack = backpackSection(stateRaw);
-  if (backpack !== null && !/鱼竿/.test(backpack)) {
-    facts.push('背包没有鱼竿：先查箱子 list_chests，没有再去鱼店买（09:00-17:00）');
-  }
+  const urgent: string[] = [];
+  const normal: string[] = [];
+  const bag = backpackSection(stateRaw);
+  const chest = latestChestSummary(recentReceipts);
   const free = /背包空位：(\d+)/.exec(stateRaw);
-  if (free?.[1] !== undefined) {
-    const slots = Number(free[1]);
-    if (slots <= 2) facts.push(`背包只剩 ${slots} 个空位：先整理/出货再进货`);
+  const staminaM = /体力：(\d+)\/(\d+)/.exec(stateRaw);
+  const healthM = /生命：(\d+)\/(\d+)/.exec(stateRaw);
+
+  if (/需要选择职业（用 choose_profession/.test(stateRaw)) {
+    urgent.push('升级选职业弹窗：对照左右描述选 choose_profession({"side":"left"}) 或 "right"');
+  } else if (/用 set_name 传一个名字/.test(stateRaw)) {
+    urgent.push('起名弹窗：直接 set_name({"name":"小鲸宝"})');
+  } else if (/奖券机的界面|PrizeTicketMenu/.test(stateRaw)) {
+    urgent.push('奖券机界面：用 prize_machine({}) 兑奖或 close_menu({}) 离开');
+  } else if (/钓鱼宝箱|拿取物品的界面/.test(stateRaw)) {
+    urgent.push('开箱拿物界面：用 close_menu({}) 收下物品');
+  } else if (/（读完用 close_menu 关闭/.test(stateRaw)) {
+    urgent.push('信件界面：读完用 close_menu({}) 关闭收下附件');
   }
-  if (Number.isFinite(clockMinutes)) {
-    if (clockMinutes < 9 * 60) {
-      facts.push(`现在 ${clockLabel(clockMinutes)}，鱼店和皮埃尔 09:00 才开门，别白跑`);
-    } else if (clockMinutes >= 17 * 60) {
-      facts.push(`现在 ${clockLabel(clockMinutes)}，鱼店和皮埃尔 17:00 已打烊，别白跑`);
+
+  if (/你正在节日里：时间不走|节日主活动(?:已经开始了|进行中)/.test(stateRaw)) {
+    urgent.push('节日进行中：用 festival({"action":"greet"}) 聊天 / festival({"action":"start"}) 进主活动，或 festival({"action":"leave"}) 离开');
+  } else if (/今天是[^\n]+用 festival enter 入场/.test(stateRaw)) {
+    normal.push('今日有节日（时段内镇上商店关门）：参加用 festival({"action":"enter"})');
+  }
+
+  if (/地点：FarmHouse\b/.test(stateRaw) && Number.isFinite(clockMinutes) && clockMinutes >= 6 * 60 && clockMinutes < 22 * 60) {
+    const giftMatch = /礼物箱[^\n]*?\((\d+)\s*,\s*(\d+)\)/.exec(stateRaw);
+    const hasSeeds = parseSeedInventory(stateRaw).length > 0;
+    if (giftMatch?.[1] !== undefined && giftMatch[2] !== undefined) {
+      urgent.push(`屋里礼物箱在 (${giftMatch[1]},${giftMatch[2]})：直接 interact({"x":${giftMatch[1]},"y":${giftMatch[2]}}) 领种子（别传 target）`);
+    } else if (hasSeeds) {
+      urgent.push('种子已到手且屋里无礼物箱：直接 travel_to({"location":"Farm"}) 出门');
+    }
+    const farm = parseFarmSummary(stateRaw);
+    const hasFarmWork = (farm.needsWater ?? 0) > 0 || (farm.harvestable ?? 0) > 0 || (farm.emptyTilled ?? 0) > 0 || hasSeeds;
+    if (hasFarmWork && giftMatch !== null) urgent.push('屋里且外头有农活：用 travel_to({"location":"Farm"}) 出门');
+  }
+
+  const mailM = /邮箱里有\s*(\d+)\s*封未读信件/.exec(stateRaw);
+  if (mailM?.[1] !== undefined) {
+    urgent.push(`有 ${mailM[1]} 封未读信：直接 read_mail({})`);
+  }
+
+  const last3Receipts = recentReceipts.slice(-3).join('\n');
+
+  if (/(?:仅限货真价实的冒险者|进不去\s*AdventureGuild|AdventureGuild[^\n]*进不去)/.test(`${last3Receipts}\n${stateRaw}`)) {
+    urgent.push('公会门未开（需杀10史莱姆次日开）：勿再进 AdventureGuild，有信件先 close_menu({})');
+  }
+
+  if (bag !== null && !/[喷水]壶|Watering ?Can/i.test(bag)) {
+    const farmSummary = /地点：Farm\b/.test(stateRaw) ? parseFarmSummary(stateRaw) : null;
+    if ((farmSummary?.needsWater ?? 0) > 0 || /water_crops[\s\S]*没有水壶|没有水壶/.test(last3Receipts)) {
+      urgent.push('背包缺“喷壶”（真名非“水壶”）：先 list_chests({}) 查箱再 take_items 取“喷壶”');
     }
   }
-  const chest = latestChestSummary(recentReceipts);
-  if (chest !== '') facts.push(`刚查到的箱子：${chest.slice(0, 80)}`);
-  const text = facts.join('；');
+
+  if (bag !== null && !/十字镐|镐子|Pickaxe/i.test(bag)) {
+    if (/地点：.*Mine/i.test(stateRaw) || /explore_mine[\s\S]*没有镐子|没有镐子/.test(last3Receipts)) {
+      urgent.push('背包缺“十字镐”（真名非“镐子”）：下矿先回箱子取“十字镐”');
+    }
+  }
+
+  if (bag !== null && !/锄头|Hoe/i.test(bag) && /till_area[\s\S]*没有锄头|没有锄头/.test(last3Receipts)) {
+    urgent.push('背包缺“锄头”：先 list_chests({}) 查箱取“锄头”');
+  }
+
+  if (/这一层找不到楼梯，也没有能走到的石头了/.test(last3Receipts)) {
+    urgent.push('本矿层无楼梯且无可达石头：立刻 travel_to({"location":"Mine"}) 重下电梯或离开');
+  }
+
+  if (/(?:走不到\([^)]+\)\s*旁边|穿过[^\n]*房门[^\n]*好感)/.test(last3Receipts)) {
+    urgent.push('目标不可达/缺房门好感：立刻换目标，别反复 interact/move_to 原坐标');
+  }
+
+  if (/背包满了，地上的[\s\S]*捡不起来/.test(last3Receipts)) {
+    urgent.push('背包0空位无法捡矿：先回 Farm 调 tidy_backpack({"purpose":"mine"}) 或存/出货腾格');
+  }
+
+  if (/还没认识[^\n]*先用\s*interact/.test(last3Receipts)) {
+    urgent.push('还没认识该村民：先调 interact({"npc":"村民名"}) 打招呼再送礼');
+  }
+
+  if (/(?:圆石\s*\(\s*\d+\s*,\s*\d+\s*\)|你的十字镐不够坚硬|从“圆石”变为“圆石”)/.test(last3Receipts)) {
+    urgent.push('大圆石当前镐等级敲不开、clear_area 也清不动：立刻放弃圆石/矮人路线，改做别的');
+  }
+
+  if (/地点：Farm\b/.test(stateRaw)) {
+    const farm = parseFarmSummary(stateRaw);
+    const hasDeadCrops = /枯死作物\s*[1-9]\d*\s*株/.test(stateRaw);
+    const hasCropLines = /生长中：[^\n]*?x\d+|农田：[^\n]*?作物\s*[1-9]\d*|可收获\s*[1-9]\d*\s*株/.test(stateRaw);
+    const anyCropOnFarm = (farm.cropCount ?? 0) > 0 || hasCropLines;
+    const allWatered = (farm.needsWater === 0 || (farm.needsWater === null && anyCropOnFarm))
+      && !/需要浇水\s*[1-9]\d*\s*株/.test(stateRaw);
+    const lastReceipt = recentReceipts[recentReceipts.length - 1] ?? '';
+    const justConfirmedNoWater = /water_crops\s*[:：].*(?:这里(?:（Farm）)?没有需要浇水的作物|还剩\s*0\s*株没浇)/.test(lastReceipt);
+    if (hasDeadCrops) {
+      urgent.push('田里有枯死作物（保留已耕土）：先 clear_area({"radius":6}) 或镰刀清除再播种');
+    } else if (!anyCropOnFarm && (farm.emptyTilled ?? 0) === 0 && parseSeedInventory(stateRaw).length > 0) {
+      urgent.push('农场暂无耕地：有杂物先 clear_area({"radius":5})，首次开垦须给矩形 x1,y1,x2,y2（如 {"x1":62,"y1":18,"x2":66,"y2":20}）');
+    } else if ((anyCropOnFarm && allWatered) || (justConfirmedNoWater && farm.needsWater === null)) {
+      urgent.push('农场当前 0 株待浇水（今日已浇透，直接把浇水计划标 done，勿重复 water_crops，忽略未解锁的 IslandWest）');
+    }
+  }
+
+  if (healthM?.[1] !== undefined && healthM[2] !== undefined) {
+    const hp = Number(healthM[1]);
+    const hpMax = Number(healthM[2]);
+    if (hpMax > 0 && hp / hpMax <= 0.43) {
+      const edibles = bag !== null ? listEdibleNames(bag) : [];
+      if (edibles.length > 0) {
+        urgent.push(`生命仅 ${hp}/${hpMax}：先 eat({"item":"${edibles[0]}"}) 回血`);
+      } else {
+        urgent.push(`生命仅 ${hp}/${hpMax} 且无非【留着】回血食物：别 eat/fight，立刻 travel_to 撤离`);
+      }
+    }
+  }
+
+  if (staminaM?.[1] !== undefined && staminaM[2] !== undefined && bag !== null) {
+    const stamina = Number(staminaM[1]);
+    if (stamina <= 50) {
+      const edibles = listEdibleNames(bag);
+      if (edibles.length > 0) {
+        urgent.push(`体力仅 ${stamina}：可 eat({"item":"${edibles[0]}"})${edibles.length > 1 ? ` 等(${edibles.slice(1, 2).join('、')})` : ''}`);
+      } else {
+        urgent.push(`体力仅 ${stamina} 且无[可食用]食物，别调 eat！做零耗体事（town/forest forage 或找未认识村民 interact）或 sleep({"force":true})`);
+      }
+    }
+  }
+
+  if (free?.[1] !== undefined && Number(free[1]) <= 3) {
+    const slots = Number(free[1]);
+    if (/地点：Farm\b/.test(stateRaw) && chest === '') {
+      const chestStatus = chestSectionPresent(stateRaw);
+      const wood = parseWoodCount(bag);
+      if (chestStatus === 'empty' && wood !== null && wood < 50) {
+        urgent.push(`剩 ${slots} 格、无箱且木材 ${wood}/50：别调 tidy_backpack 或 craft(Chest)，先 ship_items 或 axe 砍树`);
+      } else if (chestStatus === 'empty' && wood !== null && wood >= 50) {
+        urgent.push(`剩 ${slots} 格且木材已有 ${wood}/50：可 craft({"recipe":"Chest"}) 再 place_item({"item":"Chest"})`);
+      } else if (slots <= 2) {
+        urgent.push(`农场仅剩 ${slots} 格：可用 ship_items 出货，或满 50 木材造箱`);
+      }
+    } else if (slots <= 2) {
+      normal.push(`背包只剩 ${slots} 个空位：先整理/出货再进货`);
+    }
+  }
+
+  if (Number.isFinite(clockMinutes)) {
+    const weekday = parseWeekday(stateRaw);
+    if (clockMinutes < 6 * 60) {
+      urgent.push(`深夜 ${clockLabel(clockMinutes)}（距 02:00 晕倒仅 ${Math.max(0, 120 - clockMinutes)} 分）：立刻 sleep({}) 回家睡觉`);
+    } else if (clockMinutes >= 22 * 60 + 45 && !/地点：FarmHouse\b/.test(stateRaw)) {
+      urgent.push(`已 ${clockLabel(clockMinutes)}，在外别恋战：早点 travel_to("FarmHouse") + sleep 避免 02:00 晕倒扣钱`);
+    } else if (weekday === 3 && clockMinutes >= 8 * 60 && clockMinutes < 22 * 60) {
+      normal.push('今天周三皮埃尔杂货店歇业，买种子改去 JojaMart（09:00-23:00）');
+    } else if (clockMinutes < 9 * 60) {
+      normal.push(`现在 ${clockLabel(clockMinutes)}，鱼店和皮埃尔 09:00 才开门，别白跑`);
+    } else if (clockMinutes >= 17 * 60) {
+      normal.push(`现在 ${clockLabel(clockMinutes)}，鱼店和皮埃尔 17:00 已打烊，别白跑`);
+    }
+  }
+
+  if (/时间：第\d+年[春夏秋冬]28日/.test(stateRaw)) {
+    normal.push('今日季末第28天：单季未熟作物明早枯死，勿再买当季新品');
+  }
+  if (/【花钱建议】[\s\S]*背包扩到 24 格/.test(stateRaw)) {
+    normal.push('满 2000g 可去 SeedShop interact 柜台背包扩到 24 格');
+  }
+  if (/可以捐给博物馆/.test(stateRaw)) {
+    normal.push('有可捐矿物/古物（08:00-18:00 可 donate_museum）');
+  }
+  if (/用 donate_bundles/.test(stateRaw)) {
+    normal.push('背包有收集包材料（可 donate_bundles）');
+  }
+
+  if (/是(?:出货箱|宝箱)[^\n]*(?:交互没有反应|不用\s*interact)|interact[\s\S]*(?:出货箱|是宝箱)/.test(last3Receipts)) {
+    normal.push('出货用 ship_items、存取箱用 take_items/store_items，勿对箱子调 interact');
+  }
+  if (/(?:箱子里没有符合的东西|哪个箱子里都没有)/.test(last3Receipts)) {
+    normal.push('多箱查找先 list_chests({}) 看全览坐标；1.6工具名 喷壶/十字镐/竹鱼竿');
+  }
+
+  if (bag !== null && !/鱼竿/.test(bag)) {
+    normal.push('背包没有鱼竿(竹鱼竿)：先查箱子 list_chests，没有再去鱼店买（09:00-17:00）');
+  }
+
+  if (chest !== '') {
+    normal.push(`刚查到的箱子：${chest.slice(0, 80)}`);
+  }
+
+  const text = [...urgent, ...normal].join('；');
   return text.length > MAX_HINTS_CHARS ? `${text.slice(0, MAX_HINTS_CHARS - 1)}…` : text;
 }

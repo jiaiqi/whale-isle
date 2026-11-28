@@ -8,6 +8,7 @@ export * from './seed-table';
 export * from './metrics';
 export * from './autodrive';
 export * from './llm-planner';
+export * from './state-cache';
 export * from './state-hints';
 export * from './team-blackboard';
 export * from './huddle-orchestrator';

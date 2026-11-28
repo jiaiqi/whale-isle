@@ -15,6 +15,53 @@ import { cleanItemName, inventoryTexts, type GameStateSnapshot } from './planner
 import { parsePlanUpdate, type DayPlanUpdate } from './day-plan';
 import { InsightVerdictSchema, type LlmInsightDraft } from './strategy-notebook';
 
+/** 根据当前游戏局面拼出长期记忆检索查询（Generative Agents 相关性检索前置）。 */
+export function buildPlannerMemoryQuery(
+  state: GameStateSnapshot,
+  extras: { objective?: string | null; goalHint?: string; lastFailSignature?: string | null; pendingSuggestion?: string | null } = {},
+): string {
+  const parts = [
+    state.location !== '未知' ? state.location : '',
+    `${state.season}${state.day}日 ${state.season}季`,
+    state.birthday ? `生日 ${state.birthday}` : '',
+    state.festival ? `节日 ${state.festival}` : '',
+    extras.objective ?? '',
+    extras.goalHint ?? '',
+    extras.pendingSuggestion ?? '',
+    extras.lastFailSignature ? extras.lastFailSignature.replace(/\|/g, ' ') : '',
+  ].map((s) => s.trim()).filter((s) => s !== '');
+  return parts.join(' ').slice(0, 200);
+}
+
+/** 容错拉取长期记忆与知识库上下文（任一外部读取异常均静默回退为空串，不阻断自主决策）。 */
+export function resolvePlannerContexts(
+  state: GameStateSnapshot,
+  deps: {
+    memoryContextProvider?: ((query: string) => string) | undefined;
+    knowledgeContextProvider?: ((state: GameStateSnapshot) => string) | undefined;
+  },
+  extras: { objective?: string | null; goalHint?: string; lastFailSignature?: string | null; pendingSuggestion?: string | null } = {},
+): { longTermMemoryText: string; verifiedKnowledgeText: string } {
+  let longTermMemoryText = '';
+  let verifiedKnowledgeText = '';
+  if (deps.memoryContextProvider !== undefined) {
+    try {
+      const query = buildPlannerMemoryQuery(state, extras);
+      if (query !== '') longTermMemoryText = deps.memoryContextProvider(query).trim();
+    } catch {
+      longTermMemoryText = '';
+    }
+  }
+  if (deps.knowledgeContextProvider !== undefined) {
+    try {
+      verifiedKnowledgeText = deps.knowledgeContextProvider(state).trim();
+    } catch {
+      verifiedKnowledgeText = '';
+    }
+  }
+  return { longTermMemoryText, verifiedKnowledgeText };
+}
+
 /** BWF 工具白名单（越权工具名一律拒绝——运行期安全锁） */
 export const LLM_TOOL_WHITELIST = new Set([
   'get_state', 'get_guide', 'move_to', 'travel_to', 'use_tool', 'interact', 'place_item',
@@ -91,7 +138,7 @@ export function normalizeToolArgs(args: Record<string, unknown>, tool = ''): Rec
       delete out['name'];
     }
   }
-  if (tool === 'take_items') {
+  if (tool === 'take_items' || tool === 'store_items') {
     const source = args['items'] ?? args['item'];
     if (Array.isArray(source)) {
       out['items'] = source.map((value) => String(firstItemName(value))).filter((value) => value !== '').join(',');
@@ -119,6 +166,148 @@ export function normalizeToolArgs(args: Record<string, unknown>, tool = ''): Rec
       delete out['recipeName'];
       delete out['item'];
       delete out['name'];
+    }
+  }
+  if (tool === 'travel_to' && out['location'] === undefined) {
+    const source = args['target'] ?? args['destination'] ?? args['to'] ?? args['place'] ?? args['map'] ?? args['name'];
+    if (source !== undefined) {
+      out['location'] = firstItemName(source);
+      delete out['target'];
+      delete out['destination'];
+      delete out['to'];
+      delete out['place'];
+      delete out['map'];
+      delete out['name'];
+    }
+  }
+  if (tool === 'clear_area') {
+    if (out['radius'] === undefined && out['r'] !== undefined) {
+      out['radius'] = out['r'];
+      delete out['r'];
+    }
+    if (out['radius'] === undefined && out['count'] !== undefined) {
+      const rawCount = out['count'];
+      if (typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0) {
+        out['radius'] = Math.min(6, Math.max(2, Math.round(Math.sqrt(rawCount))));
+      }
+    }
+    delete out['count'];
+    const hasBox = out['x1'] !== undefined && out['y1'] !== undefined && out['x2'] !== undefined && out['y2'] !== undefined;
+    if (out['radius'] !== undefined || hasBox || out['all'] !== undefined) {
+      delete out['x'];
+      delete out['y'];
+    } else if (typeof out['x'] === 'number' && typeof out['y'] === 'number') {
+      const cx = Math.round(out['x']);
+      const cy = Math.round(out['y']);
+      out['x1'] = cx - 2;
+      out['y1'] = cy - 2;
+      out['x2'] = cx + 2;
+      out['y2'] = cy + 2;
+      delete out['x'];
+      delete out['y'];
+    }
+  }
+  if (tool === 'till_area' && out['count'] !== undefined) {
+    delete out['x'];
+    delete out['y'];
+  }
+  if (tool === 'open_shop' && out['shop_id'] === undefined) {
+    const source = args['shop'] ?? args['id'] ?? args['name'];
+    if (source !== undefined) {
+      out['shop_id'] = firstItemName(source);
+      delete out['shop'];
+      delete out['id'];
+      delete out['name'];
+    }
+  }
+  if (tool === 'fish' && out['casts'] === undefined) {
+    const rawCasts = args['count'] ?? args['times'];
+    if (typeof rawCasts === 'number' && Number.isFinite(rawCasts)) {
+      out['casts'] = Math.max(1, Math.min(20, Math.round(rawCasts)));
+      delete out['count'];
+      delete out['times'];
+    }
+  }
+  if (tool === 'sleep' && out['force'] === undefined) {
+    const rawForce = args['confirm'] ?? args['early'] ?? args['now'];
+    if (typeof rawForce === 'boolean') {
+      out['force'] = rawForce;
+      delete out['confirm'];
+      delete out['early'];
+      delete out['now'];
+    }
+  }
+  if (tool === 'festival' && out['action'] === undefined) {
+    const src = args['step'] ?? args['cmd'] ?? args['mode'];
+    if (src !== undefined) {
+      out['action'] = firstItemName(src);
+      delete out['step'];
+      delete out['cmd'];
+      delete out['mode'];
+    }
+  }
+  if (tool === 'choose_profession' && out['side'] === undefined) {
+    const src = args['choice'] ?? args['option'] ?? args['direction'];
+    if (src !== undefined) {
+      const s = String(firstItemName(src)).trim().toLowerCase();
+      out['side'] = /right|右/.test(s) ? 'right' : /left|左/.test(s) ? 'left' : s;
+      delete out['choice'];
+      delete out['option'];
+      delete out['direction'];
+    }
+  }
+  if (tool === 'set_name' && out['name'] === undefined) {
+    const src = args['petName'] ?? args['value'] ?? args['text'];
+    if (src !== undefined) {
+      out['name'] = firstItemName(src);
+      delete out['petName'];
+      delete out['value'];
+      delete out['text'];
+    }
+  }
+  if (tool === 'upgrade_tool' && out['tool'] === undefined) {
+    const src = args['item'] ?? args['name'];
+    if (src !== undefined) {
+      out['tool'] = firstItemName(src);
+      delete out['item'];
+      delete out['name'];
+    }
+  }
+  if (tool === 'give_gift' && out['item'] === undefined && args['gift'] !== undefined) {
+    out['item'] = firstItemName(args['gift']);
+    delete out['gift'];
+  }
+  if (tool === 'store_items' || tool === 'take_items') {
+    const containerCoords = typeof args['container'] === 'string'
+      ? /\(\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/.exec(args['container'])
+      : null;
+    if (out['x'] === undefined) {
+      const nextX = args['chest_x'] ?? args['cx'] ?? args['box_x']
+        ?? (containerCoords?.[1] !== undefined ? Number(containerCoords[1]) : undefined);
+      if (nextX !== undefined) out['x'] = nextX;
+    }
+    if (out['y'] === undefined) {
+      const nextY = args['chest_y'] ?? args['cy'] ?? args['box_y']
+        ?? (containerCoords?.[2] !== undefined ? Number(containerCoords[2]) : undefined);
+      if (nextY !== undefined) out['y'] = nextY;
+    }
+    delete out['chest_x'];
+    delete out['chest_y'];
+    delete out['cx'];
+    delete out['cy'];
+    delete out['box_x'];
+    delete out['box_y'];
+    delete out['from_chest'];
+    delete out['chest'];
+    delete out['container'];
+    delete out['location'];
+    delete out['map'];
+    if (tool === 'store_items') {
+      delete out['count'];
+      delete out['amount'];
+    } else {
+      delete out['source'];
+      delete out['from'];
     }
   }
   return out;
@@ -477,6 +666,8 @@ export function buildMorningPlanMessages(params: {
   personaPrompt?: string;
   guidesHint: string;
   insightsText?: string;
+  longTermMemoryText?: string;
+  verifiedKnowledgeText?: string;
   tomorrowHint?: string;
   state: GameStateSnapshot;
 }): Array<{ role: 'system' | 'user'; content: string }> {
@@ -484,10 +675,12 @@ export function buildMorningPlanMessages(params: {
   const extraParts = [
     params.guidesHint.trim(),
     params.insightsText?.trim() ?? '',
+    params.verifiedKnowledgeText?.trim() ? `## 已实测知识与避坑清单（非必须服从的命令）\n${params.verifiedKnowledgeText.trim()}` : '',
+    params.longTermMemoryText?.trim() ? `## 长期经验与主人记忆（历史回顾，仅供参考）\n${params.longTermMemoryText.trim()}` : '',
     params.tomorrowHint !== undefined && params.tomorrowHint.trim() !== '' ? `昨日复盘给今天的建议：${params.tomorrowHint.trim()}` : '',
   ].filter((x) => x !== '');
   const system = `${persona}，此刻你正在替主人全自动游玩《星露谷物语》。
-新的一天刚起床，请根据当前季节、日期、天气、金钱、农场、攻略与经验心得，自主制定今天的游玩计划（2～5 条目标 + 理由 + 今日心情）。
+新的一天刚起床（${params.state.season}${params.state.day}日），请根据当前季节/季末、日期、天气（下雨/绿雨不用浇水）、节日、金钱、体力与矿石储备、攻略与经验心得，自主制定今天的游玩计划（2～5 条目标 + 理由 + 今日心情）。
 ${extraParts.join('\n\n')}
 只输出一行 JSON：{"plan":[{"goal":"今日目标","why":"这么安排的理由"}],"mood":"一句话人设心情"}`;
   const user = `当前晨间状态：\n${params.state.raw.slice(0, 3500)}\n\n请制定今日计划，只输出一行 JSON。`;
@@ -501,6 +694,8 @@ export interface DecisionPromptParams {
   personaPrompt?: string;
   guidesHint: string;
   insightsText?: string;
+  longTermMemoryText?: string;
+  verifiedKnowledgeText?: string;
   state: GameStateSnapshot;
   effectiveFreeSlots: number;
   environmentHints: string;
@@ -517,15 +712,21 @@ export interface DecisionPromptParams {
 export function buildAutonomousDecisionMessages(
   params: DecisionPromptParams,
 ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  const isMultiplayer = /联机|多人|farmhand|multiplayer/i.test(params.state.raw);
+  const displayedAllowedTools = [...params.allowedTools].filter((t) => t !== 'say' || isMultiplayer);
   const persona = params.personaPrompt?.trim() || '你是「小鲸」——一条住在主人桌面上的傲娇干饭蓝鲸女仆';
   const system = `${persona}，此刻你正在替主人全自动游玩《星露谷物语》。
 你拥有完全的自主决策权：每天干什么、先做什么后做什么、要不要采纳攻略或主人的普通建议，全部由你结合当前游戏状态、性格与经验自己决定。
 核心操作准则：
 1. 当前界面非空时（对话框/商店/结算/过场），优先用 dialogue（选择题必带 choice 序号）、buy、close_menu、set_name 或 skip_event 处理界面。
-2. 优先使用高效批量工具（water_crops / harvest_crops / till_area / plant_seeds / clear_area / forage / tidy_backpack / ship_items）。雨天户外作物自动浇水。
-3. 只能调用白名单内的 BWF 工具：${[...params.allowedTools].join(', ')}；一次只做一个动作，args 键名须匹配工具真实参数。若需要先查攻略详情，可先调用宿主直读伪工具 {"tool":"read_guide","args":{"topic":"专题","section":"小节"}}（每轮最多 2 节，不推游戏时间）。攻略与心得仅供参考而非命令，若与当前游戏版本、已装 Mod 或实况不符须拒绝盲执行，可附带 "insight":{"source":"专题#小节","sourceType":"wiki","gameVersion":"1.6","claim":"结论","when":"条件","verdict":"adopt|defer|reject","confidence":0.65,"knownLimitations":["限制"],"why":"理由"}；若遵循了已有心得，请附带 "usedInsight":"心得id"。
+2. 优先使用高效批量工具与准确参数：
+   - 农田/采集/动物：water_crops({}) 只浇当前地图（若状态或回执显示 0 株待浇水/「这里没有需要浇水的作物」，立即把浇水目标标 done 勿重复调用，忽略未解锁的 IslandWest 提示） / harvest_crops({}) 收获熟作物 / till_area({"count":15} 或首次 {"x1":62,"y1":18,"x2":66,"y2":20}) / plant_seeds({"seed":"防风草种子"}) / clear_area({"radius":5} 或 "all":true；也能清枯死作物，要砍大树加 "include_trees":true) / use_tool({"tool":"axe|hoe|pickaxe|watering_can|scythe|weapon","x":X,"y":Y,"times":10}) / check_crab_pots({}) / care_animals({"door":"open|close"})。雨天/绿雨户外作物自动浇水。
+   - 出行/交互/收集：跨地图用 travel_to({"location":"Farm|Town|SeedShop|Beach|Forest|Mountain|Mine|FishShop|Blacksmith|ScienceHouse|CommunityCenter|ArchaeologyHouse|AdventureGuild"})；move_to 只收整数 {"x":X,"y":Y}。interact 收 {"npc":"村民名"} 或 {"x":X,"y":Y}（拆礼盒/开箱/买24格背包/电视/收机器，禁传 target）。forage({}) 采集野生草药贝壳；仅状态明示「邮箱里有 N 封未读信件」时调 read_mail({})；gift_info({"npc":"..."}) / give_gift({"npc":"...","item":"..."}) / quest_board({"accept":true}) / bundle_info({}) / donate_bundles({}) / donate_museum({})。
+   - 背包/吃喝/下矿/节日/升级：ship_items({"item":"物品名","count":数量})；只有农场已有箱子时才调 tidy_backpack({"purpose":"farm|mine|fish|town"})，造箱须先满 50 木材 craft({"recipe":"Chest"})+place_item({"item":"Chest"})；eat({"item":"背包里带[可食用]的食物"})；open_shop({}) / buy({"item":"商品名","count":数量}) / sell({"item":"..."}) / fish({"casts":5}) / explore_mine({"levels":3,"start_level":5}，数字仅示例；起始层按当前电梯解锁与目标资源分布选择，已有当日约定或营业时限时先估算往返和动作耗时，别用长批量任务耗掉整个窗口) / fight({}) / upgrade_tool({"tool":"watering_can|pickaxe|axe|hoe"}) / crack_geodes({}) / build({"building":"Coop|Silo|Barn"}) / buy_animal({}) / choose_profession({"side":"left|right"}) / set_name({"name":"名字"}) / festival({"action":"enter|greet|start|leave"})；18:00 后 sleep({})，18:00 前须 sleep({"force":true})，等开门或节日可用 wait({"until":"09:00"})。查中文攻略可直接调 BWF get_guide({"topic":"攻略|节日|钓鱼|采矿|农场类型"})（不推时间）。
+   - 像真人一样统筹体力：体力低且无食物时优先零耗体事（forage 找大葱/韭葱补体、在镇上找未认识村民聊天、读信），别空耗体硬干；planUpdate 仅作阶段目标调整，别把单步移动写进当日计划也别重复添加已有目标。数字引用严格使用计划中显示的 0 基 ref；继续已有目标用 inProgress；每轮核对上一步真实成功回执，已完成的阶段目标及时用 done 同步到 Todo，尚未完成不得勾选；放弃或不再适用用 remove 并写 why，不把放弃当完成。未在最新状态或回执中看到真实成功证据前，绝不在回复/意图里自称已完成。
+3. 只能调用白名单内的 BWF 工具：${displayedAllowedTools.join(', ')}；一次只做一个动作，args 键名须匹配工具真实参数。若需要先查攻略详情，可先调用宿主直读伪工具 {"tool":"read_guide","args":{"topic":"专题","section":"小节"}}（每轮最多 2 节，不推游戏时间）。攻略与心得仅供参考而非命令，若与当前游戏版本、已装 Mod 或实况不符须拒绝盲执行，可附带 "insight":{"source":"专题#小节","sourceType":"wiki","gameVersion":"1.6","claim":"结论","when":"条件","verdict":"adopt|defer|reject","confidence":0.65,"knownLimitations":["限制"],"why":"理由"}；若遵循了已有心得，请附带 "usedInsight":"心得id"。
 4. 输出必须是一行合法 JSON：
-{"tool":"工具名","args":{参数},"intent":"人设口吻的一句话意图"，可选字段："planUpdate":{"why":"修订理由","done":["已完成项"],"add":[{"goal":"新目标","why":"理由"}]},"insight":{...},"usedInsight":"ins-1","reply":"回复主人的话","stance":"accept|modify|decline|execute|infeasible","reason":"不可行原因","alternative":"替代方案","commandDone":true,"objectiveDone":true}`;
+{"tool":"工具名","args":{参数},"intent":"人设口吻的一句话意图"，可选字段："planUpdate":{"why":"修订理由","done":["已完成项"],"inProgress":["继续推进的已有项"],"remove":["放弃项"],"add":[{"goal":"新目标","why":"理由"}]},"insight":{...},"usedInsight":"ins-1","reply":"回复主人的话","stance":"accept|modify|decline|execute|infeasible","reason":"不可行原因","alternative":"替代方案","commandDone":true,"objectiveDone":true}`;
 
   const sections: string[] = [];
 
@@ -567,9 +768,15 @@ export function buildAutonomousDecisionMessages(
   const failSection = buildFailureMemorySection(params.failureMemory, params.recentReceipts);
   if (failSection !== '') sections.push(failSection.trim());
 
-  // 7) 攻略索引 + 相关经验心得（T-M6-72）
+  // 7) 攻略索引 + 相关经验心得（T-M6-72）+ 已实测知识与长期记忆（V2-P4-01）
   if (params.guidesHint.trim() !== '') sections.push(params.guidesHint.trim());
   if (params.insightsText !== undefined && params.insightsText.trim() !== '') sections.push(params.insightsText.trim());
+  if (params.verifiedKnowledgeText !== undefined && params.verifiedKnowledgeText.trim() !== '') {
+    sections.push(`## 已实测知识与避坑清单（来自知识库与实玩回执，非必须服从的命令）\n${params.verifiedKnowledgeText.trim()}`);
+  }
+  if (params.longTermMemoryText !== undefined && params.longTermMemoryText.trim() !== '') {
+    sections.push(`## 长期经验与主人记忆（历史回顾，仅作参考，优先核对当前游戏状态）\n${params.longTermMemoryText.trim()}`);
+  }
 
   // 8) 主人普通聊天建议 + 团队/目标上下文
   if (params.pendingSuggestion !== null) {
@@ -581,7 +788,7 @@ export function buildAutonomousDecisionMessages(
     sections.push(params.teamAndObjectiveText.trim());
   }
 
-  sections.push('请自主决定下一步动作，只输出一行 JSON。');
+  sections.push(`当前游戏时钟：${params.state.gameClock}。历史回执里的开门、地点、体力等条件只描述发生当时，不能沿用为当前事实；先按最新状态核对时限与今日目标，再自主决定下一步动作，只输出一行 JSON。`);
 
   return [
     { role: 'system', content: system },

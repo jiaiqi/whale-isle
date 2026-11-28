@@ -15,7 +15,7 @@ import { runNightlyReflection, summarizeReceiptsForReflection, type ReceiptRecor
 import {
   buildAdapterDecisionMessages, buildAutonomousDecisionMessages, buildMorningPlanMessages, extractDecisionJson,
   extractJsonObject, LLM_TOOL_WHITELIST, normalizeFailureSignature, parseAutonomousDecision, pickGuideContext,
-  validateMandatoryCommandDecision, type ChatStanceValue,
+  resolvePlannerContexts, validateMandatoryCommandDecision, type ChatStanceValue,
 } from './llm-prompt';
 
 export { pickEdible, pickShippableItem, pickTrash } from './planner';
@@ -34,7 +34,7 @@ export interface ChatStanceEmission {
   kind: 'suggestion' | 'command'; text: string; stance: ChatStanceValue; reply: string; reason?: string; alternative?: string;
 }
 export interface PlanEmission {
-  dayKey: string; plan: DayPlanSnapshot['items']; mood?: string; updateWhy?: string; reason: 'morning' | 'update';
+  dayKey: string; plan: DayPlanSnapshot['items']; mood?: string; updateWhy?: string; history?: DayPlanSnapshot['history']; reason: 'morning' | 'update';
 }
 export interface InsightEmission {
   action: 'learned' | 'used' | 'reflected'; dayKey: string; insight: StrategyInsight;
@@ -46,6 +46,7 @@ export interface LlmPlannerDeps {
   allowRuleStandin?: boolean; fallbackPlanner?: Planner; systemPrompt?: string | (() => string); personaPrompt?: string | (() => string);
   contextProvider?: () => string; isKeyAvailable?: () => boolean; probeIntervalMs?: number; now?: () => number;
   notesDir?: string; saveName?: string; notebook?: StrategyNotebook; runtimeContext?: GameRuntimeContext;
+  memoryContextProvider?: (query: string) => string; knowledgeContextProvider?: (state: GameStateSnapshot) => string;
   onPlan?: (event: PlanEmission) => void; onBrainChange?: (mode: BrainMode, reason: string) => void;
   onChatStance?: (event: ChatStanceEmission) => void; onInsight?: (event: InsightEmission) => void; rng?: () => number;
 }
@@ -133,23 +134,11 @@ export class LlmPlanner implements Planner {
   setSaveName(saveName: string): void { this.notebook.bindSave(saveName); }
   setRecentReceipts(recentReceipts: string[]): void { this.deps.recentReceipts = [...recentReceipts]; }
   setSlot(slot: string): void { this.deps.slot = slot; }
-
-  submitSuggestion(text: string): void {
-    const trimmed = text.trim().slice(0, 300);
-    if (trimmed !== '') this.pendingSuggestion = { text: trimmed, stampedDayKey: null, stampedMinutes: null, stampedClock: this.lastObservedClock || '刚刚' };
-  }
-
-  submitCommand(command: string): void {
-    const trimmed = command.replace(/^\/+/, '').trim().slice(0, 300);
-    if (trimmed !== '') { this.activeCommand = { text: trimmed, acknowledged: false, pendingDone: false }; this.objectiveDonePending = null; }
-  }
-
+  submitSuggestion(text: string): void { const trimmed = text.trim().slice(0, 300); if (trimmed !== '') this.pendingSuggestion = { text: trimmed, stampedDayKey: null, stampedMinutes: null, stampedClock: this.lastObservedClock || '刚刚' }; }
+  submitCommand(command: string): void { const trimmed = command.replace(/^\/+/, '').trim().slice(0, 300); if (trimmed !== '') { this.activeCommand = { text: trimmed, acknowledged: false, pendingDone: false }; this.objectiveDonePending = null; } }
   hasCommand(): boolean { return this.activeCommand !== null; }
   hasObjective(): boolean { return this.objective !== null || this.activeCommand !== null; }
-  cancelCommand(): string | null {
-    if (this.activeCommand === null) return null;
-    const prev = this.activeCommand.text; this.activeCommand = null; return prev;
-  }
+  cancelCommand(): string | null { if (this.activeCommand === null) return null; const prev = this.activeCommand.text; this.activeCommand = null; return prev; }
   setHandoverSummary(summary: string | null): void { this.handoverSummary = summary?.trim() ? summary.trim().slice(0, 400) : null; }
   setObjective(objective: string | null): void { this.objective = objective?.trim() ? objective.trim().slice(0, 300) : null; this.objectiveRounds = 0; this.objectiveDonePending = null; }
   consumeObjectiveDone(): string | null {
@@ -195,6 +184,7 @@ export class LlmPlanner implements Planner {
       pendingSuggestion: this.pendingSuggestion === null ? null : { ...this.pendingSuggestion },
       askCount: this.askCount, planDay: this.planDay, lastFreeSlots: this.lastFreeSlots,
       failureMemory: { signature: this.lastFailSignature, streak: this.failStreak, summary: this.lastFailSummary },
+      retrieval: { memoryConfigured: this.deps.memoryContextProvider !== undefined, knowledgeConfigured: this.deps.knowledgeContextProvider !== undefined },
       cooledTools: [], dayFails: {}, rejected: { ship: [], eat: [], trash: [], place: [] },
       fallback: this.fallback.debugSnapshot?.() ?? { planner: this.fallback.name },
     };
@@ -301,13 +291,14 @@ export class LlmPlanner implements Planner {
 
   private async maybeGenerateMorningPlan(
     state: GameStateSnapshot, dayKey: string, personaPrompt: string | undefined, guidesHint: string, insightsText: string,
+    extra: { longTermMemoryText: string; verifiedKnowledgeText: string },
   ): Promise<{ reusedContent?: string; abortedToStandin?: boolean }> {
     const freeToAct = state.menu === '' || /无（可以自由行动）/.test(state.menu);
     if (!freeToAct || this.dayPlanStore.hasAttemptedToday(dayKey) || this.activeCommand !== null || this.objective !== null) return {};
     this.dayPlanStore.markAttempted(dayKey);
     const tomorrowHint = this.notebook.getTomorrowHint();
     const messages = buildMorningPlanMessages({
-      ...(personaPrompt === undefined ? {} : { personaPrompt }), guidesHint, insightsText,
+      ...(personaPrompt === undefined ? {} : { personaPrompt }), guidesHint, insightsText, ...extra,
       ...(tomorrowHint === '' ? {} : { tomorrowHint }), state,
     });
     try {
@@ -316,10 +307,10 @@ export class LlmPlanner implements Planner {
       const obj = extractJsonObject(res.content);
       const parsedPlan = obj !== null ? parseMorningPlanObject(obj) : null;
       if (parsedPlan !== null) {
-        const saved = this.dayPlanStore.setMorningPlan(dayKey, parsedPlan.items, parsedPlan.mood);
+        const saved = this.dayPlanStore.setMorningPlan(dayKey, parsedPlan.items, parsedPlan.mood, state.gameClock);
         if (tomorrowHint !== '') this.notebook.setTomorrowHint('');
         this.brainSwitch.recordSuccess();
-        this.onPlan?.({ dayKey, plan: saved.items, ...(saved.mood === undefined ? {} : { mood: saved.mood }), reason: 'morning' });
+        this.onPlan?.({ dayKey, plan: saved.items, ...(saved.mood === undefined ? {} : { mood: saved.mood }), ...(saved.history === undefined ? {} : { history: saved.history }), reason: 'morning' });
         return typeof obj?.['tool'] === 'string' && obj['tool'].trim() !== '' ? { reusedContent: res.content } : {};
       }
       if (parseAutonomousDecision(res.content) !== null) return { reusedContent: res.content };
@@ -340,8 +331,12 @@ export class LlmPlanner implements Planner {
     const recent = this.deps.recentReceipts ?? [];
     const personaPrompt = typeof this.deps.personaPrompt === 'function' ? this.deps.personaPrompt() : this.deps.personaPrompt;
     const guidesHint = this.guidesHintForState(state);
+    const extraCtx = resolvePlannerContexts(state, this.deps, {
+      objective: this.objective, goalHint: this.dayPlanStore.snapshot()?.items[0]?.goal,
+      lastFailSignature: this.lastFailSignature, pendingSuggestion: this.pendingSuggestion?.text ?? null,
+    });
 
-    const morning = await this.maybeGenerateMorningPlan(state, dayKey, personaPrompt, guidesHint, this.insightsTextForState(state));
+    const morning = await this.maybeGenerateMorningPlan(state, dayKey, personaPrompt, guidesHint, this.insightsTextForState(state), extraCtx);
     if (morning.abortedToStandin === true) return this.standinDecision(state);
     if ((state.clockMinutes >= 24 * 60 || state.clockMinutes < 6 * 60) && this.todayReceipts.length > 0) {
       await this.maybeReflectNight(state, dayKey, personaPrompt);
@@ -350,6 +345,7 @@ export class LlmPlanner implements Planner {
     const clockStallSec = this.lastClockChangedAt > 0 ? Math.max(0, Math.floor((this.now() - this.lastClockChangedAt) / 1000)) : 0;
     const messages = buildAutonomousDecisionMessages({
       ...(personaPrompt === undefined ? {} : { personaPrompt }), guidesHint, insightsText: this.insightsTextForState(state),
+      ...extraCtx,
       state, effectiveFreeSlots: effectiveSlots, environmentHints: extractEnvironmentHints(state.raw, state.clockMinutes, recent),
       recentReceipts: recent, dayPlanText: this.dayPlanStore.formatForPrompt(),
       failureMemory: { lastSignature: this.lastFailSignature, streak: this.failStreak, lastSummary: this.lastFailSummary, clockStallSec },
@@ -430,18 +426,18 @@ export class LlmPlanner implements Planner {
 
       this.brainSwitch.recordSuccess();
       this.handoverSummary = null;
-      this.applyAcceptedMetadata(dayKey, parsed);
+      this.applyAcceptedMetadata(dayKey, parsed, state.gameClock);
       if (parsed.tool === 'sleep') await this.maybeReflectNight(state, dayKey, personaPrompt);
       return { kind: 'act', tool: parsed.tool, args: parsed.args, intent: parsed.intent };
     }
     return this.standinDecision(state);
   }
 
-  private applyAcceptedMetadata(dayKey: string, parsed: NonNullable<ReturnType<typeof parseAutonomousDecision>>): void {
+  private applyAcceptedMetadata(dayKey: string, parsed: NonNullable<ReturnType<typeof parseAutonomousDecision>>, atClock = ''): void {
     if (parsed.planUpdate !== undefined) {
-      const updated = this.dayPlanStore.applyUpdate(dayKey, parsed.planUpdate);
+      const updated = this.dayPlanStore.applyUpdate(dayKey, parsed.planUpdate, atClock);
       if (updated !== null) {
-        this.onPlan?.({ dayKey, plan: updated.items, ...(updated.mood === undefined ? {} : { mood: updated.mood }), ...(updated.updateWhy === undefined ? {} : { updateWhy: updated.updateWhy }), reason: 'update' });
+        this.onPlan?.({ dayKey, plan: updated.items, ...(updated.mood === undefined ? {} : { mood: updated.mood }), ...(updated.updateWhy === undefined ? {} : { updateWhy: updated.updateWhy }), ...(updated.history === undefined ? {} : { history: updated.history }), reason: 'update' });
       }
     }
     let verifyId: string | undefined;

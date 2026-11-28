@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { actionTimeoutMs, BwfMcpClient, isLongAction } from './mcp-client';
 import { ActionLock, StuckSentinel } from './action-lock';
 import { AutodriveRunner, PLAYER_IN_CONTROL_MARKER, describeHumanSession, type AutodriveEvent } from './autodrive';
-import { StardewAdapter } from './adapter';
+import { StardewAdapter, type GameAdapter } from './adapter';
 import { findFreeTile, parseGameState, pickEdible, RulePlanner, type GameStateSnapshot } from './planner';
 
 const STATE_OK = `【你的长期笔记】x
@@ -68,6 +68,9 @@ describe('mcp-client', () => {
     expect(isLongAction('clear_area')).toBe(true); // BWF 最长 300s（真机 TIMEOUT 误报）
     expect(isLongAction('place_item')).toBe(true); // 可能自动走回农场
     expect(isLongAction('give_gift')).toBe(true); // 传名字会自动走过去
+    expect(isLongAction('forage')).toBe(true); // 森林/山脉全图走动采集常超 30s
+    expect(isLongAction('use_tool')).toBe(true); // 连砍大树 10 下
+    expect(isLongAction('festival')).toBe(true); // 节日迎客/找彩蛋/主活动最长 620s
     expect(actionTimeoutMs('fish')).toBe(600_000);
     expect(actionTimeoutMs('read_mail')).toBe(600_000); // read_mail 走回家路，也是长动作
     expect(actionTimeoutMs('dialogue')).toBe(30_000);
@@ -1567,5 +1570,63 @@ describe('V2-P3-07C StardewAdapter 启动竞态：标题画面绝不误判就绪
     const waitings = events.filter((e) => e.type === 'watchdog' && String(e.detail).includes('启动竞态'));
     expect(waitings).toHaveLength(2);
     expect(events.some((e) => e.type === 'state')).toBe(true);
+  });
+});
+
+describe('多季度稳定性：夜间自动界面短暂让路与节日冻结豁免', () => {
+  it('ShippingMenu/SaveGameMenu 短暂轮询跳过 LLM，超过 4 次仍未消退才放行处理；节日冻结时钟不误发 wait', async () => {
+    const calls: string[] = [];
+    let stateIdx = 0;
+    const states = [
+      STATE_OK.replace('无（可以自由行动）', '每日出货结算界面（会自动确认；如果没有，用 menu_click 点 OK 按钮）'),
+      STATE_OK.replace('无（可以自由行动）', '每日出货结算界面（会自动确认；如果没有，用 menu_click 点 OK 按钮）'),
+      `${STATE_OK}\n你正在节日里：时间不走，普通工具不能用`,
+    ];
+    let fakeNow = 0;
+    const adapter: GameAdapter = {
+      gameId: 'stardew',
+      displayName: '星露谷',
+      unreachableMessage: 'down',
+      ping: async () => true,
+      transport: {
+        callTool: async (tool: string) => {
+          calls.push(tool);
+          if (tool === 'get_state') {
+            const text = states[Math.min(stateIdx++, states.length - 1)]!;
+            return { kind: 'ok', text, isError: false };
+          }
+          return { kind: 'ok', text: `成功：${tool}`, isError: false };
+        },
+      },
+      isLongAction: () => false,
+      extractClock: (text: string) => /时间：第\d+年[春夏秋冬]\d+日 \d{2}:\d{2}/.exec(text)?.[0] ?? null,
+      classifyReceipt: ({ text, tool }: { text: string; tool: string }) => ({ status: 'COMPLETED', summary: `${tool}:${text}` }),
+      keepaliveAction: { tool: 'wait', args: { minutes: 1 } },
+      staleRecoveryAction: { tool: 'wait', args: { minutes: 1 } },
+    };
+
+    const events: AutodriveEvent[] = [];
+    const runner = new AutodriveRunner(
+      (e) => events.push(e),
+      { maxCycles: 3, stepDelayMs: 0, pollDelayMs: 0, errorDelayMs: 0, now: () => fakeNow, sleep: async (ms) => { fakeNow += ms + 300_000; } },
+      adapter,
+    );
+    let plannerCalls = 0;
+    runner.setPlanner({
+      name: 'mock-planner',
+      decide: async () => {
+        plannerCalls += 1;
+        return { kind: 'act', tool: 'festival', args: { action: 'greet' }, intent: '打招呼' };
+      },
+    });
+    await runner.start();
+    for (let i = 0; i < 40 && runner.isRunning(); i += 1) {
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    await runner.stopAndWait();
+
+    expect(plannerCalls).toBe(1);
+    expect(calls).not.toContain('wait');
+    expect(events.some((e) => e.type === 'watchdog' && e.kind === 'stuck')).toBe(false);
   });
 });

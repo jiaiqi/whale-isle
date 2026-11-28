@@ -16,6 +16,7 @@ import { GameCharacterControlLease, type GameCharacterControlLeaseState } from '
 import type { DayPlanItem } from './day-plan';
 import type { ChatStanceEmission, PlanEmission } from './llm-planner';
 import { parseGameState, RulePlanner, type Planner, type PlannerDecision } from './planner';
+import { BwfStateSectionCache } from './state-cache';
 
 interface AutonomousPlannerHooks {
   bindCallbacks?(callbacks: {
@@ -37,7 +38,7 @@ export type AutodriveEvent =
   /** 多步目标生命周期（T-M6-57）：set/replaced/cancel/done，供 UI 目标条与徽标使用 */
   | { type: 'objective'; objective: string | null; reason: 'set' | 'replaced' | 'cancel' | 'done' }
   /** 当日自拟计划与步中修订（T-M6-70） */
-  | { type: 'plan'; dayKey: string; plan: DayPlanItem[]; mood?: string; updateWhy?: string; reason: 'morning' | 'update' }
+  | { type: 'plan'; dayKey: string; plan: DayPlanItem[]; mood?: string; updateWhy?: string; history?: PlanEmission['history']; reason: 'morning' | 'update' }
   /** 大脑开/关/临时代驾状态切换（T-M6-70） */
   | { type: 'brain'; mode: BrainMode; reason: string }
   /** 主人建议/强制命令的 AI 表态（T-M6-70：用于聊天气泡与采纳率统计） */
@@ -148,6 +149,9 @@ export class AutodriveRunner {
   private humanStartSnapshot: HumanSessionSnapshot | null = null;
   /** 最近一次成功的 get_state 快照：接管结束的事件流就差 */
   private lastStateSnapshot: HumanSessionSnapshot | null = null;
+  private readonly stateCache = new BwfStateSectionCache();
+  /** BWF 自动确认结算/普通升级界面期间的短暂轮询计数（避开竞态点击与多余 LLM 调用） */
+  private transientMenuPolls = 0;
 
   constructor(
     private readonly onEvent: (event: AutodriveEvent) => void,
@@ -389,6 +393,7 @@ export class AutodriveRunner {
       if (this.controlLease.owner === 'halted' || this.controlLease.owner === 'paused') {
         this.controlLease.resumeAi('重新启动自动驾驶');
       }
+      this.stateCache.clear();
       this.running = true;
       const task = this.loop();
       this.loopTask = task;
@@ -436,7 +441,14 @@ export class AutodriveRunner {
           await sleep(errorDelay);
           continue;
         }
-        const state = this.adapter.parseState ? this.adapter.parseState(stateRes.text) : parseGameState(stateRes.text);
+        let rawStateText = this.stateCache.hydrate(stateRes.text);
+        if (this.stateCache.needsFullWarmup(stateRes.text)) {
+          const fullRes = await this.client.callTool('get_state', { full: true }, { timeoutMs: 25_000 });
+          if (fullRes.kind === 'ok' && !fullRes.isError) {
+            rawStateText = this.stateCache.hydrate(fullRes.text);
+          }
+        }
+        const state = this.adapter.parseState ? this.adapter.parseState(rawStateText) : parseGameState(rawStateText);
         if (state.gameClock === '未知') {
           // 状态文本不可解析（游戏未就绪/Mod 异常/版本漂移）——按 watchdog 处理而非盲跑
           this.onEvent({ type: 'watchdog', kind: 'heartbeat', detail: 'get_state 文本不可解析——游戏未就绪或 Mod 异常，稍后重查' });
@@ -479,9 +491,26 @@ export class AutodriveRunner {
           continue;
         }
 
+        // 1.3 夜间结算/普通升级等 BWF 自动确认界面短暂让路（参考 BWF Agent.CanAct()，避免竞态与多余 LLM 请求）
+        const isAutoConfirmMenu = /^(?:每日出货结算界面（会自动确认|升级提示界面（会自动确认)|SaveGameMenu/.test(state.menu);
+        if (isAutoConfirmMenu && !this.pendingDirective && this.transientMenuPolls < 4) {
+          this.transientMenuPolls += 1;
+          this.sentinel.reset();
+          await sleep(1_500);
+          continue;
+        }
+        this.transientMenuPolls = 0;
+
+        // 节日/剧情期间游戏时钟故意冻结：免发无效 keepalive(wait) 与误报警卡死恢复
+        const clockFrozenEvent = /你正在节日里：时间不走|节日主活动进行中|节日主活动已经开始了|正在播放剧情/.test(rawStateText);
+        if (clockFrozenEvent) {
+          this.lastMutationAt = clock();
+          this.sentinel.reset();
+        }
+
         // 1.5 BWF 防自暂停心跳：连续 90s 只有 get_state（或 planner 一直 wait）会被 BWF 判为
         // “120 秒没有动作”并暂停游戏；发一次游戏原生安全 wait，保持时钟推进。
-        if (!this.lock.isBusy() && this.adapter.keepaliveAction !== undefined && clock() - this.lastMutationAt >= 90_000) {
+        if (!clockFrozenEvent && !this.lock.isBusy() && this.adapter.keepaliveAction !== undefined && clock() - this.lastMutationAt >= 90_000) {
           this.lastMutationAt = clock();
           const keepalive = this.adapter.keepaliveAction;
           this.onEvent({ type: 'watchdog', kind: 'heartbeat', detail: '90s 无变更动作 → 发送游戏 keepalive，防止 BWF 120s 自暂停' });
@@ -498,9 +527,10 @@ export class AutodriveRunner {
           continue;
         }
 
-        // 2. 卡死哨兵：时钟冻结多因 BWF 自暂停/菜单；先发真实 cancel（无在途也发），
-        // 再用最小游戏动作唤醒；只有恢复动作也失败才交回 planner，绝不再空喊 watchdog。
-        const stuck = this.sentinel.observe(stateRes.text);
+        // 2. 卡死哨兵：仅在自由行动时段检测游戏时间是否停滞
+        const stuck = clockFrozenEvent
+          ? { stale: false, staleMs: 0 }
+          : this.sentinel.observe(rawStateText);
         if (stuck.stale) {
           const elapsed = clock() - this.lastStaleRecoveryAt;
           if (elapsed < 30_000) {
