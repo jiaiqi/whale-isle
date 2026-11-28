@@ -458,7 +458,17 @@ export function extractEnvironmentHints(
   if (travelDests.length >= 3) {
     const back = travelDests.slice(-3);
     if (back[0] === back[2] && back[0] !== back[1]) {
-      normal.push(`最近在 ${back.join(' → ')} 之间来回：同一地点两次折返通常说明前一处的事没做完就走了`);
+      // 真机 2026-11-28 秋9：AnimalShop → Town → AnimalShop → Town → AnimalShop → Town（6 次里 4 次折返），
+      // 原因是「去牧场拿短裤」这件事在同一地图反复失败后仍回去试。
+      // 折返 ≥2 轮时点明「同一件事在往返中被反复尝试」，否则单轮折返只是正常的来回办事。
+      const dests = travelDests.slice(-5);
+      let flips = 0;
+      for (let i = 2; i < dests.length; i += 1) if (dests[i] === dests[i - 2] && dests[i] !== dests[i - 1]) flips += 1;
+      if (flips >= 2) {
+        urgent.push(`已在 ${dests.join(' → ')} 之间折返 ${flips} 轮：同一件事在这里反复没办成，先确认它到底缺什么（门没开/好感不够/东西不在），别再把往返当进度`);
+      } else {
+        normal.push(`最近在 ${back.join(' → ')} 之间来回：同一地点两次折返通常说明前一处的事没做完就走了`);
+      }
     }
   }
 

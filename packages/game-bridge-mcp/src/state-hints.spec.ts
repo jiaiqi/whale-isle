@@ -227,8 +227,29 @@ describe('T-M6-69 规则日程解析器', () => {
     expect(extractEnvironmentHints(winter, 8 * 60, [])).not.toContain('当季作物收益');
   });
 
-  it('同一地点来回折返时陈述往返事实（真机 2026-11-28 秋8）', () => {
-    const stateRaw = '时间：第1年秋8日 10:00（Tue）\n## 位置\n地点：Town';
+  it('同一地点折返 ≥2 轮时升级为 urgent 并点名「同一件事没办成」（真机 2026-11-28 秋9）', () => {
+    const stateRaw = '时间：第1年秋9日 11:20（Wed）\n## 位置\n地点：Town';
+    // 真机形态：AnimalShop → Town → AnimalShop → Town → AnimalShop → Town
+    const six = [
+      'COMPLETED travel_to: 成功：已到达 AnimalShop',
+      'COMPLETED travel_to: 成功：已到达 Town',
+      'COMPLETED travel_to: 成功：已到达 AnimalShop',
+      'COMPLETED travel_to: 成功：已到达 Town',
+      'COMPLETED travel_to: 成功：已到达 AnimalShop',
+      'COMPLETED travel_to: 成功：已到达 Town',
+    ];
+    const hints = extractEnvironmentHints(stateRaw, 11 * 60 + 20, six);
+    expect(hints).toContain('折返');
+    expect(hints).toContain('同一件事在这里反复没办成');
+
+    // 单轮折返只给 normal 提示，不升级
+    const single = six.slice(0, 3);
+    const once = extractEnvironmentHints(stateRaw, 11 * 60 + 20, single);
+    expect(once).toContain('来回');
+    expect(once).not.toContain('同一件事在这里反复没办成');
+  });
+
+  it('同一地点来回折返时陈述往返事实（真机 2026-11-28 秋8）', () => {    const stateRaw = '时间：第1年秋8日 10:00（Tue）\n## 位置\n地点：Town';
     const receipts = [
       'COMPLETED travel_to: 成功：已到达 Farm',
       'COMPLETED travel_to: 成功：已到达 Town',
