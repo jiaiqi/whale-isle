@@ -563,19 +563,41 @@ export interface FailureMemoryContext {
   clockStallSec: number;
 }
 
-/** 只汇总明确的空结果事实，不改写执行状态，也不替模型选择后续玩法。 */
-export function buildRepeatedEmptyResultSection(recentReceipts: readonly string[]): string {
-  const counts = new Map<string, number>();
-  for (const receipt of recentReceipts.slice(-5)) {
+/**
+ * 汇总“调用成功但真实状态零进展”的重复事实（V2-P4-01，2026-11-28 真机）：
+ * 夏27 日在书商摊同一坐标连续 interact→dialogue→close_menu 11 次，界面开合不消耗游戏时间，
+ * 卡死哨兵看不到时钟停滞；夏26 日则在空区域重复 clear_area。
+ * 只陈述重复次数与原文，保留 COMPLETED 状态，不替模型选择玩法。
+ */
+const NO_PROGRESS_PATTERNS: ReadonlyArray<{ kind: string; re: RegExp }> = [
+  { kind: '空区域清理', re: /^COMPLETED\s+[^\s:：]+\s*[:：]\s*成功：区域内没有可以清理的东西(?:$|\n)/ },
+  { kind: '反复开合同一交互界面', re: /^COMPLETED\s+(?:interact|dialogue|close_menu|open_shop)\s*[:：]\s*(?:成功：交互后打开了界面|成功：已关闭|成功：对话已推进)/ },
+];
+
+export function buildRepeatedNoProgressSection(recentReceipts: readonly string[]): string {
+  const window = recentReceipts.slice(-8);
+  const hits: Array<{ kind: string; count: number; line: string }> = [];
+  for (const pattern of NO_PROGRESS_PATTERNS) {
+    const matched = window.filter((receipt) => pattern.re.test(receipt));
+    if (matched.length < 3) continue;
+    const last = matched[matched.length - 1] ?? '';
+    hits.push({ kind: pattern.kind, count: matched.length, line: (last.split('\n')[0] ?? last).slice(0, 160) });
+  }
+  const emptyCounts = new Map<string, number>();
+  for (const receipt of window) {
     if (!/^COMPLETED\s+[^\s:：]+\s*[:：]\s*成功：区域内没有可以清理的东西(?:$|\n)/.test(receipt)) continue;
     const line = receipt.split('\n')[0] ?? receipt;
-    counts.set(line, (counts.get(line) ?? 0) + 1);
+    emptyCounts.set(line, (emptyCounts.get(line) ?? 0) + 1);
   }
-  const repeated = [...counts].filter(([, count]) => count >= 2);
-  if (repeated.length === 0) return '';
-  return '\n\n## 重复空结果（真实回执，仍保留 COMPLETED 状态）\n'
-    + repeated.map(([line, count]) => `- 最近5条回执中，同一空结果出现${count}次：${line.slice(0, 200)}`).join('\n')
-    + '\n工具调用成功只表示调用完成；该回执明确表示没有清理对象，不能据此声称已收集资源或完成目标。请核对当前位置、对象范围与真实背包变化，再自主决定下一步；不要仅改写意图后重复相同空操作。';
+  for (const [line, count] of emptyCounts) {
+    if (count >= 2 && !hits.some((h) => h.kind === '空区域清理')) {
+      hits.push({ kind: '空区域清理', count, line: line.slice(0, 160) });
+    }
+  }
+  if (hits.length === 0) return '';
+  return '\n\n## 重复无进展动作（真实回执，仍保留 COMPLETED 状态）\n'
+    + hits.map((h) => `- 最近8条回执中「${h.kind}」出现${h.count}次，最近一条：${h.line}`).join('\n')
+    + '\n这些调用虽然返回成功，但界面开合/空区域清理本身不推进游戏时间，也不增加任何资源或状态。请对照当前游戏时间、背包与目标核对是否真的前进了；若没有，换一件能改变时间或资源的事，不要仅改写意图重做同一步。';
 }
 
 export function buildFailureMemorySection(memory: FailureMemoryContext, recentReceipts: readonly string[]): string {
@@ -596,7 +618,7 @@ export function buildFailureMemorySection(memory: FailureMemoryContext, recentRe
     }
   }
 
-  const emptyResults = buildRepeatedEmptyResultSection(recentReceipts);
+  const emptyResults = buildRepeatedNoProgressSection(recentReceipts);
   if (sig === null && memory.clockStallSec < 60) return emptyResults;
   const lines = ['## 失败与停滞记忆（短期记忆）'];
   if (sig !== null) {

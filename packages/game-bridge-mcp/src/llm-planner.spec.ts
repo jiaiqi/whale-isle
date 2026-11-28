@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
 import { StardewAdapter } from './adapter';
-import { buildAutonomousDecisionMessages, buildRepeatedEmptyResultSection, buildStateContext } from './llm-prompt';
+import { buildAutonomousDecisionMessages, buildRepeatedNoProgressSection, buildStateContext } from './llm-prompt';
 import {
   BrainSwitch,
   buildFailureMemorySection,
@@ -224,20 +224,40 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(cut).toContain('因上下文预算省略约');
   });
 
-  it('重复空结果保留成功事实并提醒核对进展，不伪造失败或指定玩法', () => {
+  it('重复空结果与反复开合界面都保留成功事实并提醒核对进展，不指定玩法', () => {
     const empty = 'COMPLETED clear_area: 成功：区域内没有可以清理的东西';
-    expect(buildRepeatedEmptyResultSection([empty])).toBe('');
-    expect(buildRepeatedEmptyResultSection([empty.replace('COMPLETED', 'FAILED'), empty])).toBe('');
-    expect(buildRepeatedEmptyResultSection(['COMPLETED fish: 成功：钓到沙丁鱼', 'COMPLETED fish: 成功：钓到沙丁鱼'])).toBe('');
-    expect(buildRepeatedEmptyResultSection([empty, empty, ...Array<string>(5).fill('COMPLETED travel_to: 成功：到达农场')])).toBe('');
+    expect(buildRepeatedNoProgressSection([empty])).toBe('');
+    expect(buildRepeatedNoProgressSection([empty.replace('COMPLETED', 'FAILED'), empty])).toBe('');
+    expect(buildRepeatedNoProgressSection(['COMPLETED fish: 成功：钓到沙丁鱼', 'COMPLETED fish: 成功：钓到沙丁鱼'])).toBe('');
+    expect(buildRepeatedNoProgressSection([empty, empty, ...Array<string>(7).fill('COMPLETED travel_to: 成功：到达农场')])).toBe('');
+
+    // 夏27真机反模式：书商摊反复 interact/dialogue/close_menu，界面开合不推进时间
+    const bookShop = [
+      'COMPLETED interact: 成功：交互后打开了界面：\n对话框：我是马尔赛罗，欢迎来到我的书摊！',
+      'COMPLETED dialogue: 成功：对话已推进。当前界面：商店界面（Bookseller）。',
+      'COMPLETED close_menu: 成功：已关闭。当前界面：无（可以自由行动）',
+      'COMPLETED interact: 成功：交互后打开了界面：\n对话框：我是马尔赛罗，欢迎来到我的书摊！',
+      'COMPLETED dialogue: 成功：对话已推进。当前界面：商店界面（Bookseller）。',
+      'COMPLETED close_menu: 成功：已关闭。当前界面：无（可以自由行动）',
+    ];
+    const loop = buildRepeatedNoProgressSection(bookShop);
+    expect(loop).toContain('反复开合同一交互界面');
+    expect(loop).toContain('出现6次');
+    expect(loop).toContain('仍保留 COMPLETED 状态');
+    expect(loop).toContain('不推进游戏时间');
+    expect(loop).not.toContain('最近失败签名');
+    expect(loop).not.toContain('下矿');
+    // 单次开合不应误报
+    expect(buildRepeatedNoProgressSection(bookShop.slice(0, 2))).toBe('');
     const prompt = buildFailureMemorySection({ lastSignature: null, streak: 0, lastSummary: '', clockStallSec: 0 }, [empty, empty]);
-    expect(prompt).toContain('同一空结果出现2次');
+    expect(prompt).toContain('空区域清理');
+    expect(prompt).toContain('出现2次');
     expect(prompt).toContain('仍保留 COMPLETED 状态');
-    expect(prompt).toContain('自主决定下一步');
+    expect(prompt).toContain('换一件能改变时间或资源的事');
     expect(prompt).not.toContain('最近失败签名');
     expect(prompt).not.toContain('下矿');
     const withFailure = buildFailureMemorySection({ lastSignature: 'eat|缺少食物', streak: 1, lastSummary: '缺少食物', clockStallSec: 61 }, [empty, empty]);
-    expect(withFailure).toContain('同一空结果出现2次');
+    expect(withFailure).toContain('出现2次');
     expect(withFailure).toContain('最近失败签名');
   });
 
