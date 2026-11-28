@@ -275,6 +275,37 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(sameOut).toContain('upgrade_tool 在最近8条里失败3次');
   });
 
+  it('生命 39% 时提前点名偏低风险，不改写为指定行动', () => {
+    const mid = parseGameState(`时间：第1年夏28日 14:00（Sun），天气：晴
+金钱：771g  体力：170/270  生命：47/120
+## 位置
+地点：Farm（鲸屿两季农场），室外`);
+    const text = buildSurvivalReminder(mid, 10);
+    expect(text).toContain('生命过半偏低');
+    expect(text).toContain('47/120');
+    expect(text).not.toContain('生命值危险');
+    // 只给风险与前置建议，不写死具体玩法
+    expect(text).not.toMatch(/必须|只能|立刻前往/);
+
+    // 30% 以下仍走原有危险提示
+    const low = parseGameState(`时间：第1年夏28日 14:00（Sun），天气：晴
+金钱：771g  体力：170/270  生命：30/120
+## 位置
+地点：Farm（鲸屿两季农场），室外`);
+    const lowText = buildSurvivalReminder(low, 10);
+    expect(lowText).toContain('生命值危险');
+    expect(lowText).not.toContain('生命过半偏低');
+
+    // 健康时既不危险也不偏低
+    const healthy = parseGameState(`时间：第1年夏28日 14:00（Sun），天气：晴
+金钱：771g  体力：170/270  生命：120/120
+## 位置
+地点：Farm（鲸屿两季农场），室外`);
+    const healthyText = buildSurvivalReminder(healthy, 10);
+    expect(healthyText).not.toContain('生命过半偏低');
+    expect(healthyText).not.toContain('生命值危险');
+  });
+
   it('重复空结果与反复开合界面都保留成功事实并提醒核对进展，不指定玩法', () => {
     const empty = 'COMPLETED clear_area: 成功：区域内没有可以清理的东西';
     expect(buildRepeatedNoProgressSection([empty])).toBe('');

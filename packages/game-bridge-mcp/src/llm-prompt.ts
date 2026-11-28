@@ -545,7 +545,10 @@ export function buildSurvivalReminder(state: GameStateSnapshot, effectiveFreeSlo
   const warnings: string[] = [];
   if (staminaPct <= 15) warnings.push(`⚠️ 体力仅剩 ${staminaPct}%（继续耗体可能累晕扣钱并次日体力减半）`);
   if (remainMin <= 180) warnings.push(`⚠️ 距 02:00 强制昏倒只剩 ${remainMin} 分钟（可提前回 FarmHouse 睡觉，或自行承担风险）`);
+  // 夏28 真机反例：生命 47/120（39%）时旧阈值 30% 不触发任何提醒，随后在 Farm↔Mine 间往返 5 次、
+  // 白耗约 4 小时游戏时间。只在数值事实层提前点名风险，不指定玩法。
   if (healthPct <= 30) warnings.push(`⚠️ 生命值危险（${healthPct}%），小心被击倒丢物品`);
+  else if (healthPct <= 50) warnings.push(`⚠️ 生命过半偏低（${state.health}/${state.healthMax}，${healthPct}%）：进矿洞或战斗前先备好回血食物，或先恢复再冒险`);
   if (effectiveFreeSlots <= 0) warnings.push('⚠️ 背包空位为 0（钓鱼/采集/满包合成可能失败或掉落，建议先整理、出货、捐赠或腾格）');
 
   return [
