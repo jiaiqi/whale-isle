@@ -81,6 +81,29 @@ describe('[E2E-HOST] 气泡不得出现空心外壳', () => {
       });
       // 极小舞台：气泡要么不显示，要么必须已有正文，不得只剩外壳和心情徽标。
       expect(blocked.narrow === null || blocked.narrow.display === 'none' || (blocked.narrow.text !== '' && blocked.narrow.text === blocked.narrow.pageText)).toBe(true);
+
+      // 真机「空气泡」根因：LLM 台词混入零宽字符（U+200B 等），trim() 去不掉，
+      // 于是外壳照画、心形徽标照画，正文却没有任何墨迹。此处必须整泡不出现。
+      const zeroWidth = await page.evaluate(async () => {
+        const hooks = (window as unknown as { __petStageTest: {
+          hideBubbles(): void;
+          showBubble(kind: string, text: string, options?: { ttlMs: number }): boolean;
+          setBubbleStageBox(box: { width: number; height: number }): void;
+        } }).__petStageTest;
+        hooks.hideBubbles();
+        hooks.setBubbleStageBox({ width: 400, height: 260 });
+        const shown = hooks.showBubble('reaction', '\u200b\u200c\u200d\ufeff', { ttlMs: 30_000 });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const el = document.querySelector('.pet-bubble--reaction') as HTMLElement | null;
+        return {
+          shown,
+          display: el === null ? 'missing' : getComputedStyle(el).display,
+          text: el === null ? '' : ((el.querySelector('.pet-bubble__text') as HTMLElement).textContent ?? ''),
+        };
+      });
+      expect(zeroWidth.shown).toBe(false);
+      expect(zeroWidth.display).toBe('none');
+      expect(zeroWidth.text).toBe('');
     } finally {
       await app.close();
     }
