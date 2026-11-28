@@ -27,7 +27,7 @@ import {
   type BubbleRect,
   type BubbleTailDirection,
 } from './bubbles';
-import { cleanBubbleText } from './bubble-text';
+import { cleanBubbleText, hasVisibleGlyph, stripInvisibleChars } from './bubble-text';
 
 const STAGE = { width: 400, height: 260 };
 
@@ -467,6 +467,20 @@ describe('cleanBubbleText（<think> 标签渲染层防御清洗）', () => {
   it('无标签文本原样返回（默认参数回退 dialog）', () => {
     expect(cleanBubbleText('  星露谷 第1年夏17日 06:10  ', 'status')).toBe('星露谷 第1年夏17日 06:10');
     expect(cleanBubbleText('  普通台词  ')).toBe('普通台词');
+  });
+
+  it('零宽/不可见字符被剔除：只有这类字符的文本不弹气泡（真机「空气泡」根因）', () => {
+    // U+200B 零宽空格不被 String.trim() 去除，旧实现会画出只有心形徽标的空壳气泡。
+    expect(cleanBubbleText('\u200b', 'reaction')).toBe('');
+    expect(cleanBubbleText('\u200b\u200c\u200d\ufeff', 'reaction')).toBe('');
+    expect(stripInvisibleChars('\u200b才不是大肥鱼\u200b')).toBe('才不是大肥鱼');
+    expect(hasVisibleGlyph('\u200b\u200c\u200d\ufeff')).toBe(false);
+    expect(hasVisibleGlyph('\u200b你好\u200b')).toBe(true);
+    expect(hasVisibleGlyph('   ')).toBe(false);
+    // 变体选择符本身不出墨：emoji 变体（❤️）仍算有可见字形。
+    expect(hasVisibleGlyph('❤️')).toBe(true);
+    expect(hasVisibleGlyph('\ufe0f')).toBe(false);
+    expect(hasVisibleGlyph('❤️\u200b')).toBe(true);
   });
 
   it('三气泡并存带下方 occupied 时网格兜底优先避开中心脸身保护区', () => {

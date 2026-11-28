@@ -30,7 +30,7 @@ import {
   type StageBox,
 } from './bubble-layout';
 import { bubblePageReadingMs, paginateBubbleText } from './bubble-pages';
-import { cleanBubbleText } from './bubble-text';
+import { cleanBubbleText, hasVisibleGlyph } from './bubble-text';
 import {
   ALL_BUBBLE_FONT_IDS,
   ALL_BUBBLE_KINDS,
@@ -468,6 +468,24 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       const textValue = itemEntry?.text ?? '';
       const style = resolveBubbleStyle(kind, itemEntry?.mood);
 
+      // 渲染层最终防线：正文完全没有会出墨的字符时直接收起气泡外壳。
+      // 真机 2026-11-28 出现过只剩心形徽标、正文空白的「空气泡」。
+      if (!hasVisibleGlyph(textValue)) {
+        node.root.style.display = 'none';
+        node.root.dataset.tail = 'none';
+        node.root.dataset.bubbleMood = '';
+        delete node.root.dataset.fullText;
+        delete node.root.dataset.pageText;
+        delete node.root.dataset.page;
+        delete node.root.dataset.pageCount;
+        delete node.root.dataset.readingBlocked;
+        clearTypewriter(kind);
+        typingStates.delete(kind);
+        currentItems.delete(kind);
+        clearTimer(kind);
+        continue;
+      }
+
       node.root.dataset.bubbleFont = activeFontId;
       node.root.dataset.bubbleMood = style.mood ?? '';
       node.root.dataset.tail = placed.tail;
@@ -584,7 +602,8 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       node.text.style.height = `${availableH}px`;
       const layoutKey = `${node.text.clientWidth}/${node.text.clientHeight}/${activeFontId}/${fontRevision}/${scaleNum}/${style.fontSizePx}`;
       if (existingTyping !== undefined && !existingTyping.blocked && existingTyping.fullText === fullText && existingTyping.layoutKey === layoutKey) {
-        node.text.textContent = Array.from(existingTyping.pages[existingTyping.page] ?? '').slice(0, existingTyping.revealed).join('');
+        const currentPageText = existingTyping.pages[existingTyping.page] ?? fullText;
+        node.text.textContent = Array.from(currentPageText).slice(0, existingTyping.revealed).join('');
         continue;
       }
       clearTypewriter(kind);
@@ -696,6 +715,9 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
   const showKind = (kind: BubbleKind, text: string, opts?: ShowBubbleOptions): boolean => {
     const cleaned = cleanBubbleText(text, kind);
     if (cleaned === '') return false;
+    // 只有零宽/组合记号等无墨字符的文本：外壳会照画但正文空白（真机 2026-11-28「空气泡」）。
+    // 这里直接拒绝展示，避免出现只有徽标没有正文的空壳气泡。
+    if (!hasVisibleGlyph(cleaned)) return false;
     clearTimer(kind);
     clearTypewriter(kind);
     typingStates.delete(kind);
