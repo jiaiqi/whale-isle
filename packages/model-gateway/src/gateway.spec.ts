@@ -901,4 +901,23 @@ describe('ModelGateway · 多模态消息（V2-P3-04B）', () => {
     const body = JSON.parse(bodies[0] ?? '{}') as { messages: Array<{ content: string }> };
     expect(body.messages[0]!.content).toBe('原文 sk-live-primary-key-000000000001');
   });
+
+  it('截断半个 emoji 产生的孤立 UTF-16 代理项被清理（不发给上游触发 JSON 解析 400）', async () => {
+    const bodies: string[] = [];
+    const gateway = new ModelGateway({
+      profile: { ...PROFILE, secretMaskingEnabled: false },
+      providers: PROVIDERS,
+      groups: [GROUP],
+      keys: KEYS,
+      fetchImpl: async (_url, init) => {
+        bodies.push(init.body);
+        return okResponse();
+      },
+    });
+    const brokenSlice = '背包提示：\uD83C'; // 截半的 🎒 (\uD83C\uDF92)
+    await gateway.chat('MAIN_PERSONA_BRAIN', [{ role: 'user', content: `${brokenSlice} 合法😊` }]);
+    expect(bodies[0]).not.toContain('\\ud83c');
+    const body = JSON.parse(bodies[0] ?? '{}') as { messages: Array<{ content: string }> };
+    expect(body.messages[0]!.content).toBe('背包提示： 合法😊');
+  });
 });

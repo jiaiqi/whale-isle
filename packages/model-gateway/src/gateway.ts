@@ -151,12 +151,17 @@ function toOpenAiContent(content: ChatMessageContent): string | Array<Record<str
   );
 }
 
-/** 脱敏：文本 part 与图片外链 URL 过 sanitizer；base64 图像数据是二进制内容，不做文本脱敏 */
+/** 清理因 `.slice(0, N)` 截断 emoji/辅助平面字符留下的孤立 UTF-16 代理项（防 DeepSeek/Anthropic API 报 JSON 400）。 */
+function stripLoneSurrogates(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
+/** 脱敏 + UTF-16 完整性清理：文本 part 与图片外链 URL 过 sanitizer；base64 图像数据是二进制内容，不做文本脱敏 */
 function sanitizeContent(sanitize: Sanitize, content: ChatMessageContent): ChatMessageContent {
-  if (typeof content === 'string') return sanitize(content);
+  if (typeof content === 'string') return stripLoneSurrogates(sanitize(content));
   return content.map((part) => {
-    if (part.type === 'text') return { ...part, text: sanitize(part.text) };
-    if (part.source.kind === 'url') return { ...part, source: { ...part.source, url: sanitize(part.source.url) } };
+    if (part.type === 'text') return { ...part, text: stripLoneSurrogates(sanitize(part.text)) };
+    if (part.source.kind === 'url') return { ...part, source: { ...part.source, url: stripLoneSurrogates(sanitize(part.source.url)) } };
     return part;
   });
 }
