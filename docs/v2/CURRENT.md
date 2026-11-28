@@ -1,4 +1,7 @@
 #\n> 2026-11-28 14:19 V2-P4-01：参考复评确认本仓晨间计划未吃「今日节日/生日/可执行任务/季末」事实（planner已解析但day-plan未用）。新增 today-schedule.ts 解析节日名称地点时间窗、生日、带交付方式的任务、季末，汇总为事实段注入晨间计划，并允许计划项带 timeHint 时间安排；只陈述客观信息不指定玩法。今日安排事实回归5/5通过，包编译通过；完整门禁待执行。证据见 docs/v2/evidence/P4-01-today-schedule-facts.md。\n CURRENT — V2 跨会话唯一交接检查点
+> 2026-11-28 15:22 V2-P4-01：秋5 真机暴露「桌宠会忘」——夏28 已学到 (69,16) 站位不可达并写进心得本，秋5 却在同一坐标连续失败 3 次。根因：失败记忆窗口只有最近 8 条回执（跨日即冲掉）、心得本检索只看季节/地点/状态原文（召不回坐标级教训）。新增跨日失败动作账本 failed-action-ledger.ts：按「工具+关键参数」签名累计，随心得本同文件持久化（跨日跨进程保留），累计≥2 次生成只陈述事实的提示段（次数/参数/最近原文/跨日标记），不判定该怎么办、不改回执状态、不替模型选动作。接线拆到 failed-action-ledger-wiring.ts 以保持 llm-planner.ts ≤500 行硬门禁。账本回归 9/9、planner 集成 40/40，门禁 8/8。证据见 docs/v2/evidence/P4-01-cross-day-failed-action-ledger.md。修复的真实跨日效果需载入新构建后再观察。
+
+
 > 2026-11-28 15:10 V2-P4-01：① 多日连续观察跑通秋1→秋5（真实回执 COMPLETED 105 / FAILED 30，决策 130，emptyShell/overlap/clipped/watchdog 全 0，真实存档 mtime 零变化）；晨间计划实测含「生日给潘妮送最爱的礼物」，今日安排事实注入生效。② 定位「空气泡」根因：截图是粉色心形 reaction 气泡（戳一下触发），cleanBubbleText 只做 trim()，而 String.trim() 不移除 U+200B 等零宽字符，于是外壳照画、正文无墨。修复三层：清洗阶段剔除零宽/方向标记/BOM/变体选择符、展示前判定无墨即不弹泡、渲染期再兜底；另修打字机续显分支页码越界写空串的隐患。③ 秋2 暴露 special_orders 参数契约缺失（模型传 accept:true 被拒，同一分钟内挤了 6 次），已在工具提示里写明 accept 只收 left|right。气泡回归 25/25 通过。证据见 docs/v2/evidence/P4-01-multi-day-observation-and-empty-bubble.md。仍未验：多层重影整屏对照、物理 F7、人类听感、空气泡修复的真机会话复验。
 
 
