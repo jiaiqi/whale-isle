@@ -367,6 +367,12 @@ export class DayPlanStore {
     const lines = this.current.items.map((item, idx) =>
       `[ref=${idx}] ${badge[item.status]} ${item.goal}${item.why === '' ? '' : `（理由：${item.why}）`}`);
     const moodLine = this.current.mood === undefined ? '' : `今日心情：${this.current.mood}\n`;
-    return `${moodLine}${lines.join('\n')}`;
+    // 2026-11-28 真机：条目增多后模型会新增同义目标（如「农场清杂物砍树凑木材」与
+    // 「清农场杂物并砍树收木材」同时 in_progress），在两个几乎相同的目标间摇摆。
+    // 这里只提示「先确认是否与上面某条实质相同」，是否合并由模型自行判断，不做关键词猜测。
+    const crowded = this.current.items.length >= 6
+      ? '\n（计划条目已较多：新增前请先确认不与上面任何一条实质重复；能并入现有目标就用 inProgress/done 推进原条目，不要另开同义目标。不再需要的用 remove 并写 why。）'
+      : '';
+    return `${moodLine}${lines.join('\n')}${crowded}`;
   }
 }

@@ -61,4 +61,17 @@ describe('每日计划引用与时间线回归', () => {
     expect(result?.history?.at(-1)).toMatchObject({ atClock: later, why: '道路无法通过，今天取消' });
     expect(result?.history?.at(-1)?.summary).toContain('移除「去找矮人」');
   });
+
+  it('计划条目达到 6 条时提示先确认是否与已有目标重复', () => {
+    const store = new DayPlanStore();
+    const items = Array.from({ length: 5 }, (_, i) => ({ goal: `目标${i + 1}`, why: '', status: 'pending' as const }));
+    store.setMorningPlan('秋1', items, undefined, '第1年秋1日 06:00');
+    expect(store.formatForPrompt()).not.toContain('计划条目已较多');
+
+    const six = Array.from({ length: 6 }, (_, i) => ({ goal: `目标${i + 1}`, why: '', status: 'pending' as const }));
+    store.setMorningPlan('秋1', six, undefined, '第1年秋1日 06:00');
+    const text = store.formatForPrompt();
+    expect(text).toContain('计划条目已较多');
+    expect(text).toContain('不要另开同义目标');
+  });
 });

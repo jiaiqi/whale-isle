@@ -550,6 +550,9 @@ export function buildSurvivalReminder(state: GameStateSnapshot, effectiveFreeSlo
   if (healthPct <= 30) warnings.push(`⚠️ 生命值危险（${healthPct}%），小心被击倒丢物品`);
   else if (healthPct <= 50) warnings.push(`⚠️ 生命过半偏低（${state.health}/${state.healthMax}，${healthPct}%）：进矿洞或战斗前先备好回血食物，或先恢复再冒险`);
   if (effectiveFreeSlots <= 0) warnings.push('⚠️ 背包空位为 0（钓鱼/采集/满包合成可能失败或掉落，建议先整理、出货、捐赠或腾格）');
+  // 2026-11-28 秋1 真机：背包只剩 1 格仍下矿，explore_mine 敲 0 块就因背包满停下（白费一次下矿）；
+  // 下矿/长时间采集会持续捡入矿石与怪物掉落，1~2 格几乎必然中途卡住。只在数值层提前点名，不阻止动作。
+  else if (effectiveFreeSlots <= 2) warnings.push(`⚠️ 背包仅剩 ${effectiveFreeSlots} 个空位：下矿或长时间采集会陆续拾取矿石/宝物/怪物掉落，很可能中途卡住；建议先出货、存箱或 tidy_backpack 腾出更多空位`);
 
   return [
     '## 生存与资源提醒（仅作风险提示，具体行动完全由你自主决定）',
