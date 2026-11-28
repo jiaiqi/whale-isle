@@ -2,9 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   canPlantBeforeSeasonEnd,
+  cropEconomics,
   DAYS_PER_SEASON,
   daysLeftInSeason,
   findSeedByName,
+  formatCropEconomics,
   MAX_SPEND_RATIO,
   seedBudget,
   seedForSeason,
@@ -106,5 +108,48 @@ describe('seedNameMatches / findSeedByName', () => {
     expect(findSeedByName('小白菜种子')?.season).toBe('秋');
     expect(findSeedByName('木材 x22')).toBeNull();
     expect(findSeedByName('')).toBeNull();
+  });
+});
+
+describe('T3 作物经济事实（cropEconomics / formatCropEconomics）', () => {
+  it('辣椒可反复收获：季内收获次数按 regrow 间隔累加', () => {
+    const pepper = SEED_TABLE.find((s) => s.season === '夏')!;
+    // 夏1 日播种：还剩 28 天，5 天首收，之后每 3 天一次
+    const early = cropEconomics(pepper, 1);
+    expect(early.maturityDays).toBe(5);
+    expect(early.grossPerHarvest).toBe(40);
+    // 首次 1 次 + floor((28-5)/3)=7 次
+    expect(early.harvestsInSeason).toBe(8);
+    expect(early.netPerSeason).toBe(40 * 8 - 40);
+    expect(early.goldPerDay).toBeGreaterThan(0);
+  });
+
+  it('季末来不及成熟时不给收益数字（不编造）', () => {
+    const bokChoy = SEED_TABLE.find((s) => s.season === '秋')!;
+    const late = cropEconomics(bokChoy, 27); // 剩 2 天 < 4 天成熟
+    expect(late.harvestsInSeason).toBe(0);
+    expect(late.netPerSeason).toBeNull();
+    expect(late.goldPerDay).toBeNull();
+    // 此时不应生成提示行
+    expect(formatCropEconomics(bokChoy, 27)).toBeNull();
+  });
+
+  it('非反复收获作物整季只收一次；格式行含净收益与每日收益', () => {
+    const parsnip = SEED_TABLE.find((s) => s.season === '春')!;
+    const eco = cropEconomics(parsnip, 1);
+    expect(eco.harvestsInSeason).toBe(1);
+    expect(eco.netPerSeason).toBe(35 - 20);
+    const line = formatCropEconomics(parsnip, 1)!;
+    expect(line).toContain('防风草种子');
+    expect(line).toContain('15g');
+    expect(line).toContain('腌防风草');
+  });
+
+  it('表内未收录售价时不编造数字', () => {
+    const fake = { season: '春' as const, name: '某未知种子', aliases: [], price: 30, maturityDays: 3, regrow: false };
+    const eco = cropEconomics(fake, 1);
+    expect(eco.grossPerHarvest).toBeNull();
+    expect(eco.netPerSeason).toBeNull();
+    expect(formatCropEconomics(fake, 1)).toBeNull();
   });
 });

@@ -21,6 +21,12 @@ export interface SeedInfo {
   maturityDays: number;
   /** 可重复收获（辣椒）：收完留在地里继续长 */
   regrow: boolean;
+  /** 单次收获的基础售价（普通品质，金币）；0 表示表内未收录 */
+  sellPrice?: number;
+  /** 收获后可继续生长的间隔天数（regrow 为 true 时有效） */
+  regrowDays?: number;
+  /** 加工产物（小桶/木桶/腌菜罐）与售价；未收录则省略 */
+  processed?: { name: string; sellPrice: number };
 }
 
 export const DAYS_PER_SEASON = 28;
@@ -34,9 +40,9 @@ export const MAX_SPEND_RATIO = 0.6;
  * 只列每种季节一种「便宜、稳定」的作物；需要更多作物时在这里加，日程会自动取第一条。
  */
 export const SEED_TABLE: readonly SeedInfo[] = Object.freeze([
-  { season: '春', name: '防风草种子', aliases: ['Parsnip Seeds', 'ParsnipSeeds'], price: 20, maturityDays: 4, regrow: false },
-  { season: '夏', name: '辣椒种子', aliases: ['Hot Pepper Seeds', 'HotPepperSeeds'], price: 40, maturityDays: 5, regrow: true },
-  { season: '秋', name: '小白菜种子', aliases: ['Bok Choy Seeds', 'BokChoySeeds'], price: 50, maturityDays: 4, regrow: false },
+  { season: '春', name: '防风草种子', aliases: ['Parsnip Seeds', 'ParsnipSeeds'], price: 20, maturityDays: 4, regrow: false, sellPrice: 35, processed: { name: '腌防风草', sellPrice: 78 } },
+  { season: '夏', name: '辣椒种子', aliases: ['Hot Pepper Seeds', 'HotPepperSeeds'], price: 40, maturityDays: 5, regrow: true, sellPrice: 40, regrowDays: 3, processed: { name: '腌辣椒', sellPrice: 90 } },
+  { season: '秋', name: '小白菜种子', aliases: ['Bok Choy Seeds', 'BokChoySeeds'], price: 50, maturityDays: 4, regrow: false, sellPrice: 80, processed: { name: '腌小白菜', sellPrice: 180 } },
 ]);
 
 /** 当季种子；冬季或未知季节返回 null（不种） */
@@ -85,4 +91,69 @@ export function seedNameMatches(seed: SeedInfo, text: string): boolean {
 /** 从任意物品文本反查种子表条目；不是表内种子返回 null */
 export function findSeedByName(text: string): SeedInfo | null {
   return SEED_TABLE.find((seed) => seedNameMatches(seed, text)) ?? null;
+}
+
+/**
+ * 单株作物的经济事实（T3，2026-11-28）：只用表内已知数据算，缺字段就不猜。
+ *
+ * - `grossPerHarvest`：一次收获的毛收入（普通品质售价）
+ * - `harvestsInSeason`：季内还能收几次（含首次；regrow 按间隔累加）
+ * - `netPerSeason`：一株一季的净收益（毛收入 × 次数 − 种子价）
+ * - `goldPerDay`：摊到每天（成熟期 + 后续间隔），便于横向比较
+ *
+ * 只陈述数字事实，不代表「应该种哪个」。
+ */
+export interface CropEconomics {
+  seedName: string;
+  seedPrice: number;
+  maturityDays: number;
+  grossPerHarvest: number | null;
+  harvestsInSeason: number;
+  netPerSeason: number | null;
+  goldPerDay: number | null;
+}
+
+export function cropEconomics(seed: SeedInfo, day: number): CropEconomics {
+  const left = daysLeftInSeason(day);
+  const base: CropEconomics = {
+    seedName: seed.name,
+    seedPrice: seed.price,
+    maturityDays: seed.maturityDays,
+    grossPerHarvest: seed.sellPrice ?? null,
+    harvestsInSeason: 0,
+    netPerSeason: null,
+    goldPerDay: null,
+  };
+  if (left < seed.maturityDays) return base;
+
+  // 首次收获后：regrow 作物按 regrowDays 继续收，否则只收一次
+  const regrowGap = seed.regrow ? (seed.regrowDays ?? seed.maturityDays) : 0;
+  const firstHarvestDay = seed.maturityDays;
+  let harvests = 1;
+  if (regrowGap > 0) {
+    const extra = Math.floor((left - firstHarvestDay) / regrowGap);
+    harvests += Math.max(0, extra);
+  }
+  const gross = seed.sellPrice ?? null;
+  const net = gross === null ? null : gross * harvests - seed.price;
+  // 摊到「首次成熟 + 每次间隔」的等效天数上，便于跨作物比较
+  const spanDays = regrowGap > 0
+    ? firstHarvestDay + Math.max(0, harvests - 1) * regrowGap
+    : firstHarvestDay;
+  const perDay = net === null || spanDays <= 0 ? null : net / spanDays;
+  return {
+    ...base,
+    harvestsInSeason: harvests,
+    netPerSeason: net,
+    goldPerDay: perDay === null ? null : Math.round(perDay * 10) / 10,
+  };
+}
+
+/** 一行可注入 prompt 的经济事实；缺数据时不编造数字。 */
+export function formatCropEconomics(seed: SeedInfo, day: number): string | null {
+  const eco = cropEconomics(seed, day);
+  if (eco.goldPerDay === null) return null;
+  const regrowNote = seed.regrow && seed.regrowDays !== undefined ? `，收后每 ${seed.regrowDays} 天再收` : '';
+  const processedNote = seed.processed === undefined ? '' : `；加工成${seed.processed.name}可卖 ${seed.processed.sellPrice}g`;
+  return `${eco.seedName}：种子 ${eco.seedPrice}g，${eco.maturityDays} 天成熟${regrowNote}；本季还能收 ${eco.harvestsInSeason} 次，一株净收益约 ${eco.netPerSeason}g（约 ${eco.goldPerDay}g/天${processedNote}）`;
 }

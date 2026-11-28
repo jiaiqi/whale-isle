@@ -5,6 +5,8 @@
  * 这里把 get_state 与最近回执里**已确证**的高价值前置事实提炼成 ≤240 字，
  * 每轮注入 LlmPlanner user prompt；纯函数、零网络、缺证据绝不编造。
  */
+import { canPlantBeforeSeasonEnd, formatCropEconomics, SEED_TABLE } from './seed-table';
+
 const MAX_HINTS_CHARS = 240;
 
 function backpackSection(raw: string): string | null {
@@ -393,6 +395,20 @@ export function extractEnvironmentHints(
 
   if (/时间：第\d+年[春夏秋冬]28日/.test(stateRaw)) {
     normal.push('今日季末第28天：单季未熟作物明早枯死，勿再买当季新品');
+  }
+
+  // T3 经济事实（2026-11-28）：只在「当前季节有表内作物」且「确认该买种子/能播种」时给出，
+  // 只陈述单株净收益与收获次数，不指定该种哪个（AI-first 红线）。
+  const seasonM = /时间：第\d+年(春|夏|秋|冬)\d+日/.exec(stateRaw);
+  const dayM = /时间：第\d+年[春夏秋冬](\d+)日/.exec(stateRaw);
+  if (seasonM?.[1] !== undefined && dayM?.[1] !== undefined) {
+    const season = seasonM[1];
+    const day = Number(dayM[1]);
+    const seed = SEED_TABLE.find((s) => s.season === season);
+    if (seed !== undefined && canPlantBeforeSeasonEnd(season, day, seed)) {
+      const eco = formatCropEconomics(seed, day);
+      if (eco !== null) normal.push(`当季作物收益（普通品质、单株）：${eco}`);
+    }
   }
   if (/【花钱建议】[\s\S]*背包扩到 24 格/.test(stateRaw)) {
     normal.push('满 2000g 可去 SeedShop interact 柜台背包扩到 24 格');

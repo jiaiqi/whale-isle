@@ -178,6 +178,22 @@ describe('T-M6-69 规则日程解析器', () => {
     expect(night).toContain('sleep({"force":true})');
   });
 
+  it('当季作物收益事实进入环境提示；季末来不及成熟时不给数字', () => {
+    const autumnEarly = '时间：第1年秋2日 08:00（Tue）\n## 位置\n地点：Farm';
+    const h = extractEnvironmentHints(autumnEarly, 8 * 60, []);
+    expect(h).toContain('当季作物收益');
+    expect(h).toContain('小白菜种子');
+    expect(h).toContain('g/天');
+
+    // 秋 27 日：剩 2 天，来不及成熟 → 不给收益数字
+    const autumnLate = '时间：第1年秋27日 08:00（Tue）\n## 位置\n地点：Farm';
+    expect(extractEnvironmentHints(autumnLate, 8 * 60, [])).not.toContain('当季作物收益');
+
+    // 冬季：表内无作物 → 不给
+    const winter = '时间：第1年冬5日 08:00（Tue）\n## 位置\n地点：Farm';
+    expect(extractEnvironmentHints(winter, 8 * 60, [])).not.toContain('当季作物收益');
+  });
+
   it('同一地点来回折返时陈述往返事实（真机 2026-11-28 秋8）', () => {
     const stateRaw = '时间：第1年秋8日 10:00（Tue）\n## 位置\n地点：Town';
     const receipts = [
