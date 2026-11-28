@@ -34,6 +34,8 @@ export interface PetContextMenuState {
   characterName: string;
   asleep: boolean;
   locked: boolean;
+  /** 打开游戏后自动将桌宠停靠到游戏右下角 */
+  dockToGame?: boolean;
   /** T-M6-63：桌宠窗口显示层级（原生菜单可直接切换，不需要 HTML 二级面板） */
   windowLayer: PetContextMenuWindowLayer;
   availableActions: PetContextMenuActionOption[];
@@ -74,6 +76,7 @@ export interface PetContextMenuHandlers {
   onSyncStardewAvatar(): void;
   onToggleLock(): void;
   onDock(edge: 'left' | 'right' | null): void;
+  onToggleDockToGame?(): void;
   onResetPosition(): void;
   onHideAllPets(): void;
   onToggleVoice(): void;
@@ -127,13 +130,25 @@ function buildActionSubmenu(
   return items;
 }
 
-function buildDockSubmenu(handlers: PetContextMenuHandlers): PetContextMenuItem[] {
-  return [
+function buildDockSubmenu(state: PetContextMenuState, handlers: PetContextMenuHandlers): PetContextMenuItem[] {
+  const items: PetContextMenuItem[] = [
     { label: '贴到屏幕左侧', click: () => handlers.onDock('left') },
     { label: '贴到屏幕右侧', click: () => handlers.onDock('right') },
     { type: 'separator' },
     { label: '取消贴边', click: () => handlers.onDock(null) },
   ];
+  if (state.isDefault && handlers.onToggleDockToGame !== undefined) {
+    items.unshift(
+      {
+        label: '打开游戏时贴边右下角',
+        type: 'checkbox',
+        checked: state.dockToGame === true,
+        click: () => handlers.onToggleDockToGame?.(),
+      },
+      { type: 'separator' },
+    );
+  }
+  return items;
 }
 
 /** T-M6-63：三档显示层级（always / follow-ai / normal），原生 radio 子菜单。 */
@@ -167,7 +182,7 @@ export function buildPetContextMenuTemplate(
       { type: 'separator' },
       { label: '锁定位置', type: 'checkbox', checked: state.locked, click: () => handlers.onToggleLock() },
       { label: '显示层级', submenu: buildWindowLayerSubmenu(state, handlers) },
-      { label: '贴边停靠', submenu: buildDockSubmenu(handlers) },
+      { label: '贴边停靠', submenu: buildDockSubmenu(state, handlers) },
       { label: '让这位先回去', click: () => handlers.onDismissSelf() },
       { type: 'separator' },
       { label: '我们的小本子', click: () => handlers.onOpenNotebook() },
@@ -231,7 +246,7 @@ export function buildPetContextMenuTemplate(
     { type: 'separator' },
     { label: '锁定位置', type: 'checkbox', checked: state.locked, click: () => handlers.onToggleLock() },
     { label: '显示层级', submenu: buildWindowLayerSubmenu(state, handlers) },
-    { label: '贴边停靠', submenu: buildDockSubmenu(handlers) },
+    { label: '贴边停靠', submenu: buildDockSubmenu(state, handlers) },
     { label: '回到默认位置', click: () => handlers.onResetPosition() },
     { label: '暂藏全部桌宠', click: () => handlers.onHideAllPets() },
     {

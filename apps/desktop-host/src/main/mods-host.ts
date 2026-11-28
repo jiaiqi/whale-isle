@@ -34,6 +34,8 @@ export interface ModsHost {
   readonly bwfMcpPort: number;
   /** 订阅 BWF 端口变更（用于实时更新主进程 autodrive 端点） */
   onBwfPortChange(listener: (port: number) => void): () => void;
+  /** 把当前持久化的 bwfShowHud 偏好推给已就绪的 BWF /settings */
+  syncBwfHud(): void;
 }
 
 function readConfig(configPath: string): StardewModsConfig {
@@ -206,6 +208,9 @@ export function createModsHost(userDataDir: string): ModsHost {
     },
     get bwfMcpPort() {
       return config.bwfMcpPort;
+    },
+    syncBwfHud() {
+      void pushBwfShowHud(config.bwfShowHud, bwfBaseUrl(config.bwfMcpPort)).catch(() => undefined);
     },
     onBwfPortChange(listener) {
       portListeners.add(listener);

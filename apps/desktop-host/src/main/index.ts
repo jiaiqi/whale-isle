@@ -55,11 +55,12 @@ import { fetchDstSnapshot, GAME_CONNECT_GUIDANCE, probeGameHealth } from './game
 import { createFakeStardewLauncher, createStardewLauncher } from './stardew-launcher';
 import { createStardewLaunchPrefs, defaultIsolatedDataDir } from './stardew-launch-prefs';
 import { detectFullscreenForDisplay, parseFullscreenRect, type RectLike } from './fullscreen-detector';
+import { GameDockTracker } from './game-dock';
 import { GlobalAltMonitor, resolveAltPeekTargets } from './global-alt-peek';
 import { createTrayHost, shouldHideDirectorOnClose, shouldQuitOnAllWindowsClosed, type TrayHost } from './tray-host';
 import { buildPetContextMenuTemplate, labelForActionState } from './pet-context-menu';
 import { homedir } from 'node:os';
-import type { GameId } from '@workbench/game-bridge-mcp';
+import { formatKnowledgeUnitsForPlanner, type GameId, type GameStateSnapshot } from '@workbench/game-bridge-mcp';
 import {
   APP_DATA_DIR,
   APP_ID,
@@ -222,6 +223,9 @@ function createManagedPetWindow(input: PetWindowCreateInput): ManagedPetWindow {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  if (process.platform === 'darwin') {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
   petBrowserWindows.set(input.agentId, win);
   if (input.agentId === 'default') stageWindow = win;
   win.on('closed', () => {
@@ -240,6 +244,9 @@ function createManagedPetWindow(input: PetWindowCreateInput): ManagedPetWindow {
     setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => win.setIgnoreMouseEvents(ignore, options),
     setAlwaysOnTop: (flag: boolean, level?: string) => {
       win.setAlwaysOnTop(flag, level as Parameters<BrowserWindow['setAlwaysOnTop']>[1]);
+      if (flag && process.platform === 'darwin' && !win.isDestroyed()) {
+        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      }
     },
     close: () => win.close(),
     setBounds: (bounds: WindowBounds) => win.setBounds(bounds),
@@ -393,14 +400,30 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   const modsHost = createModsHost(app.getPath('userData'));
   void modsHost;
   // 桌宠角色注册表（T-M6-21）：内置 + userData 自定义角色，切换落 PetDesktopPrefs（单点事实源）
+  const gameDockTracker = new GameDockTracker();
+  let ignoreGameDockMoveUntil = 0;
+  let lastObservedGameRect: RectLike | null = null;
+  let syncGameDockWithRect = (_rect: RectLike | null): void => {};
+  let clearFullscreenHideNow = (): void => {};
+  let pollScreenAndGameNow = (): void => {};
   const prefs = (petPrefsStore ??= createPetPrefsStore(app.getPath('userData'), (prev, next) => {
     v2KernelHost.liveRuntime.engagement.configure(next.liveEngagement);
     if (prev.shortcutHideEnabled !== next.shortcutHideEnabled) registerShortcut();
-    // T-M6-63：气泡字号/显示层级等全局字段必须广播给所有桌宠窗（不依赖 default 窗口是否已创建）
+    // T-M6-63：气泡字号/显示层级等全局字段必须广播给所有桌宠窗与中控台（不依赖 default 窗口是否已创建）
     for (const target of petBrowserWindows.values()) {
       if (!target.isDestroyed()) target.webContents.send('pet:global-prefs-changed', next);
     }
+    sendToUiWindows('pet:global-prefs-changed', next);
     if (prev.windowLayer !== next.windowLayer) applyWindowLayerNow();
+    if (prev.autoHideFullscreen && !next.autoHideFullscreen) clearFullscreenHideNow();
+    if (prev.dockToGame !== next.dockToGame) {
+      if (next.dockToGame) {
+        gameDockTracker.resetOverride();
+        pollScreenAndGameNow();
+      } else {
+        syncGameDockWithRect(lastObservedGameRect);
+      }
+    }
     // 主分支已移除桌宠缩放入口：不再把旧 PetDesktopPrefs.scale 同步回窗口，
     // 否则任意设置变更都会把 1.0× 窗口重新拉回旧的 1.3×。
     // 旧全局 API 仅作用于 default 窗口；新协作大厅走 pet:window-prefs-set 按 agent 隔离。
@@ -544,8 +567,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   petWindowManager = new PetWindowManager({
     userDataDir: app.getPath('userData'),
     createWindow: createManagedPetWindow,
-    workArea: () => {
-      const area = screen.getPrimaryDisplay().workArea;
+    workArea: (near) => {
+      const area = (near ? screen.getDisplayMatching(near) : screen.getPrimaryDisplay()).workArea;
       return { x: area.x, y: area.y, width: area.width, height: area.height };
     },
     legacyDefault: () => ({
@@ -556,6 +579,14 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     // T-M6-63：macOS 用 screen-saver 层级，Windows 11 用 floating；其他平台交给 Electron 默认
     alwaysOnTopLevel: () => (process.platform === 'darwin' ? 'screen-saver' : process.platform === 'win32' ? 'floating' : undefined),
     onWindowsChanged: (list) => {
+      const def = list.find((item) => item.agentId === 'default');
+      if (def !== undefined && Date.now() > ignoreGameDockMoveUntil && gameDockTracker.isDocked()) {
+        gameDockTracker.noteExternalMove({ x: def.bounds.x, y: def.bounds.y });
+        if (!gameDockTracker.isDocked()) {
+          petWindowManager?.setExternalDock('default', false);
+          petWindowManager?.sendAgent('default', 'pet:game-dock-state', { active: false });
+        }
+      }
       sendToUiWindows('pet:window-list-changed', list);
     },
     // T-M6-48：两只桌宠撞在一起 → 双方 Q 弹互撞 + 互吐槽（真实窗口几何驱动）
@@ -618,10 +649,11 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       const agentId = `egg-${script.characterId.replace(/[^A-Za-z0-9._-]/g, '').slice(-20)}-${Date.now().toString(36).slice(-4)}`;
       const opened = await manager.open(agentId, script.characterId);
       if (!opened.ok) return { ok: false, error: opened.error ?? '彩蛋窗打开失败' };
-      // 放在主桌宠右侧，不抢焦点（manager.open 内部 showInactive）
+      // 放在主桌宠旁（右缘不溢出则右侧，否则自动避让至左侧/上方），绝不夹紧叠压在主宠头上
       const main = manager.get('default');
       if (main !== null) {
-        manager.setPosition(agentId, { x: main.bounds.x + main.bounds.width + 8, y: main.bounds.y, displayId: prefs.get().position.displayId });
+        const area = screen.getDisplayMatching(main.bounds).workArea;
+        manager.placeNeighbor(agentId, main.bounds, area);
       }
       manager.sendAgent(agentId, 'pet:egg-theater-mode', { active: true });
       return { ok: true, agentId };
@@ -891,6 +923,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       else if (autoHiddenAgents.delete(view.agentId)) manager.setHidden(view.agentId, false);
     }
   };
+  clearFullscreenHideNow = (): void => { applyFullscreenRect(null); };
   const altMonitor = new GlobalAltMonitor();
   altMonitor.start();
   let altTestOverride: boolean | null = null;
@@ -916,7 +949,16 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     });
   }
   ipcMain.handle('pet:window-undock', (_event, agentId: string) => petWindowManager!.undock(agentId));
-  ipcMain.handle('pet:window-clear-dock', (_event, agentId: string) => ({ ok: petWindowManager!.clearDock(agentId) }));
+  ipcMain.handle('pet:window-clear-dock', (_event, agentId: string) => {
+    const ok = petWindowManager!.clearDock(agentId);
+    if (agentId === 'default' && gameDockTracker.isDocked()) {
+      const pos = petWindowManager?.get('default')?.bounds;
+      if (pos !== undefined) gameDockTracker.noteExternalMove({ x: pos.x + 20, y: pos.y + 20 });
+      petWindowManager?.setExternalDock('default', gameDockTracker.isDocked());
+      petWindowManager?.sendAgent('default', 'pet:game-dock-state', { active: false });
+    }
+    return { ok };
+  });
   ipcMain.handle('pet:peek', (event, active: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender) ?? stageWindow;
     if (win === null || win.isDestroyed()) return { ok: false };
@@ -934,24 +976,104 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     }
   };
   registerShortcut();
+  syncGameDockWithRect = (stardewRect: RectLike | null): void => {
+    lastObservedGameRect = stardewRect;
+    const manager = petWindowManager;
+    if (manager === null || TEST_MODE) return;
+    const view = manager.get('default');
+    if (view === null || !view.visible) return;
+    const validGameRect = stardewRect !== null && stardewRect.width >= 400 && stardewRect.height >= 300
+      ? stardewRect
+      : null;
+    const referenceRect = validGameRect ?? view.bounds;
+    const display = screen.getDisplayMatching(referenceRect);
+    const workArea = { x: display.workArea.x, y: display.workArea.y, width: display.workArea.width, height: display.workArea.height };
+    const savedScreenDock = manager.undockedBounds('default');
+    const step = gameDockTracker.sync({
+      enabled: prefs.get().dockToGame,
+      locked: manager.prefs('default')?.locked === true,
+      gameRect: validGameRect,
+      petBounds: view.bounds,
+      workArea,
+      restoreFromScreenDock: savedScreenDock === null ? null : { x: savedScreenDock.x, y: savedScreenDock.y },
+    });
+    if (step.kind === 'noop') return;
+    ignoreGameDockMoveUntil = Date.now() + 600;
+    if (manager.isDocked('default') !== null) manager.clearDock('default');
+    manager.setExternalDock('default', step.docked);
+    manager.setPosition('default', {
+      x: step.position.x,
+      y: step.position.y,
+      displayId: String(display.id),
+    });
+    manager.sendAgent('default', 'pet:game-dock-state', { active: step.docked });
+  };
   const fullscreenScript = [
     'tell application "System Events"',
     'set p to first application process whose frontmost is true',
-    'if (value of attribute "AXFullScreen" of window 1 of p) is true then',
+    'set isFs to false',
+    'try',
+    'set isFs to (value of attribute "AXFullScreen" of window 1 of p) is true',
+    'end try',
+    'set rectStr to ""',
+    'try',
     'set pos to position of window 1 of p',
     'set sz to size of window 1 of p',
-    'return ((item 1 of pos) as string) & "," & ((item 2 of pos) as string) & "," & ((item 1 of sz) as string) & "," & ((item 2 of sz) as string)',
+    'set rectStr to ((item 1 of pos) as string) & "," & ((item 2 of pos) as string) & "," & ((item 1 of sz) as string) & "," & ((item 2 of sz) as string)',
+    'end try',
+    'set swRectStr to ""',
+    'try',
+    'set sp to first application process whose (name contains "Stardew" or name contains "SMAPI")',
+    'if visible of sp is true then',
+    'set swFs to false',
+    'set swMin to false',
+    'try',
+    'set swFs to (value of attribute "AXFullScreen" of window 1 of sp) is true',
+    'end try',
+    'try',
+    'set swMin to (value of attribute "AXMinimized" of window 1 of sp) is true',
+    'end try',
+    'if (not swFs) and (not swMin) then',
+    'set spos to position of window 1 of sp',
+    'set ssz to size of window 1 of sp',
+    'set swRectStr to ((item 1 of spos) as string) & "," & ((item 2 of spos) as string) & "," & ((item 1 of ssz) as string) & "," & ((item 2 of ssz) as string)',
     'end if',
-    'return ""',
+    'end if',
+    'end try',
+    'return (isFs as string) & "|" & rectStr & "|" & swRectStr',
     'end tell',
   ].join('\n');
-  setInterval(() => {
-    if (process.platform !== 'darwin' || !prefs.get().autoHideFullscreen) return;
-    execFile('osascript', ['-e', fullscreenScript], { timeout: 2_000 }, (error, stdout) => {
-      if (error) return;
-      applyFullscreenRect(parseFullscreenRect(String(stdout)));
+  let screenProbeInFlight = false;
+  let screenProbeQueued = false;
+  pollScreenAndGameNow = (): void => {
+    if (process.platform !== 'darwin' || TEST_MODE) return;
+    if (screenProbeInFlight) {
+      screenProbeQueued = true;
+      return;
+    }
+    const checkFullscreen = prefs.get().autoHideFullscreen;
+    const checkDockToGame = prefs.get().dockToGame || gameDockTracker.isDocked();
+    if (!checkFullscreen && !checkDockToGame) return;
+    screenProbeInFlight = true;
+    execFile('osascript', ['-e', fullscreenScript], { timeout: 4_000 }, (error, stdout) => {
+      screenProbeInFlight = false;
+      const runQueued = screenProbeQueued;
+      screenProbeQueued = false;
+      if (error) {
+        if (checkDockToGame) console.warn('[game-dock] 探测游戏窗口失败:', error.message);
+        if (runQueued) setTimeout(pollScreenAndGameNow, 250).unref();
+        return;
+      }
+      const [rawFs = '', rawRect = '', rawSwRect = ''] = String(stdout).trim().split('|');
+      const isFullscreen = rawFs.trim().toLowerCase() === 'true';
+      const rect = parseFullscreenRect(rawRect);
+      const stardewRect = parseFullscreenRect(rawSwRect);
+      if (checkFullscreen) applyFullscreenRect(isFullscreen ? rect : null);
+      syncGameDockWithRect(stardewRect);
+      if (runQueued) setTimeout(pollScreenAndGameNow, 250).unref();
     });
-  }, 5_000).unref();
+  };
+  setInterval(pollScreenAndGameNow, 2_500).unref();
   app.on('will-quit', () => { altMonitor.stop(); globalShortcut.unregisterAll(); });
 
   // 语音宿主（V2 生产闭环）：创作与生产统一走 V2 VoiceProviderRouter + 真实 WAV 口型包络 + 失败不静默换声
@@ -1113,6 +1235,8 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   // autodrive 宿主（T-M5-02）：事件单源多播到两窗；启停由 Shell 显式触发；端口随 modsHost 可配置项联动
   // E2E 指向仿真 BWF 时固定用注入端点，无视真实 Mods 端口变化（[SIMULATION]，仅测试态）。
   const mainGameEndpoint = (): string => resolveBwfEndpoint({ testEndpoint: TEST_BWF_ENDPOINT, port: modsHost.bwfMcpPort });
+  let knowledgeRef: KnowledgeHost | null = null;
+  let cachedKnowledgeUnits: { at: number; units: ReturnType<KnowledgeHost['list']>['units'] } | null = null;
   const autodrive = createAutodriveHost(
     mainGameEndpoint(),
     vaultPath,
@@ -1124,6 +1248,18 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       ? '该端点已被「联机协作」页接管；请先停止对应 AI 队友，避免两个 Runner 抢同一角色'
       : null,
     characters,
+    (gameState: GameStateSnapshot): string => {
+      if (knowledgeRef === null) return '';
+      const nowMs = Date.now();
+      if (cachedKnowledgeUnits === null || nowMs - cachedKnowledgeUnits.at > 3_000) {
+        try {
+          cachedKnowledgeUnits = { at: nowMs, units: knowledgeRef.list().units };
+        } catch {
+          return '';
+        }
+      }
+      return formatKnowledgeUnitsForPlanner(cachedKnowledgeUnits.units, gameState.raw, new Date(nowMs).toISOString());
+    },
   );
   v2KernelHost.attachV1Bridges({ autodrive, voice, memory });
   // 04C/D：新切片只复用现有 Runner 的 transport/锁；不修改其规划、语音或运行行为。
@@ -1154,6 +1290,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         };
       },
     });
+    knowledgeRef = knowledge;
     // 与评论 IPC 同款最小守卫：只接受本应用中控台渲染进程的主框架，子框架/非本地页面一律拒绝。
     const knowledgeRendererRoot = resolve(here, '../renderer');
     const knowledgeIpcRejection = (event: unknown): { ok: false; error: string } | null => {
@@ -1165,7 +1302,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       return null;
     };
     registerKnowledgeIpc(ipcMain, knowledge, knowledgeIpcRejection);
-    app.on('will-quit', () => knowledge.close());
+    app.on('will-quit', () => { knowledgeRef = null; cachedKnowledgeUnits = null; knowledge.close(); });
   } catch (error) {
     // 新表迁移/本地导入失败不阻塞桌宠启动，也不以空库掩盖错误。
     ipcMain.handle('v2:knowledge-source-status', () => ({
@@ -1302,7 +1439,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     const manager = petWindowManager;
     if (manager === null) return;
     const workActive = workFollowRef?.status().sessions.some((session) => session.active) ?? false;
-    const aiActive = workActive || Date.now() < acpPendingUntil || Date.now() - lastAutodriveReceiptAt < 15_000;
+    const aiActive = workActive || autodrive.runner.isRunning() || Date.now() < acpPendingUntil || Date.now() - lastAutodriveReceiptAt < 15_000;
     const layer = prefs.get().windowLayer;
     const key = `${layer}:${aiActive}`;
     if (key === lastLayerKey) return;
@@ -1392,7 +1529,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
         });
       },
     });
+  let lastLaunchPollAt = 0;
+  let hudSyncedForCurrentReady = false;
   ipcMain.handle('stardew:launch', async (_event, rawOptions?: unknown) => {
+    hudSyncedForCurrentReady = false;
     if (rawOptions !== undefined && rawOptions !== null && (typeof rawOptions !== 'object' || Array.isArray(rawOptions))) {
       return stardewLauncher.launch(rawOptions as never);
     }
@@ -1424,9 +1564,29 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     if (TEST_BWF_ENDPOINT === undefined && typeof merged.port === 'number' && Number.isInteger(merged.port)) {
       void autodrive.setEndpoint(bwfMcpEndpoint(merged.port));
     }
-    return stardewLauncher.launch(merged as never);
+    gameDockTracker.resetOverride();
+    const launchRes = await stardewLauncher.launch(merged as never);
+    if (launchRes.state === 'ready') {
+      hudSyncedForCurrentReady = true;
+      modsHost.syncBwfHud();
+    }
+    if (prefs.get().dockToGame) pollScreenAndGameNow();
+    return launchRes;
   });
-  ipcMain.handle('stardew:launch-status', () => stardewLauncher.status());
+  ipcMain.handle('stardew:launch-status', () => {
+    const status = stardewLauncher.status();
+    if (status.state === 'ready' && !hudSyncedForCurrentReady) {
+      hudSyncedForCurrentReady = true;
+      modsHost.syncBwfHud();
+    } else if (status.state !== 'ready') {
+      hudSyncedForCurrentReady = false;
+    }
+    if ((status.gameRunning || status.state === 'ready') && prefs.get().dockToGame && Date.now() - lastLaunchPollAt > 1_200) {
+      lastLaunchPollAt = Date.now();
+      pollScreenAndGameNow();
+    }
+    return status;
+  });
   ipcMain.handle('stardew:launch-cancel', () => stardewLauncher.cancel());
   ipcMain.handle('stardew:launch-prefs-get', () => stardewLaunchPrefs.get());
   ipcMain.handle('stardew:launch-prefs-set', (_event, update?: unknown) => stardewLaunchPrefs.patch(update));
@@ -1522,6 +1682,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
   if (!openedDefault.ok) console.error('[pet-window] 默认桌宠窗启动失败：', openedDefault.error);
   stageWindow = petBrowserWindows.get('default') ?? null;
   wireTargets();
+  setTimeout(() => { if (prefs.get().dockToGame) pollScreenAndGameNow(); }, 1_000).unref();
 
   /** 中控台显示/重建（托盘菜单、浮窗按钮、Dock 激活、单实例唤起共用）。 */
   const showDirector = (): void => {
@@ -1572,8 +1733,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
     const manager = petWindowManager;
     if (manager === null) return { ok: false, visible: Boolean(visible), count: 0, error: '桌宠窗未就绪' };
     const count = manager.list().length;
-    if (visible) manager.showAll();
-    else manager.hideAll();
+    if (visible) {
+      autoHiddenAgents.clear();
+      manager.showAll();
+    } else manager.hideAll();
     return { ok: true, visible: Boolean(visible), count };
   });
   ipcMain.handle('pet:sleep-all', (_event, asleep: boolean) => {
@@ -1627,6 +1790,7 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       characterName: character.displayName,
       asleep: asleepAgents.has(agentId),
       locked: view?.locked ?? false,
+      dockToGame: prefs.get().dockToGame,
       windowLayer: prefs.get().windowLayer,
       availableActions: (manifest?.actions ?? []).map((entry) => ({
         actionState: entry.actionState,
@@ -1731,7 +1895,15 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       },
       onDock: (edge) => {
         if (edge === null) void manager.undock(agentId);
-        else manager.dock(agentId, edge);
+        else {
+          if (agentId === 'default' && gameDockTracker.isDocked()) gameDockTracker.noteExternalMove({ x: -9999, y: -9999 });
+          manager.dock(agentId, edge);
+        }
+      },
+      onToggleDockToGame: () => {
+        const next = !prefs.get().dockToGame;
+        prefs.patch({ dockToGame: next });
+        sendBubble(next ? '已开启：打开游戏自动贴边右下角' : '已关闭打开游戏自动贴边');
       },
       onResetPosition: () => {
         const area = screen.getPrimaryDisplay().workArea;
@@ -1779,8 +1951,10 @@ if (gotSingleInstanceLock) app.whenReady().then(async () => {
       onOpenBench: () => { focusDirectorWith('ui:open-bench'); },
       onPopoverCreated: () => { wireTargets(); },
       onTogglePets: () => {
-        if (petWindowManager?.anyHidden() === true) petWindowManager.showAll();
-        else petWindowManager?.hideAll();
+        if (petWindowManager?.anyHidden() === true) {
+          autoHiddenAgents.clear();
+          petWindowManager.showAll();
+        } else petWindowManager?.hideAll();
       },
       petState: () => ({ anyHidden: petWindowManager?.anyHidden() === true }),
       onQuit: quitApp,

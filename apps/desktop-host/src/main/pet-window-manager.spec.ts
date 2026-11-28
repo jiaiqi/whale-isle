@@ -373,5 +373,40 @@ describe('PetWindowManager 显示层级与贴边自动收回（T-M6-63/64）', (
     const once = { ...win.bounds };
     manager.dock('default', 'right');
     expect(win.bounds).toEqual(once);
+
+    // assemble 不打断正在靠边停靠的窗口（如星露谷防遮挡停靠期间伴随宠开窗）
+    win.bounds = { x: 0, y: 100, width: 400, height: 284 };
+    manager.dock('default', 'left');
+    const dockedPos = { ...win.bounds };
+    await manager.open('helper-pet', 'crosspet-deepseek');
+    manager.assemble(['default', 'helper-pet']);
+    expect(manager.isDocked('default')).toBe('left');
+    expect(win.bounds).toEqual(dockedPos);
+  });
+
+  it('placeNeighbor 在右缘空间不足时自动左移，且超宽 assemble 与 externalDock 永不重叠堆叠', async () => {
+    const { manager, windows } = makeManager();
+    await manager.open('default', 'blue-whale-maid');
+    manager.setPosition('default', { x: 1000, y: 580 });
+    manager.setExternalDock('default', true);
+    await manager.open('egg-1', 'crosspet-egg-claude');
+    const neighbor = manager.placeNeighbor('egg-1', windows.get('default')!.getBounds(), { x: 0, y: 0, width: 1440, height: 900 });
+    expect(neighbor?.bounds.x).toBeLessThan(windows.get('default')!.getBounds().x);
+    expect(manager.collisions()).toEqual([]);
+
+    await manager.open('agent-a', 'crosspet-claude');
+    await manager.open('agent-b', 'crosspet-deepseek');
+    await manager.open('agent-c', 'crosspet-gemini');
+    await manager.open('agent-d', 'crosspet-gpt');
+    const placed = manager.assemble(['default', 'egg-1', 'agent-a', 'agent-b', 'agent-c', 'agent-d'], { x: 0, y: 0, width: 1440, height: 900 });
+    expect(placed).toHaveLength(6);
+    expect(windows.get('default')!.getBounds().x).toBe(1000);
+    expect(manager.collisions()).toEqual([]);
+
+    manager.setHidden('default', true);
+    windows.get('default')!.setAlwaysOnTop(false);
+    manager.setHidden('default', false);
+    expect(windows.get('default')!.alwaysOnTop).toBe(true);
+    expect(windows.get('default')!.alwaysOnTopLevel).toBe('screen-saver');
   });
 });

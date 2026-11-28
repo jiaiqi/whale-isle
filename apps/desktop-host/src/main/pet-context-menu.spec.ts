@@ -27,6 +27,7 @@ function makeHandlers(): PetContextMenuHandlers {
     onSyncStardewAvatar: vi.fn(),
     onToggleLock: vi.fn(),
     onDock: vi.fn(),
+    onToggleDockToGame: vi.fn(),
     onResetPosition: vi.fn(),
     onHideAllPets: vi.fn(),
     onToggleVoice: vi.fn(),
@@ -50,6 +51,7 @@ function makeState(overrides: Partial<PetContextMenuState> = {}): PetContextMenu
     characterName: '小星',
     asleep: false,
     locked: false,
+    dockToGame: true,
     windowLayer: 'always',
     availableActions: [
       { actionState: 'idle', label: '待机呼吸' },
@@ -109,6 +111,12 @@ describe('pet-context-menu', () => {
     expect(layerMenu.find((item) => item.label === '普通层级')).toMatchObject({ type: 'radio', checked: false });
     layerMenu.find((item) => item.label === '普通层级')?.click?.();
     expect(handlers.onSetWindowLayer).toHaveBeenCalledWith('normal');
+
+    const dockMenu = menu.find((item) => item.label === '贴边停靠')?.submenu ?? [];
+    const autoDockItem = dockMenu.find((item) => item.label === '打开游戏时贴边右下角');
+    expect(autoDockItem).toMatchObject({ type: 'checkbox', checked: true });
+    autoDockItem?.click?.();
+    expect(handlers.onToggleDockToGame).toHaveBeenCalledOnce();
 
     const soundMenu = menu.find((item) => item.label === '声音开关')?.submenu ?? [];
     expect(soundMenu.find((item) => item.label === '语音播报')).toMatchObject({ type: 'checkbox', checked: true });

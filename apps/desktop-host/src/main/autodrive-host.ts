@@ -18,8 +18,10 @@ import {
   type DayPlanSnapshot,
   type GameAdapter,
   type GameId,
+  type GameStateSnapshot,
   type StrategyInsight,
 } from '@workbench/game-bridge-mcp';
+import { createStardewCompanionReactions } from './stardew-companion-reactions';
 import { ModelGateway } from '@workbench/model-gateway';
 import {
   BrainRuntimeConfigSchema,
@@ -188,27 +190,11 @@ export function createAutodriveHost(
   /** 与联机协作互斥：返回非空字符串表示本端被其他 Runner 占用，拒绝启动 */
   canStart?: () => string | null,
   characterRegistry?: CharacterRegistry,
+  knowledgeContextProvider?: (state: GameStateSnapshot) => string,
 ): AutodriveHost {
   const shortNameOf = characterShortName;
-  const shortReplyPool: Record<string, { uncertain: string; fish: string }> = {
-    'blue-whale-maid': { uncertain: '都、都怪这块石头突然长出来的！', fish: '钓到啦！本鱼的手感是天赋！' },
-    'aboutme-dsh': { uncertain: '不是蓝蓝的错，是这块石头自己滚过来的。', fish: '鱼上钩啦，蓝蓝的手感也很好嘛！' },
-    'aboutme-dsh1': { uncertain: '失误！活力装只是需要热个身。', fish: '钓到啦！活力全开！' },
-    'aboutme-gpt': { uncertain: '这是环境变量异常，不是判断失误。', fish: '钓鱼成功，结果符合预期。' },
-    'aboutme-claude': { uncertain: '先别急着下结论，这块石头的位置确实不合理。', fish: '鱼钓到了，过程很顺利。' },
-    'aboutme-gemini': { uncertain: '哎呀，被石头抢先一步了。', fish: '钓到鱼啦，要不要看看它？' },
-    'aboutme-qwen': { uncertain: '按计划不该撞上的，下一步我重新规划。', fish: '钓鱼完成，收益已记录。' },
-    'aboutme-glm': { uncertain: '狐狸耳朵早听到石头在动了，只是没躲开。', fish: '鱼儿上钩，正事办成。' },
-    'aboutme-grok': { uncertain: '石头先动的手，这锅我不接。', fish: '钓到了，别问我为什么这么强。' },
-    'aboutme-kimi': { uncertain: '这次记录为环境干扰，不是操作失误。', fish: '钓到鱼了，我把过程记下来了。' },
-  };
-  /** 未登记角色的中性短评：不借用小鲸口吻，避免角色身份串味。 */
-  const GENERIC_SHORT_REPLY = { uncertain: '这次没成功，我换个办法再来。', fish: '成功啦，继续！' };
   const characterNow = (): PetCharacter | undefined => characterRegistry?.selected();
-  const shortReply = (kind: 'uncertain' | 'fish'): string => {
-    const character = characterNow();
-    return (shortReplyPool[character?.id ?? ''] ?? GENERIC_SHORT_REPLY)[kind];
-  };
+  const companionReactions = createStardewCompanionReactions();
 
   const windows: WebContents[] = [];
   const initialGameId = gameId;
@@ -358,8 +344,19 @@ export function createAutodriveHost(
       ...(adapter.toolWhitelist !== undefined ? { toolWhitelist: adapter.toolWhitelist } : {}),
       isKeyAvailable: () => brainProviders.length > 0,
       personaPrompt: () => characterNow()?.personaPrompt ?? '',
+      ...(memoryHost !== undefined ? { memoryContextProvider: (query: string) => memoryHost.contextFor(query) } : {}),
+      ...(knowledgeContextProvider !== undefined ? { knowledgeContextProvider } : {}),
       onInsight: (ev) => {
         broadcastCurrent({ type: 'insight', ...ev } as unknown as AutodriveEvent);
+        dispatchReactions(companionReactions.onInsight({
+          action: ev.action,
+          topic: ev.insight.source,
+          claim: ev.insight.claim,
+        }, {
+          characterId: characterNow()?.id,
+          shortName: shortNameOf(characterNow()),
+          voiceEnabled: voiceHost?.config.enabled === true,
+        }));
       },
       ...(gameId === 'stardew' ? {} : {
         // 惰性求值：角色在运行中热切换时，下一次规划立刻使用新角色名（T-M6-51）
@@ -727,6 +724,27 @@ export function createAutodriveHost(
   const speak = (v: { text: string; scene?: 'normal' | 'inner' | 'p0' }): void => {
     void voiceHost?.speak(voiceSceneForCharacter(v, characterNow()));
   };
+  const emitPetBubble = (bubble: { kind: 'reaction' | 'notice' | 'dialog' | 'thought'; text: string; mood?: string; ttlMs?: number }): void => {
+    const payload = {
+      agentId: 'default',
+      text: stripVisible(bubble.text),
+      kind: bubble.kind,
+      ...(bubble.mood === undefined ? {} : { mood: bubble.mood }),
+      ...(bubble.ttlMs === undefined ? {} : { ttlMs: bubble.ttlMs }),
+    };
+    if (payload.text === '') return;
+    for (const wc of windows) {
+      if (!wc.isDestroyed()) wc.send('pet:bubble', payload);
+    }
+  };
+  const dispatchReactions = (reactions: ReturnType<typeof companionReactions.onEvent>): void => {
+    for (const reaction of reactions) {
+      if (reaction.bubble !== undefined) emitPetBubble(reaction.bubble);
+      if (reaction.speech !== undefined && voiceHost?.config.enabled === true) {
+        speak(reaction.speech);
+      }
+    }
+  };
   /** 单会话事件处理：T-M6-27 起每个 runner 绑定自己的 sessionId/gameId/generation，
    *  旧会话的迟到事件在此丢弃（语音/记忆/前端都不再受影响）。 */
   const makeRunnerEventHandler = (getMeta: () => { sessionId: string; gameId: GameId; generation: number }) =>
@@ -738,14 +756,21 @@ export function createAutodriveHost(
         activeObjective = event.objective;
         if (event.objective === null) pendingChatOrder = null;
       }
-      // T-M6-70：当日计划生成或修订时，用人设口吻在气泡/聊天流播报一句
+      // T-M6-70：晨间计划用人设口吻在气泡与语音播报；中途策略修订只进内心 thought 云泡并去重，不抢语音锁也不播技术参数
       if (event.type === 'plan') {
-        const goals = event.plan.slice(0, 3).map((item) => item.goal).join('、');
-        const line = event.reason === 'morning'
-          ? `今日计划（${event.dayKey}）：${goals}${event.mood === undefined ? '' : ` —— ${event.mood}`}`
-          : `计划调整：${event.updateWhy ?? goals}`;
-        broadcast({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: line } as AutodriveEvent, meta);
-        if (voiceHost?.config.enabled) speak({ text: line, scene: 'normal' });
+        if (event.reason === 'morning') {
+          const shortGoals = event.plan.slice(0, 2).map((item) => item.goal.split(/[，。；]/)[0]?.trim() || item.goal).join('、');
+          const base = `今日计划（${event.dayKey}）：${shortGoals}`;
+          const line = base.length > 38 ? `${base.slice(0, 37)}…` : base;
+          broadcast({ type: 'receipt', tool: 'chat_reply', status: 'COMPLETED', summary: line } as AutodriveEvent, meta);
+          if (voiceHost?.config.enabled) speak({ text: line, scene: 'normal' });
+        } else {
+          const goals = event.plan.slice(0, 3).map((item) => item.goal).join('、');
+          const note = (event.updateWhy ?? goals).trim();
+          if (note !== '') {
+            emitPetBubble({ text: `计划调整：${note}`, kind: 'thought', mood: 'thinking', ttlMs: 8_000 });
+          }
+        }
       }
       // T-M6-70：LLM 对主人建议/强制命令的表态 → reply 走气泡与语音，stance 保留在事件流统计采纳率
       if (event.type === 'chat-stance') {
@@ -755,13 +780,11 @@ export function createAutodriveHost(
           if (voiceHost?.config.enabled) speak({ text: visible, scene: 'normal' });
         }
       }
-      if (event.type === 'receipt' && event.tool !== 'autodrive' && voiceHost?.config.enabled) {
-        // 回执短评（D11 节流 8s 防刷）：翻车心虚 / 收获欢呼
-        if (event.status === 'UNCERTAIN') speak({ text: shortReply('uncertain'), scene: 'normal' });
-        else if (event.status === 'COMPLETED' && /fish|钓/.test(String(event.tool)) && /成功|完美/.test(String(event.summary))) {
-          speak({ text: shortReply('fish'), scene: 'normal' });
-        }
-      }
+      dispatchReactions(companionReactions.onEvent(event, {
+        characterId: characterNow()?.id,
+        shortName: shortNameOf(characterNow()),
+        voiceEnabled: voiceHost?.config.enabled === true,
+      }));
       if (event.type === 'state' && typeof event.clock === 'string') lastGameClock = event.clock;
       if (event.type === 'receipt' && event.tool !== 'autodrive') {
         try {
@@ -800,6 +823,7 @@ export function createAutodriveHost(
       : (llmPlanner ?? pausedPlanner);
 
   const createRunner = (): AutodriveRunner => {
+    companionReactions.reset();
     // T-M6-27：每次重建 runner 都开启新会话代次；旧 runner 若仍有迟到事件，generation 不匹配会被丢弃
     const runnerGeneration = ++generation;
     const runnerGameId = gameId;
@@ -818,6 +842,7 @@ export function createAutodriveHost(
         // 期间 watchdog 事件如实回报「等待游戏就绪」，而不是单次 ping 就报「MCP 不可达」。
         readyTimeoutMs: 90_000,
         readyPollMs: 2_000,
+        stepDelayMs: 550,
       },
       adapter,
     );

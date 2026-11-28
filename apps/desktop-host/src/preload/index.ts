@@ -181,6 +181,11 @@ contextBridge.exposeInMainWorld('directorBridge', {
   // 桌宠桌面偏好（T-M6-20 缩放滑块 / T-M6-19 拖拽手感）
   prefsGet: (): Promise<unknown> => ipcRenderer.invoke('pet:prefs-get'),
   prefsSet: (update: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke('pet:prefs-set', update),
+  onGlobalPrefsChanged: (handler: (prefs: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, prefs: unknown): void => handler(prefs);
+    ipcRenderer.on('pet:global-prefs-changed', listener);
+    return () => ipcRenderer.removeListener('pet:global-prefs-changed', listener);
+  },
   // 运行时大脑配置（Dexie 套餐/槽位 → 主进程 gateway；不含任何密钥）
   brainApplyConfig: (config: unknown): Promise<unknown> => ipcRenderer.invoke('brain:apply-config', config),
   // LLM 大脑（T-M6-01 完整版）
@@ -549,10 +554,15 @@ contextBridge.exposeInMainWorld('petStage', {
   onCoopSpeaker: (handler: (event: { activeAgentId: string | null; speakerName: string; state: 'speaking' | 'idle'; voiceId?: string }) => void): void => {
     ipcRenderer.on('coop:speaker', (_e, event) => handler(event));
   },
-  onSpeechResult: (handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }) => void): () => void => {
-    const listener = (_e: unknown, event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled' }): void => handler(event);
+  onSpeechResult: (handler: (event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled'; text?: string }) => void): () => void => {
+    const listener = (_e: unknown, event: { agentId: string; speakerName: string; status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled'; text?: string }): void => handler(event);
     ipcRenderer.on('pet:speech-result', listener);
     return () => ipcRenderer.removeListener('pet:speech-result', listener);
+  },
+  onGameDockState: (handler: (payload: { active: boolean }) => void): (() => void) => {
+    const listener = (_e: unknown, payload: { active: boolean }): void => handler(payload);
+    ipcRenderer.on('pet:game-dock-state', listener);
+    return () => ipcRenderer.removeListener('pet:game-dock-state', listener);
   },
   onLipSync: (handler: (event: { agentId: string; frame: { viseme: string; amplitude: number; rmsDb: number; timestampMs: number; durationMs: number } }) => void): () => void => {
     const listener = (_e: unknown, event: { agentId: string; frame: { viseme: string; amplitude: number; rmsDb: number; timestampMs: number; durationMs: number } }): void => handler(event);

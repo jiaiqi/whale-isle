@@ -54,8 +54,8 @@ export interface PetWindowCreateInput {
 export interface PetWindowManagerOptions {
   userDataDir: string;
   createWindow(input: PetWindowCreateInput): ManagedPetWindow;
-  /** 主屏工作区；新窗口自动 +220px 时用于避免越界 */
-  workArea?: () => WindowBounds;
+  /** 工作区（可按窗口坐标匹配所在显示器）；新窗口自动 +220px 与贴边夹紧时使用 */
+  workArea?: (near?: WindowBounds) => WindowBounds;
   /** 首次无 pet-window-prefs.json 时，从旧 PetDesktopPrefs 继承 default 窗口位置/缩放 */
   legacyDefault?: () => { x: number; y: number; displayId: string; scale: number; characterId: string };
   onWindowsChanged?: (windows: PetWindowView[]) => void;
@@ -102,6 +102,8 @@ export class PetWindowManager {
   /** T-M6-64：贴边记忆（agent → 边缘）与「因干活自动探出」的原边缘 */
   private dockedEdges = new Map<string, 'left' | 'right'>();
   private autoUndockedFrom = new Map<string, 'left' | 'right'>();
+  /** 外部停靠锁（如贴边游戏右下角）：assemble 不拆散/不覆盖这类窗口 */
+  private externalDocked = new Set<string>();
   /** 互撞去抖：`a|b` → 上次播报时间 */
   private readonly lastCollisionAt = new Map<string, number>();
 
@@ -162,6 +164,7 @@ export class PetWindowManager {
       this.undocked.delete(agentId);
       this.dockedEdges.delete(agentId);
       this.autoUndockedFrom.delete(agentId);
+      this.externalDocked.delete(agentId);
       this.undockSeq.delete(agentId);
       for (const off of current.unsubscribe) off();
       this.scheduleSave();
@@ -228,7 +231,7 @@ export class PetWindowManager {
     return hits;
   }
 
-  /** 集合：按给定顺序在屏幕底部排排站（宽度按各自 scale，间隔 12px）。 */
+  /** 集合：在 workArea 内排排站，自动换行/绕开固定（锁定或贴边）窗口，绝不堆叠在屏幕右缘。 */
   assemble(agentIds: string[], screenBounds?: WindowBounds): PetWindowView[] {
     const entries = agentIds
       .map((agentId) => ({ agentId, entry: this.entries.get(agentId) }))
@@ -236,22 +239,108 @@ export class PetWindowManager {
     if (entries.length === 0) return [];
     const workArea = screenBounds ?? this.options.workArea?.() ?? { x: 0, y: 0, width: 1440, height: 900 };
     const gap = 12;
-    const totalWidth = entries.reduce((sum, pair) => sum + pair.entry.preference.scale * BASE_WIDTH, 0) + gap * (entries.length - 1);
-    let cursor = workArea.x + Math.max(0, Math.round((workArea.width - totalWidth) / 2));
-    const placed: PetWindowView[] = [];
+    const isStationary = (agentId: string, entry: Entry): boolean =>
+      entry.preference.locked || this.dockedEdges.has(agentId) || this.externalDocked.has(agentId);
+    const targetIds = new Set(entries.map((pair) => pair.agentId));
+    const placedRects: WindowBounds[] = [];
+    for (const [id, entry] of this.entries) {
+      if (!targetIds.has(id) || isStationary(id, entry)) {
+        placedRects.push(entry.window.getBounds());
+      }
+    }
+    const movable = entries.filter(({ agentId, entry }) => !isStationary(agentId, entry));
+    const movableTotalWidth = movable.reduce((sum, pair) => sum + Math.round(pair.entry.preference.scale * BASE_WIDTH), 0)
+      + gap * Math.max(0, movable.length - 1);
+    const baseRowY = workArea.y + Math.max(0, workArea.height - BASE_HEIGHT - 8);
+    // 若移动窗口整行放得下且无固定障碍挡路，保持居中单行对齐（兼容既往单行排排站断言）
+    const centeredStart = workArea.x + Math.max(0, Math.round((workArea.width - movableTotalWidth) / 2));
+    const singleRowClean = movableTotalWidth <= workArea.width && (() => {
+      let cx = centeredStart;
+      for (const { entry } of movable) {
+        const w = Math.round(entry.preference.scale * BASE_WIDTH);
+        const h = Math.round(entry.preference.scale * BASE_HEIGHT);
+        const candidate = { x: cx, y: Math.max(workArea.y, workArea.y + workArea.height - h - 8), width: w, height: h };
+        if (this.overlapsAny(candidate, placedRects)) return false;
+        cx += w + gap;
+      }
+      return true;
+    })();
+    let cursorX = singleRowClean ? centeredStart : workArea.x + 12;
+    let cursorY = baseRowY;
     for (const { agentId, entry } of entries) {
-      const width = entry.preference.scale * BASE_WIDTH;
-      const x = Math.round(cursor);
-      const y = Math.round(workArea.y + workArea.height - entry.preference.scale * BASE_HEIGHT - 8);
-      entry.window.setBounds({ x, y, width: Math.round(width), height: Math.round(entry.preference.scale * BASE_HEIGHT) });
-      entry.preference.position = { x, y, displayId: entry.preference.position.displayId };
-      cursor += width + gap;
+      if (!isStationary(agentId, entry)) {
+        const width = Math.round(entry.preference.scale * BASE_WIDTH);
+        const height = Math.round(entry.preference.scale * BASE_HEIGHT);
+        const maxX = workArea.x + Math.max(0, workArea.width - width);
+        let placed: WindowBounds;
+        if (singleRowClean) {
+          placed = { x: Math.round(cursorX), y: Math.max(workArea.y, workArea.y + workArea.height - height - 8), width, height };
+          cursorX += width + gap;
+        } else {
+          placed = this.findFreeSlot(width, height, workArea, placedRects, cursorX, cursorY, gap);
+          cursorX = placed.x + width + gap;
+          cursorY = placed.y;
+          if (cursorX > maxX) {
+            cursorX = workArea.x + 12;
+            cursorY = Math.max(workArea.y, cursorY - (height + gap));
+          }
+        }
+        entry.window.setBounds(placed);
+        entry.preference.position = { x: placed.x, y: placed.y, displayId: entry.preference.position.displayId };
+        placedRects.push(placed);
+      }
+    }
+    const ordered: PetWindowView[] = [];
+    for (const { agentId } of entries) {
       const view = this.view(agentId);
-      if (view !== null) placed.push(view);
+      if (view !== null) ordered.push(view);
     }
     this.scheduleSave();
     this.notify();
-    return placed;
+    return ordered;
+  }
+
+  /** 标记/解除外部停靠锁（如贴边游戏右下角），防止召唤/集合拆散或重影 */
+  setExternalDock(agentId: string, active: boolean): void {
+    if (active) this.externalDocked.add(agentId);
+    else this.externalDocked.delete(agentId);
+  }
+
+  /** 将伴随窗/彩蛋窗摆到 anchor 旁：右缘空间不足时自动改放左侧或上方，绝不夹紧叠在主宠头上 */
+  placeNeighbor(agentId: string, anchor: WindowBounds, screenBounds?: WindowBounds): PetWindowView | null {
+    const entry = this.entries.get(agentId);
+    if (entry === undefined) return null;
+    const width = Math.round(entry.preference.scale * BASE_WIDTH);
+    const height = Math.round(entry.preference.scale * BASE_HEIGHT);
+    const work = screenBounds ?? this.options.workArea?.(anchor) ?? { x: 0, y: 0, width: 1920, height: 1080 };
+    const maxX = work.x + Math.max(0, work.width - width);
+    const maxY = work.y + Math.max(0, work.height - height);
+    const gap = 8;
+    const others = [...this.entries.entries()]
+      .filter(([id, item]) => id !== agentId && !item.window.isDestroyed())
+      .map(([, item]) => item.window.getBounds());
+    const candidates: WindowBounds[] = [
+      { x: anchor.x + anchor.width + gap, y: anchor.y, width, height },
+      { x: anchor.x - width - gap, y: anchor.y, width, height },
+      { x: anchor.x, y: anchor.y - height - gap, width, height },
+      { x: anchor.x, y: anchor.y + anchor.height + gap, width, height },
+    ];
+    let chosen: WindowBounds | null = null;
+    for (const raw of candidates) {
+      if (raw.x < work.x || raw.x > maxX || raw.y < work.y || raw.y > maxY) continue;
+      if (!this.overlapsAny(raw, others)) {
+        chosen = raw;
+        break;
+      }
+    }
+    if (chosen === null) {
+      chosen = this.findFreeSlot(width, height, work, others, work.x + 12, Math.max(work.y, anchor.y), gap);
+    }
+    entry.preference.position = { x: chosen.x, y: chosen.y, displayId: entry.preference.position.displayId };
+    entry.window.setBounds(chosen);
+    this.flush();
+    this.notify();
+    return this.view(agentId);
   }
 
   /** 解散：关掉除 keep 之外的所有桌宠窗。 */
@@ -329,7 +418,7 @@ export class PetWindowManager {
     if (this.dockedEdges.get(agentId) === edge) return this.view(agentId);
     const current = entry.window.getBounds();
     if (!this.undocked.has(agentId)) this.undocked.set(agentId, current);
-    const work = this.options.workArea?.() ?? { x: current.x, y: current.y, width: current.width, height: current.height };
+    const work = this.options.workArea?.(current) ?? { x: current.x, y: current.y, width: current.width, height: current.height };
     const visible = Math.round(current.width * 0.45);
     entry.window.setBounds({
       x: edge === 'left' ? work.x - current.width + visible : work.x + work.width - visible,
@@ -339,6 +428,11 @@ export class PetWindowManager {
     });
     this.dockedEdges.set(agentId, edge);
     return this.view(agentId);
+  }
+
+  /** 若当前处于贴边状态，返回贴边前的原始窗口坐标（否则 null）。 */
+  undockedBounds(agentId: string): WindowBounds | null {
+    return this.undocked.get(agentId) ?? null;
   }
 
   /** 当前是否贴边（T-M6-64：工作事件自动探出/收回用）。 */
@@ -455,7 +549,11 @@ export class PetWindowManager {
   setHidden(agentId: string, hidden: boolean): boolean {
     const entry = this.entries.get(agentId);
     if (entry === undefined) return false;
-    if (hidden) entry.window.hide(); else entry.window.showInactive();
+    if (hidden) entry.window.hide();
+    else {
+      entry.window.showInactive();
+      entry.window.setAlwaysOnTop(this.shouldFloat(), this.options.alwaysOnTopLevel?.());
+    }
     this.notify();
     return true;
   }
@@ -465,7 +563,12 @@ export class PetWindowManager {
     if (this.entries.size > 0) this.notify();
   }
   showAll(): void {
-    for (const entry of this.entries.values()) entry.window.showInactive();
+    const float = this.shouldFloat();
+    const level = this.options.alwaysOnTopLevel?.();
+    for (const entry of this.entries.values()) {
+      entry.window.showInactive();
+      entry.window.setAlwaysOnTop(float, level);
+    }
     if (this.entries.size > 0) this.notify();
   }
   anyHidden(): boolean { return [...this.entries.values()].some((entry) => !entry.window.isVisible()); }
@@ -474,10 +577,12 @@ export class PetWindowManager {
   setPosition(agentId: string, position: { x: number; y: number; displayId?: string }): PetWindowPreferences | null {
     const entry = this.entries.get(agentId);
     if (entry === undefined) return null;
+    const width = Math.round(BASE_WIDTH * entry.preference.scale);
+    const height = Math.round(BASE_HEIGHT * entry.preference.scale);
     const bounds = this.boundsFor({
       ...entry.preference,
       position: { x: position.x, y: position.y, displayId: position.displayId ?? entry.preference.position.displayId },
-    });
+    }, { x: position.x, y: position.y, width, height });
     entry.preference.position = { x: bounds.x, y: bounds.y, displayId: position.displayId ?? entry.preference.position.displayId };
     entry.window.setBounds(bounds);
     this.flush();
@@ -544,21 +649,75 @@ export class PetWindowManager {
     };
   }
 
-  private offsetFrom(previous: WindowBounds): { x: number; y: number; displayId: string } {
-    const work = this.options.workArea?.();
-    const width = Math.round(BASE_WIDTH * 1);
-    const x = previous.x + OFFSET_X;
-    if (work === undefined) return { x, y: previous.y, displayId: '' };
-    if (x + width > work.x + work.width) {
-      return { x: work.x + 16, y: Math.min(previous.y + 72, work.y + Math.max(0, work.height - BASE_HEIGHT)), displayId: '' };
+  private overlapsAny(candidate: WindowBounds, rects: readonly WindowBounds[], threshold = 0.12): boolean {
+    for (const other of rects) {
+      const w = Math.max(0, Math.min(candidate.x + candidate.width, other.x + other.width) - Math.max(candidate.x, other.x));
+      const h = Math.max(0, Math.min(candidate.y + candidate.height, other.y + other.height) - Math.max(candidate.y, other.y));
+      const minArea = Math.max(1, Math.min(candidate.width * candidate.height, other.width * other.height));
+      if ((w * h) / minArea > threshold) return true;
     }
-    return { x, y: previous.y, displayId: '' };
+    return false;
   }
 
-  private boundsFor(preference: PetWindowPreferences): WindowBounds {
+  private findFreeSlot(
+    width: number,
+    height: number,
+    work: WindowBounds,
+    occupied: readonly WindowBounds[],
+    startX: number,
+    startY: number,
+    gap: number,
+  ): WindowBounds {
+    const minX = work.x;
+    const minY = work.y;
+    const maxX = work.x + Math.max(0, work.width - width);
+    const maxY = work.y + Math.max(0, work.height - height);
+    const clampedStartY = Math.min(Math.max(Math.round(startY), minY), maxY);
+    const rowStep = Math.max(80, Math.round(height * 0.85));
+    const colStep = Math.max(80, Math.round(width * 0.55));
+    const yRows: number[] = [];
+    for (let y = clampedStartY; y >= minY; y -= rowStep) yRows.push(y);
+    for (let y = clampedStartY + rowStep; y <= maxY; y += rowStep) yRows.push(y);
+    if (!yRows.includes(minY)) yRows.push(minY);
+    for (let idx = 0; idx < yRows.length; idx += 1) {
+      const y = yRows[idx]!;
+      const rowBegin = idx === 0 ? Math.min(Math.max(Math.round(startX), minX), maxX) : minX;
+      for (let x = rowBegin; x <= maxX; x += colStep) {
+        const candidate = { x, y, width, height };
+        if (!this.overlapsAny(candidate, occupied)) return candidate;
+      }
+      if (rowBegin > minX) {
+        for (let x = minX; x < rowBegin; x += colStep) {
+          const candidate = { x, y, width, height };
+          if (!this.overlapsAny(candidate, occupied)) return candidate;
+        }
+      }
+    }
+    return { x: Math.min(Math.max(Math.round(startX), minX), maxX), y: clampedStartY, width, height };
+  }
+
+  private offsetFrom(previous: WindowBounds): { x: number; y: number; displayId: string } {
+    const work = this.options.workArea?.(previous);
+    const width = Math.round(BASE_WIDTH * 1);
+    const x = previous.x + OFFSET_X;
+    const raw = work === undefined
+      ? { x, y: previous.y }
+      : x + width > work.x + work.width
+        ? { x: work.x + 16, y: Math.min(previous.y + 72, work.y + Math.max(0, work.height - BASE_HEIGHT)) }
+        : { x, y: previous.y };
+    const existing = [...this.entries.values()].filter((entry) => !entry.window.isDestroyed()).map((entry) => entry.window.getBounds());
+    // 保留 +220px 的故意错位；只有触及屏幕右缘导致 >85% 几近完全重影时，才自动挪到空闲槽位
+    if (work !== undefined && existing.length > 0 && this.overlapsAny({ ...raw, width, height: BASE_HEIGHT }, existing, 0.85)) {
+      const slot = this.findFreeSlot(width, BASE_HEIGHT, work, existing, raw.x, raw.y, 12);
+      return { x: slot.x, y: slot.y, displayId: '' };
+    }
+    return { x: raw.x, y: raw.y, displayId: '' };
+  }
+
+  private boundsFor(preference: PetWindowPreferences, near?: WindowBounds): WindowBounds {
     const width = Math.round(BASE_WIDTH * preference.scale);
     const height = Math.round(BASE_HEIGHT * preference.scale);
-    const work = this.options.workArea?.();
+    const work = this.options.workArea?.(near ?? { x: preference.position.x, y: preference.position.y, width, height });
     let { x, y } = preference.position;
     if (work !== undefined) {
       x = Math.min(Math.max(x, work.x), work.x + Math.max(0, work.width - width));
@@ -610,9 +769,16 @@ export class PetWindowManager {
     for (const [agentId, entry] of this.entries) {
       windows[agentId] = { ...entry.preference, position: { ...entry.preference.position } };
     }
-    // 已关闭窗口的持久化坐标不能因保存而丢失：合并磁盘中的旧记录
+    // 已关闭窗口的持久化坐标不能因保存而丢失：保留常驻/自定义 id；跳过一次性彩蛋 id 并对临时召唤 id 封顶
+    let closedEphemeralPets = 0;
     for (const [agentId, preference] of Object.entries(this.read().windows)) {
-      if (windows[agentId] === undefined) windows[agentId] = preference;
+      if (windows[agentId] !== undefined) continue;
+      if (agentId.startsWith('egg-')) continue;
+      if (agentId.startsWith('pet-')) {
+        if (closedEphemeralPets >= 12) continue;
+        closedEphemeralPets += 1;
+      }
+      windows[agentId] = preference;
     }
     mkdirSync(dirname(this.path), { recursive: true });
     const tmp = `${this.path}.tmp`;
