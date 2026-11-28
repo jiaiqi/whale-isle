@@ -17,9 +17,7 @@ const dllSource = join(modDir, 'bin', 'Release', 'net6.0', 'WhaleIsleAvatar.dll'
 const dllTarget = join(publishDir, 'WhaleIsleAvatar.dll');
 
 mkdirSync(publishDir, { recursive: true });
-if (!existsSync(join(publishDir, 'manifest.json'))) {
-  copyFileSync(join(modDir, 'manifest.json'), join(publishDir, 'manifest.json'));
-}
+copyFileSync(join(modDir, 'manifest.json'), join(publishDir, 'manifest.json'));
 
 const dotnet = spawnSync('dotnet', ['--version'], { encoding: 'utf8' });
 if (dotnet.error !== undefined || dotnet.status !== 0) {

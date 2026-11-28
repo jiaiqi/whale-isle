@@ -1,16 +1,16 @@
 /**
- * 星露谷精灵表后处理（T-M6-62 升级：多清晰度档位 1× / 2× / 4×）。
+ * 星露谷精灵表后处理（T-M6-62 升级：多清晰度档位 1× / 2× / 4× + 宽幅防裁切等高画格）。
  *
  * 输入：AI 生成的 4×6 网格精灵图（行序 下/右/上/左，列序 待机+3 行走+动作+表情）。
- * 输出：
- *   - 1x 原版像素：96×128 PNG（每帧 16×32，最近邻缩放 + 24 色收敛，兼容旧版 64×128）；
- *   - 2x 精致像素：192×256 PNG（每帧 32×64，最近邻缩放 + 64 色收敛，保留像素锐度且五官发饰清晰）；
- *   - 4x 高清 Q 版：384×512 PNG（每帧 64×128，预乘 Alpha 区域平均下采样 + 全彩保留，细腻顺滑）。
+ * 输出（1:1 宽幅防裁切画格，保留原版 32/64/128 高度密度，彻底避免宽发型/尾巴挤压角色身高）：
+ *   - 1x 原版像素：192×128 PNG（每帧 32×32，最近邻缩放 + 24 色收敛，兼容旧版 96×128 / 64×128）；
+ *   - 2x 精致像素：384×256 PNG（每帧 64×64，最近邻缩放 + 64 色收敛，兼容旧版 192×256）；
+ *   - 4x 高清 Q 版：768×512 PNG（每帧 128×128，预乘 Alpha 区域平均下采样 + 全彩保留，兼容旧版 384×512）。
  *
  * 铁律：
  *   - 四边连通洪水填充去白底（复用 image-pipeline，绝不全局删白）；
- *   - **整表统一等比缩放 + 每格脚底对齐**：以全部帧中最高的内容为单格高度基准，
- *     所有帧共用同一缩放系数，避免逐帧独立缩放导致走路时头忽大忽小/上下跳；
+ *   - **整表统一等比缩放 + 核心重心对齐 + 脚底落线**：以主要动作列（Cols 0..4）最高内容对齐目标格高（90%），
+ *     正/背面行走锁定头部中轴水平位置（消除摆手引发的头身左右晃动），侧面锁定闲置核轴（出招手伸出时脚不后滑）；
  *   - 1×/2× 像素档严格采用最近邻（Nearest-Neighbor），输出颜色只能是输入颜色的子集；
  *   - 4× 高清档采用预乘 Alpha 区域平均（Area/Box）下采样，避免锯齿断线和白边溢色；
  *   - 纯函数零 I/O，便于单测。
@@ -21,13 +21,16 @@ export type SpriteTier = '1x' | '2x' | '4x';
 
 export const SPRITE_COLS = 6;
 export const SPRITE_ROWS = 4;
-export const SPRITE_CELL_W = 16;
+export const SPRITE_CELL_W = 32;
 export const SPRITE_CELL_H = 32;
 // 列序：0 待机 · 1-3 行走 · 4 动作（挥工具/抛竿/吃）· 5 表情（开心/生气/惊讶）
-export const SPRITE_SHEET_W = SPRITE_COLS * SPRITE_CELL_W; // 96
+export const SPRITE_SHEET_W = SPRITE_COLS * SPRITE_CELL_W; // 192
 export const SPRITE_SHEET_H = SPRITE_ROWS * SPRITE_CELL_H; // 128
-/** 兼容早期 4 列（64×128）像素表：缺动作/表情列时回退待机 */
+/** 兼容早期 1:2（64×128 / 96×128 / 192×256 / 384×512）细长画格及 4 列旧图 */
 export const LEGACY_SPRITE_SHEET_W = 64;
+
+/** 人物在单格内的目标占高比例（89%~90% 对齐星露谷原版农夫/村民身高，顶部留 10% 给帽子与呆毛） */
+const TARGET_FILL_HEIGHT_RATIO = 0.9;
 
 export interface SpriteTierSpec {
   tier: SpriteTier;
@@ -48,41 +51,41 @@ export const SPRITE_TIER_SPECS: Readonly<Record<SpriteTier, SpriteTierSpec>> = {
   '1x': {
     tier: '1x',
     scale: 1,
-    cellWidth: 16,
+    cellWidth: 32,
     cellHeight: 32,
-    sheetWidth: 96,
+    sheetWidth: 192,
     sheetHeight: 128,
     sampling: 'nearest',
     maxColors: 24,
     haloPasses: 2,
     label: '1× 原版像素',
-    hint: '96×128（每帧 16×32）· 24 色硬边像素，与原版农夫 1:1 密度',
+    hint: '192×128（每帧 32×32）· 24 色硬边像素，身高对齐原版农夫且宽发零裁切',
   },
   '2x': {
     tier: '2x',
     scale: 2,
-    cellWidth: 32,
+    cellWidth: 64,
     cellHeight: 64,
-    sheetWidth: 192,
+    sheetWidth: 384,
     sheetHeight: 256,
     sampling: 'nearest',
     maxColors: 64,
     haloPasses: 2,
     label: '2× 精致像素',
-    hint: '192×256（每帧 32×64）· 64 色锐利像素，五官发饰清晰且贴合画风',
+    hint: '384×256（每帧 64×64）· 64 色锐利像素，宽幅防裁切+五官发饰清晰',
   },
   '4x': {
     tier: '4x',
     scale: 4,
-    cellWidth: 64,
+    cellWidth: 128,
     cellHeight: 128,
-    sheetWidth: 384,
+    sheetWidth: 768,
     sheetHeight: 512,
     sampling: 'area',
     maxColors: null,
     haloPasses: 1,
     label: '4× 高清 Q 版',
-    hint: '384×512（每帧 64×128）· 全彩平滑缩放，接近桌宠细腻质感',
+    hint: '768×512（每帧 128×128）· 全彩平滑缩放，全高不缩水且发丝裙摆零裁切',
   },
 };
 
@@ -224,33 +227,65 @@ function cropCell(source: RawImage, cellRect: Bounds): { image: RawImage; bounds
   return { image, bounds: contentBounds(image) };
 }
 
+/** 计算头肩核心带（上 14%–48% 高度）的水平质心 X（像素坐标，相对于 cell.image），用于对齐正背面中轴与侧面锚点。 */
+function computeCoreCenterX(image: RawImage, bounds: Bounds): number {
+  const yStart = bounds.y + Math.floor(bounds.height * 0.14);
+  const yEnd = Math.min(bounds.y + bounds.height - 1, bounds.y + Math.floor(bounds.height * 0.48));
+  let sumX = 0;
+  let count = 0;
+  for (let y = yStart; y <= yEnd; y += 1) {
+    const rowOffset = y * image.width;
+    for (let x = bounds.x; x < bounds.x + bounds.width; x += 1) {
+      if (image.data[(rowOffset + x) * 4 + 3]! > 16) {
+        sumX += x;
+        count += 1;
+      }
+    }
+  }
+  return count > 0 ? sumX / count : bounds.x + bounds.width / 2;
+}
+
 /**
  * 把一个格子的内容按「整表统一缩放系数」放进目标格：
- * 底边贴格底、水平居中；同时受全表最大高度与最大宽度双重约束，绝不左右裁切头发/耳朵/手臂。
+ * - 主工作列共用相同 `baseScale`（受 TARGET_FILL_HEIGHT_RATIO 高度引导，不再被 1:2 窄框压矮）；
+ * - 极宽外延表情帧（如 Col 5 双臂张开）如局部超宽仅自收敛不拖累全表缩放；
+ * - 底边贴格底，水平支持按头部核心中轴 targetCoreX 锚定（正/背面零左右晃动，侧面挥工具脚底不后滑）。
  */
 function placeCell(
   cell: { image: RawImage; bounds: Bounds | null },
   referenceHeight: number,
   referenceWidth: number,
   spec: SpriteTierSpec,
-): RawImage {
+  targetCoreX?: number,
+  fillHeightRatio = TARGET_FILL_HEIGHT_RATIO,
+): { image: RawImage; placedCoreX: number } {
   const out = makeImage(spec.cellWidth, spec.cellHeight);
   const bounds = cell.bounds;
-  if (bounds === null) return out;
-  // 2x/4x 留出 1-2px 安全水平边距，防止蓬松长发/发饰贴紧格子边缘
+  if (bounds === null) return { image: out, placedCoreX: spec.cellWidth / 2 };
   const padX = spec.scale >= 4 ? 2 : spec.scale >= 2 ? 1 : 0;
   const maxContentW = Math.max(1, spec.cellWidth - padX * 2);
-  // 全局同一缩放系数：同时确保最高帧不超格高、最宽帧不超格宽，零裁切且全表等比例不上下跳
-  const scale = Math.min(
-    spec.cellHeight / Math.max(1, referenceHeight),
+  const targetH = Math.max(1, Math.round(spec.cellHeight * fillHeightRatio));
+  const baseScale = Math.min(
+    targetH / Math.max(1, referenceHeight),
     maxContentW / Math.max(1, referenceWidth),
+  );
+  const scale = Math.min(
+    baseScale,
+    maxContentW / Math.max(1, bounds.width),
+    spec.cellHeight / Math.max(1, bounds.height),
   );
   const destW = Math.max(1, Math.min(spec.cellWidth, Math.round(bounds.width * scale)));
   const destH = Math.max(1, Math.min(spec.cellHeight, Math.round(bounds.height * scale)));
   const sampled = spec.sampling === 'area'
     ? areaDownsample(cell.image, bounds, destW, destH)
     : nearestNeighborSample(cell.image, bounds, destW, destH);
-  const offsetX = Math.max(0, Math.round((spec.cellWidth - destW) / 2));
+  const relCoreX = (computeCoreCenterX(cell.image, bounds) - bounds.x) * (destW / Math.max(1, bounds.width));
+  const rawOffsetX = targetCoreX === undefined
+    ? Math.round((spec.cellWidth - destW) / 2)
+    : Math.round(targetCoreX - relCoreX);
+  const minX = destW <= maxContentW ? padX : 0;
+  const maxX = Math.max(minX, spec.cellWidth - destW - (destW <= maxContentW ? padX : 0));
+  const offsetX = Math.max(minX, Math.min(maxX, rawOffsetX));
   const offsetY = spec.cellHeight - destH; // 脚底贴格底
   for (let y = 0; y < destH; y += 1) {
     for (let x = 0; x < destW; x += 1) {
@@ -262,7 +297,7 @@ function placeCell(
       out.data[destIndex + 3] = sampled.data[srcIndex + 3]!;
     }
   }
-  return out;
+  return { image: out, placedCoreX: offsetX + relCoreX };
 }
 
 /** 单格独立缩放（保留给外部单帧工具用；整表构建走 placeCell + 全局基准宽高）。 */
@@ -274,7 +309,11 @@ export function fitCellToSprite(
   const spec = SPRITE_TIER_SPECS[tier];
   const cell = cropCell(source, cellRect);
   if (cell.bounds === null) return { image: makeImage(spec.cellWidth, spec.cellHeight), empty: true, contentBounds: null };
-  return { image: placeCell(cell, cell.bounds.height, cell.bounds.width, spec), empty: false, contentBounds: cell.bounds };
+  return {
+    image: placeCell(cell, cell.bounds.height, cell.bounds.width, spec, undefined, 1).image,
+    empty: false,
+    contentBounds: cell.bounds,
+  };
 }
 
 /** 一维内容投影的连续区间（含首尾）。间隔 ≤ mergeGap 的相邻区间合并，避免头发/工具被拆碎。 */
@@ -376,10 +415,12 @@ export function buildStardewSpriteSheet(
   }
 
   const sheet = makeImage(spec.sheetWidth, spec.sheetHeight);
-  // 第一遍：逐行定位 6 个角色并裁格，找「整表最高与最宽内容」作为所有帧共用的缩放基准
+  // 第一遍：逐行定位 6 个角色并裁格，以主要动作列（Cols 0..4）最高最宽作为统一基准（防大表情帧拉缩全身）
   const crops: Array<{ row: number; col: number; image: RawImage; bounds: Bounds | null }> = [];
-  let referenceHeight = 1;
-  let referenceWidth = 1;
+  let primaryMaxH = 0;
+  let primaryMaxW = 0;
+  let fallbackMaxH = 1;
+  let fallbackMaxW = 1;
   for (let row = 0; row < SPRITE_ROWS; row += 1) {
     const band = rowBands[row]!;
     const colCounts = new Array<number>(raw.width).fill(0);
@@ -404,17 +445,31 @@ export function buildStardewSpriteSheet(
       };
       const cell = cropCell(raw, cellRect);
       if (cell.bounds !== null) {
-        referenceHeight = Math.max(referenceHeight, cell.bounds.height);
-        referenceWidth = Math.max(referenceWidth, cell.bounds.width);
+        fallbackMaxH = Math.max(fallbackMaxH, cell.bounds.height);
+        fallbackMaxW = Math.max(fallbackMaxW, cell.bounds.width);
+        if (col <= 4) {
+          primaryMaxH = Math.max(primaryMaxH, cell.bounds.height);
+          primaryMaxW = Math.max(primaryMaxW, cell.bounds.width);
+        }
       }
       crops.push({ row, col, ...cell });
     }
   }
-  // 第二遍：统一缩放系数落格，脚底对齐且绝不裁切左右边缘
+  const referenceHeight = primaryMaxH > 0 ? primaryMaxH : fallbackMaxH;
+  const referenceWidth = primaryMaxW > 0 ? primaryMaxW : fallbackMaxW;
+  // 第二遍：统一缩放系数 + 核心重心对齐落格（正面/背面锁定画格中心，侧面锁定每行首帧重心）
+  const rowCoreAnchors = new Map<number, number>();
   const cells: SpriteCellReport[] = [];
   let emptyCells = 0;
   for (const cell of crops) {
-    const fitted = placeCell(cell, referenceHeight, referenceWidth, spec);
+    const targetCoreX = cell.row === 0 || cell.row === 2
+      ? spec.cellWidth / 2
+      : rowCoreAnchors.get(cell.row);
+    const placed = placeCell(cell, referenceHeight, referenceWidth, spec, targetCoreX);
+    if ((cell.row === 1 || cell.row === 3) && cell.col === 0 && cell.bounds !== null) {
+      rowCoreAnchors.set(cell.row, placed.placedCoreX);
+    }
+    const fitted = placed.image;
     const empty = cell.bounds === null;
     if (empty) emptyCells += 1;
     cells.push({ row: cell.row, col: cell.col, empty, source: cell.bounds });
@@ -557,19 +612,25 @@ export function reducePalette(image: RawImage, maxColors = 24): number {
   return palette.length;
 }
 
-/** 根据精灵表像素宽高识别档位与网格（支持 1×/2×/4× 的 6 列与旧版 4 列）。 */
+/** 根据精灵表像素宽高识别档位与网格（支持 1:1 宽幅防裁切、3:4 与旧版 1:2；6 列及旧版 4 列）。 */
 export function detectSpriteSheetMeta(width: number, height: number): SpriteSheetMeta | null {
   if (height <= 0 || height % SPRITE_ROWS !== 0) return null;
   const cellHeight = height / SPRITE_ROWS;
-  if (cellHeight % 2 !== 0) return null;
-  const cellWidth = cellHeight / 2;
-  if (width <= 0 || width % cellWidth !== 0) return null;
-  const cols = width / cellWidth;
-  if (cols !== 6 && cols !== 4) return null;
-  const scale = cellWidth / SPRITE_CELL_W;
+  if (cellHeight % SPRITE_CELL_H !== 0) return null;
+  const scale = cellHeight / SPRITE_CELL_H;
   if (scale !== 1 && scale !== 2 && scale !== 4) return null;
-  const tier: SpriteTier = scale === 4 ? '4x' : scale === 2 ? '2x' : '1x';
-  return { tier, scale, cols, rows: SPRITE_ROWS, cellWidth, cellHeight, width, height };
+  for (const cols of [6, 4]) {
+    if (width <= 0 || width % cols !== 0) continue;
+    const cellWidth = width / cols;
+    const validWidth =
+      cellWidth === cellHeight
+      || cellWidth * 4 === cellHeight * 3
+      || cellWidth * 2 === cellHeight;
+    if (!validWidth) continue;
+    const tier: SpriteTier = scale === 4 ? '4x' : scale === 2 ? '2x' : '1x';
+    return { tier, scale, cols, rows: SPRITE_ROWS, cellWidth, cellHeight, width, height };
+  }
+  return null;
 }
 
 /** 直接从 PNG 二进制 IHDR 头读取宽高（零图像解码开销；非 PNG 返回 null）。 */
@@ -586,13 +647,13 @@ export function readPngDimensions(buffer: Uint8Array): { width: number; height: 
   return { width, height };
 }
 
-/** 校验一张已生成的 1×/2×/4× 精灵表（支持 6 列及旧版 4 列）。 */
+/** 校验一张已生成的 1×/2×/4× 精灵表（支持宽幅 1:1 及兼容旧版 1:2 / 4 列）。 */
 export function validateSpriteSheet(sheet: RawImage): { ok: boolean; error?: string; meta?: SpriteSheetMeta } {
   const meta = detectSpriteSheetMeta(sheet.width, sheet.height);
   if (meta === null) {
     return {
       ok: false,
-      error: `精灵表尺寸必须是 96×128（1×）、192×256（2×）或 384×512（4×）（兼容 4 列旧图），实际 ${sheet.width}×${sheet.height}`,
+      error: `精灵表尺寸必须是 192×128（1×）、384×256（2×）或 768×512（4×）（兼容旧版 1:2 与 4 列），实际 ${sheet.width}×${sheet.height}`,
     };
   }
   let opaque = 0;

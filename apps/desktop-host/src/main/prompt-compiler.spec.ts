@@ -69,7 +69,9 @@ describe('compileStardewSpritePrompt', () => {
     expect(gemini).toContain('紫蓝渐变蓬松长卷发');
     expect(gemini).toContain('左红粉右琥珀金异色大瞳');
     expect(gemini).toContain('禁止女仆发箍或围裙');
-    expect(gemini).toContain('10%-15%');
+    expect(gemini).toContain('86%-90%');
+    expect(gemini).toContain('6%-10%');
+    expect(gemini).toContain('严禁两列都抬同一只脚');
     expect(gemini).toContain('所有 24 格必须空手');
     expect(EMOJI.test(gemini)).toBe(false);
   });

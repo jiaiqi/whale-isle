@@ -194,7 +194,7 @@ export function createStardewAvatarHost(options: {
     if (!existsSync(configPath)) return null;
     try {
       const parsed = StardewAvatarSyncSchema.safeParse(JSON.parse(readFileSync(configPath, 'utf8')));
-      if (!parsed.success) return null;
+      if (!parsed.success || parsed.data.enabled === false) return null;
       const spriteFullPath = parsed.data.spriteSheetPath === undefined
         ? null
         : join(modDir, parsed.data.spriteSheetPath);
@@ -252,6 +252,7 @@ export function createStardewAvatarHost(options: {
       }
       const payload: StardewAvatarSync = StardewAvatarSyncSchema.parse({
         version: 1,
+        enabled: true,
         characterId: input.characterId,
         displayName: input.displayName.trim() === '' ? input.characterId : input.displayName.trim().slice(0, 40),
         preset: presetForCharacter(input.characterId),
@@ -299,11 +300,38 @@ export function createStardewAvatarHost(options: {
     };
   };
 
+  /** 关闭开关时把 active-avatar.json 标为 enabled:false，触发运行中/下次启动的 Mod 恢复游戏原生形象。 */
+  const disableActiveAvatar = (): void => {
+    const dir = modsDir();
+    if (dir === null) return;
+    const modDir = join(dir, MOD_FOLDER);
+    const target = join(modDir, 'active-avatar.json');
+    if (!existsSync(target)) return;
+    try {
+      const existing = StardewAvatarSyncSchema.safeParse(JSON.parse(readFileSync(target, 'utf8')));
+      const payload: StardewAvatarSync = existing.success
+        ? StardewAvatarSyncSchema.parse({ ...existing.data, enabled: false, syncDisplayName: false })
+        : StardewAvatarSyncSchema.parse({
+          version: 1,
+          enabled: false,
+          characterId: 'native',
+          displayName: '原版角色',
+          preset: NEUTRAL_AVATAR_PRESET,
+          liveliness: true,
+          syncDisplayName: false,
+        });
+      const temp = `${target}.tmp`;
+      writeFileSync(temp, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+      renameSync(temp, target);
+    } catch { /* 关闭同步触发恢复失败时仅记录本地开关状态，不阻断操作 */ }
+  };
+
   return {
     state,
     setEnabled(next) {
       enabled = next === true;
       persist();
+      if (!enabled) disableActiveAvatar();
       notifyChange();
       return state();
     },

@@ -26,22 +26,22 @@ const STARDEW_SPRITE_TIERS: Array<{
     tier: '2x',
     title: '2× 精致像素',
     badge: '推荐',
-    spec: '192×256 · 每帧 32×64',
-    desc: '64 色锐利像素，五官与发饰清晰，最贴合星露谷画风',
+    spec: '384×256 · 每帧 64×64',
+    desc: '64 色锐利像素，防裁切宽画格+身高对齐原版农夫，五官发饰清晰',
   },
   {
     tier: '4x',
     title: '4× 高清 Q 版',
     badge: '细腻',
-    spec: '384×512 · 每帧 64×128',
-    desc: '全彩平滑下采样，接近桌宠立绘质感，细节最丰富',
+    spec: '768×512 · 每帧 128×128',
+    desc: '全彩平滑下采样，防裁切全高不缩水，发丝裙摆最细腻',
   },
   {
     tier: '1x',
     title: '1× 原版像素',
     badge: '复古',
-    spec: '96×128 · 每帧 16×32',
-    desc: '24 色经典硬边像素，与原版农夫 1:1 像素密度',
+    spec: '192×128 · 每帧 32×32',
+    desc: '24 色经典硬边像素，与原版农夫等高且不压矮身型',
   },
 ];
 
@@ -950,7 +950,7 @@ export function CreatorCenter(props: {
               </button>
             </div>
             <div className="text-right text-[10px]" style={{ color: 'var(--text-3)' }}>
-              Codex CLI 最长 150 秒；OpenAI/Gemini 单张 60 秒。应用后游戏内 200ms 热切换，无需重启（Mod 需已升级至 0.3.0 以支持 2×/4× 与灵动动画）。
+              Codex CLI 最长 150 秒；OpenAI/Gemini 单张 60 秒。应用后游戏内 200ms 热切换，无需重启（Mod 需已升级至 0.3.1 以支持防裁切等高贴图与自然上下走步态）。
             </div>
             {pixelDataUrl !== '' && (
               <div className="grid gap-3 md:grid-cols-[200px_1fr]" data-pixel-preview>
@@ -1112,7 +1112,7 @@ export function CreatorCenter(props: {
   );
 }
 
-/** 星露谷精灵表四方向实机效果预览（自适应 1×/2×/4× 分辨率 + 模拟游戏内呼吸/弹跳/脚底阴影）。 */
+/** 星露谷精灵表四方向实机效果预览（自适应 1:1/3:4/1:2 比例及 1×/2×/4× 分辨率 + 模拟游戏内步态）。 */
 function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreviewMode }): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [smooth, setSmooth] = useState(false);
@@ -1124,12 +1124,14 @@ function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreview
     const img = new Image();
     let raf = 0;
     const start = performance.now();
-    const walkOrder = [1, 3, 2, 3];
+    const verticalWalkOrder = [0, 1, 0, 2];
+    const sideWalkOrder = [3, 1, 3, 2];
     img.onload = () => {
       const cellH = Math.max(16, Math.round(img.naturalHeight / 4));
-      const cellW = Math.max(8, Math.round(cellH / 2));
-      const cols = Math.max(1, Math.round(img.naturalWidth / cellW));
-      const isHd = cellW >= 64;
+      let cols = 6;
+      if (img.naturalWidth % 6 !== 0 && img.naturalWidth % 4 === 0) cols = 4;
+      const cellW = Math.max(8, Math.round(img.naturalWidth / cols));
+      const isHd = cellH >= 128;
       setSmooth(isHd);
       const draw = (now: number): void => {
         const t = (now - start) / 1000;
@@ -1140,14 +1142,19 @@ function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreview
         let bounceY = 0;
         let tilt = 0;
         if (mode === 'walk') {
-          const step = Math.floor((now - start) / 210) % walkOrder.length;
-          col = Math.min(cols - 1, walkOrder[step] ?? 0);
-          const stride = Math.abs(Math.sin(t * 11.5));
-          bounceY = -stride * 3.2;
-          squashY = 1 + stride * 0.025;
-          squashX = 1 - stride * 0.016;
-          if (direction === 1) tilt = 0.032;
-          else if (direction === 3) tilt = -0.032;
+          const phase = Math.floor((now - start) / 190) % 4;
+          const verticalWalk = direction === 0 || direction === 2;
+          const walkOrder = (verticalWalk || cols < 4) ? verticalWalkOrder : sideWalkOrder;
+          col = Math.min(cols - 1, walkOrder[phase] ?? 0);
+          const stepBeat = (phase & 1) === 1;
+          if (stepBeat) {
+            bounceY = verticalWalk ? -2.2 : -2.8;
+            squashY = 1.018;
+            squashX = 0.988;
+          }
+          if (direction === 1) tilt = 0.028;
+          else if (direction === 3) tilt = -0.028;
+          else if (stepBeat) tilt = phase === 1 ? 0.02 : -0.02;
         } else if (mode === 'idle') {
           col = 0;
           const breath = Math.sin(t * 2.4);
@@ -1171,7 +1178,7 @@ function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreview
         // 脚底椭圆投影
         const footX = canvas.width / 2;
         const footY = canvas.height - 14;
-        const shadowRx = 22 * (1 - Math.min(0.2, Math.abs(bounceY) * 0.03));
+        const shadowRx = 26 * (1 - Math.min(0.14, Math.abs(bounceY) * 0.025));
         ctx.save();
         ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
         ctx.beginPath();
@@ -1185,8 +1192,8 @@ function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreview
         ctx.translate(footX, footY + bounceY);
         ctx.rotate(tilt);
         ctx.scale(squashX, squashY);
-        const drawW = 84;
         const drawH = 168;
+        const drawW = Math.round(drawH * (cellW / cellH));
         ctx.drawImage(img, col * cellW, direction * cellH, cellW, cellH, -drawW / 2, -drawH, drawW, drawH);
         ctx.restore();
         raf = requestAnimationFrame(draw);
@@ -1199,9 +1206,9 @@ function SpritePreview({ dataUrl, mode }: { dataUrl: string; mode: SpritePreview
   return (
     <canvas
       ref={canvasRef}
-      width={128}
+      width={184}
       height={200}
-      style={{ width: 128, height: 200, margin: '0 auto', imageRendering: smooth ? 'auto' : 'pixelated' }}
+      style={{ width: 184, height: 200, margin: '0 auto', imageRendering: smooth ? 'auto' : 'pixelated' }}
       data-sprite-preview
     />
   );

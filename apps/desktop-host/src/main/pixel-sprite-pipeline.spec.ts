@@ -82,7 +82,7 @@ describe('fitCellToSprite', () => {
     expect(pixelAt(fitted.image, SPRITE_CELL_W / 2, SPRITE_CELL_H - 1)[3]).toBe(255);
     // 左右边缘特标记颜色必须完整保留，绝不裁切
     expect(colorSet(fitted.image).has('0,255,255')).toBe(true);
-    // 瘦高内容（8×32）宽度不足 16 → 居中留透明边，不拉伸变形
+    // 瘦高内容（8×32）在 32×32 防裁切格内宽度居中、两侧留透明边且脚底贴底
     const thin = makeImage(64, 64);
     for (let y = 16; y < 48; y += 1) for (let x = 28; x < 36; x += 1) setPixel(thin, x, y, [0, 200, 0, 255]);
     const thinFit = fitCellToSprite(thin, { x: 0, y: 0, width: 64, height: 64 });
@@ -95,10 +95,10 @@ describe('fitCellToSprite', () => {
 });
 
 describe('buildStardewSpriteSheet', () => {
-  it('白底 4×6 网格 → 96×128，行=方向色、列=帧色，白底被抠掉', () => {
+  it('白底 4×6 网格 → 192×128（32×32/格），行=方向色、列=帧色，白底被抠掉', () => {
     const result = buildStardewSpriteSheet(gridImage());
     expect(result.sheet.width).toBe(SPRITE_SHEET_W);
-    expect(SPRITE_SHEET_W).toBe(96); // 4×6：动作/表情列
+    expect(SPRITE_SHEET_W).toBe(192); // 6 列 × 32px
     expect(result.sheet.height).toBe(SPRITE_SHEET_H);
     expect(result.emptyCells).toBe(0);
     // 第 0 行（朝下）中心像素偏红；第 2 行（朝上）偏蓝
@@ -107,8 +107,9 @@ describe('buildStardewSpriteSheet', () => {
     expect(down[2]).toBeLessThan(120);
     const up = pixelAt(result.sheet, SPRITE_CELL_W / 2, 2 * SPRITE_CELL_H + SPRITE_CELL_H / 2);
     expect(up[2]).toBeGreaterThan(180);
-    // 高度撑满：row0 col0 帧的顶行与底行中心都不透明
-    expect(pixelAt(result.sheet, SPRITE_CELL_W / 2, 0)[3]).toBe(255);
+    // 约 90% 身高（29px/32px，顶部留 3px 头部呼吸空隙，脚底贴底）
+    expect(pixelAt(result.sheet, SPRITE_CELL_W / 2, 2)[3]).toBe(0);
+    expect(pixelAt(result.sheet, SPRITE_CELL_W / 2, 3)[3]).toBe(255);
     expect(pixelAt(result.sheet, SPRITE_CELL_W / 2, SPRITE_CELL_H - 1)[3]).toBe(255);
     // 颜色集合不含白色（白底已被洪水填充抠除）
     expect(colorSet(result.sheet).has('255,255,255')).toBe(false);
@@ -116,7 +117,7 @@ describe('buildStardewSpriteSheet', () => {
 
   it('不同高度的帧共用整表缩放：矮帧不会被单独拉高（走路不上下跳）', () => {
     const image = makeImage(384, 256, [255, 255, 255, 255]);
-    // 每格宽度 24px（<= 64/2=32），确保由高度主导缩放且列间有间隔
+    // 每格宽度 24px，确保由高度主导缩放且列间有间隔
     const heights = [64, 32, 16, 4, 4, 4];
     for (let row = 0; row < 4; row += 1) {
       for (let col = 0; col < 6; col += 1) {
@@ -128,14 +129,63 @@ describe('buildStardewSpriteSheet', () => {
     }
     const result = buildStardewSpriteSheet(image);
     expect(result.emptyCells).toBe(0);
-    // 最高帧 64px → 32px，其余帧按同一系数：32→16、16→8
-    expect(pixelAt(result.sheet, SPRITE_CELL_W / 2, 0)[3]).toBe(255);
+    // 最高帧 64px → 29px（90% 目标高），其余帧按同一系数：32→15、16→7
+    expect(pixelAt(result.sheet, SPRITE_CELL_W / 2, SPRITE_CELL_H - 29)[3]).toBe(255);
     const secondX = SPRITE_CELL_W + SPRITE_CELL_W / 2;
-    expect(pixelAt(result.sheet, secondX, SPRITE_CELL_H - 16 - 1)[3]).toBe(0); // 32→16：顶部 16px 透明
-    expect(pixelAt(result.sheet, secondX, SPRITE_CELL_H - 16)[3]).toBe(255); // 底边对齐
+    const h2 = Math.round((32 * 29) / 64);
+    expect(pixelAt(result.sheet, secondX, SPRITE_CELL_H - h2 - 1)[3]).toBe(0);
+    expect(pixelAt(result.sheet, secondX, SPRITE_CELL_H - h2)[3]).toBe(255); // 底边对齐
     const thirdX = 2 * SPRITE_CELL_W + SPRITE_CELL_W / 2;
-    expect(pixelAt(result.sheet, thirdX, SPRITE_CELL_H - 8 - 1)[3]).toBe(0); // 16→8：顶部 24px 透明
-    expect(pixelAt(result.sheet, thirdX, SPRITE_CELL_H - 8)[3]).toBe(255);
+    const h3 = Math.round((16 * 29) / 64);
+    expect(pixelAt(result.sheet, thirdX, SPRITE_CELL_H - h3 - 1)[3]).toBe(0);
+    expect(pixelAt(result.sheet, thirdX, SPRITE_CELL_H - h3)[3]).toBe(255);
+  });
+
+  it('宽体 Q 版不会因摆臂大表情帧（Col 5）拖累全身缩矮，且正面摆手头部中轴零晃动', () => {
+    const img = makeImage(384, 256, [255, 255, 255, 255]);
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 0; col < 6; col += 1) {
+        const cx = col * 64 + 32;
+        const cyTop = row * 64 + 8;
+        // 头部+躯干 36×48（aspect 0.75，模拟宽发女仆）
+        for (let y = cyTop; y < cyTop + 48; y += 1) {
+          for (let x = cx - 18; x < cx + 18; x += 1) setPixel(img, x, y, [50, 120, 220, 255]);
+        }
+        // Row 0 Col 1 左侧单独伸出摆臂，验证头部中轴仍锚定格心
+        if (row === 0 && col === 1) {
+          for (let y = cyTop + 26; y < cyTop + 34; y += 1) {
+            for (let x = cx - 24; x < cx - 18; x += 1) setPixel(img, x, y, [220, 180, 140, 255]);
+          }
+        }
+        // Col 5 张开双臂特宽（58px）
+        if (col === 5) {
+          for (let y = cyTop + 20; y < cyTop + 28; y += 1) {
+            for (let x = cx - 29; x < cx + 29; x += 1) setPixel(img, x, y, [220, 180, 140, 255]);
+          }
+        }
+      }
+    }
+    const res = buildStardewSpriteSheet(img, { tier: '4x' });
+    // Col 0 高度达到 ~90%（115px），绝不会像旧版 64×128 被挤成 ~67px
+    let col0MinY = 128;
+    for (let y = 0; y < 128; y += 1) {
+      for (let x = 0; x < 128; x += 1) {
+        if (pixelAt(res.sheet, x, y)[3] > 16) col0MinY = Math.min(col0MinY, y);
+      }
+    }
+    expect(128 - col0MinY).toBeGreaterThanOrEqual(112);
+    // Row 0 Col 1 头顶中心仍在 x≈64（不因左侧伸手而向右瞬移）
+    let headSum = 0;
+    let headN = 0;
+    for (let y = 20; y < 56; y += 1) {
+      for (let x = 128; x < 256; x += 1) {
+        if (pixelAt(res.sheet, x, y)[3] > 16) {
+          headSum += x - 128;
+          headN += 1;
+        }
+      }
+    }
+    expect(Math.abs(headSum / headN - 64)).toBeLessThan(1.5);
   });
 
   it('按整张画布均分切格：每格自带留白也不会切掉第一列或让后续列漂移', () => {
@@ -243,33 +293,36 @@ describe('reducePalette', () => {
 });
 
 describe('validateSpriteSheet & 多档位（2x/4x）支持', () => {
-  it('尺寸不符/全透明拒绝；1x/2x/4x 合法尺寸均通过', () => {
+  it('尺寸不符/全透明拒绝；宽幅 1:1 及兼容旧版 1:2 尺寸均通过', () => {
     expect(validateSpriteSheet(makeImage(32, 64)).ok).toBe(false);
     expect(validateSpriteSheet(makeImage(SPRITE_SHEET_W, SPRITE_SHEET_H)).ok).toBe(false);
-    for (const [w, h] of [[96, 128], [64, 128], [192, 256], [384, 512]] as const) {
+    for (const [w, h] of [
+      [192, 128], [384, 256], [768, 512], // 宽幅 1:1 新规范
+      [96, 128], [64, 128], [192, 256], [384, 512], // 旧版 1:2 与 4 列向后兼容
+    ] as const) {
       const ok = makeImage(w, h);
       setPixel(ok, 0, 0, [1, 2, 3, 255]);
       expect(validateSpriteSheet(ok).ok).toBe(true);
     }
   });
 
-  it('2x 精致像素输出 192×256 且 64 色锐利最近邻', () => {
+  it('2x 精致像素输出 384×256（每帧 64×64）且 64 色锐利最近邻', () => {
     const result = buildStardewSpriteSheet(gridImage(), { tier: '2x' });
     expect(result.tier).toBe('2x');
-    expect(result.sheet.width).toBe(192);
+    expect(result.sheet.width).toBe(384);
     expect(result.sheet.height).toBe(256);
-    expect(result.cellWidth).toBe(32);
+    expect(result.cellWidth).toBe(64);
     expect(result.cellHeight).toBe(64);
     expect(result.emptyCells).toBe(0);
     expect(validateSpriteSheet(result.sheet).ok).toBe(true);
   });
 
-  it('4x 高清 Q 版输出 384×512 并采用区域平均下采样不丢全彩细节', () => {
+  it('4x 高清 Q 版输出 768×512（每帧 128×128）并采用区域平均下采样不丢全彩细节', () => {
     const result = buildStardewSpriteSheet(gridImage(), { tier: '4x' });
     expect(result.tier).toBe('4x');
-    expect(result.sheet.width).toBe(384);
+    expect(result.sheet.width).toBe(768);
     expect(result.sheet.height).toBe(512);
-    expect(result.cellWidth).toBe(64);
+    expect(result.cellWidth).toBe(128);
     expect(result.cellHeight).toBe(128);
     expect(result.emptyCells).toBe(0);
     expect(validateSpriteSheet(result.sheet).ok).toBe(true);

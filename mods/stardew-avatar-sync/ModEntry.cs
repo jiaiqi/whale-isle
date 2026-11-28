@@ -35,6 +35,7 @@ public sealed class AvatarPreset
 public sealed class AvatarConfig
 {
     public int Version { get; set; }
+    public bool Enabled { get; set; } = true;
     public string CharacterId { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public AvatarPreset Preset { get; set; } = new();
@@ -44,9 +45,23 @@ public sealed class AvatarConfig
     public bool SyncDisplayName { get; set; } = true;
 }
 
+public sealed class NativeFarmerBackup
+{
+    public string Name { get; set; } = "";
+    public int Hair { get; set; }
+    public string HairColor { get; set; } = "#8a5a2b";
+    public string ShirtId { get; set; } = "0";
+    public string PantsColor { get; set; } = "#3b5bdb";
+    public int Skin { get; set; }
+    public string? HatItemId { get; set; }
+    public bool TouchedHat { get; set; }
+    public bool TouchedName { get; set; }
+}
+
 public sealed class ModEntry : StardewModdingAPI.Mod
 {
     private const string ConfigFileName = "active-avatar.json";
+    private const string BackupFileName = "native-backup.json";
 
     private FileSystemWatcher? _watcher;
     private volatile bool _dirty;
@@ -74,7 +89,11 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             prefix: new HarmonyMethod(typeof(DrawPatch), nameof(DrawPatch.Prefix)));
 
         helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
-        helper.Events.GameLoop.SaveLoaded += (_, _) => MarkDirty();
+        helper.Events.GameLoop.SaveLoaded += (_, _) =>
+        {
+            _dirty = false;
+            Reload();
+        };
 
         StartWatcher();
         MarkDirty();
@@ -128,21 +147,50 @@ public sealed class ModEntry : StardewModdingAPI.Mod
         try
         {
             var path = Path.Combine(Helper.DirectoryPath, ConfigFileName);
-            if (!File.Exists(path)) { _sprite = null; return; }
+            if (!File.Exists(path))
+            {
+                DeactivateSync();
+                return;
+            }
             var config = JsonSerializer.Deserialize<AvatarConfig>(File.ReadAllText(path), JsonOptions);
             if (config == null || config.Version != 1)
             {
                 Monitor.Log("active-avatar.json 版本不符，忽略本次热切换", LogLevel.Warn);
                 return;
             }
+            if (!config.Enabled)
+            {
+                DeactivateSync(config);
+                return;
+            }
             _liveliness = config.Liveliness;
-            ApplyPreset(Game1.player, config);
+            if (Context.IsWorldReady && Game1.player != null)
+            {
+                EnsureNativeBackup(Game1.player, config);
+                ApplyPreset(Game1.player, config);
+            }
             _sprite = LoadSprite(config.SpriteSheetPath);
             DrawPatch.ResetTakeoverLog();
         }
         catch (Exception ex)
         {
             Monitor.Log($"active-avatar.json 读取失败（保持上一次外观）：{ex.Message}", LogLevel.Warn);
+        }
+    }
+
+    private void DeactivateSync(AvatarConfig? lastConfig = null)
+    {
+        bool hadSprite = _sprite != null;
+        _sprite = null;
+        DrawPatch.ResetTakeoverLog();
+        bool restored = false;
+        if (Context.IsWorldReady && Game1.player != null)
+        {
+            restored = RestoreNativeIfPresent(Game1.player, lastConfig);
+        }
+        if (hadSprite || restored)
+        {
+            Monitor.Log("已关闭桌宠形象同步，游戏内角色已恢复原生外观", LogLevel.Info);
         }
     }
 
@@ -161,25 +209,34 @@ public sealed class ModEntry : StardewModdingAPI.Mod
         try
         {
             var texture = Helper.ModContent.Load<Texture2D>(fileName);
-            // 自适应多分辨率：4 行 × (6 列或 4 列)，每帧 1:2 比例，支持 1x(16x32) / 2x(32x64) / 4x(64x128) / 8x(128x256)
+            // 自适应多分辨率与宽幅防裁切画格：4 行 × (6 或 4) 列；单格高 32/64/128/256，支持 1:1 宽幅 / 3:4 / 旧版 1:2
             if (texture.Height <= 0 || texture.Height % 4 != 0)
             {
                 Monitor.Log($"精灵表高度需为 4 的倍数，实际 {texture.Width}x{texture.Height}，回落原版预设", LogLevel.Warn);
                 return null;
             }
             int cellH = texture.Height / 4;
-            if (cellH % 2 != 0)
+            bool validHeight = cellH == 32 || cellH == 64 || cellH == 128 || cellH == 256;
+            int cols = texture.Width % 6 == 0 ? 6 : (texture.Width % 4 == 0 ? 4 : 0);
+            int cellW = cols > 0 ? texture.Width / cols : 0;
+            bool validWidth = cellW > 0 && (
+                cellW == cellH
+                || cellW * 4 == cellH * 3
+                || cellW * 2 == cellH);
+            if (cols == 4 && texture.Width % 6 == 0)
             {
-                Monitor.Log($"精灵表帧高需为偶数（1:2 比例），实际 {texture.Width}x{texture.Height}，回落原版预设", LogLevel.Warn);
-                return null;
+                int w6 = texture.Width / 6;
+                if (w6 == cellH || w6 * 4 == cellH * 3 || w6 * 2 == cellH)
+                {
+                    cols = 6;
+                    cellW = w6;
+                    validWidth = true;
+                }
             }
-            int cellW = cellH / 2;
-            bool validScale = cellW == 16 || cellW == 32 || cellW == 64 || cellW == 128;
-            int cols = cellW > 0 && texture.Width % cellW == 0 ? texture.Width / cellW : 0;
-            if (!validScale || (cols != 6 && cols != 4))
+            if (!validHeight || cols == 0 || !validWidth)
             {
                 Monitor.Log(
-                    $"精灵表尺寸应为 1x(96x128) / 2x(192x256) / 4x(384x512)（兼容 4 列旧图），实际 {texture.Width}x{texture.Height}，回落原版预设",
+                    $"精灵表尺寸不符（支持 1x 192x128 / 2x 384x256 / 4x 768x512 及旧版 1:2），实际 {texture.Width}x{texture.Height}，回落原版预设",
                     LogLevel.Warn);
                 return null;
             }
@@ -193,6 +250,115 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             Monitor.Log($"精灵表加载失败（回落原版预设）：{ex.Message}", LogLevel.Warn);
             return null;
         }
+    }
+
+    private static string BackupKey(Farmer farmer)
+        => string.IsNullOrWhiteSpace(Constants.SaveFolderName)
+            ? farmer.UniqueMultiplayerID.ToString()
+            : $"{Constants.SaveFolderName}:{farmer.UniqueMultiplayerID}";
+
+    private static string FormatHex(Color c) => $"#{c.R:x2}{c.G:x2}{c.B:x2}";
+
+    private Dictionary<string, NativeFarmerBackup> ReadBackups()
+    {
+        try
+        {
+            var path = Path.Combine(Helper.DirectoryPath, BackupFileName);
+            if (!File.Exists(path)) return new Dictionary<string, NativeFarmerBackup>();
+            return JsonSerializer.Deserialize<Dictionary<string, NativeFarmerBackup>>(File.ReadAllText(path), JsonOptions)
+                ?? new Dictionary<string, NativeFarmerBackup>();
+        }
+        catch
+        {
+            return new Dictionary<string, NativeFarmerBackup>();
+        }
+    }
+
+    private void WriteBackups(Dictionary<string, NativeFarmerBackup> backups)
+    {
+        try
+        {
+            var path = Path.Combine(Helper.DirectoryPath, BackupFileName);
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(backups, JsonOptions));
+            File.Move(temp, path, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            Monitor.Log($"native-backup.json 写入失败：{ex.Message}", LogLevel.Warn);
+        }
+    }
+
+    private void EnsureNativeBackup(Farmer farmer, AvatarConfig config)
+    {
+        var key = BackupKey(farmer);
+        var backups = ReadBackups();
+        bool touchHat = config.Preset.HatId >= 0;
+        bool touchName = config.SyncDisplayName && config.DisplayName.Length > 0;
+        if (backups.TryGetValue(key, out var existing))
+        {
+            bool changed = false;
+            if (touchHat && !existing.TouchedHat) { existing.TouchedHat = true; changed = true; }
+            if (touchName && !existing.TouchedName) { existing.TouchedName = true; changed = true; }
+            if (changed) WriteBackups(backups);
+            return;
+        }
+        backups[key] = new NativeFarmerBackup
+        {
+            Name = farmer.Name ?? "",
+            Hair = farmer.hair.Value,
+            HairColor = FormatHex(farmer.hairstyleColor.Value),
+            ShirtId = farmer.GetShirtId() ?? "0",
+            PantsColor = FormatHex(farmer.GetPantsColor()),
+            Skin = farmer.skin.Value,
+            HatItemId = farmer.hat.Value?.ItemId,
+            TouchedHat = touchHat,
+            TouchedName = touchName,
+        };
+        WriteBackups(backups);
+    }
+
+    private bool RestoreNativeIfPresent(Farmer farmer, AvatarConfig? lastConfig = null)
+    {
+        var key = BackupKey(farmer);
+        var backups = ReadBackups();
+        if (!backups.TryGetValue(key, out var backup))
+        {
+            // 兼容旧版 0.3.x 已写过预设但尚无 native-backup.json 的存档：若农夫当前仍穿着该预设外观，则复位为星露谷默认原版外观
+            if (lastConfig != null
+                && farmer.hair.Value == Math.Max(0, lastConfig.Preset.Hair)
+                && FormatHex(farmer.hairstyleColor.Value).Equals(lastConfig.Preset.HairColor, StringComparison.OrdinalIgnoreCase))
+            {
+                farmer.changeHairStyle(0);
+                farmer.changeHairColor(new Color(138, 90, 43));
+                farmer.changeShirt("0");
+                farmer.changePantsColor(new Color(46, 85, 181));
+                farmer.changeSkinColor(0, true);
+                farmer.FarmerRenderer.MarkSpriteDirty();
+                return true;
+            }
+            return false;
+        }
+        farmer.changeHairStyle(Math.Max(0, backup.Hair));
+        farmer.changeHairColor(ParseColor(backup.HairColor, new Color(138, 90, 43)));
+        farmer.changeShirt(string.IsNullOrWhiteSpace(backup.ShirtId) ? "0" : backup.ShirtId);
+        farmer.changePantsColor(ParseColor(backup.PantsColor, new Color(59, 91, 219)));
+        farmer.changeSkinColor(Math.Max(0, backup.Skin), true);
+        if (backup.TouchedHat)
+        {
+            if (string.IsNullOrWhiteSpace(backup.HatItemId))
+                farmer.hat.Value = null;
+            else
+                farmer.hat.Value = ItemRegistry.Create<StardewValley.Objects.Hat>("(H)" + backup.HatItemId.Replace("(H)", ""));
+        }
+        if (backup.TouchedName && !string.IsNullOrWhiteSpace(backup.Name))
+        {
+            farmer.Name = backup.Name;
+        }
+        farmer.FarmerRenderer.MarkSpriteDirty();
+        backups.Remove(key);
+        WriteBackups(backups);
+        return true;
     }
 
     private void ApplyPreset(Farmer farmer, AvatarConfig config)
@@ -229,8 +395,10 @@ public sealed class ModEntry : StardewModdingAPI.Mod
     {
         internal static ModEntry? Mod;
 
-        // 像素表第 2/3/4 列（索引 1/2/3）是左脚在前/右脚在前/双脚过渡；四相位循环更顺滑。
-        private static readonly int[] WalkPose = { 1, 3, 2, 3 };
+        // 节拍对齐原版 FarmerSprite 4 相位循环（0/2 为落地过渡，1/3 为迈步推地）：
+        // 侧面用第 4 列（索引 3）柔和过渡；上下走避开第 4 列（AI 常画成内八交叉或双手合十），改用清晰自然的第 1 列（索引 0）居中站姿过渡。
+        private static readonly int[] SideWalkPose = { 3, 1, 3, 2 };
+        private static readonly int[] VerticalWalkPose = { 0, 1, 0, 2 };
         private static bool _loggedTakeover;
 
         internal static void ResetTakeoverLog() => _loggedTakeover = false;
@@ -277,7 +445,7 @@ public sealed class ModEntry : StardewModdingAPI.Mod
                     LogLevel.Info);
             }
 
-            int column = SelectColumn(who, farmerSprite, cols, out bool isMoving, out bool isAction, out bool isEmote);
+            int column = SelectColumn(who, farmerSprite, cols, out int animPhase, out bool isMoving, out bool isAction, out bool isEmote);
             // 精灵表行序：下/右/上/左；原版 FacingDirection：0 上 / 1 右 / 2 下 / 3 左
             int row = who.FacingDirection switch
             {
@@ -289,13 +457,14 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             };
             var source = new Rectangle(column * cellW, row * cellH, cellW, cellH);
 
-            // 屏幕上与原版 16×32×4 = 64×128 完全等大的基础缩放倍率
-            float baseDrawScale = (64f / cellW) * scale;
+            // 屏幕上按高度（128px）严格等比对齐原版农夫身高，兼容 1:1 宽幅 / 3:4 / 旧版 1:2
+            float baseDrawScale = (128f / cellH) * scale;
             var drawPosition = new Vector2((float)Math.Floor(position.X), (float)Math.Floor(position.Y));
-            var frameOffset = new Vector2(animationFrame.xOffset * 4f, animationFrame.positionOffset * 4f);
+            // 行走/奔跑期间分离地面阴影坐标与步态抬脚起伏，消除原版跑步 positionOffset=-2 导致的地面阴影与身体猛跳 -8px
+            var frameOffset = isMoving
+                ? new Vector2(animationFrame.xOffset * 4f, 0f)
+                : new Vector2(animationFrame.xOffset * 4f, animationFrame.positionOffset * 4f);
 
-            // 将原版 16×32 的 (position, origin) 换算为屏幕上的精确脚底中心坐标，
-            // 使 1×/2×/4×/8× 所有分辨率与原版 100% 脚底重合，呼吸/弹跳均稳稳锚在脚底。
             var screenOrigin = drawPosition + origin + frameOffset;
             var footScreenPos = screenOrigin + new Vector2((8f - origin.X) * 4f * scale, (32f - origin.Y) * 4f * scale);
             var pivotOrigin = new Vector2(cellW * 0.5f, cellH);
@@ -305,7 +474,29 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             float bounceY = 0f;
             float extraRotation = 0f;
 
-            if (mod._liveliness)
+            if (isMoving)
+            {
+                // 迈步相位（animPhase == 1 或 3）：节拍同步的轻快单步轻抬（约 2–2.5px），不再叠加异步正弦抖动或 -8px 猛跳
+                bool stepBeat = (animPhase & 1) == 1;
+                bool verticalWalk = who.FacingDirection == 0 || who.FacingDirection == 2;
+                float liftPx = mod._liveliness ? (verticalWalk ? 2.2f : 2.8f) : 1.5f;
+                if (stepBeat)
+                {
+                    bounceY = -liftPx * scale;
+                    if (mod._liveliness)
+                    {
+                        squashY = 1.018f;
+                        squashX = 0.988f;
+                    }
+                }
+                if (mod._liveliness)
+                {
+                    if (who.FacingDirection == 1) extraRotation = 0.028f;
+                    else if (who.FacingDirection == 3) extraRotation = -0.028f;
+                    else if (stepBeat) extraRotation = animPhase == 1 ? 0.020f : -0.020f; // 上下走微幅重心左右交替
+                }
+            }
+            else if (mod._liveliness)
             {
                 double t = Game1.currentGameTime?.TotalGameTime.TotalSeconds ?? 0.0;
                 if (isAction || isEmote)
@@ -315,16 +506,6 @@ public sealed class ModEntry : StardewModdingAPI.Mod
                     squashY = 1f + 0.032f * pulse;
                     squashX = 1f - 0.022f * pulse;
                     bounceY = -Math.Max(0f, pulse) * 1.8f * scale;
-                }
-                else if (isMoving)
-                {
-                    // 行走/奔跑：步伐弹性轻跳 + 左右方向轻微前倾
-                    float stride = (float)Math.Abs(Math.Sin(t * 11.5));
-                    bounceY = -stride * 2.4f * scale;
-                    squashY = 1f + stride * 0.022f;
-                    squashX = 1f - stride * 0.015f;
-                    if (who.FacingDirection == 1) extraRotation = 0.032f;
-                    else if (who.FacingDirection == 3) extraRotation = -0.032f;
                 }
                 else
                 {
@@ -337,11 +518,11 @@ public sealed class ModEntry : StardewModdingAPI.Mod
 
             var depth = FarmerRenderer.GetLayerDepth(layerDepth, FarmerRenderer.FarmerSpriteLayers.Base);
 
-            // 柔和脚底地面投影（贴合草地/地板，消除高清立绘的「悬浮贴纸感」）
+            // 柔和脚底地面投影（贴合地面，不再跟随起身步态上下瞬移）
             if (mod._liveliness && Game1.shadowTexture != null)
             {
                 var shadowTex = Game1.shadowTexture;
-                float shadowScale = (1f - Math.Min(0.18f, Math.Abs(bounceY) * 0.03f)) * 4f * scale;
+                float shadowScale = (1f - Math.Min(0.14f, Math.Abs(bounceY) * 0.025f)) * 4f * scale;
                 var shadowOrigin = new Vector2(shadowTex.Width * 0.5f, shadowTex.Height * 0.5f);
                 var shadowPos = new Vector2(footScreenPos.X, footScreenPos.Y - 4f * scale);
                 b.Draw(
@@ -373,6 +554,7 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             Farmer who,
             FarmerSprite sprite,
             int columns,
+            out int animPhase,
             out bool isMoving,
             out bool isAction,
             out bool isEmote)
@@ -385,6 +567,7 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             bool locomotion = walk || run || carryWalk || carryRun;
             bool moving = who.isMoving() || who.movedDuringLastTick();
 
+            animPhase = Math.Abs(sprite.currentAnimationIndex) % 4;
             isMoving = false;
             isAction = false;
             isEmote = false;
@@ -404,7 +587,9 @@ public sealed class ModEntry : StardewModdingAPI.Mod
             if (locomotion && moving)
             {
                 isMoving = true;
-                return WalkPose[Math.Abs(sprite.currentAnimationIndex) % WalkPose.Length];
+                bool verticalWalk = who.FacingDirection == 0 || who.FacingDirection == 2;
+                if (verticalWalk || columns < 4) return VerticalWalkPose[animPhase];
+                return SideWalkPose[animPhase];
             }
             if (who.UsingTool || sprite.PauseForSingleAnimation)
             {

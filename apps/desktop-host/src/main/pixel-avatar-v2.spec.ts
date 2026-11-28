@@ -238,7 +238,7 @@ describe('PixelAvatarPipelineV2（V2-P2-06：11 步像素流水线与 Stardew Av
     expect(job2x.steps).toHaveLength(11);
     expect(job2x.compiledPrompt).toContain('海蓝双马尾');
     expect(job2x.qa?.valid).toBe(true);
-    expect(job2x.qa?.width).toBe(192);
+    expect(job2x.qa?.width).toBe(384);
     expect(job2x.qa?.height).toBe(256);
     expect(job2x.steps[10]?.status).toBe('skipped');
 
@@ -258,7 +258,7 @@ describe('PixelAvatarPipelineV2（V2-P2-06：11 步像素流水线与 Stardew Av
     expect(exported.verification?.dllCompiled).toBe(true);
     expect(exported.verification?.dllMatchesPublish).toBe(true);
     expect(exported.verification?.spriteTier).toBe('2x');
-    expect(exported.verification?.spriteWidth).toBe(192);
+    expect(exported.verification?.spriteWidth).toBe(384);
     expect(exported.verification?.spriteHeight).toBe(256);
     expect(exported.verification?.realDeviceInGameVisualVerified).toBe(false);
 
@@ -286,7 +286,7 @@ describe('PixelAvatarPipelineV2（V2-P2-06：11 步像素流水线与 Stardew Av
       allowLivestream: false,
     });
     expect(job4x.status).toBe('review_required');
-    expect(job4x.qa?.width).toBe(384);
+    expect(job4x.qa?.width).toBe(768);
     expect(job4x.qa?.height).toBe(512);
     expect(job4x.steps[1]?.status).toBe('warn');
     expect(job4x.steps[9]?.status).toBe('warn');

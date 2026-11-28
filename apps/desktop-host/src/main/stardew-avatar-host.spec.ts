@@ -115,7 +115,14 @@ describe('syncCharacter', () => {
       syncedDisplayName: 'Kimi',
       syncedSpriteReady: true,
     });
-    // 卸载后 active-avatar.json 随目录消失，状态如实回到 null
+    // 关闭开关时向已有 active-avatar.json 写入 enabled:false 触发 Mod 恢复原生形象，且状态回落未同步
+    const afterDisable = host.setEnabled(false);
+    expect(afterDisable.enabled).toBe(false);
+    expect(afterDisable.syncedCharacterId).toBeNull();
+    const disabledPayload = StardewAvatarSyncSchema.parse(JSON.parse(readFileSync(join(modsDir, 'WhaleIsleAvatar', 'active-avatar.json'), 'utf8')));
+    expect(disabledPayload.enabled).toBe(false);
+    // 重新启用并卸载后 active-avatar.json 随目录消失
+    host.setEnabled(true);
     expect(host.uninstallMod().ok).toBe(true);
     expect(host.state().syncedCharacterId).toBeNull();
     expect(existsSync(join(modsDir, 'WhaleIsleAvatar'))).toBe(false);
