@@ -65,7 +65,9 @@ export class PoseSkinRenderer implements PetAvatarRenderer {
   private current: PetActionState | null = null;
   private active: PoseImageHandle | null = null;
   private previous: PoseImageHandle | null = null;
+  private detachTimer: ReturnType<typeof setTimeout> | null = null;
   private loading = false;
+  private loadEpoch = 0;
   private readonly poseByAction = new Map<PetActionState, string>();
   /** clipId → clip（含 ambientPool），供按姿态名直放 */
   private readonly clips = new Map<string, PetAvatarClip>();
@@ -126,6 +128,36 @@ export class PoseSkinRenderer implements PetAvatarRenderer {
     return pool[Math.floor(rng() * pool.length) % pool.length] ?? null;
   }
 
+  private commitSwap(next: PoseImageHandle, squashImpact: boolean): void {
+    if (this.detachTimer !== null) {
+      clearTimeout(this.detachTimer);
+      this.detachTimer = null;
+    }
+    if (this.previous !== null && this.previous !== this.active) {
+      this.host.detachVideo(this.previous);
+      this.previous = null;
+    }
+    this.host.mountVideo(next);
+    this.host.showVideo(next);
+    if (this.active !== null) {
+      const fading = this.active;
+      this.host.hideVideo(fading);
+      this.previous = fading;
+      this.detachTimer = setTimeout(() => {
+        this.detachTimer = null;
+        if (this.previous === fading) {
+          this.host.detachVideo(fading);
+          this.previous = null;
+        }
+      }, 240);
+    }
+    this.active = next;
+    if (squashImpact) {
+      this.host.applySquash({ scaleX: 1.045, scaleY: 0.955 });
+      setTimeout(() => this.host.applySquash({ scaleX: 1, scaleY: 1 }), 120);
+    }
+  }
+
   async play(action: PetActionState, opts?: PlayOptions): Promise<void> {
     if (this.manifestValue === null) throw new PetRendererError('NO_MANIFEST', '未装载 manifest');
     if (this.current === action && opts?.force !== true) return;
@@ -135,23 +167,20 @@ export class PoseSkinRenderer implements PetAvatarRenderer {
     const src = clip.spriteSheetPath ?? clip.webmPath;
     if (this.loading) return;
     this.loading = true;
+    const epoch = this.loadEpoch;
     const next = this.imageFactory(src);
     try {
       await next.play();
     } catch {
-      this.loading = false;
+      if (epoch === this.loadEpoch) this.loading = false;
       throw new PetRendererError('CLIP_PLAY_FAILED', `姿势图加载失败：${src}`);
     }
-    this.host.mountVideo(next);
-    this.host.showVideo(next);
-    if (this.active !== null) {
-      this.host.hideVideo(this.active);
-      this.previous = this.active;
+    if (epoch !== this.loadEpoch) {
+      next.detach();
+      return;
     }
-    this.active = next;
+    this.commitSwap(next, true);
     this.current = action;
-    this.host.applySquash({ scaleX: 1.045, scaleY: 0.955 });
-    setTimeout(() => this.host.applySquash({ scaleX: 1, scaleY: 1 }), 120);
     this.loading = false;
   }
 
@@ -176,13 +205,23 @@ export class PoseSkinRenderer implements PetAvatarRenderer {
   async playClip(clip: PetAvatarClip): Promise<void> {
     const action = [...this.poseByAction.entries()].find(([, pose]) => pose === clip.clipId)?.[0];
     if (action !== undefined) return this.play(action, { force: true });
+    if (this.loading) return;
+    this.loading = true;
+    const epoch = this.loadEpoch;
     const src = clip.spriteSheetPath ?? clip.webmPath;
     const next = this.imageFactory(src);
-    await next.play();
-    this.host.mountVideo(next);
-    this.host.showVideo(next);
-    if (this.active !== null) this.host.hideVideo(this.active);
-    this.active = next;
+    try {
+      await next.play();
+    } catch (error) {
+      if (epoch === this.loadEpoch) this.loading = false;
+      throw error;
+    }
+    if (epoch !== this.loadEpoch) {
+      next.detach();
+      return;
+    }
+    this.commitSwap(next, false);
+    this.loading = false;
   }
 
   /** 静态姿势无逐帧 Q 弹曲线，返回阻尼振荡姿态（与 WebM/精灵保持同一手感接口）。 */
@@ -191,6 +230,11 @@ export class PoseSkinRenderer implements PetAvatarRenderer {
   }
 
   dispose(): void {
+    this.loadEpoch += 1;
+    if (this.detachTimer !== null) {
+      clearTimeout(this.detachTimer);
+      this.detachTimer = null;
+    }
     if (this.active !== null) this.host.detachVideo(this.active);
     if (this.previous !== null) this.host.detachVideo(this.previous);
     this.active = null;

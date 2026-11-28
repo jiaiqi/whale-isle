@@ -70,6 +70,7 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
   private activeAction: PetActionState | null = null;
   private activeClipState: PetAvatarClip | null = null;
   private switching = false;
+  private loadEpoch = 0;
   private devWatermarkState = false;
   private sfxEnabled: boolean;
   private sfxVolume: number;
@@ -154,6 +155,8 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
   }
 
   dispose(): void {
+    this.loadEpoch += 1;
+    this.switching = false;
     if (this.active !== null) {
       this.active.pause();
       this.options.host.detachVideo(this.active);
@@ -172,11 +175,16 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
     if (meta === undefined) throw new PetRendererError('CLIP_LOAD_FAILED', `精灵图缺少帧元数据：${clip.clipId}`);
     const src = clip.spriteSheetPath ?? clip.webmPath;
     this.switching = true;
+    const epoch = this.loadEpoch;
     let standby: VideoHandle | null = null;
     try {
       standby = this.options.surfaceFactory(src, meta, clip.playbackRate, clip.loop);
       this.options.host.mountVideo(standby);
       await standby.play(clip.loop, clip.playbackRate);
+      if (epoch !== this.loadEpoch) {
+        this.options.host.detachVideo(standby);
+        return;
+      }
       this.options.host.showVideo(standby);
       if (this.active !== null) {
         this.options.host.hideVideo(this.active);
@@ -193,9 +201,10 @@ export class SpritesheetRenderer implements PetAvatarRenderer {
       }
     } catch (error) {
       if (standby !== null) this.options.host.detachVideo(standby);
+      if (epoch !== this.loadEpoch) return;
       throw new PetRendererError('CLIP_LOAD_FAILED', `精灵图播放失败：${clip.clipId}（${error instanceof Error ? error.message : String(error)}）`);
     } finally {
-      this.switching = false;
+      if (epoch === this.loadEpoch) this.switching = false;
     }
   }
 

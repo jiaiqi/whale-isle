@@ -171,4 +171,41 @@ describe('PoseSkinRenderer 幂等清理', () => {
     renderer.dispose();
     expect(renderer.manifest).not.toBeNull();
   });
+
+  it('连续切换姿态会在淡出后 detach 旧图，且 dispose 会取消在途加载避免叠层', async () => {
+    vi.useFakeTimers();
+    try {
+      const { host, calls } = makeHost();
+      const { factory } = makeFactory();
+      const renderer = new PoseSkinRenderer({ host, imageFactory: factory });
+      await renderer.load(MANIFEST);
+      await renderer.play('idle');
+      await renderer.play('happy_maid');
+      expect(calls).toContain('hide:whale-pet://a/idle.webp');
+      vi.advanceTimersByTime(260);
+      expect(calls).toContain('detach:whale-pet://a/idle.webp');
+
+      let resolveSlow!: () => void;
+      const slowDetached: string[] = [];
+      const slowHost = makeHost();
+      const slowRenderer = new PoseSkinRenderer({
+        host: slowHost.host,
+        imageFactory: (src) => ({
+          src,
+          play: () => new Promise<void>((resolve) => { resolveSlow = resolve; }),
+          pause: () => undefined,
+          detach: () => { slowDetached.push(src); },
+        }),
+      });
+      await slowRenderer.load(MANIFEST);
+      const pending = slowRenderer.play('idle');
+      slowRenderer.dispose();
+      resolveSlow();
+      await pending;
+      expect(slowDetached).toEqual(['whale-pet://a/idle.webp']);
+      expect(slowHost.calls).not.toContain('mount:whale-pet://a/idle.webp');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

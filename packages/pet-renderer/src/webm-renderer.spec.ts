@@ -367,4 +367,29 @@ describe('playClip 单条预览（T-M5-16）', () => {
     ).resolves.toBeUndefined();
     (renderer as unknown as { switching: boolean }).switching = false;
   });
+
+  it('dispose 会使在途加载退出并 detach 备片，且复位 switching 允许新角色继续播放', async () => {
+    const host = new RecordingHost();
+    let finishSlow!: () => void;
+    const renderer = new WebmVideoRenderer({
+      host,
+      videoFactory: (src) => ({
+        src,
+        play: () => src.includes('daiji')
+          ? new Promise<void>((resolve) => { finishSlow = resolve; })
+          : Promise.resolve(),
+        pause: () => undefined,
+        detach: () => undefined,
+      }),
+    });
+    await renderer.load(MANIFEST);
+    const first = renderer.play('idle');
+    renderer.dispose();
+    await renderer.load(MANIFEST);
+    await expect(renderer.play('rage_spray')).resolves.toBeUndefined();
+    finishSlow();
+    await first;
+    expect(host.ops).toContain('detach(webm/daiji-huxi-xiuxian.webm)');
+    expect(renderer.currentAction()).toBe('rage_spray');
+  });
 });

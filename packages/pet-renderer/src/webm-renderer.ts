@@ -44,6 +44,7 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
   private active: VideoHandle | null = null;
   private activeAction: PetActionState | null = null;
   private switching = false;
+  private loadEpoch = 0;
   private devWatermarkState = false;
 
   constructor(private readonly options: WebmRendererOptions) {}
@@ -100,10 +101,15 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
     if (!this.factory) throw new PetRendererError('NO_FACTORY', '缺少 videoFactory（真实工厂由 desktop-host 注入）');
     if (this.switching) return; // 预览不因并发切换抛错（静默让位）
     this.switching = true;
+    const epoch = this.loadEpoch;
     const standby = this.factory(clip.webmPath);
     try {
       this.options.host.mountVideo(standby);
       await standby.play(clip.loop, clip.playbackRate);
+      if (epoch !== this.loadEpoch) {
+        this.options.host.detachVideo(standby);
+        return;
+      }
       this.options.host.showVideo(standby);
       if (this.active) {
         this.options.host.hideVideo(this.active);
@@ -113,13 +119,14 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
       // 单条预览不更新 activeAction/entry 缓存——后续 play(action) 正常接管
     } catch (error) {
       this.options.host.detachVideo(standby);
+      if (epoch !== this.loadEpoch) return;
       // 加载失败保留旧画面（不黑屏）
       if (error instanceof Error) {
         throw new PetRendererError('CLIP_PLAY_FAILED', `片段播放失败：${clip.webmPath}（${error.message}）`);
       }
       throw new PetRendererError('CLIP_PLAY_FAILED', `片段播放失败：${clip.webmPath}`);
     } finally {
-      this.switching = false;
+      if (epoch === this.loadEpoch) this.switching = false;
     }
   }
 
@@ -138,10 +145,15 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
 
     const clip = this.pickClip(entry.clips);
     this.switching = true;
+    const epoch = this.loadEpoch;
     const standby = this.factory(clip.webmPath);
     try {
       this.options.host.mountVideo(standby);
       await standby.play(clip.loop, clip.playbackRate);
+      if (epoch !== this.loadEpoch) {
+        this.options.host.detachVideo(standby);
+        return;
+      }
       // —— 交叉淡入分界线：新画面可展示后才动旧画面（零黑帧承诺） ——
       this.options.host.showVideo(standby);
       if (this.active) {
@@ -153,12 +165,13 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
     } catch (error) {
       // 加载失败：撤下备用画面，旧画面原样保留（不黑屏）
       this.options.host.detachVideo(standby);
+      if (epoch !== this.loadEpoch) return;
       throw new PetRendererError(
         'CLIP_LOAD_FAILED',
         `片段加载失败：${clip.webmPath}（${error instanceof Error ? error.message : String(error)}）`,
       );
     } finally {
-      this.switching = false;
+      if (epoch === this.loadEpoch) this.switching = false;
     }
   }
 
@@ -168,6 +181,8 @@ export class WebmVideoRenderer implements PetAvatarRenderer {
   }
 
   dispose(): void {
+    this.loadEpoch += 1;
+    this.switching = false;
     if (this.active) {
       this.active.pause();
       this.options.host.detachVideo(this.active);
