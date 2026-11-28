@@ -797,7 +797,9 @@ export function createAutodriveHost(
         } catch {
           /* 记忆失败不影响主链路 */
         }
-        const slice = event.tool === 'bundle_info' ? 400 : 80;
+        // 回执摘要长度：失败回执常含多个前置缺口（钱/材料/等级/加工时间），
+        // 80 字会截掉后半段关键信息，模型据此无法核对真实缺口；成功回执保持短摘要即可。
+        const slice = event.tool === 'bundle_info' ? 400 : (event.status === 'COMPLETED' ? 80 : 220);
         recentReceipts.push(event.status + ' ' + event.tool + ': ' + (event.summary ?? '').slice(0, slice));
         if (recentReceipts.length > 8) recentReceipts = recentReceipts.slice(-8);
         llmPlanner?.setRecentReceipts(recentReceipts);
