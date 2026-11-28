@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
 import { StardewAdapter } from './adapter';
-import { buildAutonomousDecisionMessages } from './llm-prompt';
+import { buildAutonomousDecisionMessages, buildRepeatedEmptyResultSection } from './llm-prompt';
 import {
   BrainSwitch,
   buildFailureMemorySection,
@@ -171,6 +171,23 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(text).toContain('生命值危险（20%）');
     expect(text).toContain('背包空位为 0');
     expect(text).toContain('完全由你自主决定');
+  });
+
+  it('重复空结果保留成功事实并提醒核对进展，不伪造失败或指定玩法', () => {
+    const empty = 'COMPLETED clear_area: 成功：区域内没有可以清理的东西';
+    expect(buildRepeatedEmptyResultSection([empty])).toBe('');
+    expect(buildRepeatedEmptyResultSection([empty.replace('COMPLETED', 'FAILED'), empty])).toBe('');
+    expect(buildRepeatedEmptyResultSection(['COMPLETED fish: 成功：钓到沙丁鱼', 'COMPLETED fish: 成功：钓到沙丁鱼'])).toBe('');
+    expect(buildRepeatedEmptyResultSection([empty, empty, ...Array<string>(5).fill('COMPLETED travel_to: 成功：到达农场')])).toBe('');
+    const prompt = buildFailureMemorySection({ lastSignature: null, streak: 0, lastSummary: '', clockStallSec: 0 }, [empty, empty]);
+    expect(prompt).toContain('同一空结果出现2次');
+    expect(prompt).toContain('仍保留 COMPLETED 状态');
+    expect(prompt).toContain('自主决定下一步');
+    expect(prompt).not.toContain('最近失败签名');
+    expect(prompt).not.toContain('下矿');
+    const withFailure = buildFailureMemorySection({ lastSignature: 'eat|缺少食物', streak: 1, lastSummary: '缺少食物', clockStallSec: 61 }, [empty, empty]);
+    expect(withFailure).toContain('同一空结果出现2次');
+    expect(withFailure).toContain('最近失败签名');
   });
 
   it('buildFailureMemorySection 支持直接记忆、recentReceipts 回退与时钟停滞提示', () => {

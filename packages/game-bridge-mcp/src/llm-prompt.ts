@@ -563,6 +563,21 @@ export interface FailureMemoryContext {
   clockStallSec: number;
 }
 
+/** 只汇总明确的空结果事实，不改写执行状态，也不替模型选择后续玩法。 */
+export function buildRepeatedEmptyResultSection(recentReceipts: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const receipt of recentReceipts.slice(-5)) {
+    if (!/^COMPLETED\s+[^\s:：]+\s*[:：]\s*成功：区域内没有可以清理的东西(?:$|\n)/.test(receipt)) continue;
+    const line = receipt.split('\n')[0] ?? receipt;
+    counts.set(line, (counts.get(line) ?? 0) + 1);
+  }
+  const repeated = [...counts].filter(([, count]) => count >= 2);
+  if (repeated.length === 0) return '';
+  return '\n\n## 重复空结果（真实回执，仍保留 COMPLETED 状态）\n'
+    + repeated.map(([line, count]) => `- 最近5条回执中，同一空结果出现${count}次：${line.slice(0, 200)}`).join('\n')
+    + '\n工具调用成功只表示调用完成；该回执明确表示没有清理对象，不能据此声称已收集资源或完成目标。请核对当前位置、对象范围与真实背包变化，再自主决定下一步；不要仅改写意图后重复相同空操作。';
+}
+
 export function buildFailureMemorySection(memory: FailureMemoryContext, recentReceipts: readonly string[]): string {
   let sig = memory.lastSignature;
   let streak = memory.streak;
@@ -581,7 +596,8 @@ export function buildFailureMemorySection(memory: FailureMemoryContext, recentRe
     }
   }
 
-  if (sig === null && memory.clockStallSec < 60) return '';
+  const emptyResults = buildRepeatedEmptyResultSection(recentReceipts);
+  if (sig === null && memory.clockStallSec < 60) return emptyResults;
   const lines = ['## 失败与停滞记忆（短期记忆）'];
   if (sig !== null) {
     lines.push(`- 最近失败签名：\`${sig}\`（连续失败 ${Math.max(1, streak)} 次${lastSummary === '' ? '' : `，详情：${lastSummary.slice(0, 120)}`}）`);
@@ -590,7 +606,7 @@ export function buildFailureMemorySection(memory: FailureMemoryContext, recentRe
   if (memory.clockStallSec >= 60) {
     lines.push(`- 游戏时钟已停滞现实 ${memory.clockStallSec} 秒：检查是否卡在界面/对话框，或换可推进时间的动作。`);
   }
-  return `\n\n${lines.join('\n')}`;
+  return `\n\n${lines.join('\n')}${emptyResults}`;
 }
 
 export interface MandatoryCommandCheck {
