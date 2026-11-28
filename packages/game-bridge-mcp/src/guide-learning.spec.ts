@@ -492,6 +492,8 @@ describe('LlmPlanner + AutodriveRunner 端到端学习闭环（read_guide → de
       expect(savedRaw.insights[0]?.verdict).toBe('adopt');
       expect(savedRaw.insights[0]?.hits).toBe(1);
       expect(events.filter((e) => e.type === 'receipt' && e.status === 'COMPLETED').length).toBeGreaterThanOrEqual(3);
+      expect(extractSaveNameFromState('## 位置\n地点：FarmHouse（鲸屿真机农场）')).toBe('鲸屿真机农场');
+      expect(extractSaveNameFromState('## 位置\n地点：Greenhouse（海风农场）')).toBe('海风农场');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

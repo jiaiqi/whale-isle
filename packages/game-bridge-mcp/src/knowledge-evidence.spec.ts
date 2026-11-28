@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { PlayReceiptSchema, type GameKnowledgeItem } from '@workbench/shared-protocol';
 import { GuideLibrary } from './guide-library';
-import { applyPlayReceipt, assessKnowledge, buildEvidencePack, candidatesFromEvidence, canonicalJson, invalidateMaterialEvidence, locateSourceText, reviseKnowledge, sha256, transitionKnowledge, verifyEvidencePack } from './knowledge-evidence';
+import { applyPlayReceipt, assessKnowledge, buildEvidencePack, candidatesFromEvidence, canonicalJson, formatKnowledgeUnitsForPlanner, invalidateMaterialEvidence, locateSourceText, reviseKnowledge, sha256, transitionKnowledge, verifyEvidencePack } from './knowledge-evidence';
 
 const text = readFileSync(new URL('../../../tools/mock-harness/fixtures/knowledge-slice/spring-guide.md', import.meta.url), 'utf8');
 const quote = text.trimEnd().split('\n').at(-1)!;
@@ -77,5 +77,51 @@ describe('04B/D：确定性证据、四态与适用性', () => {
     expect(applyPlayReceipt(unit(), { ...receipt, suspicious: true })).toEqual(unit());
     expect(applyPlayReceipt(unit(), { ...receipt, receiptStatus: 'UNCERTAIN' })).toEqual(unit());
     expect(() => applyPlayReceipt(unit(), { ...receipt, knowledgeId: 'other' })).toThrow();
+  });
+
+  it('formatKnowledgeUnitsForPlanner 按状态/相关性/预算筛选已验证与反证知识', () => {
+    expect(formatKnowledgeUnitsForPlanner([], state, '2026-11-27')).toBe('');
+    expect(formatKnowledgeUnitsForPlanner([unit()], state, '2026-11-27', { maxItems: 0 })).toBe('');
+
+    const verified = transitionKnowledge(unit(), 'verified', true);
+    const promoted = transitionKnowledge(verified, 'promoted');
+    const archived = transitionKnowledge(verified, 'archived');
+    const otherGame = { ...promoted, knowledgeId: 'kn-other', gameId: 'terraria' };
+    const failedRefs = { ...verified, knowledgeId: 'kn-failed-ref', evidenceRefs: [{ ...verified.evidenceRefs[0]!, extraction: 'failed' as const }] };
+    const unverifiedCandidate = { ...unit(), knowledgeId: 'kn-cand', confidence: 0.2 };
+    const notApplicable = { ...verified, knowledgeId: 'kn-summer', applicability: ['夏季'] };
+    const partialCaution = { ...unit(), knowledgeId: 'kn-partial', status: 'partially-verified' as const, confidence: 0.7, topic: '春季浇水', applicability: ['明年运气好'] };
+    const rejectedPitfall = {
+      ...unit(),
+      knowledgeId: 'kn-pitfall',
+      topic: 'Farm',
+      claim: '满包时直接合成箱子会掉地上',
+      status: 'rejected' as const,
+      confidence: 0.1,
+      contradictoryEvidence: ['BWF Craft 满包直接拒绝'],
+    };
+
+    const textOut = formatKnowledgeUnitsForPlanner(
+      [archived, otherGame, failedRefs, unverifiedCandidate, notApplicable, partialCaution, rejectedPitfall, { ...promoted, topic: 'Farm', claim: '晴天优先用批量工具浇水' }],
+      state,
+      '2026-11-27',
+    );
+    expect(textOut).toContain('已晋升');
+    expect(textOut).toContain('实玩有效');
+    expect(textOut).toContain('注意：');
+    expect(textOut).toContain('已反证/避坑');
+    expect(textOut).toContain('反例：BWF Craft 满包直接拒绝');
+    expect(textOut).not.toContain('kn-summer');
+    expect(textOut).not.toContain('terraria');
+
+    const longUnits = Array.from({ length: 12 }, (_, idx) => ({
+      ...promoted,
+      knowledgeId: `kn-long-${idx}`,
+      topic: `专题${idx}`,
+      claim: '这是一条很长的已验证星露谷游玩策略描述'.repeat(6),
+    }));
+    const bounded = formatKnowledgeUnitsForPlanner(longUnits, state, '2026-11-27', { maxItems: 12 });
+    expect(bounded.length).toBeLessThanOrEqual(1205);
+    expect(bounded.split('\n').length).toBeLessThan(12);
   });
 });

@@ -88,7 +88,7 @@ export interface LlmInsightDraft {
 }
 
 export function extractSaveNameFromState(raw: string): string | null {
-  const farmLoc = /地点：Farm（([^）\n]+)）/.exec(raw)?.[1]?.trim();
+  const farmLoc = /地点：(?:Farm|FarmHouse|Cellar|Greenhouse)（([^）\n]+)）/.exec(raw)?.[1]?.trim();
   if (farmLoc !== undefined && farmLoc !== '') return farmLoc;
   const noteFarm = /【你的长期笔记】([^（\s，。；：\n]{2,20}农场)/.exec(raw)?.[1]?.trim();
   if (noteFarm !== undefined && noteFarm !== '') return noteFarm;
@@ -117,6 +117,15 @@ function tokenizeText(text: string): Set<string> {
     }
   }
   return tokens;
+}
+
+function tokenJaccard(a: string, b: string): number {
+  const sa = tokenizeText(a);
+  const sb = tokenizeText(b);
+  if (sa.size === 0 || sb.size === 0) return 0;
+  let inter = 0;
+  for (const t of sa) if (sb.has(t)) inter += 1;
+  return inter / (sa.size + sb.size - inter);
 }
 
 function dayRank(dayKey: string): number {
@@ -329,7 +338,8 @@ export class StrategyNotebook {
 
     const existing = draft.id !== undefined
       ? this.insights.find((item) => item.id === draft.id)
-      : this.insights.find((item) => item.claim === cleanClaim && item.source === cleanSource);
+      : (this.insights.find((item) => item.claim === cleanClaim && item.source === cleanSource)
+        ?? this.insights.find((item) => item.verdict === draft.verdict && tokenJaccard(item.claim, cleanClaim) >= 0.62));
 
     if (existing !== undefined) {
       existing.verdict = draft.verdict;

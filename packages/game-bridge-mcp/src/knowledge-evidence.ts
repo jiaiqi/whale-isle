@@ -170,3 +170,72 @@ export function applyPlayReceipt(item: GameKnowledgeItem, receipt: PlayReceipt):
     contradictoryEvidence: success ? item.contradictoryEvidence : [...item.contradictoryEvidence, receipt.summary],
   };
 }
+
+/**
+ * V2-P4-01：筛选并格式化知识库条目供 LlmPlanner 在自主游玩时参考（Voyager/Reflexion 思想）。
+ * - 优先呈现已验证/实玩有效的兼容知识（含适用条件与置信度）；
+ * - 显式保留被反证/失败的知识警告（避免重复踩坑）；
+ * - 跳过已归档与全部证据失效的条目，严格控制上下文字符预算。
+ */
+export function formatKnowledgeUnitsForPlanner(
+  units: readonly GameKnowledgeItem[],
+  stateRaw: string,
+  now: string,
+  options: { gameId?: string; maxItems?: number } = {},
+): string {
+  const gameId = options.gameId ?? 'stardew';
+  const maxItems = options.maxItems ?? 6;
+  if (units.length === 0 || maxItems <= 0) return '';
+
+  const location = /地点[:：]\s*([^（\n，,]+)/.exec(stateRaw)?.[1]?.trim().toLowerCase() ?? '';
+  const season = /时间：第\d+年([春夏秋冬])/.exec(stateRaw)?.[1] ?? '';
+  const stateLower = stateRaw.toLowerCase();
+
+  const candidates: Array<{ line: string; score: number }> = [];
+  for (const unit of units) {
+    if (unit.gameId !== gameId || unit.unitState === 'archived') continue;
+    if (unit.evidenceRefs.length > 0 && unit.evidenceRefs.every((ref) => ref.extraction === 'failed')) continue;
+
+    const isRefuted = unit.status === 'rejected' || unit.contradictoryEvidence.length > 0;
+    const isVerified = unit.unitState === 'promoted'
+      || unit.unitState === 'verified'
+      || unit.status === 'partially-verified'
+      || unit.confidence >= 0.6;
+    if (!isVerified && !isRefuted) continue;
+
+    const applicability = assessKnowledge(unit, stateRaw || null, now);
+    if (applicability.status === 'not-applicable' && !isRefuted) continue;
+
+    let score = unit.unitState === 'promoted' ? 40 : unit.unitState === 'verified' ? 30 : isRefuted ? 25 : 15;
+    score += Math.round(unit.confidence * 10);
+    const haystack = `${unit.topic} ${unit.claim} ${unit.applicability.join(' ')}`.toLowerCase();
+    if (location !== '' && haystack.includes(location)) score += 12;
+    if (season !== '' && haystack.includes(season)) score += 6;
+    if (unit.topic !== '' && stateLower.includes(unit.topic.toLowerCase())) score += 8;
+    if (applicability.status === 'compatible') score += 10;
+
+    const tag = isRefuted ? '已反证/避坑' : unit.unitState === 'promoted' ? '已晋升' : unit.unitState === 'verified' ? '已核对' : '实玩有效';
+    const pct = Math.round(unit.confidence * 100);
+    const caution = applicability.status !== 'compatible' && applicability.reasons.length > 0
+      ? `（注意：${applicability.reasons[0]}）`
+      : '';
+    const pitfall = isRefuted && unit.contradictoryEvidence.length > 0
+      ? `｜反例：${unit.contradictoryEvidence.at(-1)!.slice(0, 80)}`
+      : '';
+    candidates.push({
+      line: `- [${tag} ${pct}%] ${unit.topic}：${unit.claim.slice(0, 140)}${caution}${pitfall}`,
+      score,
+    });
+  }
+
+  if (candidates.length === 0) return '';
+  candidates.sort((a, b) => b.score - a.score);
+  const lines: string[] = [];
+  let chars = 0;
+  for (const item of candidates.slice(0, maxItems)) {
+    if (chars + item.line.length > 1200) break;
+    lines.push(item.line);
+    chars += item.line.length + 1;
+  }
+  return lines.join('\n');
+}
