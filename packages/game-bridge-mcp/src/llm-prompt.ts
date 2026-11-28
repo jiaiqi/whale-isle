@@ -619,11 +619,34 @@ export function buildRepeatedFailureSection(recentReceipts: readonly string[]): 
     const prev = groups.get(key);
     groups.set(key, { count: (prev?.count ?? 0) + 1, last: `${tool}: ${detail.split('\n')[0] ?? detail}` });
   }
+  const lines: string[] = [];
   const repeated = [...groups.values()].filter((g) => g.count >= 2);
-  if (repeated.length === 0) return '';
+  for (const g of repeated) lines.push(`- 同一失败原因出现${g.count}次：${g.last.slice(0, 180)}`);
+
+  // 同一工具在窗口内多次失败、原因各异时也要提示（夏28 真机：take_items 在 (69,16) 四周无可站处、
+  // (69,13) 空箱等处各失败一次，按原因归并不会合并，但玩法上仍是无进展的反复试探）。
+  const byTool = new Map<string, { count: number; last: string }>();
+  for (const receipt of window) {
+    const m = /^FAILED\s+([^\s:：]+)\s*[:：]\s*(.*)$/s.exec(receipt);
+    if (m?.[1] === undefined) continue;
+    const prev = byTool.get(m[1]);
+    byTool.set(m[1], { count: (prev?.count ?? 0) + 1, last: `${m[1]}: ${(m[2] ?? '').split('\n')[0] ?? ''}` });
+  }
+  const toolLevel: string[] = [];
+  for (const [tool, info] of byTool) {
+    if (info.count < 3) continue;
+    toolLevel.push(`- 工具 ${tool} 在最近8条里失败${info.count}次（可能原因各不相同），最近一次：${info.last.slice(0, 160)}`);
+  }
+  if (lines.length === 0 && toolLevel.length === 0) return '';
+  const advice = repeated.length > 0
+    ? '\n同一失败原因连续出现说明前置条件没有变化。请先确认回执点名的缺口是否仍然存在（如钱、材料、工具等级、加工剩余时间），补齐或改做别的能推进的事，不要原样重试第三、第四次。'
+    : '';
+  const toolAdvice = toolLevel.length > 0
+    ? '\n同一工具反复失败通常意味着换参数也没有用：请先核对回执点名的物理限制（可达性、容器类型、前置条件），改用另一种工具或先解决该限制，不要继续换坐标试探。'
+    : '';
   return '\n\n## 重复失败动作（真实回执）\n'
-    + repeated.map((g) => `- 最近8条回执中，同一失败原因出现${g.count}次：${g.last.slice(0, 180)}`).join('\n')
-    + '\n同一失败原因连续出现说明前置条件没有变化。请先确认回执点名的缺口是否仍然存在（如钱、材料、工具等级、加工剩余时间），补齐或改做别的能推进的事，不要原样重试第三、第四次。';
+    + [...lines, ...toolLevel].join('\n')
+    + advice + toolAdvice;
 }
 
 export function buildFailureMemorySection(memory: FailureMemoryContext, recentReceipts: readonly string[]): string {

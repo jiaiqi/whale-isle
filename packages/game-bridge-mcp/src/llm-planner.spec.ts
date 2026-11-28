@@ -251,6 +251,30 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(buildRepeatedFailureSection(old)).toContain('出现2次');
   });
 
+  it('同一工具多种原因反复失败也提示物理限制，换参数无益', () => {
+    // 夏28 真机：take_items 在多个坐标各失败一次，原因不同但都是无进展试探
+    const window = [
+      'FAILED take_items: 失败：(69,16) 四周没有可以站的地方',
+      'FAILED take_items: 失败：箱子里没有符合的东西，箱子是空的',
+      'FAILED take_items: 失败：(69,16) 四周没有可以站的地方',
+    ];
+    const out = buildRepeatedFailureSection(window);
+    expect(out).toContain('take_items 在最近8条里失败3次');
+    expect(out).toContain('换参数也没有用');
+    expect(out).toContain('不要继续换坐标试探');
+
+    // 仅两次不触发工具级提示
+    expect(buildRepeatedFailureSection(window.slice(0, 2))).toBe('');
+
+    // 同因重复优先走同因提示，不重复输出工具级说明
+    const same = ['FAILED upgrade_tool: 失败：钱差 1554g，缺 4 个铜锭', 'FAILED upgrade_tool: 失败：钱差 1554g，缺 4 个铜锭', 'FAILED upgrade_tool: 失败：钱差 1554g，缺 4 个铜锭'];
+    const sameOut = buildRepeatedFailureSection(same);
+    expect(sameOut).toContain('同一失败原因出现3次');
+    expect(sameOut).toContain('前置条件没有变化');
+    // 同一工具 3 次失败时，同因与工具级两层提示都会出现（不互斥）
+    expect(sameOut).toContain('upgrade_tool 在最近8条里失败3次');
+  });
+
   it('重复空结果与反复开合界面都保留成功事实并提醒核对进展，不指定玩法', () => {
     const empty = 'COMPLETED clear_area: 成功：区域内没有可以清理的东西';
     expect(buildRepeatedNoProgressSection([empty])).toBe('');
