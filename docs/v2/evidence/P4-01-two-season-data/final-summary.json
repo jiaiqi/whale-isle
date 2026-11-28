@@ -1,0 +1,1714 @@
+{
+  "elapsedSec": 1211,
+  "reachedTargetDay": true,
+  "targetDayActions": 3,
+  "lastProgressClock": "第1年秋1日 06:50",
+  "totalDecisions": 62,
+  "toolCounts": {
+    "chat_reply": {
+      "COMPLETED": 2,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "read_mail": {
+      "COMPLETED": 2,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "take_items": {
+      "COMPLETED": 2,
+      "FAILED": 14,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "interact": {
+      "COMPLETED": 1,
+      "FAILED": 5,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "travel_to": {
+      "COMPLETED": 11,
+      "FAILED": 1,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "explore_mine": {
+      "COMPLETED": 1,
+      "FAILED": 1,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "get_guide": {
+      "COMPLETED": 1,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "move_to": {
+      "COMPLETED": 1,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "forage": {
+      "COMPLETED": 2,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "list_chests": {
+      "COMPLETED": 1,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "eat": {
+      "COMPLETED": 2,
+      "FAILED": 1,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "dialogue": {
+      "COMPLETED": 3,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "wait": {
+      "COMPLETED": 3,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "festival": {
+      "COMPLETED": 3,
+      "FAILED": 2,
+      "UNCERTAIN": 1,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "sleep": {
+      "COMPLETED": 1,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "bundle_info": {
+      "COMPLETED": 1,
+      "FAILED": 0,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    },
+    "donate_bundles": {
+      "COMPLETED": 1,
+      "FAILED": 1,
+      "UNCERTAIN": 0,
+      "TIMEOUT": 0,
+      "ERROR": 0
+    }
+  },
+  "recentFails": [
+    {
+      "ts": "2026-11-28T05:42:26.309Z",
+      "clock": "第1年夏28日 06:10",
+      "tool": "take_items",
+      "status": "FAILED",
+      "summary": "失败：箱子里没有符合的东西，箱子是空的"
+    },
+    {
+      "ts": "2026-11-28T05:42:34.414Z",
+      "clock": "第1年夏28日 06:10",
+      "tool": "interact",
+      "status": "FAILED",
+      "summary": "失败：(69,16) 是宝箱（里面有 蒲公英x3、野山葵x4、石英x62、地晶x20、紫水晶x13、蚌x1、大比目鱼x1、螃蟹x3 等）：箱子不用 interact，取东西用取回物品（take_items）（可以传 x=69 y=16 指定这个箱子），放东西用存入箱子（store_items）"
+    },
+    {
+      "ts": "2026-11-28T05:42:34.414Z",
+      "clock": "第1年夏28日 06:10",
+      "tool": "take_items",
+      "status": "FAILED",
+      "summary": "失败：箱子里没有符合的东西，箱子是空的\n⏱ 用时 10 分钟（06:10 → 06:20）"
+    },
+    {
+      "ts": "2026-11-28T05:47:09.138Z",
+      "clock": "第1年夏28日 12:00",
+      "tool": "take_items",
+      "status": "FAILED",
+      "summary": "失败：(69,16) 四周没有可以站的地方"
+    },
+    {
+      "ts": "2026-11-28T05:47:17.161Z",
+      "clock": "第1年夏28日 12:00",
+      "tool": "interact",
+      "status": "FAILED",
+      "summary": "失败：(65,21) 是宝箱（空的）：箱子不用 interact，取东西用取回物品（take_items）（可以传 x=65 y=21 指定这个箱子），放东西用存入箱子（store_items）\n⏱ 用时 10 分钟（12:00 → 12:10）"
+    },
+    {
+      "ts": "2026-11-28T05:47:25.178Z",
+      "clock": "第1年夏28日 12:10",
+      "tool": "take_items",
+      "status": "FAILED",
+      "summary": "失败：箱子里没有符合的东西，箱子里（4/36 格）：矮人卷轴 Ix4、铜锭x2、紫水晶x1、古代种子x1"
+    },
+    {
+      "ts": "2026-11-28T05:47:25.178Z",
+      "clock": "第1年夏28日 12:10",
+      "tool": "take_items",
+      "status": "FAILED",
+      "summary": "失败：(69,16) 四周没有可以站的地方"
+    },
+    {
+      "ts": "2026-11-28T05:47:25.179Z",
+      "clock": "第1年夏28日 12:10",
+      "tool": "take_items",
+      "status": "FAILED",
+      "summary": "失败：箱子里没有符合的东西，箱子是空的"
+    },
+    {
+      "ts": "2026-11-28T05:50:05.801Z",
+      "clock": "第1年夏28日 14:00",
+      "tool": "explore_mine",
+      "status": "FAILED",
+      "summary": "失败：从第 5 层下到第 5 层（下了 0 层），敲了 0 块石头，打倒 0 只怪，吃了 0 次东西；生命 47/120，体力 170；停下原因：生命只剩 47/120，背包里没有能回血的食物（只有要交的 葡萄（社区中心“夏季采集”要交），没舍得吃），赶紧撤退\n⏱ 用时 50 分钟（14:00 → 14:50）"
+    },
+    {
+      "ts": "2026-11-28T05:50:54.074Z",
+      "clock": "第1年夏28日 15:30",
+      "tool": "interact",
+      "status": "FAILED",
+      "summary": "失败：(71,14) 是出货箱，交互没有反应。附近 3 格内能交互的：宝箱(69,14)、宝箱(70,16)、宝箱(69,13)、熔炉(69,15)、宝箱(69,16)、宝箱(69,17)\n⏱ 用时 20 分钟（15:30 → 15:50）"
+    },
+    {
+      "ts": "2026-11-28T05:51:02.116Z",
+      "clock": "第1年夏28日 15:50",
+      "tool": "eat",
+      "status": "FAILED",
+      "summary": "失败：葡萄 是社区中心“夏季采集”要交的，吃了就交不了，换别的吃（get_state 背包里标了【留着】的都别吃）。真要这么做就再调用一次并传 force=true"
+    },
+    {
+      "ts": "2026-11-28T05:52:38.630Z",
+      "clock": "第1年夏28日 17:10",
+      "tool": "travel_to",
+      "status": "FAILED",
+      "summary": "失败：今天是月光水母之舞（Beach，22:00-00:00(次日)），Beach 正在布置节日，22:00 以前进不去。先做别的，到点再去（参加节日用 festival enter）"
+    },
+    {
+      "ts": "2026-11-28T05:56:07.865Z",
+      "clock": "第1年夏28日 21:50",
+      "tool": "festival",
+      "status": "FAILED",
+      "summary": "失败：月光水母之舞 22:00 才开始，先去做别的，到点再来"
+    },
+    {
+      "ts": "2026-11-28T05:58:40.768Z",
+      "clock": "第1年夏28日 22:10",
+      "tool": "festival",
+      "status": "FAILED",
+      "summary": "失败：主活动还没结束（等太久了）。再 festival start 接着参加，或者用 dialogue 过对白\n📍 这个动作把你从 Temp 带到了 Beach，你现在在 Beach。接下来的动作都在这里进行；要回 Temp 接着干就用前往（travel_to）"
+    },
+    {
+      "ts": "2026-11-28T06:01:39.722Z",
+      "clock": "第1年秋1日 06:50",
+      "tool": "donate_bundles",
+      "status": "FAILED",
+      "summary": "失败：背包里没有能交给已解锁收集包的材料（用查看收集包（bundle_info）看看缺什么）"
+    }
+  ],
+  "watchdogCount": 0,
+  "watchdogs": [],
+  "overlapCount": 0,
+  "clippedCount": 0,
+  "emptyShellCount": 0,
+  "speechObserved": {
+    "sawSpeakingAttr": true,
+    "maxAmplitude": 0.3113,
+    "completedCount": 3,
+    "failedCount": 1
+  },
+  "saveName": "鲸屿两季农场",
+  "insightsCount": 32,
+  "insightsSample": [
+    "夏10:NPC在柜台后时无法递礼物，须等其走出柜台再give_gift",
+    "夏28:节日未到开始时间时海滩在布置不可进入，应到点再festival enter；非所有节日都有刘易斯宣布的主活动",
+    "夏25:店门未开时不要提前出发等开门，先做农场杂务或采矿，算好开门时间再出发",
+    "夏15:下矿前须备好回血食物并留出非任务用食物，避免舍不得吃任务物品导致低血硬拼",
+    "夏27:store_items 的正确参数为 items x y，传入 container 会静默失败",
+    "夏17:矿洞层内找不到楼梯且无可交互时，应先向上/回头换层而非原地继续敲石",
+    "夏22:矿洞内与矮人对话/送礼需先进Mine并处理已打开的对话框，避免重复发起对话导致空对话失败",
+    "夏24:store_items前应先travel_to箱所在map并确认箱内仍有余格，箱子满则先清箱或换箱",
+    "夏24:下矿或战斗前须备好回血食物并在生命过半时撤退，否则残血硬拼易空手而归",
+    "夏28:take_items失败'四周没有可站的地方'属站位不可达，应先靠近或换站再取箱内物品"
+  ],
+  "memoryStats": {
+    "nodes": 2450,
+    "edges": 5275,
+    "lastDay": "秋1日"
+  },
+  "riceConsumed": 18211000,
+  "consoleErrors": [],
+  "finalStatus": {
+    "planner": {
+      "mode": "llm",
+      "userMode": "llm",
+      "llmReady": true,
+      "providers": [
+        "deepseek-official"
+      ],
+      "missingKeys": [],
+      "dayPlan": {
+        "dayKey": "秋1",
+        "items": [
+          {
+            "goal": "把背包里的葡萄、香味浆果、甜豌豆捐给社区中心收集包",
+            "why": "腾出背包格，顺便推进收集包进度，箱子已满没处放",
+            "status": "in_progress",
+            "addedAt": "第1年秋1日 06:00"
+          },
+          {
+            "goal": "去农场箱子取回50木材和斧头，砍树补木材",
+            "why": "攒够木材做箱子解决背包长期爆满问题",
+            "status": "pending",
+            "addedAt": "第1年秋1日 06:00"
+          },
+          {
+            "goal": "剩余体力下矿挖铁矿并打怪",
+            "why": "采矿6级、有钢剑，矿石储备可换钱升级工具",
+            "status": "pending",
+            "addedAt": "第1年秋1日 06:00"
+          },
+          {
+            "goal": "18点前回屋，睡前把体力走完就睡觉",
+            "why": "次日晴天但今天先稳住作息，睡觉回满体力",
+            "status": "pending",
+            "addedAt": "第1年秋1日 06:00"
+          },
+          {
+            "goal": "回农场整理背包，把多余物资存箱或出货腾格",
+            "why": "背包仅6空位且打不开收集包进度",
+            "status": "pending",
+            "addedAt": "第1年秋1日 06:50"
+          }
+        ],
+        "mood": "哼，背包又塞成这样，主人真是丢三落四……本鲸先替你把破烂理干净！",
+        "updateWhy": "甜豌豆和银星葡萄等材料不属于该收集包所需，回农场推进木材与箱子任务",
+        "history": [
+          {
+            "atClock": "第1年秋1日 06:00",
+            "atTs": 1795845630168,
+            "kind": "morning",
+            "summary": "晨间拟定 4 项待办",
+            "why": "哼，背包又塞成这样，主人真是丢三落四……本鲸先替你把破烂理干净！"
+          },
+          {
+            "atClock": "第1年秋1日 06:50",
+            "atTs": 1795845697610,
+            "kind": "update",
+            "summary": "记录计划说明（共 4 项，目标状态未变）",
+            "why": "继续捐夏季采集剩余物品"
+          },
+          {
+            "atClock": "第1年秋1日 06:50",
+            "atTs": 1795845700029,
+            "kind": "update",
+            "summary": "新增「回农场整理背包，把多余物资存箱或出货腾格」",
+            "why": "甜豌豆和银星葡萄等材料不属于该收集包所需，回农场推进木材与箱子任务"
+          }
+        ]
+      },
+      "insights": [
+        {
+          "id": "ins-1",
+          "source": "春1实战复盘",
+          "claim": "体力低于60时应回屋砍树睡觉，别硬撑到晕倒，春1体力有限，优先保证农田浇水",
+          "when": "春季初期体力不足约50-60%",
+          "verdict": "defer",
+          "why": "条件今日仍未触发，砍树凑木材多次失败，无法验证",
+          "evidence": [
+            "46步成功42步；浇水27株完成；木材做箱子1个；18点前回屋睡觉未完成",
+            "27株浇水完成，木材够造箱子，金币+100g；4步失败含Town开垦无空地、出货箱空交互无效",
+            "今日12株浇水×2轮完成，砍树凑够50木材做出箱子；睡觉环节未成功验证",
+            "今日未到睡觉环节，体力红线未验证；农田浇水完成",
+            "春8日程8项7项done，60步成功52，18点前回屋睡觉达成",
+            "先浇水后全部日程走通，无晕倒",
+            "60步中16步未完成，木材凑箱失败3次；金币无变化",
+            "砍树任务多次未完成，未触发低体力晕倒",
+            "浇水9株土豆两次成功，傍晚回屋睡觉；take_items/list_chests因箱内无目标物失败8+4次，清理杂草木材任务pending",
+            "60步成功45/未完成15，砍树凑50木材反复未完成；金币740→740无变化",
+            "今日下雨免浇水，未出现低体力场景；砍树步多次未完成",
+            "今日未观测体力低阈值场景"
+          ],
+          "createdDay": "春1",
+          "updatedDay": "春19",
+          "hits": 1,
+          "lastHitDay": "春7",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.65,
+          "applicability": [],
+          "knownLimitations": [
+            "体力红线未实际压到触发点",
+            "木材凑箱仍未完成",
+            "睡觉恢复体力路径未实际触发验证",
+            "睡觉回体力未实测",
+            "低体力阈值与睡觉恢复未实测",
+            "低体力睡觉恢复体力的幅度未实测",
+            "木材获取路径受箱内无货与工具限制",
+            "雨天免浇水场景不适用该策略",
+            "木材采集路径受阻无法验证体力上限",
+            "雨天/免浇水日不适用",
+            "砍树工具与站位未摸清",
+            "砍树动作多次未完成"
+          ],
+          "contradictoryEvidence": [
+            "4步失败含Town区开垦无空地与出货箱/空交互无效",
+            "Town区开垦无空地失败",
+            "出货箱空交互无效",
+            "出货箱空交互无效，出货环节失败2次",
+            "凑木材做箱任务多次未完成",
+            "砍树凑木材任务多次未完成",
+            "砍树凑木材多次失败",
+            "砍树凑木材多次失败，未能验证低体力上限策略",
+            "砍树凑木材多次失败，未能验证低体力睡觉策略",
+            "砍树凑木材多次失败，低体力睡觉策略未获验证"
+          ],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-2",
+          "source": "春1实战复盘",
+          "claim": "对话框弹出会打断移动，须先关闭再操作",
+          "when": "领礼物、送礼或与NPC对话后",
+          "verdict": "adopt",
+          "why": "dialogue失败7次仍居首，因果链稳定",
+          "evidence": [
+            "read_mail被剧情对话框打断",
+            "本日未出现对话打断移动的失败签名",
+            "close_menu:COMPLETED 成功：已关闭。当前界面：无（可以自由行动）",
+            "give_gift:COMPLETED 成功：送给 谢恩 一个 土豆（他喜欢），好感 +360。成功：交互后打开了界面：\n对话框（谢恩）：啊，今天是我生日吗？对哦……我差点忘了。谢谢你。\n（用 dialogue 不带参数继续/关闭对话）\n⏱ 用时 10 分钟（13:50 → 14:00）",
+            "读邮箱信件后正常继续操作",
+            "今日送艾米丽、交乔迪对话均正常关闭",
+            "对话后先关闭再操作，移动正常",
+            "今日未出现对话框打断移动的反例",
+            "dialogue|失败：现在没有对话框|Mine共7次；use_tool失败含DialogueBox界面干扰",
+            "dialogue失败7次，均为已打开对话框时继续操作",
+            "夏25共47步，失败签名Top3虽为take_items，但dialogue失败7次为各类之最",
+            "今日dialogue失败7次，均为对话未关继续操作"
+          ],
+          "createdDay": "春1",
+          "updatedDay": "夏28",
+          "hits": 3,
+          "lastHitDay": "春20",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.99,
+          "applicability": [],
+          "knownLimitations": [
+            "剧情事件需用dialogue/skip_event推进",
+            "未区分礼物弹窗与普通对话弹窗",
+            "长剧情可能连续多段对话，需多次推进",
+            "仅覆盖对话与剧情弹窗，商店UI打断未单独验证",
+            "节日/过场动画中的强制对话",
+            "剧情类对话需用dialogue推进或skip_event跳过",
+            "对话结束后状态未及时刷新会导致误判没有对话框",
+            "NPC对话与礼物流程可能连续弹窗",
+            "仅验证室内与农场场景"
+          ],
+          "contradictoryEvidence": [],
+          "status": "verified",
+          "verifiedCount": 3,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-3",
+          "source": "春2复盘",
+          "claim": "皮埃尔柜台无人或非营业时间时open_shop必失败，先确认店主在柜台再交互",
+          "when": "SeedShop购买种子",
+          "verdict": "defer",
+          "why": "今日未进店，营业时段内失败反例仍未解",
+          "evidence": [
+            "今日open_shop失败2次，购买种子未完成",
+            "open_shop失败2次均在Farm；travel_to早到需干等",
+            "今日成功购入土豆种子，支出240g",
+            "今天买种子扣除金币成功；此前营业时段内失败1次",
+            "买种子并种下浇水成功，金币相应减少",
+            "买土豆种子成功并扣款",
+            "买种子成功；Farm处open_shop失败提示“这里没有商店”",
+            "今日SeedShop购种子成功扣款",
+            "购种扣款成功，作物浇水正常",
+            "今日购种子成功扣款；历史营业时段失败1次",
+            "travel_to SeedShop失败2次：未开门到店门口干等",
+            "今日无商店交互记录"
+          ],
+          "createdDay": "春2",
+          "updatedDay": "春23",
+          "hits": 1,
+          "lastHitDay": "春6",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.85,
+          "applicability": [],
+          "knownLimitations": [
+            "节日或店主外出时",
+            "营业时段内柜台无人的情形今日未复现，无法区分主因",
+            "营业时段内也曾出现open_shop失败",
+            "需在营业时段且店主在柜台",
+            "营业时段内仍有一次open_shop失败反例",
+            "节日当天商店时间可能变化",
+            "地点错用也会触发失败，需先确认在SeedShop",
+            "Farm场景内open_shop仍会失败",
+            "营业时段仍可能偶发失败",
+            "营业时间内NPC离柜仍可能失败",
+            "未开门早到会白跑一趟",
+            "营业时段内失败原因未查明"
+          ],
+          "contradictoryEvidence": [
+            "开门时段内也有open_shop失败记录",
+            "营业时段内仍出现open_shop失败",
+            "此前营业时段内也出现过open_shop失败",
+            "此前营业时段内open_shop失败一次",
+            "此前营业时段open_shop失败一次",
+            "营业时段曾失败一次",
+            "营业时段曾失败一次，原因未查明"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 1,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-4",
+          "source": "春6复盘",
+          "claim": "出货前须核对背包实有物品名，出货列表里没有就换可出售物或先整理背包",
+          "when": "ship_items/take_items/store_items",
+          "verdict": "defer",
+          "why": "今日金币零增长，出货未落地，坐标取物连败，经验待验证",
+          "evidence": [
+            "今日金币+490g但出货仍零成交，无新增反例",
+            "失败签名Top1：take_items不认识box_x box_y，4次在FarmHouse",
+            "take_items失败4次：箱子里没有符合的东西，参数被误当物品名",
+            "take_items 失败 3 次，均报箱子没有符合的东西；place_item 堵门口失败 1 次；interact 误对宝箱操作失败 1 次",
+            "今日take_items带坐标连败3次；store_items传box_x/box_y未执行",
+            "失败签名Top3中ship_items与take_items多条失败",
+            "金币3560→3710(+150g)；take_items连败3次、store_items参数错误",
+            "金币4670→2670，仅+150g出货收入；take_items带坐标连续失败",
+            "金币+200g，远低于预期；take_items带坐标连续失败",
+            "金币2930g→2930g，整理与出货均未完成",
+            "金币2930→2930，+0g；take_items带坐标连续失败",
+            "金币2930→2930，+0g；take_items坐标连续失败"
+          ],
+          "createdDay": "春6",
+          "updatedDay": "夏11",
+          "hits": 2,
+          "lastHitDay": "春15",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.65,
+          "applicability": [],
+          "knownLimitations": [
+            "工具参数名必须用items/count/x/y",
+            "今日仍无实际出货收益",
+            "各工具参数名不同，须先读签名",
+            "箱内物品需先确认实际名称",
+            "箱子实际内容与预期不符时仍会失败",
+            "箱子坐标不等于箱内物品，需先open确认",
+            "坐标参数不匹配时仍会失败",
+            "take_items需精确坐标与背包容量",
+            "坐标取物在箱子叠放时易失败",
+            "未观测到成功出货一笔",
+            "坐标式take_items不稳",
+            "尚未成功完成一次出货"
+          ],
+          "contradictoryEvidence": [
+            "收货环节连续两日无产出",
+            "store_items:FAILED 失败：存入箱子（store_items）不认识参数 box_x、box_y，所以什么都没做。这个工具的参数有：items、x、y。改好参数名再调用一次",
+            "store_items传入box_x、box_y导致未执行",
+            "store_items传box_x、box_y导致未执行",
+            "store_items 传 box_x/box_y 导致未执行",
+            "take_items连败3次",
+            "store_items参数错误未执行",
+            "take_items带坐标连败",
+            "take_items带坐标连续失败"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 1,
+          "refutedCount": 1
+        },
+        {
+          "id": "ins-5",
+          "source": "复盘",
+          "claim": "take_items参数名为items/count/x/y，不认from_chest；取箱中物品改用正确参数或改为直接交互",
+          "when": "从箱子取回物品",
+          "verdict": "defer",
+          "why": "失败签名显示箱内有石头、纤维却未识别，参数或识别逻辑未定",
+          "evidence": [
+            "take_items失败1次，返回参数说明",
+            "take_items在Beach失败4次，箱内存有石头、晶球、蛤等20/36格物品；FishTackleBox取木材也失败",
+            "take_items失败1次，报箱内无匹配物"
+          ],
+          "createdDay": "春8",
+          "updatedDay": "春11",
+          "hits": 1,
+          "lastHitDay": "春10",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "其他工具参数名未逐一核对",
+            "失败：箱子里没有符合的东西，箱子里（20/36 格）：石头x71、晶球x5、蛤x1、太阳鱼x2、混合种子x4、绿藻x1、比目鱼x1、比目鱼x1、大头鱼x1、鲤鱼x1、大头鱼x1、大嘴鲈鱼x1、鱼饵x10、纤维x12、橡子x17、枫树种子x7、松果x9、鸟蛤x1、沙丁鱼x1、比目鱼",
+            "items名称必须与箱内物品名精确匹配",
+            "未确认正确参数组合",
+            "箱子定位可能失败"
+          ],
+          "contradictoryEvidence": [
+            "take_items:FAILED 失败：箱子里没有符合的东西，箱子里（20/36 格）：石头x71、晶球x5、蛤x1、太阳鱼x2、混合种子x4、绿藻x1、比目鱼x1、比目鱼x1、大头鱼x1、鲤鱼x1、大头鱼x1、大嘴鲈鱼x1、鱼饵x10、纤维x12、橡子x17、枫树种子x7、松果x9、鸟蛤x1、沙丁鱼x1、比目鱼x1",
+            "take_items:FAILED 失败：箱子里没有符合的东西（箱内实有石头x71、纤维x12等）",
+            "take_items:FAILED 箱内实有石头x71、纤维x12"
+          ],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 1
+        },
+        {
+          "id": "ins-6",
+          "source": "复盘",
+          "claim": "出货前核对背包实有物品名，缺失则换可售物或先整理背包",
+          "when": "ship_items出货时",
+          "verdict": "defer",
+          "why": "今日仍无真实成交，且下矿因背包满被迫中止，佐证整理背包优先于出货",
+          "evidence": [
+            "ship_items:COMPLETED 成功：已把 7 个 树液 放进出货箱（预计今晚结算约 14g）",
+            "金币1237g→37g，无出货收入；56步成功44未完成12",
+            "全天金币+0g，出货环节无任何产出",
+            "金币59→59，出货零成交",
+            "ship_items报“背包里没有〈物品〉”，今日无成交",
+            "今日出货0笔，金币+0g；背包仅工具与黄水仙/木材",
+            "金币515g→515g，+0g；出货箱核对可卖物已完成但无产出可售",
+            "金币740→740，今日无出货成功记录",
+            "金币+100g非出货所得；出货步骤未产生收益",
+            "今日仍未产生实际出货收益，list_chests两次找不到物品",
+            "今日金币+0g，零成交；list_chests未见目标物品",
+            "矿洞探索停下原因=背包满了，发现晶球；29步中1步未完成"
+          ],
+          "createdDay": "春8",
+          "updatedDay": "春21",
+          "hits": 1,
+          "lastHitDay": "春11",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.65,
+          "applicability": [],
+          "knownLimitations": [
+            "背包中必须有可售物",
+            "未验证整理背包后出货是否一次成功",
+            "背包满时自动出货会跳过",
+            "未实测成功出货一次",
+            "缺可售物场景未实测成功",
+            "需先有可售产出",
+            "背包无产出时核对也只能空出货",
+            "出货工具参数配套仍需核对",
+            "背包格子紧张时整理成本高",
+            "背包整理依赖正确参数",
+            "出货工具与背包清单偶有不同步",
+            "出货流程未跑通"
+          ],
+          "contradictoryEvidence": [
+            "今日出货环节无任何产出",
+            "今日出货环节零成交",
+            "今日出货仍零成交",
+            "今日仍未产生实际出货收益",
+            "list_chests报哪个箱子里都没有该物品",
+            "list_chests报所有箱子都没有该物品",
+            "list_chests报所有箱子均无该物品"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 1,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-7",
+          "source": "开局前几周#Energy",
+          "claim": "吃食物能恢复体力，睡觉可回满",
+          "when": "体力不足需进食时",
+          "verdict": "adopt",
+          "why": "方向仍成立，反例均为标记物品导致eat失败，非恢复机制失效",
+          "evidence": [
+            "forage:COMPLETED 成功： Farm 这张地图上没有能采的采集品了。背包空位 5 个",
+            "捡野菜补体，未消耗金币",
+            "无体力崩溃记录",
+            "全天无体力瓶颈导致的任务失败",
+            "体力管理全天无中断",
+            "eat:FAILED 葡萄为社区中心要交物品，拒绝食用",
+            "fight失败2次：生命只剩、背包无可回血食物；eat失败2次因葡萄被标记",
+            "eat因葡萄被标记交任务失败两次",
+            "今日进食多次成功回体力；eat因标记葡萄失败2次"
+          ],
+          "createdDay": "春9",
+          "updatedDay": "夏12",
+          "hits": 1,
+          "lastHitDay": "夏4",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.9,
+          "applicability": [],
+          "knownLimitations": [
+            "未提具体食物数值",
+            "失败：葡萄 是社区中心“夏季采集”要交的，吃了就交不了，换别的吃（get_state 背包里标了【留着】的都别吃）。真要这么做就再调用一次并传 force=true\n⚠ 附近有 1 只怪：苍蝇(37,26)，生命 39/105。先用 fight 清掉再干别的；生命低又没有回血食物",
+            "【留着】标记物品默认不可食",
+            "需提前分出专门补给格",
+            "标记【留着】的物品不能吃",
+            "被标记交任务的物品不可进食",
+            "被标记/锁定的食物无法直接eat，需先取消标记"
+          ],
+          "contradictoryEvidence": [
+            "eat:FAILED 失败：葡萄 是社区中心“夏季采集”要交的，吃了就交不了，换别的吃（get_state 背包里标了【留着】的都别吃）。真要这么做就再调用一次并传 force=true\n⚠ 附近有 1 只怪：苍蝇(37,26)，生命 39/105。先用 fight 清掉再干别的；生命低又没有回血食物就撤退",
+            "eat因葡萄被标记交任务而失败两次",
+            "eat因标记葡萄失败两次"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 1,
+          "refutedCount": 1
+        },
+        {
+          "id": "ins-8",
+          "source": "开局前几周#Energy",
+          "claim": "睡觉能回满体力",
+          "when": "睡前体力不满、需恢复时",
+          "verdict": "adopt",
+          "why": "今日无异常，维持",
+          "evidence": [
+            "收工计划按时执行，无晕倒记录",
+            "travel_to:COMPLETED 成功：已到达 Town，位置 (0,54)\n⏱ 用时 10 分钟（12:00 → 12:10）",
+            "睡觉任务完成，无体力异常报告",
+            "春27今日睡觉流程顺利，体力回满",
+            "按时睡觉，体力回满，无异常",
+            "travel_to:COMPLETED 成功：已到达 Farm，位置 (40,0)\n⏱ 用时 50 分钟（21:10 → 22:00）",
+            "今日18点前回屋睡觉，体力回满无异常",
+            "今日成功睡前指令，睡眠后无体力异常报告",
+            "travel_to:COMPLETED 成功：已到达 FarmHouse，位置 (3,11)",
+            "当晚入睡后体力回满，无异常",
+            "今日按计划18点前回屋睡觉，未出现异常",
+            "回屋睡觉正常"
+          ],
+          "createdDay": "春10",
+          "updatedDay": "夏20",
+          "hits": 8,
+          "lastHitDay": "夏21",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.98,
+          "applicability": [],
+          "knownLimitations": [
+            "须午夜前睡，超时可能只恢复部分",
+            "午夜后睡会损失体力与金币",
+            "需在午夜前上床",
+            "须在午夜前",
+            "需在午夜前入睡"
+          ],
+          "contradictoryEvidence": [],
+          "status": "verified",
+          "verifiedCount": 4,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-9",
+          "source": "复盘",
+          "claim": "浇水前须先确认水壶在背包/工具槽，否则water_crops必失败",
+          "when": "浇水任务前",
+          "verdict": "refuted",
+          "why": "两次失败均为没有水壶，水壶疑存(68,17)箱或送修",
+          "evidence": [
+            "water_crops失败2次：没有水壶",
+            "44步中5次未完成，2次浇水因无水壶失败；补确认后浇水10株成功",
+            "water_crops失败：没有水壶（Farm 1次）；水壶取物两次未成功"
+          ],
+          "createdDay": "春11",
+          "updatedDay": "春14",
+          "hits": 2,
+          "lastHitDay": "春14",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.65,
+          "applicability": [],
+          "knownLimitations": [
+            "未验证找回水壶后的浇水流程",
+            "水壶需提前充水，干壶同样不可用",
+            "失败：没有水壶",
+            "水壶送铁匠升级期间无法浇水",
+            "失败：哪个箱子里都没有“水壶”"
+          ],
+          "contradictoryEvidence": [
+            "water_crops:FAILED 失败：没有水壶",
+            "take_items:箱子里没有符合的东西，水壶不在箱中",
+            "list_chests:FAILED 失败：哪个箱子里都没有“水壶”"
+          ],
+          "status": "rejected",
+          "verifiedCount": 0,
+          "refutedCount": 2
+        },
+        {
+          "id": "ins-10",
+          "source": "复盘",
+          "claim": "金币骤降多因集中采购，出门前应留底金避免陷入无钱窘境",
+          "when": "春季初期采购种子",
+          "verdict": "defer",
+          "why": "今日金币+250无采购场景，条件未覆盖非推翻",
+          "evidence": [
+            "1237g→37g",
+            "采购后余额37g，全天无法再进行任何购买",
+            "59g余额，买种子后仅余37g",
+            "金币215g→215g，无采购",
+            "金币515g持平，无采购",
+            "840g→1330g平稳增长",
+            "春21金币1384g→1384g，+0g，29步中无采购动作",
+            "1288g→1538g，全天无采购"
+          ],
+          "createdDay": "春11",
+          "updatedDay": "春23",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.85,
+          "applicability": [],
+          "knownLimitations": [
+            "未计算留底金额阈值",
+            "留底金数额需按次日委托收入估算",
+            "未覆盖大额采购场景",
+            "仅春季初期样本",
+            "尚未在真实采购日验证留底金效果",
+            "采购场景今日未触发"
+          ],
+          "contradictoryEvidence": [],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-11",
+          "source": "春12复盘",
+          "claim": "去镇上找书商需先确认其在营业位，否则反复走路也到不了",
+          "when": "Town找书商/商店NPC",
+          "verdict": "defer",
+          "why": "今日2次interact失败都卡在走不到坐标，障碍清完仍过不去，疑似NPC不在位",
+          "evidence": [
+            "interact失败签名2次：杂草石头已清仍无法接近目标坐标"
+          ],
+          "createdDay": "春12",
+          "updatedDay": "春12",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.5,
+          "applicability": [],
+          "knownLimitations": [
+            "未确认是点位被占还是寻路bug"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-12",
+          "source": "复盘春13",
+          "claim": "复活节等节日为全天事件，须先确认水壶等工具还在再出门，节日当天商店多关闭",
+          "when": "节日当天安排任务前",
+          "verdict": "defer",
+          "why": "今日复活节未参加（pending），仅推测节日商店时间受限",
+          "evidence": [
+            "复活节09:00-14:00任务未完成"
+          ],
+          "createdDay": "春13",
+          "updatedDay": "春13",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "未实测节日商店营业状态"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-13",
+          "source": "春19复盘",
+          "claim": "浇水前须先装备或持有水壶，否则water_crops直接失败",
+          "when": "农场浇水与铁匠升级水壶",
+          "verdict": "adopt",
+          "why": "喷壶在箱内导致upgrade_tool失败的实例补充了该条",
+          "evidence": [
+            "water_crops:COMPLETED 成功：宠物水碗加满了；浇了 9 株，还剩 0 株没浇，剩余体力 252\n⏱ 用时 30 分钟（06:00 → 06:30），体力 270 → 252（-18）",
+            "今日9株作物全部浇完，取壶成功后才开始浇水",
+            "water_crops:COMPLETED 成功：浇了 3 株，还剩 0 株没浇，剩余体力 246\n⏱ 体力 252 → 246（-6）",
+            "补种9格并浇水全部完成；喷壶在箱子时升级失败属工具不在背包的另一环节",
+            "浇水全部成功；取回喷壶后无异常",
+            "取回喷壶后浇水无失败",
+            "今日浇水任务全部成功；喷壶取回后无失败",
+            "取回喷壶后浇水全程顺利",
+            "今日浇水无失败",
+            "喷壶灌水成功",
+            "今日无浇水失败，喷壶管理正常",
+            "今日灌满喷壶；upgrade_tool因喷壶在箱内失败"
+          ],
+          "createdDay": "春19",
+          "updatedDay": "夏27",
+          "hits": 4,
+          "lastHitDay": "春23",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.98,
+          "applicability": [],
+          "knownLimitations": [
+            "需从箱子取回水壶才能浇水",
+            "失败：要升级的“喷壶”不在背包里，在 Farm (70,16) 的箱子里。先取回物品（take_items）items=喷壶 x=70 y=16 拿上（在别的地图要先前往（travel_to）Farm）（这次没有出门）",
+            "跨地图取物须先travel_to，否则take_items无法命中箱子",
+            "水壶可能在Farm箱子内，需先travel_to Farm",
+            "水壶存放在箱子时需先take_items取回",
+            "喷壶存箱时须先取回",
+            "喷壶存箱时需先take_items取回",
+            "喷壶存箱子时需先take_items取回",
+            "水壶须在背包并非箱内",
+            "工具存放箱子需先take_items取回"
+          ],
+          "contradictoryEvidence": [
+            "upgrade_tool:FAILED 失败：要升级的“喷壶”不在背包里，在 Farm (70,16) 的箱子里。先取回物品（take_items）items=喷壶 x=70 y=16 拿上（在别的地图要先前往（travel_to）Farm）（这次没有出门）",
+            "upgrade_tool因喷壶在Farm(70,16)箱内失败",
+            "upgrade_tool因喷壶在箱内失败"
+          ],
+          "status": "verified",
+          "verifiedCount": 3,
+          "refutedCount": 1
+        },
+        {
+          "id": "ins-14",
+          "source": "复盘",
+          "claim": "下矿前须先清背包，背包满会强制终止矿洞探索并丢失战利品",
+          "when": "Mountain矿洞刷怪挖矿前",
+          "verdict": "defer",
+          "why": "今日矿洞未成行，背包满的因果链仍未直接观测，且当日失败主因是无补给撤退",
+          "evidence": [
+            "今日矿洞任务因背包满终止",
+            "explore_mine失败：敲石头/打怪后背包满了停下；60步中21步未完成，含trash_item因古物未扔",
+            "下矿计划pending，18步未完成含背包相关失败",
+            "60步中19步失败，其中8次explore_mine失败，敲石数#，停下原因背包满且无楼梯",
+            "今日矿洞失败集中于背包满与找不到楼梯",
+            "explore_mine失败3次，停下原因为生命低且背包满；成功下矿仅31/45步",
+            "explore_mine:COMPLETED 成功：从第 10 层下到第 13 层（下了 3 层），敲了 17 块石头（其中矿石/宝石节点 3 个），打倒 8 只怪，吃了 2 次东西；生命 41/105，体力 50；停下原因：生命只剩 41/105，背包里没有能回血的食物（只有要交的 葡萄（社区中心“夏季采集”要交），没舍得吃），赶紧撤退\n⏱ 用时 2 小时 10 分（11:30 → 13:40）",
+            "夏3共31步，成功25/未完成6；fight失败：生命低、背包无回血食物（只剩要交的葡萄不舍得吃），只能撤退；多次找不到楼梯与背包满相关",
+            "6次矿洞未完成；travel_to因生命37→33被苍蝇打断；eat拒绝吃留存葡萄",
+            "41步中2次未完成均在UndergroundMine24：take_items空箱失败1次；被绿色史莱姆攻击（生命37→33）1次，回血土豆被标记留存无法使用",
+            "13:50→14:00被苍蝇攻击、生命33/105无粮撤退；Mine内12次interact走不到",
+            "金币+0g，9步全成功但矿洞任务pending，无背包满触发记录"
+          ],
+          "createdDay": "春21",
+          "updatedDay": "夏7",
+          "hits": 2,
+          "lastHitDay": "夏4",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.72,
+          "applicability": [],
+          "knownLimitations": [
+            "古物（如矮人卷轴）不可随意丢弃，需museum捐赠或force确认",
+            "史莱姆泥等任务物品不可卖须留存",
+            "仅验证1.6无Mod环境",
+            "找楼梯本身也需时间",
+            "找不到楼梯也会导致下矿中断，非仅背包问题",
+            "需同时带食物与留空位，两者缺一都会中断下矿",
+            "失败：干活时被攻击了（生命 37 → 33），已停下。最近的怪是苍蝇 (34,8)，在你西边 1 格。先用 fight 清掉附近的怪再继续\n⏱ 用时 10 分钟（13:50 → 14:00）\n⚠ 附近有 1 只怪：苍蝇(34,8)，生命 33/105。先用 fight 清掉再干别",
+            "社区中心待交物品不可当补给，须另备普通食物",
+            "空箱子需先确认确有可存物品",
+            "回血食物须显式加入携带而非留存",
+            "背包满导致强制终止的机制未直接实测",
+            "需实际满包下矿才能验证强制中止"
+          ],
+          "contradictoryEvidence": [
+            "dialogue失败：现在没有对话框(UndergroundMine5)",
+            "dialogue失败：UndergroundMine5无对话框",
+            "dialogue失败：UndergroundMine5无对话框，与背包问题无关",
+            "travel_to:FAILED 失败：干活时被攻击了（生命 37 → 33），已停下。最近的怪是苍蝇 (34,8)，在你西边 1 格。先用 fight 清掉附近的怪再继续\n⏱ 用时 10 分钟（13:50 → 14:00）\n⚠ 附近有 1 只怪：苍蝇(34,8)，生命 33/105。先用 fight 清掉再干别的；生命低又没有回血食物就撤退",
+            "13:50→14:00被苍蝇攻击、生命33/105无粮撤退",
+            "今日矿洞失败主要因为无补给撤退，非背包满",
+            "今日失败主要因无补给撤退，非背包满"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 1,
+          "refutedCount": 1
+        },
+        {
+          "id": "ins-15",
+          "source": "收工复盘",
+          "claim": "合成箱子前须按配方核对木材实有数量并一次性备齐50，标【留着】的材料同样计入可用",
+          "when": "craft制作需木材配方时",
+          "verdict": "defer",
+          "why": "今日攒了木材纤维但造箱子仍挂起未实测，保持defer",
+          "evidence": [
+            "砍树枝补至50后箱子合成成功",
+            "清杂草树枝步成功，造箱子仍在pending",
+            "箱子合成未执行，无实测结果"
+          ],
+          "createdDay": "春23",
+          "updatedDay": "夏8",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.75,
+          "applicability": [],
+          "knownLimitations": [
+            "材料计数需与背包实数一致",
+            "造箱尚未实跑，木材数目未核",
+            "未实测配方校验流程"
+          ],
+          "contradictoryEvidence": [
+            "craft失败3次：木材还差数",
+            "craft曾因木材差数失败3次"
+          ],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-16",
+          "source": "收工复盘",
+          "claim": "使用工具前须确认该工具在背包中，工具存放在箱子时需先take_items取回",
+          "when": "下矿、战斗、砍树、铁匠升级前",
+          "verdict": "adopt",
+          "why": "今日upgrade_tool因喷壶/斧在箱内失败，再次印证背包管理是失败主源",
+          "evidence": [
+            "夏16：成功10/未完成2，下矿因背包无武器失败",
+            "fight:COMPLETED 成功：附近没有能打的怪物",
+            "60步中21步未完成，Farm失败签名20次多与缺工具/无楼梯相关",
+            "explore_mine失败签名出现2次（无武器/生命低）；upgrade_tool因喷壶在Farm(70,16)箱内失败",
+            "fight失败2次因无回血食物与武器不足；upgrade_tool因喷壶在箱内失败；取喷壶任务仍pending",
+            "取回喷壶并灌满水成功",
+            "explore_mine失败：背包满了，生命体力见底，紫水晶占格",
+            "35步成功24/未完成11，use_tool失败2次均因对话框/体力/背包状态，下矿被背包满中断",
+            "12步中4次未完成，工具/杂物未在背包导致挖矿失败；upgrade_tool因喷壶在箱内失败",
+            "fight失败：生命低、无回血食物、撤退，Farm 1次",
+            "take_items在FarmHouse失败4次+1次，interact误对宝箱1次",
+            "upgrade_tool失败4次缺钱缺锭；take_items失败5次"
+          ],
+          "createdDay": "春23",
+          "updatedDay": "夏27",
+          "hits": 2,
+          "lastHitDay": "夏17",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.99,
+          "applicability": [],
+          "knownLimitations": [
+            "背包格数不足时需先腾格",
+            "多个箱子分散存放时容易漏取",
+            "取回工具后仍需腾格确认背包有空位",
+            "背包格位有限，取物后需腾格",
+            "下矿前还需带食物",
+            "背包装满时取回会失败",
+            "背包格位需提前清空",
+            "仅限于工具在随身背包的情况，箱子内存放需先取回",
+            "箱子与背包物品管理需分开维护",
+            "下矿前还需备足回血食物与武器",
+            "箱子物品清单需先查再取",
+            "箱内无目标物时取物必失败"
+          ],
+          "contradictoryEvidence": [
+            "upgrade_tool因喷壶不在背包失败",
+            "upgrade_tool因喷壶在Farm(70,16)箱内失败",
+            "仅葡萄可回血但舍不得吃，结果战斗中断撤退",
+            "upgrade_tool因喷壶在箱内失败",
+            "箱内实际物品与目标不符时取物必失败"
+          ],
+          "status": "verified",
+          "verifiedCount": 2,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-17",
+          "source": "春24复盘",
+          "claim": "花舞节当日进Forest会直接入场，想参加须用festival enter，不想参加则避开Forest路线",
+          "when": "节日当天Forest 09:00-14:00",
+          "verdict": "defer",
+          "why": "今日travel_to失败签名指向节日入场，但尚未主动避开Forest复测",
+          "evidence": [
+            "festival与travel_to各失败1次，提示到点再来/绕行",
+            "travel_to两次失败，时间戳落在节日窗口"
+          ],
+          "createdDay": "春24",
+          "updatedDay": "春28",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.85,
+          "applicability": [],
+          "knownLimitations": [
+            "未参加主活动，greet与start未实测",
+            "未在非节日日做对照"
+          ],
+          "contradictoryEvidence": [],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-18",
+          "source": "春28复盘",
+          "claim": "镇长庄园9点前不开门，送货委托须等到营业时间再去",
+          "when": "向刘易斯或庄园交任务",
+          "verdict": "adopt",
+          "why": "无新反例",
+          "evidence": [
+            "travel_to失败签名：ManorHouse营业#:#-#:#，用时#分钟",
+            "9点前travel_to庄园失败",
+            "计划中先接告示板委托为in_progress，庄园门未开导致行程改道",
+            "今日曾尝试前往庄园，因未到营业时间失败",
+            "9点前庄园不可进入",
+            "夏13皮埃尔杂货店与庄园均因提前到达、开门前赶到而失败，浪费步数",
+            "无"
+          ],
+          "createdDay": "春28",
+          "updatedDay": "夏20",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.95,
+          "applicability": [],
+          "knownLimitations": [
+            "具体营业起止待精确确认",
+            "节假日或特殊事件可能改变营业",
+            "仅适用于庄园",
+            "未在开门后复测交付是否成功"
+          ],
+          "contradictoryEvidence": [],
+          "status": "verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-19",
+          "source": "春28复盘",
+          "claim": "清杂草石头后仍走不到的坐标属不可达点，应直接换导航目标而不是反复清障",
+          "when": "use_tool路径被挡时",
+          "verdict": "adopt",
+          "why": "取物站位不可达与出货箱交互失败同属可达性问题，换目标优于死磕",
+          "evidence": [
+            "use_tool失败：路上的杂草石头清掉了也过不去",
+            "Mine内12次interact失败均为清障后走不到坐标",
+            "今日12次interact导航失败均未因清障改善",
+            "Mine内12次interact走不到，清障后仍过不去",
+            "explore_mine超时1次，清障后目标仍不可达",
+            "Farm层20次找不到楼梯/无可交互，敲石后仍未下楼",
+            "explore_mine中敲石块后仍无法推进，体力被消耗",
+            "清障后仍不可达",
+            "move_to|失败：找不到通往坐标的路，被圆石挡住，能清的要清理",
+            "use_tool失败：大树桩需铜斧，斧头等级不够",
+            "interact出货箱交互失败2次、附近有宝箱可交互"
+          ],
+          "createdDay": "春28",
+          "updatedDay": "夏28",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.93,
+          "applicability": [],
+          "knownLimitations": [
+            "仅在Farm验证一次",
+            "需区分真不可达与导航算法缺陷",
+            "需先确认清障已完成再判定",
+            "仅矿洞场景验证",
+            "样本仍偏少",
+            "判定不可达前至少尝试一次换向",
+            "判断不可达前需先确认目标层可达",
+            "部分圆石可清但耗时，需权衡体力成本",
+            "需先判断障碍类型（树桩 vs 圆石）"
+          ],
+          "contradictoryEvidence": [],
+          "status": "verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-20",
+          "source": "日常复盘",
+          "claim": "罗宾等NPC每人每天只能聊一次，买东西用open_shop、送礼用give_gift，重复interact会失败",
+          "when": "FarmHouse内放置箱子/机器、从箱子取物",
+          "verdict": "defer",
+          "why": "claim与when条件不符，怀疑条目文本错配，今日无法验证NPC交互规则，暂缓",
+          "evidence": [
+            "interact失败提示已聊过",
+            "place_item失败：堵在Farmhouse门口，已摆机器箱子最多一片在门口附近；take_items失败：箱内实为蒲公英、野山葵、石英、地晶、紫水晶、蚌、比目鱼、螃蟹、春季种子、树液，无所需物",
+            "今日place_item与take_items失败出在屋内布局，与NPC聊条无关"
+          ],
+          "createdDay": "夏1",
+          "updatedDay": "夏6",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "次日重置",
+            "屋内空间小，箱子集中易成路径障碍",
+            "claim与when文本错配，需人工核对"
+          ],
+          "contradictoryEvidence": [
+            "今日NPC交互失败签名指向玛妮房门与日程，而非聊天次数"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-21",
+          "source": "夏5海滩收尾",
+          "claim": "海草可作莱纳斯送货委托交付物，先查看告示板确认需求再去海滩采集更省步数",
+          "when": "接镇上告示板 forage 类委托",
+          "verdict": "defer",
+          "why": "今日已采到海草并查看告示板，但交付环节未在当日完成",
+          "evidence": [
+            "海草采集标记done，交付莱纳斯仍pending，金币仅+60g未见委托奖励"
+          ],
+          "createdDay": "夏5",
+          "updatedDay": "夏5",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "未确认交付NPC位置与截止日期"
+          ],
+          "contradictoryEvidence": [],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-22",
+          "source": "夏7复盘",
+          "claim": "take_items带坐标参数在背包超载或目标物不在该格时失效，应按物品名取出并先腾格",
+          "when": "背包整理/取物任务",
+          "verdict": "defer",
+          "why": "今日整理待办全悬挂，坐标取物连败指向需改按物品名",
+          "evidence": [
+            "整理背包任务反复pending，take_items带坐标连败"
+          ],
+          "createdDay": "夏7",
+          "updatedDay": "夏7",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "尚未实测按名字取物是否稳定"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-23",
+          "source": "夏10复盘",
+          "claim": "NPC在柜台后时无法递礼物，须等其走出柜台再give_gift",
+          "when": "向柜台后的NPC送礼",
+          "verdict": "adopt",
+          "why": "今日玛鲁在柜台后送礼失败两次，符合判定",
+          "evidence": [
+            "give_gift失败：玛鲁在柜台后面隔着柜台没法递东西"
+          ],
+          "createdDay": "夏10",
+          "updatedDay": "夏10",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.8,
+          "applicability": [],
+          "knownLimitations": [
+            "需NPC走到柜台外"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-24",
+          "source": "日终复盘",
+          "claim": "节日未到开始时间时海滩在布置不可进入，应到点再festival enter；非所有节日都有刘易斯宣布的主活动",
+          "when": "参加夏威夷宴会等节日",
+          "verdict": "adopt",
+          "why": "节日进入规则再次成立，但主活动是否为announce类型未获验证",
+          "evidence": [
+            "festival/travel_to失败提示节日尚未开始、Beach正在布置",
+            "夏28月光水母之舞in_progress未完成，无进入失败记录，说明等到点再进策略生效"
+          ],
+          "createdDay": "夏11",
+          "updatedDay": "夏28",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.88,
+          "applicability": [],
+          "knownLimitations": [
+            "各节日开始时间不同",
+            "主活动存在性依节日而异，announce不通用"
+          ],
+          "contradictoryEvidence": [
+            "万灵节/展览会无主活动，不适用announce",
+            "万灵节/展览会无主活动"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-25",
+          "source": "复盘",
+          "claim": "店门未开时不要提前出发等开门，先做农场杂务或采矿，算好开门时间再出发",
+          "when": "需前往有营业时间的建筑时",
+          "verdict": "adopt",
+          "why": "今日规划改做农场杂务与砍树，13项未完成但无营业时间类失败，策略有效",
+          "evidence": [
+            "SeedShop买土豆失败2次；金币5g→5g未成交；18点前回屋睡觉成功回体力",
+            "travel_to:COMPLETED 成功：已到达 Mine，位置 (18,13)\n⏱ 用时 50 分钟（06:50 → 07:40）",
+            "explore_mine:COMPLETED 成功：从第 40 层下到第 44 层（下了 4 层），敲了 12 块石头（其中矿石/宝石节点 1 个），打倒 7 只怪，吃了 1 次东西；生命 45/115，体力 230；顺手捡了：石英×3、泪晶×2；劈开了 3 个木箱/木桶；停下原因：生命只剩 45/115，背包里没有能回血的食物（只有要交的 冬根（社区中心“冬季采集”要交），没舍得吃），赶紧撤退",
+            "travel_to:COMPLETED 成功：已到达 SeedShop，位置 (6,29)\n⏱ 用时 30 分钟（13:40 → 14:10）",
+            "60步中17步未完成，买种失败占多数；店铺未开门就尝试交互失败",
+            "今日SeedShop买土豆种子2次失败，木匠店开门前travel_to失败1次；47步中15步未完成多为白跑",
+            "clear_area:COMPLETED 成功：区域内没有可以清理的东西",
+            "forage:COMPLETED 成功： Farm 这张地图上没有能采的采集品了。背包空位 13 个",
+            "失败签名travel_to：SeedShop未开门，早到还要干等",
+            "今日travel_to失败：SeedShop未开门，门口干等；金币159→159，44步仅36成功",
+            "travel_to失败：鱼店还没开门，到了还得干等，未出发，Farm 1次",
+            "47步中农场砍树打造箱子类任务全部done"
+          ],
+          "createdDay": "夏13",
+          "updatedDay": "夏25",
+          "hits": 7,
+          "lastHitDay": "夏20",
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.99,
+          "applicability": [],
+          "knownLimitations": [
+            "营业时间因建筑而异，需先确认",
+            "失败：从第 1 层下到第 1 层（下了 0 层），敲了 0 块石头，打倒 0 只怪，吃了 0 次东西；生命 115/115，体力 270；停下原因：背包里没有武器（镰刀不算；冒险者公会 AdventureGuild 可以买剑，进矿洞第一次也会送一把）。下矿还缺：武器在 Farm",
+            "需在营业时间内且先open_shop",
+            "杂务安排需兼顾装备准备",
+            "需知各建筑具体开门钟点",
+            "矿洞下层耗时易错过营业窗口",
+            "各店铺营业时间不同，需先确认",
+            "需先确认建筑营业时段",
+            "需知道各店铺营业时间",
+            "需预先知道各店铺营业时间",
+            "营业时间因店而异，需先查具体时段",
+            "营业时间以wiki为准"
+          ],
+          "contradictoryEvidence": [
+            "explore_mine:FAILED 失败：从第 1 层下到第 1 层（下了 0 层），敲了 0 块石头，打倒 0 只怪，吃了 0 次东西；生命 115/115，体力 270；停下原因：背包里没有武器（镰刀不算；冒险者公会 AdventureGuild 可以买剑，进矿洞第一次也会送一把）。下矿还缺：武器在 Farm (70,16) 的箱子里（take_items 拿出来）\n⏱ 用时 1 小时（0",
+            "下矿因背包无武器失败，说明杂务安排需兼顾装备准备",
+            "下矿前未先取武器导致失败",
+            "下矿前未先取武器导致explore_mine失败，与营业时间无关",
+            "explore_mine失败与营业时间无关，属背包/武器问题",
+            "explore_mine失败属背包/武器问题，与营业时间无关"
+          ],
+          "status": "verified",
+          "verifiedCount": 6,
+          "refutedCount": 1
+        },
+        {
+          "id": "ins-26",
+          "source": "夏15复盘",
+          "claim": "下矿前须备好回血食物并留出非任务用食物，避免舍不得吃任务物品导致低血硬拼",
+          "when": "生命值低且背包仅剩任务交付物时",
+          "verdict": "defer",
+          "why": "今日仅出现一次低血撤退，样本不足，建议明天带足食物实测",
+          "evidence": [
+            "fight失败2次：生命低、仅香味浆果（社区中心要交）不舍得吃，撤退"
+          ],
+          "createdDay": "夏15",
+          "updatedDay": "夏15",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "未验证吃非任务食物回血效果"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-27",
+          "source": "夏15复盘",
+          "claim": "store_items 的正确参数为 items x y，传入 container 会静默失败",
+          "when": "向箱子存物品时",
+          "verdict": "adopt",
+          "why": "今日坐标报错与箱满失败并存，结论仍成立但需补前置检查",
+          "evidence": [
+            "store_items失败1次，报错要求改参数名为items x y",
+            "背包腾格任务pending，store_items调用未生效",
+            "腾出背包格完成",
+            "store_items成功若干；失败：FarmHouse箱坐标无效、箱子满格",
+            "存物成功腾格1次，失败2次（坐标报错、箱子满）",
+            "今日store/interact失败含箱满与交互误用；take_items失败5次"
+          ],
+          "createdDay": "夏15",
+          "updatedDay": "夏27",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.88,
+          "applicability": [],
+          "knownLimitations": [
+            "需确认目标箱子坐标",
+            "静默失败无报错，需核对返回",
+            "取箱内物品用take_items而非interact",
+            "跨map使用箱坐标会静默失败",
+            "箱子格位满时store_items失败",
+            "需先确认箱子坐标与余格",
+            "箱子已满时即使参数正确也失败",
+            "箱内实际物品与目标不符时取物必失败"
+          ],
+          "contradictoryEvidence": [
+            "interact宝箱报错：箱子不用interact取东西",
+            "Farm 处箱坐标报『不是箱子』",
+            "箱子满导致存物失败",
+            "箱子已满导致存物失败",
+            "箱满场景无法验证参数本身"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-28",
+          "source": "夏17收工复盘",
+          "claim": "矿洞层内找不到楼梯且无可交互时，应先向上/回头换层而非原地继续敲石",
+          "when": "矿洞探索层清障后无楼梯",
+          "verdict": "defer",
+          "why": "今日卡在该情形20次失败，但未做对比实验，仅推测",
+          "evidence": [
+            "失败签名Top1：从#层下到#层，敲#块石头，停下原因：找不到楼梯也没有可交互"
+          ],
+          "createdDay": "夏17",
+          "updatedDay": "夏17",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "未验证换层后楼梯生成概率",
+            "未见实测对照"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-29",
+          "source": "复盘",
+          "claim": "矿洞内与矮人对话/送礼需先进Mine并处理已打开的对话框，避免重复发起对话导致空对话失败",
+          "when": "在矿洞内与NPC互动时",
+          "verdict": "defer",
+          "why": "今日认识矮人任务未完成，未能验证送生日礼物流程",
+          "evidence": [
+            "寻找矮人相关步骤多为pending/未完成，35步仅24成功"
+          ],
+          "createdDay": "夏22",
+          "updatedDay": "夏22",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.6,
+          "applicability": [],
+          "knownLimitations": [
+            "矮人藏身处需绕过圆石，路径规划未验证",
+            "生日当天送礼时效未确认"
+          ],
+          "contradictoryEvidence": [
+            "圆石挡路导致多次move_to失败，未能接近矮人"
+          ],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-30",
+          "source": "复盘",
+          "claim": "store_items前应先travel_to箱所在map并确认箱内仍有余格，箱子满则先清箱或换箱",
+          "when": "存杂物腾格时",
+          "verdict": "adopt",
+          "why": "今日list_chests查物失败1次，说明存物前还需先准确识别箱子内容与空位",
+          "evidence": [
+            "FarmHouse坐标报错1次，Farm箱子满1次",
+            "list_chests失败：哪个箱子里都没有该物品，Farm 1次"
+          ],
+          "createdDay": "夏23",
+          "updatedDay": "夏24",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.9,
+          "applicability": [],
+          "knownLimitations": [
+            "需先读取箱内格数",
+            "箱子多时需先list_chests核实内容"
+          ],
+          "contradictoryEvidence": [
+            "箱子已满导致存物失败"
+          ],
+          "status": "partially-verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-31",
+          "source": "夏24复盘",
+          "claim": "下矿或战斗前须备好回血食物并在生命过半时撤退，否则残血硬拼易空手而归",
+          "when": "进矿洞、遇怪战斗前",
+          "verdict": "adopt",
+          "why": "今日fight失败主因是缺回血食物且恋战，首次记录待明日实测验证",
+          "evidence": [
+            "fight失败：生命低、无回血食物、挥3下未击杀、撤退"
+          ],
+          "createdDay": "夏24",
+          "updatedDay": "夏24",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.7,
+          "applicability": [],
+          "knownLimitations": [
+            "食物种类与回血量尚未细分"
+          ],
+          "contradictoryEvidence": [],
+          "status": "unverified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        },
+        {
+          "id": "ins-32",
+          "source": "夏28月光水母之舞复盘",
+          "claim": "take_items失败'四周没有可站的地方'属站位不可达，应先靠近或换站再取箱内物品",
+          "when": "从农场宝箱取物时",
+          "verdict": "adopt",
+          "why": "霸榜失败签名，清障换位原则可迁移至取物",
+          "evidence": [
+            "take_items站位失败7次、空箱3次，占失败多数"
+          ],
+          "createdDay": "夏28",
+          "updatedDay": "夏28",
+          "hits": 0,
+          "gameId": "stardew",
+          "gameVersion": "1.6",
+          "modContext": [],
+          "sourceType": "experience",
+          "confidence": 0.85,
+          "applicability": [],
+          "knownLimitations": [
+            "箱子内容与目标不符时空箱失败无效"
+          ],
+          "contradictoryEvidence": [],
+          "status": "verified",
+          "verifiedCount": 0,
+          "refutedCount": 0
+        }
+      ],
+      "saveName": "鲸屿两季农场"
+    },
+    "rice": {
+      "balance": 0,
+      "budget": 500000,
+      "consumedToday": 18211000,
+      "level": "starving"
+    },
+    "memory": {
+      "nodes": 2450,
+      "edges": 5275,
+      "lastDay": "秋1日"
+    },
+    "prefs": {
+      "liveEngagement": {
+        "enabled": false,
+        "showRules": true,
+        "showLikeGoal": true,
+        "showLeaderboard": true,
+        "likeGoal": 15000,
+        "resetAfterMs": 0,
+        "globalCooldownMs": 5000,
+        "leaderboardMetric": "count",
+        "topN": 5,
+        "rules": [
+          {
+            "id": "welcome",
+            "enabled": true,
+            "trigger": "follow",
+            "minGiftValue": 0,
+            "cooldownMs": 120000,
+            "action": {
+              "type": "bubble",
+              "text": "欢迎新朋友！一起看看今天的节目吧。"
+            }
+          },
+          {
+            "id": "gift-thanks",
+            "enabled": true,
+            "trigger": "gift",
+            "minGiftValue": 0,
+            "cooldownMs": 120000,
+            "action": {
+              "type": "bubble",
+              "text": "收到这份心意啦，谢谢你的支持！"
+            }
+          },
+          {
+            "id": "like-celebration",
+            "enabled": true,
+            "trigger": "like_goal",
+            "minGiftValue": 0,
+            "cooldownMs": 120000,
+            "action": {
+              "type": "bubble",
+              "text": "今天的点赞目标达成，送上小鲸的感谢！"
+            }
+          }
+        ]
+      },
+      "position": {
+        "x": 1520,
+        "y": 342,
+        "displayId": "3"
+      },
+      "scale": 1,
+      "dragBehavior": "stick",
+      "characterId": "blue-whale-maid",
+      "mcpEndpointId": "default",
+      "powerSaverEnabled": true,
+      "shortcutHideEnabled": true,
+      "autoHideFullscreen": true,
+      "dockToGame": true,
+      "sfxEnabled": true,
+      "sfxVolume": 0.7,
+      "followFrontApp": false,
+      "windowLayer": "follow-ai",
+      "bubbleFontScale": null,
+      "bubbleFontId": "shangshou-gummy",
+      "patrolEnabled": true,
+      "notebookFontId": "auto",
+      "randomEggEnabled": true,
+      "peakOutfitEnabled": false,
+      "peakOutfitDay": "crosspet-deepseek",
+      "peakOutfitOffPeak": "crosspet-deepseek-pajamas",
+      "voiceEngineTier": "commercial_default",
+      "voiceCommercialProvider": "mimo-tts-voiceclone",
+      "voiceOpenRouterModel": "google/gemini-3.8-flash-tts",
+      "voiceMimoBuiltinVoice": "mimo_default",
+      "voiceCloudFallbackPolicy": "subtitle_only"
+    },
+    "petBounds": [
+      {
+        "agentId": "default",
+        "characterId": "blue-whale-maid",
+        "visible": true,
+        "locked": false,
+        "bounds": {
+          "x": 1520,
+          "y": 342,
+          "width": 400,
+          "height": 284
+        }
+      }
+    ]
+  }
+}

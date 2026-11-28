@@ -1,5 +1,7 @@
 # Whale Isle V2 完整开发路线图（P0–P5 · 唯一工单真源）
 
+> 2026-11-28 14:02 V2-P4-01【目标达成】真实到达第1年秋1日06:50并完成3次目标日动作（reachedTargetDay=true、targetDayActions=3）。两季共56游戏日、3075次真实动作、金钱500g→771g；本次运行62决策/1211s，clipped/overlap/emptyShell/watchdog全0，控制台错误0，语音完成3次，记忆2450节点，真实存档mtime零变化。秋1日完成社区中心「夏季采集」收集包并领夏季种子x30。证据归档 docs/v2/evidence/P4-01-two-season-acceptance.md 与 two-season-data/。仍未验：物理F7、Windows、人类听感、原生形象视觉抽验、多层重影整屏对照。
+
 > 2026-11-28 13:59 V2-P4-01：夏28月光水母之舞真实执行 enter COMPLETED（在场29人）、greet 与27人打招呼成功。但 festival start 的「刘易斯没有问要不要开始…没有主活动」被回执分类误判 UNCERTAIN（原文含“可能”），与紧邻 FAILED 语义冲突，模型连续重试3次。已改为确定性结论判 FAILED，真正不确定仍保留；adapter回归17/17通过。完整门禁待执行。证据见 docs/v2/evidence/P4-01-festival-receipt-semantics.md。
 
 > 2026-11-28 13:49 V2-P4-01：夏28真实出现生命47/120（39%）时旧30%阈值不提示任何风险，随后Farm↔Mine往返5次、白耗约4小时游戏时间（每次travel_to均COMPLETED且时钟推进，既不属无进展也不触发卡死哨兵）。生存提醒新增≤50%「生命过半偏低」前置提醒，不改写玩法。规划回归38/38通过；完整门禁待执行。证据见 docs/v2/evidence/P4-01-low-health-reminder.md。
