@@ -151,8 +151,7 @@ export function normalizeToolArgs(args: Record<string, unknown>, tool = ''): Rec
       delete out['item'];
     }
   }
-  if (tool === 'plant_seeds' && out['seed'] === undefined) {
-    const source = args['seeds'] ?? args['item'];
+  if (tool === 'plant_seeds' && out['seed'] === undefined) {    const source = args['seeds'] ?? args['item'];
     if (source !== undefined) {
       out['seed'] = firstItemName(source);
       delete out['seeds'];
@@ -180,12 +179,22 @@ export function normalizeToolArgs(args: Record<string, unknown>, tool = ''): Rec
       delete out['name'];
     }
   }
+  if (tool === 'explore_mine') {
+    // 真机 2026-11-28 秋8：体力 12 + 背包剩 1 格时连续两次调 explore_mine({"levels":0})，
+    // 0 层等于什么都不做，两次都失败。levels 有下限 1；非法/缺失时不塞默认值（交给回执说明）。
+    const rawLevels = out['levels'];
+    if (typeof rawLevels === 'number' && Number.isFinite(rawLevels)) {
+      out['levels'] = Math.max(1, Math.min(30, Math.round(rawLevels)));
+    }
+    if (out['start_level'] !== undefined && typeof out['start_level'] === 'number' && Number.isFinite(out['start_level'])) {
+      out['start_level'] = Math.max(1, Math.min(120, Math.round(out['start_level'])));
+    }
+  }
   if (tool === 'clear_area') {
     if (out['radius'] === undefined && out['r'] !== undefined) {
       out['radius'] = out['r'];
       delete out['r'];
-    }
-    if (out['radius'] === undefined && out['count'] !== undefined) {
+    }    if (out['radius'] === undefined && out['count'] !== undefined) {
       const rawCount = out['count'];
       if (typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0) {
         out['radius'] = Math.min(6, Math.max(2, Math.round(Math.sqrt(rawCount))));
@@ -553,6 +562,11 @@ export function buildSurvivalReminder(state: GameStateSnapshot, effectiveFreeSlo
   // 2026-11-28 秋1 真机：背包只剩 1 格仍下矿，explore_mine 敲 0 块就因背包满停下（白费一次下矿）；
   // 下矿/长时间采集会持续捡入矿石与怪物掉落，1~2 格几乎必然中途卡住。只在数值层提前点名，不阻止动作。
   else if (effectiveFreeSlots <= 2) warnings.push(`⚠️ 背包仅剩 ${effectiveFreeSlots} 个空位：下矿或长时间采集会陆续拾取矿石/宝物/怪物掉落，很可能中途卡住；建议先出货、存箱或 tidy_backpack 腾出更多空位`);
+  // 2026-11-28 秋8 真机：体力 12/270（4%）+ 背包剩 1 格时连续两次调 explore_mine({"levels":0})，
+  // 两次都失败（0 层 0 石头）。体力极低时下矿在第一块石头前就会停下，属可预估的必然失败。
+  if (staminaPct <= 10 && effectiveFreeSlots <= 2) {
+    warnings.push(`⚠️ 体力 ${state.stamina}/${state.staminaMax} 且背包仅剩 ${effectiveFreeSlots} 格：这种组合下矿/长采集几乎必然在原地停住，先吃饱/腾格再做`);
+  }
 
   return [
     '## 生存与资源提醒（仅作风险提示，具体行动完全由你自主决定）',

@@ -275,8 +275,27 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(sameOut).toContain('upgrade_tool 在最近8条里失败3次');
   });
 
-  it('生命 39% 时提前点名偏低风险，不改写为指定行动', () => {
-    const mid = parseGameState(`时间：第1年夏28日 14:00（Sun），天气：晴
+  it('体力极低 + 背包将满的组合点名必然失败（真机 2026-11-28 秋8）', () => {
+    // 真机：体力 12/270（4%）+ 背包剩 1 格时连续两次 explore_mine({"levels":0})，两次都失败
+    const exhausted = parseGameState(`时间：第1年秋8日 14:20（Tue），天气：晴
+金钱：1125g  体力：12/270  生命：54/120
+## 位置
+地点：UndergroundMine15`);
+    const text = buildSurvivalReminder(exhausted, 1);
+    expect(text).toContain('几乎必然在原地停住');
+    expect(text).toContain('12/270');
+    // 只点名组合风险，不写死玩法
+    expect(text).not.toMatch(/必须|只能|立刻前往/);
+
+    // 体力充足时不出现这条组合提示
+    const fine = parseGameState(`时间：第1年秋8日 14:20（Tue），天气：晴
+金钱：1125g  体力：200/270  生命：120/120
+## 位置
+地点：Farm`);
+    expect(buildSurvivalReminder(fine, 1)).not.toContain('几乎必然在原地停住');
+  });
+
+  it('生命 39% 时提前点名偏低风险，不改写为指定行动', () => {    const mid = parseGameState(`时间：第1年夏28日 14:00（Sun），天气：晴
 金钱：771g  体力：170/270  生命：47/120
 ## 位置
 地点：Farm（鲸屿两季农场），室外`);
@@ -1087,8 +1106,7 @@ describe('S01–S07 卡死回归剧本内存同构验证（免端口绑定验证
   }
 });
 
-describe('V2-P4-01：跨日失败动作账本注入 LlmPlanner（秋5 真机）', () => {
-  it('同一签名跨日累计失败后，事实提示段进入自主决策 prompt', async () => {
+describe('V2-P4-01：跨日失败动作账本注入 LlmPlanner（秋5 真机）', () => {  it('同一签名跨日累计失败后，事实提示段进入自主决策 prompt', async () => {
     const prompts: string[] = [];
     let callIdx = 0;
     const planner = new LlmPlanner({
@@ -1211,7 +1229,11 @@ describe('V2-P4-01：长期记忆与知识库检索注入 LlmPlanner', () => {
     expect(normalizeToolArgs({ count: 9 }, 'clear_area')).toEqual({ radius: 3 });
     expect(normalizeToolArgs({ chest_x: 68, chest_y: 17, items: ['石头'], count: 10 }, 'store_items')).toEqual({ x: 68, y: 17, items: '石头' });
     expect(normalizeToolArgs({ box_x: 68, box_y: 17, from_chest: true, chest: 'home', location: 'Farm', items: '喷壶' }, 'take_items')).toEqual({ x: 68, y: 17, items: '喷壶' });
-    expect(normalizeToolArgs({ item: '昆虫头部', container: 'Farm (68,18)' }, 'store_items')).toEqual({ items: '昆虫头部', x: 68, y: 18 });
+    // 真机 2026-11-28 秋8：explore_mine({"levels":0}) 等于什么都不做，两次都失败；levels 必须有下限。
+    expect(normalizeToolArgs({ levels: 0 }, 'explore_mine')).toEqual({ levels: 1 });
+    expect(normalizeToolArgs({ levels: -3, start_level: 0 }, 'explore_mine')).toEqual({ levels: 1, start_level: 1 });
+    expect(normalizeToolArgs({ levels: 999 }, 'explore_mine')).toEqual({ levels: 30 });
+    expect(normalizeToolArgs({ levels: 5, start_level: 45 }, 'explore_mine')).toEqual({ levels: 5, start_level: 45 });    expect(normalizeToolArgs({ item: '昆虫头部', container: 'Farm (68,18)' }, 'store_items')).toEqual({ items: '昆虫头部', x: 68, y: 18 });
 
     const spMessages = buildAutonomousDecisionMessages({
       state: state(),
