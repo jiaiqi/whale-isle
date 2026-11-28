@@ -325,8 +325,32 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     expect(healthyText).not.toContain('生命值危险');
   });
 
-  it('重复空结果与反复开合界面都保留成功事实并提醒核对进展，不指定玩法', () => {
-    const empty = 'COMPLETED clear_area: 成功：区域内没有可以清理的东西';
+  it('同一界面被重复打开时点名（真机 2026-11-28 秋9 书摊/电梯菜单）', () => {
+    // 书摊：interact 打开对话框 → 进商店 → close_menu → 又 interact 同一书摊
+    const stall = [
+      'COMPLETED interact: 成功：交互后打开了界面： 对话框：我是马尔赛罗，欢迎来到我的书摊！ 选项（用 dialogue 并传 c',
+      'COMPLETED dialogue: 成功：对话已推进。当前界面：商店界面（Bookseller）。你的钱：1150g。用 buy 购买、se',
+      'COMPLETED close_menu: 成功：已关闭。当前界面：无（可以自由行动）',
+      'COMPLETED interact: 成功：交互后打开了界面： 对话框：我是马尔赛罗，欢迎来到我的书摊！ 选项（用 dialogue 并传 c',
+      'COMPLETED dialogue: 成功：对话已推进。当前界面：无（可以自由行动）',
+    ];
+    const out = buildRepeatedNoProgressSection(stall);
+    expect(out).toContain('重复打开同一界面');
+    expect(out).toContain('马尔赛罗');
+
+    // 电梯菜单：interact 开 MineElevatorMenu → close_menu，再来一遍
+    const elevator = [
+      'COMPLETED interact: 成功：交互后打开了界面： 菜单：MineElevatorMenu。如果不需要，用 close_menu 关闭',
+      'COMPLETED close_menu: 成功：已关闭。当前界面：无（可以自由行动）',
+      'COMPLETED interact: 成功：交互后打开了界面： 菜单：MineElevatorMenu。如果不需要，用 close_menu 关闭',
+    ];
+    expect(buildRepeatedNoProgressSection(elevator)).toContain('MineElevatorMenu');
+
+    // 只开一次不提示
+    expect(buildRepeatedNoProgressSection([stall[0]!])).toBe('');
+  });
+
+  it('重复空结果与反复开合界面都保留成功事实并提醒核对进展，不指定玩法', () => {    const empty = 'COMPLETED clear_area: 成功：区域内没有可以清理的东西';
     expect(buildRepeatedNoProgressSection([empty])).toBe('');
     expect(buildRepeatedNoProgressSection([empty.replace('COMPLETED', 'FAILED'), empty])).toBe('');
     expect(buildRepeatedNoProgressSection(['COMPLETED fish: 成功：钓到沙丁鱼', 'COMPLETED fish: 成功：钓到沙丁鱼'])).toBe('');

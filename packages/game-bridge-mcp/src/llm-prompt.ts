@@ -614,6 +614,30 @@ export function buildRepeatedNoProgressSection(recentReceipts: readonly string[]
       hits.push({ kind: '空区域清理', count, line: line.slice(0, 160) });
     }
   }
+  // 2026-11-28 秋9 真机：书摊 interact(109,26) → 进商店 → close_menu → 又 interact(109,26)。
+  // 同一坐标重复打开同类界面属于无进展重复；按「工具 + 坐标」聚合（≥2 次即提示）。
+  const sameSpot = new Map<string, { count: number; last: string }>();
+  for (const receipt of window) {
+    const m = /^COMPLETED\s+(interact|dialogue)\s*[:：]\s*成功：(.*)$/s.exec(receipt);
+    if (m?.[1] === undefined) continue;
+    const detail = m[2] ?? '';
+    if (!/打开了界面|对话已推进/.test(detail)) continue;
+    // 回执里没写坐标时退化为按「界面名」聚合（书摊/Billboard/MineElevatorMenu 等）
+    const menu = /菜单：([A-Za-z]+)|对话框：([^，。\n]{1,12})/.exec(detail);
+    const key = m[1] === 'interact'
+      ? `interact|${(menu?.[1] ?? menu?.[2] ?? detail.slice(0, 12)).trim()}`
+      : '';
+    if (key === '') continue;
+    const prev = sameSpot.get(key);
+    sameSpot.set(key, { count: (prev?.count ?? 0) + 1, last: receipt.split('\n')[0] ?? receipt });
+  }
+  for (const [key, info] of sameSpot) {
+    if (info.count < 2) continue;
+    const target = key.split('|')[1] ?? key;
+    if (!hits.some((h) => h.kind === '重复打开同一界面')) {
+      hits.push({ kind: '重复打开同一界面', count: info.count, line: `${target}：${info.last.slice(0, 120)}` });
+    }
+  }
   if (hits.length === 0) return '';
   return '\n\n## 重复无进展动作（真实回执，仍保留 COMPLETED 状态）\n'
     + hits.map((h) => `- 最近8条回执中「${h.kind}」出现${h.count}次，最近一条：${h.line}`).join('\n')
