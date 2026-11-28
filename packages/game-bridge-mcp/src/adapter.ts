@@ -113,7 +113,12 @@ export function classifyStardewReceipt(input: {
     return { status: 'ERROR', summary: humanizeBwfReceipt((errorMessage ?? '') + (text.slice(0, 200) || '客户端错误')) };
   }
   if (isError) {
-    const status = /UNCERTAIN|不确定|可能|unknown/i.test(text) ? 'UNCERTAIN' : 'FAILED';
+    // 2026-11-28 夏28 真机：BWF「刘易斯没有问要不要开始（可能还没到时间，或者这个节日没有主活动）」
+    // 是确定性结论——该节日没有主活动；原文里的「可能」只是措辞，旧规则据此判 UNCERTAIN，
+    // 导致模型把 festival start 连续重试。确定性的「没有主活动」不应归入不确定态。
+    const noMainActivity = /没有问要不要开始|没有主活动/.test(text);
+    const uncertain = !noMainActivity && /UNCERTAIN|不确定|可能|unknown/i.test(text);
+    const status = uncertain ? 'UNCERTAIN' : 'FAILED';
     return { status, summary: humanizeBwfReceipt(text).slice(0, 300) };
   }
   return { status: 'COMPLETED', summary: humanizeBwfReceipt(text).slice(0, 300) };

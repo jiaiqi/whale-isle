@@ -79,6 +79,22 @@ describe('classifyStardewReceipt（星露谷四态原样迁移）', () => {
     expect(classifyStardewReceipt({ text: '失败：没鱼饵', kind: 'ok', isError: true, tool: 'fish' }).status).toBe('FAILED');
     expect(classifyStardewReceipt({ text: '成功：钓到鱼', kind: 'ok', isError: false, tool: 'fish' }).status).toBe('COMPLETED');
   });
+
+  it('节日没有主活动属确定结论，不因措辞含“可能”误判 UNCERTAIN', () => {
+    // 夏28 真机原文：月光水母之舞由 BWF 判定刘易斯不问是否开始
+    const noMain = classifyStardewReceipt({
+      text: '失败：刘易斯没有问要不要开始（可能还没到时间，或者这个节日没有主活动）。展览会、万灵节没有要他宣布的主活动，逛完 festival leave',
+      kind: 'ok',
+      isError: true,
+      tool: 'festival',
+    });
+    expect(noMain.status).toBe('FAILED');
+    expect(noMain.summary).toContain('没有主活动');
+
+    // 真正不确定的仍需保留 UNCERTAIN
+    expect(classifyStardewReceipt({ text: 'UNCERTAIN 状态未知', kind: 'ok', isError: true, tool: 'move_to' }).status).toBe('UNCERTAIN');
+    expect(classifyStardewReceipt({ text: '失败：可能卡在界面里了', kind: 'ok', isError: true, tool: 'wait' }).status).toBe('UNCERTAIN');
+  });
 });
 
 describe('humanizeBwfReceipt（回执人话化，2026-11-23 用户反馈）', () => {
