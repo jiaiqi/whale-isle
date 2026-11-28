@@ -81,25 +81,31 @@ def test_design_weight_import_validates() -> None:
 
 
 def test_slice_extract_deterministic_slices() -> None:
+    import tempfile
     import wave
 
-    tmp = Path("/tmp/_vs_test_20s.wav")
-    with wave.open(str(tmp), "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(24000)
-        w.writeframes(b"\x00\x00" * 24000 * 20)
-    r = client.post(
-        "/api/voice-studio/slice-extract",
-        json={"filePath": str(tmp), "separateVocal": False},
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is True
-    assert len(body["slices"]) >= 2
-    assert all(3.0 <= (s["endSec"] - s["startSec"]) <= 8.0 + 0.01 for s in body["slices"])
-    assert all(s["refTextDraft"] for s in body["slices"])
-    tmp.unlink()
+    # 2026-11-28：原实现写死 /tmp/_vs_test_20s.wav，两次门禁因此偶发失败
+    # （同机并行跑 pytest 或残留旧文件时会互相覆盖）。改为唯一临时文件 + finally 清理。
+    with tempfile.NamedTemporaryFile(suffix=".wav", prefix="_vs_test_20s_", delete=False) as fh:
+        tmp = Path(fh.name)
+    try:
+        with wave.open(str(tmp), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(24000)
+            w.writeframes(b"\x00\x00" * 24000 * 20)
+        r = client.post(
+            "/api/voice-studio/slice-extract",
+            json={"filePath": str(tmp), "separateVocal": False},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert len(body["slices"]) >= 2
+        assert all(3.0 <= (s["endSec"] - s["startSec"]) <= 8.0 + 0.01 for s in body["slices"])
+        assert all(s["refTextDraft"] for s in body["slices"])
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def test_slice_extract_missing_file() -> None:

@@ -241,6 +241,8 @@ describe('T-M6-69 规则日程解析器', () => {
     const hints = extractEnvironmentHints(stateRaw, 11 * 60 + 20, six);
     expect(hints).toContain('折返');
     expect(hints).toContain('同一件事在这里反复没办成');
+    // 给出现成的退出机制，但不代替模型决定放弃（AI-first：提供能力，不强制）
+    expect(hints).toContain('planUpdate.remove');
 
     // 单轮折返只给 normal 提示，不升级
     const single = six.slice(0, 3);

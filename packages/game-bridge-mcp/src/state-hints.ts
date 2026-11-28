@@ -465,7 +465,7 @@ export function extractEnvironmentHints(
       let flips = 0;
       for (let i = 2; i < dests.length; i += 1) if (dests[i] === dests[i - 2] && dests[i] !== dests[i - 1]) flips += 1;
       if (flips >= 2) {
-        urgent.push(`已在 ${dests.join(' → ')} 之间折返 ${flips} 轮：同一件事在这里反复没办成，先确认它到底缺什么（门没开/好感不够/东西不在），别再把往返当进度`);
+        urgent.push(`已在 ${dests.join(' → ')} 之间折返 ${flips} 轮：同一件事在这里反复没办成，先确认它到底缺什么（门没开/好感不够/东西不在），别再把往返当进度。若确认今天做不到，可用 planUpdate.remove 放弃该目标并写 why`);
       } else {
         normal.push(`最近在 ${back.join(' → ')} 之间来回：同一地点两次折返通常说明前一处的事没做完就走了`);
       }
