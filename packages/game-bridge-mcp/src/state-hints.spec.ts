@@ -155,6 +155,44 @@ describe('T-M6-69 规则日程解析器', () => {
     expect(extractEnvironmentHints('时间：第1年春1日 06:00（Mon）\n## 位置\n地点：Farm', 6 * 60, [])).not.toContain('在屋里');
   });
 
+  it('白天低体力不再建议 sleep（真机 2026-11-28 秋8 06:50 睡掉整白天）', () => {
+    const daytimeLowStamina = `时间：第1年秋8日 06:50（Mon）
+金钱：1125g  体力：20/270  生命：120/120
+## 位置
+地点：Farm
+## 背包（序号: 物品）
+0: 斧头（手持）
+1: 木材 x30
+背包空位：5 个（共 12 格）`;
+    const day = extractEnvironmentHints(daytimeLowStamina, 6 * 60 + 50, []);
+    expect(day).toContain('别调 eat');
+    expect(day).toContain('白天');
+    expect(day).toContain('sleep 会把整天睡掉');
+    expect(day).not.toContain('或 sleep({"force":true})');
+    // 白天通用提示：sleep 会跳过整天
+    expect(day).toContain('sleep 会跳过整天');
+
+    // 深夜体力低 + 无食物：允许收工睡觉
+    const nightLowStamina = daytimeLowStamina.replace('第1年秋8日 06:50', '第1年秋8日 23:30');
+    const night = extractEnvironmentHints(nightLowStamina, 23 * 60 + 30, []);
+    expect(night).toContain('sleep({"force":true})');
+  });
+
+  it('同一地点来回折返时陈述往返事实（真机 2026-11-28 秋8）', () => {
+    const stateRaw = '时间：第1年秋8日 10:00（Tue）\n## 位置\n地点：Town';
+    const receipts = [
+      'COMPLETED travel_to: 成功：已到达 Farm',
+      'COMPLETED travel_to: 成功：已到达 Town',
+      'COMPLETED travel_to: 成功：已到达 Farm',
+    ];
+    const hints = extractEnvironmentHints(stateRaw, 10 * 60, receipts);
+    expect(hints).toContain('Farm → Town → Farm');
+    expect(hints).toContain('折返');
+    // 单次单向移动不该提示
+    const oneWay = extractEnvironmentHints(stateRaw, 10 * 60, ['COMPLETED travel_to: 成功：已到达 Farm']);
+    expect(oneWay).not.toContain('折返');
+  });
+
   it('无箱且木材不足50时阻止 tidy_backpack/craft(Chest)；低体力真实区分有无[可食用]食物与未读邮件', () => {
     const farmNoChestLowWood = `时间：第1年春1日 08:20（Mon）
 金钱：500g  体力：30/270  生命：100/100

@@ -344,7 +344,12 @@ export function extractEnvironmentHints(
       if (edibles.length > 0) {
         urgent.push(`体力仅 ${stamina}：可 eat({"item":"${edibles[0]}"})${edibles.length > 1 ? ` 等(${edibles.slice(1, 2).join('、')})` : ''}`);
       } else {
-        urgent.push(`体力仅 ${stamina} 且无[可食用]食物，别调 eat！做零耗体事（town/forest forage 或找未认识村民 interact）或 sleep({"force":true})`);
+        // 真机 2026-11-28 秋8：06:50 就调了 sleep({"force":true}) 把整白天睡掉。
+        // sleep 会跳过整天，凌晨/深夜才是它的位置；白天体力低应先做零耗体事或找吃的。
+        const earlyDay = Number.isFinite(clockMinutes) && clockMinutes >= 6 * 60 && clockMinutes < 17 * 60;
+        urgent.push(earlyDay
+          ? `体力仅 ${stamina} 且无[可食用]食物，别调 eat！现在是白天（${clockLabel(clockMinutes)}），sleep 会把整天睡掉：先做零耗体事（town/forest forage 找大葱韭葱、找未认识村民 interact、read_mail、整理箱子），或去商店买吃的`
+          : `体力仅 ${stamina} 且无[可食用]食物，别调 eat！做零耗体事（town/forest forage 或找未认识村民 interact），或 sleep({"force":true}) 收工`);
       }
     }
   }
@@ -368,6 +373,11 @@ export function extractEnvironmentHints(
 
   if (Number.isFinite(clockMinutes)) {
     const weekday = parseWeekday(stateRaw);
+    // 真机 2026-11-28 秋8：06:50 调了 sleep({"force":true})，把整白天睡掉、当天空手结束。
+    // sleep 跳过整天，白天（06:00–17:00）用它等于白丢一整天，深夜才是它的位置。
+    if (clockMinutes >= 6 * 60 && clockMinutes < 17 * 60) {
+      normal.push(`现在是白天 ${clockLabel(clockMinutes)}：sleep 会跳过整天，白天别收工，做点能推进的事`);
+    }
     if (clockMinutes < 6 * 60) {
       urgent.push(`深夜 ${clockLabel(clockMinutes)}（距 02:00 晕倒仅 ${Math.max(0, 120 - clockMinutes)} 分）：立刻 sleep({}) 回家睡觉`);
     } else if (clockMinutes >= 22 * 60 + 45 && !/地点：FarmHouse\b/.test(stateRaw)) {
@@ -399,6 +409,20 @@ export function extractEnvironmentHints(
   }
   if (/(?:箱子里没有符合的东西|哪个箱子里都没有)/.test(last3Receipts)) {
     normal.push('多箱查找先 list_chests({}) 看全览坐标；1.6工具名 喷壶/十字镐/竹鱼竿');
+  }
+
+  // 真机 2026-11-28 秋8：Farm → Town → Farm → Town 连续往返（travelPingPong 3 次），
+  // 每次都是「去下一件事」而没把当前地图的事收尾。这里只陈述往返事实。
+  const travelDests = recentReceipts
+    .filter((r) => /^COMPLETED\s+travel_to\s*[:：]/.test(r))
+    .slice(-4)
+    .map((r) => /已到达\s*([A-Za-z]+)/.exec(r)?.[1] ?? '')
+    .filter((d) => d !== '');
+  if (travelDests.length >= 3) {
+    const back = travelDests.slice(-3);
+    if (back[0] === back[2] && back[0] !== back[1]) {
+      normal.push(`最近在 ${back.join(' → ')} 之间来回：同一地点两次折返通常说明前一处的事没做完就走了`);
+    }
   }
 
   if (bag !== null && !/鱼竿/.test(bag)) {
