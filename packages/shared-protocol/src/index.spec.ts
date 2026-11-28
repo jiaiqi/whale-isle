@@ -420,6 +420,8 @@ describe('星露谷外观同步契约（T-M6-62）', () => {
       preset: { hair: 12, hairColor: '#3b82f6', shirt: 5, pantsColor: '#1d4ed8', skin: 0, hatId: -1 },
     });
     expect(parsed.spriteSheetPath).toBeUndefined();
+    expect(parsed.enabled).toBe(true);
+    expect(StardewAvatarSyncSchema.parse({ version: 1, enabled: false, characterId: 'native', displayName: '原版', preset: {} }).enabled).toBe(false);
     expect(StardewAvatarSyncSchema.safeParse({ version: 2, characterId: 'x', displayName: 'x', preset: {} }).success).toBe(false);
     expect(StardewAvatarSyncSchema.safeParse({ version: 1, characterId: 'x', displayName: 'x', preset: { hairColor: 'blue' } }).success).toBe(false);
     expect(StardewAvatarSyncSchema.parse({ version: 1, characterId: 'x', displayName: 'x', preset: {} }).preset.hatId).toBe(-1);
@@ -441,6 +443,7 @@ describe('桌宠多语义气泡契约', () => {
     expect(PetBubbleMoodSchema.safeParse('bored').success).toBe(false);
     expect(PetBubbleFontIdSchema.safeParse('comic-sans').success).toBe(false);
     expect(PetDesktopPrefsSchema.parse({}).bubbleFontId).toBe('shangshou-gummy');
+    expect(PetDesktopPrefsSchema.parse({}).dockToGame).toBe(true);
   });
 
   it('PetBubbleEventSchema 默认值、mood 与 ttlMs 边界校验', () => {

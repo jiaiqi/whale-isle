@@ -930,6 +930,8 @@ export const PetDesktopPrefsSchema = z.object({
   shortcutHideEnabled: z.boolean().default(true),
   /** 全屏应用自动隐藏 */
   autoHideFullscreen: z.boolean().default(true),
+  /** 打开星露谷等游戏后自动将桌宠停靠到游戏窗口右下角（默认开，可在设置与游戏页随时关闭） */
+  dockToGame: z.boolean().default(true),
   /** 精灵图动作原声音效开关/音量（T-M6-44） */
   sfxEnabled: z.boolean().default(true),
   sfxVolume: z.number().min(0).max(1).default(0.7),
@@ -1441,7 +1443,7 @@ export function statusLabelZh(status: string | undefined | null): string {
 }
 
 // ───────────────────────── 星露谷像素表生成请求（T-M6-62，创作中心 IPC 入参） ─────────────────────────
-/** 星露谷精灵表清晰度档位：1x 原版 16×32 · 2x 精致像素 32×64（推荐默认） · 4x 高清 Q 版 64×128 */
+/** 星露谷精灵表清晰度档位：1x 原版像素（32×32/格） · 2x 精致像素（64×64/格，推荐默认） · 4x 高清 Q 版（128×128/格） */
 export const StardewSpriteTierSchema = z.enum(['1x', '2x', '4x']);
 export type StardewSpriteTier = z.infer<typeof StardewSpriteTierSchema>;
 
@@ -1449,7 +1451,7 @@ export const StardewSpriteGenRequestSchema = z.object({
   characterId: z.string().regex(/^[a-z0-9][a-z0-9-]{1,60}$/),
   provider: ImageGenProviderDescriptorSchema,
   modelId: z.string().min(1).max(200),
-  /** 清晰度档位：默认 2x（192×256，兼顾星露谷像素感与清晰度） */
+  /** 清晰度档位：默认 2x（384×256，兼顾宽幅防裁切、身高对齐与星露谷像素感） */
   tier: StardewSpriteTierSchema.default('2x'),
   /** 缺省时由主进程用 compileStardewSpritePrompt 编译 */
   prompt: z.string().max(6000).optional(),
@@ -1485,6 +1487,8 @@ export type StardewAvatarPreset = z.infer<typeof StardewAvatarPresetSchema>;
  */
 export const StardewAvatarSyncSchema = z.object({
   version: z.literal(1),
+  /** 是否开启同步；false 时 SMAPI Mod 卸载精灵表并将游戏内农夫恢复为原生外观 */
+  enabled: z.boolean().default(true),
   characterId: z.string().min(1).max(80),
   displayName: z.string().min(1).max(40),
   preset: StardewAvatarPresetSchema,
