@@ -29,6 +29,7 @@ import {
   type SmartBubbleLayout,
   type StageBox,
 } from './bubble-layout';
+import { bubblePageReadingMs, paginateBubbleText } from './bubble-pages';
 import { cleanBubbleText } from './bubble-text';
 import {
   ALL_BUBBLE_FONT_IDS,
@@ -102,6 +103,30 @@ export interface ShowBubbleOptions {
   /** true 时交由语音租约托管，不启普通自动隐藏定时器 */
   voiceManaged?: boolean;
   mood?: BubbleMood;
+  /** true 时跳过打字机逐字揭示，立即显示完整文本 */
+  instant?: boolean;
+}
+
+export interface TypewriterPlan {
+  enabled: boolean;
+  glyphs: string[];
+  stepChars: number;
+  intervalMs: number;
+  estimatedMs: number;
+}
+
+/** 计算气泡打字机逐字揭示节奏（status 状态条即时渲染；长文本自适应每帧字数控制在 ~2s 内完成）。 */
+export function computeTypewriterPlan(
+  kind: BubbleKind,
+  text: string,
+  opts?: { instant?: boolean; reducedMotion?: boolean },
+): TypewriterPlan {
+  const glyphs = Array.from(text);
+  const enabled = kind !== 'status' && opts?.instant !== true && opts?.reducedMotion !== true && glyphs.length > 1;
+  const stepChars = glyphs.length <= 45 ? 1 : glyphs.length <= 90 ? 2 : 3;
+  const intervalMs = 32;
+  const estimatedMs = enabled ? Math.ceil(glyphs.length / stepChars) * intervalMs : 0;
+  return { enabled, glyphs, stepChars, intervalMs, estimatedMs };
 }
 
 export interface BubbleWidgets {
@@ -117,6 +142,7 @@ export interface BubbleWidgets {
   hideThought(): void;
   hideDialog(): void;
   setDialogMuted(muted: boolean): void;
+  setDialogSpeaking(speaking: boolean): void;
   rects(): { thought: BubbleRect; dialog: BubbleRect };
   activeRects(): Partial<Record<BubbleKind, BubbleRect>>;
   activeKinds(): BubbleKind[];
@@ -147,11 +173,16 @@ function ensureBubbleStyles(): void {
     '.pet-bubble__shell{position:absolute;pointer-events:none;z-index:1;overflow:visible;}',
     '.pet-bubble__body{position:relative;z-index:2;display:flex;align-items:flex-start;gap:6px;width:100%;overflow:hidden;}',
     '.pet-bubble__icon{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;margin-top:2px;}',
-    '.pet-bubble__text{flex:1 1 auto;min-width:0;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word;overflow-wrap:anywhere;}',
+    '.pet-bubble__text{flex:1 1 auto;min-width:0;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word;word-break:normal;}',
     '.pet-bubble--status .pet-bubble__body{align-items:center;}',
     '.pet-bubble--status .pet-bubble__icon{margin-top:0;animation:whaleStatusPulse 2.2s ease-in-out infinite;}',
     '.pet-bubble-muted{flex:0 0 auto;display:none;align-items:center;gap:2px;padding:1px 5px;border-radius:999px;background:rgba(255,216,154,0.88);border:1px solid rgba(176,104,16,0.45);color:#7a3e00;font:600 9px/1.2 ui-monospace,monospace;align-self:flex-end;margin-left:2px;}',
-    'html[data-power-saver="true"] .pet-bubble,html[data-power-saver="true"] .pet-bubble *{backdrop-filter:none !important;filter:none !important;box-shadow:none !important;animation:none !important;}',
+    '.pet-bubble-voice{flex:0 0 auto;display:none;align-items:flex-end;gap:2px;height:11px;align-self:flex-end;margin-left:3px;padding:0 2px;}',
+    '.pet-bubble-voice i{display:block;width:2px;border-radius:2px;background:currentColor;opacity:.75;transition:height 70ms linear;}',
+    '.pet-bubble-voice i:nth-child(1){height:calc(3px + var(--pet-lip-amplitude, 0) * 6px);}',
+    '.pet-bubble-voice i:nth-child(2){height:calc(4px + var(--pet-lip-amplitude, 0) * 8px);}',
+    '.pet-bubble-voice i:nth-child(3){height:calc(3px + var(--pet-lip-amplitude, 0) * 5px);}',
+    'html[data-power-saver="true"] .pet-bubble,html[data-power-saver="true"] .pet-bubble *{backdrop-filter:none !important;filter:none !important;box-shadow:none !important;animation:none !important;transition:none !important;}',
     '@media (prefers-reduced-motion: reduce){.pet-bubble,.pet-bubble *{animation:none !important;}}',
   ].join('');
   document.head.appendChild(style);
@@ -289,8 +320,23 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
   let box: StageBox = { ...stageBox };
   let context: BubbleStageContext = {};
   let activeFontId: BubbleFontId = 'shangshou-gummy';
-  let currentItems = new Map<BubbleKind, { text: string; mood?: BubbleMood }>();
+  let currentItems = new Map<BubbleKind, { text: string; mood?: BubbleMood; instant?: boolean }>();
   const hideTimers = new Map<BubbleKind, ReturnType<typeof setTimeout>>();
+  const typingTimers = new Map<BubbleKind, ReturnType<typeof setInterval>>();
+  const pageTimers = new Map<BubbleKind, ReturnType<typeof setTimeout>>();
+  interface Presentation {
+    fullText: string;
+    layoutKey: string;
+    pages: string[];
+    page: number;
+    revealed: number;
+    done: boolean;
+    readDone: boolean;
+    hideRequested: boolean;
+    blocked: boolean;
+  }
+  const typingStates = new Map<BubbleKind, Presentation>();
+  let fontRevision = 0;
   let latestLayout: SmartBubbleLayout = computeSmartBubbleLayout(box, [], context);
 
   stage.style.setProperty('--pet-bubble-font-family', bubbleFontStack(activeFontId));
@@ -299,6 +345,12 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
   mutedBadge.className = 'pet-bubble-muted';
   mutedBadge.textContent = '静音';
   let mutedState = false;
+
+  const voiceWave = document.createElement('span');
+  voiceWave.className = 'pet-bubble-voice';
+  voiceWave.setAttribute('aria-hidden', 'true');
+  voiceWave.innerHTML = '<i></i><i></i><i></i>';
+  let speakingState = false;
 
   const nodes = new Map<BubbleKind, BubbleNodeRefs>();
 
@@ -354,15 +406,34 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     }
   };
 
+  const clearTypewriter = (kind: BubbleKind): void => {
+    const timer = typingTimers.get(kind);
+    if (timer !== undefined) {
+      clearInterval(timer);
+      typingTimers.delete(kind);
+    }
+    const pageTimer = pageTimers.get(kind);
+    if (pageTimer !== undefined) clearTimeout(pageTimer);
+    pageTimers.delete(kind);
+  };
+
+  const shouldUseTypewriter = (kind: BubbleKind, entry?: { instant?: boolean }): boolean => {
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+    return computeTypewriterPlan(kind, 'ab', { instant: entry?.instant === true, reducedMotion: reduced }).enabled;
+  };
+
   const syncMutedAttachment = (): void => {
     const dialogVisible = latestLayout.items.dialog !== undefined;
-    const targetKind: BubbleKind = dialogVisible ? 'dialog' : 'legacy';
+    const reactionVisible = latestLayout.items.reaction !== undefined;
+    const targetKind: BubbleKind = dialogVisible ? 'dialog' : reactionVisible ? 'reaction' : 'legacy';
     const targetNode = nodes.get(targetKind);
-    if (targetNode !== undefined && mutedBadge.parentElement !== targetNode.body) {
-      targetNode.body.appendChild(mutedBadge);
+    if (targetNode !== undefined) {
+      if (mutedBadge.parentElement !== targetNode.body) targetNode.body.appendChild(mutedBadge);
+      if (voiceWave.parentElement !== targetNode.body) targetNode.body.appendChild(voiceWave);
     }
-    const visible = mutedState && (latestLayout.items.dialog !== undefined || latestLayout.items.legacy !== undefined);
-    mutedBadge.style.display = visible ? 'inline-flex' : 'none';
+    const hasSpeechBubble = dialogVisible || reactionVisible || latestLayout.items.legacy !== undefined;
+    mutedBadge.style.display = mutedState && hasSpeechBubble ? 'inline-flex' : 'none';
+    voiceWave.style.display = speakingState && !mutedState && hasSpeechBubble ? 'inline-flex' : 'none';
   };
 
   const renderLayout = (freshKind?: BubbleKind): void => {
@@ -379,6 +450,13 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
         node.root.style.display = 'none';
         node.root.dataset.tail = 'none';
         node.root.dataset.bubbleMood = '';
+        delete node.root.dataset.fullText;
+        delete node.root.dataset.pageText;
+        delete node.root.dataset.page;
+        delete node.root.dataset.pageCount;
+        delete node.root.dataset.readingBlocked;
+        clearTypewriter(kind);
+        typingStates.delete(kind);
         if (currentItems.has(kind)) {
           currentItems.delete(kind);
           clearTimer(kind);
@@ -408,23 +486,26 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
         node.icon.style.display = 'none';
       }
 
-      node.text.textContent = textValue;
-      node.text.style.setProperty('-webkit-line-clamp', String(placed.maxLines));
-
       const bodyMaxHeight = Math.max(12, placed.rect.height - style.paddingY * 2);
+      const scaleNum = context.fontScale ?? 1;
+      const linePx = style.fontSizePx * scaleNum * style.lineHeight;
+      const fittingLines = linePx > 0 ? Math.max(1, Math.min(placed.maxLines, Math.floor(bodyMaxHeight / linePx))) : placed.maxLines;
+      node.text.style.height = '';
+      node.text.style.display = '-webkit-box';
+      node.text.textContent = textValue;
+      node.root.dataset.fullText = textValue;
+      node.text.style.setProperty('-webkit-line-clamp', String(fittingLines));
       node.body.style.maxHeight = `${bodyMaxHeight}px`;
 
       node.root.style.left = `${placed.rect.x}px`;
       node.root.style.top = `${placed.rect.y}px`;
       node.root.style.width = `${placed.rect.width}px`;
+      node.root.style.height = '';
       node.root.style.maxHeight = `${placed.rect.height}px`;
+      node.body.style.minHeight = '';
 
       const wasHidden = node.root.style.display === 'none';
       node.root.style.display = 'block';
-
-      const actualW = Math.max(28, Math.round(node.root.offsetWidth || placed.rect.width));
-      const actualH = Math.max(20, Math.round(node.root.offsetHeight || placed.rect.height));
-      renderShellSvg(node.shell, node.glass, kind, style, actualW, actualH, placed.tail);
 
       if (wasHidden || freshKind === kind) {
         node.root.style.animation = 'none';
@@ -434,10 +515,152 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     }
 
     syncMutedAttachment();
+
+    for (const kind of ALL_BUBBLE_KINDS) {
+      const node = nodes.get(kind)!;
+      const placed = latestLayout.items[kind];
+      if (placed === undefined || node.root.style.display === 'none') continue;
+      const style = resolveBubbleStyle(kind, currentItems.get(kind)?.mood);
+      const scaleNum = context.fontScale ?? 1;
+      const linePx = style.fontSizePx * scaleNum * style.lineHeight;
+      if (node.text.scrollHeight > node.text.clientHeight + 2 && linePx > 0) {
+        // Real DOM font wrapping exceeded estimated lines cleanly within maxLines: grow downward, or lift upward within stage wing without overlapping other bubbles or pet face
+        const bottomLimit = box.height > 150 ? box.height - 28 : box.height - 6;
+        const petGw = Math.round(box.width * 0.28);
+        const petGy = Math.round(box.height * 0.28);
+        const petZone = { x: Math.round(box.width * 0.5 - petGw / 2), y: petGy, width: petGw, height: Math.max(20, bottomLimit - petGy) };
+        const others = [...latestLayout.ordered.filter((o) => o.kind !== kind).map((o) => o.rect), petZone];
+        const xOverlaps = others.filter((r) => !(r.x + r.width <= placed.rect.x || r.x >= placed.rect.x + placed.rect.width));
+        const blockerY = xOverlaps
+          .filter((r) => r.y >= placed.rect.y + placed.rect.height - 2)
+          .reduce((best, r) => Math.min(best, r.y - 6), bottomLimit);
+        const aboveBlockerY = xOverlaps
+          .filter((r) => r.y + r.height <= placed.rect.y + 2)
+          .reduce((best, r) => Math.max(best, r.y + r.height + 6), 6);
+        const maxDownH = Math.max(placed.rect.height, blockerY - placed.rect.y);
+        const neededH = Math.ceil(node.text.scrollHeight + style.paddingY * 2 + 2);
+        const extraNeed = Math.max(0, neededH - maxDownH);
+        const liftPx = Math.min(extraNeed, Math.max(0, placed.rect.y - aboveBlockerY));
+        const nextY = placed.rect.y - liftPx;
+        const maxRoomH = Math.max(placed.rect.height, Math.min(bottomLimit - nextY, blockerY - nextY));
+        const grownH = Math.min(maxRoomH, Math.max(placed.rect.height, neededH));
+        if (liftPx > 0) {
+          node.root.style.top = `${nextY}px`;
+        }
+        if (grownH > placed.rect.height) {
+          const nextBodyMax = Math.max(12, grownH - style.paddingY * 2);
+          const nextClamp = Math.max(1, Math.floor((nextBodyMax + 2) / linePx));
+          node.root.style.maxHeight = `${grownH}px`;
+          node.body.style.maxHeight = `${nextBodyMax}px`;
+          node.text.style.setProperty('-webkit-line-clamp', String(nextClamp));
+        }
+        // If even at maxRoomH Chromium's line-clamp cuts overflow (causing scrollHeight > clientHeight), snap line-clamp to fit clientHeight lines cleanly so nothing clips half-line
+        const finalBodyH = parseFloat(node.body.style.maxHeight) || placed.rect.height;
+        const maxFitLines = Math.max(1, Math.floor((finalBodyH + 1) / linePx));
+        if (node.text.scrollHeight > node.text.clientHeight + 2) {
+          node.text.style.setProperty('-webkit-line-clamp', String(maxFitLines));
+        }
+      }
+      const actualW = Math.max(28, Math.round(node.root.offsetWidth || placed.rect.width));
+      const actualH = Math.max(20, Math.round(node.root.offsetHeight || placed.rect.height));
+      renderShellSvg(node.shell, node.glass, kind, style, actualW, actualH, placed.tail);
+
+      // 锁定最终测算好的外框宽高后，再启动打字机逐字揭示，防止文字逐字增加时气泡外框反复跳变
+      const entry = currentItems.get(kind);
+      const fullText = entry?.text ?? '';
+      node.root.style.height = `${actualH}px`;
+      node.body.style.minHeight = `${Math.max(12, actualH - style.paddingY * 2)}px`;
+      const existingTyping = typingStates.get(kind);
+      // 固定整行文本区域，移除省略号；分页判据读取真实 DOM 的溢出情况。
+      const visibleBodyH = Math.max(0, Math.min(
+        actualH - style.paddingY * 2,
+        node.body.clientHeight,
+        Number.parseFloat(node.body.style.maxHeight),
+      ));
+      const availableH = linePx > 0 ? Math.floor((visibleBodyH + 0.01) / linePx) * linePx : 0;
+      node.text.style.display = 'block';
+      node.text.style.setProperty('-webkit-line-clamp', 'unset');
+      node.text.style.overflowWrap = 'anywhere';
+      node.text.style.height = `${availableH}px`;
+      const layoutKey = `${node.text.clientWidth}/${node.text.clientHeight}/${activeFontId}/${fontRevision}/${scaleNum}/${style.fontSizePx}`;
+      if (existingTyping !== undefined && !existingTyping.blocked && existingTyping.fullText === fullText && existingTyping.layoutKey === layoutKey) {
+        node.text.textContent = Array.from(existingTyping.pages[existingTyping.page] ?? '').slice(0, existingTyping.revealed).join('');
+        continue;
+      }
+      clearTypewriter(kind);
+      const readPrefix = existingTyping?.fullText === fullText
+        ? existingTyping.pages.slice(0, existingTyping.page).join('') : '';
+      const remaining = fullText.slice(readPrefix.length);
+      let pages: string[];
+      let blocked = availableH < linePx || node.text.clientWidth <= 0;
+      try {
+        pages = blocked ? [remaining] : kind === 'status' ? [fullText] : paginateBubbleText(remaining, (candidate) => {
+          node.text.textContent = candidate;
+          return node.text.scrollHeight <= node.text.clientHeight + 1 && node.text.scrollWidth <= node.text.clientWidth + 1;
+        });
+      } catch (error) {
+        if (!(error instanceof RangeError)) throw error;
+        // 极小舞台或临时徽标挤占导致连一个完整字也无法显示：保留未读原文等待空间恢复。
+        blocked = true;
+        pages = [remaining];
+      }
+      const presentation: Presentation = {
+        fullText, layoutKey, pages: readPrefix === '' ? pages : [readPrefix, ...pages],
+        page: readPrefix === '' ? 0 : 1, revealed: 0, done: false, readDone: false,
+        hideRequested: existingTyping?.hideRequested ?? false, blocked,
+      };
+      typingStates.set(kind, presentation);
+      node.root.dataset.readingBlocked = String(blocked);
+      if (blocked) {
+        node.text.textContent = '';
+        node.root.dataset.pageText = remaining;
+        node.root.dataset.page = String(presentation.page + 1);
+        node.root.dataset.pageCount = String(presentation.pages.length);
+        continue;
+      }
+      const revealPage = (): void => {
+        if (typingStates.get(kind) !== presentation || !currentItems.has(kind)) return;
+        const pageText = presentation.pages[presentation.page] ?? '';
+        const plan = computeTypewriterPlan(kind, pageText, { instant: !shouldUseTypewriter(kind, entry) });
+        node.root.dataset.pageText = pageText;
+        node.root.dataset.page = String(presentation.page + 1);
+        node.root.dataset.pageCount = String(presentation.pages.length);
+        presentation.revealed = plan.enabled ? 1 : plan.glyphs.length;
+        presentation.done = !plan.enabled;
+        const finishPage = (): void => {
+          const timer = typingTimers.get(kind);
+          if (timer !== undefined) clearInterval(timer);
+          typingTimers.delete(kind);
+          presentation.done = true;
+          pageTimers.set(kind, setTimeout(() => {
+            if (typingStates.get(kind) !== presentation) return;
+            pageTimers.delete(kind);
+            if (presentation.page + 1 < presentation.pages.length) {
+              presentation.page += 1;
+              revealPage();
+            } else {
+              presentation.readDone = true;
+              if (presentation.hideRequested) hideKind(kind);
+            }
+          }, bubblePageReadingMs(pageText)));
+        };
+        node.text.textContent = plan.glyphs.slice(0, presentation.revealed).join('');
+        if (!plan.enabled) { finishPage(); return; }
+        typingTimers.set(kind, setInterval(() => {
+          if (typingStates.get(kind) !== presentation) return;
+          presentation.revealed = Math.min(plan.glyphs.length, presentation.revealed + plan.stepChars);
+          node.text.textContent = plan.glyphs.slice(0, presentation.revealed).join('');
+          if (presentation.revealed >= plan.glyphs.length) finishPage();
+        }, plan.intervalMs));
+      };
+      revealPage();
+    }
   };
 
   const hideKind = (kind: BubbleKind): void => {
     clearTimer(kind);
+    clearTypewriter(kind);
+    typingStates.delete(kind);
     if (!currentItems.has(kind)) {
       const node = nodes.get(kind);
       if (node !== undefined) node.root.style.display = 'none';
@@ -448,19 +671,41 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
     renderLayout();
   };
 
+  const requestHide = (kind: BubbleKind): void => {
+    const presentation = typingStates.get(kind);
+    if (presentation !== undefined && (presentation.blocked || presentation.pages.length > 1) && !presentation.readDone) {
+      presentation.hideRequested = true;
+      clearTimer(kind);
+      return;
+    }
+    hideKind(kind);
+  };
+
   const showKind = (kind: BubbleKind, text: string, opts?: ShowBubbleOptions): boolean => {
     const cleaned = cleanBubbleText(text, kind);
     if (cleaned === '') return false;
     clearTimer(kind);
-    currentItems.set(kind, { text: cleaned, ...(opts?.mood !== undefined ? { mood: opts.mood } : {}) });
+    clearTypewriter(kind);
+    typingStates.delete(kind);
+    currentItems.set(kind, {
+      text: cleaned,
+      ...(opts?.mood !== undefined ? { mood: opts.mood } : {}),
+      ...(opts?.instant !== undefined ? { instant: opts.instant } : {}),
+    });
     renderLayout(kind);
     if (latestLayout.items[kind] === undefined) return false;
     if (opts?.voiceManaged !== true) {
-      const ttl = ttlForBubbleKind(kind, opts?.ttlMs);
-      hideTimers.set(kind, setTimeout(() => hideKind(kind), ttl));
+      const estTypingMs = computeTypewriterPlan(kind, cleaned, { instant: !shouldUseTypewriter(kind, opts) }).estimatedMs;
+      const ttl = Math.min(60_000, Math.max(ttlForBubbleKind(kind, opts?.ttlMs), estTypingMs + 4_500));
+      hideTimers.set(kind, setTimeout(() => requestHide(kind), ttl));
     }
     return true;
   };
+
+  // 随包字体完成加载后按未读页起点重测，避免 fallback 字体的分页容量遗留。
+  const refreshFonts = (): void => { fontRevision += 1; renderLayout(); };
+  void document.fonts?.ready.then(refreshFonts);
+  document.fonts?.addEventListener('loadingdone', refreshFonts);
 
   return {
     setStageBox(next: StageBox) {
@@ -490,10 +735,16 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       hideKind(kind);
     },
     hideAll() {
-      for (const kind of ALL_BUBBLE_KINDS) clearTimer(kind);
+      for (const kind of ALL_BUBBLE_KINDS) {
+        clearTimer(kind);
+        clearTypewriter(kind);
+      }
+      typingStates.clear();
       currentItems = new Map();
       mutedState = false;
+      speakingState = false;
       mutedBadge.style.display = 'none';
+      voiceWave.style.display = 'none';
       renderLayout();
     },
     showThought(text: string, opts?: ShowBubbleOptions) {
@@ -506,11 +757,17 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       hideKind('thought');
     },
     hideDialog() {
-      hideKind('dialog');
+      requestHide('dialog');
     },
     setDialogMuted(muted: boolean) {
+      if (mutedState === muted) return;
       mutedState = muted;
-      syncMutedAttachment();
+      renderLayout();
+    },
+    setDialogSpeaking(speaking: boolean) {
+      if (speakingState === speaking) return;
+      speakingState = speaking;
+      renderLayout();
     },
     rects() {
       const fallback = computeBubbleLayout(box, context);

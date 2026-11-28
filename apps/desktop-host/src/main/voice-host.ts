@@ -418,6 +418,8 @@ export interface VoiceHostSpeechResult {
   agentId: string;
   speakerName: string;
   status: 'completed' | 'failed' | 'timeout' | 'interrupted' | 'cancelled';
+  /** 对应此次发声的台词原文，供渲染层忽略过期气泡回执 */
+  text?: string;
 }
 
 export interface VoiceHostPlaybackInput {
@@ -470,11 +472,14 @@ export interface CreateVoiceHostOptions {
 export function createVoiceHost(platform = process.platform, options: CreateVoiceHostOptions = {}): VoiceHost {
   let config: VoiceConfig = { ...DEFAULT_CONFIG };
   const lastTextAt = new Map<string, number>();
+  const leaseTexts = new Map<string, string>();
   let speechEpoch = 0;
   const inflightControllers = new Set<AbortController>();
 
   const leases = new GlobalAudioLeaseManager({
     onReceipt: (receipt) => {
+      const spokenText = leaseTexts.get(receipt.leaseId);
+      leaseTexts.delete(receipt.leaseId);
       // 试听租约不发正式气泡回执
       if (receipt.purpose === 'preview') return;
       const status = receipt.status === 'COMPLETED'
@@ -482,7 +487,12 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
         : receipt.status === 'TTL_EXPIRED' ? 'timeout'
           : receipt.status === 'INTERRUPTED_BY_P0' ? 'interrupted'
             : receipt.status === 'CANCELLED' ? 'cancelled' : 'failed';
-      options.onSpeechResult?.({ agentId: receipt.agentId, speakerName: receipt.speakerName, status });
+      options.onSpeechResult?.({
+        agentId: receipt.agentId,
+        speakerName: receipt.speakerName,
+        status,
+        ...(spokenText === undefined ? {} : { text: spokenText }),
+      });
     },
     onActiveChange: (event) => {
       // 试听不触发 coop:speaker 角色正式发言态与气泡
@@ -509,7 +519,7 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
   const speak = (voice: VoiceScene): { ok: boolean; error?: string; queued?: boolean; leaseId?: string } => {
     const scene = voice.scene ?? 'normal';
     if (!config.enabled) {
-      options.onSpeechResult?.({ agentId: voice.agentId ?? 'default', speakerName: voice.speakerName ?? '小鲸', status: 'failed' });
+      options.onSpeechResult?.({ agentId: voice.agentId ?? 'default', speakerName: voice.speakerName ?? '小鲸', status: 'failed', text: voice.text.trim() });
       return { ok: false, error: '语音总开关关闭' };
     }
     if (scene === 'inner' && !config.innerVoice) return { ok: false, error: '内心戏发声关闭' };
@@ -529,7 +539,7 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       // T-A 语音终态闭合：节流吞掉的台词不会建立租约，租约回执永不到来，
       // 渲染层气泡会停在 waiting 挂满 60s TTL。这句台词刚刚说过（已交付语义），
       // 按 completed 收泡而不是 failed/muted 挂字。
-      options.onSpeechResult?.({ agentId, speakerName, status: 'completed' });
+      options.onSpeechResult?.({ agentId, speakerName, status: 'completed', text });
       return { ok: true };
     }
     lastTextAt.set(key, now);
@@ -560,6 +570,11 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       const controller = new AbortController();
       inflightControllers.add(controller);
       const leaseId = randomUUID();
+      leaseTexts.set(leaseId, text);
+      if (leaseTexts.size > 100) {
+        const firstKey = leaseTexts.keys().next().value;
+        if (firstKey !== undefined) leaseTexts.delete(firstKey);
+      }
       const volume = scene === 'inner' ? Math.min(effectiveConfig.volume, 0.45) : effectiveConfig.volume;
 
       void options.synthesize({
@@ -571,7 +586,8 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
       }).then((outcome) => {
         inflightControllers.delete(controller);
         if (controller.signal.aborted || myEpoch !== speechEpoch) {
-          options.onSpeechResult?.({ agentId, speakerName, status: 'interrupted' });
+          leaseTexts.delete(leaseId);
+          options.onSpeechResult?.({ agentId, speakerName, status: 'interrupted', text });
           return;
         }
         if (outcome.ok) {
@@ -597,7 +613,8 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
           return;
         }
         if (!outcome.allowLegacyFallback) {
-          options.onSpeechResult?.({ agentId, speakerName, status: 'failed' });
+          leaseTexts.delete(leaseId);
+          options.onSpeechResult?.({ agentId, speakerName, status: 'failed', text });
           return;
         }
         let playback: PlaybackControl | null = null;
@@ -618,7 +635,8 @@ export function createVoiceHost(platform = process.platform, options: CreateVoic
         });
       }).catch(() => {
         inflightControllers.delete(controller);
-        options.onSpeechResult?.({ agentId, speakerName, status: 'failed' });
+        leaseTexts.delete(leaseId);
+        options.onSpeechResult?.({ agentId, speakerName, status: 'failed', text });
       });
 
       return { ok: true, leaseId };

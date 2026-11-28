@@ -107,7 +107,7 @@ const THEMES: Record<BubbleKind, BubbleVisualTheme> = {
     lineHeight: 1.42,
     paddingX: 11,
     paddingY: 7,
-    maxLines: 3,
+    maxLines: 4,
     radiusPx: 14,
     fillStart: 'rgba(255,248,244,0.97)',
     fillEnd: 'rgba(255,234,224,0.96)',
@@ -129,7 +129,7 @@ const THEMES: Record<BubbleKind, BubbleVisualTheme> = {
     lineHeight: 1.48,
     paddingX: 13,
     paddingY: 9,
-    maxLines: 5,
+    maxLines: 6,
     radiusPx: 16,
     fillStart: 'rgba(248,252,255,0.96)',
     fillEnd: 'rgba(232,244,255,0.94)',
@@ -173,7 +173,7 @@ const THEMES: Record<BubbleKind, BubbleVisualTheme> = {
     lineHeight: 1.45,
     paddingX: 12,
     paddingY: 7,
-    maxLines: 3,
+    maxLines: 4,
     radiusPx: 12,
     fillStart: 'rgba(24,34,54,0.93)',
     fillEnd: 'rgba(18,26,42,0.91)',
@@ -196,7 +196,7 @@ const THEMES: Record<BubbleKind, BubbleVisualTheme> = {
     lineHeight: 1.48,
     paddingX: 11,
     paddingY: 8,
-    maxLines: 4,
+    maxLines: 5,
     radiusPx: 19,
     fillStart: 'rgba(66,44,112,0.88)',
     fillEnd: 'rgba(46,29,84,0.85)',
@@ -484,18 +484,22 @@ export function bubbleWidthBudget(
       : Math.min(Math.floor(safeWidth * 0.45), 192);
   } else if (activeCount <= 1) {
     rawMax = kind === 'reaction'
-      ? Math.min(Math.floor(safeWidth * 0.62), 260)
+      ? Math.min(Math.floor(safeWidth * 0.68), 288)
       : kind === 'thought' || kind === 'status'
-        ? Math.min(Math.floor(safeWidth * 0.70), 296)
-        : Math.min(Math.floor(safeWidth * 0.76), 320);
+        ? Math.min(Math.floor(safeWidth * 0.80), 336)
+        : Math.min(Math.floor(safeWidth * 0.90), 376);
   } else if (activeCount === 2) {
     rawMax = kind === 'reaction'
-      ? Math.min(Math.floor(safeWidth * 0.50), 212)
-      : kind === 'dialog' || kind === 'notice'
-        ? Math.min(Math.floor(safeWidth * 0.60), 252)
-        : Math.min(Math.floor(safeWidth * 0.46), 196);
+      ? Math.min(Math.floor(safeWidth * 0.52), 212)
+      : kind === 'dialog' || kind === 'notice' || kind === 'thought'
+        ? Math.min(Math.floor(safeWidth * 0.82), 344)
+        : Math.min(Math.floor(safeWidth * 0.56), 240);
   } else {
-    rawMax = Math.min(Math.floor(safeWidth * 0.52), 220);
+    rawMax = kind === 'dialog' || kind === 'notice'
+      ? Math.min(Math.floor(safeWidth * 0.94), 380)
+      : kind === 'thought' || kind === 'hint'
+        ? Math.min(Math.floor(safeWidth * 0.72), 300)
+        : Math.min(Math.floor(safeWidth * 0.54), 228);
   }
   const maxWidth = Math.max(48, Math.min(rawMax, safeWidth - 8));
   const rawMin = kind === 'status' ? 88 : kind === 'reaction' ? 76 : 104;
@@ -532,7 +536,11 @@ export function estimateBubbleSize(input: {
   const contentWidth = Math.max(fontSize, width - extraWidth);
   const unitsPerLine = Math.max(1, contentWidth / fontSize);
   const lines = Math.min(theme.maxLines, Math.max(1, Math.ceil(textUnits / unitsPerLine)));
-  const heightRatio = input.activeCount <= 1 ? 0.42 : input.activeCount === 2 ? 0.28 : 0.26;
+  const heightRatio = input.activeCount <= 1
+    ? 0.54
+    : input.activeCount === 2
+      ? 0.42
+      : (input.kind === 'dialog' || input.kind === 'reaction' ? 0.44 : 0.36);
   const maxHeight = Math.max(24, Math.floor(Math.max(40, input.stage.height) * heightRatio));
   const computedHeight = Math.ceil(lines * fontSize * theme.lineHeight + theme.paddingY * 2 + 6);
   const height = input.overrideWidth !== undefined

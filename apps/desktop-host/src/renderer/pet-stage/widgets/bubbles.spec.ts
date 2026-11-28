@@ -14,6 +14,7 @@ import {
   buildThoughtCloudDots,
   computeBubbleLayout,
   computeSmartBubbleLayout,
+  computeTypewriterPlan,
   estimateBubbleSize,
   MAX_VISIBLE_BUBBLES,
   moodForTrigger,
@@ -110,7 +111,7 @@ describe('bubble-types（7 种语义 × 7 种情绪 × 4 套随包字体）', ()
     expect(css).not.toContain('上首软糖体.ttf');
   });
 
-  it('单气泡突破旧 220px 上限；legacy 保持紧凑上限；窄舞台自动安全夹紧', () => {
+  it('单气泡突破旧 304px 上限适度加宽；legacy 保持紧凑上限；窄舞台自动安全夹紧', () => {
     const single = estimateBubbleSize({
       kind: 'dialog',
       text: '今天星露谷春天收获了满满一筐防风草和草莓，鱼片晚上想不想一起吃海鲜饭呀！',
@@ -119,7 +120,7 @@ describe('bubble-types（7 种语义 × 7 种情绪 × 4 套随包字体）', ()
       mood: 'happy',
     });
     expect(single.width).toBeGreaterThan(240);
-    expect(single.width).toBeLessThanOrEqual(304);
+    expect(single.width).toBeLessThanOrEqual(376);
 
     const legacySingle = estimateBubbleSize({
       kind: 'legacy',
@@ -140,11 +141,12 @@ describe('bubble-types（7 种语义 × 7 种情绪 × 4 套随包字体）', ()
     expect(tinyBudget.maxWidth).toBeGreaterThanOrEqual(48);
 
     const twoDialog = bubbleWidthBudget('dialog', 400, 2);
-    expect(twoDialog.maxWidth).toBeLessThanOrEqual(252);
+    expect(twoDialog.maxWidth).toBeGreaterThanOrEqual(280);
+    expect(twoDialog.maxWidth).toBeLessThanOrEqual(344);
     const twoReaction = bubbleWidthBudget('reaction', 400, 2);
     expect(twoReaction.maxWidth).toBeLessThanOrEqual(212);
     const twoThought = bubbleWidthBudget('thought', 400, 2);
-    expect(twoThought.maxWidth).toBeLessThanOrEqual(196);
+    expect(twoThought.maxWidth).toBeLessThanOrEqual(344);
     const threeBudget = bubbleWidthBudget('status', 400, 3);
     expect(threeBudget.maxWidth).toBeLessThanOrEqual(220);
   });
@@ -323,6 +325,7 @@ describe('computeSmartBubbleLayout（智能定位 + legacy 右下 + 不重叠）
   });
 
   it('多气泡并发（3 轨 & 7 轨裁剪）保持优先级裁剪且 0 重叠', () => {
+    const avatarGuard: BubbleRect = { x: 144, y: 73, width: 112, height: 159 };
     const threeA = computeSmartBubbleLayout(STAGE, [
       { kind: 'status', text: '星露谷 第1年夏17日 09:20' },
       { kind: 'thought', text: '今天天气真不错呀' },
@@ -330,6 +333,19 @@ describe('computeSmartBubbleLayout（智能定位 + legacy 右下 + 不重叠）
     ]);
     expect(threeA.ordered).toHaveLength(3);
     assertNoOverlapAndInside(threeA.ordered.map((i) => i.rect), STAGE);
+    expect(rectsOverlap(threeA.items.status!.rect, avatarGuard)).toBe(false);
+
+    // 真机第 1 天晨间回归：长对话 + status（第1年春1日 06:00）+ thought 时，status 自动折行贴到左下翼，零遮挡脸部
+    const tick3 = computeSmartBubbleLayout(STAGE, [
+      { kind: 'status', text: '星露谷 第1年春1日 06:00' },
+      { kind: 'thought', text: '出门看看农舍外面的地！' },
+      { kind: 'dialog', text: '计划调整：种子已到手，先去农舍门口开荒种地，别耽误春1日宝贵农时！' },
+    ]);
+    expect(tick3.ordered).toHaveLength(3);
+    assertNoOverlapAndInside(tick3.ordered.map((i) => i.rect), STAGE);
+    for (const placed of tick3.ordered) {
+      expect(rectsOverlap(placed.rect, avatarGuard)).toBe(false);
+    }
 
     const threeB = computeSmartBubbleLayout(STAGE, [
       { kind: 'reaction', text: '哇！被吓了一跳！', mood: 'surprised' },
@@ -442,5 +458,62 @@ describe('cleanBubbleText（<think> 标签渲染层防御清洗）', () => {
   it('无标签文本原样返回（默认参数回退 dialog）', () => {
     expect(cleanBubbleText('  星露谷 第1年夏17日 06:10  ', 'status')).toBe('星露谷 第1年夏17日 06:10');
     expect(cleanBubbleText('  普通台词  ')).toBe('普通台词');
+  });
+
+  it('三气泡并存带下方 occupied 时网格兜底优先避开中心脸身保护区', () => {
+    const avatarGuard: BubbleRect = { x: 144, y: 73, width: 112, height: 159 };
+    const occupied: BubbleRect[] = [
+      { x: 136, y: 228, width: 128, height: 30 },
+      { x: 6, y: 6, width: 180, height: 56 },
+    ];
+    const layout = computeSmartBubbleLayout(
+      STAGE,
+      [
+        { kind: 'dialog', text: '夏1日早安！先查信箱看看今天皮埃尔寄来了什么新种子和蓝莓推荐，然后去田里浇水！' },
+        { kind: 'thought', text: '得记着今天夏1日重新买夏季作物种子呢' },
+        { kind: 'status', text: '星露谷 第1年夏1日 06:20' },
+      ],
+      { anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'right' }, occupied },
+    );
+    expect(layout.ordered).toHaveLength(3);
+    assertNoOverlapAndInside(layout.ordered.map((i) => i.rect), STAGE);
+    for (const placed of layout.ordered) {
+      expect(rectsOverlap(placed.rect, avatarGuard)).toBe(false);
+    }
+  });
+
+  it('三气泡并存时主对话气泡宽度可自适应放宽至 >=290px 且不撞脸身区', () => {
+    const avatarGuard: BubbleRect = { x: 144, y: 73, width: 112, height: 159 };
+    const layout = computeSmartBubbleLayout(
+      STAGE,
+      [
+        { kind: 'dialog', text: '下午先下矿到第35层挖点铜矿和煤炭，顺路捡两个晶球回家交给克林特砸开，争取凑够熔炉配方！' },
+        { kind: 'thought', text: '包里还有16个空位呢' },
+        { kind: 'status', text: '星露谷 第1年夏22日 14:20' },
+      ],
+      { anchor: { xRatio: 0.5, headYRatio: 0.34, facing: 'right' } },
+    );
+    expect(layout.items.dialog?.rect.width).toBeGreaterThanOrEqual(280);
+    assertNoOverlapAndInside(layout.ordered.map((i) => i.rect), STAGE);
+    for (const placed of layout.ordered) {
+      expect(rectsOverlap(placed.rect, avatarGuard)).toBe(false);
+    }
+  });
+
+  it('打字机揭示计划：dialog/thought 逐字揭示，status/instant/reducedMotion 立即全显，长文在 ~2s 内收尾', () => {
+    const shortDialog = computeTypewriterPlan('dialog', '哼，米粒我这就去帮忙！');
+    expect(shortDialog.enabled).toBe(true);
+    expect(shortDialog.glyphs).toHaveLength(11);
+    expect(shortDialog.stepChars).toBe(1);
+    expect(shortDialog.estimatedMs).toBeGreaterThan(250);
+
+    const longDialog = computeTypewriterPlan('dialog', 'A'.repeat(70));
+    expect(longDialog.enabled).toBe(true);
+    expect(longDialog.stepChars).toBe(2);
+    expect(longDialog.estimatedMs).toBeLessThanOrEqual(2000);
+
+    expect(computeTypewriterPlan('status', '星露谷 第1年夏22日 09:00').enabled).toBe(false);
+    expect(computeTypewriterPlan('dialog', '立刻全显', { instant: true }).enabled).toBe(false);
+    expect(computeTypewriterPlan('dialog', '无障碍降级', { reducedMotion: true }).enabled).toBe(false);
   });
 });

@@ -412,6 +412,8 @@ function buildCandidates(
         { x: centerX, y: topY, width: w, height: h },
         { x: oppX, y: topY, width: w, height: h },
         { x: mainX, y: topY, width: w, height: h },
+        { x: oppX, y: lowerSideY, width: w, height: h },
+        { x: mainX, y: lowerSideY, width: w, height: h },
         { x: mainX, y: sideUpperY, width: w, height: h },
       ];
       break;
@@ -493,12 +495,25 @@ function buildCandidates(
     } else {
       const isPrimary = kind === 'dialog' || kind === 'reaction' || kind === 'hint';
       const [firstX, secondX] = isPrimary ? [cMainX, cOppX] : [cOppX, cMainX];
-      rawList.push(
-        { x: firstX, y: topY, width: cw, height: ch },
-        { x: firstX, y: cMidY, width: cw, height: ch },
-        { x: secondX, y: topY, width: cw, height: ch },
-        { x: secondX, y: cMidY, width: cw, height: ch },
-      );
+      if (kind === 'status' || kind === 'notice') {
+        rawList.push(
+          { x: firstX, y: cLowerY, width: cw, height: ch },
+          { x: secondX, y: cLowerY, width: cw, height: ch },
+          { x: firstX, y: topY, width: cw, height: ch },
+          { x: firstX, y: cMidY, width: cw, height: ch },
+          { x: secondX, y: topY, width: cw, height: ch },
+          { x: secondX, y: cMidY, width: cw, height: ch },
+        );
+      } else {
+        rawList.push(
+          { x: firstX, y: topY, width: cw, height: ch },
+          { x: firstX, y: cLowerY, width: cw, height: ch },
+          { x: firstX, y: cMidY, width: cw, height: ch },
+          { x: secondX, y: topY, width: cw, height: ch },
+          { x: secondX, y: cLowerY, width: cw, height: ch },
+          { x: secondX, y: cMidY, width: cw, height: ch },
+        );
+      }
     }
   }
 
@@ -632,9 +647,12 @@ export function computeSmartBubbleLayout(
         mood: entry.item.mood,
         overrideWidth: targetSideW,
       });
+      const maxSideH = entry.item.kind === 'dialog'
+        ? Math.floor(safeStage.height * 0.62)
+        : Math.floor(safeStage.height * 0.52);
       sideCompact = {
         width: est.width,
-        height: Math.max(24, Math.min(Math.floor(safeStage.height * 0.44), est.height)),
+        height: Math.max(24, Math.min(maxSideH, est.height)),
       };
     }
 
@@ -653,15 +671,29 @@ export function computeSmartBubbleLayout(
     const matchClear = candidates.find(
       (c) => !overlapsAny(c, placedRects, gap) && !overlapsAny(c, obstaclesWithAvatar, 2),
     );
-    const matchBoth = matchClear ?? candidates.find(
+    const slotClear = matchClear
+      ?? (obstaclesWithAvatar.length > 0
+        ? findGridSlot(entry.size, placedRects, obstaclesWithAvatar, safeStage, preferredSide, margin, gap, bottomLimit)
+        : null)
+      ?? (sideCompact !== null && obstaclesWithAvatar.length > 0
+        ? findGridSlot(sideCompact, placedRects, obstaclesWithAvatar, safeStage, preferredSide, margin, gap, bottomLimit)
+        : null);
+    const matchBoth = slotClear ?? candidates.find(
       (c) => !overlapsAny(c, placedRects, gap) && !overlapsAny(c, occupied, 2),
     );
     const slotWithObstacles = matchBoth
       ?? (occupied.length > 0
         ? findGridSlot(entry.size, placedRects, occupied, safeStage, preferredSide, margin, gap, bottomLimit)
+        : null)
+      ?? (sideCompact !== null && occupied.length > 0
+        ? findGridSlot(sideCompact, placedRects, occupied, safeStage, preferredSide, margin, gap, bottomLimit)
         : null);
     const matchPlaced = slotWithObstacles ?? candidates.find((c) => !overlapsAny(c, placedRects, gap));
-    const slot = matchPlaced ?? findGridSlot(entry.size, placedRects, [], safeStage, preferredSide, margin, gap, bottomLimit);
+    const slot = matchPlaced
+      ?? findGridSlot(entry.size, placedRects, [], safeStage, preferredSide, margin, gap, bottomLimit)
+      ?? (sideCompact !== null
+        ? findGridSlot(sideCompact, placedRects, [], safeStage, preferredSide, margin, gap, bottomLimit)
+        : null);
 
     if (slot === null) {
       needHorizontalFallback = true;
