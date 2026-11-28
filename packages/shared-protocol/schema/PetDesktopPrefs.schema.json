@@ -243,6 +243,10 @@
           "default": true,
           "type": "boolean"
         },
+        "dockToGame": {
+          "default": true,
+          "type": "boolean"
+        },
         "sfxEnabled": {
           "default": true,
           "type": "boolean"

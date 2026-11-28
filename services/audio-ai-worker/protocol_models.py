@@ -3352,6 +3352,7 @@ class PetDesktopPrefs(BaseModel):
     powerSaverEnabled: bool | None = True
     shortcutHideEnabled: bool | None = True
     autoHideFullscreen: bool | None = True
+    dockToGame: bool | None = True
     sfxEnabled: bool | None = True
     sfxVolume: Annotated[float | None, Field(ge=0.0, le=1.0)] = 0.7
     followFrontApp: bool | None = False
@@ -4047,6 +4048,7 @@ class StardewAvatarSync(BaseModel):
         extra='forbid',
     )
     version: Literal[1]
+    enabled: bool | None = True
     characterId: Annotated[str, Field(max_length=80, min_length=1)]
     displayName: Annotated[str, Field(max_length=40, min_length=1)]
     preset: Preset

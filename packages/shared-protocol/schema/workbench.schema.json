@@ -9043,6 +9043,10 @@
           "default": true,
           "type": "boolean"
         },
+        "dockToGame": {
+          "default": true,
+          "type": "boolean"
+        },
         "sfxEnabled": {
           "default": true,
           "type": "boolean"
@@ -10954,6 +10958,10 @@
         "version": {
           "type": "number",
           "const": 1
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
         },
         "characterId": {
           "type": "string",
