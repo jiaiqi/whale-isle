@@ -35,3 +35,4 @@
 | 日期 | 工单 | 结论变化 | 原因 |
 | --- | --- | --- | --- |
 | 2026-11-15 | 预置 | 初版档案建立；许可证确认为代码 MIT / 文档 CC-BY-4.0 | GitHub API + LICENSE 原文核实 |
+| 2026-11-28 | 全仓复核 | 克隆至 `reference-clones/deepseek-superagent-feiyu-os` 逐文件复读：①明确本仓为运维模板与橱窗，**不含桌面窗口/气泡前端代码**（桌面形态在外部私有仓 `feiyuos-pc-body`）；②补记 `health_check.sh` 记忆落盘停滞检测、五大「假活」判别、`sha256 + CRLF + bash -n` 部署三检、`tool-result-pruner`（>8192 字符保留首尾）、以及「严禁可见记忆留存墓碑占位符」原则；③重申严格剔除运行期自改人设、`danger-full-access`、私有 SQLite 直写与 20 分钟常驻心跳 | 只读审计全仓脚本与案例文档 |

@@ -2,11 +2,21 @@
 
 > 任何新 AI 会话接手前只看本文件与 [ROADMAP.md](./ROADMAP.md)，严禁依赖对话历史猜测进度。每次完成或阻塞工单时必须同步更新。
 
+## 2026-11-28 日间续验（进行中，V2-P4-01）
+
+- **owner 提交节奏（12:51明确）**：每个可独立验证的功能切片及时提交，不等整轮真机验收结束再积攒；只暂存明确路径，正常执行提交门禁。当前已落库 `b3fb7fe`（模型请求编码）与 `4063866`（贴边/形象开关契约），其余切片正在按依赖顺序提交。
+
+- `[REAL-DEVICE]` 两季隔离验收已完成春季并推进到夏24；目标仍为秋1，不能记录为两季全部通过。服务重启中断后从隔离存档恢复，未改写用户真实存档。巡检改为每2分钟审阅近期决策、状态与真实回执。
+- `[SIMULATION]` 修复每日 Todo 的模型显示编号与0基引用错位、重排覆盖历史时间、重复新增降级状态与移除末项目失效；新增5项回归加既有32项规划测试均通过。专项命令因全仓覆盖率阈值退出1已留档，随后完整 `pnpm verify:gate` 8通过、0跳过。
+- `[REAL-DEVICE]` 新构建夏24日志已出现目标移除及原因；形象同步关闭的隔离 SMAPI 日志记录恢复原生外观（模组0.4.0-dev.1）。每日任务的完整真实完成流程与时间显示仍继续验证。
+- 长气泡侧翼收窄后仍会省略尾部，正在修复分页阅读；打字机及分页的 Electron DOM 回归尚待执行，不能以全文存在于DOM冒充全文可见。成熟开源参考的六仓克隆与复评见 `docs/REFERENCE-*.md`；参考源码只作审阅数据，遵守各自许可证。
+- 当前工单保持唯一 `NEXT`，未达到“像人类一样完善游玩”验收标准。跟进证据：[P4-01-day-plan-repair.md](./evidence/P4-01-day-plan-repair.md)。
+
 ## 1. 当前进度锚点
 
 - **直播互动第一切片 `V2-P3-02A`（2026-11-27，`IMPLEMENTED_UNVERIFIED`）**：owner 授权支线 `live-engagement` 基于 `feat/whale-isle-v2` `c205410`（已 rebase）；新增确定规则卡、点赞周期目标、按份数/币值的 Top N 投喂榜与合并感谢优先级。配置在 `pet-desktop-prefs.json.liveEngagement`，中控台「生活 → 直播互动编排」编辑并保存，默认 `enabled=false`；真实 `/obs` 只读快照每秒刷新。`FOLLOW` 与 `likeCount/giftCount` 为兼容扩展，进房不触发关注规则、点赞不再冒充关注感谢；只触发气泡/经版权门禁的点歌请求，游戏繁忙/睡眠时不投桌宠气泡，不改 P4 动作或语音链。专项 90/90 + 隔离 Electron 全链路 1/1；门禁首轮 7/8（可选 WebUI 字段兼容断言），修复后 8/8；原始失败留档见 [P3-02A 证据](./evidence/P3-02A-live-engagement-verification.md)。真实直播增量归一/OBS 实播仍待验，SVC 真唱与累计赠礼触发留后续；P4-01 继续唯一 `NEXT`。
 
-- **V2-P4-01 LLM 软件链路（2026-11-27）**：`single-pet-llm-chain.e2e.spec.ts` 已通过 6/6（54.72s），经真实 `brain:apply-config → ModelGateway HTTP → LlmPlanner → 控制租约 → BWF 三态回执 → 记忆检索`；模型服务与游戏服务均为本地仿真，证据等级 `[E2E-HOST]` + `[SIMULATION]`。增加显式 `allowRuleStandin` 与有界 `plannerTimeoutMs` 配置，503/超时/非法工具/缺 Key 分别验证规则代驾，省略开关仍默认安全暂停；未使用真实模型 Key。能力域「复用 / 重写 / 拒绝」与边界见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)，总工单继续 `NEXT`，真实模型与游戏长时验收仍待。
+- **V2-P4-01 LLM 软件链路与桌宠伴随闭环（2026-11-27 ~ 2026-11-28）**：`single-pet-llm-chain.e2e.spec.ts` 已通过 6/6，经真实 `brain:apply-config → ModelGateway HTTP → LlmPlanner → 控制租约 → BWF 三态回执 → 记忆检索`；模型服务与游戏服务均为本地仿真，证据等级 `[E2E-HOST]` + `[SIMULATION]`。增加显式 `allowRuleStandin` 与有界 `plannerTimeoutMs` 配置，503/超时/非法工具/缺 Key 分别验证规则代驾，省略开关仍默认安全暂停。**2026-11-27 晚增补桌宠×星露谷陪伴联动切片（`MemoryGraph` + `KnowledgeHost` 注入、`stardew-companion-reactions.ts`、`.pet-bubble-voice` 口型振幅与开游戏自动贴边右下角 `dockToGame` 默认开 + 三端开关同步）**。**2026-11-28 凌晨完成三轮 `[REAL-DEVICE]` 真机全天沉浸验收与体验收口**：新增 `BwfStateSectionCache`（自动水合 BWF 10 分钟折叠的穿戴/箱子/出口/农田段）、`dayPlan` 去重与中控台动态 `<GameGoalChain>`、BWF 左上角调试 HUD 按配置自动隐藏、低体力/零待浇水/无箱/未读信精确环境提示、`forage`/`use_tool` 等长动作纳入 `isLongAction`、报错伴随气泡人设化短句（`summarizeFailureForBubble`）及气泡 DOM 上下避让防裁切。终改后在真实 Keychain（DeepSeek + MiMo 锁声）+ 隔离中文新档完整跑通 **第1年春1日 06:00 → 农耕采购（500g→170g 买土豆/花椰菜）→ 低体力转镇上 10 村民问候与 `forage` 采集 → `sleep` 夜间复盘 2 条心得 → 结算进账 `406g` 醒于春2日 06:00**（`669s`、`reachedDay2=true`、`TIMEOUT=0`、`watchdogs=[]`、`overlapCount=0`、`clippedCount=0`、`sawMutedVisible=false`、`maxAmplitude=0.5038`、真实个人存档 `mtime` 零写入）。详单见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)，总工单因第 2 天起多日连续浸泡、物理 `F7` 热键、13 项控制语义全量实按与 Windows 端未验保持 `NEXT`。
 
 - **V2-P4-04A–D 外部参考融合第一垂直切片（2026-11-27，`IMPLEMENTED_UNVERIFIED`，支线不夺 `P4-01` 的 `NEXT`）**：外部 Envoy 只读材料 → Evidence Pack（来源/版本/SHA-256/许可/digest）→ `GameKnowledgeItem` 候选知识（四态生命周期）→ 真实 `get_state` 适用性 + 复用 `ActionLock` 的三态实玩回执 → `workbench.db` 持久化。新增契约已登记并重生成 JSON Schema/Pydantic；仓库仍只有一个 SQLite 权威库、没有平行内核。`pnpm verify:gate` 8/8；本单 5 文件 38 用例、Electron E2E 1/1（2968ms）已进 macOS CI；真实环境 probe 如实 `unavailable`（本机无 envoy、无 `~/WhaleIsle` 授权材料），未伪造证据、未发动作。**未验证**：真实 Envoy/owner 材料读取与两次 digest 复现、真实游戏同链路、Windows 子进程回收；参考 Envoy 本地材料不支持 Markdown 的冲突已记录。04A 的 social 观察版本/Outbox 留 04F/G，04E 知识 UI 未做。证据 [EXTERNAL-FUSION-D1-slice-verification.md](./evidence/EXTERNAL-FUSION-D1-slice-verification.md)。
 

@@ -3,7 +3,50 @@
 本项目的所有显著变更将记录在本文件。
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased] — 2026-11-27
+## [Unreleased] — 2026-11-28
+
+### Fixed（V2-P4-01 每日 Todo 记录，持续验收中）
+
+- 模型计划显示显式0基ref，避免完成/推进/移除错项；重排保留旧目标创建时间和完成时间，完成项不被无意重开，移除最后目标后正确发布空计划。
+- 为计划回归新增5例；完整工程门禁8/8通过。真机隔离续验至夏24，秋1与长气泡完整阅读回归仍待完成，不宣称两季验收全部通过。
+- 详细证据见 [每日计划修复记录](docs/v2/evidence/P4-01-day-plan-repair.md)。
+
+### Added / Changed（`V2-P4-01` BWF 省略段水合、全天自主游玩收口、气泡防裁切与真机过夜验收，`[REAL-DEVICE]`）
+
+- **状态感知与规划连贯性（`packages/game-bridge-mcp`）**：
+  - 新增 `packages/game-bridge-mcp/src/state-cache.ts`（`BwfStateSectionCache`，+ `state-cache.spec.ts`）并在 `autodrive.ts` 中接入：自动缓存并回填 BWF 10 分钟折叠的 `## 穿戴` / `## 箱子` / `## 本地出口` / `图例：` / `农田：` / `【花钱建议】`，冷启动遇到省略标记时先补拉一次 `get_state({ full: true })`，保持无状态 `LlmPlanner` 视野完整。
+  - `day-plan.ts`：`DayPlanStore.applyUpdate` 按 `normalizeGoalKey()` 对新增目标去重，消除日内重复项。
+  - `state-hints.ts` / `llm-prompt.ts` / `mcp-client.ts`：对齐 BWF `Observer.cs` 格式在农田「`生长中：...` 且无 `需要浇水`」时显式提示 `0 株待浇水`（消除重复 `water_crops` 与 IslandWest 误导）；明确仅状态明示未读信时调用 `read_mail`；无箱且木材不足 50 阻止 `tidy_backpack`/`craft(Chest)` 并给出低体力食/停建议；归一化 `open_shop` / `fish` / `sleep` 参数；将 `forage` / `use_tool` / `take_items` / `upgrade_tool` / `donate_museum` 纳入 `isLongAction()`（消除全图采集 30s 假超时）。
+- **视觉同步与气泡体验收口（`apps/desktop-host`）**：
+  - `mods-host.ts` (`syncBwfHud`) & `index.ts`：启动与就绪时自动向 BWF `/settings` 同步 `bwfShowHud`（默认关闭左上角调试框）。
+  - `autodrive-host.ts` & `stardew-view.tsx`：调优自主节奏（`stepDelayMs: 900`）、晨间口播摘要控至 ≤38 字，并将中控台 `<GameGoalChain>` 绑定实时 `dayPlan`。
+  - `stardew-companion-reactions.ts`：新增 `summarizeFailureForBubble()`，将原始弹窗/路阻报错压为人设短句。
+  - `pet-stage/{main.ts,widgets/bubble-types.ts,widgets/bubble-layout.ts,widgets/bubbles.ts}`：开启 `dockToGame` 时固定 `edgeHint: 'right'` 让气泡避开右侧体力条 `E` 向左展开，扩大各类型行数与高度预算并补足真实 DOM `scrollHeight` 上下避让（含中心 `petZone` 保护）。
+- **验证与仍待真机**：`[REAL-DEVICE]` 真实 Keychain（DeepSeek + MiMo 锁声）+ 隔离中文新档完整跑通 **第1年春1日 06:00 → 农耕采购（500g→170g 买土豆/花椰菜）→ 低体力转镇上 10 村民问候与 `forage` 采集 → `sleep` 夜间复盘 2 条心得 → 结算进账 `406g` 醒于春2日 06:00**（`669s`、`reachedDay2=true`、`TIMEOUT=0`、`overlapCount=0`、`clippedCount=0`、`sawMutedVisible=false`、`maxAmplitude=0.5038`、真实个人存档零写入）；第 2 天起多日连续实机浸泡、物理 `F7`、13 项控制语义全量实按与 Windows 端仍待验收，`V2-P4-01` 维持 `NEXT`。
+
+## [2026-11-27]
+
+### Added / Changed（`V2-P4-01` 桌宠打开游戏自动贴边右下角、气泡/语音修复与真机首日实测，`[REAL-DEVICE]`）
+
+- **契约与桌宠贴边游戏右下角（默认开）**：
+  - `packages/shared-protocol`：`PetDesktopPrefsSchema` 新增 `dockToGame`（默认 `true`），新增 `apps/desktop-host/src/main/game-dock.ts`（`computeGameBottomRightBounds` / `GameDockTracker`），检测到窗口化《星露谷》即自动将 `default` 桌宠贴边至游戏窗内右下角（底部物品栏上方、右侧体力条左侧），跟随移动并支持手动拖拽让位及闭游恢复。
+  - 中控台星露谷工作区（`[data-dock-to-game]`）、桌宠舞台面板（`[data-desk-pref="dockToGame"]`）与桌宠右键菜单（「打开游戏时贴边右下角」）三处双向实时同步。
+- **桌宠气泡、语音标记与星露谷首日体验打磨**：
+  - 修复启动未同步静音标记与旧 `onSpeechResult` 误把最新对话标成 `[静音]`；修复日内 `plan(update)` 频繁顶掉主对话气泡并重复 TTS（改用低干扰 `thought` 气泡）；修复 5~6 行对话底部像素裁切与 `clear_ar\nea` 断词；游戏贴边/自主游玩期间暂停 `patrolTick` 乱跑。
+  - `packages/game-bridge-mcp`：`llm-prompt.ts` 归一化 `clear_area`/`till_area` 冗余坐标入参；`state-hints.ts` 增补 `FarmHouse` 礼盒坐标提示、`Farm` 首动 `till_area` 与背包低余量造箱提示。
+- **验证状态**：构建与回归单测（`game-bridge-mcp` + `game-dock` + `bubbles` 共 24 套件 341/341）及真实 macOS Keychain（DeepSeek + MiMo 锁声）+ 真实星露谷隔离新档首日实玩闭环通过；完整全天 `soak-real` 与物理 `F7` 仍待续测，`V2-P4-01` 维持 `NEXT`。
+
+### Added / Changed（`V2-P4-01` 记忆/知识检索接入规划、伴随反应联动与桌宠口型停靠，`[SIMULATION]` / `[E2E-HOST]`）
+
+- **记忆与知识进规划（Voyager / Generative Agents / Reflexion 架构启发重写）**：
+  - `packages/game-bridge-mcp/src/knowledge-evidence.ts` 新增 `formatKnowledgeUnitsForPlanner()`，按 `promoted > verified > refuted > partially-verified`、地点/季节/主题命中评分、跳过已归档与全失效证据、保留反例警告并在 1200 字内截断注入。
+  - `packages/game-bridge-mcp/src/llm-prompt.ts` 新增 `buildPlannerMemoryQuery()`（补齐 `${season}${day}日` 对齐 `memory-host.ts` 日键）与 `resolvePlannerContexts()`（异常隔离）；`LlmPlanner` 晨间规划与逐轮决策均按此注入 `## 长期经验与主人记忆` 与 `## 已核查攻略知识库（供决策参考）`，`debugSnapshot()` 暴露配置开关；`apps/desktop-host/src/main/index.ts` 为 `autodrive-host` 接入 3 秒缓存的 `KnowledgeHost` 检索端口。
+- **游戏伴随反应与语音气泡联动**：
+  - 新增 `apps/desktop-host/src/main/stardew-companion-reactions.ts`（并由 `autodrive-host.ts` 收编复用，移除重复回复池），按角色语态与冷却节流在低体力（≤15%）、危急生命（≤30%，`p0` 通道）、深夜 23:30 后催睡、满包、收获/下矿/钓鱼里程碑、FAILED/UNCERTAIN 连败卡顿 `watchdog`、人类接管恢复差异与 `onInsight` 新心得时同步投递 `pet:bubble` 与 `voiceHost.speak()`。
+- **桌宠口型外显与自动让位停靠（dsh-pet / VPet 启发重写）**：
+  - `apps/desktop-host/src/renderer/pet-stage/widgets/bubbles.ts` 与 `main.ts` 为气泡接入 `.pet-bubble-voice` 三段式振幅响应与 `#stage` 发声微抬升（受 `data-power-saver` / `prefers-reduced-motion` 约束），并在切换至停靠状态后守卫被动 `state`/`cycle-end` 事件不误撤销 `dockedEdge`。
+  - `apps/desktop-host/src/main/index.ts` 的 macOS 前台轮询新增对非全屏窗口化星露谷（`Stardew Valley` / `StardewModdingAPI`）遮挡未锁定桌宠窗的检测与自动靠边停靠/恢复（`TEST_MODE` 下禁用）。
+- **验证与仍待真机**：`packages/game-bridge-mcp` 317/317（分支 90.58%）、宿主新增/相关单测 10/10、Electron E2E 4 套件（含 `single-pet-llm-chain` 检验每轮 LLM 请求携带长期记忆段落）9/9、`pnpm verify:gate` **8/8**（扫描 365 源文件 0 违规）；真实付费 LLM 长时浸泡、真实星露谷游玩、macOS 窗口停靠视觉体验与 F7 物理接管仍待 `[REAL-DEVICE]`，总工单保持 `NEXT`。
 
 ### Fixed（`V2-P2-10` 启动期 `pet:sleep-status` IPC 注册竞态）
 

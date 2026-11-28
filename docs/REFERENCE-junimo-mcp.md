@@ -135,4 +135,5 @@ Junimo-MCP 是"同一个游戏、另一种工程解法"的独立实现：**游�
 
 | 日期 | 工单 | 结论变化 | 原因 |
 | --- | --- | --- | --- |
+| 2026-11-28 | `dsh-junimo` 插件仓补充审计 | 拉取 [`mlkgrnt/dsh-junimo`](https://github.com/mlkgrnt/dsh-junimo) (`0.4.4`, MIT) 至 `reference-clones/dsh-junimo`：核实其为 DSH 宿主包装层（ESM + 随包 `junimo-mcp.exe` 3.3.1 + 无构建季历面板，游戏执行全靠内嵌黑盒二进制）；吸收其 `order: 9000` 超轻 ~1KB 常驻规则 + `SKILL.md` 按需供给、`bundledBinaryUsable` 防跨平台「假绿」、`[ERROR|ALERT|CRITICAL]` 精准解析 SMAPI 日志、零版权 `crispEdges` 像素 SVG；明确拒采其 Windows `TitleMenu` 像素坐标盲点 `(517,609)` `loadSave` 实现 | 只读审计 `reference-clones/dsh-junimo` 源码与测试脚手架 |
 | 2026-11-23 | T-M6-29（复评建档，关联 T-M6-10） | 首次登记为**星露谷第二参考实现（MIT，仅思想吸收）**；主采用项 = mock/真机同源测试纪律、效果核验式回执、sleep 落盘 mtime 回读、soak 方法论、菜单/剧情/NamingMenu 盲区处理；不采用其 OCaml/stdio/私有 HTTP 形态、Windows 端到端依赖与 NagiBridge-Remix（PolyForm NC）代码 | 只读本地克隆 `LICENSE` / `README` / `AGENTS` / `CHANGELOG` / `test` / `lib`；LICENSE 原文 MIT 与 README 一致；157 项断言静态复核一致（117 调用点 + 41 工具循环）；参考仓库 `HEAD 717218b`（3.3.1）；未执行其构建与测试 |

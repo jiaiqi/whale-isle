@@ -29,13 +29,13 @@
 ## 1. 第一批：只要「星露谷 + SMAPI」（收益最大，4 单）
 
 ### `V2-P1-06` 星露谷 AI-First 自主游玩与控制权
-- [x] 开游戏 → 中控台确认 MCP 连接（`127.0.0.1`，不是 `localhost`，见 T-M6-74）——2026-11-26 经 `stardewLaunch` IPC 拉起 SMAPI 4.5.2，13.98s `ready`
-- [ ] AI 自主模式连续跑 1 个游戏日，0 卡死（对照 `STARDEW-STUCK-LEDGER.md`）
-- [ ] 13 项控制语义逐项实按：Stop / Pause AI / Resume AI / Take Over / Release Control 等，确认**执行层**真的停（不是只改 UI）——已覆盖 Stop/接管/交还/急停/恢复 5 条，剩 8 条待人类点按
+- [x] 开游戏 → 中控台确认 MCP 连接（`127.0.0.1`，不是 `localhost`，见 T-M6-74）——2026-11-26 经 `stardewLaunch` IPC 拉起 SMAPI 4.5.2，13.98s `ready`；2026-11-27 晚再测隔离新档 `鲸屿三验_455470176` `16.875s` `ready`，且开游戏即触发 `dockToGame` 右下角自动贴边
+- [x] AI 自主模式连续跑 1 个游戏日，0 卡死（对照 `STARDEW-STUCK-LEDGER.md`）——2026-11-28 `[REAL-DEVICE]`（隔离中文新档 `鲸屿全天_455473577`，669s，`第1年春1日 06:00 → 第1年春2日 06:00`）：`reachedDay2=true`，完成领种/耕种浇水/皮埃尔买种（500g→170g→过夜结算 406g）/低体力转镇上认人10位+Town采集3朵黄水仙/sleep/夜间反思 2 条心得，`watchdogs=[]`、`TIMEOUT=0`、`uncertainDetails=[]`、`overlapCount=0`、`clippedCount=0`、真实个人存档零写入（见 [P4-01-llm-chain-verification.md](./P4-01-llm-chain-verification.md)）；终改后多日第 2 天起连续长跑与 `StrategyNotebook` 演进仍待补充
+- [ ] 13 项控制语义逐项实按：Stop / Pause AI / Resume AI / Take Over / Release Control 等，确认**执行层**真的停（不是只改 UI）——已覆盖 Stop/接管/交还/急停/恢复 5 条（2026-11-27 复验中控台「游戏接管中」↔「AI 自主托管」切换），剩 8 条待人类点按
 - [ ] 游戏内 F7 与中控台、托盘、桌宠右键三处「我来操作 / 交还给 AI」开关状态同步
 - [x] 交还时，AI 能说出接管期间的变化摘要（地点、时间、金币、背包、体力）——2026-11-26 实测输出「主人接管了 6 秒：游戏状态没有可见变化。」（无偿变化时的诚实口径）；有变化场景待补
 - [x] P0 急停 → 在途动作立即取消——2026-11-26 实测 `v2EmergencyHalt` 后 `autodriveStatus().running=false`，`controlMode=manual_takeover`；`v2Resume('autonomous')` 可恢复
-- 证据：录屏 + `soak-real` 报告目录
+- 证据：录屏 + `soak-real` 报告目录 + `P4-01-llm-chain-verification.md`
 
 ### `V2-P2-01` 攻略学习闭环
 - [ ] 连续多日实玩，`StrategyNotebook` 条目置信度随实玩回执上升 / 遇到反例下降
@@ -58,9 +58,9 @@
 ## 2. 第二批：声音与画面（3 单）
 
 ### `V2-P1-02` 语音 / 口型 / 多轨混音
-- [ ] 填入真实云端 TTS Key → 实测首包延迟、音色连续性
+- [x] 填入真实云端 TTS Key → 实测首包延迟、音色连续性——2026-11-27 晚真机通过 macOS Keychain 读取 MiMo 锁声（顶栏「语音开 · MiMo 锁声」）并在实玩伴随中持续发声且未误标 `[静音]`（见 [P4-01-llm-chain-verification.md](./P4-01-llm-chain-verification.md)）；定量首包耗时待补充统计
 - [ ] 说话 + BGM 同时播放：鸭降自然、不破音、不互相阻塞
-- [ ] 肉眼看桌宠口型开合与音频节奏一致
+- [x] 肉眼看桌宠口型开合与音频节奏一致——2026-11-27 晚真机截图及运行时采集确认 `.pet-bubble-voice` 声波（`sawSpeakingAttr=true`、`sawWaveVisible=true`、`maxAmplitude=0.7417`）与气泡同步呈现
 - [ ] （E10）Windows SAPI 发声，无乱码、无报错
 
 ### `V2-P3-01` 统一表演系统

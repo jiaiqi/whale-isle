@@ -5,13 +5,21 @@
 
 ---
 
+## 2026-11-28 日间续验（进行中，V2-P4-01）
+
+- `[REAL-DEVICE]` 两季隔离验收已完成春季并推进到夏24；目标仍为秋1，不能记录为两季全部通过。服务重启中断后从隔离存档恢复，未改写用户真实存档。巡检改为每2分钟审阅近期决策、状态与真实回执。
+- `[SIMULATION]` 修复每日 Todo 的模型显示编号与0基引用错位、重排覆盖历史时间、重复新增降级状态与移除末项目失效；新增5项回归加既有32项规划测试均通过。专项命令因全仓覆盖率阈值退出1已留档，随后完整 `pnpm verify:gate` 8通过、0跳过。
+- `[REAL-DEVICE]` 新构建夏24日志已出现目标移除及原因；形象同步关闭的隔离 SMAPI 日志记录恢复原生外观（模组0.4.0-dev.1）。每日任务的完整真实完成流程与时间显示仍继续验证。
+- 长气泡侧翼收窄后仍会省略尾部，正在修复分页阅读；打字机及分页的 Electron DOM 回归尚待执行，不能以全文存在于DOM冒充全文可见。成熟开源参考的六仓克隆与复评见 `docs/REFERENCE-*.md`；参考源码只作审阅数据，遵守各自许可证。
+- 当前工单保持唯一 `NEXT`，未达到“像人类一样完善游玩”验收标准。跟进证据：[P4-01-day-plan-repair.md](./evidence/P4-01-day-plan-repair.md)。
+
 ## V2-P3-02A 直播互动编排（2026-11-27）
 
 `[SIMULATION]` 新增 12 项编排/运行时测试，覆盖真实关注匹配、礼物下限、同人冷却/全局节流、去重、点赞恰好或跨越阈值与补发、周期重置、按份数/币值排序及并列、容量边界、版权拒绝与授权只排队；专项合计 90/90。`[E2E-HOST]` 临时 userData 的 Electron UI 保存/重启恢复、真实鉴权 `/obs` 的三张卡、12/10 进度、昵称转义、深浅布局与开关/停播隐藏均通过 1/1。`verify:gate` 首次 7/8（WebUI 新空字段破坏旧调用方精确断言），修复为可选字段后 8/8，未放宽阈值，失败原始输出已留档。状态 `IMPLEMENTED_UNVERIFIED`，真实开播/OBS Studio 观感未验证；证据 [P3-02A](./evidence/P3-02A-live-engagement-verification.md)。
 
-## V2-P4-01 LLM 软件链路增量（2026-11-27）
+## V2-P4-01 LLM 软件链路与真机初验增量（2026-11-27 ~ 2026-11-28）
 
-`single-pet-llm-chain.e2e.spec.ts` 6/6（54.72s）验证真实 Electron / IPC / 模型网关 HTTP / LLM 规划器 / 租约阻断与交还 / 三态回执 / 磁盘记忆检索；本地模型 stub 与 BWF 仿真均属 `[SIMULATION]`，总体证据为 `[E2E-HOST]` + `[SIMULATION]`。503、超时、非法工具与缺 Key 在显式配置下进入可见规则代驾，省略配置时安全暂停；真实模型推理、真实游戏与长时验收未做，状态不升级为 `DONE`。能力域对照、回退和原始验证命令见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)。
+`single-pet-llm-chain.e2e.spec.ts` 6/6（54.72s）验证真实 Electron / IPC / 模型网关 HTTP / LLM 规划器 / 租约阻断与交还 / 三态回执 / 磁盘记忆检索；本地模型 stub 与 BWF 仿真均属 `[SIMULATION]`，总体证据为 `[E2E-HOST]` + `[SIMULATION]`。503、超时、非法工具与缺 Key 在显式配置下进入可见规则代驾，省略配置时安全暂停。2026-11-27 晚 ~ 2026-11-28 凌晨连续三轮 `[REAL-DEVICE]` 真机联合实测与收口打磨：新增 `dockToGame`（默认开、三端实时同步）实现开游即贴边游戏右下角、BWF `Once(...)` 省略段水合（`state-cache.ts`）、BWF 调试 HUD 自动隐藏、中控台动态目标链、报错气泡短句与上下自适应避让，并验证完整第 1 天 `06:00 → 夜间睡眠复盘（2 条心得）→ 过夜结算（500g→170g→406g）→ 第 2 天 06:00` 自主游玩（`669s`、`TIMEOUT=0`、`watchdogs=[]`、`overlapCount=0`、`clippedCount=0`、`sawMutedVisible=false`、`maxAmplitude=0.5038`、真实个人存档零写入）；第 2 天起多日持续浸泡与 `StrategyNotebook` 演进、物理 `F7` 热键及 Windows 端仍待验收，工单维持 `NEXT`。详细验证记录见 [P4-01-llm-chain-verification.md](./evidence/P4-01-llm-chain-verification.md)。
 
 ## V2-P4-04A–D 外部知识切片增量（2026-11-27）
 
