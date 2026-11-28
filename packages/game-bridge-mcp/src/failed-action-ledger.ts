@@ -102,6 +102,22 @@ export function recordFailedAction(ledger: FailedActionLedger, record: FailedAct
 }
 
 /**
+ * 按失败原文给出**一条**具体方向（依据回执真实措辞，不是玩法规则）：
+ * 真机 2026-11-28 秋7：take_items 在 (69,16) 累计失败 4 次、interact (13,7) 失败 3 次，
+ * 只给「五大类方向」太笼统，模型仍会原样重试同一坐标；给一条对得上号的更有效。
+ */
+export function concreteHintForFailure(summary: string): string {
+  if (/四周没有可以站的地方|四周没有可站/.test(summary)) return '取放箱前先 move_to 到箱子相邻的空地再调该工具';
+  if (/走不到|找不到通往|路被封|被挡住了/.test(summary)) return '先走到回执提到的可站坐标或换另一侧接近';
+  if (/得先和.*有\s*\d+\s*心好感|需要.*好感/.test(summary)) return '当天再试不会变，先做别的、改日再来';
+  if (/还没开门|营业\s*\d{2}:\d{2}-\d{2}:\d{2}/.test(summary)) return '先做别的，等营业时间再出发';
+  if (/哪个箱子里都没有|箱子里没有符合的东西/.test(summary)) return '先 list_chests({}) 看全览再决定去哪找';
+  if (/是宝箱|是出货箱|不用\s*interact/.test(summary)) return '箱子走 take_items / store_items / ship_items，不用 interact';
+  if (/没有打开商店/.test(summary)) return '先 open_shop({}) 再 buy';
+  return '';
+}
+
+/**
  * 生成事实提示段：只列出「累计失败 ≥ 阈值」的签名，写明次数、参数与最近原文。
  * 跨日也保留（这正是「夏28 学过、秋5 又踩」要治的病）。
  */
@@ -115,7 +131,9 @@ export function buildFailedActionLedgerSection(ledger: FailedActionLedger, curre
       const crossDay = currentDayKey !== undefined && r.firstDayKey !== currentDayKey
         ? `（首次见于${r.firstDayKey}，跨日重复）`
         : '';
-      return `- ${r.tool} 在「${r.subject}」已累计失败${r.count}次${crossDay}，最近一次（${r.lastClock}）：${r.lastSummary.slice(0, 120)}`;
+      const hint = concreteHintForFailure(r.lastSummary);
+      const hintText = hint === '' ? '' : ` → ${hint}`;
+      return `- ${r.tool} 在「${r.subject}」已累计失败${r.count}次${crossDay}，最近一次（${r.lastClock}）：${r.lastSummary.slice(0, 120)}${hintText}`;
     });
   return '\n\n## 跨日累计失败动作（真实回执事实）\n'
     + lines.join('\n')

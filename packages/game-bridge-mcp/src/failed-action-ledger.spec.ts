@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFailedActionLedgerSection,
+  concreteHintForFailure,
   createFailedActionLedger,
   extractFailureSubject,
   FAILED_ACTION_ALERT_THRESHOLD,
@@ -75,6 +76,26 @@ describe('跨日失败动作账本（V2-P4-01 秋5 真机）', () => {
   it('失败原因无坐标无引号时按首句归并', () => {
     expect(extractFailureSubject('sleep', '失败：太累了站不稳')).toBe('太累了站不稳');
     expect(extractFailureSubject('eat', '失败：没有可以吃的东西')).toBe('没有可以吃的东西');
+  });
+
+  it('按回执真实措辞给出一条对得上号的方向（不新增玩法规则）', () => {
+    expect(concreteHintForFailure('失败：(69,16) 四周没有可以站的地方')).toContain('move_to');
+    expect(concreteHintForFailure('失败：走不到(13,7) 旁边')).toContain('可站坐标');
+    expect(concreteHintForFailure('失败：要穿过玛妮的房门，得先和玛妮有 2 心好感才能进')).toContain('改日');
+    expect(concreteHintForFailure('失败：玛妮的牧场（AnimalShop）还没开门（营业 09:00-18:00）')).toContain('营业时间');
+    expect(concreteHintForFailure('失败：哪个箱子里都没有“花椰菜”')).toContain('list_chests');
+    expect(concreteHintForFailure('失败：(68,18) 是宝箱')).toContain('take_items');
+    expect(concreteHintForFailure('失败：没有打开商店，先用 open_shop')).toContain('open_shop');
+    // 认不出的原因不硬编建议
+    expect(concreteHintForFailure('失败：某种未见过的新原因')).toBe('');
+  });
+
+  it('提示段把方向挂在对应条目后面', () => {
+    let ledger = createFailedActionLedger();
+    ledger = recordFailedAction(ledger, rec('FAILED take_items: 失败：(69,16) 四周没有可以站的地方')!);
+    ledger = recordFailedAction(ledger, rec('FAILED take_items: 失败：(69,16) 四周没有可以站的地方')!);
+    const section = buildFailedActionLedgerSection(ledger, '1-秋7');
+    expect(section).toMatch(/\(69,16\)[\s\S]*四周没有可以站的地方 → .*move_to/);
   });
 
   it('账本超过上限时只保留最近若干条', () => {
