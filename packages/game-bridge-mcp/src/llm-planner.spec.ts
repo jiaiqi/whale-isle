@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { AutodriveRunner, type AutodriveEvent } from './autodrive';
 import { StardewAdapter } from './adapter';
-import { buildAutonomousDecisionMessages, buildRepeatedNoProgressSection, buildStateContext } from './llm-prompt';
+import { buildAutonomousDecisionMessages, buildRepeatedFailureSection, buildRepeatedNoProgressSection, buildStateContext } from './llm-prompt';
 import {
   BrainSwitch,
   buildFailureMemorySection,
@@ -222,6 +222,33 @@ describe('JSON 提取、参数归一化与辅助纯函数', () => {
     const cut = buildStateContext(oneLine, 600);
     expect(cut).toContain('## 背包');
     expect(cut).toContain('因上下文预算省略约');
+  });
+
+  it('重复失败按原因归并提示，单次或不同原因不误报', () => {
+    expect(buildRepeatedFailureSection([])).toBe('');
+    expect(buildRepeatedFailureSection(['COMPLETED fish: 成功：钓到沙丁鱼'])).toBe('');
+
+    const upgrade = 'FAILED upgrade_tool: 失败：升级 斧头 → 铜斧头 还不够：钱差 1554g（要 2000g，你身上 446g）；材料差 4 个铜锭';
+    expect(buildRepeatedFailureSection([upgrade, upgrade])).toContain('同一失败原因出现2次');
+    expect(buildRepeatedFailureSection([upgrade, upgrade])).toContain('upgrade_tool');
+    expect(buildRepeatedFailureSection([upgrade, upgrade])).toContain('不要原样重试');
+
+    // 不同工具的不同原因不应合并
+    const other = 'FAILED interact: 失败：(69,15) 的熔炉还在加工铜锭，还要约 30 分钟';
+    const mixed = buildRepeatedFailureSection([upgrade, other]);
+    expect(mixed).toBe('');
+
+    // 逐字差异但同因（前 24 字一致）应归并
+    const drift = 'FAILED interact: 失败：(69,15) 的熔炉还在加工铜锭，还要约 20 分钟';
+    const both = buildRepeatedFailureSection([
+      'FAILED interact: 失败：(69,15) 的熔炉还在加工铜锭，还要约 30 分钟',
+      drift,
+    ]);
+    expect(both).toContain('出现2次');
+
+    // 窗口外的旧失败不计入
+    const old = [...Array<string>(8).fill('COMPLETED travel_to: 成功：到达农场'), upgrade, upgrade];
+    expect(buildRepeatedFailureSection(old)).toContain('出现2次');
   });
 
   it('重复空结果与反复开合界面都保留成功事实并提醒核对进展，不指定玩法', () => {

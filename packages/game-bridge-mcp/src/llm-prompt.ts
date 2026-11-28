@@ -600,6 +600,32 @@ export function buildRepeatedNoProgressSection(recentReceipts: readonly string[]
     + '\n这些调用虽然返回成功，但界面开合/空区域清理本身不推进游戏时间，也不增加任何资源或状态。请对照当前游戏时间、背包与目标核对是否真的前进了；若没有，换一件能改变时间或资源的事，不要仅改写意图重做同一步。';
 }
 
+/**
+ * 重复失败动作（V2-P4-01，2026-11-28 夏27 真机）：
+ * upgrade_tool 连续 3 次因「钱差 1554g / 缺 4 个铜锭」失败，熔炉「还在加工」也被连续重探；
+ * 失败记忆只保留最后一条签名与次数，未把「同一前置条件仍然不满足」的重复原文摊开给模型。
+ * 只陈述次数与最近原文，不改状态、不替模型决定玩法。
+ */
+export function buildRepeatedFailureSection(recentReceipts: readonly string[]): string {
+  const window = recentReceipts.slice(-8);
+  const groups = new Map<string, { count: number; last: string }>();
+  for (const receipt of window) {
+    const m = /^FAILED\s+([^\s:：]+)\s*[:：]\s*(.*)$/s.exec(receipt);
+    if (m?.[1] === undefined) continue;
+    const tool = m[1];
+    const detail = (m[2] ?? '').trim();
+    // 同一工具的失败按「原因前 24 字」归并，避免逐字差异导致统计失效
+    const key = `${tool}|${detail.slice(0, 24)}`;
+    const prev = groups.get(key);
+    groups.set(key, { count: (prev?.count ?? 0) + 1, last: `${tool}: ${detail.split('\n')[0] ?? detail}` });
+  }
+  const repeated = [...groups.values()].filter((g) => g.count >= 2);
+  if (repeated.length === 0) return '';
+  return '\n\n## 重复失败动作（真实回执）\n'
+    + repeated.map((g) => `- 最近8条回执中，同一失败原因出现${g.count}次：${g.last.slice(0, 180)}`).join('\n')
+    + '\n同一失败原因连续出现说明前置条件没有变化。请先确认回执点名的缺口是否仍然存在（如钱、材料、工具等级、加工剩余时间），补齐或改做别的能推进的事，不要原样重试第三、第四次。';
+}
+
 export function buildFailureMemorySection(memory: FailureMemoryContext, recentReceipts: readonly string[]): string {
   let sig = memory.lastSignature;
   let streak = memory.streak;
@@ -618,7 +644,7 @@ export function buildFailureMemorySection(memory: FailureMemoryContext, recentRe
     }
   }
 
-  const emptyResults = buildRepeatedNoProgressSection(recentReceipts);
+  const emptyResults = buildRepeatedNoProgressSection(recentReceipts) + buildRepeatedFailureSection(recentReceipts);
   if (sig === null && memory.clockStallSec < 60) return emptyResults;
   const lines = ['## 失败与停滞记忆（短期记忆）'];
   if (sig !== null) {
