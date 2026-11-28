@@ -591,6 +591,16 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       const readPrefix = existingTyping?.fullText === fullText
         ? existingTyping.pages.slice(0, existingTyping.page).join('') : '';
       const remaining = fullText.slice(readPrefix.length);
+      // 已全部读完时布局重算（字体加载/尺寸变化）不得把正文清空留下空壳气泡，保留当前页原文。
+      if (remaining === '' && existingTyping !== undefined && existingTyping.fullText === fullText) {
+        node.text.textContent = existingTyping.pages[existingTyping.page] ?? fullText;
+        node.root.dataset.pageText = node.text.textContent;
+        node.root.dataset.page = String(existingTyping.page + 1);
+        node.root.dataset.pageCount = String(existingTyping.pages.length);
+        node.root.dataset.readingBlocked = 'false';
+        existingTyping.readDone = true;
+        continue;
+      }
       let pages: string[];
       let blocked = availableH < linePx || node.text.clientWidth <= 0;
       try {
@@ -612,7 +622,9 @@ export function mountBubbleWidgets(stage: HTMLElement, stageBox: StageBox): Bubb
       typingStates.set(kind, presentation);
       node.root.dataset.readingBlocked = String(blocked);
       if (blocked) {
+        // 没有可容纳一个字的空间时不显示空心气泡壳；保留原文等待下一次布局恢复。
         node.text.textContent = '';
+        node.root.style.display = 'none';
         node.root.dataset.pageText = remaining;
         node.root.dataset.page = String(presentation.page + 1);
         node.root.dataset.pageCount = String(presentation.pages.length);
